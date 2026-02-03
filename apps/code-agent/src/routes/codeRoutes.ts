@@ -491,14 +491,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
-      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully');
+      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully'); // @allow-result-access -- .ok checked at line 461
 
       // Mirror dispatched status to action (non-fatal)
       try {
         await services.statusMirrorService.mirrorStatus({
           actionId: body.actionId,
           taskStatus: 'dispatched',
-          resourceUrl: result.value.resourceUrl,
+          resourceUrl: result.value.resourceUrl, // @allow-result-access -- .ok checked at line 461
           traceId,
         });
       } catch (mirrorError) {
@@ -507,7 +507,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       return await reply.ok({
         status: 'submitted',
-        codeTaskId: result.value.codeTaskId,
+        codeTaskId: result.value.codeTaskId, // @allow-result-access -- .ok checked at line 461
         resourceUrl: result.value.resourceUrl,
       });
     }
@@ -954,6 +954,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     Body: {
       prompt: string;
       workerType?: 'opus' | 'auto' | 'glm';
+      workerLocation?: string;
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
@@ -971,6 +972,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+            workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
             linearIssueTitle: { type: 'string' },
           },
@@ -1008,6 +1010,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               },
             },
             required: ['success', 'error'],
+          },
+          400: {
+            description: 'Invalid worker specified',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_WORKER', 'WORKER_UNHEALTHY'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
           },
           409: {
             description: 'Duplicate task (similar prompt within 5 minutes)',
@@ -1080,7 +1098,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; linearIssueId?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/submit',
         includeParams: true,
@@ -1090,9 +1108,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const body = request.body as {
         prompt: string;
         workerType?: 'opus' | 'auto' | 'glm';
+        workerLocation?: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
       };
+
       /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
@@ -1227,8 +1247,40 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       /* v8 ignore stop @preserve */
 
+      // Validate workerLocation if provided
+      if (body.workerLocation !== undefined) {
+        const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
+
+        if (requestedWorker === undefined) {
+          request.log.warn({ userId, workerLocation: body.workerLocation }, 'Requested worker not found');
+          return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
+        }
+
+        // Check if worker is healthy (if health data available)
+        const healthStatuses = settings?.workerHealthStatuses;
+        if (healthStatuses !== undefined) {
+          const workerHealth = healthStatuses[body.workerLocation];
+          if (workerHealth !== undefined && !workerHealth.state.healthy) {
+            request.log.warn({ userId, workerLocation: body.workerLocation, healthState: workerHealth.state }, 'Requested worker is unhealthy');
+            return await reply.fail('WORKER_UNHEALTHY', `Worker '${body.workerLocation}' is currently unhealthy`);
+          }
+        }
+      }
+
+      // If workerLocation specified, put that worker first in the list
+      let orderedWorkers = enabledWorkers;
+      if (body.workerLocation !== undefined) {
+        const selectedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
+        if (selectedWorker !== undefined) {
+          orderedWorkers = [
+            selectedWorker,
+            ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
+          ];
+        }
+      }
+
       const workerCredentials = {
-        workers: enabledWorkers.map((w) => ({
+        workers: orderedWorkers.map((w) => ({
           name: w.name,
           url: w.url,
           cfAccessClientId: w.cfAccessClientId,

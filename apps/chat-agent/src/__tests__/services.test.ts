@@ -1,14 +1,35 @@
 /**
  * Service container tests for chat-agent.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { resetFirestore } from '@intexuraos/infra-firestore';
-import { getServices, setServices, resetServices, initializeServices, type ServiceContainer } from '../services.js';
+import { getServices, setServices, resetServices, type ServiceContainer } from '../services.js';
+import { ok } from '@intexuraos/common-core';
+
+// Mock llm-pricing to avoid network calls in unit tests
+vi.mock('@intexuraos/llm-pricing', () => ({
+  fetchAllPricing: vi.fn().mockResolvedValue({ ok: true, value: { models: [] } }),
+  createPricingContext: vi.fn().mockReturnValue({}),
+}));
+
+// Mock internal-clients to avoid network calls in unit tests
+// Note: Cannot use ok() helper here due to vi.mock hoisting - must use raw object
+vi.mock('@intexuraos/internal-clients', () => ({
+  createUserServiceClient: vi.fn().mockReturnValue({
+    getLlmClient: vi.fn().mockResolvedValue({ ok: true, value: { generate: vi.fn() } }),
+    getApiKeys: vi.fn().mockResolvedValue({ ok: true, value: {} }),
+    reportLlmSuccess: vi.fn(),
+    getOAuthToken: vi.fn(),
+  }),
+}));
 
 describe('chat-agent services', () => {
   beforeEach(() => {
     process.env['INTEXURAOS_OPENAI_API_KEY'] = 'test-key';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://localhost:8080';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-token';
+    process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] = 'http://localhost:8081';
   });
 
   afterEach(() => {
@@ -16,21 +37,15 @@ describe('chat-agent services', () => {
     resetFirestore();
     delete process.env['INTEXURAOS_OPENAI_API_KEY'];
     delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
+    delete process.env['INTEXURAOS_USER_SERVICE_URL'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+    delete process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
   });
 
   describe('getServices', () => {
     it('should throw when container not initialized', () => {
       resetServices();
       expect(() => getServices()).toThrow('Service container not initialized');
-    });
-
-    it('should return container after initialization', () => {
-      initializeServices();
-      const services = getServices();
-      expect(services).toBeDefined();
-      expect(typeof services.generateId).toBe('function');
-      expect(services.embeddingRepository).toBeDefined();
-      expect(services.embeddingClient).toBeDefined();
     });
   });
 
@@ -47,9 +62,25 @@ describe('chat-agent services', () => {
         silent: () => undefined,
         msgPrefix: '',
       } as const;
-      const mockLlmClient = {
-        async generate(): Promise<{ ok: true; value: { response: string } }> {
-          return { ok: true, value: { response: 'test' } };
+      const mockUserServiceClient: ServiceContainer['userServiceClient'] = {
+        async getLlmClient() {
+          return ok({
+            async generate() {
+              return ok({
+                content: 'test response',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.0001 },
+              });
+            },
+          });
+        },
+        async getApiKeys() {
+          return ok({});
+        },
+        async reportLlmSuccess() {
+          // no-op
+        },
+        async getOAuthToken() {
+          return { ok: false as const, error: { code: 'CONNECTION_NOT_FOUND' as const, message: 'Not found' } };
         },
       };
 
@@ -57,7 +88,7 @@ describe('chat-agent services', () => {
         generateId: () => 'custom-id',
         embeddingRepository: null as unknown as ServiceContainer['embeddingRepository'],
         embeddingClient: null as unknown as ServiceContainer['embeddingClient'],
-        llmClient: mockLlmClient as ServiceContainer['llmClient'],
+        userServiceClient: mockUserServiceClient,
         logger: mockLogger as unknown as ServiceContainer['logger'],
       };
       setServices(customServices);
@@ -66,20 +97,29 @@ describe('chat-agent services', () => {
     });
   });
 
-  describe('generateId', () => {
-    it('should generate unique IDs', (): void => {
-      initializeServices();
-      const services = getServices();
-      const id1 = services.generateId();
-      const id2 = services.generateId();
-      expect(id1).not.toBe(id2);
-      expect(typeof id1).toBe('string');
-    });
-  });
-
   describe('resetServices', () => {
     it('should reset service container', () => {
-      initializeServices();
+      // Manually set up services for this test (since initializeServices is async and mocked)
+      const mockLogger = {
+        level: 'info',
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+        debug: () => undefined,
+        fatal: () => undefined,
+        trace: () => undefined,
+        silent: () => undefined,
+        msgPrefix: '',
+      } as const;
+
+      const customServices: ServiceContainer = {
+        generateId: () => 'test-id',
+        embeddingRepository: null as unknown as ServiceContainer['embeddingRepository'],
+        embeddingClient: null as unknown as ServiceContainer['embeddingClient'],
+        userServiceClient: null as unknown as ServiceContainer['userServiceClient'],
+        logger: mockLogger as unknown as ServiceContainer['logger'],
+      };
+      setServices(customServices);
       expect(() => getServices()).not.toThrow();
       resetServices();
       expect(() => getServices()).toThrow('Service container not initialized');

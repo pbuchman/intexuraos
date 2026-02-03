@@ -6,7 +6,7 @@
 
 import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
-import { getServices } from '../services.js';
+import { getServices, createChatClient } from '../services.js';
 import { generateResponse } from '../domain/usecases/generateResponse.js';
 import type { SuggestedAction, ConversationHistory } from '../domain/index.js';
 
@@ -121,10 +121,22 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         pendingAction?: SuggestedAction;
       };
 
+      // Get user's LLM client
+      const llmClientResult = await getServices().userServiceClient.getLlmClient(userId);
+      if (!llmClientResult.ok) {
+        return await reply.fail('DOWNSTREAM_ERROR', llmClientResult.error.message);
+      }
+
+      // Create chat client with user's LLM
+      const chatClient = createChatClient({
+        llmClient: llmClientResult.value, // @allow-result-access -- guarded by !llmClientResult.ok check above
+        logger: getServices().logger,
+      });
+
       // Call generateResponse use case
       const result = await generateResponse(
         {
-          llmClient: getServices().llmClient,
+          llmClient: chatClient,
           searchDocumentation: {
             embeddingRepository: getServices().embeddingRepository,
             embeddingClient: getServices().embeddingClient,
@@ -155,9 +167,9 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok({
-        response: result.value.response,
-        sources: result.value.sources,
-        suggestedAction: result.value.suggestedAction ?? null,
+        response: result.value.response, // @allow-result-access -- guarded by !result.ok check above
+        sources: result.value.sources, // @allow-result-access -- guarded by !result.ok check above
+        suggestedAction: result.value.suggestedAction ?? null, // @allow-result-access -- guarded by !result.ok check above
       });
     }
   );
