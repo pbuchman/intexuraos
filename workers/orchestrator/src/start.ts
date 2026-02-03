@@ -164,7 +164,8 @@ async function bootstrap(): Promise<void> {
     join(orchestratorDir, 'github-token')
   );
 
-  const webhookClient = new WebhookClient(statePersistence, logger);
+  const internalAuthToken = getRequiredEnv('INTEXURAOS_INTERNAL_AUTH_TOKEN');
+  const webhookClient = new WebhookClient(statePersistence, logger, internalAuthToken);
 
   const worktreeManager = new WorktreeManager(
     {
