@@ -197,6 +197,8 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
       res.status(200).json({
         locked: currentState?.branchLocked ?? false,
         branch: currentState?.branch ?? 'unknown',
+        commitSha: currentState?.commitSha ?? null,
+        commitMessage: currentState?.commitMessage ?? null,
         status: currentState?.status ?? 'unknown',
       });
       return;
@@ -210,6 +212,8 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
       res.status(200).json({
         locked: newState?.branchLocked ?? false,
         branch: newState?.branch ?? 'unknown',
+        commitSha: newState?.commitSha ?? null,
+        commitMessage: newState?.commitMessage ?? null,
         status: newState?.status ?? 'unknown',
       });
       return;
