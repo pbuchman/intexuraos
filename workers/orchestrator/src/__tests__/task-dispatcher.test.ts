@@ -1,16 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { exec, type ChildProcess } from 'node:child_process';
-import { TaskDispatcher } from '../services/task-dispatcher.js';
+import { TaskDispatcher, type IsolationConfig } from '../services/task-dispatcher.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { StatePersistence } from '../services/state-persistence.js';
 import type { WorktreeManager } from '../services/worktree-manager.js';
-import type { TmuxManager } from '../services/tmux-manager.js';
 import type { LogForwarder } from '../services/log-forwarder.js';
 import type { WebhookClient } from '../services/webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { OrchestratorState } from '../types/state.js';
+import type { IsolationProvider, WorkerHandle } from '../services/isolation/types.js';
+import type { TokenRefresher } from '../services/isolation/token-refresher.js';
 
 const createMockChildProcess = (): ChildProcess =>
   ({
@@ -57,6 +58,7 @@ describe('TaskDispatcher', () => {
     stateFilePath: '/tmp/state.json',
     worktreeBasePath: '/tmp/worktrees',
     logBasePath: '/tmp/logs',
+    codeAgentUrl: 'http://localhost:8080',
     githubAppId: 'test-app-id',
     githubAppPrivateKeyPath: '/tmp/key.pem',
     githubInstallationId: 'test-installation-id',
@@ -95,16 +97,52 @@ describe('TaskDispatcher', () => {
     deleteWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
   } as unknown as WorktreeManager;
 
-  // Mock TmuxManager
-  const mockTmuxManager = {
-    startSession: vi.fn(async () => ({
-      ok: true,
-      value: { sessionName: 'orchestrator-test-task', logPath: '/tmp/logs/test-task.log' },
+  // Mock IsolationProvider
+  const mockIsolationProvider: IsolationProvider = {
+    createWorker: vi.fn(
+      async (config): Promise<WorkerHandle> => ({
+        taskId: config.taskId,
+        containerId: `container-${config.taskId}`,
+        status: 'running',
+        startedAt: new Date(),
+      })
+    ),
+    destroyWorker: vi.fn(async () => undefined),
+    isWorkerRunning: vi.fn(async () => false),
+    getWorkerLogs: vi.fn(async () => ''),
+    streamLogs: vi.fn(async () => undefined),
+    waitForCompletion: vi.fn(async () => 0),
+    sendInput: vi.fn(async () => undefined),
+    attachTTY: vi.fn(async () => ({
+      stdin: {} as NodeJS.WritableStream,
+      stdout: {} as NodeJS.ReadableStream,
+      stderr: {} as NodeJS.ReadableStream,
+      detach: vi.fn(),
     })),
-    stopSession: vi.fn(async () => ({ ok: true, value: undefined })),
-    killSession: vi.fn(async () => ({ ok: true, value: undefined })),
-    isSessionRunning: vi.fn(async () => false),
-  } as unknown as TmuxManager;
+    getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
+    listWorkers: vi.fn(async () => []),
+  };
+
+  // Mock TokenRefresher
+  const mockTokenRefresher = {
+    registerTask: vi.fn(async () => undefined),
+    unregisterTask: vi.fn(),
+    stop: vi.fn(),
+  } as unknown as TokenRefresher;
+
+  // Create mock isolation config
+  const mockIsolationConfig: IsolationConfig = {
+    provider: mockIsolationProvider,
+    tokenRefresher: mockTokenRefresher,
+    secrets: {
+      ANTHROPIC_API_KEY: 'test-anthropic-key',
+      LINEAR_API_KEY: 'test-linear-key',
+      SENTRY_AUTH_TOKEN: 'test-sentry-token',
+      ZAI_API_KEY: 'test-zai-key',
+    },
+    gcpSaKeyPath: '/tmp/gcp-sa.json',
+    githubAppKeyPath: '/tmp/github-app.pem',
+  };
 
   // Mock LogForwarder
   const mockLogForwarder = {
@@ -143,11 +181,11 @@ describe('TaskDispatcher', () => {
       mockConfig,
       statePersistence,
       mockWorktreeManager,
-      mockTmuxManager,
       mockLogForwarder,
       mockWebhookClient,
       mockGitHubTokenService,
-      mockLogger
+      mockLogger,
+      mockIsolationConfig
     );
   });
 
@@ -170,11 +208,8 @@ describe('TaskDispatcher', () => {
       expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(1);
       expect(mockWorktreeManager.createWorktree).toHaveBeenCalled();
-      expect(mockTmuxManager.startSession).toHaveBeenCalled();
-      expect(mockLogForwarder.startForwarding).toHaveBeenCalledWith(
-        'test-task-1',
-        expect.any(String)
-      );
+      expect(mockIsolationProvider.createWorker).toHaveBeenCalled();
+      expect(mockTokenRefresher.registerTask).toHaveBeenCalledWith('test-task-1');
     });
 
     it('should reject task when at capacity', async () => {
@@ -266,8 +301,8 @@ describe('TaskDispatcher', () => {
       const result = await dispatcher.cancelTask('test-task');
 
       expect(result.ok).toBe(true);
-      expect(mockTmuxManager.killSession).toHaveBeenCalled();
-      expect(mockLogForwarder.stopForwarding).toHaveBeenCalledWith('test-task');
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('test-task');
+      expect(mockTokenRefresher.unregisterTask).toHaveBeenCalledWith('test-task');
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ status: 'cancelled' }),
@@ -364,24 +399,24 @@ describe('TaskDispatcher', () => {
 
     beforeEach(() => {
       vi.useFakeTimers();
-      // For timeout tests, session should always appear running (until killed)
-      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(true);
+      // For timeout tests, worker should always appear running (until killed)
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       timeoutStatePersistence = createStatePersistence();
       timeoutDispatcher = new TaskDispatcher(
         mockConfig,
         timeoutStatePersistence,
         mockWorktreeManager,
-        mockTmuxManager,
         mockLogForwarder,
         mockWebhookClient,
         mockGitHubTokenService,
-        mockLogger
+        mockLogger,
+        mockIsolationConfig
       );
     });
 
     afterEach(() => {
       vi.useRealTimers();
-      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
 
     it('should log warning at 1h 55m', async () => {
@@ -401,7 +436,7 @@ describe('TaskDispatcher', () => {
       expect(timeoutDispatcher.getRunningCount()).toBe(1);
     });
 
-    it('should kill session at 2h timeout', async () => {
+    it('should kill container at 2h timeout', async () => {
       const request: CreateTaskRequest = {
         taskId: 'timeout-kill-test',
         workerType: 'auto',
@@ -416,7 +451,7 @@ describe('TaskDispatcher', () => {
       // Advance to 2h (120 minutes)
       await vi.advanceTimersByTimeAsync(120 * 60 * 1000);
 
-      expect(mockTmuxManager.killSession).toHaveBeenCalled();
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalled();
     });
 
     it('should log timeout warning for running task', async () => {
@@ -455,8 +490,8 @@ describe('TaskDispatcher', () => {
       // Advance past 2h timeout
       await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
 
-      expect(mockTmuxManager.killSession).toHaveBeenCalledWith('kill-webhook-test', false);
-      expect(mockLogForwarder.stopForwarding).toHaveBeenCalledWith('kill-webhook-test');
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('kill-webhook-test');
+      // Note: stopForwarding is not called in Docker model - container termination handles log cleanup
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ status: 'interrupted' }),
@@ -496,11 +531,11 @@ describe('TaskDispatcher', () => {
         mockConfig,
         monitorStatePersistence,
         mockWorktreeManager,
-        mockTmuxManager,
         mockLogForwarder,
         mockWebhookClient,
         mockGitHubTokenService,
-        mockLogger
+        mockLogger,
+        mockIsolationConfig
       );
     });
 
@@ -508,7 +543,7 @@ describe('TaskDispatcher', () => {
       vi.useRealTimers();
     });
 
-    it('should detect task completion when tmux session stops', async () => {
+    it('should detect task completion when container stops', async () => {
       const request: CreateTaskRequest = {
         taskId: 'completion-test',
         workerType: 'auto',
@@ -519,13 +554,13 @@ describe('TaskDispatcher', () => {
 
       await monitorDispatcher.submitTask(request);
 
-      // Initially session is running
-      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(true);
+      // Initially container is running
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       await vi.advanceTimersByTimeAsync(30 * 1000);
       expect(monitorDispatcher.getRunningCount()).toBe(1);
 
-      // Session stops
-      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);
+      // Container stops
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
       // Task should be marked as completed or failed
@@ -552,10 +587,10 @@ describe('TaskDispatcher', () => {
       await monitorStatePersistence.save(state);
 
       // Advance time - should not try to handle completion again
-      vi.mocked(mockTmuxManager.isSessionRunning).mockClear();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockClear();
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
-      expect(mockTmuxManager.isSessionRunning).not.toHaveBeenCalled();
+      expect(mockIsolationProvider.isWorkerRunning).not.toHaveBeenCalled();
     });
 
     it('should handle completion monitoring errors gracefully', async () => {
@@ -593,11 +628,11 @@ describe('TaskDispatcher', () => {
         mockConfig,
         resultStatePersistence,
         mockWorktreeManager,
-        mockTmuxManager,
         mockLogForwarder,
         mockWebhookClient,
         mockGitHubTokenService,
-        mockLogger
+        mockLogger,
+        mockIsolationConfig
       );
     });
 
@@ -605,7 +640,7 @@ describe('TaskDispatcher', () => {
       vi.useRealTimers();
     });
 
-    it('should detect task completion when session stops', async () => {
+    it('should detect task completion when container stops', async () => {
       const request: CreateTaskRequest = {
         taskId: 'completion-detect-test',
         workerType: 'auto',
@@ -618,13 +653,13 @@ describe('TaskDispatcher', () => {
 
       await resultDispatcher.submitTask(request);
 
-      // Initially session is running
-      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(true);
+      // Initially container is running
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       await vi.advanceTimersByTimeAsync(30 * 1000);
       expect(resultDispatcher.getRunningCount()).toBe(1);
 
-      // Session stops - task should be marked completed
-      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);
+      // Container stops - task should be marked completed
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
       const task = await resultDispatcher.getTask('completion-detect-test');
@@ -644,8 +679,8 @@ describe('TaskDispatcher', () => {
 
       await resultDispatcher.submitTask(request);
 
-      // Stop the session to trigger completion
-      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);
+      // Stop the container to trigger completion
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
       // Webhook should be sent with completed/failed status
@@ -725,11 +760,11 @@ describe('TaskDispatcher', () => {
         mockConfig,
         statePersistence,
         mockWorktreeManager,
-        mockTmuxManager,
         mockLogForwarder,
         mockWebhookClient,
         mockGitHubTokenService,
-        mockLogger
+        mockLogger,
+        mockIsolationConfig
       );
 
       // Override getTask to throw during submitTask's saveTask call
@@ -746,25 +781,31 @@ describe('TaskDispatcher', () => {
       expect(errorDispatcher.getRunningCount()).toBe(0);
     });
 
-    it('should cleanup worktree when tmux session start fails', async () => {
+    it('should cleanup worktree when container creation fails', async () => {
       const cleanupWorktreeManager = {
         ...mockWorktreeManager,
         removeWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
       } as unknown as WorktreeManager;
 
+      // Create isolation config with failing provider
+      const failingIsolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        createWorker: vi.fn().mockRejectedValueOnce(new Error('Failed to create container')),
+      };
+      const failingIsolationConfig: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: failingIsolationProvider,
+      };
+
       const errorDispatcher = new TaskDispatcher(
         mockConfig,
         statePersistence,
         cleanupWorktreeManager,
-        mockTmuxManager,
         mockLogForwarder,
         mockWebhookClient,
         mockGitHubTokenService,
-        mockLogger
-      );
-
-      vi.mocked(mockTmuxManager.startSession).mockRejectedValueOnce(
-        new Error('Failed to start tmux')
+        mockLogger,
+        failingIsolationConfig
       );
 
       const request: CreateTaskRequest = {
@@ -780,61 +821,10 @@ describe('TaskDispatcher', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.type).toBe('service_error');
-        expect(result.error.message).toBe('Failed to start tmux session');
+        expect(result.error.message).toBe('Failed to start worker container');
       }
       // Worktree should be cleaned up
       expect(cleanupWorktreeManager.removeWorktree).toHaveBeenCalledWith('cleanup-test');
-    });
-
-    it('should force kill task after graceful shutdown period', { timeout: 15000 }, async () => {
-      const forceKillTmuxManager = {
-        ...mockTmuxManager,
-        killSession: vi.fn(async (_taskId, graceful) => {
-          if (graceful) {
-            // First call is graceful, return immediately
-            return { ok: true, value: undefined };
-          }
-          // Second call is force kill
-          return { ok: true, value: undefined };
-        }),
-        isSessionRunning: vi
-          .fn()
-          .mockResolvedValueOnce(true) // Still running after graceful period
-          .mockResolvedValueOnce(false), // Not running after force kill
-      } as unknown as TmuxManager;
-
-      const cancelDispatcher = new TaskDispatcher(
-        mockConfig,
-        statePersistence,
-        mockWorktreeManager,
-        forceKillTmuxManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger
-      );
-
-      const request: CreateTaskRequest = {
-        taskId: 'force-kill-test',
-        workerType: 'auto',
-        prompt: 'Test',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-      };
-
-      await cancelDispatcher.submitTask(request);
-      vi.clearAllMocks();
-
-      // Mock that session is still running after graceful shutdown
-      vi.mocked(forceKillTmuxManager.isSessionRunning).mockResolvedValue(true);
-
-      const result = await cancelDispatcher.cancelTask('force-kill-test');
-
-      expect(result.ok).toBe(true);
-      // Should have called kill twice - once graceful, once force
-      expect(forceKillTmuxManager.killSession).toHaveBeenCalledTimes(2);
-      // Second call should be force kill (graceful=false)
-      expect(forceKillTmuxManager.killSession).toHaveBeenLastCalledWith('force-kill-test', false);
     });
 
     it('should return early from timeout kill if task no longer running', async () => {
@@ -882,11 +872,11 @@ describe('TaskDispatcher', () => {
         mockConfig,
         statePersistence,
         mockWorktreeManager,
-        mockTmuxManager,
         mockLogForwarder,
         mockWebhookClient,
         mockGitHubTokenService,
-        mockLogger
+        mockLogger,
+        mockIsolationConfig
       );
 
       // Submit a task
@@ -918,8 +908,8 @@ describe('TaskDispatcher', () => {
           return createMockChildProcess();
         });
 
-      // Stop the session to trigger completion check
-      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);
+      // Stop the container to trigger completion check
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
 
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
@@ -939,11 +929,11 @@ describe('TaskDispatcher', () => {
         mockConfig,
         statePersistence,
         mockWorktreeManager,
-        mockTmuxManager,
         mockLogForwarder,
         mockWebhookClient,
         mockGitHubTokenService,
-        mockLogger
+        mockLogger,
+        mockIsolationConfig
       );
 
       // Submit a task
@@ -975,8 +965,8 @@ describe('TaskDispatcher', () => {
           return createMockChildProcess();
         });
 
-      // Mock isSessionRunning to return false
-      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);
+      // Mock isWorkerRunning to return false
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
 
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
@@ -996,11 +986,11 @@ describe('TaskDispatcher', () => {
         mockConfig,
         statePersistence,
         mockWorktreeManager,
-        mockTmuxManager,
         mockLogForwarder,
         mockWebhookClient,
         mockGitHubTokenService,
-        mockLogger
+        mockLogger,
+        mockIsolationConfig
       );
 
       const request: CreateTaskRequest = {

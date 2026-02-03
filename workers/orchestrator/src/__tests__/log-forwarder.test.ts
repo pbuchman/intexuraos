@@ -55,6 +55,7 @@ describe('LogForwarder', () => {
         logBasePath,
         codeAgentUrl,
         orchestratorSecret,
+        internalAuthToken,
       },
       mockLogger
     );
@@ -481,7 +482,9 @@ describe('LogForwarder', () => {
       // Verify sequential numbering
       for (let i = 0; i < allChunks.length; i++) {
         const chunk = allChunks[i];
-        expect(chunk.sequence).toBe(i);
+        if (chunk) {
+          expect(chunk.sequence).toBe(i);
+        }
       }
     });
   });
@@ -636,7 +639,8 @@ describe('LogForwarder', () => {
 
       // First chunk should be at most MAX_CHUNK_SIZE
       const firstChunk = allChunks[0];
-      expect(firstChunk.content.length).toBeLessThanOrEqual(8192);
+      expect(firstChunk).toBeDefined();
+      expect(firstChunk?.content.length).toBeLessThanOrEqual(8192);
     });
 
     it('should not split at newline when too far back', async () => {
@@ -662,7 +666,8 @@ describe('LogForwarder', () => {
 
       // First chunk should be at max chunk size (not at the newline)
       const firstChunk = allChunks[0];
-      expect(firstChunk.content.length).toBeLessThanOrEqual(8192);
+      expect(firstChunk).toBeDefined();
+      expect(firstChunk?.content.length).toBeLessThanOrEqual(8192);
     });
   });
 });

@@ -97,7 +97,7 @@ describe('Orchestrator HTTP-Only Integration', () => {
   }
 
   function verifyOrchestratorSignature(
-    url: string,
+    _url: string,
     body: string,
     headers: Record<string, string>
   ): boolean {

@@ -7,16 +7,16 @@ import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { StatePersistence } from './state-persistence.js';
 import type { WorktreeManager } from './worktree-manager.js';
-import type { TmuxManager, SessionParams } from './tmux-manager.js';
 import type { LogForwarder } from './log-forwarder.js';
 import type { WebhookClient } from './webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
+import type { IsolationProvider, WorkerConfig } from './isolation/types.js';
+import type { TokenRefresher } from './isolation/token-refresher.js';
 
 const execAsync = promisify(exec);
 
 const TASK_TIMEOUT_WARNING_MS = 115 * 60 * 1000; // 1h 55m
 const TASK_TIMEOUT_KILL_MS = 120 * 60 * 1000; // 2h
-const CANCELLATION_GRACE_PERIOD_MS = 10 * 1000; // 10s
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 
 export interface DispatchError {
@@ -31,6 +31,19 @@ export interface CancelError {
   originalError?: unknown;
 }
 
+export interface IsolationConfig {
+  provider: IsolationProvider;
+  tokenRefresher: TokenRefresher;
+  secrets: {
+    ANTHROPIC_API_KEY: string;
+    LINEAR_API_KEY: string;
+    SENTRY_AUTH_TOKEN: string;
+    ZAI_API_KEY: string;
+  };
+  gcpSaKeyPath: string;
+  githubAppKeyPath: string;
+}
+
 export class TaskDispatcher {
   private runningCount = 0;
   private readonly capacityMutex = new Mutex();
@@ -40,11 +53,11 @@ export class TaskDispatcher {
     private readonly config: OrchestratorConfig,
     private readonly statePersistence: StatePersistence,
     private readonly worktreeManager: WorktreeManager,
-    private readonly tmuxManager: TmuxManager,
     private readonly logForwarder: LogForwarder,
     private readonly webhookClient: WebhookClient,
     _githubTokenService: GitHubTokenService,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly isolation: IsolationConfig
   ) {}
 
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
@@ -87,39 +100,50 @@ export class TaskDispatcher {
         };
       }
 
-      // Start tmux session
-      const sessionParams: SessionParams = {
+      // Start Docker container worker
+      let containerId: string;
+      const workerConfig: WorkerConfig = {
         taskId,
         worktreePath,
         prompt: request.prompt,
+        systemPrompt: this.buildSystemPrompt({
+          taskId,
+          worktreePath,
+          ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
+          prompt: request.prompt,
+        }),
         workerType: request.workerType,
-        machine: 'mac',
-        ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
+        secrets: this.isolation.secrets,
+        gcpSaKeyPath: this.isolation.gcpSaKeyPath,
+        githubAppKeyPath: this.isolation.githubAppKeyPath,
+        onLog: (chunk) => {
+          this.logForwarder.appendChunk(taskId, chunk);
+        },
       };
 
       try {
-        await this.tmuxManager.startSession(sessionParams);
+        const handle = await this.isolation.provider.createWorker(workerConfig);
+        containerId = handle.containerId;
+
+        // Register task with token refresher for GitHub token refresh
+        await this.isolation.tokenRefresher.registerTask(taskId);
       } catch (error) {
         this.runningCount--;
         this.worktreeManager.removeWorktree(taskId).catch((cleanupError: unknown) => {
           this.logger.error(
             { taskId, cleanupError },
-            'Failed to cleanup worktree after tmux session start failure'
+            'Failed to cleanup worktree after worker start failure'
           );
         });
         return {
           ok: false,
           error: {
             type: 'service_error',
-            message: 'Failed to start tmux session',
+            message: 'Failed to start worker container',
             originalError: error,
           },
         };
       }
-
-      // Start log forwarding
-      const logFilePath = this.getLogFilePath(taskId);
-      this.logForwarder.startForwarding(taskId, logFilePath);
 
       // Create task object
       const task: Task = {
@@ -131,8 +155,8 @@ export class TaskDispatcher {
         webhookUrl: request.webhookUrl,
         webhookSecret: request.webhookSecret,
         status: 'running',
-        tmuxSession: `cc-task-${taskId}`,
         worktreePath,
+        containerId,
         ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
         ...(request.linearIssueTitle !== undefined && {
           linearIssueTitle: request.linearIssueTitle,
@@ -177,25 +201,15 @@ export class TaskDispatcher {
     }
 
     try {
-      // Kill tmux session (graceful)
-      await this.tmuxManager.killSession(taskId, true);
-
-      // Wait for graceful shutdown
-      await new Promise((resolve) => setTimeout(resolve, CANCELLATION_GRACE_PERIOD_MS));
-
-      // Force kill if still running
-      const isRunning = await this.tmuxManager.isSessionRunning(taskId);
-      if (isRunning) {
-        await this.tmuxManager.killSession(taskId, false);
-      }
+      // Kill Docker container - destroyWorker handles graceful + force kill
+      await this.isolation.provider.destroyWorker(taskId);
+      // Unregister from token refresher
+      this.isolation.tokenRefresher.unregisterTask(taskId);
 
       // Update task status
       task.status = 'cancelled';
       task.completedAt = new Date().toISOString();
       await this.saveTask(task);
-
-      // Stop log forwarding
-      await this.logForwarder.stopForwarding(taskId);
 
       // Decrease running count
       this.runningCount--;
@@ -249,10 +263,6 @@ export class TaskDispatcher {
     return 'pbuchman/intexuraos';
   }
 
-  private getLogFilePath(taskId: string): string {
-    return `${this.config.logBasePath}/${taskId}.log`;
-  }
-
   private async saveTask(task: Task): Promise<void> {
     const state = await this.statePersistence.load();
     state.tasks[task.taskId] = task;
@@ -290,11 +300,9 @@ export class TaskDispatcher {
 
           this.logger.warn({ taskId }, 'Task timeout - killing');
 
-          // Kill tmux session
-          await this.tmuxManager.killSession(taskId, false);
-
-          // Stop log forwarding
-          await this.logForwarder.stopForwarding(taskId);
+          // Kill Docker container
+          await this.isolation.provider.destroyWorker(taskId);
+          this.isolation.tokenRefresher.unregisterTask(taskId);
 
           // Check for PR
           const result = await this.checkForResult(task);
@@ -340,7 +348,9 @@ export class TaskDispatcher {
             return;
           }
 
-          const isRunning = await this.tmuxManager.isSessionRunning(taskId);
+          // Check if Docker container is still running
+          const isRunning = await this.isolation.provider.isWorkerRunning(taskId);
+
           if (!isRunning) {
             // Task completed
             await this.handleTaskCompletion(task);
@@ -357,8 +367,8 @@ export class TaskDispatcher {
   private async handleTaskCompletion(task: Task): Promise<void> {
     this.logger.info({ taskId: task.taskId }, 'Task completed naturally');
 
-    // Stop log forwarding
-    await this.logForwarder.stopForwarding(task.taskId);
+    // Unregister from token refresher (container cleanup handled separately)
+    this.isolation.tokenRefresher.unregisterTask(task.taskId);
 
     // Check for PR
     const result = await this.checkForResult(task);
@@ -505,5 +515,67 @@ export class TaskDispatcher {
         this.activeTasks.delete(key);
       }
     }
+  }
+
+  private buildSystemPrompt(params: {
+    taskId: string;
+    worktreePath: string;
+    linearIssueId?: string;
+    prompt: string;
+  }): string {
+    const { taskId, worktreePath, linearIssueId, prompt } = params;
+
+    // Sanitize user prompt - remove XML tags and forbidden keywords
+    let sanitizedPrompt = prompt.replace(/<[^>]*>/g, '');
+    const forbiddenKeywords = [
+      'ignore',
+      'disregard',
+      'forget',
+      'override',
+      'system',
+      'instruction',
+      'instructions',
+      'instead',
+      'rather',
+      'but',
+      'however',
+    ];
+    for (const keyword of forbiddenKeywords) {
+      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+      sanitizedPrompt = sanitizedPrompt.replace(regex, '');
+    }
+    sanitizedPrompt = sanitizedPrompt.replace(/\s+/g, ' ').trim();
+
+    // Build system prompt
+    const systemPrompt = `[SYSTEM CONTEXT]
+You are a Claude Code worker in IntexuraOS running in Docker isolation.
+Task ID: ${taskId}
+Worktree: ${worktreePath}
+${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
+
+[MANDATORY - FIRST ACTION]${
+      linearIssueId !== undefined
+        ? `
+You MUST invoke: /linear ${linearIssueId}
+DO NOT proceed with any other action until this completes.`
+        : ''
+    }
+[GIT WORKFLOW]
+- Create feature branch from origin/development
+- Commit with format: "INT-{issue-id} Description"
+- Push to origin
+- Update Linear issue state to In Review
+
+[REQUIREMENTS]
+- Follow CLAUDE.md instructions in worktree
+- Use Test-First Development (write tests BEFORE implementation)
+- Run pnpm run ci:tracked before committing
+- Never push without CI passing
+
+[TASK]
+${sanitizedPrompt}`;
+
+    // Truncate to 4000 characters
+    return systemPrompt.length > 4000 ? systemPrompt.slice(0, 4000) : systemPrompt;
   }
 }

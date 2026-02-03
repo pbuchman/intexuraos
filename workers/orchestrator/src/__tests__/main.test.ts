@@ -52,6 +52,7 @@ describe('main.ts', () => {
     stateFilePath: '/tmp/state.json',
     worktreeBasePath: '/tmp/worktrees',
     logBasePath: '/tmp/logs',
+    codeAgentUrl: 'http://localhost:8080',
     githubAppId: 'test-app-id',
     githubAppPrivateKeyPath: '/tmp/key.pem',
     githubInstallationId: 'test-installation-id',
@@ -191,7 +192,7 @@ describe('main.ts', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
         status: 'running' as const,
-        tmuxSession: 'session-1',
+        containerId: 'session-1',
         worktreePath: '/path/to/worktree',
         startedAt: '2025-01-26T00:00:00.000Z',
       };
@@ -248,7 +249,7 @@ describe('main.ts', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
         status: 'running' as const,
-        tmuxSession: 'session-1',
+        containerId: 'session-1',
         worktreePath: '/path/to/worktree',
         startedAt: '2025-01-26T00:00:00.000Z',
       };
@@ -302,7 +303,7 @@ describe('main.ts', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
         status: 'running' as const,
-        tmuxSession: 'session-1',
+        containerId: 'session-1',
         worktreePath: '/path/to/worktree',
         startedAt: '2025-01-26T00:00:00.000Z',
       };
@@ -316,7 +317,7 @@ describe('main.ts', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
         status: 'completed' as const,
-        tmuxSession: 'session-2',
+        containerId: 'session-2',
         worktreePath: '/path/to/worktree2',
         startedAt: '2025-01-26T00:00:00.000Z',
         completedAt: '2025-01-26T01:00:00.000Z',
@@ -372,7 +373,7 @@ describe('main.ts', () => {
         webhookUrl: 'https://example.com/webhook1',
         webhookSecret: 'secret1',
         status: 'running' as const,
-        tmuxSession: 'session-1',
+        containerId: 'session-1',
         worktreePath: '/path/to/worktree1',
         startedAt: '2025-01-26T00:00:00.000Z',
       };
@@ -386,7 +387,7 @@ describe('main.ts', () => {
         webhookUrl: 'https://example.com/webhook2',
         webhookSecret: 'secret2',
         status: 'running' as const,
-        tmuxSession: 'session-2',
+        containerId: 'session-2',
         worktreePath: '/path/to/worktree2',
         startedAt: '2025-01-26T00:00:00.000Z',
       };
