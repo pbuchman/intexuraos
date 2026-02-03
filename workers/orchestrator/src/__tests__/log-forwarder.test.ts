@@ -16,6 +16,7 @@ describe('LogForwarder', () => {
   // Test configuration
   const codeAgentUrl = 'https://code-agent.test';
   const orchestratorSecret = 'test-orchestrator-secret';
+  const internalAuthToken = 'test-internal-auth-token';
 
   // Mock logger
   const mockLogger: Logger = {
@@ -160,7 +161,7 @@ describe('LogForwarder', () => {
       });
 
       const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret },
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
         mockLogger
       );
 
@@ -199,7 +200,7 @@ describe('LogForwarder', () => {
       });
 
       const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret },
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
         mockLogger
       );
 
@@ -245,7 +246,7 @@ describe('LogForwarder', () => {
       });
 
       const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret },
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
         mockLogger
       );
 
@@ -280,7 +281,7 @@ describe('LogForwarder', () => {
       });
 
       const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret },
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
         mockLogger
       );
 
@@ -320,7 +321,7 @@ describe('LogForwarder', () => {
       });
 
       const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret },
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
         mockLogger
       );
 
@@ -502,7 +503,7 @@ describe('LogForwarder', () => {
       });
 
       const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret },
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
         mockLogger
       );
 
@@ -531,7 +532,7 @@ describe('LogForwarder', () => {
       };
 
       const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret },
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
         loggerWithWarn
       );
 
@@ -560,7 +561,7 @@ describe('LogForwarder', () => {
       };
 
       const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret },
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
         loggerWithWarn
       );
 
@@ -596,7 +597,7 @@ describe('LogForwarder', () => {
       };
 
       const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret },
+        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
         loggerWithError
       );
 

@@ -6,6 +6,7 @@ export interface LogForwarderConfig {
   logBasePath: string;
   codeAgentUrl: string;
   orchestratorSecret: string;
+  internalAuthToken: string;
 }
 
 export interface LogChunkData {
@@ -252,7 +253,8 @@ export class LogForwarder {
     taskId: string;
     chunks: { sequence: number; content: string; timestamp: string }[];
   }): Promise<boolean> {
-    const url = `${this.config.codeAgentUrl}/internal/logs`;
+    const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
+    const url = `${baseUrl}/internal/logs`;
     const jsonBody = JSON.stringify(payload);
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = this.signPayload(jsonBody, timestamp);
@@ -267,6 +269,7 @@ export class LogForwarder {
             'Content-Type': 'application/json',
             'X-Request-Timestamp': String(timestamp),
             'X-Request-Signature': signature,
+            'X-Internal-Auth': this.config.internalAuthToken,
           },
           body: jsonBody,
         });
