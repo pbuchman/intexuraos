@@ -15,12 +15,11 @@ const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string 
   { id: 'glm', name: 'GLM', description: 'GLM - alternative model' },
 ];
 
-type LinearMode = 'none' | 'link' | 'create';
+type LinearMode = 'create' | 'link';
 
 const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: React.ReactNode }[] = [
-  { id: 'none', name: 'None', description: 'No Linear issue', icon: null },
-  { id: 'link', name: 'Link Existing', description: 'Link to an existing Linear issue', icon: <Link2 className="h-4 w-4" /> },
   { id: 'create', name: 'Create New', description: 'Auto-generate title from task description', icon: <Sparkles className="h-4 w-4" /> },
+  { id: 'link', name: 'Link Existing', description: 'Link to an existing Linear issue', icon: <Link2 className="h-4 w-4" /> },
 ];
 
 export function CodeTaskNewPage(): React.JSX.Element {
@@ -30,7 +29,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
   const [prompt, setPrompt] = useState('');
   const [workerType, setWorkerType] = useState<CodeTaskWorkerType>('auto');
-  const [linearMode, setLinearMode] = useState<LinearMode>('none');
+  const [linearMode, setLinearMode] = useState<LinearMode>('create');
   const [selectedIssue, setSelectedIssue] = useState<LinearIssueOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -292,7 +291,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
           <div className="border-t border-slate-200 pt-6 dark:border-slate-700">
             <h3 className="text-sm font-medium text-slate-700 mb-4 dark:text-slate-200">
-              Linear Issue (Optional)
+              Linear Issue
             </h3>
 
             <div className="flex flex-wrap gap-3 mb-4">
@@ -352,11 +351,6 @@ export function CodeTaskNewPage(): React.JSX.Element {
               </div>
             )}
 
-            {linearMode === 'none' && (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                No Linear issue will be linked to this task.
-              </p>
-            )}
           </div>
         </div>
       </Card>
