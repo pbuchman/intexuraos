@@ -49,6 +49,38 @@ export class DockerProvider implements IsolationProvider {
     this.workers = new Map();
   }
 
+  /**
+   * Clean up orphaned worker containers from previous orchestrator runs.
+   * Should be called on startup to prevent name collisions.
+   */
+  async cleanupOrphanedContainers(): Promise<void> {
+    try {
+      const containers = await this.docker.listContainers({
+        all: true,
+        filters: { name: ['claude-worker-'] },
+      });
+
+      for (const containerInfo of containers) {
+        const container = this.docker.getContainer(containerInfo.Id);
+        this.logger.info(
+          { containerId: containerInfo.Id, name: containerInfo.Names[0] },
+          'Cleaning up orphaned container'
+        );
+
+        try {
+          if (containerInfo.State === 'running') {
+            await container.stop({ t: 5 });
+          }
+          await container.remove({ force: true });
+        } catch {
+          this.logger.debug({ containerId: containerInfo.Id }, 'Failed to remove orphan');
+        }
+      }
+    } catch (error) {
+      this.logger.warn({ error }, 'Failed to list containers for cleanup');
+    }
+  }
+
   async createWorker(config: WorkerConfig): Promise<WorkerHandle> {
     const { taskId, worktreePath, prompt, secrets, workerType } = config;
 
@@ -106,11 +138,18 @@ export class DockerProvider implements IsolationProvider {
         Memory: this.config.memoryLimitBytes,
         NanoCpus: this.config.cpuCount * 1e9,
         NetworkMode: this.config.networkName,
+        // ReadonlyRootfs: false - Claude Code writes to /home/claude/.claude/ for
+        // settings, session cache, and MCP server state. With /home/claude as tmpfs,
+        // this would work, but the Alpine base image also needs writes to /etc/passwd
+        // for user creation at runtime. Keeping rootfs writable is a pragmatic choice.
         ReadonlyRootfs: false,
         Tmpfs: {
           '/tmp': 'rw,noexec,nosuid,size=2g',
+          '/home/claude': 'rw,noexec,nosuid,size=500m',
         },
         CapDrop: ['ALL'],
+        // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude
+        // uses to verify connectivity. Without it, Claude's network-test commands fail.
         CapAdd: ['NET_RAW'],
         SecurityOpt: ['no-new-privileges'],
         AutoRemove: false,

@@ -6,6 +6,7 @@ import type { WorkerConfig } from '../types.js';
 interface MockDocker {
   createContainer: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
+  listContainers: ReturnType<typeof vi.fn>;
 }
 
 interface MockContainer {
@@ -80,6 +81,7 @@ function createMockDocker(): MockDockerResult {
   const mockDocker = {
     createContainer: vi.fn().mockResolvedValue(mockContainer),
     getContainer: vi.fn().mockReturnValue(mockContainer),
+    listContainers: vi.fn().mockResolvedValue([]),
   };
 
   return {
@@ -428,6 +430,56 @@ describe('DockerProvider', () => {
       await expect(provider.attachTTY('non-existent')).rejects.toThrow(
         'Worker non-existent not found'
       );
+    });
+  });
+
+  describe('cleanupOrphanedContainers', () => {
+    it('removes orphaned containers on startup', async () => {
+      const orphanContainer = {
+        Id: 'orphan-container-id',
+        Names: ['/claude-worker-orphan-task'],
+        State: 'running',
+      };
+
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([orphanContainer]);
+
+      await provider.cleanupOrphanedContainers();
+
+      expect(mocks.mockDocker.listContainers).toHaveBeenCalledWith({
+        all: true,
+        filters: { name: ['claude-worker-'] },
+      });
+      expect(mocks.mockDocker.getContainer).toHaveBeenCalledWith('orphan-container-id');
+      expect(mocks.mockContainer.stop).toHaveBeenCalledWith({ t: 5 });
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+    });
+
+    it('handles stopped orphan containers', async () => {
+      const orphanContainer = {
+        Id: 'orphan-container-id',
+        Names: ['/claude-worker-orphan-task'],
+        State: 'exited',
+      };
+
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([orphanContainer]);
+
+      await provider.cleanupOrphanedContainers();
+
+      expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+    });
+
+    it('handles empty container list gracefully', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([]);
+
+      await expect(provider.cleanupOrphanedContainers()).resolves.not.toThrow();
+    });
+
+    it('handles list error gracefully', async () => {
+      mocks.mockDocker.listContainers.mockRejectedValueOnce(new Error('Docker not available'));
+
+      await expect(provider.cleanupOrphanedContainers()).resolves.not.toThrow();
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
   });
 });
