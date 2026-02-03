@@ -29,7 +29,8 @@ function signPayload(payload: string, secret: string, timestamp: number): string
 export class WebhookClient {
   constructor(
     private readonly statePersistence: StatePersistence,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly internalAuthToken: string
   ) {}
 
   async send(params: {
@@ -168,6 +169,7 @@ export class WebhookClient {
           'Content-Type': 'application/json',
           'X-Request-Timestamp': String(timestamp),
           'X-Request-Signature': signature,
+          'X-Internal-Auth': this.internalAuthToken,
         },
         body,
         signal: controller.signal,

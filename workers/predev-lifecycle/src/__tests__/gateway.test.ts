@@ -401,6 +401,8 @@ describe('gateway function', () => {
       expect(mockRes.json).toHaveBeenCalledWith({
         locked: true,
         branch: 'development',
+        commitSha: null,
+        commitMessage: null,
         status: 'running',
       });
     });
@@ -416,6 +418,8 @@ describe('gateway function', () => {
       expect(mockRes.json).toHaveBeenCalledWith({
         locked: false,
         branch: 'unknown',
+        commitSha: null,
+        commitMessage: null,
         status: 'unknown',
       });
     });
@@ -437,6 +441,8 @@ describe('gateway function', () => {
       expect(mockRes.json).toHaveBeenCalledWith({
         locked: false,
         branch: 'development',
+        commitSha: null,
+        commitMessage: null,
         status: 'running',
       });
     });
@@ -484,6 +490,8 @@ describe('gateway function', () => {
       expect(mockRes.json).toHaveBeenCalledWith({
         locked: false,
         branch: 'unknown',
+        commitSha: null,
+        commitMessage: null,
         status: 'unknown',
       });
     });
