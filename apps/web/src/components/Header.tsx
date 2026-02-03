@@ -155,7 +155,7 @@ export function Header(): React.JSX.Element {
 
       <div className="flex items-center gap-2 md:gap-4">
         {/* Worker Status Indicator */}
-        {isAuthenticated && workersStatus !== null && workersStatus.workers.length > 0 && (
+        {isAuthenticated && workersStatus !== null && (
           <div className="relative" ref={workersRef}>
             <button
               onClick={(): void => {
@@ -167,9 +167,11 @@ export function Header(): React.JSX.Element {
               <Server className="h-4 w-4 text-slate-500" />
               <span
                 className={`h-2 w-2 rounded-full ${
-                  workersStatus.workers.some((w) => w.healthy)
-                    ? 'bg-green-500'
-                    : 'bg-red-500'
+                  workersStatus.workers.length === 0
+                    ? 'bg-gray-400'
+                    : workersStatus.workers.some((w) => w.healthy)
+                      ? 'bg-green-500'
+                      : 'bg-red-500'
                 }`}
               />
             </button>
@@ -180,55 +182,77 @@ export function Header(): React.JSX.Element {
                   <div className="text-xs font-medium uppercase text-slate-400">
                     Code Workers
                   </div>
-                  <button
-                    onClick={(): void => {
-                      void refreshWorkersStatus();
-                    }}
-                    className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                    title="Refresh status"
-                  >
-                    Refresh
-                  </button>
-                </div>
-
-                {workersStatus.workers.map((worker) => {
-                  const display = getStatusDisplay(worker);
-                  return (
-                    <div
-                      key={worker.name}
-                      className="flex items-center justify-between px-4 py-2 text-sm"
+                  {workersStatus.workers.length > 0 && (
+                    <button
+                      onClick={(): void => {
+                        void refreshWorkersStatus();
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                      title="Refresh status"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{display.icon}</span>
-                        <div className="flex flex-col">
-                          <span className="font-medium text-slate-700 dark:text-slate-200">
-                            {worker.name}
-                          </span>
-                          {worker.stale && (
-                            <span className="text-xs text-slate-400">
-                              (stale)
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {display.text}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                <div className="mt-1 border-t border-slate-100 px-4 py-2 dark:border-slate-700">
-                  <Link
-                    to="/code-tasks"
-                    onClick={(): void => {
-                      setIsWorkersOpen(false);
-                    }}
-                    className="block text-sm text-blue-600 hover:underline dark:text-blue-400"
-                  >
-                    View Code Tasks →
-                  </Link>
+                      Refresh
+                    </button>
+                  )}
                 </div>
+
+                {workersStatus.workers.length === 0 ? (
+                  <div className="px-4 py-3">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                      <span className="text-lg">⚪</span>
+                      <span>No workers configured</span>
+                    </div>
+                    <Link
+                      to="/settings/code-workers"
+                      onClick={(): void => {
+                        setIsWorkersOpen(false);
+                      }}
+                      className="mt-2 block text-sm text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Configure in Settings →
+                    </Link>
+                  </div>
+                ) : (
+                  <>
+                    {workersStatus.workers.map((worker) => {
+                      const display = getStatusDisplay(worker);
+                      return (
+                        <div
+                          key={worker.name}
+                          className="flex items-center justify-between px-4 py-2 text-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{display.icon}</span>
+                            <div className="flex flex-col">
+                              <span className="font-medium text-slate-700 dark:text-slate-200">
+                                {worker.name}
+                              </span>
+                              {worker.stale && (
+                                <span className="text-xs text-slate-400">
+                                  (stale)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {display.text}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <div className="mt-1 border-t border-slate-100 px-4 py-2 dark:border-slate-700">
+                      <Link
+                        to="/code-tasks"
+                        onClick={(): void => {
+                          setIsWorkersOpen(false);
+                        }}
+                        className="block text-sm text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        View Code Tasks →
+                      </Link>
+                    </div>
+                  </>
+                )}
               </div>
             ) : null}
           </div>
