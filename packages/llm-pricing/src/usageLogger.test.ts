@@ -180,7 +180,7 @@ describe('usageLogger', () => {
 
       await usageLogger.log(params);
 
-      const callArgs = logger.info.mock.calls[0] as unknown[];
+      const callArgs = vi.mocked(logger.info).mock.calls[0] as unknown[];
       expect(callArgs[0] as Record<string, unknown>).not.toHaveProperty('errorMessage');
     });
 
@@ -228,7 +228,7 @@ describe('usageLogger', () => {
       const params: UsageLogParams = {
         userId: 'user-123',
         provider: LlmProviders.OpenAI,
-        model: LlmModels.GPT4,
+        model: LlmModels.GPT4oMini,
         callType: 'generate',
         usage: {
           inputTokens: 100,

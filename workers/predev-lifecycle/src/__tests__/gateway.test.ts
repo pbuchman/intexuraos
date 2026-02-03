@@ -280,6 +280,29 @@ describe('gateway function', () => {
       );
     });
 
+    it('should not duplicate Content-Type header when incoming request has content-type', async () => {
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        status: 201,
+        headers: new Map() as unknown as Headers,
+        text: () => Promise.resolve('created'),
+      } as Response);
+
+      mockReq.method = 'POST';
+      mockReq.body = { data: 'test' };
+      mockReq.headers = { 'content-type': 'application/json' };
+
+      await gateway(mockReq as never, mockRes as never);
+
+      const fetchCall = vi.mocked(global.fetch).mock.calls[0];
+      const requestOptions = fetchCall?.[1] as RequestInit | undefined;
+      const headers = requestOptions?.headers as Record<string, string> | undefined;
+
+      // Should have exactly one Content-Type header, not duplicated
+      expect(headers?.['Content-Type']).toBe('application/json');
+      expect(headers?.['content-type']).toBeUndefined();
+    });
+
     it('should proxy SSE logs endpoint when running', async () => {
       const mockReader = {
         read: vi
