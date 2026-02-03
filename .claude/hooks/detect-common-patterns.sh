@@ -154,7 +154,7 @@ if [[ "$FILE_PATH" =~ \.(ts|tsx)$ ]] && [[ ! "$FILE_PATH" =~ \.d\.ts$ ]]; then
                 "Line $LINE_NUM: $(echo "$LINE_CONTENT" | xargs)" \
                 "Narrow Result type before accessing .value: if (!result.ok) return result;"
         fi
-    done < <(grep -nE "result\w*\.value" "$FILE_PATH" 2>/dev/null | head -3 || true)
+    done < <(grep -nE "result\w*\.value" "$FILE_PATH" 2>/dev/null || true)
 
 fi  # End TypeScript checks
 

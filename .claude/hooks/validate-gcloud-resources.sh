@@ -2,12 +2,15 @@
 # BLOCK: Direct GCloud resource creation - must use Terraform
 # Exit 0 = allow, Exit 2 = block with stderr message
 
-HOOK_NAME="validate-gcloud-resources"
-LOG_FILE="$(dirname "$0")/${HOOK_NAME}.log"
+set -euo pipefail
 
-log_blocked() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] BLOCKED: $1" >> "$LOG_FILE"
-}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Source shared logging library
+# shellcheck source=lib/log.sh
+source "${SCRIPT_DIR}/lib/log.sh"
+
+HOOK_NAME="validate-gcloud-resources"
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -29,7 +32,9 @@ BLOCKED: Direct gcloud resource creation forbidden. Use Terraform.
 Detected: $pattern
 Use instead: $tf_resource in terraform/environments/dev/main.tf
 EOF
-        log_blocked "$COMMAND"
+        log_blocked "$HOOK_NAME" "direct-gcloud-create" \
+            "Direct gcloud resource creation: $pattern" \
+            "Use Terraform: $tf_resource"
         exit 2
     fi
 }
