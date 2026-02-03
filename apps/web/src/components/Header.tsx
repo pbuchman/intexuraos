@@ -66,7 +66,15 @@ export function Header(): React.JSX.Element {
   const { isInstalled } = usePWA();
   const { status: workersStatus, refresh: refreshWorkersStatus } = useWorkersStatus();
   const { resolvedTheme, toggleTheme } = useTheme();
-  const { isPredevMode, branchLocked, currentBranch, toggleLock, isLoading: isLockLoading } = usePredev();
+  const {
+    isPredevMode,
+    branchLocked,
+    currentBranch,
+    currentCommitSha,
+    currentCommitMessage,
+    toggleLock,
+    isLoading: isLockLoading,
+  } = usePredev();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isWorkersOpen, setIsWorkersOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -267,22 +275,36 @@ export function Header(): React.JSX.Element {
           {resolvedTheme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
 
-        {/* Branch Lock Toggle - Predev only */}
+        {/* Branch Info + Lock Toggle - Predev only */}
         {isPredevMode && (
-          <button
-            onClick={(): void => {
-              void toggleLock();
-            }}
-            disabled={isLockLoading}
-            className="flex items-center justify-center rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            title={branchLocked ? `Branch locked: ${currentBranch}` : 'Lock current branch'}
-          >
-            {branchLocked ? (
-              <Lock className="h-5 w-5 text-amber-500" />
-            ) : (
-              <Unlock className="h-5 w-5" />
-            )}
-          </button>
+          <div className="flex items-center gap-1">
+            <div
+              className="hidden items-center gap-1.5 rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 sm:flex"
+              title={currentCommitMessage ?? 'No commit info'}
+            >
+              <span className="max-w-24 truncate md:max-w-32">{currentBranch}</span>
+              {currentCommitSha !== null && (
+                <>
+                  <span className="text-indigo-400">@</span>
+                  <span className="font-mono">{currentCommitSha.slice(0, 7)}</span>
+                </>
+              )}
+            </div>
+            <button
+              onClick={(): void => {
+                void toggleLock();
+              }}
+              disabled={isLockLoading}
+              className="flex items-center justify-center rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              title={branchLocked ? `Branch locked: ${currentBranch}` : 'Lock current branch'}
+            >
+              {branchLocked ? (
+                <Lock className="h-5 w-5 text-amber-500" />
+              ) : (
+                <Unlock className="h-5 w-5" />
+              )}
+            </button>
+          </div>
         )}
 
         {pendingCount > 0 && (

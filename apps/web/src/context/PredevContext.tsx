@@ -3,6 +3,8 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 interface PredevState {
   locked: boolean;
   branch: string;
+  commitSha: string | null;
+  commitMessage: string | null;
   status: string;
 }
 
@@ -10,6 +12,8 @@ interface PredevContextValue {
   isPredevMode: boolean;
   branchLocked: boolean;
   currentBranch: string;
+  currentCommitSha: string | null;
+  currentCommitMessage: string | null;
   currentStatus: string;
   toggleLock: () => Promise<void>;
   isLoading: boolean;
@@ -30,6 +34,8 @@ export function PredevProvider({ children }: PredevProviderProps): React.JSX.Ele
   const [state, setState] = useState<PredevState>({
     locked: false,
     branch: 'unknown',
+    commitSha: null,
+    commitMessage: null,
     status: 'unknown',
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -94,6 +100,8 @@ export function PredevProvider({ children }: PredevProviderProps): React.JSX.Ele
         isPredevMode,
         branchLocked: state.locked,
         currentBranch: state.branch,
+        currentCommitSha: state.commitSha,
+        currentCommitMessage: state.commitMessage,
         currentStatus: state.status,
         toggleLock,
         isLoading,
