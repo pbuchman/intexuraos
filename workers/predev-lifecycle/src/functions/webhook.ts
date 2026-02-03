@@ -134,21 +134,16 @@ export const webhook: HttpFunction = async (req, res) => {
     return;
   }
 
-  // If VM is running on the same branch, notify it to pull latest code
+  // If VM is running, notify it to pull latest code (handles same or different branch)
   /* v8 ignore start -- test-infra: VM notification requires specific running state @preserve */
-  if (currentState?.status === 'running' && currentState.branch === branch) {
-    logger.info({ branch, commitSha }, 'VM running on same branch - notifying for code update');
-    await publishCodeUpdate(branch, commitSha ?? 'unknown');
-  }
-  /* v8 ignore stop @preserve */
-
-  // If VM is running on different branch (and not locked), log but don't switch
-  /* v8 ignore start -- test-infra: branch switch detection requires specific VM state @preserve */
-  if (currentState?.status === 'running' && currentState.branch !== branch) {
+  if (currentState?.status === 'running') {
     logger.info(
-      { from: currentState.branch, to: branch },
-      'Branch change detected - VM will switch on next restart'
+      { branch, commitSha, currentBranch: currentState.branch },
+      currentState.branch === branch
+        ? 'VM running on same branch - notifying for code update'
+        : 'VM running on different branch - notifying for branch switch'
     );
+    await publishCodeUpdate(branch, commitSha ?? 'unknown');
   }
   /* v8 ignore stop @preserve */
 
