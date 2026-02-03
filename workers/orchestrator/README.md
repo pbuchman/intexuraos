@@ -169,7 +169,7 @@ The dev server:
 ### Running Tests
 
 ```bash
-pnpm test        # Run once
+pnpm test        # Run once (unit tests only)
 pnpm test:watch  # Watch mode
 ```
 
@@ -178,6 +178,80 @@ pnpm test:watch  # Watch mode
 ```bash
 pnpm typecheck
 ```
+
+---
+
+## Local Testing (Container Isolation)
+
+The orchestrator includes E2E tests for Docker container isolation. These test the `DockerProvider` with real containers.
+
+### Prerequisites
+
+| Requirement    | Check Command                              | Install                                                      |
+| -------------- | ------------------------------------------ | ------------------------------------------------------------ |
+| Docker daemon  | `docker info`                              | [Docker Desktop](https://docker.com/products/docker-desktop) |
+| Docker network | `docker network inspect claude-worker-net` | See below                                                    |
+| Test image     | `docker image inspect claude-worker:test`  | See below                                                    |
+
+### 1. Create Worker Network
+
+```bash
+./scripts/setup-worker-network.sh
+```
+
+Or manually:
+
+```bash
+docker network create --driver bridge --subnet 172.28.0.0/16 claude-worker-net
+```
+
+### 2. Build Test Image
+
+```bash
+cd workers/claude-worker
+docker build -t claude-worker:test -f Dockerfile.test .
+```
+
+The test image uses a **Claude stub** (`test-fixtures/claude-stub.sh`) instead of real Claude CLI. The stub:
+
+- Echoes input for verification
+- Responds to test commands: `exit`, `error`, `timeout`, `network-test`, `resource-test`, `file-test`
+- Verifies mounts and permissions
+
+### 3. Run E2E Tests
+
+```bash
+# From orchestrator directory
+pnpm test:e2e
+```
+
+Or run all tests (unit + E2E):
+
+```bash
+pnpm test
+```
+
+> **Note:** E2E tests auto-skip if prerequisites are missing. Check test output for "skipped" count.
+
+### Test Coverage
+
+| Suite               | What it tests                          |
+| ------------------- | -------------------------------------- |
+| Container Lifecycle | Start, stop, destroy containers        |
+| Mount Verification  | `/repo` writable, `/secrets` read-only |
+| Input/Output        | stdin delivery, exit codes             |
+| Resource Limits     | Memory reporting, cgroup limits        |
+| Timeout Handling    | Container killed after timeout         |
+| Concurrency         | Max workers limit enforced             |
+
+### Troubleshooting
+
+| Issue                   | Fix                                                                |
+| ----------------------- | ------------------------------------------------------------------ |
+| Tests skipped           | Run prerequisite check commands above                              |
+| "Network not found"     | Run `./scripts/setup-worker-network.sh`                            |
+| "Image not found"       | Rebuild: `docker build -t claude-worker:test -f Dockerfile.test .` |
+| Container name conflict | Run `docker rm -f $(docker ps -aq --filter name=claude-worker-)`   |
 
 ---
 
