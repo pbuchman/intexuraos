@@ -33,7 +33,7 @@ export function getConfig(): AppConfig {
     bookmarksAgentUrl: getServiceUrl('INTEXURAOS_BOOKMARKS_AGENT_URL', '/api/bookmarks'),
     calendarAgentUrl: getServiceUrl('INTEXURAOS_CALENDAR_AGENT_URL', '/api/calendar'),
     linearAgentUrl: getServiceUrl('INTEXURAOS_LINEAR_AGENT_URL', '/api/linear'),
-    codeAgentUrl: getServiceUrl('INTEXURAOS_CODE_AGENT_URL', '/api'),
+    codeAgentUrl: getServiceUrl('INTEXURAOS_CODE_AGENT_URL', '/api/code'),
     chatAgentUrl: getServiceUrl('INTEXURAOS_CHAT_AGENT_URL', '/api/chat'),
     appSettingsServiceUrl: getServiceUrl('INTEXURAOS_APP_SETTINGS_SERVICE_URL', '/api/settings'),
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
