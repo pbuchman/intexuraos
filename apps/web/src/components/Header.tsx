@@ -202,7 +202,7 @@ export function Header(): React.JSX.Element {
                       <span>No workers configured</span>
                     </div>
                     <Link
-                      to="/settings/code-workers"
+                      to="/settings/workers"
                       onClick={(): void => {
                         setIsWorkersOpen(false);
                       }}
