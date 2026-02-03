@@ -5,6 +5,8 @@ export interface PredevState {
   status: 'stopped' | 'starting' | 'running' | 'stopping';
   vmIp: string | null;
   branch: string;
+  commitSha: string | null;
+  commitMessage: string | null;
   branchLocked: boolean;
   lastActivity: Date;
   startedAt: Date | null;
@@ -46,6 +48,8 @@ export class StateManager {
         status: (data['status'] ?? 'stopped') as PredevState['status'],
         vmIp: (data['vmIp'] ?? null) as string | null,
         branch: (data['branch'] ?? 'development') as string,
+        commitSha: (data['commitSha'] ?? null) as string | null,
+        commitMessage: (data['commitMessage'] ?? null) as string | null,
         branchLocked: data['branchLocked'] === true,
         lastActivity: toDate(data['lastActivity']) ?? new Date(),
         startedAt: toDate(data['startedAt']),

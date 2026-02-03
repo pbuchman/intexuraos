@@ -17,6 +17,9 @@ interface GitHubPushPayload {
   repository?: {
     full_name?: string;
   };
+  head_commit?: {
+    message?: string;
+  };
 }
 
 interface CodeUpdateMessage {
@@ -110,7 +113,8 @@ export const webhook: HttpFunction = async (req, res) => {
   }
 
   const payload = req.body as GitHubPushPayload;
-  const { ref, after: commitSha } = payload;
+  const { ref, after: commitSha, head_commit } = payload;
+  const commitMessage = head_commit?.message ?? null;
 
   if (!ref || ref.length === 0) {
     logger.warn('Missing ref in payload');
@@ -147,8 +151,15 @@ export const webhook: HttpFunction = async (req, res) => {
   }
   /* v8 ignore stop @preserve */
 
-  // Update state with new branch
-  await state.setState({ branch });
+  // Update state with new branch and commit info
+  /* v8 ignore start -- ts-type: split() always returns at least one element, [0] ?? null is TypeScript safety @preserve */
+  const firstLine = commitMessage !== null ? (commitMessage.split('\n')[0] ?? null) : null;
+  /* v8 ignore stop @preserve */
+  await state.setState({
+    branch,
+    commitSha: commitSha ?? null,
+    commitMessage: firstLine,
+  });
 
   res.status(200).send('OK');
 };
