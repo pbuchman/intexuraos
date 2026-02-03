@@ -2,13 +2,27 @@
  * ChatPanel - Desktop conversation panel.
  * Fixed position, bottom-right corner, above FAB.
  * Displays messages, typing indicator, pending action confirmations, and input area.
+ * Resizable via drag handle at top-left corner.
  */
 
-import { useEffect, useRef } from 'react';
-import { Minimize2, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { ChatMessage } from './ChatMessage.js';
 import { ChatInput } from './ChatInput.js';
-import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat';
+import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat.js';
+
+/** Default dimensions for the chat panel */
+const DEFAULT_WIDTH = 384; // w-96 in Tailwind
+const DEFAULT_HEIGHT = 500;
+const MIN_WIDTH = 320;
+const MIN_HEIGHT = 300;
+const MAX_WIDTH = 800;
+const MAX_HEIGHT = 900;
+
+export interface ChatPanelSize {
+  width: number;
+  height: number;
+}
 
 interface ChatPanelProps {
   isOpen: boolean;
@@ -17,8 +31,13 @@ interface ChatPanelProps {
   error: string | null;
   pendingAction: SuggestedAction | null;
   onSendMessage: (message: string) => void;
-  onClose: () => void;
   onClear: () => void;
+  /** Initial size (from localStorage) */
+  initialSize?: ChatPanelSize;
+  /** Callback when size changes (for persistence) */
+  onSizeChange?: (size: ChatPanelSize) => void;
+  /** User's profile picture URL */
+  userPicture?: string;
 }
 
 export function ChatPanel({
@@ -28,46 +47,144 @@ export function ChatPanel({
   error,
   pendingAction,
   onSendMessage,
-  onClose,
   onClear,
+  initialSize,
+  onSizeChange,
+  userPicture,
 }: ChatPanelProps): React.JSX.Element | null {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<ChatPanelSize>({
+    width: initialSize?.width ?? DEFAULT_WIDTH,
+    height: initialSize?.height ?? DEFAULT_HEIGHT,
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading, error, pendingAction]);
 
+  // Handle resize mouse/touch move
+  const handleResizeMove = useCallback((clientX: number, clientY: number) => {
+    if (resizeStartRef.current === null) return;
+
+    const { x: startX, y: startY, width: startWidth, height: startHeight } = resizeStartRef.current;
+
+    // Calculate delta (negative because dragging top-left corner)
+    const deltaX = startX - clientX;
+    const deltaY = startY - clientY;
+
+    // Calculate new dimensions with constraints
+    const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + deltaX));
+    const newHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeight + deltaY));
+
+    setSize({ width: newWidth, height: newHeight });
+  }, []);
+
+  // Handle resize end
+  const handleResizeEnd = useCallback(() => {
+    if (resizeStartRef.current !== null) {
+      setIsResizing(false);
+      resizeStartRef.current = null;
+      // Notify parent of size change for persistence
+      onSizeChange?.(size);
+    }
+  }, [size, onSizeChange]);
+
+  // Mouse event handlers
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent): void => {
+      e.preventDefault();
+      handleResizeMove(e.clientX, e.clientY);
+    };
+
+    const handleMouseUp = (): void => {
+      handleResizeEnd();
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return (): void => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, handleResizeMove, handleResizeEnd]);
+
+  // Start resize on mouse down
+  const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+
+    const clientX = 'touches' in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
+    const clientY = 'touches' in e ? (e.touches[0]?.clientY ?? 0) : e.clientY;
+
+    resizeStartRef.current = {
+      x: clientX,
+      y: clientY,
+      width: size.width,
+      height: size.height,
+    };
+  }, [size]);
+
+  // Touch event handlers for resize
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (touch !== undefined) {
+      handleResizeMove(touch.clientX, touch.clientY);
+    }
+  }, [handleResizeMove]);
+
+  const handleTouchEnd = useCallback(() => {
+    handleResizeEnd();
+  }, [handleResizeEnd]);
+
   if (!isOpen) return null;
 
   const pendingCommandText = typeof pendingAction?.payload['text'] === 'string' ? pendingAction.payload['text'] : undefined;
 
   return (
-    <div className="fixed bottom-20 right-4 z-50 hidden md:flex w-96 flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+    <div
+      ref={panelRef}
+      className={`fixed bottom-20 right-4 z-50 hidden md:flex flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 ${isResizing ? 'select-none' : ''}`}
+      // eslint-disable-next-line no-restricted-syntax -- Dynamic resize dimensions require inline style (Tailwind classes are static)
+      style={{ width: size.width, height: size.height }}
+    >
+      {/* Resize handle - top-left corner */}
+      <div
+        className="absolute -top-1 -left-1 w-4 h-4 cursor-nwse-resize z-10 group"
+        onMouseDown={handleResizeStart}
+        onTouchStart={handleResizeStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        aria-label="Resize chat panel"
+        role="separator"
+        aria-orientation="horizontal"
+      >
+        {/* Visual indicator */}
+        <div className="absolute top-1 left-1 w-2 h-2 rounded-full bg-gray-300 group-hover:bg-blue-500 dark:bg-gray-600 dark:group-hover:bg-blue-400 transition-colors" />
+      </div>
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white text-sm font-bold">
-            I
-          </div>
+          <img
+            src="/apple-touch-icon-180x180.png"
+            alt="Intex"
+            className="h-8 w-8 rounded-full"
+          />
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Intex</h2>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onClear}
-            className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-            aria-label="Clear conversation"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={onClose}
-            className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-            aria-label="Close chat"
-          >
-            <Minimize2 className="h-4 w-4" />
-          </button>
-        </div>
+        <button
+          onClick={onClear}
+          className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+          aria-label="Clear conversation"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Messages area */}
@@ -86,6 +203,7 @@ export function ChatPanel({
             key={message.id}
             message={message}
             isUser={message.role === 'user'}
+            {...(message.role === 'user' && userPicture !== undefined && { userPicture })}
           />
         ))}
 

@@ -3,12 +3,12 @@
  * Handles FAB toggle, message sending, command creation flow, and localStorage persistence.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../../context';
 import { ChatFAB } from './ChatFAB.js';
-import { ChatPanel } from './ChatPanel.js';
+import { ChatPanel, type ChatPanelSize } from './ChatPanel.js';
 import { ChatBottomSheet } from './ChatBottomSheet.js';
-import { sendMessage, saveSession, loadSession, clearSession } from '../../services/chatService.js';
+import { sendMessage, saveSession, loadSession, clearSession, savePanelSize, loadPanelSize } from '../../services/chatService.js';
 import { createCommand } from '../../services/commandsApi.js';
 import type { ChatMessage, SuggestedAction } from '../../types/chat';
 
@@ -18,7 +18,16 @@ export function Chat(): React.JSX.Element {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<SuggestedAction | null>(null);
-  const { getAccessToken } = useAuth();
+  const [panelSize, setPanelSize] = useState<ChatPanelSize | undefined>(undefined);
+  const { getAccessToken, user } = useAuth();
+
+  // Load panel size from localStorage on mount
+  useEffect(() => {
+    const savedSize = loadPanelSize();
+    if (savedSize !== null) {
+      setPanelSize(savedSize);
+    }
+  }, []);
 
   const handleToggle = useCallback((): void => {
     setIsOpen((prev) => {
@@ -30,6 +39,11 @@ export function Chat(): React.JSX.Element {
       }
       return !prev;
     });
+  }, []);
+
+  const handlePanelSizeChange = useCallback((size: ChatPanelSize): void => {
+    setPanelSize(size);
+    savePanelSize(size);
   }, []);
 
   const handleSendMessage = useCallback(
@@ -144,8 +158,10 @@ export function Chat(): React.JSX.Element {
         onSendMessage={(message): void => {
           void handleSendMessage(message);
         }}
-        onClose={handleClose}
         onClear={handleClear}
+        onSizeChange={handlePanelSizeChange}
+        {...(panelSize !== undefined && { initialSize: panelSize })}
+        {...(user?.picture !== undefined && { userPicture: user.picture })}
       />
       {/* Mobile: ChatBottomSheet (hidden on desktop) */}
       <ChatBottomSheet
@@ -159,6 +175,7 @@ export function Chat(): React.JSX.Element {
         }}
         onClose={handleClose}
         onClear={handleClear}
+        {...(user?.picture !== undefined && { userPicture: user.picture })}
       />
     </>
   );

@@ -138,8 +138,8 @@ describe('ChatPanel', () => {
     messages: mockMessages,
     isLoading: false,
     error: null,
+    pendingAction: null,
     onSendMessage: vi.fn(),
-    onClose: vi.fn(),
     onClear: vi.fn(),
   };
 
