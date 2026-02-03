@@ -22,10 +22,11 @@ import { TaskDispatcher } from './services/task-dispatcher.js';
 import { GitHubTokenService } from './github/token-service.js';
 import { WebhookClient } from './services/webhook-client.js';
 import { WorktreeManager } from './services/worktree-manager.js';
-import { TmuxManager } from './services/tmux-manager.js';
 import { LogForwarder } from './services/log-forwarder.js';
 import { createHeartbeatManager } from './heartbeat.js';
+import { createIsolationProvider, TokenRefresher } from './services/isolation/index.js';
 import type { OrchestratorConfig } from './types/config.js';
+import type { IsolationConfig } from './services/task-dispatcher.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 1;
@@ -176,8 +177,6 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  const tmuxManager = new TmuxManager({ logBasePath: config.logBasePath }, logger);
-
   const logForwarder = new LogForwarder(
     {
       logBasePath: config.logBasePath,
@@ -188,15 +187,43 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  // Create Docker isolation provider
+  const secretsBasePath = join(orchestratorDir, 'secrets');
+  const isolationProvider = createIsolationProvider({ secretsBasePath }, logger);
+  const tokenRefresher = new TokenRefresher(
+    {
+      secretsBasePath,
+      githubAppId: config.githubAppId,
+      githubAppPrivateKeyPath: config.githubAppPrivateKeyPath,
+      githubInstallationId: config.githubInstallationId,
+      refreshIntervalMs: 30 * 60 * 1000, // 30 minutes
+    },
+    logger
+  );
+
+  // Get API keys for workers
+  const isolationConfig: IsolationConfig = {
+    provider: isolationProvider,
+    tokenRefresher,
+    secrets: {
+      ANTHROPIC_API_KEY: getRequiredEnv('INTEXURAOS_ANTHROPIC_API_KEY'),
+      LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
+      SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
+      ZAI_API_KEY: getOptionalEnv('INTEXURAOS_ZAI_API_KEY', ''),
+    },
+    gcpSaKeyPath: process.env['GOOGLE_APPLICATION_CREDENTIALS'] ?? '',
+    githubAppKeyPath: config.githubAppPrivateKeyPath,
+  };
+
   const dispatcher = new TaskDispatcher(
     config,
     statePersistence,
     worktreeManager,
-    tmuxManager,
     logForwarder,
     webhookClient,
     tokenService,
-    logger
+    logger,
+    isolationConfig
   );
 
   // Create heartbeat manager

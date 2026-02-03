@@ -19,8 +19,8 @@ export interface Task {
   webhookSecret: string;
   actionId?: string;
   status: TaskStatus;
-  tmuxSession: string;
   worktreePath: string;
+  containerId: string;
   startedAt: string;
   completedAt?: string;
 }

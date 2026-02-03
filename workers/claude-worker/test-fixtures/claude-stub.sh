@@ -1,0 +1,129 @@
+#!/bin/bash
+# ==============================================================================
+# Claude CLI Stub for E2E Testing
+# ==============================================================================
+# Simulates Claude CLI for E2E tests without making real API calls.
+# Accepts input, echoes responses, and exits cleanly.
+
+set -euo pipefail
+
+echo "[claude-stub] Started"
+echo "[claude-stub] Working directory: $(pwd)"
+echo "[claude-stub] Git branch: $(git branch --show-current 2>/dev/null || echo 'no-git')"
+
+# Log environment for debugging
+echo "[claude-stub] TASK_ID: ${TASK_ID:-unset}"
+echo "[claude-stub] ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-unset}"
+
+# Verify /repo mount
+if [ -d "/repo/.git" ]; then
+  echo "[claude-stub] /repo mount verified (git repository present)"
+else
+  echo "[claude-stub] WARNING: /repo is not a git repository"
+fi
+
+# Verify /secrets mount
+if [ -d "/secrets" ]; then
+  echo "[claude-stub] /secrets mount verified"
+  if [ -f "/secrets/gcp-sa.json" ]; then
+    echo "[claude-stub] GCP SA key present"
+  fi
+  if [ -f "/secrets/github-token" ]; then
+    echo "[claude-stub] GitHub token present"
+  fi
+else
+  echo "[claude-stub] WARNING: /secrets not mounted"
+fi
+
+# Read and process input (simulates interactive mode)
+while IFS= read -r line || [ -n "$line" ]; do
+  # Strip any Docker attach metadata prefix (JSON that sometimes appears)
+  clean_line=$(echo "$line" | sed 's/^{[^}]*}//g')
+  echo "[claude-stub] Received: $clean_line"
+
+  case "$clean_line" in
+    "exit"|"quit"|"/exit"|"/quit")
+      echo "[claude-stub] Exit command received, shutting down..."
+      exit 0
+      ;;
+    "error"|"/error")
+      echo "[claude-stub] Simulating error exit..."
+      exit 1
+      ;;
+    "timeout"|"/timeout")
+      echo "[claude-stub] Simulating long-running task (will timeout)..."
+      sleep 3600
+      ;;
+    "network-test"|"/network-test")
+      echo "[claude-stub] Testing network connectivity..."
+      # Test public internet (should work)
+      if curl -s --max-time 5 https://api.github.com > /dev/null 2>&1; then
+        echo "[claude-stub] Public internet: OK"
+      else
+        echo "[claude-stub] Public internet: BLOCKED"
+      fi
+      # Test metadata server (should be blocked)
+      if curl -s --max-time 2 http://169.254.169.254/ > /dev/null 2>&1; then
+        echo "[claude-stub] Metadata server: ACCESSIBLE (SECURITY ISSUE!)"
+        exit 1
+      else
+        echo "[claude-stub] Metadata server: BLOCKED (good)"
+      fi
+      # Test localhost (should be blocked from container perspective)
+      if curl -s --max-time 2 http://127.0.0.1:8080/ > /dev/null 2>&1; then
+        echo "[claude-stub] Localhost: ACCESSIBLE"
+      else
+        echo "[claude-stub] Localhost: BLOCKED/UNREACHABLE (expected)"
+      fi
+      echo "[claude-stub] Network test complete"
+      ;;
+    "resource-test"|"/resource-test")
+      echo "[claude-stub] Testing resource limits..."
+      # Report memory info
+      if [ -f /sys/fs/cgroup/memory.max ]; then
+        echo "[claude-stub] Memory limit: $(cat /sys/fs/cgroup/memory.max)"
+      fi
+      if [ -f /sys/fs/cgroup/memory.current ]; then
+        echo "[claude-stub] Memory current: $(cat /sys/fs/cgroup/memory.current)"
+      fi
+      # Report CPU info
+      if [ -f /sys/fs/cgroup/cpu.max ]; then
+        echo "[claude-stub] CPU limit: $(cat /sys/fs/cgroup/cpu.max)"
+      fi
+      echo "[claude-stub] Resource test complete"
+      ;;
+    "file-test"|"/file-test")
+      echo "[claude-stub] Testing file system..."
+      # Verify worktree is writable
+      if touch /repo/.test-file 2>/dev/null; then
+        rm /repo/.test-file
+        echo "[claude-stub] /repo: WRITABLE"
+      else
+        echo "[claude-stub] /repo: READ-ONLY"
+      fi
+      # Verify secrets are read-only
+      if touch /secrets/.test-file 2>/dev/null; then
+        rm /secrets/.test-file
+        echo "[claude-stub] /secrets: WRITABLE (SECURITY ISSUE!)"
+        exit 1
+      else
+        echo "[claude-stub] /secrets: READ-ONLY (good)"
+      fi
+      # Verify /tmp is writable
+      if touch /tmp/.test-file 2>/dev/null; then
+        rm /tmp/.test-file
+        echo "[claude-stub] /tmp: WRITABLE"
+      else
+        echo "[claude-stub] /tmp: READ-ONLY"
+      fi
+      echo "[claude-stub] File system test complete"
+      ;;
+    *)
+      echo "[claude-stub] Acknowledged: $clean_line"
+      echo "[claude-stub] Response: Task completed successfully"
+      ;;
+  esac
+done
+
+echo "[claude-stub] stdin closed, exiting gracefully"
+exit 0
