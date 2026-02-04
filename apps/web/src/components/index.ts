@@ -1,5 +1,7 @@
 export { ActionDetailModal } from './ActionDetailModal.js';
 export { ConfirmSubmitModal } from './ConfirmSubmitModal.js';
+export { TaskConflictModal } from './TaskConflictModal.js';
+export type { ConflictReason } from './TaskConflictModal.js';
 export { ActionItem } from './ActionItem.js';
 export type { ExecutionState } from './ActionItem.js';
 export { ChartDefinitionDisplay } from './ChartDefinitionDisplay.js';
