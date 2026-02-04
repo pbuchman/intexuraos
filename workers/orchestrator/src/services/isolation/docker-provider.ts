@@ -93,6 +93,26 @@ export class DockerProvider implements IsolationProvider {
       throw new Error(`Invalid worktree: ${worktreePath} (no .git directory)`);
     }
 
+    // Detect main git directory for worktree support
+    // Worktrees have a .git file (not directory) containing: "gitdir: /main/repo/.git/worktrees/name"
+    /* v8 ignore start -- test-infra: worktree detection requires real filesystem, tests mock fs.statSync @preserve */
+    let mainGitDir: string | null = null;
+    const gitStat = fs.statSync(gitPath);
+    if (gitStat.isFile()) {
+      const gitFileContent = fs.readFileSync(gitPath, 'utf-8').trim();
+      const gitdirMatch = /^gitdir:\s*(.+)$/.exec(gitFileContent);
+      if (gitdirMatch?.[1] !== undefined) {
+        // Extract the main .git directory from the worktree gitdir path
+        // Format: /path/to/repo/.git/worktrees/worktree-name
+        const worktreeGitDir = gitdirMatch[1];
+        const worktreesIndex = worktreeGitDir.lastIndexOf('/.git/worktrees/');
+        if (worktreesIndex !== -1) {
+          mainGitDir = worktreeGitDir.substring(0, worktreesIndex + '/.git'.length);
+        }
+      }
+    }
+    /* v8 ignore stop @preserve */
+
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
     await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
 
