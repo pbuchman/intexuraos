@@ -19,8 +19,6 @@ import {
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
-// --- Custom Icons ---
-
 function LinkedinIcon({ className }: { className?: string }): React.JSX.Element {
   return (
     <svg
