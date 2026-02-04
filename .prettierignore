@@ -3,4 +3,5 @@ node_modules
 coverage
 *.log
 .tsbuildinfo
+.pnpm-store
 

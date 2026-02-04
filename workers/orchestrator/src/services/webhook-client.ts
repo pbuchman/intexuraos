@@ -48,11 +48,14 @@ export class WebhookClient {
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = signPayload(rawJsonBody, secret, timestamp);
 
+    this.logger.info({ taskId, url, payload }, 'Sending webhook');
+
     // Attempt delivery with retries
     let lastError: WebhookError | null = null;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         await this.deliver(url, rawJsonBody, signature, timestamp);
+        this.logger.info({ taskId, url }, 'Webhook delivered successfully');
         return { ok: true, value: undefined };
       } catch (error) {
         lastError = this.classifyError(error);
@@ -119,6 +122,10 @@ export class WebhookClient {
           const signature = signPayload(rawJsonBody, pending.secret, timestamp);
 
           await this.deliver(pending.url, rawJsonBody, signature, timestamp);
+          this.logger.info(
+            { taskId: pending.taskId, url: pending.url, retryAttempt: pending.attempts + 1 },
+            'Pending webhook delivered successfully'
+          );
           success = true;
           break;
         } catch (error) {

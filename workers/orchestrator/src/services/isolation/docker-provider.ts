@@ -82,7 +82,7 @@ export class DockerProvider implements IsolationProvider {
   }
 
   async createWorker(config: WorkerConfig): Promise<WorkerHandle> {
-    const { taskId, worktreePath, prompt, secrets, workerType } = config;
+    const { taskId, worktreePath, prompt, systemPrompt, secrets, workerType } = config;
 
     if (this.workers.size >= this.config.maxConcurrent) {
       throw new Error(`Max concurrent workers (${String(this.config.maxConcurrent)}) reached`);
@@ -184,7 +184,8 @@ export class DockerProvider implements IsolationProvider {
         ReadonlyRootfs: false,
         Tmpfs: {
           '/tmp': 'rw,noexec,nosuid,size=2g',
-          '/home/claude': 'rw,noexec,nosuid,size=500m',
+          // uid=1001,gid=1001 ensures claude user (1001) can write to tmpfs
+          '/home/claude': 'rw,noexec,nosuid,size=500m,uid=1001,gid=1001',
         },
         CapDrop: ['ALL'],
         // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude
@@ -205,7 +206,11 @@ export class DockerProvider implements IsolationProvider {
       hijack: true,
     })) as unknown as NodeJS.ReadWriteStream;
 
-    attachStream.write(prompt + '\n');
+    // Combine system prompt and user prompt for --print mode
+    // System prompt provides context about the task, Linear integration, and workflow rules
+    // The delimiter ---END_PROMPT--- signals end of multi-line prompt to entrypoint.sh
+    const fullPrompt = systemPrompt + '\n\n' + prompt;
+    attachStream.write(fullPrompt + '\n---END_PROMPT---\n');
 
     const handle: WorkerHandle = {
       taskId,

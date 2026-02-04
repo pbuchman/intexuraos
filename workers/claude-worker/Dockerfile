@@ -49,8 +49,8 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
 # Create non-root user (use UID 1001 since 1000 is taken by 'node' in base image)
 RUN addgroup -S claude && adduser -S claude -G claude -u 1001
 
-# Set up directories
-RUN mkdir -p /repo /secrets /tmp /home/claude/.claude \
+# Set up directories (including .config/gcloud for gcloud auth)
+RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gcloud \
     && chown -R claude:claude /repo /secrets /tmp /home/claude
 
 # Copy entrypoint
