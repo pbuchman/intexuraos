@@ -37,6 +37,7 @@ jobs:
         env:
           ANTHROPIC_BASE_URL: https://api.z.ai/api/anthropic
         with:
+          allowed_bots: 'intexuraos-code-worker'
           anthropic_api_key: ${{ secrets.ZAI_API_KEY }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
