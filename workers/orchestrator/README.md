@@ -82,6 +82,26 @@ The orchestrator reads from the monorepo's `.envrc` (synced from GCP Secret Mana
 | `REPOSITORY_PATH`        | ~/personal/intexuraos-3 | Repo path            |
 | `INTEXURAOS_ZAI_API_KEY` | -                       | ZAI API (optional)   |
 
+### .envrc.local Setup
+
+Add these to your `.envrc.local` for local orchestrator testing:
+
+```bash
+# Project ID (maps from sync-secrets.sh PROJECT_ID)
+export INTEXURAOS_PROJECT_ID=$PROJECT_ID
+
+# Orchestrator-specific
+export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
+export INTEXURAOS_ORCHESTRATOR_SECRET=<your-generated-secret>
+
+# Map API keys from GCP secrets (already in .envrc)
+export INTEXURAOS_ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
+export INTEXURAOS_LINEAR_API_KEY=$LINEAR_API_KEY
+export INTEXURAOS_SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
+```
+
+Then run `direnv allow` to reload.
+
 ### HMAC Signing (INTEXURAOS_ORCHESTRATOR_SECRET)
 
 The orchestrator secret is used for request signing between code-agent and orchestrator:
@@ -239,16 +259,50 @@ launchctl list | grep orchestrator                                          # St
 
 ---
 
-## Cloudflare Tunnel
+## Cloudflare Tunnel & Access
 
-The tunnel routes `cc-mac.intexuraos.cloud` → `localhost:8199`.
+The tunnel routes `cc-mac.intexuraos.cloud` → `localhost:8199`, protected by Cloudflare Access.
+
+### Check Tunnel Status
 
 ```bash
-# Check tunnel is running
 ps aux | grep cloudflared
-
-# Test connectivity
-curl -s -o /dev/null -w "%{http_code}" https://cc-mac.intexuraos.cloud/health
 ```
 
-Install: `brew install cloudflared && sudo cloudflared service install`
+### Testing Connectivity
+
+**Local (no Cloudflare):**
+
+```bash
+curl http://localhost:8199/health
+```
+
+**Via tunnel (requires Cloudflare Access token):**
+
+```bash
+# Get service token from Cloudflare dashboard or 1Password
+curl -H "CF-Access-Client-Id: <client-id>" \
+     -H "CF-Access-Client-Secret: <secret>" \
+     https://cc-mac.intexuraos.cloud/health
+```
+
+Without the `CF-Access-*` headers, you'll get:
+
+```json
+{ "message": "Forbidden. You don't have permission to view this.", "status_code": 403 }
+```
+
+### How code-agent Authenticates
+
+The code-agent reads Cloudflare Access credentials from **Firestore worker settings**:
+
+- `cfAccessClientId` - Service token client ID
+- `cfAccessClientSecret` - Service token secret
+
+These are configured per-worker in IntexuraOS → Settings → Worker Configuration.
+
+### Install Tunnel
+
+```bash
+brew install cloudflared && sudo cloudflared service install
+```
