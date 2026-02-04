@@ -141,12 +141,26 @@ export function registerRoutes(
 
   // POST /tasks - Submit new task
   app.post('/tasks', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
+    // Log incoming request (redact secrets)
+    const rawBody = request.body as Record<string, unknown>;
+    logger.info(
+      {
+        method: 'POST',
+        path: '/tasks',
+        body: {
+          ...rawBody,
+          webhookSecret: rawBody['webhookSecret'] ? '[REDACTED]' : undefined,
+        },
+      },
+      'Incoming request'
+    );
+
     const parseResult = CreateTaskRequestSchema.safeParse(request.body);
     if (!parseResult.success) {
       const errorResponse = { error: parseResult.error.message };
       logger.warn(
-        { taskId: 'unknown', validationError: parseResult.error.message },
-        'Task validation failed'
+        { taskId: 'unknown', validationError: parseResult.error.message, response: errorResponse },
+        'Task validation failed - returning 400'
       );
       reply.status(400).send(errorResponse);
       return;
@@ -185,20 +199,25 @@ export function registerRoutes(
     if (!result.ok) {
       const { error } = result;
       if (error.type === 'at_capacity') {
-        logger.warn({ taskId: body.taskId, errorType: error.type }, 'Task rejected: at capacity');
-        reply.status(503).send({ error: error.message });
+        const errorResponse = { error: error.message };
+        logger.warn(
+          { taskId: body.taskId, errorType: error.type, status: 503, response: errorResponse },
+          'Task rejected: at capacity - returning 503'
+        );
+        reply.status(503).send(errorResponse);
         return;
       }
+      const errorResponse = { error: error.message };
       logger.warn(
-        { taskId: body.taskId, errorType: error.type, errorMessage: error.message },
-        'Task submission failed'
+        { taskId: body.taskId, errorType: error.type, status: 400, response: errorResponse },
+        'Task submission failed - returning 400'
       );
-      reply.status(400).send({ error: error.message });
+      reply.status(400).send(errorResponse);
       return;
     }
 
     const response = { taskId: body.taskId, status: 'accepted' };
-    logger.info({ taskId: body.taskId, response }, 'Task accepted');
+    logger.info({ taskId: body.taskId, status: 202, response }, 'Task accepted - returning 202');
     reply.status(202).send(response);
   });
 
