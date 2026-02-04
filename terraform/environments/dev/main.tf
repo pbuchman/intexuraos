@@ -489,7 +489,12 @@ module "secret_manager" {
     # Crawl4AI Cloud API
     "INTEXURAOS_CRAWL4AI_API_KEY" = "Crawl4AI Cloud API key for web page content extraction"
     # LLM API keys
-    "INTEXURAOS_OPENAI_API_KEY" = "OpenAI API key for chat-agent LLM features"
+    "INTEXURAOS_OPENAI_API_KEY"    = "OpenAI API key for chat-agent LLM features"
+    "INTEXURAOS_ANTHROPIC_API_KEY" = "Anthropic API key for Claude worker containers"
+    "INTEXURAOS_ZAI_API_KEY"       = "ZAI API key for Claude worker containers (Z.ai provider)"
+    # External service API keys for worker containers
+    "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to Claude worker containers"
+    "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to Claude worker containers"
     # Code worker secrets (INT-156)
     "INTEXURAOS_ORCHESTRATOR_SECRET"   = "HMAC signing secret for orchestrator communication"
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET" = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
