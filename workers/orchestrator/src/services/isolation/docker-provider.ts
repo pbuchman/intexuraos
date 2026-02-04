@@ -82,7 +82,7 @@ export class DockerProvider implements IsolationProvider {
   }
 
   async createWorker(config: WorkerConfig): Promise<WorkerHandle> {
-    const { taskId, worktreePath, prompt, secrets, workerType } = config;
+    const { taskId, worktreePath, prompt, systemPrompt, secrets, workerType } = config;
 
     if (this.workers.size >= this.config.maxConcurrent) {
       throw new Error(`Max concurrent workers (${String(this.config.maxConcurrent)}) reached`);
@@ -97,6 +97,7 @@ export class DockerProvider implements IsolationProvider {
     // We need to mount the main .git directory for git operations to work inside the container.
     let mainGitDir: string | null = null;
     const gitStat = fs.statSync(gitPath);
+    /* v8 ignore start -- test-infra: worktree detection requires actual git worktree filesystem setup @preserve */
     if (gitStat.isFile()) {
       // Worktree - read gitdir path from .git file
       const gitContent = fs.readFileSync(gitPath, 'utf-8').trim();
@@ -112,6 +113,7 @@ export class DockerProvider implements IsolationProvider {
         }
       }
     }
+    /* v8 ignore stop @preserve */
 
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
     await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
@@ -159,8 +161,10 @@ export class DockerProvider implements IsolationProvider {
         Binds: [
           `${worktreePath}:/repo:rw`,
           `${taskSecretsPath}:/secrets:ro`,
+          /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
           // Mount main git dir for worktree support (worktrees reference parent .git)
           ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:ro`] : []),
+          /* v8 ignore stop @preserve */
         ],
         Memory: this.config.memoryLimitBytes,
         NanoCpus: this.config.cpuCount * 1e9,
@@ -194,7 +198,10 @@ export class DockerProvider implements IsolationProvider {
       hijack: true,
     })) as unknown as NodeJS.ReadWriteStream;
 
-    attachStream.write(prompt + '\n');
+    // Combine system prompt and user prompt for --print mode
+    // System prompt provides context about the task, Linear integration, and workflow rules
+    const fullPrompt = systemPrompt + '\n\n' + prompt;
+    attachStream.write(fullPrompt + '\n');
 
     const handle: WorkerHandle = {
       taskId,

@@ -71,7 +71,10 @@ export class LogForwarder {
 
     const webhookSecret = this.taskSecrets.get(taskId) ?? '';
     if (webhookSecret === '') {
-      this.logger.warn({ taskId }, 'No webhook secret registered - log upload signatures will fail');
+      this.logger.warn(
+        { taskId },
+        'No webhook secret registered - log upload signatures will fail'
+      );
     }
 
     const state: ForwardingState = {
@@ -163,7 +166,10 @@ export class LogForwarder {
     if (state === undefined) {
       const webhookSecret = this.taskSecrets.get(taskId) ?? '';
       if (webhookSecret === '') {
-        this.logger.warn({ taskId }, 'No webhook secret registered - log upload signatures will fail');
+        this.logger.warn(
+          { taskId },
+          'No webhook secret registered - log upload signatures will fail'
+        );
       }
       state = {
         taskId,

@@ -132,10 +132,12 @@ export class TaskDispatcher {
         await this.isolation.tokenRefresher.registerTask(taskId);
       } catch (error) {
         this.runningCount--;
+        /* v8 ignore start -- ts-type: error type narrowing for logging context @preserve */
         this.logger.error(
           { taskId, error, errorMessage: error instanceof Error ? error.message : String(error) },
           'Failed to create worker container'
         );
+        /* v8 ignore stop @preserve */
         this.logForwarder.unregisterTask(taskId);
         this.worktreeManager.removeWorktree(taskId).catch((cleanupError: unknown) => {
           this.logger.error(

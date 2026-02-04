@@ -99,6 +99,12 @@ vi.mock('node:fs', async (importOriginal) => {
   return {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
+    // Mock statSync to return a directory (not a file) for .git path
+    // This simulates a normal git repo (not a worktree)
+    statSync: vi.fn().mockReturnValue({
+      isFile: () => false,
+      isDirectory: () => true,
+    }),
     promises: {
       ...actual.promises,
       mkdir: vi.fn().mockResolvedValue(undefined),
@@ -211,11 +217,17 @@ describe('DockerProvider', () => {
       }
     });
 
-    it('sends initial prompt to container', async () => {
-      const config = createTestConfig({ prompt: 'Hello Claude' });
+    it('sends combined system and user prompt to container', async () => {
+      const config = createTestConfig({
+        prompt: 'Hello Claude',
+        systemPrompt: 'You are a helpful assistant',
+      });
       await provider.createWorker(config);
 
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('Hello Claude\n');
+      // System prompt + double newline + user prompt + final newline
+      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith(
+        'You are a helpful assistant\n\nHello Claude\n'
+      );
     });
   });
 

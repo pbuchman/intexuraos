@@ -1,28 +1,29 @@
 import { Link } from 'react-router-dom';
 import {
-  ArrowRight,
   Brain,
   CheckSquare,
-  Database,
   FileText,
-  Mail,
   Layers,
   Mic,
   Shield,
-  Terminal,
   Zap,
+  Globe,
+  Cpu,
+  BarChart3,
+  Calendar,
+  Layout,
+  MessageSquare,
+  Lock,
+  ChevronRight
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-// Custom icons since lucide-react brand icons are deprecated
+// --- Custom Icons ---
+
 function LinkedinIcon({ className }: { className?: string }): React.JSX.Element {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
       <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
     </svg>
   );
@@ -30,210 +31,258 @@ function LinkedinIcon({ className }: { className?: string }): React.JSX.Element 
 
 function GithubIcon({ className }: { className?: string }): React.JSX.Element {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
       <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
     </svg>
   );
 }
 
-// --- Components ---
+// --- Shared Components ---
 
-function BrutalistCard({
-  children,
-  className = '',
+function FeatureCard({
   title,
+  description,
   icon: Icon,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  title?: string;
-  icon?: React.ElementType;
-}): React.JSX.Element {
-  return (
-    <div
-      className={`relative border-2 border-black bg-white p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${className}`}
-    >
-      {title && (
-        <div className="mb-4 flex items-center gap-3 border-b-2 border-black pb-3">
-          {Icon && <Icon className="h-6 w-6 stroke-[2.5px]" />}
-          <h3 className="font-mono text-lg font-bold uppercase tracking-tight">{title}</h3>
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
-
-function SectionHeading({
-  children,
   className = '',
 }: {
-  children: React.ReactNode;
+  title: string;
+  description: string;
+  icon: React.ElementType;
   className?: string;
 }): React.JSX.Element {
   return (
-    <h2
-      className={`mb-12 text-4xl font-black uppercase tracking-tighter md:text-6xl ${className}`}
+    <motion.div
+      whileHover={{ y: -5 }}
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      className={`group relative overflow-hidden rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm transition-all hover:shadow-md ${className}`}
     >
-      {children}
-    </h2>
+      <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 group-hover:bg-cyan-600 group-hover:text-white transition-colors">
+        <Icon className="h-6 w-6" />
+      </div>
+      <h3 className="mb-2 text-xl font-bold text-neutral-900">{title}</h3>
+      <p className="text-neutral-600 leading-relaxed">{description}</p>
+    </motion.div>
   );
 }
 
 // --- Sections ---
 
+function Navbar(): React.JSX.Element {
+  return (
+    <motion.nav
+      initial={{ y: -20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      className="fixed top-0 z-50 w-full border-b border-white/10 bg-white/80 backdrop-blur-md"
+    >
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+        <Link to="/" className="flex items-center gap-2">
+          <img src="/logo-primary-light.png" alt="IntexuraOS" className="h-8 w-auto" />
+          <span className="font-bold tracking-tight text-neutral-900 hidden sm:inline">IntexuraOS</span>
+        </Link>
+        <div className="flex items-center gap-4">
+          <a
+            href="https://github.com/pbuchman/intexuraos"
+            className="hidden text-sm font-medium text-neutral-600 hover:text-cyan-600 sm:flex items-center gap-1"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <GithubIcon className="h-4 w-4" /> GitHub
+          </a>
+          <Link
+            to="/login"
+            className="rounded-full bg-black px-6 py-2 text-sm font-semibold text-white transition-transform hover:scale-105 active:scale-95 hover:bg-neutral-800"
+          >
+            Log In
+          </Link>
+        </div>
+      </div>
+    </motion.nav>
+  );
+}
+
 function HeroSection(): React.JSX.Element {
   return (
-    <section className="relative flex min-h-[90vh] flex-col justify-center border-b-4 border-black bg-yellow-400 px-6 py-24 pattern-dots pattern-black pattern-bg-transparent pattern-size-4 pattern-opacity-10">
-      <div className="mx-auto w-full max-w-7xl">
-        <div className="max-w-4xl">
-          <div className="mb-6 flex flex-wrap gap-3">
-            <a
-              href="https://www.linkedin.com/in/piotrbuchman/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
-            >
-              <LinkedinIcon className="h-4 w-4" /> LinkedIn
-            </a>
-            <a
-              href="https://github.com/pbuchman/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
-            >
-              <GithubIcon className="h-4 w-4" /> GitHub
-            </a>
-            <a
-              href="mailto:kontakt@pbuchman.com"
-              className="inline-flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
-            >
-              <Mail className="h-4 w-4" /> Email
-            </a>
+    <section className="relative overflow-hidden bg-gradient-to-b from-cyan-50 to-white pt-32 pb-24">
+      {/* Background decoration */}
+      <div className="absolute top-0 left-0 right-0 h-[500px] bg-gradient-to-br from-blue-100/50 via-cyan-50/30 to-transparent skew-y-[-6deg] transform -translate-y-24" />
+
+      <div className="relative mx-auto max-w-7xl px-6 text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <div className="mx-auto mb-6 flex max-w-fit items-center gap-2 rounded-full border border-cyan-200 bg-white/60 px-4 py-1.5 text-sm font-medium text-cyan-900 shadow-sm backdrop-blur-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500"></span>
+            </span>
+            v2.1.0 is now live
           </div>
-          <p className="mb-4 font-mono text-sm font-bold uppercase tracking-widest text-neutral-700">
-            The AI-Native Personal Operating System
-          </p>
-          <h1 className="mb-8 text-6xl font-black uppercase leading-[0.9] tracking-tighter text-black md:text-8xl lg:text-[7rem]">
-            Your brain is for <span className="bg-white px-2 text-black">thinking</span>
+          <h1 className="mx-auto mb-6 max-w-4xl text-5xl font-extrabold tracking-tight text-neutral-900 md:text-7xl lg:leading-[1.1]">
+            Your brain is for <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 to-blue-600">thinking</span>,
             <br /> not remembering.
           </h1>
-          <p className="mb-10 max-w-2xl text-xl font-medium leading-relaxed text-neutral-900 md:text-2xl">
-            IntexuraOS transforms fragmented information into structured intelligence. A council of
-            17 AI models across 5 providers works autonomously — you remain the commander.
+          <p className="mx-auto mb-10 max-w-2xl text-lg text-neutral-600 md:text-xl leading-relaxed">
+            IntexuraOS transforms fragmented information into structured intelligence.
+            A council of 17 AI models across 5 providers works autonomously — you remain the commander.
           </p>
-
-          <div className="flex flex-col gap-4 sm:flex-row">
+          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
               to="/login"
-              className="group flex items-center justify-center gap-2 border-2 border-black bg-black px-8 py-4 text-lg font-bold text-white shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] transition-all hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-cyan-600 px-8 text-base font-semibold text-white shadow-lg shadow-cyan-600/20 transition-all hover:bg-cyan-700 hover:-translate-y-0.5"
             >
-              LOG IN <Terminal className="h-5 w-5" />
+              Get Started <ChevronRight className="h-4 w-4" />
             </Link>
             <a
               href="https://github.com/pbuchman/intexuraos"
               target="_blank"
               rel="noopener noreferrer"
-              className="group flex items-center justify-center gap-2 border-2 border-black bg-white px-8 py-4 text-lg font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-1 hover:bg-neutral-100 hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-neutral-200 bg-white px-8 text-base font-semibold text-neutral-900 transition-all hover:bg-neutral-50 hover:border-neutral-300"
             >
-              VIEW SOURCE CODE <GithubIcon className="h-5 w-5" />
+              View Source <GithubIcon className="h-4 w-4" />
             </a>
           </div>
-        </div>
+        </motion.div>
+
+        {/* Hero Visual/Dashboard Mockup */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.8 }}
+          className="relative mx-auto mt-20 max-w-5xl rounded-2xl border border-neutral-200 bg-white/50 p-2 shadow-2xl backdrop-blur-xl"
+        >
+          <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-50"></div>
+          <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden shadow-sm">
+            <div className="flex h-8 items-center gap-1.5 border-b border-neutral-100 bg-neutral-50 px-4">
+              <div className="h-3 w-3 rounded-full bg-red-400/20"></div>
+              <div className="h-3 w-3 rounded-full bg-amber-400/20"></div>
+              <div className="h-3 w-3 rounded-full bg-green-400/20"></div>
+            </div>
+            <div className="p-8 h-[300px] flex items-center justify-center bg-neutral-50/50 relative overflow-hidden">
+              <div className="absolute inset-0 grid grid-cols-[repeat(20,minmax(0,1fr))] opacity-[0.03]">
+                {Array.from({ length: 400 }).map((_, i) => (
+                  <div key={i} className="border-r border-b border-black aspect-square"></div>
+                ))}
+              </div>
+              <div className="relative text-center z-10">
+                <div className="inline-flex items-center justify-center p-4 bg-white rounded-2xl shadow-xl mb-4 border border-neutral-100">
+                  <Brain className="w-12 h-12 text-cyan-600" />
+                </div>
+                <div className="text-neutral-400 font-mono text-sm">System Active • All Agents Online</div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </section>
   );
 }
 
-function DemoSection(): React.JSX.Element {
-  const [step, setStep] = useState(0);
+function DemoLoopSection(): React.JSX.Element {
+  const [activeStep, setActiveStep] = useState(0);
+
+  const steps = [
+    { title: "Capture", icon: Mic, color: "text-blue-500", bg: "bg-blue-100", desc: "Voice note, link, or text" },
+    { title: "Classify", icon: Brain, color: "text-purple-500", bg: "bg-purple-100", desc: "AI determines intent" },
+    { title: "Execute", icon: CheckSquare, color: "text-green-500", bg: "bg-green-100", desc: "Action performed automagically" }
+  ];
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setStep((prev) => (prev + 1) % 4);
-    }, 2000);
+    const interval = setInterval(() => {
+      setActiveStep((prev) => (prev + 1) % steps.length);
+    }, 2500);
     return (): void => {
-      clearInterval(timer);
+      clearInterval(interval);
     };
   }, []);
 
   return (
-    <section className="border-b-4 border-black bg-white px-6 py-24">
-      <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2">
-        <div className="flex flex-col justify-center">
-          <SectionHeading>
-            The Loop: <br />
-            <span className="text-cyan-600">Capture</span> → <br />
-            <span className="text-purple-600">Classify</span> → <br />
-            <span className="text-green-600">Execute</span>
-          </SectionHeading>
-          <p className="text-xl font-medium text-neutral-600">
-            18 specialized microservices route your intent to the right agent. Voice note becomes
-            research report. Link becomes summarized bookmark. Date mention becomes calendar event.
-          </p>
-        </div>
-
-        <div className="relative aspect-square max-h-[600px] w-full border-4 border-black bg-neutral-100 p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
-          {/* Step 1: Voice Input */}
-          <div
-            className={`absolute left-8 top-8 w-[80%] border-2 border-black bg-white p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-500 ${
-              step >= 0 ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0'
-            }`}
-          >
-            <div className="mb-2 flex items-center gap-2 font-mono text-sm font-bold text-neutral-500">
-              <Mic className="h-4 w-4" /> USER INPUT (WHATSAPP)
-            </div>
-            <p className="text-lg font-bold italic">
-              "Research the latest Hexagonal Architecture patterns and schedule a review meeting for
-              Friday."
+    <section className="bg-white py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          <div>
+            <h2 className="text-4xl font-bold tracking-tight text-neutral-900 mb-6">
+              The Intelligence Loop
+            </h2>
+            <p className="text-lg text-neutral-600 mb-8 leading-relaxed">
+              18 specialized microservices route your intent to the right agent.
+              A voice note becomes a research report. A shared link becomes a summarized bookmark.
+              A date mention becomes a calendar event—instantly.
             </p>
-          </div>
-
-          {/* Step 2: Synthesis */}
-          <div
-            className={`absolute right-8 top-1/3 w-[80%] border-2 border-black bg-purple-100 p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-500 ${
-              step >= 1 ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'
-            }`}
-          >
-            <div className="mb-2 flex items-center gap-2 font-mono text-sm font-bold text-purple-700">
-              <Brain className="h-4 w-4" /> COUNCIL OF AI
-            </div>
-            <div className="space-y-2 font-mono text-sm">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500" /> Intent: Research + Calendar
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500" /> Agents: ResearchAgent,
-                CalendarAgent
-              </div>
+            <div className="space-y-6">
+              {steps.map((step, index) => (
+                <div
+                  key={step.title}
+                  className={`flex items-start gap-4 rounded-xl p-4 transition-all duration-500 ${activeStep === index ? 'bg-neutral-50 shadow-sm border border-neutral-100' : 'opacity-50'}`}
+                >
+                  <div className={`p-3 rounded-lg ${step.bg}`}>
+                    <step.icon className={`w-6 h-6 ${step.color}`} />
+                  </div>
+                  <div>
+                    <h3 className={`font-semibold text-lg ${activeStep === index ? 'text-neutral-900' : 'text-neutral-700'}`}>
+                      {step.title}
+                    </h3>
+                    <p className="text-neutral-500">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Step 3: Execution */}
-          <div
-            className={`absolute bottom-8 left-8 w-[90%] border-2 border-black bg-green-100 p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-500 ${
-              step >= 2 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
-            }`}
-          >
-            <div className="mb-2 flex items-center gap-2 font-mono text-sm font-bold text-green-700">
-              <CheckSquare className="h-4 w-4" /> EXECUTION LOG
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 border border-black/10 bg-white p-2">
-                <Database className="h-4 w-4 text-neutral-400" />
-                <span className="font-mono text-xs font-bold">NOTION</span>
-                <span className="text-sm">Created page "Hexagonal Arch Research"</span>
-              </div>
-              <div className="flex items-center gap-3 border border-black/10 bg-white p-2">
-                <Layers className="h-4 w-4 text-neutral-400" />
-                <span className="font-mono text-xs font-bold">CALENDAR</span>
-                <span className="text-sm">Event created: "Arch Review" (Fri 2PM)</span>
-              </div>
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-tr from-cyan-100 to-purple-100 rounded-full blur-3xl opacity-30"></div>
+            <div className="relative rounded-3xl border border-neutral-200 bg-white p-8 shadow-2xl">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeStep}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="min-h-[200px] flex flex-col items-center justify-center text-center p-6"
+                >
+                  {activeStep === 0 && (
+                    <>
+                      <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mb-4 text-white shadow-lg shadow-blue-200">
+                        <Mic className="w-8 h-8" />
+                      </div>
+                      <div className="font-mono text-sm bg-neutral-100 px-4 py-2 rounded-lg text-neutral-600 mb-2">Authenticated User Input</div>
+                      <p className="text-xl font-medium text-neutral-900">"Research hexagonal architecture and schedule a review for Friday"</p>
+                    </>
+                  )}
+                  {activeStep === 1 && (
+                    <>
+                      <div className="w-16 h-16 bg-purple-500 rounded-full flex items-center justify-center mb-4 text-white shadow-lg shadow-purple-200">
+                        <Brain className="w-8 h-8" />
+                      </div>
+                      <div className="flex gap-2 mb-4">
+                        <span className="text-xs font-semibold bg-cyan-100 text-cyan-800 px-2 py-1 rounded">Research</span>
+                        <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-2 py-1 rounded">Calendar</span>
+                      </div>
+                      <p className="text-xl font-medium text-neutral-900">Analyzing intent... splitting into parallel workflows.</p>
+                    </>
+                  )}
+                  {activeStep === 2 && (
+                    <>
+                      <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mb-4 text-white shadow-lg shadow-green-200">
+                        <CheckSquare className="w-8 h-8" />
+                      </div>
+                      <div className="space-y-2 w-full max-w-xs text-left">
+                        <div className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-100">
+                          <FileText className="w-4 h-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-900">Notion Page Created</span>
+                        </div>
+                        <div className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-100">
+                          <Calendar className="w-4 h-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-900">Review Meeting Set</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
           </div>
         </div>
@@ -243,33 +292,39 @@ function DemoSection(): React.JSX.Element {
 }
 
 function CouncilSection(): React.JSX.Element {
+  const models = [
+    { name: 'ANTHROPIC', models: 'Opus 4.5, Sonnet 4.5', role: 'Analysis & Validation', icon: Cpu },
+    { name: 'OPENAI', models: 'GPT-5.2, o4-mini', role: 'Deep Research & Images', icon: Zap },
+    { name: 'GOOGLE', models: 'Gemini 2.5 Pro/Flash', role: 'Classification & Routing', icon: Brain },
+    { name: 'PERPLEXITY', models: 'Sonar Pro/Deep', role: 'Real-time Web Search', icon: Globe },
+    { name: 'ZAI', models: 'GLM-4.7 / Flash', role: 'Multilingual Analysis', icon: MessageSquare },
+  ];
+
   return (
-    <section className="border-b-4 border-black bg-neutral-950 px-6 py-24 text-white">
-      <div className="mx-auto max-w-7xl text-center">
-        <h2 className="mb-6 font-mono text-3xl font-bold uppercase tracking-widest text-neutral-500">
-          The Council of AI
-        </h2>
-        <p className="mx-auto mb-16 max-w-2xl text-lg text-neutral-400">
-          17 models across 5 providers, treated as a council of experts rather than a single oracle.
-          Each query is dispatched to multiple models in parallel, then synthesized with confidence
-          scoring. <span className="text-cyan-400">v2.0.0: Natural language model selection — "research with Claude and GPT"</span>
-        </p>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
-          {[
-            { name: 'ANTHROPIC', models: 'Opus 4.5, Sonnet 4.5', role: 'Analysis & Validation' },
-            { name: 'OPENAI', models: 'GPT-5.2, o4-mini', role: 'Deep Research & Images' },
-            { name: 'GOOGLE', models: 'Gemini 2.5 Pro/Flash', role: 'Classification & Routing' },
-            { name: 'PERPLEXITY', models: 'Sonar Pro/Deep', role: 'Real-time Web Search' },
-            { name: 'ZAI', models: 'GLM-4.7 / Flash', role: 'Multilingual Analysis' },
-          ].map((provider) => (
-            <div
+    <section className="bg-neutral-950 py-24 text-white">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold tracking-tight mb-4">The Council of AI</h2>
+          <p className="text-neutral-400 max-w-2xl mx-auto">
+            17 models across 5 providers. Not a single oracle, but a consensus engine.
+            When they agree, you get certainty. When they disagree, you see the debate.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {models.map((provider) => (
+            <motion.div
               key={provider.name}
-              className="flex flex-col items-center justify-center border-2 border-neutral-800 p-6 transition-colors hover:border-white hover:bg-neutral-900"
+              whileHover={{ y: -5, backgroundColor: 'rgba(255,255,255,0.1)' }}
+              className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-6 text-center backdrop-blur-sm transition-colors"
             >
-              <div className="mb-2 text-2xl font-black">{provider.name}</div>
-              <div className="mb-2 font-mono text-xs text-neutral-400">{provider.models}</div>
-              <div className="font-mono text-xs text-neutral-500">{provider.role}</div>
-            </div>
+              <div className="mx-auto w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center mb-4 text-neutral-300">
+                <provider.icon className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-lg mb-1">{provider.name}</h3>
+              <p className="text-xs font-mono text-cyan-400 mb-2">{provider.models}</p>
+              <p className="text-sm text-neutral-500">{provider.role}</p>
+            </motion.div>
           ))}
         </div>
       </div>
@@ -277,250 +332,86 @@ function CouncilSection(): React.JSX.Element {
   );
 }
 
-function ManifestoSection(): React.JSX.Element {
-  return (
-    <section className="border-b-4 border-black bg-cyan-400 px-6 py-24">
-      <div className="mx-auto max-w-7xl">
-        <div className="grid gap-16 lg:grid-cols-2">
-          <div>
-            <SectionHeading>Intelligence as Infrastructure</SectionHeading>
-            <p className="mb-8 text-xl font-bold leading-relaxed">
-              IntexuraOS reimagines productivity as an AI-first system. Instead of building another
-              app that uses AI as a feature, we build AI agents that use apps as tools.
-            </p>
-            <p className="text-lg font-medium leading-relaxed">
-              Your brain excels at creative thinking and decision-making. It struggles with
-              remembering, scheduling, aggregating, and cross-referencing. IntexuraOS handles the
-              cognitive load while you remain the commander.
-            </p>
-          </div>
+function FeaturesGrid(): React.JSX.Element {
+  const features = [
+    {
+      title: "Hexagonal Architecture",
+      desc: "Strict boundaries between Domain Logic and Infrastructure. Notion is just an adapter. The core logic is pure.",
+      icon: Hexagon
+    },
+    {
+      title: "No Dummy Success",
+      desc: "A function either succeeds with a verified result or fails explicitly. We never return null to silence an error.",
+      icon: Shield
+    },
+    {
+      title: "Source Attribution",
+      desc: "Every claim links to which model said it. No black-box answers — trace any statement back to its origin.",
+      icon: FileText
+    },
+    {
+      title: "Cost Transparency",
+      desc: "Every LLM call tracked: model, tokens, cost. Know exactly what you're spending before and after each query.",
+      icon: BarChart3
+    },
+    {
+      title: "Sleep-at-Night Reliability",
+      desc: "95%+ coverage is not a target; it's a gate. If the code isn't proven to work, it doesn't merge.",
+      icon: Lock
+    },
+    {
+      title: "Linear Integration",
+      desc: "New 3-column dashboard optimized for daily standups. Planning, Work, and Closed fully synced.",
+      icon: Layout
+    }
+  ];
 
-          <div className="grid gap-6">
-            <BrutalistCard title="No Dummy Success" icon={Shield}>
-              <p className="text-neutral-700">
-                A function either succeeds with a verified result or fails explicitly. We never return{' '}
-                <code className="bg-neutral-200 px-1 py-0.5 text-sm">null</code> to silence an
-                error.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Hexagonal Architecture" icon={Layers}>
-              <p className="text-neutral-700">
-                Strict boundaries between Domain Logic and Infrastructure. Notion is just an adapter.
-                The core logic is pure.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Council Consensus" icon={Brain}>
-              <p className="text-neutral-700">
-                Five AI models debate independently. When they agree, you get certainty. When they
-                disagree, you see the confidence scores.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Source Attribution" icon={FileText}>
-              <p className="text-neutral-700">
-                Every claim links to which model said it. No black-box answers — trace any statement
-                back to its origin.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Cost Transparency" icon={Database}>
-              <p className="text-neutral-700">
-                Every LLM call tracked: model, tokens, cost. Know exactly what you're spending before
-                and after each query.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Sleep-at-Night Reliability" icon={Zap}>
-              <p className="text-neutral-700">
-                95%+ coverage is not a target; it's a gate. If the code isn't proven to work, it
-                doesn't merge.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard
-              title="Extreme Ownership"
-              icon={Shield}
-              className="hover:border-cyan-600 hover:shadow-[6px_6px_0px_0px_rgba(8,145,178,1)]"
-            >
-              <p className="mb-3 text-neutral-700">
-                Our engineering philosophy based on Jocko Willink&apos;s book. CI failure = your problem.
-                No &quot;other services failed&quot; rationalizations. Own it, fix it, ship it.
-              </p>
-              <a
-                href="https://github.com/pbuchman/intexuraos/blob/main/docs/philosophy/extreme-ownership.md"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-cyan-700 underline"
-              >
-                Read Philosophy <ArrowRight className="h-4 w-4" />
-              </a>
-            </BrutalistCard>
-          </div>
+  return (
+    <section className="bg-neutral-50 py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold tracking-tight text-neutral-900 mb-4">Intelligence as Infrastructure</h2>
+          <p className="text-lg text-neutral-600 max-w-2xl mx-auto">
+            Built with the rigor of a financial system. Type-safe, tested, and observable.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {features.map((f) => (
+            <FeatureCard
+              key={f.title}
+              title={f.title}
+              description={f.desc}
+              icon={f.icon}
+            />
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-function RecentUpdatesSection(): React.JSX.Element {
-  return (
-    <section className="border-b-4 border-black bg-purple-100 px-6 py-24">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-12 flex items-center justify-between max-w-2xl">
-          <SectionHeading className="mb-0">
-            What's New
-          </SectionHeading>
-          <a
-            href="https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-cyan-700 underline"
-          >
-            View Changelog <ArrowRight className="h-4 w-4" />
-          </a>
-        </div>
-        <p className="mb-12 max-w-2xl text-lg font-medium text-neutral-700">
-          Major improvements to approval workflows, classification accuracy, and user control.
-        </p>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <BrutalistCard title="WhatsApp Approval" icon={CheckSquare} className="bg-green-50">
-            <p className="mb-3 text-neutral-700">
-              Approve or reject actions directly from WhatsApp. Reply with text (&quot;yes&quot;, &quot;ok&quot;, &quot;reject&quot;)
-              or react with emoji — 👍 to approve, 👎 to reject. No app switching required.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              LLM-based intent classification for natural replies.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Calendar Preview" icon={Layers} className="bg-yellow-50">
-            <p className="mb-3 text-neutral-700">
-              See exactly what will be created before approving. Event title, time, duration,
-              and all-day detection — full visibility before commit.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              &quot;Meeting Tuesday 2pm&quot; → Preview → 👍 → Created
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Smart Classification" icon={Brain} className="bg-purple-50">
-            <p className="mb-3 text-neutral-700">
-              5-step decision tree with URL keyword isolation. &quot;Save bookmark example.com/todo-list&quot;
-              correctly saves as link, not todo. Explicit intent always wins.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              Polish language support: &quot;zapisz&quot;, &quot;notatka&quot;, &quot;zadanie&quot;
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Model Selection" icon={Zap} className="bg-cyan-50">
-            <p className="mb-3 text-neutral-700">
-              Specify which AI models to use in natural language. &quot;Research AI trends with Claude
-              and GPT&quot; or &quot;all models except Perplexity&quot; — you&apos;re in control.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              GLM-4.7-Flash: Free tier for cost-conscious queries.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Linear Dashboard" icon={Database} className="bg-orange-50">
-            <p className="mb-3 text-neutral-700">
-              New 3-column layout: Planning → Work → Closed. Todo and To Test categories with
-              smart state-to-column mapping for visual workflow tracking.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              Optimized for daily standup and sprint planning.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Race Prevention" icon={Shield} className="bg-red-50">
-            <p className="mb-3 text-neutral-700">
-              Atomic status transitions via Firestore transactions. No more double-approvals or
-              lost updates when multiple agents process the same action.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              updateStatusIf() — optimistic locking pattern.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Trust & Verify" icon={Shield} className="bg-green-50">
-            <p className="mb-3 text-neutral-700">
-              We believe in AI models, but validation builds trust. Every LLM response is verified
-              with structured schemas — catching errors before they affect your data.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              Zod schemas: Runtime safety + TypeScript types in one
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="No More Duplicates" icon={CheckSquare} className="bg-purple-50">
-            <p className="mb-3 text-neutral-700">
-              Fixed duplicate WhatsApp approval notifications. Now you receive exactly one message
-              per action — clean, predictable, and clutter-free.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              One notification per action. Period.
-            </p>
-          </BrutalistCard>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function VersionHistorySection(): React.JSX.Element {
-  const [showHistory, setShowHistory] = useState(false);
-
-  return (
-    <section className="border-b-4 border-black bg-neutral-100 px-6 py-24">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8">
-          <button
-            onClick={() => {
-              setShowHistory(!showHistory);
-            }}
-            className="flex items-center gap-3 font-mono text-lg font-bold uppercase hover:text-cyan-700"
-          >
-            <ArrowRight className={`h-5 w-5 transition-transform ${
-              showHistory ? 'rotate-90' : ''
-            }`} />
-            Previous Versions
-          </button>
-        </div>
-
-        {showHistory && (
-          <div className="border-2 border-black bg-white p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <h3 className="mb-4 font-mono text-xl font-bold">v1.x — Launch</h3>
-            <p className="text-lg font-medium leading-relaxed text-neutral-800">
-              End-to-end AI autonomy: From your mobile to the cloud and back. IntexuraOS went from
-              architecture document to handling live traffic — voice to research, links to bookmarks,
-              dates to calendar events. The full AI agent pipeline is now processing real user
-              requests in production.
-            </p>
-          </div>
-        )}
-      </div>
-    </section>
-  );
+// Helper for Hexagon icon since it might not be in the imported set
+function Hexagon({ className }: { className?: string }): React.JSX.Element {
+  return <Layers className={className} />;
 }
 
 function Footer(): React.JSX.Element {
   return (
-    <footer className="bg-white px-6 py-12">
-      <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 md:flex-row md:items-center">
-        <div>
-          <h3 className="mb-2 text-2xl font-black uppercase tracking-tighter">IntexuraOS</h3>
-          <p className="font-mono text-sm text-neutral-500">
-            © {new Date().getFullYear()} <a href="https://pbuchman.com" className="hover:text-cyan-600">Piotr Buchman</a>. Open Source.
-          </p>
+    <footer className="bg-white border-t border-neutral-100 py-12">
+      <div className="mx-auto max-w-7xl px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="flex items-center gap-2">
+          <div className="h-6 w-6 bg-cyan-600 rounded-md"></div>
+          <span className="font-bold text-neutral-900">IntexuraOS</span>
         </div>
-        <div className="flex gap-8 font-mono text-sm font-bold uppercase">
-          <a
-            href="https://github.com/pbuchman/intexuraos"
-            className="flex items-center gap-1 hover:text-cyan-600"
-          >
-            GitHub <ArrowRight className="h-4 w-4" />
+        <p className="text-sm text-neutral-500">
+          © {new Date().getFullYear()} Piotr Buchman. Open Source.
+        </p>
+        <div className="flex gap-6">
+          <a href="https://github.com/pbuchman" className="text-neutral-400 hover:text-neutral-900 transition-colors">
+            <GithubIcon className="w-5 h-5" />
           </a>
-          <a
-            href="https://www.linkedin.com/in/piotrbuchman/"
-            className="flex items-center gap-1 hover:text-cyan-600"
-          >
-            LinkedIn <ArrowRight className="h-4 w-4" />
-          </a>
-          <a
-            href="mailto:kontakt@pbuchman.com"
-            className="flex items-center gap-1 hover:text-cyan-600"
-          >
-            Email <ArrowRight className="h-4 w-4" />
+          <a href="https://linkedin.com/in/piotrbuchman" className="text-neutral-400 hover:text-neutral-900 transition-colors">
+            <LinkedinIcon className="w-5 h-5" />
           </a>
         </div>
       </div>
@@ -528,17 +419,14 @@ function Footer(): React.JSX.Element {
   );
 }
 
-// --- Main Page ---
-
 export function HomePage(): React.JSX.Element {
   return (
-    <div className="min-h-screen bg-neutral-100 font-sans text-black selection:bg-cyan-300 selection:text-black">
+    <div className="min-h-screen bg-white font-sans text-neutral-900 selection:bg-cyan-100 selection:text-cyan-900">
+      <Navbar />
       <HeroSection />
-      <DemoSection />
+      <DemoLoopSection />
       <CouncilSection />
-      <ManifestoSection />
-      <RecentUpdatesSection />
-      <VersionHistorySection />
+      <FeaturesGrid />
       <Footer />
     </div>
   );
