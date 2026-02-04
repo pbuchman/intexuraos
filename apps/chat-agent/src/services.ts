@@ -10,6 +10,8 @@ import { LlmModels } from '@intexuraos/llm-contract';
 import { FirestoreEmbeddingRepository } from './infra/firestore/embeddingRepository.js';
 import { EmbeddingClient } from './infra/llm/embeddingClient.js';
 import { createChatClient } from './infra/llm/chatClient.js';
+import OpenAI from 'openai';
+import type { CreateEmbeddingResponse } from 'openai/resources';
 import type { EmbeddingRepositoryPort } from './domain/models/docChunk.js';
 import type { EmbeddingClient as EmbeddingClientInterface } from './domain/usecases/searchDocumentation.js';
 import type { Logger } from 'pino';
@@ -108,10 +110,16 @@ export async function initializeServices(): Promise<void> {
     [...CHAT_MODELS] as unknown as (typeof LlmModels.Gemini25Flash)[]
   );
 
+  // Create OpenAI instance for embeddings
+  const openai = new OpenAI({ apiKey: openaiApiKey });
+
   container = {
     generateId: (): string => crypto.randomUUID(),
     embeddingRepository: new FirestoreEmbeddingRepository(),
-    embeddingClient: new EmbeddingClient({ apiKey: openaiApiKey }),
+    embeddingClient: new EmbeddingClient({
+      embedFn: (text: string, model: string): Promise<CreateEmbeddingResponse> =>
+        openai.embeddings.create({ model, input: text }),
+    }),
     userServiceClient: createUserServiceClient({
       baseUrl: userServiceUrl,
       internalAuthToken,

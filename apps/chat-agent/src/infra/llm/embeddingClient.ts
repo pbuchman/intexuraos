@@ -6,20 +6,17 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
-// eslint-disable-next-line no-restricted-imports -- OpenAI embeddings API is separate from LLM generation (not in @intexuraos/infra-gpt)
-import OpenAI from 'openai';
+import type { CreateEmbeddingResponse } from 'openai/resources';
 
-/** Configuration for embedding client. */
-export interface EmbeddingClientConfig {
-  readonly apiKey: string;
-  readonly model?: string;
-  readonly maxRetries?: number;
-  readonly retryDelayMs?: number;
-}
+/** Function signature for embedding API call. */
+export type EmbeddingFn = (
+  text: string,
+  model: string
+) => Promise<CreateEmbeddingResponse>;
 
-/** Marker interface for dependency injection of OpenAI instance (for testing). */
+/** Dependencies for embedding client using function injection. */
 export interface EmbeddingClientDeps {
-  readonly openai: OpenAI;
+  readonly embedFn: EmbeddingFn;
   readonly model?: string;
   readonly maxRetries?: number;
   readonly retryDelayMs?: number;
@@ -49,28 +46,16 @@ const DEFAULT_RETRY_DELAY_MS = 1000;
  * OpenAI embedding client with retry logic for rate limiting.
  */
 export class EmbeddingClient {
-  private readonly openai: OpenAI;
+  private readonly embedFn: EmbeddingFn;
   private readonly model: string;
   private readonly maxRetries: number;
   private readonly retryDelayMs: number;
 
-  constructor(configOrDeps: EmbeddingClientConfig | EmbeddingClientDeps) {
-    // Discriminated union: 'openai' key indicates deps object (config has 'apiKey')
-    if ('openai' in configOrDeps) {
-      // Dependency injection mode (for testing)
-      this.openai = configOrDeps.openai;
-      this.model = configOrDeps.model ?? 'text-embedding-3-small';
-      this.maxRetries = configOrDeps.maxRetries ?? DEFAULT_MAX_RETRIES;
-      this.retryDelayMs = configOrDeps.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
-    /* v8 ignore start -- module-init: Production constructor uses real OpenAI client @preserve */
-    } else {
-      // Config mode (production)
-      this.openai = new OpenAI({ apiKey: configOrDeps.apiKey });
-      this.model = configOrDeps.model ?? 'text-embedding-3-small';
-      this.maxRetries = configOrDeps.maxRetries ?? DEFAULT_MAX_RETRIES;
-      this.retryDelayMs = configOrDeps.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
-    }
-    /* v8 ignore stop @preserve */
+  constructor(deps: EmbeddingClientDeps) {
+    this.embedFn = deps.embedFn;
+    this.model = deps.model ?? 'text-embedding-3-small';
+    this.maxRetries = deps.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.retryDelayMs = deps.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   }
 
   /**
@@ -86,10 +71,7 @@ export class EmbeddingClient {
 
     for (let attempt = 0; attempt < this.maxRetries; attempt++) {
       try {
-        const response = await this.openai.embeddings.create({
-          model: this.model,
-          input: trimmedText,
-        });
+        const response = await this.embedFn(trimmedText, this.model);
 
         const embedding = response.data[0]?.embedding;
 
