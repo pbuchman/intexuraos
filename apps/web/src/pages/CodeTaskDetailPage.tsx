@@ -380,9 +380,18 @@ function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
                 levelValue === 'debug'
                   ? levelValue
                   : 'info';
+              // Firestore Timestamp has toDate() method, convert to ISO string
+              const timestampField = data['timestamp'];
+              const timestamp =
+                timestampField !== null &&
+                typeof timestampField === 'object' &&
+                'toDate' in timestampField &&
+                typeof timestampField.toDate === 'function'
+                  ? (timestampField.toDate() as Date).toISOString()
+                  : String(timestampField);
               const entry: LogEntry = {
                 id: doc.id,
-                timestamp: data['timestamp'] as string,
+                timestamp,
                 level,
                 message: data['message'] as string,
               };

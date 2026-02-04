@@ -206,6 +206,16 @@ export class DockerProvider implements IsolationProvider {
       hijack: true,
     })) as unknown as NodeJS.ReadWriteStream;
 
+    // Set up log listener BEFORE writing prompt to avoid race condition
+    // With --print mode, container may emit logs immediately after receiving prompt
+    /* v8 ignore start -- test-infra: optional onLog callback tested via test mock @preserve */
+    if (config.onLog !== undefined) {
+      attachStream.on('data', (chunk: Buffer) => {
+        config.onLog?.(chunk.toString('utf-8'));
+      });
+    }
+    /* v8 ignore stop @preserve */
+
     // Combine system prompt and user prompt for --print mode
     // System prompt provides context about the task, Linear integration, and workflow rules
     // The delimiter ---END_PROMPT--- signals end of multi-line prompt to entrypoint.sh
@@ -224,14 +234,6 @@ export class DockerProvider implements IsolationProvider {
       handle,
       attachStream,
     });
-
-    /* v8 ignore start -- test-infra: optional onLog callback tested via test mock @preserve */
-    if (config.onLog !== undefined) {
-      attachStream.on('data', (chunk: Buffer) => {
-        config.onLog?.(chunk.toString('utf-8'));
-      });
-    }
-    /* v8 ignore stop @preserve */
 
     /* v8 ignore start -- test-infra: promise handlers run after test completes @preserve */
     container

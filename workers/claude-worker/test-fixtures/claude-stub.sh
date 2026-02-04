@@ -86,6 +86,9 @@ process_command() {
         echo "[claude-stub] CPU limit: $(cat /sys/fs/cgroup/cpu.max)"
       fi
       echo "[claude-stub] Resource test complete"
+      # Keep container running for E2E tests to query docker stats
+      echo "[claude-stub] Waiting for stats collection (5s)..."
+      sleep 5
       ;;
     "file-test"|"/file-test")
       echo "[claude-stub] Testing file system..."

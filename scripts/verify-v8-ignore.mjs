@@ -694,6 +694,77 @@ function reportMissingComments(coverageData, comments) {
 }
 
 // ============================================================================
+// PHASE E-1: Report Exempted Branches (for visibility)
+// ============================================================================
+
+function reportExemptedBranches(coverageData, comments) {
+  const exempted = [];
+
+  function normalizePath(filePath) {
+    return filePath.replace(ROOT_DIR + '/', '');
+  }
+
+  // Build map of v8 ignore ranges
+  const ignoreRangesMap = new Map();
+  for (const comment of comments) {
+    if (comment.type !== 'start') continue;
+    const fileKey = comment.file;
+    if (!ignoreRangesMap.has(fileKey)) ignoreRangesMap.set(fileKey, []);
+    const matchingStop = comments.find(
+      (c) => c.file === comment.file && c.type === 'stop' && c.line > comment.line
+    );
+    if (matchingStop) {
+      ignoreRangesMap.get(fileKey).push({
+        start: comment.line,
+        stop: matchingStop.line,
+        category: comment.category,
+      });
+    }
+  }
+
+  // Find branches with null hits (exempted by v8 ignore)
+  for (const [filePath, fileData] of Object.entries(coverageData)) {
+    if (filePath.includes('__tests__')) continue;
+    const branches = fileData.b;
+    const branchMap = fileData.branchMap;
+    if (!branches || !branchMap) continue;
+
+    const normalizedPath = normalizePath(filePath);
+    const ranges = ignoreRangesMap.get(normalizedPath) ?? [];
+
+    for (const [branchId, hitCounts] of Object.entries(branches)) {
+      if (!Array.isArray(hitCounts)) continue;
+      const branchInfo = branchMap[branchId];
+      if (!branchInfo) continue;
+
+      // Get the full span of this branch (from start to end line)
+      const branchStartLine = branchInfo.loc?.start?.line ?? branchInfo.line;
+      const branchEndLine = branchInfo.loc?.end?.line ?? branchStartLine;
+
+      for (let i = 0; i < hitCounts.length; i++) {
+        if (hitCounts[i] === null) {
+          // Check if ANY part of this branch's span overlaps with v8 ignore range
+          const coveringRange = ranges.find(
+            (range) => !(branchEndLine < range.start || branchStartLine > range.stop)
+          );
+
+          if (coveringRange) {
+            exempted.push({
+              file: normalizedPath,
+              line: branchStartLine,
+              endLine: branchEndLine,
+              category: coveringRange.category,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return exempted;
+}
+
+// ============================================================================
 // PHASE F: Verify 1:1 Mapping (each block covers exactly 1 branch)
 // ============================================================================
 
@@ -871,6 +942,14 @@ async function main() {
     missingReport = reportMissingComments(coverageData, comments);
   }
 
+  // Phase E-1: Report exempted branches (for visibility)
+  let exemptedReport = [];
+
+  if (existsSync(coveragePath)) {
+    const coverageData = JSON.parse(readFileSync(coveragePath, 'utf8'));
+    exemptedReport = reportExemptedBranches(coverageData, comments);
+  }
+
   // Phase F: Verify 1:1 mapping (each block covers exactly 1 branch)
   let mappingResult = {
     issues: [],
@@ -924,9 +1003,46 @@ async function main() {
     );
   }
 
+  // CRITICAL: Fail on exempted branches (v8 ignore on branches is not allowed)
+  if (exemptedReport.length > 0) {
+    // Group by category for clearer output
+    const byCategory = new Map();
+    for (const e of exemptedReport) {
+      if (!byCategory.has(e.category)) byCategory.set(e.category, []);
+      byCategory.get(e.category).push(e);
+    }
+
+    console.log(
+      `\n❌ ${exemptedReport.length} exempted branch(es) found - v8 ignore on branches is NOT ALLOWED:\n`
+    );
+
+    for (const [category, branches] of byCategory.entries()) {
+      console.log(`  [${category}]`);
+      const uniqueFiles = [
+        ...new Set(branches.map((b) => `${b.file}:${b.line}-${b.endLine ?? b.line}`)),
+      ];
+      uniqueFiles.slice(0, 10).forEach((loc) => {
+        console.log(`    ${loc}`);
+      });
+      if (uniqueFiles.length > 10) {
+        console.log(`    ... and ${uniqueFiles.length - 10} more`);
+      }
+      console.log('');
+    }
+    console.log(
+      'CRITICAL: v8 ignore on branches is NOT ALLOWED.\n' +
+        '\n' +
+        'Branch exemption with v8 ignore hides untested code paths from CI.\n' +
+        'All branches must be covered by tests.\n' +
+        '\n' +
+        'To fix: Remove the v8 ignore comment and write a test for this code path.'
+    );
+  }
+
   const hasErrors = allErrors.length > 0;
   const hasMissing = missingReport.length > 0;
-  process.exit(hasErrors || hasMissing ? 1 : 0);
+  const hasExempted = exemptedReport.length > 0;
+  process.exit(hasErrors || hasMissing || hasExempted ? 1 : 0);
 }
 
 main();
