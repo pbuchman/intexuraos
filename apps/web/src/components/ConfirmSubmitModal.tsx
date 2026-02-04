@@ -20,18 +20,19 @@ export function ConfirmSubmitModal({
   onCancel,
 }: ConfirmSubmitModalProps): React.JSX.Element | null {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleConfirm = async (): Promise<void> => {
     setIsSubmitting(true);
-    setError(null);
     try {
       await onConfirm();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit task');
       setIsSubmitting(false);
+      // Close modal and let parent handle error display
+      onCancel();
+      // Re-throw so parent can catch
+      throw err;
     }
   };
 
@@ -88,12 +89,6 @@ export function ConfirmSubmitModal({
                 </span>
                 ?
               </p>
-
-              {error !== null && (
-                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
-                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-                </div>
-              )}
             </div>
 
             <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-700">
