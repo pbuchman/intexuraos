@@ -253,7 +253,10 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
   });
 
   describe.skipIf(skipIfNoImage)('Input/Output', () => {
-    it(
+    // Skip: sendInput is not supported in --print mode. The worker now reads the full
+    // prompt via stdin delimiter (---END_PROMPT---) and runs Claude in non-interactive
+    // mode, which exits after processing. Interactive sendInput is deprecated.
+    it.skip(
       'sendInput delivers message to container stdin',
       async () => {
         const taskId = `e2e-input-${Date.now()}`;
