@@ -200,8 +200,9 @@ export class DockerProvider implements IsolationProvider {
 
     // Combine system prompt and user prompt for --print mode
     // System prompt provides context about the task, Linear integration, and workflow rules
+    // The delimiter ---END_PROMPT--- signals end of multi-line prompt to entrypoint.sh
     const fullPrompt = systemPrompt + '\n\n' + prompt;
-    attachStream.write(fullPrompt + '\n');
+    attachStream.write(fullPrompt + '\n---END_PROMPT---\n');
 
     const handle: WorkerHandle = {
       taskId,

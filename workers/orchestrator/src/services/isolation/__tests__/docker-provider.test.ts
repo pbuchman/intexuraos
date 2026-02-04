@@ -217,16 +217,16 @@ describe('DockerProvider', () => {
       }
     });
 
-    it('sends combined system and user prompt to container', async () => {
+    it('sends combined system and user prompt to container with delimiter', async () => {
       const config = createTestConfig({
         prompt: 'Hello Claude',
         systemPrompt: 'You are a helpful assistant',
       });
       await provider.createWorker(config);
 
-      // System prompt + double newline + user prompt + final newline
+      // System prompt + double newline + user prompt + delimiter
       expect(mocks.mockAttachStream.write).toHaveBeenCalledWith(
-        'You are a helpful assistant\n\nHello Claude\n'
+        'You are a helpful assistant\n\nHello Claude\n---END_PROMPT---\n'
       );
     });
   });

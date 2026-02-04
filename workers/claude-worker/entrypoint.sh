@@ -103,9 +103,20 @@ if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
 fi
 
 # Read prompt from stdin (sent by orchestrator via attachStream)
-# We read the first line as the prompt, then use --print mode
-read -r PROMPT
-echo "[entrypoint] Received prompt: ${PROMPT:0:100}..."
+# The prompt is multi-line (system context + user prompt), ending with ---END_PROMPT---
+# Read all lines until the delimiter
+PROMPT=""
+while IFS= read -r line; do
+    if [[ "$line" == "---END_PROMPT---" ]]; then
+        break
+    fi
+    if [[ -n "$PROMPT" ]]; then
+        PROMPT="${PROMPT}"$'\n'"${line}"
+    else
+        PROMPT="$line"
+    fi
+done
+echo "[entrypoint] Received prompt (${#PROMPT} chars): ${PROMPT:0:100}..."
 
 # Execute Claude in print mode (non-interactive)
 # --print: Process prompt and exit, bypasses interactive onboarding
