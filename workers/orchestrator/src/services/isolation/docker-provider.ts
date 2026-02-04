@@ -113,6 +113,8 @@ export class DockerProvider implements IsolationProvider {
       `LINEAR_API_KEY=${secrets.LINEAR_API_KEY}`,
       `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
+      // Exit 10s after idle - no resume functionality yet (see INT-491)
+      'CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=10000',
     ];
 
     if (workerTypeConfig.model !== undefined) {
