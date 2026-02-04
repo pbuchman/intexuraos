@@ -190,7 +190,7 @@ function DemoLoopSection(): React.JSX.Element {
     { title: "Execute", icon: CheckSquare, color: "text-green-500", bg: "bg-green-100", desc: "Action performed automagically" }
   ];
 
-  useEffect(() => {
+  useEffect((): (() => void) => {
     const interval = setInterval(() => {
       setActiveStep((prev) => (prev + 1) % steps.length);
     }, 2500);
