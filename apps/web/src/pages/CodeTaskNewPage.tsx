@@ -3,11 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Play, Link2, Sparkles } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
-import { Button, Card, Layout, ConfirmSubmitModal } from '@/components';
+import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal } from '@/components';
+import type { ConflictReason } from '@/components';
 import { LinearIssueCombobox } from '@/components';
 import { useCodeTasks, useLinearIssueOptions, useWorkersStatus } from '@/hooks';
 import type { CodeTaskWorkerType } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
+import { ApiError, parseConflictError } from '@/services/apiClient';
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = [
   { id: 'auto', name: 'Auto', description: 'Automatically select the best model' },
@@ -33,6 +35,8 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [selectedIssue, setSelectedIssue] = useState<LinearIssueOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState<{ taskId: string; reason: ConflictReason } | null>(null);
 
   const { status: workersStatus, loading: workersLoading } = useWorkersStatus();
 
@@ -85,6 +89,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const handleConfirmSubmit = async (): Promise<void> => {
     setSubmitting(true);
     setError(null);
+    setShowConflictModal(false);
 
     try {
       const requestData: {
@@ -111,13 +116,30 @@ export function CodeTaskNewPage(): React.JSX.Element {
       const taskId = await submitTask(requestData);
       void navigate(`/code-tasks/${taskId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit task');
       setSubmitting(false);
+      if (err instanceof ApiError && err.code === 'CONFLICT') {
+        const parsedConflict = parseConflictError(err.message);
+        if (parsedConflict !== null) {
+          setConflictInfo(parsedConflict);
+          setShowConflictModal(true);
+          return;
+        }
+      }
+      setError(err instanceof Error ? err.message : 'Failed to submit task');
     }
   };
 
   const handleCancelModal = (): void => {
     setShowConfirmModal(false);
+  };
+
+  const handleNavigateToTask = (taskId: string): void => {
+    void navigate(`/code-tasks/${taskId}`);
+  };
+
+  const handleCloseConflictModal = (): void => {
+    setShowConflictModal(false);
+    setConflictInfo(null);
   };
 
   return (
@@ -394,6 +416,16 @@ export function CodeTaskNewPage(): React.JSX.Element {
         onConfirm={handleConfirmSubmit}
         onCancel={handleCancelModal}
       />
+
+      {showConflictModal && conflictInfo !== null ? (
+        <TaskConflictModal
+          isOpen={showConflictModal}
+          taskId={conflictInfo.taskId}
+          reason={conflictInfo.reason}
+          onClose={handleCloseConflictModal}
+          onNavigateToTask={handleNavigateToTask}
+        />
+      ) : null}
     </Layout>
   );
 }
