@@ -443,26 +443,13 @@ if [ -n "$token_metrics" ]; then
 fi
 
 # MEGA session stats (append to line2, only if session matches)
-mega_stats_file="$HOME/.make-english-great-again/current-session.json"
-if [ -f "$mega_stats_file" ] && [ -n "$session_id" ]; then
-  if [ "$HAS_JQ" -eq 1 ]; then
-    mega_session=$(jq -r '.session_id // ""' "$mega_stats_file" 2>/dev/null)
-    if [ "$mega_session" = "$session_id" ]; then
-      mega_total=$(jq -r '.total // 0' "$mega_stats_file" 2>/dev/null)
-      mega_saved=$(jq -r '.saved // 0' "$mega_stats_file" 2>/dev/null)
-      mega_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;183m'; fi; }
-      line2="$line2  📝 $(mega_color)MEGA: ${mega_saved}/${mega_total}$(rst)"
-    fi
-  else
-    mega_session=$(grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$mega_stats_file" | sed 's/.*"\([^"]*\)"$/\1/')
-    if [ "$mega_session" = "$session_id" ]; then
-      mega_total=$(grep -o '"total"[[:space:]]*:[[:space:]]*[0-9]*' "$mega_stats_file" | grep -o '[0-9]*$')
-      mega_saved=$(grep -o '"saved"[[:space:]]*:[[:space:]]*[0-9]*' "$mega_stats_file" | grep -o '[0-9]*$')
-      [ -z "$mega_total" ] && mega_total=0
-      [ -z "$mega_saved" ] && mega_saved=0
-      mega_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;183m'; fi; }
-      line2="$line2  📝 $(mega_color)MEGA: ${mega_saved}/${mega_total}$(rst)"
-    fi
+mega_sessions_file="$HOME/.make-english-great-again/sessions.json"
+if [ -f "$mega_sessions_file" ] && [ -n "$session_id" ]; then
+  mega_total=$(jq -r --arg sid "$session_id" '.sessions[] | select(.session_id == $sid) | .total // 0' "$mega_sessions_file" 2>/dev/null)
+  mega_saved=$(jq -r --arg sid "$session_id" '.sessions[] | select(.session_id == $sid) | .saved // 0' "$mega_sessions_file" 2>/dev/null)
+  if [ -n "$mega_total" ] && [ "$mega_total" != "null" ] && [ "$mega_total" -gt 0 ] 2>/dev/null; then
+    mega_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;183m'; fi; }
+    line2="$line2  📝 $(mega_color)MEGA: ${mega_saved}/${mega_total}$(rst)"
   fi
 fi
 
