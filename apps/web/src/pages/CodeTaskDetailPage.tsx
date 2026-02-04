@@ -393,7 +393,7 @@ function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
                 id: doc.id,
                 timestamp,
                 level,
-                message: data['message'] as string,
+                message: data['content'] as string,
               };
               if (toolValue !== undefined) {
                 entry.tool = toolValue;

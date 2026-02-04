@@ -119,6 +119,10 @@ export class TaskDispatcher {
         onLog: (chunk) => {
           this.logForwarder.appendChunk(taskId, chunk);
         },
+        onComplete: () => {
+          // Flush any remaining logs when container exits
+          void this.logForwarder.flushAndStop(taskId);
+        },
       };
 
       // Register webhook secret for log forwarding signatures
