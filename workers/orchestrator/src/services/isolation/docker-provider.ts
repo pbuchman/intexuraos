@@ -127,6 +127,15 @@ export class DockerProvider implements IsolationProvider {
     const workerTypeConfig = (await import('./types.js')).WORKER_TYPES[workerType];
     const apiKey = secrets[workerTypeConfig.apiKeyEnvVar];
 
+    /* v8 ignore start -- test-infra: tests always provide mock API keys @preserve */
+    // Fail early if the required API key for this worker type is not configured
+    if (apiKey === '') {
+      throw new Error(
+        `Worker type '${workerType}' requires ${workerTypeConfig.apiKeyEnvVar} but it is not configured`
+      );
+    }
+    /* v8 ignore stop @preserve */
+
     /* v8 ignore start -- test-infra: worker type configuration varies by test @preserve */
     const env = [
       `TASK_ID=${taskId}`,

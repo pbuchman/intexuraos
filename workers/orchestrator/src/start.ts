@@ -206,7 +206,9 @@ async function bootstrap(): Promise<void> {
     provider: isolationProvider,
     tokenRefresher,
     secrets: {
-      ANTHROPIC_API_KEY: getRequiredEnv('INTEXURAOS_ANTHROPIC_API_KEY'),
+      // ANTHROPIC_API_KEY is optional - tasks with 'opus' or 'auto' workerType will fail
+      // if not set, but 'glm' (ZAI) tasks can still run
+      ANTHROPIC_API_KEY: getOptionalEnv('INTEXURAOS_ANTHROPIC_API_KEY', ''),
       LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
       SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
       ZAI_API_KEY: getOptionalEnv('INTEXURAOS_ZAI_API_KEY', ''),
