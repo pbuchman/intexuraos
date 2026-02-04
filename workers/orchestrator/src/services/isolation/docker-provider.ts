@@ -196,8 +196,8 @@ export class DockerProvider implements IsolationProvider {
       },
     });
 
-    await container.start();
-
+    // CRITICAL: attach() MUST be called before start() to capture all container output.
+    // If attach is called after start, the stream misses output emitted during startup.
     const attachStream = (await container.attach({
       stream: true,
       stdin: true,
@@ -205,6 +205,8 @@ export class DockerProvider implements IsolationProvider {
       stderr: true,
       hijack: true,
     })) as unknown as NodeJS.ReadWriteStream;
+
+    await container.start();
 
     // Set up log listener BEFORE writing prompt to avoid race condition
     // With --print mode, container may emit logs immediately after receiving prompt

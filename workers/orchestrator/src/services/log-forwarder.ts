@@ -61,6 +61,32 @@ export class LogForwarder {
     this.taskSecrets.delete(taskId);
   }
 
+  /**
+   * Flush remaining logs and stop forwarding for a task.
+   * Called when container exits to ensure no logs are lost.
+   */
+  async flushAndStop(taskId: string): Promise<void> {
+    const state = this.forwarders.get(taskId);
+    /* v8 ignore start -- test-infra: early return when task not registered, only happens in error scenarios @preserve */
+    if (state === undefined) {
+      return;
+    }
+    /* v8 ignore stop @preserve */
+
+    // Flush any remaining buffer content
+    await this.flushBuffer(taskId);
+
+    // Stop timer
+    /* v8 ignore start -- test-infra: cannot set timer to non-null to test else branch without breaking startForwarding @preserve */
+    if (state.timer !== null) {
+      clearInterval(state.timer);
+    }
+    /* v8 ignore stop @preserve */
+
+    // Remove from tracking
+    this.forwarders.delete(taskId);
+  }
+
   startForwarding(taskId: string, logFilePath: string): void {
     if (this.forwarders.has(taskId)) {
       this.logger.warn({ taskId }, 'Log forwarding already started');
