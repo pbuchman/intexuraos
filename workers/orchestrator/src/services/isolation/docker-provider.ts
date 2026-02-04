@@ -93,6 +93,26 @@ export class DockerProvider implements IsolationProvider {
       throw new Error(`Invalid worktree: ${worktreePath} (no .git directory)`);
     }
 
+    // Git worktrees use a .git file pointing to the main repo's .git/worktrees/ directory.
+    // We need to mount the main .git directory for git operations to work inside the container.
+    let mainGitDir: string | null = null;
+    const gitStat = fs.statSync(gitPath);
+    if (gitStat.isFile()) {
+      // Worktree - read gitdir path from .git file
+      const gitContent = fs.readFileSync(gitPath, 'utf-8').trim();
+      const match = /^gitdir:\s*(.+)$/.exec(gitContent);
+      if (match?.[1] !== undefined) {
+        // gitdir points to /path/to/repo/.git/worktrees/taskId
+        // We need the parent .git directory
+        const worktreeGitDir = match[1];
+        // Extract the main .git path (parent of worktrees/taskId)
+        const worktreesDir = path.dirname(worktreeGitDir);
+        if (path.basename(worktreesDir) === 'worktrees') {
+          mainGitDir = path.dirname(worktreesDir);
+        }
+      }
+    }
+
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
     await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
 
@@ -136,7 +156,12 @@ export class DockerProvider implements IsolationProvider {
       AttachStdout: true,
       AttachStderr: true,
       HostConfig: {
-        Binds: [`${worktreePath}:/repo:rw`, `${taskSecretsPath}:/secrets:ro`],
+        Binds: [
+          `${worktreePath}:/repo:rw`,
+          `${taskSecretsPath}:/secrets:ro`,
+          // Mount main git dir for worktree support (worktrees reference parent .git)
+          ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:ro`] : []),
+        ],
         Memory: this.config.memoryLimitBytes,
         NanoCpus: this.config.cpuCount * 1e9,
         NetworkMode: this.config.networkName,
@@ -147,7 +172,8 @@ export class DockerProvider implements IsolationProvider {
         ReadonlyRootfs: false,
         Tmpfs: {
           '/tmp': 'rw,noexec,nosuid,size=2g',
-          '/home/claude': 'rw,noexec,nosuid,size=500m',
+          // uid=1001,gid=1001 ensures claude user (1001) can write to tmpfs
+          '/home/claude': 'rw,noexec,nosuid,size=500m,uid=1001,gid=1001',
         },
         CapDrop: ['ALL'],
         // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude

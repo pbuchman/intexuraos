@@ -31,6 +31,11 @@ verify_network_restrictions() {
 verify_network_restrictions &
 
 # ------------------------------------------------------------------------------
+# Create required directories (tmpfs on /home/claude wipes image dirs)
+# ------------------------------------------------------------------------------
+mkdir -p /home/claude/.config/gcloud /home/claude/.claude
+
+# ------------------------------------------------------------------------------
 # Verify mounts
 # ------------------------------------------------------------------------------
 if [ ! -d "/repo" ]; then
@@ -38,8 +43,9 @@ if [ ! -d "/repo" ]; then
     exit 1
 fi
 
-if [ -d "/repo/.git" ]; then
-    echo "[entrypoint] Worktree verified: /repo (git repo)"
+# Git worktrees use a .git FILE (not directory) pointing to the main repo
+if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
+    echo "[entrypoint] Git repo verified: /repo"
 else
     echo "[entrypoint] WARNING: /repo is not a git repository"
 fi
@@ -92,16 +98,16 @@ setup_github_token
 # ------------------------------------------------------------------------------
 echo "[entrypoint] Starting Claude..."
 echo "[entrypoint] Working directory: $(pwd)"
-if [ -d "/repo/.git" ]; then
+if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
     echo "[entrypoint] Git branch: $(git -C /repo branch --show-current 2>/dev/null || echo 'unknown')"
 fi
 
-# Execute Claude in interactive mode (no --print flag)
-# stdin/stdout connected directly for sendInput() to work
-#
-# --dangerously-skip-permissions: Required for automated operation. Without this flag,
-# Claude Code prompts for confirmation before file writes, tool executions, and other
-# actions. In a containerized worker, there's no human to approve these prompts, so
-# they would block indefinitely. The container's isolation (non-root user, read-only
-# secrets, dropped capabilities) provides the security boundary instead.
-exec claude --dangerously-skip-permissions
+# Read prompt from stdin (sent by orchestrator via attachStream)
+# We read the first line as the prompt, then use --print mode
+read -r PROMPT
+echo "[entrypoint] Received prompt: ${PROMPT:0:100}..."
+
+# Execute Claude in print mode (non-interactive)
+# --print: Process prompt and exit, bypasses interactive onboarding
+# --dangerously-skip-permissions: Required for automated operation
+exec claude --print --dangerously-skip-permissions "$PROMPT"
