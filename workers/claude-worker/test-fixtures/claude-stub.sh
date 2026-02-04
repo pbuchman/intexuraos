@@ -3,7 +3,7 @@
 # Claude CLI Stub for E2E Testing
 # ==============================================================================
 # Simulates Claude CLI for E2E tests without making real API calls.
-# Accepts input, echoes responses, and exits cleanly.
+# Supports both interactive mode and --print mode (argument-based).
 
 set -euo pipefail
 
@@ -15,8 +15,8 @@ echo "[claude-stub] Git branch: $(git branch --show-current 2>/dev/null || echo 
 echo "[claude-stub] TASK_ID: ${TASK_ID:-unset}"
 echo "[claude-stub] ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-unset}"
 
-# Verify /repo mount
-if [ -d "/repo/.git" ]; then
+# Verify /repo mount (supports both git directories and worktree files)
+if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
   echo "[claude-stub] /repo mount verified (git repository present)"
 else
   echo "[claude-stub] WARNING: /repo is not a git repository"
@@ -35,11 +35,11 @@ else
   echo "[claude-stub] WARNING: /secrets not mounted"
 fi
 
-# Read and process input (simulates interactive mode)
-while IFS= read -r line || [ -n "$line" ]; do
-  # Strip any Docker attach metadata prefix (JSON that sometimes appears)
-  clean_line=$(echo "$line" | sed 's/^{[^}]*}//g')
-  echo "[claude-stub] Received: $clean_line"
+# ------------------------------------------------------------------------------
+# Process a single command (used by both interactive and print modes)
+# ------------------------------------------------------------------------------
+process_command() {
+  local clean_line="$1"
 
   case "$clean_line" in
     "exit"|"quit"|"/exit"|"/quit")
@@ -56,20 +56,17 @@ while IFS= read -r line || [ -n "$line" ]; do
       ;;
     "network-test"|"/network-test")
       echo "[claude-stub] Testing network connectivity..."
-      # Test public internet (should work)
       if curl -s --max-time 5 https://api.github.com > /dev/null 2>&1; then
         echo "[claude-stub] Public internet: OK"
       else
         echo "[claude-stub] Public internet: BLOCKED"
       fi
-      # Test metadata server (should be blocked)
       if curl -s --max-time 2 http://169.254.169.254/ > /dev/null 2>&1; then
         echo "[claude-stub] Metadata server: ACCESSIBLE (SECURITY ISSUE!)"
         exit 1
       else
         echo "[claude-stub] Metadata server: BLOCKED (good)"
       fi
-      # Test localhost (should be blocked from container perspective)
       if curl -s --max-time 2 http://127.0.0.1:8080/ > /dev/null 2>&1; then
         echo "[claude-stub] Localhost: ACCESSIBLE"
       else
@@ -79,14 +76,12 @@ while IFS= read -r line || [ -n "$line" ]; do
       ;;
     "resource-test"|"/resource-test")
       echo "[claude-stub] Testing resource limits..."
-      # Report memory info
       if [ -f /sys/fs/cgroup/memory.max ]; then
         echo "[claude-stub] Memory limit: $(cat /sys/fs/cgroup/memory.max)"
       fi
       if [ -f /sys/fs/cgroup/memory.current ]; then
         echo "[claude-stub] Memory current: $(cat /sys/fs/cgroup/memory.current)"
       fi
-      # Report CPU info
       if [ -f /sys/fs/cgroup/cpu.max ]; then
         echo "[claude-stub] CPU limit: $(cat /sys/fs/cgroup/cpu.max)"
       fi
@@ -94,14 +89,12 @@ while IFS= read -r line || [ -n "$line" ]; do
       ;;
     "file-test"|"/file-test")
       echo "[claude-stub] Testing file system..."
-      # Verify worktree is writable
       if touch /repo/.test-file 2>/dev/null; then
         rm /repo/.test-file
         echo "[claude-stub] /repo: WRITABLE"
       else
         echo "[claude-stub] /repo: READ-ONLY"
       fi
-      # Verify secrets are read-only
       if touch /secrets/.test-file 2>/dev/null; then
         rm /secrets/.test-file
         echo "[claude-stub] /secrets: WRITABLE (SECURITY ISSUE!)"
@@ -109,7 +102,6 @@ while IFS= read -r line || [ -n "$line" ]; do
       else
         echo "[claude-stub] /secrets: READ-ONLY (good)"
       fi
-      # Verify /tmp is writable
       if touch /tmp/.test-file 2>/dev/null; then
         rm /tmp/.test-file
         echo "[claude-stub] /tmp: WRITABLE"
@@ -119,10 +111,49 @@ while IFS= read -r line || [ -n "$line" ]; do
       echo "[claude-stub] File system test complete"
       ;;
     *)
-      echo "[claude-stub] Acknowledged: $clean_line"
-      echo "[claude-stub] Response: Task completed successfully"
+      if [ -n "$clean_line" ]; then
+        echo "[claude-stub] Acknowledged: $clean_line"
+        echo "[claude-stub] Response: Task completed successfully"
+      fi
       ;;
   esac
+}
+
+# ------------------------------------------------------------------------------
+# Check for --print mode (prompt passed as argument)
+# ------------------------------------------------------------------------------
+PRINT_MODE=false
+PROMPT=""
+
+for arg in "$@"; do
+  if [[ "$arg" == "--print" ]]; then
+    PRINT_MODE=true
+  elif [[ "$arg" != "--dangerously-skip-permissions" && "$arg" != -* ]]; then
+    PROMPT="$arg"
+  fi
+done
+
+if $PRINT_MODE && [ -n "$PROMPT" ]; then
+  echo "[claude-stub] Running in print mode with prompt"
+  # Process each line of the prompt looking for commands
+  while IFS= read -r line; do
+    clean_line=$(echo "$line" | sed 's/^{[^}]*}//g' | xargs)
+    if [ -n "$clean_line" ]; then
+      process_command "$clean_line"
+    fi
+  done <<< "$PROMPT"
+  echo "[claude-stub] Print mode complete"
+  exit 0
+fi
+
+# ------------------------------------------------------------------------------
+# Interactive mode: Read and process input from stdin
+# ------------------------------------------------------------------------------
+while IFS= read -r line || [ -n "$line" ]; do
+  # Strip any Docker attach metadata prefix (JSON that sometimes appears)
+  clean_line=$(echo "$line" | sed 's/^{[^}]*}//g')
+  echo "[claude-stub] Received: $clean_line"
+  process_command "$clean_line"
 done
 
 echo "[claude-stub] stdin closed, exiting gracefully"

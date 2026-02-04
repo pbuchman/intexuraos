@@ -99,12 +99,8 @@ vi.mock('node:fs', async (importOriginal) => {
   return {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
-    // Mock statSync to return a directory (not a file) for .git path
-    // This simulates a normal git repo (not a worktree)
-    statSync: vi.fn().mockReturnValue({
-      isFile: () => false,
-      isDirectory: () => true,
-    }),
+    statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
+    readFileSync: vi.fn().mockReturnValue(''),
     promises: {
       ...actual.promises,
       mkdir: vi.fn().mockResolvedValue(undefined),

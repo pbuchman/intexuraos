@@ -93,23 +93,21 @@ export class DockerProvider implements IsolationProvider {
       throw new Error(`Invalid worktree: ${worktreePath} (no .git directory)`);
     }
 
-    // Git worktrees use a .git file pointing to the main repo's .git/worktrees/ directory.
-    // We need to mount the main .git directory for git operations to work inside the container.
+    // Detect main git directory for worktree support
+    // Worktrees have a .git file (not directory) containing: "gitdir: /main/repo/.git/worktrees/name"
+    /* v8 ignore start -- test-infra: worktree detection requires real filesystem, tests mock fs.statSync @preserve */
     let mainGitDir: string | null = null;
     const gitStat = fs.statSync(gitPath);
-    /* v8 ignore start -- test-infra: worktree detection requires actual git worktree filesystem setup @preserve */
     if (gitStat.isFile()) {
-      // Worktree - read gitdir path from .git file
-      const gitContent = fs.readFileSync(gitPath, 'utf-8').trim();
-      const match = /^gitdir:\s*(.+)$/.exec(gitContent);
-      if (match?.[1] !== undefined) {
-        // gitdir points to /path/to/repo/.git/worktrees/taskId
-        // We need the parent .git directory
-        const worktreeGitDir = match[1];
-        // Extract the main .git path (parent of worktrees/taskId)
-        const worktreesDir = path.dirname(worktreeGitDir);
-        if (path.basename(worktreesDir) === 'worktrees') {
-          mainGitDir = path.dirname(worktreesDir);
+      const gitFileContent = fs.readFileSync(gitPath, 'utf-8').trim();
+      const gitdirMatch = /^gitdir:\s*(.+)$/.exec(gitFileContent);
+      if (gitdirMatch?.[1] !== undefined) {
+        // Extract the main .git directory from the worktree gitdir path
+        // Format: /path/to/repo/.git/worktrees/worktree-name
+        const worktreeGitDir = gitdirMatch[1];
+        const worktreesIndex = worktreeGitDir.lastIndexOf('/.git/worktrees/');
+        if (worktreesIndex !== -1) {
+          mainGitDir = worktreeGitDir.substring(0, worktreesIndex + '/.git'.length);
         }
       }
     }
@@ -172,7 +170,8 @@ export class DockerProvider implements IsolationProvider {
           `${taskSecretsPath}:/secrets:ro`,
           /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
           // Mount main git dir for worktree support (worktrees reference parent .git)
-          ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:ro`] : []),
+          // Must be read-write for git operations (commit, push) to work
+          ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
           /* v8 ignore stop @preserve */
         ],
         Memory: this.config.memoryLimitBytes,
