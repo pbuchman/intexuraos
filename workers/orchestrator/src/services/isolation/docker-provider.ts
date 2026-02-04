@@ -145,7 +145,15 @@ export class DockerProvider implements IsolationProvider {
       AttachStdout: true,
       AttachStderr: true,
       HostConfig: {
-        Binds: [`${worktreePath}:/repo:rw`, `${taskSecretsPath}:/secrets:ro`],
+        Binds: [
+          `${worktreePath}:/repo:rw`,
+          `${taskSecretsPath}:/secrets:ro`,
+          /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
+          // Mount main git dir for worktree support (worktrees reference parent .git)
+          // Must be read-write for git operations (commit, push) to work
+          ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
+          /* v8 ignore stop @preserve */
+        ],
         Memory: this.config.memoryLimitBytes,
         NanoCpus: this.config.cpuCount * 1e9,
         NetworkMode: this.config.networkName,
