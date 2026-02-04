@@ -99,6 +99,8 @@ vi.mock('node:fs', async (importOriginal) => {
   return {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
+    statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
+    readFileSync: vi.fn().mockReturnValue(''),
     promises: {
       ...actual.promises,
       mkdir: vi.fn().mockResolvedValue(undefined),
