@@ -27,6 +27,7 @@ export interface ForwardingState {
   droppedChunks: number;
   timer: NodeJS.Timeout | null;
   pollTimer: NodeJS.Timeout | null;
+  webhookSecret: string;
 }
 
 const MAX_CHUNK_SIZE = 8 * 1024; // 8KB
@@ -38,10 +39,27 @@ const MAX_BATCH_SIZE = 5;
 export class LogForwarder {
   private readonly forwarders = new Map<string, ForwardingState>();
 
+  private readonly taskSecrets = new Map<string, string>();
+
   constructor(
     private readonly config: LogForwarderConfig,
     private readonly logger: Logger
   ) {}
+
+  /**
+   * Register a task's webhook secret before starting log forwarding.
+   * Must be called before appendChunk or startForwarding.
+   */
+  registerTask(taskId: string, webhookSecret: string): void {
+    this.taskSecrets.set(taskId, webhookSecret);
+  }
+
+  /**
+   * Unregister a task when it completes.
+   */
+  unregisterTask(taskId: string): void {
+    this.taskSecrets.delete(taskId);
+  }
 
   startForwarding(taskId: string, logFilePath: string): void {
     if (this.forwarders.has(taskId)) {
@@ -50,6 +68,11 @@ export class LogForwarder {
     }
 
     this.logger.info({ taskId, logFilePath }, 'Starting log forwarding');
+
+    const webhookSecret = this.taskSecrets.get(taskId) ?? '';
+    if (webhookSecret === '') {
+      this.logger.warn({ taskId }, 'No webhook secret registered - log upload signatures will fail');
+    }
 
     const state: ForwardingState = {
       taskId,
@@ -62,6 +85,7 @@ export class LogForwarder {
       droppedChunks: 0,
       timer: null,
       pollTimer: null,
+      webhookSecret,
     };
 
     this.forwarders.set(taskId, state);
@@ -137,6 +161,10 @@ export class LogForwarder {
 
     // Create state if it doesn't exist (Docker mode doesn't call startForwarding)
     if (state === undefined) {
+      const webhookSecret = this.taskSecrets.get(taskId) ?? '';
+      if (webhookSecret === '') {
+        this.logger.warn({ taskId }, 'No webhook secret registered - log upload signatures will fail');
+      }
       state = {
         taskId,
         logFilePath: '', // Not used in Docker mode
@@ -148,6 +176,7 @@ export class LogForwarder {
         droppedChunks: 0,
         timer: null,
         pollTimer: null,
+        webhookSecret,
       };
       this.forwarders.set(taskId, state);
 
@@ -274,7 +303,7 @@ export class LogForwarder {
       chunks: chunkPayloads,
     };
 
-    const success = await this.sendWithRetry(payload);
+    const success = await this.sendWithRetry(payload, state.webhookSecret);
 
     if (success) {
       state.sequence += chunks.length;
@@ -290,15 +319,18 @@ export class LogForwarder {
   }
   /* v8 ignore stop @preserve */
 
-  private async sendWithRetry(payload: {
-    taskId: string;
-    chunks: { sequence: number; content: string; timestamp: string }[];
-  }): Promise<boolean> {
+  private async sendWithRetry(
+    payload: {
+      taskId: string;
+      chunks: { sequence: number; content: string; timestamp: string }[];
+    },
+    webhookSecret: string
+  ): Promise<boolean> {
     const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
     const url = `${baseUrl}/internal/logs`;
     const jsonBody = JSON.stringify(payload);
     const timestamp = Math.floor(Date.now() / 1000);
-    const signature = this.signPayload(jsonBody, timestamp);
+    const signature = this.signPayload(jsonBody, timestamp, webhookSecret);
 
     const delays = [1000, 2000, 4000];
 
@@ -350,9 +382,9 @@ export class LogForwarder {
     return false;
   }
 
-  private signPayload(payload: string, timestamp: number): string {
+  private signPayload(payload: string, timestamp: number, secret: string): string {
     const message = `${String(timestamp)}.${payload}`;
-    return createHmac('sha256', this.config.orchestratorSecret).update(message).digest('hex');
+    return createHmac('sha256', secret).update(message).digest('hex');
   }
 
   private enforceChunkSize(chunk: string): string {

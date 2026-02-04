@@ -17,6 +17,7 @@ describe('LogForwarder', () => {
   const codeAgentUrl = 'https://code-agent.test';
   const orchestratorSecret = 'test-orchestrator-secret';
   const internalAuthToken = 'test-internal-auth-token';
+  const webhookSecret = 'test-webhook-secret';
 
   // Mock logger
   const mockLogger: Logger = {
@@ -167,6 +168,7 @@ describe('LogForwarder', () => {
       );
 
       const logFile = join(logBasePath, 'task-http.log');
+      forwarder.registerTask('task-http', webhookSecret);
       forwarder.startForwarding('task-http', logFile);
 
       writeFileSync(logFile, 'Test content\n');
@@ -179,11 +181,11 @@ describe('LogForwarder', () => {
       expect(capturedHeaders?.['X-Request-Timestamp']).toBeDefined();
       expect(capturedHeaders?.['X-Request-Signature']).toBeDefined();
 
-      // Verify HMAC signature
+      // Verify HMAC signature (uses task-specific webhookSecret, not orchestratorSecret)
       const expectedMessage = `${capturedHeaders?.['X-Request-Timestamp']}.${capturedBody}`;
       const crypto = await import('node:crypto');
       const expectedSignature = crypto
-        .createHmac('sha256', orchestratorSecret)
+        .createHmac('sha256', webhookSecret)
         .update(expectedMessage)
         .digest('hex');
       expect(capturedHeaders?.['X-Request-Signature']).toBe(expectedSignature);

@@ -78,7 +78,8 @@ export INTEXURAOS_TODOS_PROCESSING_TOPIC=todos-processing
 # SERVICE-TO-SERVICE AUTHENTICATION
 # =============================================================================
 # Used for internal API calls and Pub/Sub push endpoint authentication
-export INTEXURAOS_INTERNAL_AUTH_TOKEN=local-dev-token
+# Fetched from: gcloud secrets versions access latest --secret=INTEXURAOS_INTERNAL_AUTH_TOKEN
+export INTEXURAOS_INTERNAL_AUTH_TOKEN=$INTERNAL_AUTH_TOKEN
 
 # =============================================================================
 # GCP PROJECT (for local emulators)
@@ -176,4 +177,22 @@ export INTEXURAOS_ENVIRONMENT=development
 # 2. Orchestrator's ~/.claude-orchestrator/.env as INTEXURAOS_ORCHESTRATOR_SECRET
 #
 # See workers/orchestrator/README.md for full orchestrator setup instructions.
-export INTEXURAOS_ORCHESTRATOR_SECRET=your-super-confidential-secret-here
+export INTEXURAOS_ORCHESTRATOR_SECRET=$ORCHESTRATOR_SECRET
+
+# =============================================================================
+# PROJECT ID (for orchestrator Secret Manager access)
+# =============================================================================
+# Maps PROJECT_ID from .envrc to INTEXURAOS_PROJECT_ID for consistency
+export INTEXURAOS_PROJECT_ID=$PROJECT_ID
+
+# =============================================================================
+# Orchestrator environments (for local testing)
+# =============================================================================
+export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
+export INTEXURAOS_ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
+export INTEXURAOS_ZAI_API_KEY=$ZAI_API_KEY
+export INTEXURAOS_LINEAR_API_KEY=$LINEAR_API_KEY
+export INTEXURAOS_SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
+
+# GCP credentials for worker containers (needed for Firestore access inside containers)
+export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json

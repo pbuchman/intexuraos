@@ -53,7 +53,11 @@ fi
 # ------------------------------------------------------------------------------
 if [ -f "/secrets/gcp-sa.json" ]; then
     echo "[entrypoint] Activating GCP service account..."
-    gcloud auth activate-service-account --key-file=/secrets/gcp-sa.json 2>/dev/null || echo "[entrypoint] GCP auth failed (non-fatal)"
+    if gcloud auth activate-service-account --key-file=/secrets/gcp-sa.json 2>&1; then
+        echo "[entrypoint] GCP auth successful"
+    else
+        echo "[entrypoint] GCP auth failed (non-fatal)"
+    fi
 fi
 
 # ------------------------------------------------------------------------------

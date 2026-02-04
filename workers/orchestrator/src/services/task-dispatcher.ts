@@ -121,6 +121,9 @@ export class TaskDispatcher {
         },
       };
 
+      // Register webhook secret for log forwarding signatures
+      this.logForwarder.registerTask(taskId, request.webhookSecret);
+
       try {
         const handle = await this.isolation.provider.createWorker(workerConfig);
         containerId = handle.containerId;
@@ -129,6 +132,11 @@ export class TaskDispatcher {
         await this.isolation.tokenRefresher.registerTask(taskId);
       } catch (error) {
         this.runningCount--;
+        this.logger.error(
+          { taskId, error, errorMessage: error instanceof Error ? error.message : String(error) },
+          'Failed to create worker container'
+        );
+        this.logForwarder.unregisterTask(taskId);
         this.worktreeManager.removeWorktree(taskId).catch((cleanupError: unknown) => {
           this.logger.error(
             { taskId, cleanupError },
@@ -203,8 +211,9 @@ export class TaskDispatcher {
     try {
       // Kill Docker container - destroyWorker handles graceful + force kill
       await this.isolation.provider.destroyWorker(taskId);
-      // Unregister from token refresher
+      // Unregister from token refresher and log forwarder
       this.isolation.tokenRefresher.unregisterTask(taskId);
+      this.logForwarder.unregisterTask(taskId);
 
       // Update task status
       task.status = 'cancelled';
@@ -303,6 +312,7 @@ export class TaskDispatcher {
           // Kill Docker container
           await this.isolation.provider.destroyWorker(taskId);
           this.isolation.tokenRefresher.unregisterTask(taskId);
+          this.logForwarder.unregisterTask(taskId);
 
           // Check for PR
           const result = await this.checkForResult(task);
@@ -367,8 +377,9 @@ export class TaskDispatcher {
   private async handleTaskCompletion(task: Task): Promise<void> {
     this.logger.info({ taskId: task.taskId }, 'Task completed naturally');
 
-    // Unregister from token refresher (container cleanup handled separately)
+    // Unregister from token refresher and log forwarder (container cleanup handled separately)
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
+    this.logForwarder.unregisterTask(task.taskId);
 
     // Check for PR
     const result = await this.checkForResult(task);
