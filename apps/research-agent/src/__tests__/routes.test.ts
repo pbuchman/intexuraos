@@ -551,6 +551,81 @@ describe('Research Routes - Authenticated', () => {
       expect(body.success).toBe(true);
     });
 
+    it('returns 503 when Pub/Sub publish fails with PUBLISH_FAILED', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeResearchEventPublisher.setNextPublishError('PUBLISH_FAILED');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toBe('Failed to dispatch task to worker. Please try again.');
+    });
+
+    it('returns 503 when Pub/Sub publish fails with TOPIC_NOT_FOUND', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeResearchEventPublisher.setNextPublishError('TOPIC_NOT_FOUND');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toContain('Pub/Sub topic not found');
+    });
+
+    it('returns 503 when Pub/Sub publish fails with PERMISSION_DENIED', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeResearchEventPublisher.setNextPublishError('PERMISSION_DENIED');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toContain('Permission denied');
+    });
+
   });
 
   describe('POST /research/draft', () => {
@@ -1306,6 +1381,52 @@ describe('Research Routes - Authenticated', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
     });
+
+    it('returns 503 when Pub/Sub publish fails with PUBLISH_FAILED', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'draft' });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+      fakeResearchEventPublisher.setNextPublishError('PUBLISH_FAILED');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toBe('Failed to dispatch task to worker. Please try again.');
+    });
+
+    it('returns 503 when Pub/Sub publish fails with TOPIC_NOT_FOUND', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'draft' });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+      fakeResearchEventPublisher.setNextPublishError('TOPIC_NOT_FOUND');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toContain('Pub/Sub topic not found');
+    });
   });
 
   describe('DELETE /research/:id', () => {
@@ -1662,6 +1783,54 @@ describe('Research Routes - Authenticated', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 503 when Pub/Sub publish fails with PUBLISH_FAILED', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch();
+      fakeRepo.addResearch(source);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key', anthropic: 'test-anthropic-key' });
+      fakeResearchEventPublisher.setNextPublishError('PUBLISH_FAILED');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [LlmModels.ClaudeOpus45] },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toBe('Failed to dispatch task to worker. Please try again.');
+    });
+
+    it('returns 503 when Pub/Sub publish fails with TOPIC_NOT_FOUND', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch();
+      fakeRepo.addResearch(source);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key', anthropic: 'test-anthropic-key' });
+      fakeResearchEventPublisher.setNextPublishError('TOPIC_NOT_FOUND');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [LlmModels.ClaudeOpus45] },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toContain('Pub/Sub topic not found');
     });
   });
 

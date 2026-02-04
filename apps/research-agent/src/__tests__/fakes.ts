@@ -297,13 +297,21 @@ export class FakeUserServiceClient implements UserServiceClient {
 export class FakeResearchEventPublisher implements ResearchEventPublisher {
   private publishedEvents: ResearchProcessEvent[] = [];
   private failNextPublish = false;
+  private nextErrorCode: 'PUBLISH_FAILED' | 'TOPIC_NOT_FOUND' | 'PERMISSION_DENIED' | null = null;
 
   async publishProcessResearch(
     event: ResearchProcessEvent
-  ): Promise<Result<void, { code: 'PUBLISH_FAILED'; message: string }>> {
-    if (this.failNextPublish) {
+  ): Promise<Result<void, { code: 'PUBLISH_FAILED' | 'TOPIC_NOT_FOUND' | 'PERMISSION_DENIED'; message: string }>> {
+    if (this.failNextPublish || this.nextErrorCode !== null) {
       this.failNextPublish = false;
-      return err({ code: 'PUBLISH_FAILED', message: 'Test publish failure' });
+      const errorCode = this.nextErrorCode ?? 'PUBLISH_FAILED';
+      this.nextErrorCode = null;
+      const messages: Record<typeof errorCode, string> = {
+        PUBLISH_FAILED: 'Failed to dispatch task to worker',
+        TOPIC_NOT_FOUND: 'Pub/Sub topic not found',
+        PERMISSION_DENIED: 'Permission denied to publish to Pub/Sub topic',
+      };
+      return err({ code: errorCode, message: messages[errorCode] });
     }
     this.publishedEvents.push(event);
     return ok(undefined);
@@ -317,8 +325,13 @@ export class FakeResearchEventPublisher implements ResearchEventPublisher {
     this.failNextPublish = fail;
   }
 
+  setNextPublishError(errorCode: 'PUBLISH_FAILED' | 'TOPIC_NOT_FOUND' | 'PERMISSION_DENIED' | null): void {
+    this.nextErrorCode = errorCode;
+  }
+
   clear(): void {
     this.publishedEvents = [];
+    this.nextErrorCode = null;
   }
 }
 

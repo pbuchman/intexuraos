@@ -236,12 +236,24 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Publish to Pub/Sub for async processing
-      await researchEventPublisher.publishProcessResearch({
+      const publishResult = await researchEventPublisher.publishProcessResearch({
         type: 'research.process',
         researchId: result.value.id,
         userId: user.userId,
         triggeredBy: 'create',
       });
+
+      if (!publishResult.ok) {
+        const publishError = publishResult.error;
+        switch (publishError.code) {
+          case 'PUBLISH_FAILED':
+            return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker. Please try again.');
+          case 'TOPIC_NOT_FOUND':
+            return await reply.fail('MISCONFIGURED', `Pub/Sub topic not found: ${publishError.message}`);
+          case 'PERMISSION_DENIED':
+            return await reply.fail('MISCONFIGURED', `Permission denied to publish to Pub/Sub topic: ${publishError.message}`);
+        }
+      }
 
       return await reply.code(201).ok(result.value);
     }
@@ -829,12 +841,24 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Publish to Pub/Sub for async processing
-      await researchEventPublisher.publishProcessResearch({
+      const publishResult = await researchEventPublisher.publishProcessResearch({
         type: 'research.process',
         researchId: params.id,
         userId: user.userId,
         triggeredBy: 'approve',
       });
+
+      if (!publishResult.ok) {
+        const publishError = publishResult.error;
+        switch (publishError.code) {
+          case 'PUBLISH_FAILED':
+            return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker. Please try again.');
+          case 'TOPIC_NOT_FOUND':
+            return await reply.fail('MISCONFIGURED', `Pub/Sub topic not found: ${publishError.message}`);
+          case 'PERMISSION_DENIED':
+            return await reply.fail('MISCONFIGURED', `Permission denied to publish to Pub/Sub topic: ${publishError.message}`);
+        }
+      }
 
       return await reply.ok(updateResult.value);
     }
@@ -1302,12 +1326,24 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Publish to Pub/Sub for async processing
-      await researchEventPublisher.publishProcessResearch({
+      const publishResult = await researchEventPublisher.publishProcessResearch({
         type: 'research.process',
         researchId: result.value.id,
         userId: user.userId,
         triggeredBy: 'create',
       });
+
+      if (!publishResult.ok) {
+        const publishError = publishResult.error;
+        switch (publishError.code) {
+          case 'PUBLISH_FAILED':
+            return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker. Please try again.');
+          case 'TOPIC_NOT_FOUND':
+            return await reply.fail('MISCONFIGURED', `Pub/Sub topic not found: ${publishError.message}`);
+          case 'PERMISSION_DENIED':
+            return await reply.fail('MISCONFIGURED', `Permission denied to publish to Pub/Sub topic: ${publishError.message}`);
+        }
+      }
 
       return await reply.code(201).ok(result.value);
     }
