@@ -149,6 +149,8 @@ describe('TaskDispatcher', () => {
     startForwarding: vi.fn(),
     stopForwarding: vi.fn(async () => undefined),
     getDroppedChunkCount: vi.fn(() => 0),
+    registerTask: vi.fn(),
+    unregisterTask: vi.fn(),
   } as unknown as LogForwarder;
 
   // Mock WebhookClient

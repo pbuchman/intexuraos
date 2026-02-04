@@ -68,7 +68,7 @@ The orchestrator reads from the monorepo's `.envrc` (synced from GCP Secret Mana
 | `INTEXURAOS_ORCHESTRATOR_SECRET`    | .envrc.local   | HMAC signing secret (see below)        |
 | `INTEXURAOS_GITHUB_APP_ID`          | GCP Secret Mgr | GitHub App ID                          |
 | `INTEXURAOS_GITHUB_INSTALLATION_ID` | GCP Secret Mgr | GitHub App installation ID             |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | .envrc.local   | Service-to-service auth                |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | GCP Secret Mgr | Service-to-service auth (see below)    |
 | `INTEXURAOS_ANTHROPIC_API_KEY`      | GCP Secret Mgr | Claude API key (passed to workers)     |
 | `INTEXURAOS_LINEAR_API_KEY`         | GCP Secret Mgr | Linear integration (passed to workers) |
 | `INTEXURAOS_SENTRY_AUTH_TOKEN`      | GCP Secret Mgr | Sentry integration (passed to workers) |
@@ -96,8 +96,12 @@ export INTEXURAOS_ORCHESTRATOR_SECRET=<your-generated-secret>
 
 # Map API keys from GCP secrets (already in .envrc)
 export INTEXURAOS_ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
+export INTEXURAOS_ZAI_API_KEY=$ZAI_API_KEY
 export INTEXURAOS_LINEAR_API_KEY=$LINEAR_API_KEY
 export INTEXURAOS_SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
+
+# GCP credentials for worker containers
+export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
 ```
 
 Then run `direnv allow` to reload.
@@ -112,6 +116,22 @@ The orchestrator secret is used for request signing between code-agent and orche
    - IntexuraOS UI: Worker Settings → your worker → `dispatchSigningSecret`
 
 Both must match or task dispatch fails signature verification.
+
+### Internal Auth Token (INTEXURAOS_INTERNAL_AUTH_TOKEN)
+
+The orchestrator uses this token to authenticate with the deployed code-agent when uploading logs. Fetch it from Secret Manager:
+
+```bash
+gcloud secrets versions access latest --secret=INTEXURAOS_INTERNAL_AUTH_TOKEN --project=$PROJECT_ID
+```
+
+Add to `.envrc.local`:
+
+```bash
+export INTEXURAOS_INTERNAL_AUTH_TOKEN=<fetched-value>
+```
+
+Without this token, log uploads to `/internal/logs` will fail with 401.
 
 ### GitHub Private Key
 

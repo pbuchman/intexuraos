@@ -31,9 +31,11 @@ export class WorktreeManager {
       // Ensure base directory exists
       await mkdir(this.config.worktreeBasePath, { recursive: true });
 
-      // Create worktree
+      // Create worktree with a new branch for the task
+      // Using -b creates a local branch, avoiding detached HEAD state
+      // which is required for Claude to create commits and PRs
       const { stderr } = await execAsync(
-        `git worktree add "${worktreePath}" origin/${baseBranch}`,
+        `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
         {
           cwd: this.config.repositoryPath,
         }
