@@ -1,0 +1,209 @@
+/**
+ * Firestore repository for GitHub PR events.
+ */
+
+import type { Logger } from 'pino';
+import type { Result } from '@intexuraos/common-core';
+import { err, ok, getErrorMessage } from '@intexuraos/common-core';
+import type {
+  GitHubPREvent,
+  CreateGitHubPREventInput,
+} from '../../domain/models/gitHubPREvent.js';
+import type {
+  GitHubPREventRepository,
+  RepositoryError,
+} from '../../domain/repositories/gitHubPREventRepository.js';
+import { getFirestore } from '@intexuraos/infra-firestore';
+
+const COLLECTION_NAME = 'github-pr-events';
+
+export function createFirestoreGitHubPREventsRepository(deps: {
+  logger: Logger;
+}): GitHubPREventRepository {
+  const { logger } = deps;
+  const firestore = getFirestore();
+  const collection = firestore.collection(COLLECTION_NAME);
+
+  return {
+    async save(
+      input: CreateGitHubPREventInput
+    ): Promise<Result<GitHubPREvent, RepositoryError>> {
+      try {
+        // Check for duplicate event ID (deduplication)
+        const duplicateQuery = collection
+          .where('githubEventId', '==', input.githubEventId)
+          .limit(1);
+
+        const duplicateSnapshot = await duplicateQuery.get();
+
+        if (!duplicateSnapshot.empty) {
+          logger.debug(
+            { githubEventId: input.githubEventId },
+            'Duplicate GitHub event, skipping'
+          );
+          // Return the existing event
+          const existingDoc = duplicateSnapshot.docs[0];
+          /* v8 ignore start -- ts-type: type narrowing for TypeScript array access, branch is theoretically unreachable @preserve */
+          if (existingDoc === undefined) {
+            // Should never happen since we checked empty, but TypeScript requires this check
+            return err({
+              code: 'FIRESTORE_ERROR',
+              message: 'Unexpected empty snapshot',
+            });
+          }
+          /* v8 ignore stop @preserve */
+          const existingData = existingDoc.data() as GitHubPREvent;
+          return ok({
+            ...existingData,
+            id: existingDoc.id,
+          });
+        }
+
+        // Create new event document
+        const eventId = crypto.randomUUID();
+        const docRef = collection.doc(eventId);
+
+        const now = new Date();
+        const eventData: Omit<GitHubPREvent, 'id'> & {
+          createdAt: unknown;
+          processedAt: unknown;
+          mergedAt: unknown;
+        } = {
+          githubEventId: input.githubEventId,
+          repository: input.repository,
+          repositoryId: input.repositoryId,
+          pullRequestNumber: input.pullRequestNumber,
+          pullRequestId: input.pullRequestId,
+          eventType: input.eventType,
+          action: input.action,
+          senderLogin: input.senderLogin,
+          senderId: input.senderId,
+          senderType: input.senderType,
+          title: input.title,
+          body: input.body,
+          state: input.state,
+          mergedAt: input.mergedAt ?? null,
+          createdAt: input.createdAt,
+          processedAt: now,
+          payload: input.payload,
+        };
+
+        await docRef.set(eventData);
+
+        return ok({
+          id: eventId,
+          githubEventId: eventData.githubEventId,
+          repository: eventData.repository,
+          repositoryId: eventData.repositoryId,
+          pullRequestNumber: eventData.pullRequestNumber,
+          pullRequestId: eventData.pullRequestId,
+          eventType: eventData.eventType,
+          action: eventData.action,
+          senderLogin: eventData.senderLogin,
+          senderId: eventData.senderId,
+          senderType: eventData.senderType,
+          title: eventData.title,
+          body: eventData.body,
+          state: eventData.state,
+          mergedAt: eventData.mergedAt,
+          createdAt: eventData.createdAt,
+          processedAt: eventData.processedAt,
+          payload: eventData.payload,
+        });
+      } catch (error) {
+        logger.error({ error }, 'Failed to save GitHub PR event');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
+    async findByPullRequest(
+      repository: string,
+      pullRequestNumber: number
+    ): Promise<Result<GitHubPREvent[], RepositoryError>> {
+      try {
+        const query = collection
+          .where('repository', '==', repository)
+          .where('pullRequestNumber', '==', pullRequestNumber)
+          .orderBy('createdAt', 'desc')
+          .limit(100);
+
+        const snapshot = await query.get();
+
+        const events: GitHubPREvent[] = snapshot.docs.map((doc) => {
+          const data = doc.data() as Omit<GitHubPREvent, 'id'> & {
+            createdAt: unknown;
+            processedAt: unknown;
+            mergedAt: unknown;
+          };
+          return {
+            ...data,
+            id: doc.id,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
+            createdAt: data.createdAt as Date,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
+            processedAt: data.processedAt as Date,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
+            mergedAt: data.mergedAt as Date | null,
+          };
+        });
+
+        return ok(events);
+      } catch (error) {
+        logger.error(
+          { error, repository, pullRequestNumber },
+          'Failed to find GitHub PR events by pull request'
+        );
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
+    async findByRepository(
+      repository: string,
+      limit = 50
+    ): Promise<Result<GitHubPREvent[], RepositoryError>> {
+      try {
+        const query = collection
+          .where('repository', '==', repository)
+          .orderBy('createdAt', 'desc')
+          .limit(limit);
+
+        const snapshot = await query.get();
+
+        const events: GitHubPREvent[] = snapshot.docs.map((doc) => {
+          const data = doc.data() as Omit<GitHubPREvent, 'id'> & {
+            createdAt: unknown;
+            processedAt: unknown;
+            mergedAt: unknown;
+          };
+          return {
+            ...data,
+            id: doc.id,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
+            createdAt: data.createdAt as Date,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
+            processedAt: data.processedAt as Date,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
+            mergedAt: data.mergedAt as Date | null,
+          };
+        });
+
+        return ok(events);
+      } catch (error) {
+        logger.error(
+          { error, repository },
+          'Failed to find GitHub PR events by repository'
+        );
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+  };
+}
