@@ -85,6 +85,7 @@ describe('POST /webhooks/github', () => {
       taskDispatcher: {} as never,
       whatsappNotifier: {} as never,
       actionsAgentClient: {} as never,
+      linearAgentClient: {} as never,
       rateLimitService: {} as never,
       linearIssueService: {} as never,
       statusMirrorService: {} as never,

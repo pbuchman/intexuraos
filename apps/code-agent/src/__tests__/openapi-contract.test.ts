@@ -44,6 +44,7 @@ import { createWorkerSettingsRepository } from '../infra/firestore/workerSetting
 import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from './helpers/mockServices.js';
+import { createFirestoreGitHubPREventsRepository } from '../infra/firestore/gitHubPREventsRepository.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -134,6 +135,9 @@ describe('OpenAPI contract', () => {
       metricsClient: createNoOpMetricsClient(),
       rateLimitService,
       workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -152,6 +156,7 @@ describe('OpenAPI contract', () => {
       detectZombieTasks: import('../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
+      gitHubPREventRepo: import('../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
     });
 
     app = await buildServer();

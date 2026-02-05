@@ -28,6 +28,7 @@ import { createFirestoreLogChunkRepository } from '../../../infra/repositories/f
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../../infra/http/linearAgentHttpClient.js';
+import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
 import { createLinearIssueService } from '../../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
@@ -151,6 +152,7 @@ describe('GET /code/github-pr-events', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      linearAgentClient,
       rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
@@ -183,6 +185,7 @@ describe('GET /code/github-pr-events', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: typeof logChunkRepo;
       actionsAgentClient: typeof actionsAgentClient;
+      linearAgentClient: LinearAgentClient;
       whatsappNotifier: ReturnType<typeof createWhatsAppNotifier>;
       rateLimitService: RateLimitService;
       linearIssueService: ReturnType<typeof createLinearIssueService>;

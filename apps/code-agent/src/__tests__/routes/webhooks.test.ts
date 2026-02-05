@@ -26,6 +26,7 @@ import { createTaskDispatcherService } from '../../infra/services/taskDispatcher
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient, type ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
+import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
@@ -46,7 +47,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
-import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
+import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -143,12 +144,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
-      linearAgentClient: createLinearAgentHttpClient({
-        baseUrl: 'http://linear-agent',
-        internalAuthToken: 'test-token',
-        timeoutMs: 10000,
-      }, logger),
       actionsAgentClient,
+      linearAgentClient,
       rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
@@ -169,6 +166,9 @@ describe('POST /internal/webhooks/task-complete', () => {
         logger,
       }),
       workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -177,8 +177,8 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
-      whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
@@ -187,6 +187,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
+      gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
     });
 
     app = await buildServer();
@@ -1278,6 +1279,29 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       recordTaskDuration: vi.fn().mockResolvedValue(undefined),
     };
 
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -1287,11 +1311,6 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
-      linearAgentClient: createLinearAgentHttpClient({
-        baseUrl: 'http://linear-agent',
-        internalAuthToken: 'test-token',
-        timeoutMs: 10000,
-      }, logger),
       whatsappNotifier: createWhatsAppNotifier({
         whatsappPublisher: {
           publishSendMessage: async () => ok(undefined),
@@ -1302,6 +1321,10 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         logger,
       }),
       actionsAgentClient,
+      linearAgentClient,
+      rateLimitService,
+      linearIssueService,
+      metricsClient: mockMetricsClient as unknown as MetricsClient,
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
         logger,
@@ -1318,27 +1341,10 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      linearIssueService: createLinearIssueService({
-        linearAgentClient: createLinearAgentHttpClient({
-          baseUrl: 'http://linear-agent:8086',
-          internalAuthToken: 'test-token',
-          timeoutMs: 10000,
-        }, logger),
+      workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
-      metricsClient: mockMetricsClient as unknown as MetricsClient,
-      rateLimitService: {
-        async checkLimits() {
-          return ok(undefined);
-        },
-        async recordTaskStart() {
-          return;
-        },
-        async recordTaskComplete() {
-          return;
-        },
-      },
-      workerHealthProbe: mockWorkerHealthProbe,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1347,8 +1353,8 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
-      whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
@@ -1357,6 +1363,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
+      gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
     });
 
     app = await buildServer();
@@ -1597,6 +1604,18 @@ describe('POST /internal/logs', () => {
       logger,
     });
 
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -1613,6 +1632,12 @@ describe('POST /internal/logs', () => {
       logger,
     });
 
+    const whatsappNotifier = createWhatsAppNotifier({
+      whatsappPublisher: {
+        publishSendMessage: async () => ok(undefined),
+      } as unknown as WhatsAppSendPublisher,
+    });
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -1620,30 +1645,12 @@ describe('POST /internal/logs', () => {
       logChunkRepo,
       taskDispatcher,
       workerSettingsRepo,
-      linearAgentClient: createLinearAgentHttpClient({
-        baseUrl: 'http://linear-agent',
-        internalAuthToken: 'test-token',
-        timeoutMs: 10000,
-      }, logger),
       actionsAgentClient,
-      whatsappNotifier: createWhatsAppNotifier({
-        whatsappPublisher: {
-          publishSendMessage: async () => ok(undefined),
-        } as unknown as WhatsAppSendPublisher,
-      }),
-      rateLimitService: {
-        async checkLimits() {
-          return ok(undefined);
-        },
-        async recordTaskStart() {
-          return;
-        },
-        async recordTaskComplete() {
-          return;
-        },
-      },
+      linearAgentClient,
+      rateLimitService,
       linearIssueService,
       statusMirrorService,
+      whatsappNotifier,
       metricsClient: createNoOpMetricsClient(),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
@@ -1658,6 +1665,9 @@ describe('POST /internal/logs', () => {
         logger,
       }),
       workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1666,8 +1676,8 @@ describe('POST /internal/logs', () => {
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
-      whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
@@ -1676,6 +1686,7 @@ describe('POST /internal/logs', () => {
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
+      gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
     });
 
     app = await buildServer();
@@ -2058,12 +2069,8 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
-      linearAgentClient: createLinearAgentHttpClient({
-        baseUrl: 'http://linear-agent',
-        internalAuthToken: 'test-token',
-        timeoutMs: 10000,
-      }, logger),
       actionsAgentClient,
+      linearAgentClient,
       rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
@@ -2084,6 +2091,9 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         logger,
       }),
       workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -2092,8 +2102,8 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
-      whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
@@ -2102,6 +2112,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
+      gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
     });
 
     app = await buildServer();
