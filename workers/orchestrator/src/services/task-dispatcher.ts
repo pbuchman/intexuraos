@@ -12,6 +12,7 @@ import type { WebhookClient } from './webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { IsolationProvider, WorkerConfig } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
+import { buildSystemPrompt } from './system-prompt.js';
 
 const execAsync = promisify(exec);
 
@@ -106,7 +107,7 @@ export class TaskDispatcher {
         taskId,
         worktreePath,
         prompt: request.prompt,
-        systemPrompt: this.buildSystemPrompt({
+        systemPrompt: buildSystemPrompt({
           taskId,
           worktreePath,
           ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
@@ -534,65 +535,4 @@ export class TaskDispatcher {
     }
   }
 
-  private buildSystemPrompt(params: {
-    taskId: string;
-    worktreePath: string;
-    linearIssueId?: string;
-    prompt: string;
-  }): string {
-    const { taskId, worktreePath, linearIssueId, prompt } = params;
-
-    // Sanitize user prompt - remove XML tags and forbidden keywords
-    let sanitizedPrompt = prompt.replace(/<[^>]*>/g, '');
-    const forbiddenKeywords = [
-      'ignore',
-      'disregard',
-      'forget',
-      'override',
-      'system',
-      'instruction',
-      'instructions',
-      'instead',
-      'rather',
-      'but',
-      'however',
-    ];
-    for (const keyword of forbiddenKeywords) {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-      sanitizedPrompt = sanitizedPrompt.replace(regex, '');
-    }
-    sanitizedPrompt = sanitizedPrompt.replace(/\s+/g, ' ').trim();
-
-    // Build system prompt
-    const systemPrompt = `[SYSTEM CONTEXT]
-You are a Claude Code worker in IntexuraOS running in Docker isolation.
-Task ID: ${taskId}
-Worktree: ${worktreePath}
-${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
-
-[MANDATORY - FIRST ACTION]${
-      linearIssueId !== undefined
-        ? `
-You MUST invoke: /linear ${linearIssueId}
-DO NOT proceed with any other action until this completes.`
-        : ''
-    }
-[GIT WORKFLOW]
-- Create feature branch from origin/development
-- Commit with format: "INT-{issue-id} Description"
-- Push to origin
-- Update Linear issue state to In Review
-
-[REQUIREMENTS]
-- Follow CLAUDE.md instructions in worktree
-- Use Test-First Development (write tests BEFORE implementation)
-- Run pnpm run ci:tracked before committing
-- Never push without CI passing
-
-[TASK]
-${sanitizedPrompt}`;
-
-    // Truncate to 4000 characters
-    return systemPrompt.length > 4000 ? systemPrompt.slice(0, 4000) : systemPrompt;
-  }
 }
