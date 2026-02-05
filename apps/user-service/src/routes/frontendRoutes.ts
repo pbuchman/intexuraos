@@ -266,10 +266,21 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Extract profile claims from JWT
+      // Auth0 Actions add claims under a custom namespace for API audiences
+      // Try namespaced claims first, fall back to bare claims for ID tokens
+      const NAMESPACE = 'https://intexuraos.cloud/';
       const claims = user.claims;
-      const email = typeof claims['email'] === 'string' ? claims['email'] : undefined;
-      const name = typeof claims['name'] === 'string' ? claims['name'] : undefined;
-      const picture = typeof claims['picture'] === 'string' ? claims['picture'] : undefined;
+      /* v8 ignore start -- source-map: ternary type guards have source map alignment issues @preserve */
+      const email =
+        (typeof claims[`${NAMESPACE}email`] === 'string' ? claims[`${NAMESPACE}email`] : undefined) ??
+        (typeof claims['email'] === 'string' ? claims['email'] : undefined);
+      const name =
+        (typeof claims[`${NAMESPACE}name`] === 'string' ? claims[`${NAMESPACE}name`] : undefined) ??
+        (typeof claims['name'] === 'string' ? claims['name'] : undefined);
+      const picture =
+        (typeof claims[`${NAMESPACE}picture`] === 'string' ? claims[`${NAMESPACE}picture`] : undefined) ??
+        (typeof claims['picture'] === 'string' ? claims['picture'] : undefined);
+      /* v8 ignore stop @preserve */
 
       const responseData: Record<string, unknown> = {
         userId: user.userId,

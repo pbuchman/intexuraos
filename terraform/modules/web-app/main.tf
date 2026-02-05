@@ -249,6 +249,10 @@ resource "random_id" "custom_cert_suffix" {
 }
 
 # Self-managed SSL certificate (used when use_custom_certificate = true)
+# NOTE: private_key is ignored because terraform can't reliably compare sensitive values
+# from Secret Manager across runs, causing false drift. The certificate will still be
+# recreated when the cert file changes (via random_id.custom_cert_suffix keeper).
+# To force key rotation: update the certificate file or taint the resource.
 resource "google_compute_ssl_certificate" "custom" {
   count       = var.enable_load_balancer && var.domain != "" && var.use_custom_certificate ? 1 : 0
   name        = "intexuraos-web-${var.environment}-cert-${random_id.custom_cert_suffix[0].hex}"
@@ -258,6 +262,7 @@ resource "google_compute_ssl_certificate" "custom" {
 
   lifecycle {
     create_before_destroy = true
+    ignore_changes        = [private_key]
   }
 }
 

@@ -34,6 +34,8 @@ import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './dom
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
+import type { GitHubPREventRepository } from './domain/repositories/gitHubPREventRepository.js';
+import { createFirestoreGitHubPREventsRepository } from './infra/firestore/gitHubPREventsRepository.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -53,6 +55,7 @@ export interface ServiceContainer {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
+  gitHubPREventRepo: GitHubPREventRepository;
 }
 
 // Configuration required to initialize services
@@ -220,6 +223,7 @@ export function initServices(config: ServiceConfig): void {
     metricsClient,
     workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
     workerHealthProbe: createWorkerHealthProbe(),
+    gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
   };
 }
 

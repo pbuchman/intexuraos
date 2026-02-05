@@ -3,6 +3,7 @@ import { apiRequest } from './apiClient.js';
 import type {
   CodeTask,
   CodeTaskStatus,
+  GitHubPREventsResponse,
   ListCodeTasksResponse,
   SubmitCodeTaskRequest,
   SubmitCodeTaskResponse,
@@ -79,4 +80,26 @@ export async function refreshWorkersStatus(accessToken: string): Promise<Workers
   return await apiRequest<WorkersStatusResponse>(config.codeAgentUrl, '/code/workers/refresh-status', accessToken, {
     method: 'POST',
   });
+}
+
+/**
+ * Get GitHub PR events for a repository
+ */
+export async function getGitHubPREvents(
+  accessToken: string,
+  options?: {
+    repository?: string;
+    limit?: number;
+  }
+): Promise<GitHubPREventsResponse> {
+  const params = new URLSearchParams();
+  if (options?.repository !== undefined) {
+    params.set('repository', options.repository);
+  }
+  if (options?.limit !== undefined) {
+    params.set('limit', String(options.limit));
+  }
+  const query = params.toString();
+  const path = query !== '' ? `/code/github-pr-events?${query}` : '/code/github-pr-events';
+  return await apiRequest<GitHubPREventsResponse>(config.codeAgentUrl, path, accessToken);
 }
