@@ -13,6 +13,11 @@ export interface CreateTaskRequest {
   webhookUrl: string;
   webhookSecret: string;
   actionId?: string;
+  /**
+   * For retried tasks: points to the original task ID that this task is retrying.
+   * Used for tracking retry chains and debugging.
+   */
+  retriedFrom?: string;
 }
 
 // GET /health response

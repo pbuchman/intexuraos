@@ -23,6 +23,11 @@ export interface Task {
   containerId: string;
   startedAt: string;
   completedAt?: string;
+  /**
+   * For retried tasks: points to the original task ID that this task is retrying.
+   * Used for tracking retry chains and debugging.
+   */
+  retriedFrom?: string;
 }
 
 export interface TaskResult {
