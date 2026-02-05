@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -20,7 +20,7 @@ import {
   query,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { Button, Card, Layout, RefreshIndicator } from '@/components';
+import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useCodeTask } from '@/hooks';
 import {
@@ -40,6 +40,29 @@ interface LogEntry {
   tool?: string;
 }
 
+// Helper functions moved outside components to avoid recreation on each render
+const formatLogTime = (timestamp: string): string => {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+};
+
+const getLevelColor = (level: LogEntry['level']): string => {
+  switch (level) {
+    case 'error':
+      return 'text-red-400';
+    case 'warn':
+      return 'text-amber-400';
+    case 'debug':
+      return 'text-slate-500';
+    default:
+      return 'text-green-400';
+  }
+};
+
 interface StatusStyle {
   bg: string;
   text: string;
@@ -58,7 +81,7 @@ const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
 
 export function CodeTaskDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { task, loading, refreshing, error, cancelTask } = useCodeTask(id ?? '');
+  const { task, loading, error, cancelTask } = useCodeTask(id ?? '');
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -122,8 +145,6 @@ export function CodeTaskDetailPage(): React.JSX.Element {
         </Link>
       </div>
 
-      <RefreshIndicator show={refreshing} />
-
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-3">
           {task.linearIssueId !== undefined ? (
@@ -176,34 +197,12 @@ export function CodeTaskDetailPage(): React.JSX.Element {
         ) : null}
       </div>
 
-      <Card title="Prompt" className="mb-6">
-        <div className="mb-2 flex justify-end">
-          <Button
-            variant="secondary"
-            onClick={(): void => {
-              void copyToClipboard(task.prompt, 'prompt');
-            }}
-          >
-            <Copy className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">
-              {copiedSection === 'prompt' ? 'Copied!' : 'Copy'}
-            </span>
-          </Button>
-        </div>
-        <blockquote className="border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
-          <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{task.prompt}</p>
-        </blockquote>
-        {task.sanitizedPrompt !== task.prompt ? (
-          <details className="mt-3">
-            <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
-              Show sanitized prompt
-            </summary>
-            <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
-              <p className="whitespace-pre-wrap">{task.sanitizedPrompt}</p>
-            </blockquote>
-          </details>
-        ) : null}
-      </Card>
+      <PromptCard
+        prompt={task.prompt}
+        sanitizedPrompt={task.sanitizedPrompt}
+        onCopy={copyToClipboard}
+        copiedSection={copiedSection}
+      />
 
       {task.result !== undefined ? <TaskResultCard task={task} /> : null}
 
@@ -214,11 +213,60 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   );
 }
 
+// Memoized PromptCard to isolate copy state changes
+interface PromptCardProps {
+  prompt: string;
+  sanitizedPrompt: string;
+  onCopy: (text: string, section: string) => Promise<void>;
+  copiedSection: string | null;
+}
+
+const PromptCard = memo(function PromptCard({
+  prompt,
+  sanitizedPrompt,
+  onCopy,
+  copiedSection,
+}: PromptCardProps): React.JSX.Element {
+  return (
+    <Card title="Prompt" className="mb-6">
+      <div className="mb-2 flex justify-end">
+        <Button
+          variant="secondary"
+          onClick={() => {
+            onCopy(prompt, 'prompt').catch(() => {
+              // Silently ignore copy errors
+            });
+          }}
+        >
+          <Copy className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">
+            {copiedSection === 'prompt' ? 'Copied!' : 'Copy'}
+          </span>
+        </Button>
+      </div>
+      <blockquote className="border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+        <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{prompt}</p>
+      </blockquote>
+      {sanitizedPrompt !== prompt ? (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
+            Show sanitized prompt
+          </summary>
+          <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
+            <p className="whitespace-pre-wrap">{sanitizedPrompt}</p>
+          </blockquote>
+        </details>
+      ) : null}
+    </Card>
+  );
+});
+
+// Memoized TaskResultCard - only re-renders when task.result changes
 interface TaskResultCardProps {
   task: CodeTask;
 }
 
-function TaskResultCard({ task }: TaskResultCardProps): React.JSX.Element | null {
+const TaskResultCard = memo(function TaskResultCard({ task }: TaskResultCardProps): React.JSX.Element | null {
   const result = task.result;
   if (result === undefined) return null;
 
@@ -276,13 +324,17 @@ function TaskResultCard({ task }: TaskResultCardProps): React.JSX.Element | null
       </div>
     </Card>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if result object reference changed
+  return prevProps.task.result === nextProps.task.result;
+});
 
+// Memoized TaskErrorCard - only re-renders when task.error changes
 interface TaskErrorCardProps {
   task: CodeTask;
 }
 
-function TaskErrorCard({ task }: TaskErrorCardProps): React.JSX.Element | null {
+const TaskErrorCard = memo(function TaskErrorCard({ task }: TaskErrorCardProps): React.JSX.Element | null {
   const error = task.error;
   if (error === undefined) return null;
 
@@ -317,14 +369,18 @@ function TaskErrorCard({ task }: TaskErrorCardProps): React.JSX.Element | null {
       </div>
     </Card>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if error object reference changed
+  return prevProps.task.error === nextProps.task.error;
+});
 
+// Memoized LogViewer - only re-renders when taskId or isActive changes
 interface LogViewerProps {
   taskId: string;
   isActive: boolean;
 }
 
-function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
+const LogViewer = memo(function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
   const { getAccessToken } = useAuth();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
@@ -335,12 +391,19 @@ function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
   const unsubscribeRef = useRef<Unsubscribe | null>(null);
   const firebaseAuthenticatedRef = useRef(false);
   const isMountedRef = useRef(true);
+  // Use ref for autoScroll to avoid dependency cycles in useEffect
+  const autoScrollRef = useRef(autoScroll);
+
+  // Keep the ref in sync with state
+  useEffect(() => {
+    autoScrollRef.current = autoScroll;
+  }, [autoScroll]);
 
   const scrollToBottom = useCallback((): void => {
-    if (autoScroll && logsEndRef.current !== null) {
+    if (autoScrollRef.current && logsEndRef.current !== null) {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [autoScroll]);
+  }, []); // No dependencies - uses ref instead
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -427,29 +490,23 @@ function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
         unsubscribeRef.current = null;
       }
     };
-  }, [taskId, getAccessToken, scrollToBottom]);
+  }, [taskId, getAccessToken, scrollToBottom]); // scrollToBottom is now stable (empty deps)
 
-  const formatLogTime = (timestamp: string): string => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
-
-  const getLevelColor = (level: LogEntry['level']): string => {
-    switch (level) {
-      case 'error':
-        return 'text-red-400';
-      case 'warn':
-        return 'text-amber-400';
-      case 'debug':
-        return 'text-slate-500';
-      default:
-        return 'text-green-400';
-    }
-  };
+  // Memoize logs rendering to avoid recalculating on every parent re-render
+  const logsElements = useMemo(() => {
+    return logs.map((log) => (
+      <div key={log.id} className="flex gap-2 py-0.5 hover:bg-slate-800/50">
+        <span className="text-slate-500 shrink-0">{formatLogTime(log.timestamp)}</span>
+        <span className={`shrink-0 uppercase w-12 ${getLevelColor(log.level)}`}>
+          [{log.level}]
+        </span>
+        {log.tool !== undefined ? (
+          <span className="text-blue-400 shrink-0">[{log.tool}]</span>
+        ) : null}
+        <span className="text-slate-200 break-all whitespace-pre-wrap">{log.message}</span>
+      </div>
+    ));
+  }, [logs]);
 
   return (
     <Card
@@ -496,22 +553,15 @@ function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
           <div className="text-slate-500">No logs yet...</div>
         ) : (
           <>
-            {logs.map((log) => (
-              <div key={log.id} className="flex gap-2 py-0.5 hover:bg-slate-800/50">
-                <span className="text-slate-500 shrink-0">{formatLogTime(log.timestamp)}</span>
-                <span className={`shrink-0 uppercase w-12 ${getLevelColor(log.level)}`}>
-                  [{log.level}]
-                </span>
-                {log.tool !== undefined ? (
-                  <span className="text-blue-400 shrink-0">[{log.tool}]</span>
-                ) : null}
-                <span className="text-slate-200 break-all whitespace-pre-wrap">{log.message}</span>
-              </div>
-            ))}
+            {logsElements}
             <div ref={logsEndRef} />
           </>
         )}
       </div>
     </Card>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if taskId or isActive changed
+  // isActive changes update the "Live" badge, so we allow re-render for it
+  return prevProps.taskId === nextProps.taskId && prevProps.isActive === nextProps.isActive;
+});
