@@ -45,6 +45,8 @@ describe('linearIssueService', () => {
           identifier: 'INT-123',
           title: 'Fix auth bug',
           url: 'https://linear.app/intexuraos/INT-123',
+          labels: [],
+          childCount: 0,
         })
       );
 
@@ -60,6 +62,8 @@ describe('linearIssueService', () => {
         linearIssueId: 'INT-123',
         linearIssueTitle: 'Fix auth bug',
         linearFallback: false,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
       expect(mockValidateIssue).toHaveBeenCalledWith({
         userId: testUserId,
@@ -173,6 +177,8 @@ describe('linearIssueService', () => {
         linearIssueTitle: 'Fix login authentication for SSO users',
         linearIssueType: 'bug',
         linearFallback: false,
+        linearIssueLabels: ['Code Task'],
+        hasChildren: false,
       });
 
       expect(mockGenerateTitle).toHaveBeenCalledWith({

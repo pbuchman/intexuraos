@@ -28,6 +28,10 @@ export interface DispatchWorkerCredentials {
 export interface DispatchRequest {
   taskId: string;
   linearIssueId?: string;
+  /** Labels from the validated Linear issue */
+  linearIssueLabels: string[];
+  /** Whether the issue has child issues */
+  hasChildren: boolean;
   prompt: string;
   systemPromptHash: string;
   repository: string;

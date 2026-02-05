@@ -452,6 +452,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
           taskDispatcher: services.taskDispatcher,
+          linearIssueService: services.linearIssueService,
           whatsappNotifier: services.whatsappNotifier,
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
@@ -1303,6 +1304,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType: 'opus' | 'auto' | 'glm';
         webhookUrl: string;
         webhookSecret: string;
+        linearIssueLabels: string[];
+        hasChildren: boolean;
         workerCredentials: { workers: Array<{ name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }> };
       } = {
         taskId: task.id,
@@ -1313,6 +1316,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType: task.workerType,
         webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
         webhookSecret,
+        linearIssueLabels: task.linearIssueLabels ?? [],
+        hasChildren: task.hasChildren ?? false,
         workerCredentials,
       };
 

@@ -110,7 +110,9 @@ export class TaskDispatcher {
         systemPrompt: buildSystemPrompt({
           taskId,
           worktreePath,
-          ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
+          linearIssueId: request.linearIssueId,
+          linearIssueLabels: request.linearIssueLabels,
+          hasChildren: request.hasChildren,
           prompt: request.prompt,
         }),
         workerType: request.workerType,

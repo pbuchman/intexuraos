@@ -21,6 +21,10 @@ export interface EnsureIssueResult {
   linearIssueTitle: string;
   linearIssueType?: LinearIssueType;
   linearFallback: boolean;
+  /** Labels from validated issue */
+  linearIssueLabels: string[];
+  /** Whether the issue has child issues */
+  hasChildren: boolean;
 }
 
 export interface LinearIssueService {
@@ -74,6 +78,8 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
           return {
             linearIssueTitle: `Linked issue ${linearIssueId}`,
             linearFallback: true,
+            linearIssueLabels: [],
+            hasChildren: false,
           };
         }
 
@@ -87,6 +93,8 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
           linearIssueId: validated.identifier,
           linearIssueTitle: validated.title,
           linearFallback: false,
+          linearIssueLabels: validated.labels,
+          hasChildren: validated.childCount > 0,
         };
       }
 
@@ -124,6 +132,8 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
           linearIssueTitle: title,
           linearIssueType: issueType,
           linearFallback: true,
+          linearIssueLabels: [],
+          hasChildren: false,
         };
       }
 
@@ -137,6 +147,8 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
         linearIssueTitle: createResult.value.issueTitle,
         linearIssueType: issueType,
         linearFallback: false,
+        linearIssueLabels: ['Code Task'],
+        hasChildren: false,
       };
     },
 

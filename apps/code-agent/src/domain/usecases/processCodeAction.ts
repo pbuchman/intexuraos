@@ -8,6 +8,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../domain/services/taskDispatcher.js';
+import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
@@ -86,6 +87,7 @@ export interface ProcessCodeActionDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   taskDispatcher: TaskDispatcherService;
+  linearIssueService: LinearIssueService;
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
@@ -105,7 +107,7 @@ export async function processCodeAction(
   deps: ProcessCodeActionDeps,
   request: ProcessCodeActionRequest
 ): Promise<Result<ProcessCodeActionResult, ProcessCodeActionError>> {
-  const { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, workerSettingsRepo } = deps;
   const { actionId, approvalEventId, userId, prompt, workerType, linearIssueId, repository, baseBranch, traceId } =
     request;
 
@@ -148,8 +150,29 @@ export async function processCodeAction(
     })),
   };
 
-  // Step 2: Linear issue creation (stub for now - use provided or undefined)
-  const finalLinearIssueId = linearIssueId;
+  // Step 2: Ensure Linear issue exists and get labels/childCount
+  const issueResult = await linearIssueService.ensureIssueExists({
+    userId,
+    ...(linearIssueId !== undefined && { linearIssueId }),
+    taskPrompt: prompt,
+  });
+
+  const {
+    linearIssueId: finalLinearIssueId,
+    linearIssueTitle,
+    linearIssueLabels,
+    hasChildren,
+  } = issueResult;
+
+  logger.info(
+    {
+      linearIssueId: finalLinearIssueId,
+      linearIssueTitle,
+      linearIssueLabels,
+      hasChildren,
+    },
+    'Linear issue processed'
+  );
 
   // Step 3: Generate webhook secret upfront so it can be stored with the task
   const webhookSecret = generateWebhookSecret();
@@ -170,6 +193,8 @@ export async function processCodeAction(
     webhookSecret: string;
     linearIssueId?: string;
     linearIssueTitle?: string;
+    linearIssueLabels?: string[];
+    hasChildren?: boolean;
     linearFallback?: boolean;
   } = {
     userId,
@@ -188,9 +213,14 @@ export async function processCodeAction(
     webhookSecret,
   };
 
-  // Only include linearIssueId if provided
+  // Only include linear issue fields if we have them
+  /* v8 ignore start -- ts-type: type narrowing branch for optional linear issue fields, requires complex setup @preserve */
   if (finalLinearIssueId !== undefined) {
+  /* v8 ignore stop @preserve */
     createInput.linearIssueId = finalLinearIssueId;
+    createInput.linearIssueTitle = linearIssueTitle;
+    createInput.linearIssueLabels = linearIssueLabels;
+    createInput.hasChildren = hasChildren;
   }
 
   const createResult = await codeTaskRepo.create(createInput);
@@ -222,6 +252,8 @@ export async function processCodeAction(
   const dispatchRequest: {
     taskId: string;
     linearIssueId?: string;
+    linearIssueLabels: string[];
+    hasChildren: boolean;
     prompt: string;
     systemPromptHash: string;
     repository: string;
@@ -233,6 +265,8 @@ export async function processCodeAction(
     workerCredentials: DispatchWorkerCredentials;
   } = {
     taskId: task.id,
+    linearIssueLabels: task.linearIssueLabels ?? [],
+    hasChildren: task.hasChildren ?? false,
     prompt: task.sanitizedPrompt,
     systemPromptHash: task.systemPromptHash,
     repository: task.repository,

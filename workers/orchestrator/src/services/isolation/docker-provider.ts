@@ -82,7 +82,7 @@ export class DockerProvider implements IsolationProvider {
   }
 
   async createWorker(config: WorkerConfig): Promise<WorkerHandle> {
-    const { taskId, worktreePath, prompt, systemPrompt, secrets, workerType } = config;
+    const { taskId, worktreePath, systemPrompt, secrets, workerType } = config;
 
     if (this.workers.size >= this.config.maxConcurrent) {
       throw new Error(`Max concurrent workers (${String(this.config.maxConcurrent)}) reached`);
@@ -218,11 +218,10 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
-    // Combine system prompt and user prompt for --print mode
-    // System prompt provides context about the task, Linear integration, and workflow rules
+    // Write system prompt to worker
+    // User prompt is embedded in system prompt as [USER SUPPLEMENTAL INSTRUCTIONS]
     // The delimiter ---END_PROMPT--- signals end of multi-line prompt to entrypoint.sh
-    const fullPrompt = systemPrompt + '\n\n' + prompt;
-    attachStream.write(fullPrompt + '\n---END_PROMPT---\n');
+    attachStream.write(systemPrompt + '\n---END_PROMPT---\n');
 
     const handle: WorkerHandle = {
       taskId,

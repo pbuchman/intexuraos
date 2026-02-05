@@ -108,6 +108,8 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         identifier: request.identifier,
         title: `Mock ${request.identifier}`,
         url: `https://linear.app/intexura/issue/${request.identifier}`,
+        labels: [],
+        childCount: 0,
       }));
     },
     generateTitle(request): ReturnType<LinearAgentClient['generateTitle']> {

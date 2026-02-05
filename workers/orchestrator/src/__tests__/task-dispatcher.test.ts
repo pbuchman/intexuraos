@@ -203,6 +203,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test prompt',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       const result = await dispatcher.submitTask(request);
@@ -223,6 +225,8 @@ describe('TaskDispatcher', () => {
           prompt: 'Test',
           webhookUrl: 'https://example.com/webhook',
           webhookSecret: 'secret',
+          linearIssueLabels: [],
+          hasChildren: false,
         };
         await dispatcher.submitTask(request);
       }
@@ -234,6 +238,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       const result = await dispatcher.submitTask(request);
@@ -256,6 +262,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       const result = await dispatcher.submitTask(request);
@@ -276,6 +284,8 @@ describe('TaskDispatcher', () => {
         baseBranch: 'main',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       const result = await dispatcher.submitTask(request);
@@ -297,6 +307,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
       await dispatcher.submitTask(request);
 
@@ -330,6 +342,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
       await dispatcher.submitTask(request);
 
@@ -358,6 +372,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
       await dispatcher.submitTask(request);
 
@@ -384,6 +400,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
       await dispatcher.submitTask(request);
 
@@ -428,6 +446,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test timeout',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await timeoutDispatcher.submitTask(request);
@@ -445,6 +465,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test timeout kill',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await timeoutDispatcher.submitTask(request);
@@ -464,6 +486,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test warning',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await timeoutDispatcher.submitTask(request);
@@ -484,6 +508,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test kill webhook',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await timeoutDispatcher.submitTask(request);
@@ -509,6 +535,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test interrupted status',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await timeoutDispatcher.submitTask(request);
@@ -552,6 +580,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test completion',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await monitorDispatcher.submitTask(request);
@@ -577,6 +607,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test already stopped',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await monitorDispatcher.submitTask(request);
@@ -603,6 +635,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test monitor error',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await monitorDispatcher.submitTask(request);
@@ -651,6 +685,8 @@ describe('TaskDispatcher', () => {
         baseBranch: 'development',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await resultDispatcher.submitTask(request);
@@ -677,6 +713,8 @@ describe('TaskDispatcher', () => {
         baseBranch: 'development',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await resultDispatcher.submitTask(request);
@@ -706,6 +744,8 @@ describe('TaskDispatcher', () => {
         actionId: 'action-456',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       const result = await dispatcher.submitTask(request);
@@ -728,6 +768,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test prompt without optional fields',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       const result = await dispatcher.submitTask(request);
@@ -752,6 +794,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       // Mock getTask to throw unexpected error during submit
@@ -816,6 +860,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       const result = await errorDispatcher.submitTask(request);
@@ -838,6 +884,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await dispatcher.submitTask(request);
@@ -890,6 +938,8 @@ describe('TaskDispatcher', () => {
         baseBranch: 'development',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await resultDispatcher.submitTask(request);
@@ -947,6 +997,8 @@ describe('TaskDispatcher', () => {
         baseBranch: 'development',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await resultDispatcher.submitTask(request);
@@ -1001,6 +1053,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await timeoutDispatcher.submitTask(request);
@@ -1045,6 +1099,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test task 1',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       const request2: CreateTaskRequest = {
@@ -1053,6 +1109,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test task 2',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await dispatcher.submitTask(request1);
@@ -1071,6 +1129,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Test task',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await dispatcher.submitTask(request);

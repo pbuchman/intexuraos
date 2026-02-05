@@ -9,6 +9,8 @@ export interface CreateTaskRequest {
   baseBranch?: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueLabels: string[];
+  hasChildren: boolean;
   slug?: string;
   webhookUrl: string;
   webhookSecret: string;
