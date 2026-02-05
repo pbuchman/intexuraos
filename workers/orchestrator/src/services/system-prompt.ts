@@ -165,21 +165,18 @@ This issue has child subtasks. You must execute ALL children continuously withou
 `
     : '';
 
+  /* v8 ignore start -- test-infra: conditional branches require integration test with/without Linear issue ID @preserve */
   return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 Task ID: ${taskId}
 Worktree: ${worktreePath}
-/* v8 ignore start -- test-infra: linear issue template conditional requires Linear API mock @preserve */
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
-/* v8 ignore stop @preserve */
 
 [PHASE 2: STRICT EXECUTION]
 You are in **NON-INTERACTIVE MODE**. Execute the task autonomously.
 
 ### Mandatory First Action
-/* v8 ignore start -- test-infra: linear issue fallback requires Linear API mock @preserve */
 /linear ${linearIssueId ?? 'your-issue-id'}
-/* v8 ignore stop @preserve */
 
 ### Post-Skill Execution
 Follow all instructions from the Linear issue description and any additional user instructions provided below.
@@ -203,6 +200,7 @@ Follow all instructions from the Linear issue description and any additional use
 [USER SUPPLEMENTAL INSTRUCTIONS]
 ${sanitizedSupplement}
 `;
+  /* v8 ignore stop @preserve */
 }
 
 /**

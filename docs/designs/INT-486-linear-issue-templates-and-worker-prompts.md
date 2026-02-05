@@ -30,6 +30,16 @@ This document defines a unified template system for Linear issues and a two-phas
 
 ---
 
+## Endpoint Changes
+
+| Service      | Method | Path                                  | Change                                                      |
+| ------------ | ------ | ------------------------------------- | ----------------------------------------------------------- |
+| linear-agent | GET    | `/internal/linear/issues/:identifier` | Add `labels: string[]` and `childCount: number` to response |
+
+**Breaking Change:** This is a backward-incompatible change to an internal API contract. The `labels` and `childCount` fields are now included in all responses. Internal consumers must be updated to handle these new fields.
+
+---
+
 ## Table of Contents
 
 1. [Two-Phase Execution Model](#two-phase-execution-model)
