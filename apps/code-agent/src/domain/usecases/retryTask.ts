@@ -172,7 +172,15 @@ export async function retryTask(
   // Step 4: Check for active tasks on same Linear issue (if exists)
   if (originalTask.linearIssueId !== undefined) {
     const activeCheckResult = await codeTaskRepo.hasActiveTaskForLinearIssue(originalTask.linearIssueId);
-    if (activeCheckResult.ok && activeCheckResult.value.hasActive) {
+
+    if (!activeCheckResult.ok) {
+      // Log error but don't fail the retry - the active task check is best-effort
+      // Better to allow retry than to block on a database check
+      logger.error(
+        { linearIssueId: originalTask.linearIssueId, error: activeCheckResult.error },
+        'Failed to check for active tasks on Linear issue, proceeding with retry'
+      );
+    } else if (activeCheckResult.value.hasActive) {
       logger.warn(
         { linearIssueId: originalTask.linearIssueId, activeTaskId: activeCheckResult.value.taskId },
         'Cannot retry: active task exists for Linear issue'
@@ -339,7 +347,11 @@ ${additionalContext.trim()}
 
     if (!stateResult.ok) {
       logger.warn(
-        { linearIssueId: originalTask.linearIssueId, error: stateResult.error },
+        {
+          linearIssueId: originalTask.linearIssueId,
+          errorCode: stateResult.error.code,
+          errorMessage: stateResult.error.message,
+        },
         'Failed to update Linear issue to In Progress'
       );
       // Don't fail the retry - continue without Linear state update
