@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CheckCircle, Plus, Star, Trash2, XCircle } from 'lucide-react';
-import { Button, Card, Layout, RefreshIndicator } from '@/components';
+import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useResearches } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
@@ -31,7 +31,7 @@ const STATUS_STYLES: Record<ResearchStatus, StatusStyle> = {
 };
 
 export function ResearchListPage(): React.JSX.Element {
-  const { researches, loading, loadingMore, refreshing, error, hasMore, loadMore, deleteResearch, refresh } =
+  const { researches, loading, loadingMore, error, hasMore, loadMore, deleteResearch, refresh } =
     useResearches();
   const { getAccessToken } = useAuth();
   const [updatingFavourite, setUpdatingFavourite] = useState<string | null>(null);
@@ -75,8 +75,6 @@ export function ResearchListPage(): React.JSX.Element {
           </Button>
         </Link>
       </div>
-
-      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
@@ -140,7 +138,7 @@ interface ResearchCardProps {
   updatingFavourite: string | null;
 }
 
-function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite }: ResearchCardProps): React.JSX.Element {
+const ResearchCard = memo(function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite }: ResearchCardProps): React.JSX.Element {
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const status = STATUS_STYLES[research.status];
@@ -233,4 +231,12 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
       </div>
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if relevant fields changed
+  return (
+    prevProps.research.id === nextProps.research.id &&
+    prevProps.research.status === nextProps.research.status &&
+    prevProps.research.favourite === nextProps.research.favourite &&
+    prevProps.updatingFavourite === nextProps.updatingFavourite
+  );
+});
