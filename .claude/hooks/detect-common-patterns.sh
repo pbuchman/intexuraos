@@ -143,8 +143,8 @@ if [[ "$FILE_PATH" =~ \.(ts|tsx)$ ]] && [[ ! "$FILE_PATH" =~ \.d\.ts$ ]]; then
             continue
         fi
 
-        # Check if there's an .ok check in the same function context (simplified: same 10 lines)
-        START=$((LINE_NUM - 5))
+        # Check if there's an .ok check in the same function context (simplified: same 30 lines)
+        START=$((LINE_NUM - 15))
         [ "$START" -lt 1 ] && START=1
         CONTEXT=$(sed -n "${START},${LINE_NUM}p" "$FILE_PATH" 2>/dev/null || true)
 
