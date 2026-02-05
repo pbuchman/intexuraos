@@ -33,4 +33,10 @@ export interface GitHubPREventRepository {
     repository: string,
     limit?: number
   ): Promise<Result<GitHubPREvent[], RepositoryError>>;
+
+  /**
+   * Find all recent events across all repositories.
+   * Returns empty array if no events found.
+   */
+  findAll(limit?: number): Promise<Result<GitHubPREvent[], RepositoryError>>;
 }

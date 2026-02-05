@@ -155,22 +155,7 @@ export function PREventsPage(): React.JSX.Element {
     refreshing,
     error,
     refresh,
-    repository,
-    setRepository,
   } = useGitHubPREvents({ limit: 100 });
-
-  const [repoInput, setRepoInput] = useState(repository ?? '');
-
-  const handleRepositoryChange = (): void => {
-    if (repoInput.trim() !== '') {
-      setRepository(repoInput.trim());
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent): void => {
-    e.preventDefault();
-    handleRepositoryChange();
-  };
 
   if (loading && groupedEvents.length === 0) {
     return (
@@ -187,32 +172,10 @@ export function PREventsPage(): React.JSX.Element {
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">GitHub PR Events</h2>
-          <p className="text-slate-600 dark:text-slate-300">View pull request activity across repositories</p>
+          <p className="text-slate-600 dark:text-slate-300">View pull request activity</p>
         </div>
-        <Link to="/code-tasks" className="text-sm text-blue-600 underline dark:text-blue-400">
-          Back to Code Tasks
-        </Link>
-      </div>
-
-      <RefreshIndicator show={refreshing} />
-
-      {/* Repository filter */}
-      <Card className="mb-6">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            type="text"
-            value={repoInput}
-            onChange={(e): void => {
-              setRepoInput(e.target.value);
-            }}
-            placeholder="intexuraos/code-agent"
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400"
-          />
-          <Button type="submit" disabled={repoInput.trim() === ''}>
-            Filter
-          </Button>
+        <div className="flex items-center gap-2">
           <Button
-            type="button"
             variant="secondary"
             onClick={() => {
               void refresh();
@@ -220,9 +183,15 @@ export function PREventsPage(): React.JSX.Element {
             disabled={refreshing}
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span className="ml-2">Refresh</span>
           </Button>
-        </form>
-      </Card>
+          <Link to="/code-tasks" className="text-sm text-blue-600 underline dark:text-blue-400">
+            Back to Code Tasks
+          </Link>
+        </div>
+      </div>
+
+      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
@@ -239,9 +208,7 @@ export function PREventsPage(): React.JSX.Element {
             <GitPullRequest className="mx-auto mb-4 h-12 w-12 text-slate-400" />
             <p className="mb-2 text-slate-600 dark:text-slate-300">No PR events found</p>
             <p className="text-sm text-slate-500">
-              {repository !== undefined && repository !== ''
-                ? `No events found for ${repository}. Try a different repository.`
-                : 'Enter a repository to view PR events.'}
+              No webhook events have been received yet.
             </p>
           </div>
         </Card>
