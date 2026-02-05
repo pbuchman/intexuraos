@@ -1178,3 +1178,52 @@ export interface WorkersStatusResponse {
   workers: WorkerStatus[];
   stale: boolean;
 }
+
+/**
+ * GitHub Pull Request event types
+ */
+export type GitHubPREventType =
+  | 'pull_request'
+  | 'pull_request_review'
+  | 'push';
+
+/**
+ * Valid actions for pull_request events
+ */
+export type PRAction = 'opened' | 'closed' | 'edited' | 'synchronized';
+
+/**
+ * Valid actions for pull_request_review events
+ */
+export type ReviewAction = 'submitted' | 'edited' | 'dismissed';
+
+/**
+ * GitHub Pull Request event from code-agent
+ */
+export interface GitHubPREvent {
+  id: string;
+  githubEventId: number;
+  repository: string;
+  repositoryId: number;
+  pullRequestNumber: number;
+  pullRequestId: number;
+  eventType: GitHubPREventType;
+  action: string | null;
+  senderLogin: string;
+  senderId: number;
+  senderType: string;
+  title: string | null;
+  body: string | null;
+  state: string | null;
+  mergedAt: string | null;
+  createdAt: string;
+  processedAt: string | null;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Response from GitHub PR events endpoint
+ */
+export interface GitHubPREventsResponse {
+  events: GitHubPREvent[];
+}

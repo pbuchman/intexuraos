@@ -41,6 +41,7 @@ import {
   MobileNotificationsListPage,
   NotesListPage,
   NotionConnectionPage,
+  PREventsPage,
   ResearchDetailPage,
   ResearchListPage,
   ShareHistoryPage,
@@ -235,6 +236,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CodeTaskDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/pr-events"
+        element={
+          <ProtectedRoute>
+            <PREventsPage />
           </ProtectedRoute>
         }
       />

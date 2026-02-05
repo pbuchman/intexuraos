@@ -15,6 +15,7 @@ import {
   DollarSign,
   FileText,
   Filter,
+  GitPullRequest,
   Inbox,
   Key,
   LayoutList,
@@ -65,6 +66,7 @@ const dataInsightsItems: NavItem[] = [
 const codeTasksItems: NavItem[] = [
   { to: '/code-tasks', label: 'Task History', icon: List },
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
+  { to: '/code-tasks/pr-events', label: 'PR Events', icon: GitPullRequest },
 ];
 
 /**

@@ -41,6 +41,7 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
@@ -152,6 +153,9 @@ describe('GET /code/tasks endpoints', () => {
         logger,
       }),
       workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -170,6 +174,7 @@ describe('GET /code/tasks endpoints', () => {
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
+      gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
     });
 
     app = await buildServer();
