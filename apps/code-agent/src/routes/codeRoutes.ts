@@ -2749,10 +2749,26 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 properties: {
                   code: {
                     type: 'string',
-                    enum: ['task_not_found', 'invalid_status', 'too_soon', 'worker_not_configured'],
+                    enum: ['invalid_status', 'too_soon', 'worker_not_configured'],
                   },
                   message: { type: 'string' },
                   retryAfterMs: { type: 'number', nullable: true },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
                 },
                 required: ['code', 'message'],
               },

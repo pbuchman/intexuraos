@@ -216,6 +216,100 @@ describe('retryTask use case', () => {
         expect(result.error.message).toMatch(/minute\(s\)/);
       }
     });
+
+    it('should allow retry when task has no completedAt timestamp', async () => {
+      // Task without completedAt (e.g., interrupted) - should be retryable immediately
+      // Omit completedAt to simulate task without the field
+      const mockTaskWithoutCompletedAt = createMockTask() as unknown as Record<string, unknown>;
+      delete mockTaskWithoutCompletedAt['completedAt'];
+      const mockTask = mockTaskWithoutCompletedAt as unknown as CodeTask;
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      // Setup successful task creation
+      const retryTaskId = 'task_retry_no_completed_at';
+      mockCodeTaskRepo.create.mockImplementation((input) => {
+        const newTask: CodeTask = {
+          id: retryTaskId,
+          userId: input.userId,
+          traceId: input.traceId,
+          prompt: input.prompt,
+          sanitizedPrompt: input.sanitizedPrompt,
+          systemPromptHash: input.systemPromptHash,
+          workerType: input.workerType,
+          workerLocation: input.workerLocation,
+          repository: input.repository,
+          baseBranch: input.baseBranch,
+          status: 'dispatched',
+          dedupKey: 'new-dedup-key',
+          callbackReceived: false,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          retriedFrom: originalTaskId,
+          webhookSecret: input.webhookSecret ?? 'whsec_secret',
+          linearIssueId,
+          linearIssueTitle: 'Retry mechanism test',
+        };
+        return Promise.resolve(ok(newTask));
+      });
+
+      // Setup successful dispatch
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({
+          orchestratorTaskId: 'orch-123',
+          workerLocation: 'home-mac',
+        })
+      );
+
+      // Setup Linear state update
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+
+      // Setup Linear add comment
+      mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+
+      // Setup worker settings
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'http://localhost:3000',
+              enabled: true,
+              cfAccessClientId: undefined,
+              cfAccessClientSecret: undefined,
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+        })
+      );
+
+      // Setup active task check (no active tasks)
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+
+      // Setup WhatsApp notification
+      mockWhatsAppNotifier.notifyTaskStarted.mockResolvedValue(ok(undefined));
+
+      // Setup task update (for cancel nonce)
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+
+      // Setup metrics
+      mockMetricsClient.incrementTasksSubmitted.mockResolvedValue(undefined);
+
+      const deps = createDeps();
+      const result = await retryTask(deps, {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe(retryTaskId);
+        expect(result.value.retriedFrom).toBe(originalTaskId);
+      }
+    });
   });
 
   describe('successful retry', () => {

@@ -138,29 +138,35 @@ export async function retryTask(
 
   // Step 3: Validate cool-off period
   const completedAt = originalTask.completedAt;
-  const now = Date.now();
-  let completedAtTime = now;
 
-  // completedAt can be Date, Timestamp, or undefined - narrow to extract time
-  /* v8 ignore start -- ts-type: instanceof check creates type narrowing branch @preserve */
-  if (completedAt instanceof Date) {
-    completedAtTime = completedAt.getTime();
-  } else if (completedAt !== undefined && typeof completedAt.toDate === 'function') {
-    completedAtTime = completedAt.toDate().getTime();
-  }
-  /* v8 ignore stop @preserve */
+  // Only enforce cool-off if we have a completedAt timestamp
+  // Tasks without completedAt (e.g., interrupted) can be retried immediately
+  if (completedAt !== undefined) {
+    const now = Date.now();
+    let completedAtTime: number;
 
-  const timeSinceFailure = now - completedAtTime;
+    // completedAt can be Date or Timestamp - narrow to extract time
+    /* v8 ignore start -- ts-type: instanceof check creates type narrowing branch @preserve */
+    if (completedAt instanceof Date) {
+      completedAtTime = completedAt.getTime();
+    } else {
+      // Must be Timestamp with toDate() method
+      completedAtTime = completedAt.toDate().getTime();
+    }
+    /* v8 ignore stop @preserve */
 
-  if (timeSinceFailure < RETRY_COOL_OFF_MS) {
-    const remainingMs = RETRY_COOL_OFF_MS - timeSinceFailure;
-    const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
-    logger.info({ taskId: originalTask.id, remainingMs }, 'Retry attempted before cool-off period');
-    return err({
-      code: 'too_soon',
-      message: `Please wait ${String(remainingMinutes)} minute(s) before retrying this task.`,
-      retryAfterMs: remainingMs,
-    });
+    const timeSinceFailure = now - completedAtTime;
+
+    if (timeSinceFailure < RETRY_COOL_OFF_MS) {
+      const remainingMs = RETRY_COOL_OFF_MS - timeSinceFailure;
+      const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+      logger.info({ taskId: originalTask.id, remainingMs }, 'Retry attempted before cool-off period');
+      return err({
+        code: 'too_soon',
+        message: `Please wait ${String(remainingMinutes)} minute(s) before retrying this task.`,
+        retryAfterMs: remainingMs,
+      });
+    }
   }
 
   // Step 4: Check for active tasks on same Linear issue (if exists)
