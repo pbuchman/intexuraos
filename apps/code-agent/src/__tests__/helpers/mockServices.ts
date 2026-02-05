@@ -103,6 +103,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       } as unknown as WhatsAppSendPublisher,
     }),
     actionsAgentClient,
+    linearAgentClient,
     statusMirrorService: createStatusMirrorService({
       actionsAgentClient,
       logger,

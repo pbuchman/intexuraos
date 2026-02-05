@@ -16,6 +16,7 @@ describe('linearIssueService', () => {
   let mockUpdateIssueState = vi.fn();
   let mockValidateIssue = vi.fn();
   let mockGenerateTitle = vi.fn();
+  let mockAddComment = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -23,6 +24,7 @@ describe('linearIssueService', () => {
     mockUpdateIssueState = vi.fn();
     mockValidateIssue = vi.fn();
     mockGenerateTitle = vi.fn();
+    mockAddComment = vi.fn();
   });
 
   const mockClient: LinearAgentClient = {
@@ -30,6 +32,7 @@ describe('linearIssueService', () => {
     updateIssueState: (...args: Parameters<LinearAgentClient['updateIssueState']>) => mockUpdateIssueState(...args),
     validateIssue: (...args: Parameters<LinearAgentClient['validateIssue']>) => mockValidateIssue(...args),
     generateTitle: (...args: Parameters<LinearAgentClient['generateTitle']>) => mockGenerateTitle(...args),
+    addComment: (...args: Parameters<LinearAgentClient['addComment']>) => mockAddComment(...args),
   };
 
   const testUserId = 'test-user-123';

@@ -34,6 +34,7 @@ import type { RateLimitService } from '../../domain/services/rateLimitService.js
 import { ok } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
+import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
@@ -127,6 +128,7 @@ describe('POST /internal/code/process', () => {
       whatsappNotifier,
       logChunkRepo: _logChunkRepo,
       actionsAgentClient,
+      linearAgentClient,
       rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
@@ -159,6 +161,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearAgentClient: LinearAgentClient;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;

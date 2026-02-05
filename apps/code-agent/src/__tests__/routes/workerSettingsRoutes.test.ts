@@ -116,6 +116,7 @@ describe('Worker Settings Routes', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      linearAgentClient,
       rateLimitService: {
         async checkLimits() {
           return ok(undefined);

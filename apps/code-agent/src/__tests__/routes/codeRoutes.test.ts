@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
 import nock from 'nock';
 import crypto from 'node:crypto';
+import { err } from '@intexuraos/common-core';
 
 // Mock jose library for JWT validation
 vi.mock('jose', () => ({
@@ -34,6 +35,7 @@ import type { RateLimitService, RateLimitError } from '../../domain/services/rat
 import { ok, type Result } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
+import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
@@ -161,6 +163,7 @@ describe('codeRoutes', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      linearAgentClient,
       rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
@@ -193,6 +196,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearAgentClient: LinearAgentClient;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
@@ -2272,6 +2276,392 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       const response = await server.inject({
         method: 'POST',
         url: '/code/workers/refresh-status',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+  });
+
+  describe('POST /code/retry', () => {
+    const taskId = 'task-to-retry';
+    let mockGetSettings: ReturnType<typeof vi.spyOn>;
+    let mockFindByIdForUser: ReturnType<typeof vi.spyOn>;
+    let mockCreate: ReturnType<typeof vi.spyOn>;
+    let mockDispatch: ReturnType<typeof vi.spyOn>;
+    let mockUpdateIssueState: ReturnType<typeof vi.spyOn>;
+    let mockAddComment: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      const services = getServices();
+
+      // Mock worker settings with all required fields
+      mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'http://localhost:3000',
+              enabled: true,
+              cfAccessClientId: 'cf-client-id',
+              cfAccessClientSecret: 'cf-client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      // Mock task repository methods
+      mockFindByIdForUser = vi.spyOn(services.codeTaskRepo, 'findByIdForUser');
+      mockCreate = vi.spyOn(services.codeTaskRepo, 'create');
+
+      // Mock task dispatcher with correct DispatchResult type
+      mockDispatch = vi.spyOn(services.taskDispatcher, 'dispatch').mockResolvedValue(
+        ok({
+          dispatched: true,
+          workerLocation: 'home-mac',
+        })
+      );
+
+      // Mock Linear client
+      mockUpdateIssueState = vi.spyOn(services.linearAgentClient, 'updateIssueState').mockResolvedValue(ok(undefined));
+      mockAddComment = vi.spyOn(services.linearAgentClient, 'addComment').mockResolvedValue(
+        ok({ commentId: 'comment-123' })
+      );
+    });
+
+    afterEach(() => {
+      mockGetSettings?.mockRestore();
+      mockFindByIdForUser?.mockRestore();
+      mockCreate?.mockRestore();
+      mockDispatch?.mockRestore();
+      mockUpdateIssueState?.mockRestore();
+      mockAddComment?.mockRestore();
+    });
+
+    it('should retry a failed task successfully', async () => {
+      const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
+      mockFindByIdForUser.mockResolvedValue(
+        ok({
+          id: taskId,
+          userId: 'test-user-id',
+          status: 'failed',
+          completedAt: sixMinutesAgo,
+          prompt: 'Original prompt',
+          sanitizedPrompt: 'Original prompt',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'home-mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          linearIssueId: 'INT-520',
+          linearIssueTitle: 'Test issue',
+          traceId: 'trace-123',
+          dedupKey: 'dedup-123',
+          callbackReceived: true,
+          createdAt: sixMinutesAgo,
+          updatedAt: sixMinutesAgo,
+          error: { code: 'WORKER_ERROR', message: 'Task failed' },
+        } as never)
+      );
+
+      const newTaskId = 'retry-task-123';
+      mockCreate.mockResolvedValue(
+        ok({
+          id: newTaskId,
+          userId: 'test-user-id',
+          status: 'dispatched',
+          traceId: 'retry-trace',
+          prompt: 'Original prompt',
+          sanitizedPrompt: 'Original prompt',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'home-mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          linearIssueId: 'INT-520',
+          linearIssueTitle: 'Test issue',
+          webhookSecret: 'whsec_secret',
+          dedupKey: 'new-dedup-key',
+          callbackReceived: false,
+          retriedFrom: taskId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as never)
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/retry',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.codeTaskId).toBe(newTaskId);
+      expect(body.data.retriedFrom).toBe(taskId);
+      expect(body.data.resourceUrl).toContain('/code-tasks/');
+    });
+
+    it('should include additional context in retry prompt', async () => {
+      const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
+      mockFindByIdForUser.mockResolvedValue(
+        ok({
+          id: taskId,
+          userId: 'test-user-id',
+          status: 'failed',
+          completedAt: sixMinutesAgo,
+          prompt: 'Original prompt',
+          sanitizedPrompt: 'Original prompt',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'home-mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          linearIssueId: 'INT-520',
+          linearIssueTitle: 'Test issue',
+          traceId: 'trace-123',
+          dedupKey: 'dedup-123',
+          callbackReceived: true,
+          createdAt: sixMinutesAgo,
+          updatedAt: sixMinutesAgo,
+          error: { code: 'WORKER_ERROR', message: 'Task failed' },
+        } as never)
+      );
+
+      const newTaskId = 'retry-task-with-context';
+      const additionalContext = 'The error was a timeout';
+      mockCreate.mockImplementation((input: unknown) => {
+        // Verify additional context is in the prompt
+        expect((input as { prompt: string }).prompt).toContain('Additional context (retry)');
+        expect((input as { prompt: string }).prompt).toContain(additionalContext);
+        return Promise.resolve(
+          ok({
+            id: newTaskId,
+            userId: 'test-user-id',
+            status: 'dispatched',
+            prompt: (input as { prompt: string }).prompt,
+            sanitizedPrompt: (input as { sanitizedPrompt: string }).sanitizedPrompt,
+            traceId: 'retry-trace',
+            systemPromptHash: 'hash-123',
+            workerType: 'auto',
+            workerLocation: 'home-mac',
+            repository: 'pbuchman/intexuraos',
+            baseBranch: 'development',
+            webhookSecret: 'whsec_secret',
+            dedupKey: 'new-dedup-key',
+            callbackReceived: false,
+            retriedFrom: taskId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as never)
+        );
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/retry',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+          additionalContext,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('should return 404 when task not found', async () => {
+      mockFindByIdForUser.mockResolvedValue(
+        err({ code: 'NOT_FOUND', message: 'Task not found' })
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/retry',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('should return 400 when task status is not failed', async () => {
+      const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
+      mockFindByIdForUser.mockResolvedValue(
+        ok({
+          id: taskId,
+          userId: 'test-user-id',
+          status: 'running', // Not failed
+          completedAt: sixMinutesAgo,
+          prompt: 'Original prompt',
+          sanitizedPrompt: 'Original prompt',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'home-mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          dedupKey: 'dedup-123',
+          callbackReceived: false,
+          createdAt: sixMinutesAgo,
+          updatedAt: sixMinutesAgo,
+        } as never)
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/retry',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('invalid_status');
+    });
+
+    it('should return 400 with retryAfterMs when task failed too recently', async () => {
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+      mockFindByIdForUser.mockResolvedValue(
+        ok({
+          id: taskId,
+          userId: 'test-user-id',
+          status: 'failed',
+          completedAt: twoMinutesAgo,
+          prompt: 'Original prompt',
+          sanitizedPrompt: 'Original prompt',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'home-mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          dedupKey: 'dedup-123',
+          callbackReceived: true,
+          createdAt: twoMinutesAgo,
+          updatedAt: twoMinutesAgo,
+          error: { code: 'WORKER_ERROR', message: 'Task failed' },
+        } as never)
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/retry',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('too_soon');
+      expect(body.error.retryAfterMs).toBeDefined();
+      expect(body.error.retryAfterMs).toBeGreaterThan(0);
+    });
+
+    it('should return 400 when user has no enabled workers', async () => {
+      const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
+      mockFindByIdForUser.mockResolvedValue(
+        ok({
+          id: taskId,
+          userId: 'test-user-id',
+          status: 'failed',
+          completedAt: sixMinutesAgo,
+          prompt: 'Original prompt',
+          sanitizedPrompt: 'Original prompt',
+          systemPromptHash: 'hash-123',
+          workerType: 'auto',
+          workerLocation: 'home-mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-123',
+          dedupKey: 'dedup-123',
+          callbackReceived: true,
+          createdAt: sixMinutesAgo,
+          updatedAt: sixMinutesAgo,
+          error: { code: 'WORKER_ERROR', message: 'Task failed' },
+        } as never)
+      );
+
+      // Mock settings with disabled workers
+      mockGetSettings.mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'http://localhost:3000',
+              enabled: false, // Disabled
+              cfAccessClientId: 'cf-client-id',
+              cfAccessClientSecret: 'cf-client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/retry',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('worker_not_configured');
+    });
+
+    it('should return 401 when user is not authenticated', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/retry',
+        payload: {
+          taskId,
+        },
       });
 
       expect(response.statusCode).toBe(401);

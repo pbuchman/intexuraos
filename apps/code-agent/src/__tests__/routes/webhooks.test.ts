@@ -46,6 +46,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -142,6 +143,11 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
+      linearAgentClient: createLinearAgentHttpClient({
+        baseUrl: 'http://linear-agent',
+        internalAuthToken: 'test-token',
+        timeoutMs: 10000,
+      }, logger),
       actionsAgentClient,
       rateLimitService,
       linearIssueService,
@@ -172,6 +178,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearAgentClient: LinearAgentClient;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
@@ -1280,6 +1287,11 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      linearAgentClient: createLinearAgentHttpClient({
+        baseUrl: 'http://linear-agent',
+        internalAuthToken: 'test-token',
+        timeoutMs: 10000,
+      }, logger),
       whatsappNotifier: createWhatsAppNotifier({
         whatsappPublisher: {
           publishSendMessage: async () => ok(undefined),
@@ -1336,6 +1348,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearAgentClient: LinearAgentClient;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
@@ -1584,18 +1597,6 @@ describe('POST /internal/logs', () => {
       logger,
     });
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() {
-        return ok(undefined);
-      },
-      async recordTaskStart() {
-        return;
-      },
-      async recordTaskComplete() {
-        return;
-      },
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -1619,10 +1620,31 @@ describe('POST /internal/logs', () => {
       logChunkRepo,
       taskDispatcher,
       workerSettingsRepo,
+      linearAgentClient: createLinearAgentHttpClient({
+        baseUrl: 'http://linear-agent',
+        internalAuthToken: 'test-token',
+        timeoutMs: 10000,
+      }, logger),
       actionsAgentClient,
-      rateLimitService,
+      whatsappNotifier: createWhatsAppNotifier({
+        whatsappPublisher: {
+          publishSendMessage: async () => ok(undefined),
+        } as unknown as WhatsAppSendPublisher,
+      }),
+      rateLimitService: {
+        async checkLimits() {
+          return ok(undefined);
+        },
+        async recordTaskStart() {
+          return;
+        },
+        async recordTaskComplete() {
+          return;
+        },
+      },
       linearIssueService,
       statusMirrorService,
+      metricsClient: createNoOpMetricsClient(),
       processHeartbeat: createProcessHeartbeatUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
@@ -1645,6 +1667,7 @@ describe('POST /internal/logs', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearAgentClient: LinearAgentClient;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
@@ -2035,6 +2058,11 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
+      linearAgentClient: createLinearAgentHttpClient({
+        baseUrl: 'http://linear-agent',
+        internalAuthToken: 'test-token',
+        timeoutMs: 10000,
+      }, logger),
       actionsAgentClient,
       rateLimitService,
       linearIssueService,
@@ -2065,6 +2093,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearAgentClient: LinearAgentClient;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;

@@ -8,6 +8,7 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
+import { retryTask } from '../domain/usecases/retryTask.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
@@ -2691,6 +2692,203 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       );
 
       return await reply.ok(result.value);
+    }
+  );
+
+  // POST /code/retry - Retry a failed code task (INT-520)
+  fastify.post(
+    '/code/retry',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'retryCodeTask',
+        summary: 'Retry a failed code task',
+        description: 'Creates a new task based on a failed task, with optional additional context. Requires Auth0 JWT.',
+        tags: ['public'],
+        body: {
+          type: 'object',
+          required: ['taskId'],
+          properties: {
+            taskId: {
+              type: 'string',
+              description: 'The ID of the failed task to retry',
+            },
+            additionalContext: {
+              type: 'string',
+              description: 'Optional additional context to help with the retry',
+              maxLength: 5000,
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Task retry created successfully',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['codeTaskId', 'resourceUrl', 'workerLocation', 'retriedFrom'],
+                properties: {
+                  codeTaskId: { type: 'string' },
+                  resourceUrl: { type: 'string' },
+                  workerLocation: { type: 'string' },
+                  retriedFrom: { type: 'string' },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Bad request - task cannot be retried',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: {
+                    type: 'string',
+                    enum: ['invalid_status', 'too_soon', 'worker_not_configured'],
+                  },
+                  message: { type: 'string' },
+                  retryAfterMs: { type: 'number', nullable: true },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/retry',
+      });
+
+      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo } =
+        getServices();
+      const userId = request.user?.userId;
+
+      /* v8 ignore start -- test-infra: requires authenticated user @preserve */
+      if (!userId) {
+        return reply.fail('UNAUTHORIZED', 'Authentication required');
+      }
+      /* v8 ignore stop @preserve */
+
+      const { taskId, additionalContext } = request.body as { taskId: string; additionalContext?: string };
+
+      request.log.info({ taskId, userId, hasAdditionalContext: additionalContext !== undefined }, 'Processing task retry');
+
+      // Build retry request - only include additionalContext if defined
+      const retryRequest: {
+        originalTaskId: string;
+        userId: string;
+        additionalContext?: string;
+      } = {
+        originalTaskId: taskId,
+        userId,
+      };
+      // Only add additionalContext if provided
+      if (additionalContext !== undefined) {
+        retryRequest.additionalContext = additionalContext;
+      }
+
+      const result = await retryTask(
+        {
+          logger: request.log,
+          codeTaskRepo,
+          linearAgentClient,
+          taskDispatcher,
+          whatsappNotifier,
+          metricsClient,
+          workerSettingsRepo,
+        },
+        retryRequest
+      );
+
+      if (!result.ok) {
+        const error = result.error;
+
+        // Map error codes to response codes
+        if (error.code === 'task_not_found') {
+          return reply.fail('NOT_FOUND', error.message);
+        }
+        /* v8 ignore start -- ts-type: complex error code comparison creates type narrowing branch @preserve */
+        if (error.code === 'invalid_status' || error.code === 'too_soon' || error.code === 'worker_not_configured') {
+          // Use BAD_REQUEST for client-side errors with additional data
+          // @allow-raw-send: Returning retryAfterMs which is not supported by reply.fail()
+          return reply.status(400).send({
+            success: false,
+            error: {
+              code: error.code,
+              message: error.message,
+              ...(error.retryAfterMs !== undefined && { retryAfterMs: error.retryAfterMs }),
+            },
+          });
+        }
+        /* v8 ignore stop @preserve */
+
+        // Internal error
+        request.log.error({ error }, 'Task retry failed');
+        return reply.fail('INTERNAL_ERROR', 'Failed to retry task');
+      }
+
+      request.log.info(
+        { originalTaskId: taskId, retryTaskId: result.value.codeTaskId },
+        'Task retry created successfully'
+      );
+
+      return reply.ok(result.value);
     }
   );
 

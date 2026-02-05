@@ -160,6 +160,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
           if (input.webhookSecret !== undefined) {
             taskData.webhookSecret = input.webhookSecret;
           }
+          /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
+          if (input.retriedFrom !== undefined) {
+            taskData.retriedFrom = input.retriedFrom;
+          }
+          /* v8 ignore stop @preserve */
 
           const docRef = collection.doc(taskId);
           transaction.set(docRef, taskData);

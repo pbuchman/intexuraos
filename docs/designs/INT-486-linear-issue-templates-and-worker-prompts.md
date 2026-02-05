@@ -14,12 +14,14 @@ This document defines a unified template system for Linear issues and a two-phas
 **Core Principle:** The Linear skill must allow non-specialized agents to execute tasks by providing complete context. The two-phase model separates design/validation (requires deep thinking) from execution (follows explicit instructions).
 
 **Problem Statement:**
+
 - Current Linear issue templates are inconsistent
 - Worker system prompt has ambiguities
 - No validation gate before execution
 - Parent->child workflow not handled in non-interactive mode
 
 **Solution:**
+
 1. Unified Linear issue template (strict format, agent-agnostic)
 2. Two-phase execution: Design/Validation → Execution
 3. Non-interactive mode for /linear skill
@@ -72,12 +74,12 @@ This document defines a unified template system for Linear issues and a two-phas
 
 ### Why This Matters
 
-| Aspect | Phase 1 (Design) | Phase 2 (Execution) |
-|--------|------------------|---------------------|
-| Agent Capability | Deep thinking, design | Can follow instructions |
-| User Interaction | High (iteration) | None (autonomous) |
-| Failure Mode | Stop, report gap | Stop on error only |
-| Key Skill | Identifying missing context | Implementing specified artifacts |
+| Aspect           | Phase 1 (Design)            | Phase 2 (Execution)              |
+| ---------------- | --------------------------- | -------------------------------- |
+| Agent Capability | Deep thinking, design       | Can follow instructions          |
+| User Interaction | High (iteration)            | None (autonomous)                |
+| Failure Mode     | Stop, report gap            | Stop on error only               |
+| Key Skill        | Identifying missing context | Implementing specified artifacts |
 
 ### Phase 1: Design & Validation Gate
 
@@ -118,6 +120,7 @@ This document defines a unified template system for Linear issues and a two-phas
 **PASS:** Proceed to Phase 2 (Execution)
 
 **FAIL:**
+
 1. STOP execution
 2. Report missing sections with specifics
 3. DO NOT create any code
@@ -178,10 +181,10 @@ User may explicitly override with: "Execute anyway" or "Skip validation"
 
 **Backend Tests (`apps/<service>/src/__tests__/`):**
 
-| Test Name | Endpoint/Function | Scenario | Expected |
-|-----------|-------------------|----------|----------|
-| <name> | <what is tested> | <input/condition> | <output/behavior> |
-| ... | ... | ... | ... |
+| Test Name | Endpoint/Function | Scenario          | Expected          |
+| --------- | ----------------- | ----------------- | ----------------- |
+| <name>    | <what is tested>  | <input/condition> | <output/behavior> |
+| ...       | ...               | ...               | ...               |
 
 **Frontend Tests (if applicable):**
 
@@ -239,12 +242,15 @@ _Preserve typos, grammar, raw phrasing. This is the source of truth._
 ## Files to Modify
 
 **Primary Changes:**
+
 - `path/to/file1.ts` - <what changes expected>
 
 **Secondary Changes (if needed):**
+
 - `path/to/file2.ts` - <what changes expected>
 
 **Tests to Add/Modify:**
+
 - `path/to/test/file.test.ts` - <what tests needed>
 
 ---
@@ -264,9 +270,11 @@ _Preserve typos, grammar, raw phrasing. This is the source of truth._
 ## Dependencies
 
 **Blocked By:**
+
 - [INT-XXX](url) - <why this blocks current work>
 
 **Blocks:**
+
 - [INT-XXX](url) - <what this enables>
 
 ---
@@ -276,6 +284,7 @@ _Preserve typos, grammar, raw phrasing. This is the source of truth._
 <Provide any architecture notes, constraints, or background needed for implementation>
 
 **Example:**
+
 - Uses Firestore collection: `items`
 - Requires API: `POST /internal/process`
 - Dependent on: `@intexuraos/common-types` package
@@ -297,18 +306,18 @@ _Preserve typos, grammar, raw phrasing. This is the source of truth._
 
 ### Required Sections (All Issues)
 
-| Section | Required? | Validation Rule |
-|---------|-----------|-----------------|
-| Test Requirements | YES | Table format, at least 1 test row |
-| Original User Instruction | YES | Blockquote format present |
-| Summary | YES | 1-2 sentences, not empty |
-| Requirements | YES | At least 1 bullet |
-| Acceptance Criteria | YES | At least 3 checkboxes, includes tests/CI/PR/Linear |
-| Scope | YES | In Scope list present |
-| Files to Modify | Conditional | Required for code changes |
-| Dependencies | Conditional | Required if blocked/blocks exist |
-| Technical Context | Optional | N/A |
-| Related | Optional | N/A |
+| Section                   | Required?   | Validation Rule                                    |
+| ------------------------- | ----------- | -------------------------------------------------- |
+| Test Requirements         | YES         | Table format, at least 1 test row                  |
+| Original User Instruction | YES         | Blockquote format present                          |
+| Summary                   | YES         | 1-2 sentences, not empty                           |
+| Requirements              | YES         | At least 1 bullet                                  |
+| Acceptance Criteria       | YES         | At least 3 checkboxes, includes tests/CI/PR/Linear |
+| Scope                     | YES         | In Scope list present                              |
+| Files to Modify           | Conditional | Required for code changes                          |
+| Dependencies              | Conditional | Required if blocked/blocks exist                   |
+| Technical Context         | Optional    | N/A                                                |
+| Related                   | Optional    | N/A                                                |
 
 ### Conditional Rules
 
@@ -331,6 +340,7 @@ IF issue is part of parent/child hierarchy:
 ### Current State
 
 The `/linear` skill assumes interactive execution:
+
 - Asks user for clarification
 - Pauses at checkpoints
 - Expects confirmation before proceeding
@@ -354,13 +364,13 @@ function detectExecutionContext(): ExecutionContext {
 
 **Behavior Changes:**
 
-| Situation | Current (Interactive) | New (Non-Interactive) |
-|-----------|----------------------|------------------------|
-| Issue missing Test Requirements | Ask user to add | STOP, report error |
-| Unclear requirement | Ask for clarification | STOP, report what's unclear |
-| Before committing | Ask "commit?" | Auto-commit if CI passes |
-| Before creating PR | Ask "create PR?" | Auto-create PR |
-| CI failure | Ask how to proceed | Fix, retry, continue |
+| Situation                       | Current (Interactive) | New (Non-Interactive)       |
+| ------------------------------- | --------------------- | --------------------------- |
+| Issue missing Test Requirements | Ask user to add       | STOP, report error          |
+| Unclear requirement             | Ask for clarification | STOP, report what's unclear |
+| Before committing               | Ask "commit?"         | Auto-commit if CI passes    |
+| Before creating PR              | Ask "create PR?"      | Auto-create PR              |
+| CI failure                      | Ask how to proceed    | Fix, retry, continue        |
 
 **Non-Interactive Mode Rules:**
 
@@ -370,23 +380,27 @@ function detectExecutionContext(): ExecutionContext {
 When invoked from worker/code-agent, /linear operates in NON-INTERACTIVE mode:
 
 ### Validation Phase
+
 - Check issue template completeness
 - If invalid: STOP with specific error
 - If valid: proceed to execution
 
 ### Execution Phase
+
 - No user prompts
 - No confirmations
 - All checkpoints automatic
 - Only stop on unrecoverable error
 
 ### Forbidden
+
 - ❌ "Would you like me to commit?"
 - ❌ "Should I create a PR?"
 - ❌ "How should I handle X?"
 - ❌ Any question that requires user input
 
 ### Required
+
 - ✅ Automatic checkpoint completion
 - ✅ CI failure → fix → retry
 - ✅ Report completion with cross-links
@@ -398,14 +412,14 @@ When invoked from worker/code-agent, /linear operates in NON-INTERACTIVE mode:
 
 ### Current Issues
 
-| # | Issue | Location | Severity |
-|---|-------|----------|----------|
-| 1 | Double prompt (sanitization bypass) | `docker-provider.ts:224` | HIGH |
-| 2 | No parent issue handling | `system-prompt.ts` | HIGH |
-| 3 | Branch check not emphasized | `system-prompt.ts` | HIGH |
-| 4 | No CI failure handling | `system-prompt.ts` | MEDIUM |
-| 5 | "but/however" in forbidden keywords | `system-prompt.ts` | LOW |
-| 6 | No NON-INTERACTIVE declaration | `system-prompt.ts` | HIGH |
+| #   | Issue                               | Location                 | Severity |
+| --- | ----------------------------------- | ------------------------ | -------- |
+| 1   | Double prompt (sanitization bypass) | `docker-provider.ts:224` | HIGH     |
+| 2   | No parent issue handling            | `system-prompt.ts`       | HIGH     |
+| 3   | Branch check not emphasized         | `system-prompt.ts`       | HIGH     |
+| 4   | No CI failure handling              | `system-prompt.ts`       | MEDIUM   |
+| 5   | "but/however" in forbidden keywords | `system-prompt.ts`       | LOW      |
+| 6   | No NON-INTERACTIVE declaration      | `system-prompt.ts`       | HIGH     |
 
 ### Proposed System Prompt Structure
 
@@ -417,15 +431,12 @@ When invoked from worker/code-agent, /linear operates in NON-INTERACTIVE mode:
  * @param hasChildren - Whether the Linear issue has child subtasks
  * @returns Complete system prompt for non-interactive execution
  */
-export function buildSystemPrompt(
-  params: SystemPromptParams,
-  hasChildren: boolean = false
-): string
+export function buildSystemPrompt(params: SystemPromptParams, hasChildren: boolean = false): string;
 ```
 
 ### New System Prompt Template
 
-```markdown
+````markdown
 [SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 ⚠️ NON-INTERACTIVE MODE: Execute automatically. NEVER ask for confirmation.
@@ -446,24 +457,29 @@ Before ANY code changes, complete these steps in order:
    ```bash
    git branch --show-current
    ```
-   ✅ OK: On feature branch (contains INT-)
-   ❌ FAIL: On 'development' or 'main' → STOP → Create branch first
-   ```bash
-   git fetch origin
-   git checkout -b fix/INT-${issueId} origin/development
-   ```
+````
+
+✅ OK: On feature branch (contains INT-)
+❌ FAIL: On 'development' or 'main' → STOP → Create branch first
+
+```bash
+git fetch origin
+git checkout -b fix/INT-${issueId} origin/development
+```
 
 2. **Check for Child Issues** (determines workflow):
+
    ```javascript
    // Call Linear MCP
-   mcp__linear__list_issues({ parentId: "${parentUuid}", team: "IntexuraOS" })
+   mcp__linear__list_issues({ parentId: '${parentUuid}', team: 'IntexuraOS' });
    ```
+
    ✅ Children exist → Use PARENT EXECUTION MODE (see below)
    ✅ No children → Use STANDARD WORKFLOW
 
 3. **Update Linear State** (signals work started):
    ```javascript
-   mcp__linear__update_issue({ id: "${issueId}", state: "In Progress" })
+   mcp__linear__update_issue({ id: '${issueId}', state: 'In Progress' });
    ```
 
 ---
@@ -484,6 +500,7 @@ ${hasChildren ? PARENT_EXECUTION_MODE : STANDARD_WORKFLOW}
 [CI FAILURE HANDLING]
 
 When `pnpm run ci:tracked` fails:
+
 1. Capture: `pnpm run ci:tracked 2>&1 | tee /tmp/ci-fail.txt`
 2. Analyze: `bat /tmp/ci-fail.txt` or `rg "error|FAIL" /tmp/ci-fail.txt -C3`
 3. Fix: ALL errors (even in other workspaces - ownership mindset)
@@ -495,6 +512,7 @@ When `pnpm run ci:tracked` fails:
 [EXECUTION CHECKLIST]
 
 After completing work:
+
 - [ ] All Test Requirements implemented
 - [ ] pnpm run ci:tracked passes (all 4 checks)
 - [ ] Changes committed with [INT-${issueId}] prefix
@@ -515,7 +533,8 @@ ${sanitizedPrompt}
 [END OF PROMPT]
 
 Execute automatically. Complete all checkpoints. NEVER ask for confirmation.
-```
+
+````
 
 ### Parent Execution Mode Section
 
@@ -540,7 +559,7 @@ This issue has ${childCount} child subtasks. Use parent workflow:
 3. Report completion with summary of all children
 
 **Child Order:** Execute by tier number (tier-0 → tier-1 → tier-2)
-```
+````
 
 ### Standard Workflow Section
 
@@ -552,6 +571,7 @@ This issue has ${childCount} child subtasks. Use parent workflow:
 **Execution:** Complete requirements, then create PR
 
 **After Implementation:**
+
 1. Run CI: `pnpm run ci:tracked`
 2. Commit with issue ID in message
 3. Push to remote
@@ -566,6 +586,7 @@ This issue has ${childCount} child subtasks. Use parent workflow:
 ### Current Gap
 
 The orchestrator creates a worker with a single system prompt, but:
+
 - No detection of whether the Linear issue has children
 - No special handling for parent execution mode
 - Worker may create multiple branches/PRs instead of one
@@ -824,42 +845,42 @@ This Linear issue has child subtasks. Use parent workflow:
 
 ### Phase 1: Foundation (Critical Fixes)
 
-| Task | File | Change |
-|------|------|--------|
-| Fix double prompt | `docker-provider.ts` | Use `systemPrompt` only, not `systemPrompt + prompt` |
-| Add hasChildren detection | `task-dispatcher.ts` | Query Linear API for children before building prompt |
-| Add parent/standard workflows | `system-prompt.ts` | Separate workflow sections |
-| Remove "but/however" keywords | `system-prompt.ts` | Update FORBIDDEN_KEYWORDS array |
-| Add NON-INTERACTIVE declaration | `system-prompt.ts` | Add to system context |
-| Emphasize branch check | `system-prompt.ts` | Move to PRE-FLIGHT section |
+| Task                            | File                 | Change                                               |
+| ------------------------------- | -------------------- | ---------------------------------------------------- |
+| Fix double prompt               | `docker-provider.ts` | Use `systemPrompt` only, not `systemPrompt + prompt` |
+| Add hasChildren detection       | `task-dispatcher.ts` | Query Linear API for children before building prompt |
+| Add parent/standard workflows   | `system-prompt.ts`   | Separate workflow sections                           |
+| Remove "but/however" keywords   | `system-prompt.ts`   | Update FORBIDDEN_KEYWORDS array                      |
+| Add NON-INTERACTIVE declaration | `system-prompt.ts`   | Add to system context                                |
+| Emphasize branch check          | `system-prompt.ts`   | Move to PRE-FLIGHT section                           |
 
 ### Phase 2: Template Validation
 
-| Task | Component | Description |
-|------|-----------|-------------|
-| Validation function | Linear skill | Check all required sections present |
-| Validation error messages | Linear skill | Specific feedback on what's missing |
-| Stop on invalid issue | Linear skill | Don't proceed to execution if validation fails |
-| User override mechanism | Linear skill | Allow "Execute anyway" to bypass |
+| Task                      | Component    | Description                                    |
+| ------------------------- | ------------ | ---------------------------------------------- |
+| Validation function       | Linear skill | Check all required sections present            |
+| Validation error messages | Linear skill | Specific feedback on what's missing            |
+| Stop on invalid issue     | Linear skill | Don't proceed to execution if validation fails |
+| User override mechanism   | Linear skill | Allow "Execute anyway" to bypass               |
 
 ### Phase 3: /linear Skill Non-Interactive Mode
 
-| Task | Component | Description |
-|------|-----------|-------------|
-| Detect execution context | Linear skill | Determine if running in worker vs CLI |
-| Remove user prompts | Linear skill workflows | Eliminate "Should I?" style questions |
-| Auto-completion | Linear skill workflows | Commit → push → PR → In Review automatically |
-| Update templates | Linear skill templates | Add non-interactive variant guidance |
+| Task                     | Component              | Description                                  |
+| ------------------------ | ---------------------- | -------------------------------------------- |
+| Detect execution context | Linear skill           | Determine if running in worker vs CLI        |
+| Remove user prompts      | Linear skill workflows | Eliminate "Should I?" style questions        |
+| Auto-completion          | Linear skill workflows | Commit → push → PR → In Review automatically |
+| Update templates         | Linear skill templates | Add non-interactive variant guidance         |
 
 ### Phase 4: Testing & Documentation
 
-| Task | Description |
-|------|-------------|
-| System prompt tests | Test both standard and parent execution modes |
-| Validation tests | Ensure all required sections checked |
-| E2E worker tests | Verify full flow with parent/child issues |
-| Update CLAUDE.md | Document new execution model |
-| Update Linear SKILL.md | Add non-interactive mode documentation |
+| Task                   | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| System prompt tests    | Test both standard and parent execution modes |
+| Validation tests       | Ensure all required sections checked          |
+| E2E worker tests       | Verify full flow with parent/child issues     |
+| Update CLAUDE.md       | Document new execution model                  |
+| Update Linear SKILL.md | Add non-interactive mode documentation        |
 
 ---
 
@@ -879,9 +900,7 @@ interface ValidationError {
   severity: 'error' | 'warning';
 }
 
-function validateLinearIssue(
-  issue: LinearIssue
-): ValidationResult {
+function validateLinearIssue(issue: LinearIssue): ValidationResult {
   const errors: ValidationError[] = [];
 
   // Check Test Requirements
@@ -889,7 +908,7 @@ function validateLinearIssue(
     errors.push({
       section: 'Test Requirements',
       message: 'Missing ## Test Requirements section (MANDATORY)',
-      severity: 'error'
+      severity: 'error',
     });
   }
 
@@ -901,8 +920,9 @@ function validateLinearIssue(
     if (!testSection.includes('|') || !testSection.includes('Test Name')) {
       errors.push({
         section: 'Test Requirements',
-        message: 'Test Requirements must be in table format with columns: Test Name, Endpoint/Function, Scenario, Expected',
-        severity: 'error'
+        message:
+          'Test Requirements must be in table format with columns: Test Name, Endpoint/Function, Scenario, Expected',
+        severity: 'error',
       });
     }
   }
@@ -911,32 +931,32 @@ function validateLinearIssue(
   // (similar checks for Original User Instruction, Summary, etc.)
 
   return {
-    valid: errors.filter(e => e.severity === 'error').length === 0,
-    errors
+    valid: errors.filter((e) => e.severity === 'error').length === 0,
+    errors,
   };
 }
 ```
 
 ### Enforcement Points
 
-| Point | When | Action on Fail |
-|-------|------|---------------|
-| Issue creation | `/linear <desc>` | Validate template, warn if incomplete |
-| Worker dispatch | `task-dispatcher.dispatch()` | Validate before creating worker |
-| Pre-commit hook | `git commit` | Check linked issues follow template |
-| CI pipeline | `pnpm run ci` | Optional: lint issue descriptions |
+| Point           | When                         | Action on Fail                        |
+| --------------- | ---------------------------- | ------------------------------------- |
+| Issue creation  | `/linear <desc>`             | Validate template, warn if incomplete |
+| Worker dispatch | `task-dispatcher.dispatch()` | Validate before creating worker       |
+| Pre-commit hook | `git commit`                 | Check linked issues follow template   |
+| CI pipeline     | `pnpm run ci`                | Optional: lint issue descriptions     |
 
 ---
 
 ## Open Questions
 
-| Question | Context | Decision Needed |
-|----------|---------|----------------|
-| Should validation be blocking? | Worker can't wait for user | Yes - stop and report error |
-| How to handle existing invalid issues? | Grandfather clause | Allow override, warn on use |
-| Should we add "code-task" label? | Routing/identification | Yes - helps identify worker-ready issues |
-| Max prompt length? | Current 4000 chars | Keep 4000, make truncation smart |
-| Parent issue child limit? | How many children is too many? | 20 is current MCP limit, use that |
+| Question                               | Context                        | Decision Needed                          |
+| -------------------------------------- | ------------------------------ | ---------------------------------------- |
+| Should validation be blocking?         | Worker can't wait for user     | Yes - stop and report error              |
+| How to handle existing invalid issues? | Grandfather clause             | Allow override, warn on use              |
+| Should we add "code-task" label?       | Routing/identification         | Yes - helps identify worker-ready issues |
+| Max prompt length?                     | Current 4000 chars             | Keep 4000, make truncation smart         |
+| Parent issue child limit?              | How many children is too many? | 20 is current MCP limit, use that        |
 
 ---
 
@@ -947,11 +967,11 @@ function validateLinearIssue(
 
 **Backend Tests (`apps/code-agent/src/__tests__/infra/services/taskDispatcher.test.ts`):**
 
-| Test Name | Endpoint/Function | Scenario | Expected |
-|-----------|-------------------|----------|----------|
-| system prompt includes NON-INTERACTIVE | buildSystemPrompt() | hasChildren=false, code-task mode | Contains "NON-INTERACTIVE MODE" |
-| parent execution mode detected | buildSystemPrompt() | hasChildren=true | Contains PARENT_EXECUTION_MODE section |
-| branch check emphasized | buildSystemPrompt() | Any mode | PRE-FLIGHT section before GIT WORKFLOW |
+| Test Name                              | Endpoint/Function   | Scenario                          | Expected                               |
+| -------------------------------------- | ------------------- | --------------------------------- | -------------------------------------- |
+| system prompt includes NON-INTERACTIVE | buildSystemPrompt() | hasChildren=false, code-task mode | Contains "NON-INTERACTIVE MODE"        |
+| parent execution mode detected         | buildSystemPrompt() | hasChildren=true                  | Contains PARENT_EXECUTION_MODE section |
+| branch check emphasized                | buildSystemPrompt() | Any mode                          | PRE-FLIGHT section before GIT WORKFLOW |
 
 **Frontend Tests:** N/A
 
@@ -1006,13 +1026,16 @@ Update the worker system prompt to support non-interactive execution mode and pr
 ## Files to Modify
 
 **Primary Changes:**
+
 - `workers/orchestrator/src/services/system-prompt.ts` - Add workflow variants, hasChildren parameter
 
 **Secondary Changes:**
+
 - `workers/orchestrator/src/services/isolation/docker-provider.ts` - Remove duplicate prompt
 - `workers/orchestrator/src/services/task-dispatcher.ts` - Add Linear API calls for child detection
 
 **Tests to Add/Modify:**
+
 - `workers/orchestrator/src/services/__tests__/system-prompt.test.ts` - Test all variants
 
 ---
@@ -1035,6 +1058,7 @@ Update the worker system prompt to support non-interactive execution mode and pr
 **Blocked By:** None
 
 **Blocks:**
+
 - [INT-XXX] Linear skill non-interactive mode updates
 
 ---
@@ -1042,6 +1066,7 @@ Update the worker system prompt to support non-interactive execution mode and pr
 ## Technical Context
 
 The worker system prompt is currently built for interactive execution but runs in a non-interactive Docker container. This causes:
+
 - Workers stopping to ask for confirmation that never comes
 - No handling of parent issues with children
 - Ambiguous instructions leading to development commits
@@ -1066,6 +1091,7 @@ The orchestrator has access to Linear API and can detect child issues before bui
 **Last Updated:** 2026-02-05
 
 **Key Changes from v1.0:**
+
 - Added two-phase execution model (Design/Validation → Execution)
 - Emphasized that Linear skill is for non-specialized agents
 - Refined scope to 4 specific deliverables
