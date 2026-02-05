@@ -1,0 +1,336 @@
+/**
+ * GitHub webhook event parser.
+ *
+ * Normalizes GitHub webhook payloads into our GitHubPREvent domain model.
+ * Handles pull_request, pull_request_review, pull_request_review_comment, and push events.
+ */
+
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+/* eslint-disable @typescript-eslint/no-base-to-string */
+/* eslint-disable @typescript-eslint/dot-notation */
+
+import type { Result } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
+import type {
+  CreateGitHubPREventInput,
+  GitHubEventType,
+  GitHubPRAction,
+} from '../domain/models/gitHubPREvent.js';
+
+// Supported GitHub event types
+const ALLOWED_REPOS = /^[\w-]+\/intexuraos$/;
+const INT_EXURAOS_ORG_REPOS = /^intexuraos\/[\w-]+$/;
+
+/**
+ * Check if a repository should be processed.
+ * Only processes intexuraos/* repositories.
+ */
+export function shouldProcessRepository(repositoryFullName: string): boolean {
+  return (
+    INT_EXURAOS_ORG_REPOS.test(repositoryFullName) ||
+    ALLOWED_REPOS.test(repositoryFullName)
+  );
+}
+
+/**
+ * Extract sender information from a GitHub webhook payload.
+ */
+function extractSender(payload: unknown): Result<
+  { login: string; id: number; type: string },
+  { code: 'INVALID_PAYLOAD'; message: string }
+> {
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    !('sender' in payload) ||
+    !payload.sender ||
+    typeof payload.sender !== 'object'
+  ) {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing or invalid sender' });
+  }
+
+  const sender = payload.sender as Record<string, unknown>;
+
+  const login = sender['login'];
+  const id = sender['id'];
+  const type = sender['type'] ?? 'User';
+
+  if (typeof login !== 'string') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid sender login' });
+  }
+
+  if (typeof id !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid sender id' });
+  }
+
+  return ok({ login, id, type: String(type) });
+}
+
+/**
+ * Parse a pull_request event payload.
+ */
+export function parsePullRequestEvent(
+  payload: unknown
+): Result<CreateGitHubPREventInput, { code: 'INVALID_PAYLOAD'; message: string }> {
+  if (!payload || typeof payload !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Payload is not an object' });
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  // Extract required fields
+  const senderResult = extractSender(payload);
+  if (!senderResult.ok) {
+    return senderResult;
+  }
+
+  const action = p['action'];
+  const repository = p['repository'];
+  const pullRequest = p['pull_request'];
+
+  if (!repository || typeof repository !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing repository' });
+  }
+
+  const repo = repository as Record<string, unknown>;
+  const repoName = repo['full_name'];
+  const repoId = repo['id'];
+
+  if (typeof repoName !== 'string' || typeof repoId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid repository data' });
+  }
+
+  if (!pullRequest || typeof pullRequest !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing pull_request' });
+  }
+
+  const pr = pullRequest as Record<string, unknown>;
+  const prNumber = pr['number'];
+  const prId = pr['id'];
+  const prTitle = pr['title'] ?? null;
+  const prBody = pr['body'] ?? null;
+  const prState = pr['state'] ?? null;
+  const prMergedAt = pr['merged_at'];
+
+  if (typeof prNumber !== 'number' || typeof prId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data' });
+  }
+
+  const createdAt = p['created_at'] ?? new Date().toISOString();
+
+  // Validate action is a known GitHubPRAction or null
+  const validatedAction =
+    typeof action === 'string' && isValidGitHubPRAction(action) ? action : null;
+
+  return ok({
+    githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    repository: repoName,
+    repositoryId: repoId,
+    pullRequestNumber: prNumber,
+    pullRequestId: prId,
+    eventType: 'pull_request' as GitHubEventType,
+    action: validatedAction,
+    senderLogin: senderResult.value.login,
+    senderId: senderResult.value.id,
+    senderType: senderResult.value.type,
+    title: typeof prTitle === 'string' ? prTitle : null,
+    body: typeof prBody === 'string' ? prBody : null,
+    state: typeof prState === 'string' ? prState : null,
+    mergedAt:
+      prMergedAt && typeof prMergedAt === 'string'
+        ? new Date(prMergedAt)
+        : prMergedAt instanceof Date
+          ? prMergedAt
+          : null,
+    createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
+    payload,
+  });
+}
+
+/**
+ * Type guard to check if a string is a valid GitHubPRAction.
+ */
+function isValidGitHubPRAction(value: string): value is GitHubPRAction {
+  const validActions: GitHubPRAction[] = [
+    'opened',
+    'closed',
+    'edited',
+    'synchronized',
+    'ready_for_review',
+    'converted_to_draft',
+    'submitted',
+    'dismissed',
+    'created',
+    'deleted',
+  ];
+  return validActions.includes(value as GitHubPRAction);
+}
+
+/**
+ * Parse a pull_request_review event payload.
+ */
+export function parsePullRequestReviewEvent(
+  payload: unknown
+): Result<CreateGitHubPREventInput, { code: 'INVALID_PAYLOAD'; message: string }> {
+  if (!payload || typeof payload !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Payload is not an object' });
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  const senderResult = extractSender(payload);
+  if (!senderResult.ok) {
+    return senderResult;
+  }
+
+  const action = p['action'];
+  const repository = p['repository'];
+  const pullRequest = p['pull_request'];
+  const review = p['review'];
+
+  if (!repository || typeof repository !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing repository' });
+  }
+
+  const repo = repository as Record<string, unknown>;
+  const repoName = repo['full_name'];
+  const repoId = repo['id'];
+
+  if (typeof repoName !== 'string' || typeof repoId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid repository data' });
+  }
+
+  if (!pullRequest || typeof pullRequest !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing pull_request' });
+  }
+
+  const pr = pullRequest as Record<string, unknown>;
+  const prNumber = pr['number'];
+  const prId = pr['id'];
+  const prTitle = pr['title'] ?? null;
+
+  // Get review body if available, otherwise fall back to PR body
+  let prBody: unknown = null;
+  if (review && typeof review === 'object') {
+    const reviewObj = review as Record<string, unknown>;
+    prBody = reviewObj['body'] ?? pr['body'];
+  } else {
+    prBody = pr['body'];
+  }
+  prBody = prBody ?? null;
+
+  const prState = pr['state'] ?? null;
+  const prMergedAt = pr['merged_at'];
+
+  if (typeof prNumber !== 'number' || typeof prId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data' });
+  }
+
+  const createdAt = p['created_at'] ?? new Date().toISOString();
+
+  // Validate action is a known GitHubPRAction or null
+  const validatedAction =
+    typeof action === 'string' && isValidGitHubPRAction(action) ? action : null;
+
+  return ok({
+    githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    repository: repoName,
+    repositoryId: repoId,
+    pullRequestNumber: prNumber,
+    pullRequestId: prId,
+    eventType: 'pull_request_review' as GitHubEventType,
+    action: validatedAction,
+    senderLogin: senderResult.value.login,
+    senderId: senderResult.value.id,
+    senderType: senderResult.value.type,
+    title: typeof prTitle === 'string' ? prTitle : null,
+    body: typeof prBody === 'string' ? prBody : null,
+    state: typeof prState === 'string' ? prState : null,
+    mergedAt:
+      prMergedAt && typeof prMergedAt === 'string'
+        ? new Date(prMergedAt)
+        : null,
+    createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
+    payload,
+  });
+}
+
+/**
+ * Parse a push event payload.
+ * Push events are optional for context, so we return null if not PR-related.
+ */
+export function parsePushEvent(
+  payload: unknown
+): Result<CreateGitHubPREventInput | null, { code: 'INVALID_PAYLOAD'; message: string }> {
+  if (!payload || typeof payload !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Payload is not an object' });
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  const senderResult = extractSender(payload);
+  if (!senderResult.ok) {
+    return senderResult;
+  }
+
+  const repository = p['repository'];
+  const ref = p['ref'];
+
+  if (!repository || typeof repository !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing repository' });
+  }
+
+  const repo = repository as Record<string, unknown>;
+  const repoName = repo['full_name'];
+  const repoId = repo['id'];
+
+  if (typeof repoName !== 'string' || typeof repoId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid repository data' });
+  }
+
+  // Push events don't have a PR number, use 0 as placeholder
+  // These are stored for context but won't appear in PR-specific queries
+  const createdAt = p['created_at'] ?? new Date().toISOString();
+
+  return ok({
+    githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    repository: repoName,
+    repositoryId: repoId,
+    pullRequestNumber: 0, // Push events are not PR-specific
+    pullRequestId: 0,
+    eventType: 'push' as GitHubEventType,
+    action: null,
+    senderLogin: senderResult.value.login,
+    senderId: senderResult.value.id,
+    senderType: senderResult.value.type,
+    title: `Push to ${typeof ref === 'string' ? ref.replace('refs/heads/', '') : 'unknown'}`,
+    body: null,
+    state: null,
+    mergedAt: null,
+    createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
+    payload,
+  });
+}
+
+/**
+ * Parse a GitHub webhook event based on the event type.
+ */
+export function parseGitHubWebhookEvent(
+  eventType: string,
+  payload: unknown
+): Result<CreateGitHubPREventInput | null, { code: 'INVALID_PAYLOAD'; message: string }> {
+  switch (eventType) {
+    case 'pull_request':
+      return parsePullRequestEvent(payload);
+    case 'pull_request_review':
+      return parsePullRequestReviewEvent(payload);
+    case 'push':
+      return parsePushEvent(payload);
+    case 'ping':
+      // Ping events don't need to be stored
+      return ok(null);
+    default:
+      // Unknown event type, ignore
+      return ok(null);
+  }
+}
