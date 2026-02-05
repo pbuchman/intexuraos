@@ -18,6 +18,8 @@ import type {
   ValidatedIssue,
   GenerateTitleRequest,
   GeneratedTitle,
+  AddCommentRequest,
+  AddCommentResponse,
   LinearAgentError,
 } from '../../domain/ports/linearAgentClient.js';
 
@@ -290,6 +292,77 @@ export function createLinearAgentHttpClient(
         /* v8 ignore stop @preserve */
 
         logger.error({ error }, 'linear-agent generateTitle request failed');
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
+    async addComment(request: AddCommentRequest): Promise<Result<AddCommentResponse, LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.issueId)}/comments`;
+
+      logger.info({ issueId: request.issueId }, 'Adding comment to Linear issue');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
+          },
+          body: JSON.stringify({ body: request.body }),
+          signal: controller.signal,
+        });
+
+        /* v8 ignore start -- test-infra: HTTP error responses require mock setup @preserve */
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.error({ status: response.status, error: errorText }, 'linear-agent addComment failed');
+
+          if (response.status === 429) {
+            return err({ code: 'RATE_LIMITED', message: 'Linear API rate limited' });
+          }
+          if (response.status >= 500) {
+            return err({ code: 'UNAVAILABLE', message: 'linear-agent unavailable' });
+          }
+          return err({ code: 'INVALID_REQUEST', message: errorText });
+        }
+        /* v8 ignore stop @preserve */
+
+        const body = await response.json() as {
+          success: boolean;
+          data?: {
+            id: string;
+          };
+        };
+
+        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
+        if (!body.success || body.data === undefined) {
+          logger.error({ body }, 'Invalid response from linear-agent');
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+        /* v8 ignore stop @preserve */
+
+        logger.info({ issueId: request.issueId, commentId: body.data.id }, 'Comment added to Linear issue');
+
+        return ok({
+          commentId: body.data.id,
+        });
+      } catch (error) {
+        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.error({ timeoutMs }, 'linear-agent request timed out');
+          return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
+        }
+        /* v8 ignore stop @preserve */
+
+        logger.error({ error }, 'linear-agent addComment request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
       } finally {
         clearTimeout(timeoutId);

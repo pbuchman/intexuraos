@@ -1081,4 +1081,41 @@ describe('TaskDispatcher', () => {
       expect(ids).toContain('test-task');
     });
   });
+
+  describe('retriedFrom handling', () => {
+    it('should store retriedFrom when provided in payload', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'retry-task-1',
+        workerType: 'auto',
+        prompt: 'Retry test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        retriedFrom: 'original-task-abc',
+      };
+
+      const result = await dispatcher.submitTask(request);
+
+      expect(result.ok).toBe(true);
+      const task = await dispatcher.getTask('retry-task-1');
+      expect(task).not.toBeNull();
+      expect(task?.retriedFrom).toBe('original-task-abc');
+    });
+
+    it('should handle missing retriedFrom gracefully', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'normal-task-1',
+        workerType: 'auto',
+        prompt: 'Normal task prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+      };
+
+      const result = await dispatcher.submitTask(request);
+
+      expect(result.ok).toBe(true);
+      const task = await dispatcher.getTask('normal-task-1');
+      expect(task).not.toBeNull();
+      expect(task?.retriedFrom).toBeUndefined();
+    });
+  });
 });

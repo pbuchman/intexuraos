@@ -49,6 +49,16 @@ export interface GeneratedTitle {
   issueType: 'feature' | 'bug' | 'refactor' | 'research';
 }
 
+export interface AddCommentRequest {
+  userId: string;
+  issueId: string;
+  body: string;
+}
+
+export interface AddCommentResponse {
+  commentId: string;
+}
+
 export interface LinearAgentError {
   code: 'UNAVAILABLE' | 'RATE_LIMITED' | 'INVALID_REQUEST' | 'NOT_FOUND' | 'UNKNOWN';
   message: string;
@@ -78,4 +88,10 @@ export interface LinearAgentClient {
    * Returns generated title with issue type classification.
    */
   generateTitle(request: GenerateTitleRequest): Promise<Result<GeneratedTitle, LinearAgentError>>;
+
+  /**
+   * Add a comment to an existing Linear issue.
+   * Used for adding retry context when retrying failed tasks.
+   */
+  addComment(request: AddCommentRequest): Promise<Result<AddCommentResponse, LinearAgentError>>;
 }
