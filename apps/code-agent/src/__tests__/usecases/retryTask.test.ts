@@ -574,7 +574,11 @@ describe('retryTask use case', () => {
       // It should be logged and the task should still be created
       expect(result.ok).toBe(true);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.anything() }),
+        expect.objectContaining({
+          errorCode: expect.any(String),
+          errorMessage: expect.any(String),
+          linearIssueId,
+        }),
         'Failed to update Linear issue to In Progress'
       );
     });
@@ -803,6 +807,136 @@ describe('retryTask use case', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: retryTaskId }),
         'Failed to update retry task with cancel nonce'
+      );
+    });
+
+    it('should continue when active task check fails with database error', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      // Repository returns error for active task check
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        err({ code: 'DATABASE_ERROR', message: 'Could not check active tasks' })
+      );
+
+      // Setup all other successful mocks
+      const retryTaskId = 'retry-task-db-check-fail';
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'http://localhost:3000',
+              enabled: true,
+              cfAccessClientId: undefined,
+              cfAccessClientSecret: undefined,
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+        })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({
+          orchestratorTaskId: 'orch-123',
+          workerLocation: 'home-mac',
+        })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+      mockWhatsAppNotifier.notifyTaskStarted.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+      mockMetricsClient.incrementTasksSubmitted.mockResolvedValue(undefined);
+
+      const deps = createDeps();
+      const result = await retryTask(deps, {
+        originalTaskId,
+        userId,
+      });
+
+      // Should still proceed with retry - this is intentional behavior
+      // Better to allow retry than to block on a database check
+      expect(result.ok).toBe(true);
+
+      // Verify error was logged
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueId,
+          error: { code: 'DATABASE_ERROR', message: 'Could not check active tasks' },
+        }),
+        'Failed to check for active tasks on Linear issue, proceeding with retry'
+      );
+    });
+
+    it('should continue successfully when metrics recording fails', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+
+      // Setup all successful mocks
+      const retryTaskId = 'retry-task-metrics-fail';
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'http://localhost:3000',
+              enabled: true,
+              cfAccessClientId: undefined,
+              cfAccessClientSecret: undefined,
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+        })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({
+          orchestratorTaskId: 'orch-123',
+          workerLocation: 'home-mac',
+        })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+      mockWhatsAppNotifier.notifyTaskStarted.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+
+      // Make metrics fail
+      mockMetricsClient.incrementTasksSubmitted.mockRejectedValue(
+        new Error('Metrics service unavailable')
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, {
+        originalTaskId,
+        userId,
+      });
+
+      // Should still succeed despite metrics failure
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe(retryTaskId);
+      }
+
+      // Verify warning was logged for metrics failure
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: retryTaskId,
+          error: expect.anything(),
+        }),
+        'Failed to record task submission metric for retry'
       );
     });
   });
