@@ -505,7 +505,7 @@ function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
                 {log.tool !== undefined ? (
                   <span className="text-blue-400 shrink-0">[{log.tool}]</span>
                 ) : null}
-                <span className="text-slate-200 break-all">{log.message}</span>
+                <span className="text-slate-200 break-all whitespace-pre-wrap">{log.message}</span>
               </div>
             ))}
             <div ref={logsEndRef} />
