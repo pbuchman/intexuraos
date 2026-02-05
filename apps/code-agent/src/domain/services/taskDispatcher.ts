@@ -39,6 +39,8 @@ export interface DispatchRequest {
   workerCredentials: DispatchWorkerCredentials;
   /** Optional health statuses for filtering workers. Only healthy workers will be tried first. */
   workerHealthStatuses?: Record<string, { healthy: boolean }>;
+  /** For retried tasks: points to the original task ID that this task is retrying. */
+  retriedFrom?: string;
 }
 
 /**

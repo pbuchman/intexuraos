@@ -34,6 +34,7 @@ import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js'
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../domain/services/rateLimitService.js';
 import type { LinearIssueService } from '../domain/services/linearIssueService.js';
+import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
@@ -101,6 +102,11 @@ describe('OpenAPI contract', () => {
         logger,
       }),
       actionsAgentClient,
+      linearAgentClient: createLinearAgentHttpClient({
+        baseUrl: 'http://linear-agent:8086',
+        internalAuthToken: 'test-token',
+        timeoutMs: 10000,
+      }, logger),
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
         logger,
@@ -136,6 +142,7 @@ describe('OpenAPI contract', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearAgentClient: LinearAgentClient;
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;

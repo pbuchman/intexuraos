@@ -22,6 +22,11 @@ export interface CreateTaskInput {
   linearIssueTitle?: string;
   linearFallback?: boolean;
   webhookSecret?: string;
+  /**
+   * For retried tasks: points to the original task ID that this task is retrying.
+   * Used for tracking retry chains and debugging.
+   */
+  retriedFrom?: string;
 }
 
 export interface UpdateTaskInput {

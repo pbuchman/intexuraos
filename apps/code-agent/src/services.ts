@@ -26,12 +26,12 @@ import { createUserUsageFirestoreRepository } from './infra/firestore/userUsageF
 import { createRateLimitService } from './domain/services/rateLimitService.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
+import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
 import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './domain/usecases/cleanupTaskLogs.js';
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
-import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
 import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
 
@@ -43,6 +43,7 @@ export interface ServiceContainer {
   taskDispatcher: TaskDispatcherService;
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
+  linearAgentClient: LinearAgentClient;
   rateLimitService: RateLimitService;
   linearIssueService: LinearIssueService;
   statusMirrorService: StatusMirrorService;
@@ -116,6 +117,12 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         issueType: 'feature',
       }));
     },
+    addComment(request): ReturnType<LinearAgentClient['addComment']> {
+      logger.info({ issueId: request.issueId }, '[E2E] Mock Linear comment addition');
+      return Promise.resolve(ok({
+        commentId: `comment-${String(Date.now())}`,
+      }));
+    },
   };
 }
 
@@ -186,6 +193,7 @@ export function initServices(config: ServiceConfig): void {
       whatsappPublisher,
     }),
     actionsAgentClient,
+    linearAgentClient,
     statusMirrorService: createStatusMirrorService({
       actionsAgentClient,
       logger,
