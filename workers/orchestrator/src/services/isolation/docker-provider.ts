@@ -256,22 +256,27 @@ export class DockerProvider implements IsolationProvider {
     return handle;
   }
 
-  async destroyWorker(taskId: string): Promise<void> {
+  async destroyWorker(taskId: string, forceKill = false): Promise<void> {
     const worker = this.workers.get(taskId);
     if (worker === undefined) {
       this.logger.warn({ taskId }, 'Worker not found for destroy');
       return;
     }
 
-    this.logger.info({ taskId }, 'Destroying worker container');
+    this.logger.info({ taskId, forceKill }, 'Destroying worker container');
 
     try {
       const container = this.docker.getContainer(worker.containerId);
 
       try {
-        await container.stop({ t: 10 });
+        // Force kill (SIGKILL) for timeout scenarios, graceful stop otherwise
+        if (forceKill) {
+          await container.kill({ signal: 'SIGKILL' });
+        } else {
+          await container.stop({ t: 10 });
+        }
       } catch {
-        this.logger.debug({ taskId }, 'Stop failed (may already be stopped)');
+        this.logger.debug({ taskId }, 'Stop/kill failed (may already be stopped)');
       }
 
       try {
@@ -351,10 +356,13 @@ export class DockerProvider implements IsolationProvider {
     const container = this.docker.getContainer(worker.containerId);
 
     return await new Promise((resolve) => {
+      let timeoutFired = false;
+
       const timeout = setTimeout(() => {
-        this.logger.warn({ taskId }, 'Worker timeout, destroying');
+        timeoutFired = true;
+        this.logger.warn({ taskId }, 'Worker timeout, force killing');
         worker.handle.status = 'timeout';
-        void this.destroyWorker(taskId).then(() => {
+        void this.destroyWorker(taskId, true).then(() => {
           resolve(-1);
         });
       }, timeoutMs);
@@ -363,13 +371,19 @@ export class DockerProvider implements IsolationProvider {
         .wait()
         .then((data) => {
           clearTimeout(timeout);
-          resolve(data.StatusCode);
+          // Don't resolve if timeout already fired (race condition)
+          if (!timeoutFired) {
+            resolve(data.StatusCode);
+          }
         })
         /* v8 ignore start -- async-timing: catch block for Docker SDK error, hard to trigger in tests @preserve */
         .catch((err: unknown) => {
           clearTimeout(timeout);
-          this.logger.error({ taskId, error: err }, 'Wait error');
-          resolve(-1);
+          // Don't resolve if timeout already fired (race condition)
+          if (!timeoutFired) {
+            this.logger.error({ taskId, error: err }, 'Wait error');
+            resolve(-1);
+          }
         });
       /* v8 ignore stop @preserve */
     });
