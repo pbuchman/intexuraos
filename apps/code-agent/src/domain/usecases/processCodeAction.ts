@@ -216,12 +216,12 @@ export async function processCodeAction(
   // Only include linear issue fields if we have them
   /* v8 ignore start -- ts-type: type narrowing branch for optional linear issue fields, requires complex setup @preserve */
   if (finalLinearIssueId !== undefined) {
-  /* v8 ignore stop @preserve */
     createInput.linearIssueId = finalLinearIssueId;
     createInput.linearIssueTitle = linearIssueTitle;
     createInput.linearIssueLabels = linearIssueLabels;
     createInput.hasChildren = hasChildren;
   }
+  /* v8 ignore stop @preserve */
 
   const createResult = await codeTaskRepo.create(createInput);
 

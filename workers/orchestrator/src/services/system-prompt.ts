@@ -156,7 +156,7 @@ function buildPhase2Prompt(params: SystemPromptParams): string {
     ? `
 
 [PARENT EXECUTION MODE]
-This issue has ${String(hasChildren)} child issue(s). You must execute ALL children continuously without stopping between them:
+This issue has child subtasks. You must execute ALL children continuously without stopping between them:
 - Use single branch for all children
 - Create PR early (before first child)
 - After EACH child: commit → push → update PR description
@@ -169,7 +169,7 @@ This issue has ${String(hasChildren)} child issue(s). You must execute ALL child
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 Task ID: ${taskId}
 Worktree: ${worktreePath}
-/* v8 ignore start -- ts-type: optional linearIssueId template conditional @preserve */
+/* v8 ignore start -- test-infra: linear issue template conditional requires Linear API mock @preserve */
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 /* v8 ignore stop @preserve */
 
@@ -177,7 +177,7 @@ ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 You are in **NON-INTERACTIVE MODE**. Execute the task autonomously.
 
 ### Mandatory First Action
-/* v8 ignore start -- ts-type: optional linearIssueId nullish coalescing @preserve */
+/* v8 ignore start -- test-infra: linear issue fallback requires Linear API mock @preserve */
 /linear ${linearIssueId ?? 'your-issue-id'}
 /* v8 ignore stop @preserve */
 
