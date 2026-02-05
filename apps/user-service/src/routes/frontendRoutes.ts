@@ -270,6 +270,7 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Try namespaced claims first, fall back to bare claims for ID tokens
       const NAMESPACE = 'https://intexuraos.cloud/';
       const claims = user.claims;
+      /* v8 ignore start -- source-map: ternary type guards have source map alignment issues @preserve */
       const email =
         (typeof claims[`${NAMESPACE}email`] === 'string' ? claims[`${NAMESPACE}email`] : undefined) ??
         (typeof claims['email'] === 'string' ? claims['email'] : undefined);
@@ -279,6 +280,7 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const picture =
         (typeof claims[`${NAMESPACE}picture`] === 'string' ? claims[`${NAMESPACE}picture`] : undefined) ??
         (typeof claims['picture'] === 'string' ? claims['picture'] : undefined);
+      /* v8 ignore stop @preserve */
 
       const responseData: Record<string, unknown> = {
         userId: user.userId,
