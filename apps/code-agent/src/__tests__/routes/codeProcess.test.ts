@@ -387,6 +387,22 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       value: { dispatched: true, workerLocation: 'mac' },
     });
 
+    // Mock linearAgentClient.validateIssue to succeed for both INT-123 and INT-456
+    // This is needed because Critical Fix 1 now returns error when user-provided issue ID can't be validated
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    const validateIssueSpy = vi.spyOn(services.linearAgentClient, 'validateIssue').mockResolvedValue({
+      ok: true,
+      value: {
+        id: 'uuid-123',
+        identifier: 'INT-123',
+        title: 'First Issue',
+        url: 'https://linear.app/intexuraos/INT-123',
+        labels: [],
+        childCount: 0,
+      },
+    });
+
     // First request with linearIssueId
     await app.inject({
       method: 'POST',
@@ -427,6 +443,8 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
     const json = response.json() as { success: boolean; error: { code: string; message: string } };
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('CONFLICT');
+
+    validateIssueSpy.mockRestore();
   });
 
   it('returns 200 with correct resourceUrl format', async () => {

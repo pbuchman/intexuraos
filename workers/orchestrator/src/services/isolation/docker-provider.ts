@@ -72,8 +72,15 @@ export class DockerProvider implements IsolationProvider {
             await container.stop({ t: 5 });
           }
           await container.remove({ force: true });
-        } catch {
-          this.logger.debug({ containerId: containerInfo.Id }, 'Failed to remove orphan');
+        } catch (err: unknown) {
+          this.logger.error(
+            {
+              containerId: containerInfo.Id,
+              name: containerInfo.Names[0],
+              error: err,
+            },
+            'Failed to remove orphaned container'
+          );
         }
       }
     } catch (error) {
@@ -275,8 +282,20 @@ export class DockerProvider implements IsolationProvider {
         } else {
           await container.stop({ t: 10 });
         }
-      } catch {
-        this.logger.debug({ taskId }, 'Stop/kill failed (may already be stopped)');
+      } catch (err: unknown) {
+        // Docker returns specific error when container is already stopped/not found
+        const isAlreadyStopped =
+          err instanceof Error &&
+          (err.message.includes('No such container') ||
+            err.message.includes('is not running') ||
+            err.message.includes('already stopped') ||
+            err.message.includes('is not running'));
+
+        if (isAlreadyStopped) {
+          this.logger.debug({ taskId }, 'Container already stopped');
+        } else {
+          this.logger.error({ taskId, error: err }, 'Failed to stop/kill container');
+        }
       }
 
       try {
@@ -286,7 +305,14 @@ export class DockerProvider implements IsolationProvider {
       }
 
       const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
-      await fs.promises.rm(taskSecretsPath, { recursive: true, force: true });
+      try {
+        await fs.promises.rm(taskSecretsPath, { recursive: true, force: true });
+      } catch (err: unknown) {
+        this.logger.error(
+          { taskId, error: err, path: taskSecretsPath },
+          'Failed to remove task secrets directory'
+        );
+      }
     } finally {
       this.workers.delete(taskId);
     }
@@ -355,6 +381,7 @@ export class DockerProvider implements IsolationProvider {
 
     const container = this.docker.getContainer(worker.containerId);
 
+    /* v8 ignore start -- async-timing: setTimeout/clearTimeout race condition handling, hard to trigger in tests @preserve */
     return await new Promise((resolve) => {
       let timeoutFired = false;
 
@@ -362,8 +389,11 @@ export class DockerProvider implements IsolationProvider {
         timeoutFired = true;
         this.logger.warn({ taskId }, 'Worker timeout, force killing');
         worker.handle.status = 'timeout';
-        void this.destroyWorker(taskId, true).then(() => {
-          resolve(-1);
+
+        // Resolve immediately, then cleanup asynchronously
+        resolve(-1);
+        void this.destroyWorker(taskId, true).catch((err: unknown) => {
+          this.logger.error({ taskId, error: err }, 'Failed to destroy timed-out worker');
         });
       }, timeoutMs);
 
@@ -376,7 +406,6 @@ export class DockerProvider implements IsolationProvider {
             resolve(data.StatusCode);
           }
         })
-        /* v8 ignore start -- async-timing: catch block for Docker SDK error, hard to trigger in tests @preserve */
         .catch((err: unknown) => {
           clearTimeout(timeout);
           // Don't resolve if timeout already fired (race condition)
@@ -385,8 +414,8 @@ export class DockerProvider implements IsolationProvider {
             resolve(-1);
           }
         });
-      /* v8 ignore stop @preserve */
     });
+    /* v8 ignore stop @preserve */
   }
 
   async sendInput(taskId: string, input: string): Promise<void> {

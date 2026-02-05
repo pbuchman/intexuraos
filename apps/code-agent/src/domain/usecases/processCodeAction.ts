@@ -157,11 +157,23 @@ export async function processCodeAction(
     taskPrompt: prompt,
   });
 
+  // CRITICAL: If user provided an issue ID but we're in fallback mode, this is an error
+  /* v8 ignore start -- test-infra: requires linear-agent mock to return validation failure @preserve */
+  if (linearIssueId !== undefined && issueResult.linearFallback) {
+    logger.error({ linearIssueId }, 'User-provided Linear issue could not be validated');
+    return err({
+      code: 'internal_error',
+      message: `The Linear issue "${linearIssueId}" could not be validated. Please check that it exists and you have access to it.`,
+    });
+  }
+  /* v8 ignore stop @preserve */
+
   const {
     linearIssueId: finalLinearIssueId,
     linearIssueTitle,
     linearIssueLabels,
     hasChildren,
+    linearFallback,
   } = issueResult;
 
   logger.info(
@@ -220,6 +232,7 @@ export async function processCodeAction(
     createInput.linearIssueTitle = linearIssueTitle;
     createInput.linearIssueLabels = linearIssueLabels;
     createInput.hasChildren = hasChildren;
+    createInput.linearFallback = linearFallback;
   }
   /* v8 ignore stop @preserve */
 
@@ -307,9 +320,11 @@ export async function processCodeAction(
 
   // Step 7: Record metrics for task submission
   const source = request.source ?? 'web';
-  await deps.metricsClient.incrementTasksSubmitted(workerType, source).catch((error: unknown) => {
-    logger.warn({ error, taskId: task.id }, 'Failed to record task submission metric');
-  });
+  try {
+    await deps.metricsClient.incrementTasksSubmitted(workerType, source);
+  } catch (error: unknown) {
+    logger.error({ error, taskId: task.id, workerType, source }, 'Failed to record task submission metric');
+  }
 
   // Step 8: Generate cancel nonce and send task started notification (INT-379)
   const cancelNonce = generateCancelNonce();

@@ -548,6 +548,44 @@ describe('TaskDispatcher', () => {
       expect(task?.status).toBe('interrupted');
       expect(task?.completedAt).toBeDefined();
     });
+
+    it('prevents race condition when timeout fires before container completes', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'race-test',
+        workerType: 'auto',
+        prompt: 'Test race condition',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await timeoutDispatcher.submitTask(request);
+
+      // Manually mark task as completed to simulate container finishing
+      const state = await timeoutStatePersistence.load();
+      const task = state.tasks['race-test'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await timeoutStatePersistence.save(state);
+
+      // Clear mocks to see what gets called
+      vi.clearAllMocks();
+
+      // Advance past 2h timeout - should NOT send interruption webhook since task is already completed
+      await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
+
+      // Task should still be completed (not interrupted)
+      const finalTask = await timeoutDispatcher.getTask('race-test');
+      expect(finalTask?.status).toBe('completed');
+
+      // No interruption webhook should be sent
+      expect(mockWebhookClient.send).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ status: 'interrupted' }),
+        })
+      );
+    });
   });
 
   describe('Completion Monitoring', () => {
