@@ -505,4 +505,143 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       }
     });
   });
+
+  describe('findAll()', () => {
+    it('should return all events ordered by createdAt desc', async () => {
+      const eventData1: Omit<GitHubPREvent, 'id'> = {
+        githubEventId: 111,
+        repository: 'intexuraos/repo-a',
+        repositoryId: 111111,
+        pullRequestNumber: 1,
+        pullRequestId: 100001,
+        eventType: 'pull_request',
+        action: 'opened',
+        senderLogin: 'user1',
+        senderId: 111,
+        senderType: 'User',
+        title: 'PR 1',
+        body: 'Body 1',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date('2024-01-02T00:00:00Z'),
+        processedAt: new Date('2024-01-02T00:05:00Z'),
+        payload: {},
+      };
+
+      const eventData2: Omit<GitHubPREvent, 'id'> = {
+        githubEventId: 222,
+        repository: 'intexuraos/repo-b',
+        repositoryId: 222222,
+        pullRequestNumber: 2,
+        pullRequestId: 100002,
+        eventType: 'pull_request',
+        action: 'closed',
+        senderLogin: 'user2',
+        senderId: 222,
+        senderType: 'User',
+        title: 'PR 2',
+        body: 'Body 2',
+        state: 'closed',
+        mergedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        processedAt: new Date('2024-01-01T00:05:00Z'),
+        payload: {},
+      };
+
+      const doc1 = createMockDocSnapshot('doc1', eventData1);
+      const doc2 = createMockDocSnapshot('doc2', eventData2);
+
+      const mockQuery = {
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc1, doc2])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findAll();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(2);
+        expect(result.value[0]?.repository).toBe('intexuraos/repo-a');
+        expect(result.value[1]?.repository).toBe('intexuraos/repo-b');
+        expect(mockQuery.orderBy).toHaveBeenCalledWith('createdAt', 'desc');
+        expect(mockQuery.limit).toHaveBeenCalledWith(50);
+      }
+    });
+
+    it('should use custom limit when provided', async () => {
+      const mockQuery = {
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      await repository.findAll(25);
+
+      expect(mockQuery.limit).toHaveBeenCalledWith(25);
+    });
+
+    it('should return empty array when no events found', async () => {
+      const mockQuery = {
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findAll();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+    });
+
+    it('should handle query errors', async () => {
+      const mockQuery = {
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockRejectedValue(new Error('Query failed')),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findAll();
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+        expect(mockLogger.error).toHaveBeenCalled();
+      }
+    });
+  });
 });
