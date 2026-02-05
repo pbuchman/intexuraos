@@ -1150,6 +1150,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Retry test prompt',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
         retriedFrom: 'original-task-abc',
       };
 
@@ -1168,6 +1170,8 @@ describe('TaskDispatcher', () => {
         prompt: 'Normal task prompt',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       const result = await dispatcher.submitTask(request);

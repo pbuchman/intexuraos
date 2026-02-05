@@ -283,6 +283,8 @@ ${additionalContext.trim()}
     traceId?: string;
     workerCredentials: DispatchWorkerCredentials;
     retriedFrom?: string;
+    linearIssueLabels: string[];
+    hasChildren: boolean;
   } = {
     taskId: retryTask.id,
     prompt: retryTask.sanitizedPrompt,
@@ -294,6 +296,8 @@ ${additionalContext.trim()}
     webhookSecret,
     workerCredentials,
     retriedFrom: originalTaskId,
+    linearIssueLabels: originalTask.linearIssueLabels ?? [],
+    hasChildren: originalTask.hasChildren ?? false,
   };
 
   // Only include optional fields if defined
