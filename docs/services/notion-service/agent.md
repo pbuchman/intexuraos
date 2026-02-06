@@ -113,10 +113,10 @@ await disconnectNotion();
 
 ## Internal Endpoints
 
-| Method | Path                     | Purpose                                       |
-| ------ | ------------------------ | --------------------------------------------- |
-| GET    | `/internal/notion/token` | Get Notion token (called by research-agent)   |
-| POST   | `/webhook`               | Handle Notion webhook events                  |
+| Method | Path                     | Purpose                                     |
+| ------ | ------------------------ | ------------------------------------------- |
+| GET    | `/internal/notion/token` | Get Notion token (called by research-agent) |
+| POST   | `/webhook`               | Handle Notion webhook events                |
 
 ---
 

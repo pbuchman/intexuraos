@@ -388,7 +388,10 @@ export async function generateEmbeddings(
 /**
  * Get Firestore instance.
  */
-function getFirestoreClient(): { db: Firestore; FieldValue: typeof import('@google-cloud/firestore').FieldValue } {
+function getFirestoreClient(): {
+  db: Firestore;
+  FieldValue: typeof import('@google-cloud/firestore').FieldValue;
+} {
   const { Firestore, FieldValue } = require('@google-cloud/firestore');
 
   const db = new Firestore({
@@ -536,7 +539,9 @@ async function main(): Promise<void> {
 
   // Filter out empty chunks (OpenAI cannot embed empty strings)
   const validChunks = markdownChunks.filter((c) => c.content.trim().length > 0);
-  console.log(`Filtered to ${validChunks.length} non-empty chunks (removed ${markdownChunks.length - validChunks.length} empty)`);
+  console.log(
+    `Filtered to ${validChunks.length} non-empty chunks (removed ${markdownChunks.length - validChunks.length} empty)`
+  );
 
   // 3. Fetch and parse OpenAPI specs (optional - skip for MVP)
   console.log('\nStep 3: OpenAPI parsing (skipped for MVP)');
