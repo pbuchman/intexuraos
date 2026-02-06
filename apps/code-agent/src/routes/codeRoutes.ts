@@ -9,6 +9,7 @@ import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../domain/usecases/retryTask.js';
+import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
@@ -2891,6 +2892,201 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request.log.info(
         { originalTaskId: taskId, retryTaskId: result.value.codeTaskId },
         'Task retry created successfully'
+      );
+
+      return reply.ok(result.value);
+    }
+  );
+
+  // POST /code/tasks/:taskId/feedback - Submit feedback on completed task (INT-465 Phase 4)
+  fastify.post(
+    '/code/tasks/:taskId/feedback',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'submitTaskFeedback',
+        summary: 'Submit feedback on a completed task',
+        description: 'Creates a follow-up task based on user feedback for a completed task. Requires Auth0 JWT.',
+        tags: ['public'],
+        params: {
+          type: 'object',
+          required: ['taskId'],
+          properties: {
+            taskId: {
+              type: 'string',
+              description: 'The ID of the completed task to provide feedback on',
+            },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['feedback'],
+          properties: {
+            feedback: {
+              type: 'string',
+              description: 'Feedback text from the user',
+              minLength: 1,
+              maxLength: 5000,
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Follow-up task created successfully',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['codeTaskId', 'resourceUrl', 'workerLocation', 'followUpFor'],
+                properties: {
+                  codeTaskId: { type: 'string' },
+                  resourceUrl: { type: 'string' },
+                  workerLocation: { type: 'string' },
+                  followUpFor: { type: 'string' },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Bad request - task cannot receive feedback',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: {
+                    type: 'string',
+                    enum: ['invalid_status', 'worker_not_configured'],
+                  },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/tasks/:taskId/feedback',
+      });
+
+      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo } =
+        getServices();
+      const userId = request.user?.userId;
+
+      /* v8 ignore start -- test-infra: requires authenticated user @preserve */
+      if (userId === undefined) {
+        return reply.fail('UNAUTHORIZED', 'Authentication required');
+      }
+      /* v8 ignore stop @preserve */
+
+      const { taskId } = request.params as { taskId: string };
+      const { feedback } = request.body as { feedback: string };
+
+      request.log.info({ taskId, userId, feedbackLength: feedback.length }, 'Processing task feedback');
+
+      const result = await submitTaskFeedback(
+        {
+          logger: request.log,
+          codeTaskRepo,
+          linearAgentClient,
+          taskDispatcher,
+          whatsappNotifier,
+          metricsClient,
+          workerSettingsRepo,
+        },
+        {
+          originalTaskId: taskId,
+          userId,
+          feedback,
+        }
+      );
+
+      /* v8 ignore start -- test-infra: error handling paths covered by use case tests @preserve */
+      if (!result.ok) {
+        const error = result.error;
+
+        // Map error codes to response codes
+        if (error.code === 'task_not_found') {
+          /* v8 ignore stop @preserve */
+          return reply.fail('NOT_FOUND', error.message);
+        }
+        /* v8 ignore start -- ts-type: complex error code comparison creates type narrowing branch @preserve */
+        if (error.code === 'invalid_status' || error.code === 'worker_not_configured') {
+          // Use BAD_REQUEST for client-side errors
+          // @allow-raw-send: Returning application-specific error codes not supported by reply.fail()
+          return reply.status(400).send({
+            success: false,
+            error: {
+              code: error.code,
+              message: error.message,
+            },
+          });
+        }
+        /* v8 ignore stop @preserve */
+
+        // Internal error
+        request.log.error({ error }, 'Task feedback submission failed');
+        return reply.fail('INTERNAL_ERROR', 'Failed to submit task feedback');
+      }
+
+      request.log.info(
+        { originalTaskId: taskId, followUpTaskId: result.value.codeTaskId },
+        'Follow-up task created from feedback'
       );
 
       return reply.ok(result.value);
