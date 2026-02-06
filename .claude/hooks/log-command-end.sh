@@ -7,6 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMP_DIR="${CLAUDE_CMD_TIMING_DIR:-/tmp/claude-cmd-timing}"
 LOG_FILE="${SCRIPT_DIR}/commands.log"
+SESSION_COMMANDS_FILE="${SCRIPT_DIR}/session-commands.log"
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -61,5 +62,8 @@ fi
 # Also truncate to 500 chars to prevent log bloat
 COMMAND_ESCAPED=$(printf '%s' "$COMMAND" | awk 1 ORS='\\n' | sed 's/\\n$//')
 printf "[%s] %6s %s\n" "$TIMESTAMP_ISO" "${DURATION_SEC}s" "${COMMAND_ESCAPED:0:500}" >> "$LOG_FILE"
+
+# Append to session log (atomic append, safe for concurrent hooks)
+echo "1" >> "$SESSION_COMMANDS_FILE" 2>/dev/null || true
 
 exit 0

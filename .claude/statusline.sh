@@ -261,6 +261,12 @@ elif [ -d ".claude/hooks" ]; then
 fi
 
 if [ -n "$hooks_dir" ]; then
+  # Count session commands (from session-commands.log, cleared at session start)
+  session_cmds=0
+  if [ -f "$hooks_dir/session-commands.log" ]; then
+    session_cmds=$(wc -l < "$hooks_dir/session-commands.log" 2>/dev/null | tr -d ' ' || echo 0)
+  fi
+
   # Count session blocked (from session-blocked.log, cleared at session start)
   session_blocked=0
   if [ -f "$hooks_dir/session-blocked.log" ]; then
@@ -273,9 +279,9 @@ if [ -n "$hooks_dir" ]; then
     total_blocked=$(grep -c "BLOCKED" "$hooks_dir/hooks.log" 2>/dev/null || echo 0)
   fi
 
-  # Show metrics if any blocks exist
-  if [ "$session_blocked" -gt 0 ] || [ "$total_blocked" -gt 0 ]; then
-    hook_metrics="🛡️ ✗${session_blocked} session | ✗${total_blocked} total"
+  # Show metrics if any activity exists
+  if [ "$session_cmds" -gt 0 ] || [ "$session_blocked" -gt 0 ] || [ "$total_blocked" -gt 0 ]; then
+    hook_metrics="🛡️ ✓${session_cmds} ✗${session_blocked} session | ✗${total_blocked} total"
   fi
 fi
 
