@@ -134,6 +134,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_CRAWL4AI_API_KEY: process.env.INTEXURAOS_CRAWL4AI_API_KEY ?? '',
   },
   'chat-agent': {
+    // OpenAI API key for embeddings (from .envrc)
     INTEXURAOS_OPENAI_API_KEY: process.env.INTEXURAOS_OPENAI_API_KEY ?? '',
   },
 };

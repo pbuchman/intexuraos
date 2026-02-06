@@ -14,8 +14,8 @@ let firestoreInstance: Firestore | null = null;
 
 /**
  * Get or create the Firestore client instance.
- * Uses application default credentials in production.
- * In development, uses FIRESTORE_EMULATOR_HOST with demo project.
+ * Uses FIRESTORE_EMULATOR_HOST when set (local development).
+ * Uses Application Default Credentials in production (Cloud Run).
  */
 export function getFirestore(): Firestore {
   if (firestoreInstance === null) {
