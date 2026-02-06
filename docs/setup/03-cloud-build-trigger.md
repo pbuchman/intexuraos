@@ -117,7 +117,6 @@ The pipeline (`cloudbuild/cloudbuild.yaml`) now runs **independent per-service c
 2. `detect-affected` (node:22) — writes `/workspace/affected.json`
 3. Per-service pipelines (each waits only on `detect-affected` → build → push → deploy):
    - `user-service`: `build-user-service` → `push-user-service` → `deploy-user-service`
-   - `promptvault-service`: `build-promptvault-service` → `push-promptvault-service` → `deploy-promptvault-service`
    - `notion-service`: `build-notion-service` → `push-notion-service` → `deploy-notion-service`
    - `whatsapp-service`: `build-whatsapp-service` → `push-whatsapp-service` → `deploy-whatsapp-service`
    - `api-docs-hub`: `build-api-docs-hub` → `push-api-docs-hub` → `deploy-api-docs-hub`
@@ -133,8 +132,7 @@ The `detect-affected.mjs` script determines which services need deployment:
 ```
 packages/common/** → all services
 apps/user-service/** → user-service only
-apps/promptvault-service/** → promptvault-service only
-apps/notion-service/** → notion-service only (reserved)
+apps/notion-service/** → notion-service only
 apps/whatsapp-service/** → whatsapp-service only
 apps/api-docs-hub/** → api-docs-hub only
 apps/web/** → web only

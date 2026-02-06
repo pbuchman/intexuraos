@@ -16,7 +16,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, extname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import type { Firestore } from '@google-cloud/firestore';
+
+const require = createRequire(import.meta.url);
 
 // ============================================================================
 // Utilities
@@ -385,8 +388,11 @@ export async function generateEmbeddings(
 /**
  * Get Firestore instance.
  */
-function getFirestore(): Firestore {
-  const { Firestore } = require('@google-cloud/firestore');
+function getFirestoreClient(): {
+  db: Firestore;
+  FieldValue: typeof import('@google-cloud/firestore').FieldValue;
+} {
+  const { Firestore, FieldValue } = require('@google-cloud/firestore');
 
   const db = new Firestore({
     projectId: process.env.GOOGLE_CLOUD_PROJECT ?? 'intexuraos-dev',
@@ -401,7 +407,7 @@ function getFirestore(): Firestore {
     });
   }
 
-  return db;
+  return { db, FieldValue };
 }
 
 /**
@@ -415,9 +421,10 @@ export function getDocId(filePath: string, section: string): string {
 
 /**
  * Upload chunks to Firestore with upsert semantics.
+ * Uses FieldValue.vector() to store embeddings in the correct format for vector search.
  */
 async function uploadChunks(chunks: EmbeddedChunk[]): Promise<void> {
-  const db = getFirestore();
+  const { db, FieldValue } = getFirestoreClient();
   const collection = db.collection('doc_embeddings');
 
   console.log(`Uploading ${chunks.length} chunks to Firestore...`);
@@ -430,9 +437,9 @@ async function uploadChunks(chunks: EmbeddedChunk[]): Promise<void> {
     const docId = getDocId(chunk.filePath, chunk.section);
     const docRef = collection.doc(docId);
 
-    const data: FirestoreDocChunk = {
+    const data = {
       content: chunk.content,
-      embedding: chunk.embedding,
+      embedding: FieldValue.vector(chunk.embedding),
       filePath: chunk.filePath,
       section: chunk.section,
       docType: chunk.docType,
@@ -460,7 +467,7 @@ async function uploadChunks(chunks: EmbeddedChunk[]): Promise<void> {
  * Clean up stale embeddings (docs that no longer exist).
  */
 async function cleanStaleEmbeddings(currentFilePaths: Set<string>): Promise<void> {
-  const db = getFirestore();
+  const { db } = getFirestoreClient();
   const collection = db.collection('doc_embeddings');
 
   console.log('Cleaning up stale embeddings...');
@@ -530,17 +537,23 @@ async function main(): Promise<void> {
 
   console.log(`Parsed into ${markdownChunks.length} chunks`);
 
+  // Filter out empty chunks (OpenAI cannot embed empty strings)
+  const validChunks = markdownChunks.filter((c) => c.content.trim().length > 0);
+  console.log(
+    `Filtered to ${validChunks.length} non-empty chunks (removed ${markdownChunks.length - validChunks.length} empty)`
+  );
+
   // 3. Fetch and parse OpenAPI specs (optional - skip for MVP)
   console.log('\nStep 3: OpenAPI parsing (skipped for MVP)');
 
   // 4. Generate embeddings
   console.log('\nStep 4: Generating embeddings...');
-  const embeddedChunks = await generateEmbeddings(markdownChunks, openaiApiKey);
+  const embeddedChunks = await generateEmbeddings(validChunks, openaiApiKey);
   console.log(`Generated ${embeddedChunks.length} embeddings`);
 
   // 5. Upload to Firestore
   console.log('\nStep 5: Uploading to Firestore...');
-  const filePaths = new Set(markdownChunks.map((c) => c.filePath));
+  const filePaths = new Set(validChunks.map((c) => c.filePath));
   await uploadChunks(embeddedChunks);
 
   // 6. Clean stale embeddings

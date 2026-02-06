@@ -9,7 +9,7 @@ import {
   teardownJwksServer,
   createToken,
 } from './testUtils.js';
-import type { FakeLlmGenerateClient, FakeEmbeddingRepository, FakeUserServiceClient } from './fakes.fixture.js';
+import type { FakeLlmGenerateClient, FakeEmbeddingRepository, FakeUserServiceClient, FakeGuestRateLimiter } from './fakes.fixture.js';
 import type { FastifyInstance } from 'fastify';
 import { clearJwksCache } from '@intexuraos/common-http';
 
@@ -19,6 +19,7 @@ describe('chat-agent routes', () => {
     embeddingRepository: FakeEmbeddingRepository;
     llmGenerateClient: FakeLlmGenerateClient;
     fakeUserServiceClient: FakeUserServiceClient;
+    fakeGuestRateLimiter: FakeGuestRateLimiter;
   };
 
   beforeAll(async () => {
@@ -37,6 +38,7 @@ describe('chat-agent routes', () => {
       embeddingRepository: services.embeddingRepository as FakeEmbeddingRepository,
       llmGenerateClient: services.llmGenerateClient,
       fakeUserServiceClient: services.fakeUserServiceClient,
+      fakeGuestRateLimiter: services.fakeGuestRateLimiter,
     };
     app = await buildServer();
   });
@@ -433,6 +435,107 @@ describe('chat-agent routes', () => {
         });
 
         expect(response.statusCode).toBe(200);
+      });
+    });
+  });
+
+  describe('POST /chat (guest user)', () => {
+    describe('session validation', () => {
+      it('should return 401 without guest session header', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/chat',
+          payload: {
+            message: 'Hello',
+          },
+        });
+
+        expect(response.statusCode).toBe(401);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('UNAUTHORIZED');
+      });
+
+      it('should return 401 with empty guest session header', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/chat',
+          headers: {
+            'x-guest-session': '',
+          },
+          payload: {
+            message: 'Hello',
+          },
+        });
+
+        expect(response.statusCode).toBe(401);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+      });
+
+    });
+
+    describe('rate limiting', () => {
+      it('should return 429 when rate limit exceeded', async () => {
+        fakeServices.fakeGuestRateLimiter.setBlock(true, 'Rate limit exceeded. Try again in 30 minutes.');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/chat',
+          headers: {
+            'x-guest-session': 'guest-session-123',
+          },
+          payload: {
+            message: 'Hello',
+          },
+        });
+
+        expect(response.statusCode).toBe(429);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('RATE_LIMITED');
+        expect(body.error.message).toContain('Rate limit exceeded');
+      });
+    });
+
+    describe('successful responses', () => {
+      it('should return 200 for guest with valid session', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/chat',
+          headers: {
+            'x-guest-session': 'guest-session-123',
+          },
+          payload: {
+            message: 'How do I create a todo?',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.response).toBeTruthy();
+      });
+
+      it('should handle guest conversation history', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/chat',
+          headers: {
+            'x-guest-session': 'guest-session-123',
+          },
+          payload: {
+            message: 'What about completing it?',
+            conversationHistory: [
+              { role: 'user', content: 'How do I create a todo?' },
+              { role: 'assistant', content: 'Use POST /todos' },
+            ],
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
       });
     });
   });

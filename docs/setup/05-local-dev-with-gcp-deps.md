@@ -164,9 +164,7 @@ intexuraos/
 ├── docker/
 │   └── docker-compose.yaml
 ├── apps/
-│   ├── user-service/
-│   │   └── .env        # Service-specific overrides (gitignored)
-│   └── promptvault-service/
+│   └── user-service/
 │       └── .env        # Service-specific overrides (gitignored)
 ```
 

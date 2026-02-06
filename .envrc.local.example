@@ -89,7 +89,6 @@ export INTEXURAOS_TODOS_PROCESSING_TOPIC=todos-processing
 # GOOGLE_CLOUD_PROJECT is the standard env var that Google SDKs look for.
 # INTEXURAOS_GCP_PROJECT_ID is used by whatsapp-service.
 export GOOGLE_CLOUD_PROJECT=demo-intexuraos
-export GCLOUD_PROJECT=demo-intexuraos
 export INTEXURAOS_GCP_PROJECT_ID=demo-intexuraos
 
 # =============================================================================
@@ -194,6 +193,10 @@ export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.r
 # Only set if source vars are defined (preserves .envrc defaults otherwise)
 [ -n "$ANTHROPIC_API_KEY" ] && export INTEXURAOS_ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
 [ -n "$ZAI_API_KEY" ] && export INTEXURAOS_ZAI_API_KEY=$ZAI_API_KEY
+# OpenAI key for embeddings (overrides placeholder from PREDEV_ENV_VARS block)
+export INTEXURAOS_OPENAI_API_KEY=$OPENAI_API_KEY
+# Guest chat uses platform-owned Zai key (GLM-4.7-Flash is free)
+export INTEXURAOS_GUEST_ZAI_API_KEY=$INTEXURAOS_ZAI_API_KEY
 [ -n "$LINEAR_API_KEY" ] && export INTEXURAOS_LINEAR_API_KEY=$LINEAR_API_KEY
 [ -n "$SENTRY_AUTH_TOKEN" ] && export INTEXURAOS_SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
 

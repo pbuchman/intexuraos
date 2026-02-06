@@ -47,11 +47,10 @@ Internal integration tokens have access to:
 
 Each service that uses Notion owns its own configuration:
 
-| Service             | Collection                 | Purpose                             |
-| ------------------- | -------------------------- | ----------------------------------- |
-| notion-service      | `notion_connections`       | Notion API token + connection state |
-| promptvault-service | `promptvault_settings`     | PromptVault page ID                 |
-| research-agent      | `research_export_settings` | Research export page ID             |
+| Service        | Collection                 | Purpose                             |
+| -------------- | -------------------------- | ----------------------------------- |
+| notion-service | `notion_connections`       | Notion API token + connection state |
+| research-agent | `research_export_settings` | Research export page ID             |
 
 This follows the "each service owns its settings" pattern - no single shared settings entity.
 

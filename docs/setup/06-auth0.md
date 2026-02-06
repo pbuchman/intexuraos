@@ -604,7 +604,7 @@ export INTEXURAOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 | `INTEXURAOS_AUTH_ISSUER`          | Token issuer for verification             | `https://intexuraos-dev.eu.auth0.com/`                      |
 | `INTEXURAOS_TOKEN_ENCRYPTION_KEY` | AES-256 encryption key (base64, 32 bytes) | `k7J9mL2nP4qR6s...`                                         |
 
-### promptvault-service (and other protected services)
+### Protected Services (all backend services)
 
 | Variable                   | Description       | Example                                                     |
 | -------------------------- | ----------------- | ----------------------------------------------------------- |

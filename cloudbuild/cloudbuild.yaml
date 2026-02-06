@@ -578,7 +578,7 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 7 - Code Agent (ADD NEW SERVICES HERE, max 3)
+  # BATCH 7 - Code Agent, Chat Agent (ADD NEW SERVICES HERE, max 3)
   # ===========================================================================
 
   # --- Batch 7 Builds (wait for Batch 6 deploys) ---
@@ -593,12 +593,34 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-chat-agent'
+    waitFor: ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'chat-agent', 'apps/chat-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
   # --- Batch 7 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-code-agent'
     waitFor: ['build-push-code-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-code-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-chat-agent'
+    waitFor: ['build-push-chat-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-chat-agent.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -635,7 +657,7 @@ steps:
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['deploy-code-agent', 'deploy-all-workers']
+    waitFor: ['deploy-code-agent', 'deploy-chat-agent', 'deploy-all-workers']
     entrypoint: 'bash'
     args:
       - '-c'

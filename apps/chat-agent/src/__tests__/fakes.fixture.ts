@@ -21,6 +21,7 @@ import type {
   UserServiceError,
   OAuthProvider,
 } from '@intexuraos/internal-clients';
+import type { GuestRateLimiter } from '../infra/rateLimit/index.js';
 
 /**
  * Fake embedding repository for testing.
@@ -253,15 +254,47 @@ export class FakeUserServiceClient implements UserServiceClient {
 }
 
 /**
+ * Fake GuestRateLimiter for testing.
+ */
+export class FakeGuestRateLimiter implements GuestRateLimiter {
+  private shouldBlock = false;
+  private blockMessage = 'Rate limit exceeded';
+
+  setBlock(block: boolean, message = 'Rate limit exceeded'): void {
+    this.shouldBlock = block;
+    this.blockMessage = message;
+  }
+
+  check(_sessionId: string): Result<void, { message: string }> {
+    if (this.shouldBlock) {
+      return err({ message: this.blockMessage });
+    }
+    return ok(undefined);
+  }
+
+  record(_sessionId: string): void {
+    // No-op for tests
+  }
+
+  getUsage(_sessionId: string): { count: number; remaining: number } | null {
+    return { count: 0, remaining: 100 };
+  }
+}
+
+/**
  * Set up fake services for testing.
  * Returns both the ServiceContainer and the fake clients for test control.
  */
 export function setupFakeServices(): ServiceContainer & {
   llmGenerateClient: FakeLlmGenerateClient;
   fakeUserServiceClient: FakeUserServiceClient;
+  fakeGuestRateLimiter: FakeGuestRateLimiter;
+  guestLlmClient: FakeLlmGenerateClient;
 } {
   const llmGenerateClient = new FakeLlmGenerateClient();
   const fakeUserServiceClient = new FakeUserServiceClient(llmGenerateClient);
+  const fakeGuestRateLimiter = new FakeGuestRateLimiter();
+  const guestLlmClient = new FakeLlmGenerateClient();
 
   const services: ServiceContainer = {
     generateId: () => `test-${crypto.randomUUID()}`,
@@ -269,9 +302,11 @@ export function setupFakeServices(): ServiceContainer & {
     embeddingClient: new FakeEmbeddingClient(),
     userServiceClient: fakeUserServiceClient,
     logger: mockLogger as unknown as import('pino').Logger,
+    guestRateLimiter: fakeGuestRateLimiter,
+    guestLlmClient,
   };
   setServices(services);
-  return { ...services, llmGenerateClient, fakeUserServiceClient };
+  return { ...services, llmGenerateClient, fakeUserServiceClient, fakeGuestRateLimiter, guestLlmClient };
 }
 
 /**

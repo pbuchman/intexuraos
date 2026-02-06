@@ -73,7 +73,7 @@ Review the plan carefully. It should create:
 - Artifact Registry repository
 - Firestore database
 - Secret Manager secrets
-- Service accounts (6 accounts: auth, promptvault, notion, whatsapp, api-docs-hub, mobile-notifications)
+- Service accounts (5 accounts: auth, notion, whatsapp, api-docs-hub, mobile-notifications)
 - IAM bindings
 - Cloud Run services (6 services)
 - Cloud Build trigger
@@ -198,7 +198,6 @@ Expected outputs:
 ```
 artifact_registry_url = "europe-central2-docker.pkg.dev/intexuraos-dev-yourname/intexuraos-dev"
 user_service_url = "https://intexuraos-user-service-xxxxx-ew.a.run.app"
-promptvault_service_url = "https://intexuraos-promptvault-service-xxxxx-ew.a.run.app"
 notion_service_url = "https://intexuraos-notion-service-xxxxx-ew.a.run.app"
 whatsapp_service_url = "https://intexuraos-whatsapp-service-xxxxx-ew.a.run.app"
 api_docs_hub_url = "https://intexuraos-api-docs-hub-xxxxx-ew.a.run.app"
@@ -206,7 +205,6 @@ mobile_notifications_service_url = "https://intexuraos-mobile-notifications-xxxx
 firestore_database = "(default)"
 service_accounts = {
   auth_service = "intexuraos-user-svc-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
-  promptvault_service = "intexuraos-pv-svc-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
   notion_service = "intexuraos-notion-svc-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
   whatsapp_service = "intexuraos-whatsapp-svc-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
   api_docs_hub = "intexuraos-docs-hub-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
@@ -248,11 +246,6 @@ export REGISTRY="${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev"
 docker build --platform linux/amd64 -f apps/user-service/Dockerfile \
   -t ${REGISTRY}/user-service:latest .
 docker push ${REGISTRY}/user-service:latest
-
-# Build and push promptvault-service
-docker build --platform linux/amd64 -f apps/promptvault-service/Dockerfile \
-  -t ${REGISTRY}/promptvault-service:latest .
-docker push ${REGISTRY}/promptvault-service:latest
 
 # Build and push notion-service
 docker build --platform linux/amd64 -f apps/notion-service/Dockerfile \
