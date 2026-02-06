@@ -89,7 +89,7 @@ function SectionHeading({
 
 function HeroSection(): React.JSX.Element {
   return (
-    <section className="relative flex min-h-[90vh] flex-col justify-center border-b-4 border-black bg-yellow-400 px-6 py-24 pattern-dots pattern-black pattern-bg-transparent pattern-size-4 pattern-opacity-10">
+    <section className="relative flex min-h-[90vh] flex-col justify-center border-b-4 border-black bg-gradient-to-br from-cyan-100 via-blue-50 to-white px-6 py-24 pattern-dots pattern-black pattern-bg-transparent pattern-size-4 pattern-opacity-10">
       <div className="mx-auto w-full max-w-7xl">
         <div className="max-w-4xl">
           <div className="mb-6 flex flex-wrap gap-3">
@@ -117,21 +117,21 @@ function HeroSection(): React.JSX.Element {
             </a>
           </div>
           <p className="mb-4 font-mono text-sm font-bold uppercase tracking-widest text-neutral-700">
-            The AI-Native Personal Operating System
+            The Self-Building Personal OS
           </p>
           <h1 className="mb-8 text-6xl font-black uppercase leading-[0.9] tracking-tighter text-black md:text-8xl lg:text-[7rem]">
-            Your brain is for <span className="bg-white px-2 text-black">thinking</span>
-            <br /> not remembering.
+            Stop managing your <span className="bg-cyan-600 px-2 text-white">life.</span>
+            <br /> Start living it.
           </h1>
           <p className="mb-10 max-w-2xl text-xl font-medium leading-relaxed text-neutral-900 md:text-2xl">
-            IntexuraOS transforms fragmented information into structured intelligence. A council of
-            17 AI models across 5 providers works autonomously — you remain the commander.
+            IntexuraOS builds itself around you. AI agents handle the boring shit — scheduling,
+            research, reminders — while you focus on what actually matters.
           </p>
 
           <div className="flex flex-col gap-4 sm:flex-row">
             <Link
               to="/login"
-              className="group flex items-center justify-center gap-2 border-2 border-black bg-black px-8 py-4 text-lg font-bold text-white shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] transition-all hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]"
+              className="group flex items-center justify-center gap-2 border-2 border-black bg-cyan-600 px-8 py-4 text-lg font-bold text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-1 hover:bg-cyan-700 hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
             >
               LOG IN <Terminal className="h-5 w-5" />
             </Link>
@@ -168,9 +168,9 @@ function DemoSection(): React.JSX.Element {
         <div className="flex flex-col justify-center">
           <SectionHeading>
             The Loop: <br />
-            <span className="text-cyan-600">Capture</span> → <br />
-            <span className="text-purple-600">Classify</span> → <br />
-            <span className="text-green-600">Execute</span>
+            <span className="text-blue-600">Capture</span> → <br />
+            <span className="text-cyan-600">Classify</span> → <br />
+            <span className="text-emerald-600">Execute</span>
           </SectionHeading>
           <p className="text-xl font-medium text-neutral-600">
             18 specialized microservices route your intent to the right agent. Voice note becomes
@@ -252,7 +252,7 @@ function CouncilSection(): React.JSX.Element {
         <p className="mx-auto mb-16 max-w-2xl text-lg text-neutral-400">
           17 models across 5 providers, treated as a council of experts rather than a single oracle.
           Each query is dispatched to multiple models in parallel, then synthesized with confidence
-          scoring. <span className="text-cyan-400">v2.0.0: Natural language model selection — "research with Claude and GPT"</span>
+          scoring. <span className="text-blue-400">v2.0.0: Natural language model selection — "research with Claude and GPT"</span>
         </p>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
           {[
@@ -279,7 +279,7 @@ function CouncilSection(): React.JSX.Element {
 
 function ManifestoSection(): React.JSX.Element {
   return (
-    <section className="border-b-4 border-black bg-cyan-400 px-6 py-24">
+    <section className="border-b-4 border-black bg-gradient-to-br from-cyan-200 to-blue-100 px-6 py-24">
       <div className="mx-auto max-w-7xl">
         <div className="grid gap-16 lg:grid-cols-2">
           <div>
@@ -336,7 +336,7 @@ function ManifestoSection(): React.JSX.Element {
             <BrutalistCard
               title="Extreme Ownership"
               icon={Shield}
-              className="hover:border-cyan-600 hover:shadow-[6px_6px_0px_0px_rgba(8,145,178,1)]"
+              className="hover:border-blue-600 hover:shadow-[6px_6px_0px_0px_rgba(37,99,235,1)]"
             >
               <p className="mb-3 text-neutral-700">
                 Our engineering philosophy based on Jocko Willink&apos;s book. CI failure = your problem.
@@ -346,7 +346,7 @@ function ManifestoSection(): React.JSX.Element {
                 href="https://github.com/pbuchman/intexuraos/blob/main/docs/philosophy/extreme-ownership.md"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-cyan-700 underline"
+                className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-blue-600 underline"
               >
                 Read Philosophy <ArrowRight className="h-4 w-4" />
               </a>
@@ -360,7 +360,7 @@ function ManifestoSection(): React.JSX.Element {
 
 function RecentUpdatesSection(): React.JSX.Element {
   return (
-    <section className="border-b-4 border-black bg-purple-100 px-6 py-24">
+    <section className="border-b-4 border-black bg-blue-50 px-6 py-24">
       <div className="mx-auto max-w-7xl">
         <div className="mb-12 flex items-center justify-between max-w-2xl">
           <SectionHeading className="mb-0">
@@ -370,7 +370,7 @@ function RecentUpdatesSection(): React.JSX.Element {
             href="https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-cyan-700 underline"
+            className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-blue-600 underline"
           >
             View Changelog <ArrowRight className="h-4 w-4" />
           </a>
@@ -468,7 +468,7 @@ function VersionHistorySection(): React.JSX.Element {
             onClick={() => {
               setShowHistory(!showHistory);
             }}
-            className="flex items-center gap-3 font-mono text-lg font-bold uppercase hover:text-cyan-700"
+            className="flex items-center gap-3 font-mono text-lg font-bold uppercase hover:text-blue-600"
           >
             <ArrowRight className={`h-5 w-5 transition-transform ${
               showHistory ? 'rotate-90' : ''
@@ -500,25 +500,25 @@ function Footer(): React.JSX.Element {
         <div>
           <h3 className="mb-2 text-2xl font-black uppercase tracking-tighter">IntexuraOS</h3>
           <p className="font-mono text-sm text-neutral-500">
-            © {new Date().getFullYear()} <a href="https://pbuchman.com" className="hover:text-cyan-600">Piotr Buchman</a>. Open Source.
+            © {new Date().getFullYear()} <a href="https://pbuchman.com" className="hover:text-blue-600">Piotr Buchman</a>. Open Source.
           </p>
         </div>
         <div className="flex gap-8 font-mono text-sm font-bold uppercase">
           <a
             href="https://github.com/pbuchman/intexuraos"
-            className="flex items-center gap-1 hover:text-cyan-600"
+            className="flex items-center gap-1 hover:text-blue-600"
           >
             GitHub <ArrowRight className="h-4 w-4" />
           </a>
           <a
             href="https://www.linkedin.com/in/piotrbuchman/"
-            className="flex items-center gap-1 hover:text-cyan-600"
+            className="flex items-center gap-1 hover:text-blue-600"
           >
             LinkedIn <ArrowRight className="h-4 w-4" />
           </a>
           <a
             href="mailto:kontakt@pbuchman.com"
-            className="flex items-center gap-1 hover:text-cyan-600"
+            className="flex items-center gap-1 hover:text-blue-600"
           >
             Email <ArrowRight className="h-4 w-4" />
           </a>
@@ -532,7 +532,7 @@ function Footer(): React.JSX.Element {
 
 export function HomePage(): React.JSX.Element {
   return (
-    <div className="min-h-screen bg-neutral-100 font-sans text-black selection:bg-cyan-300 selection:text-black">
+    <div className="min-h-screen bg-neutral-100 font-sans text-black selection:bg-blue-200 selection:text-black">
       <HeroSection />
       <DemoSection />
       <CouncilSection />
