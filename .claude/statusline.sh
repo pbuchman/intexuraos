@@ -261,34 +261,21 @@ elif [ -d ".claude/hooks" ]; then
 fi
 
 if [ -n "$hooks_dir" ]; then
-  # Count executed commands
-  executed=0
-  if [ -f "$hooks_dir/commands.log" ]; then
-    executed=$(grep -c "^\[" "$hooks_dir/commands.log" 2>/dev/null || echo 0)
+  # Count session blocked (from session-blocked.log, cleared at session start)
+  session_blocked=0
+  if [ -f "$hooks_dir/session-blocked.log" ]; then
+    session_blocked=$(wc -l < "$hooks_dir/session-blocked.log" 2>/dev/null | tr -d ' ' || echo 0)
   fi
 
-  # Count blocked by each hook (short labels)
-  b_vitest=$(grep -c "BLOCKED" "$hooks_dir/validate-vitest-flags.log" 2>/dev/null || echo 0)
-  b_poll=$(grep -c "BLOCKED" "$hooks_dir/validate-polling.log" 2>/dev/null || echo 0)
-  b_poll=$((b_poll + $(grep -c "BLOCKED" "$hooks_dir/validate-gh-polling.log" 2>/dev/null || echo 0)))
-  b_ci=$(grep -c "BLOCKED" "$hooks_dir/validate-ci-output-capture.log" 2>/dev/null || echo 0)
-  b_cov=$(grep -c "BLOCKED" "$hooks_dir/validate-coverage-commands.log" 2>/dev/null || echo 0)
-  b_ws=$(grep -c "BLOCKED" "$hooks_dir/validate-verify-workspace.log" 2>/dev/null || echo 0)
-  b_gcloud=$(grep -c "BLOCKED" "$hooks_dir/validate-gcloud-builds.log" 2>/dev/null || echo 0)
-  b_gcloud=$((b_gcloud + $(grep -c "BLOCKED" "$hooks_dir/validate-gcloud-builds-log.log" 2>/dev/null || echo 0)))
+  # Count total blocked (cumulative from hooks.log)
+  total_blocked=0
+  if [ -f "$hooks_dir/hooks.log" ]; then
+    total_blocked=$(grep -c "BLOCKED" "$hooks_dir/hooks.log" 2>/dev/null || echo 0)
+  fi
 
-  blocked=$((b_vitest + b_poll + b_ci + b_cov + b_ws + b_gcloud))
-  total=$((executed + blocked))
-
-  if [ "$total" -gt 0 ]; then
-    # Calculate blocked percentage
-    if [ "$total" -gt 0 ]; then
-      blocked_pct=$(( blocked * 100 / total ))
-    else
-      blocked_pct=0
-    fi
-
-    hook_metrics="🛡️ Cmds: ${total} | ✗${blocked} (${blocked_pct}%)"
+  # Show metrics if any blocks exist
+  if [ "$session_blocked" -gt 0 ] || [ "$total_blocked" -gt 0 ]; then
+    hook_metrics="🛡️ ✗${session_blocked} session | ✗${total_blocked} total"
   fi
 fi
 

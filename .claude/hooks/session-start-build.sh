@@ -8,8 +8,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/sessions.log"
+SESSION_BLOCKED_FILE="${SCRIPT_DIR}/session-blocked.log"
 
 cd "$(dirname "$0")/../.." || exit 0
+
+# Clear session-scoped blocked log (atomic truncate)
+: > "$SESSION_BLOCKED_FILE"
 
 # Log session start with timestamp
 if command -v gdate &>/dev/null; then
