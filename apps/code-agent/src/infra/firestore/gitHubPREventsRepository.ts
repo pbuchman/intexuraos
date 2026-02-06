@@ -25,6 +25,7 @@ function toDate(value: unknown): Date {
   if (value instanceof Date) {
     return value;
   }
+  /* v8 ignore stop @preserve */
   /* v8 ignore start -- ts-type: null guard for unknown type, callers always have null guards so this is unreachable @preserve */
   // Firestore Timestamps and mock objects with toDate method
   if (value !== null && typeof value === 'object' && 'toDate' in value) {
