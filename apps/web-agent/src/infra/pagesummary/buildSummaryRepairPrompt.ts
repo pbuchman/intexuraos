@@ -49,6 +49,18 @@ export interface SummaryRepairPromptDeps extends PromptDeps {
 }
 
 /**
+ * Formats the content focus section for prompts.
+ * Guides LLM to focus on actual content rather than platform descriptions.
+ */
+function formatContentFocus(): string {
+  return `## CONTENT FOCUS
+- Focus on the SPECIFIC CONTENT of this page (the article, post, thread, or message)
+- Do NOT describe what the platform is or how it works (e.g., don't explain "LinkedIn is a professional network" or "Threads is a social media app")
+- Do NOT include platform structural information (usernames, profile details, navigation elements)
+- Summarize WHAT is being said, not WHO said it or WHERE it was posted`;
+}
+
+/**
  * Formats the requirements section for prompts.
  */
 function formatRequirements(
@@ -91,6 +103,8 @@ export const summaryPrompt: PromptBuilder<SummaryPromptInput, SummaryPromptDeps>
 
     return `## Your Task
 Summarize the following web page content.
+
+${formatContentFocus()}
 
 ${formatRequirements(input.maxSentences, maxWords)}
 
@@ -139,6 +153,8 @@ ${input.errorMessage}
 """
 ${truncatedInvalid}
 """
+
+${formatContentFocus()}
 
 ${formatRequirements(maxSentences, maxWords)}
 
