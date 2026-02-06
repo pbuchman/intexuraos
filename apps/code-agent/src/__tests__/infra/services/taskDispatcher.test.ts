@@ -76,6 +76,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test123',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(true);
@@ -119,6 +121,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test123',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       await service.dispatch(dispatchRequest);
@@ -172,6 +176,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       const fetchCall = vi.mocked(global.fetch).mock.calls[0];
@@ -216,6 +222,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(true);
@@ -245,6 +253,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(false);
@@ -276,6 +286,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(false);
@@ -302,6 +314,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(false);
@@ -329,6 +343,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(false);
@@ -361,6 +377,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(false);
@@ -399,6 +417,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: credentialsWithEmptySecret,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(false);
@@ -437,6 +457,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(true);
@@ -464,6 +486,8 @@ describe('taskDispatcherImpl', () => {
         webhookSecret: 'whsec_test',
         linearIssueId: 'INT-123',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -498,6 +522,8 @@ describe('taskDispatcherImpl', () => {
         webhookSecret: 'whsec_test',
         // linearIssueId not provided
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -532,6 +558,8 @@ describe('taskDispatcherImpl', () => {
         webhookSecret: 'whsec_test',
         traceId: 'test-trace-id-123',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -566,6 +594,8 @@ describe('taskDispatcherImpl', () => {
         webhookSecret: 'whsec_test',
         // traceId not provided
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -598,6 +628,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(false);
@@ -638,6 +670,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: credentialsWithEmptyCF,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -672,6 +706,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: emptyCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(false);
@@ -710,6 +746,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: macOnlyCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(true);
@@ -750,6 +788,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: vmOnlyCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(true);
@@ -794,6 +834,8 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         workerCredentials: vmFirstCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
       });
 
       expect(result.ok).toBe(true);

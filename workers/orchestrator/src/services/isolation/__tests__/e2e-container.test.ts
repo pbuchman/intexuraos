@@ -143,7 +143,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
       taskId,
       worktreePath: testWorktreePath,
       prompt,
-      systemPrompt: 'You are a test assistant.',
+      systemPrompt: `You are a test assistant.\n\n${prompt}`,
       workerType: 'auto',
       secrets: {
         ANTHROPIC_API_KEY: 'test-key',
@@ -364,7 +364,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
           taskId,
           worktreePath: testWorktreePath,
           prompt: 'timeout',
-          systemPrompt: 'Test',
+          systemPrompt: 'timeout',
           workerType: 'auto',
           secrets: {
             ANTHROPIC_API_KEY: 'test-key',

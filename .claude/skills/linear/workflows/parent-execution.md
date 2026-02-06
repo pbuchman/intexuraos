@@ -1,6 +1,30 @@
 # Parent Issue Execution Workflow
 
-**Trigger:** Redirected from [work-existing.md](work-existing.md) when issue has child subissues
+**Trigger:** Issue has `code-task` label AND has child subissues
+
+---
+
+## Verbose Transition Logging (MANDATORY)
+
+```
+🚀 PARENT EXEC: Starting execution for INT-301 (3 children)
+🌿 BRANCH: Creating refactor/INT-301 from origin/development
+📍 STATE: INT-301 → In Progress
+🔗 PR: Created draft PR #123
+👶 CHILD: Starting INT-302 "[tier-0] Setup infrastructure"
+📍 STATE: INT-302 → In Progress
+💻 IMPLEMENT: Working on INT-302...
+✅ CI: pnpm run ci:tracked passed
+📦 COMMIT: INT-302 Setup infrastructure
+📤 PUSH: Pushed to origin/refactor/INT-301
+📝 PR: Updated PR #123 description (INT-302 ✅)
+📍 STATE: INT-302 → In Review
+👶 CHILD: Starting INT-303 "[tier-1] Implement core logic"
+...
+✅ PARENT EXEC COMPLETE: All 3 children done
+🔗 PR: #123 ready for review
+📍 STATE: INT-301 → In Review
+```
 
 ---
 
@@ -54,13 +78,24 @@ Execute the entire workflow automatically:
 
 ## Steps
 
-### 1. Validate Entry Point
+### 1. Validate Entry Conditions
 
-This workflow should only be reached via redirect from `work-existing.md`. Confirm:
+**This workflow executes when issue has BOTH:**
+- `code-task` label (ready for execution)
+- Child subissues (non-empty children array)
 
-- Issue was fetched with `mcp__linear__get_issue`
-- Subissues were detected with `mcp__linear__list_issues(parentId: "<issue-uuid>")`
-- Children array is non-empty
+**Validation steps:**
+
+1. Issue was fetched with `mcp__linear__get_issue`
+2. Labels include `code-task`
+3. Subissues were detected with `mcp__linear__list_issues(parentId: "<issue-uuid>")`
+4. Children array is non-empty
+
+**How we arrive here:**
+- Via `work-existing.md` router (most common)
+- User re-invokes `/linear INT-parent` after plan-splitting completed
+
+> ⚠️ **This is NOT automatic.** After plan-splitting completes, execution STOPS. User must explicitly re-invoke `/linear INT-parent` to start this workflow.
 
 ### 2. Analyze Children Structure
 
@@ -263,7 +298,7 @@ blocked_children = children where state == "Backlog" AND was_skipped
 
 FOR each blocked_child:
   IF blockers now resolved (blocking issues in In Review/QA/Done):
-    Execute child (same as Step 6)
+    Execute child (same as Step 7)
   ELSE:
     Report: "Cannot complete INT-XXX — blocked by INT-YYY (still in progress)"
 ```
@@ -339,12 +374,14 @@ All artifacts cross-linked via GitHub integration.
 
 ## State Transitions
 
-| Event                    | Issue  | From        | To          |
-| ------------------------ | ------ | ----------- | ----------- |
-| Start parent execution   | Parent | Backlog     | In Progress |
-| Begin child work         | Child  | Backlog     | In Progress |
-| Complete child work      | Child  | In Progress | In Review   |
-| All children done, PR up | Parent | In Progress | In Review   |
+| Event                    | Issue  | From                      | To          |
+| ------------------------ | ------ | ------------------------- | ----------- |
+| Start parent execution   | Parent | Backlog/Todo (any)        | In Progress |
+| Begin child work         | Child  | Backlog                   | In Progress |
+| Complete child work      | Child  | In Progress               | In Review   |
+| All children done, PR up | Parent | In Progress               | In Review   |
+
+> **Note:** Parent may start from any pre-execution state (Backlog, Todo). The workflow sets "In Progress" regardless of starting state.
 
 ---
 

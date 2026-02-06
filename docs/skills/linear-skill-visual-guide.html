@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Linear Skill - Visual Documentation</title>
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --surface: #141414;
+        --surface-hover: #1a1a1a;
+        --border: #2a2a2a;
+        --text: #e5e5e5;
+        --text-muted: #888;
+        --accent: #3b82f6;
+        --accent-dim: #1e40af;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        --error: #ef4444;
+        --phase1: #8b5cf6;
+        --phase2: #06b6d4;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        padding: 2rem;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        background: linear-gradient(135deg, var(--phase1), var(--phase2));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .subtitle {
+        color: var(--text-muted);
+        margin-bottom: 2rem;
+      }
+
+      .section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .mode-toggle {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .mode-btn {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+      }
+
+      .mode-btn:hover {
+        background: var(--surface-hover);
+      }
+      .mode-btn.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+
+      .flow-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .flow-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .flow-node {
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        transition: all 0.3s;
+        cursor: default;
+      }
+
+      .flow-node.trigger {
+        background: var(--accent-dim);
+        border: 2px solid var(--accent);
+      }
+
+      .flow-node.router {
+        background: #1e1e3f;
+        border: 2px solid #6366f1;
+      }
+
+      .flow-node.phase1 {
+        background: #2d1f4e;
+        border: 2px solid var(--phase1);
+      }
+
+      .flow-node.phase2 {
+        background: #0d3340;
+        border: 2px solid var(--phase2);
+      }
+
+      .flow-node.stop {
+        background: #3f1f1f;
+        border: 2px solid var(--error);
+      }
+
+      .flow-node.success {
+        background: #1f3f2f;
+        border: 2px solid var(--success);
+      }
+
+      .flow-node.label {
+        background: #3f3f1f;
+        border: 2px solid var(--warning);
+      }
+
+      .flow-arrow {
+        color: var(--text-muted);
+        font-size: 1.2rem;
+      }
+
+      .flow-decision {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding-left: 2rem;
+        border-left: 2px dashed var(--border);
+        margin-left: 1rem;
+      }
+
+      .flow-branch {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .branch-label {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        min-width: 120px;
+      }
+
+      .highlight {
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.6;
+        }
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+      }
+
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+      }
+
+      .legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 4px;
+      }
+
+      .details-panel {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        background: var(--bg);
+        border-radius: 8px;
+        font-size: 0.85rem;
+      }
+
+      .details-panel h3 {
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+        color: var(--accent);
+      }
+
+      .details-panel ul {
+        list-style: none;
+        padding-left: 1rem;
+      }
+
+      .details-panel li::before {
+        content: '→ ';
+        color: var(--text-muted);
+      }
+
+      .emoji-log {
+        font-family: inherit;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        padding: 0.75rem;
+        background: #0d0d0d;
+        border-radius: 6px;
+        margin-top: 0.5rem;
+        overflow-x: auto;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+      }
+
+      @media (max-width: 900px) {
+        .two-col {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .state-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+        margin-top: 0.5rem;
+      }
+
+      .state-table th,
+      .state-table td {
+        padding: 0.5rem;
+        border: 1px solid var(--border);
+        text-align: left;
+      }
+
+      .state-table th {
+        background: var(--bg);
+        font-weight: 500;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 500;
+      }
+
+      .badge-phase1 {
+        background: var(--phase1);
+        color: white;
+      }
+      .badge-phase2 {
+        background: var(--phase2);
+        color: white;
+      }
+      .badge-label {
+        background: var(--warning);
+        color: black;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Linear Skill</h1>
+      <p class="subtitle">Two-phase autonomous task execution for Claude Code</p>
+
+      <div class="mode-toggle">
+        <button class="mode-btn active" onclick="showMode('interactive')">Interactive Mode</button>
+        <button class="mode-btn" onclick="showMode('agent')">Intex Code Agent</button>
+      </div>
+
+      <!-- Interactive Mode -->
+      <div id="interactive-mode">
+        <div class="section">
+          <div class="section-title">Entry Points</div>
+          <div class="flow-container">
+            <div class="flow-row">
+              <div class="flow-node trigger">/linear</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node router">random-todo.md</div>
+              <span class="flow-arrow">→</span>
+              <span style="color: var(--text-muted); font-size: 0.8rem">picks Todo issue</span>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node router">work-existing.md</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-node trigger">/linear INT-XXX</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node router">work-existing.md</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-node trigger">/linear &lt;description&gt;</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node router">create-issue.md</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node label">creates in Backlog</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Router Logic (work-existing.md)</div>
+          <div class="flow-container">
+            <div class="flow-row">
+              <div class="flow-node router">Check Labels</div>
+            </div>
+            <div class="flow-decision">
+              <div class="flow-branch">
+                <span class="branch-label">has <code>unclear</code></span>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node stop">STOP (human review)</div>
+              </div>
+              <div class="flow-branch">
+                <span class="branch-label">no <code>code-task</code></span>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node phase1">Phase 1</div>
+              </div>
+              <div class="flow-branch">
+                <span class="branch-label">has <code>code-task</code></span>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node router">Check Children</div>
+              </div>
+            </div>
+            <div class="flow-decision" style="margin-left: 3rem">
+              <div class="flow-branch">
+                <span class="branch-label">has children</span>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node phase2">parent-execution.md</div>
+              </div>
+              <div class="flow-branch">
+                <span class="branch-label">no children</span>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node phase2">Phase 2</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="section">
+            <div class="section-title">
+              <span class="badge badge-phase1">Phase 1</span> Design & Validation
+            </div>
+            <div class="flow-container">
+              <div class="flow-row">
+                <div class="flow-node phase1">Fetch Issue</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node phase1">Analyze</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node phase1">Enrich IN-PLACE</div>
+              </div>
+              <div class="flow-row">
+                <span class="flow-arrow" style="margin-left: 2rem">↓</span>
+              </div>
+              <div class="flow-decision">
+                <div class="flow-branch">
+                  <span class="branch-label">complex task</span>
+                  <span class="flow-arrow">→</span>
+                  <div class="flow-node phase1">Create Children</div>
+                </div>
+                <div class="flow-branch">
+                  <span class="branch-label">simple task</span>
+                  <span class="flow-arrow">→</span>
+                  <div class="flow-node label">Add code-task</div>
+                </div>
+              </div>
+              <div class="flow-row" style="margin-top: 0.5rem">
+                <span class="flow-arrow" style="margin-left: 2rem">↓</span>
+              </div>
+              <div class="flow-row">
+                <div class="flow-node stop">STOP (user re-invokes)</div>
+              </div>
+            </div>
+            <div class="emoji-log">
+              🔧 PHASE 1: Starting for INT-123<br />
+              📝 ENRICH: Added Test Requirements section<br />
+              🏷️ LABEL: Adding 'code-task' label<br />
+              ✅ PHASE 1 COMPLETE<br />
+              ⏹️ STOPPING: Re-invoke for Phase 2
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">
+              <span class="badge badge-phase2">Phase 2</span> Strict Execution
+            </div>
+            <div class="flow-container">
+              <div class="flow-row">
+                <div class="flow-node phase2">Create Branch</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node phase2">Set In Progress</div>
+              </div>
+              <div class="flow-row">
+                <span class="flow-arrow" style="margin-left: 2rem">↓</span>
+              </div>
+              <div class="flow-row">
+                <div class="flow-node phase2">Implement</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node phase2">CI Gate</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node phase2">Commit</div>
+              </div>
+              <div class="flow-row">
+                <span class="flow-arrow" style="margin-left: 2rem">↓</span>
+              </div>
+              <div class="flow-row">
+                <div class="flow-node phase2">Create PR</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node success">Set In Review</div>
+              </div>
+            </div>
+            <div class="emoji-log">
+              🚀 PHASE 2: Starting for INT-123<br />
+              🌿 BRANCH: Creating fix/INT-123<br />
+              📍 STATE: Backlog → In Progress<br />
+              ✅ CI: pnpm run ci:tracked passed<br />
+              📦 COMMIT: [INT-123] Implementation<br />
+              🔗 PR: Created PR #456<br />
+              📍 STATE: In Progress → In Review
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Parent Execution (Multi-Child Issues)</div>
+          <div class="flow-container">
+            <div class="flow-row">
+              <div class="flow-node phase2">Single Branch</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node phase2">Create Draft PR</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node phase2">Execute All Children</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node success">Finalize PR</div>
+            </div>
+          </div>
+          <div class="details-panel">
+            <h3>Continuous Execution Loop</h3>
+            <ul>
+              <li>One branch for parent (feature/INT-XXX)</li>
+              <li>Execute children in tier order (0 → 1 → 2 → ...)</li>
+              <li>After each child: commit, push, update PR description</li>
+              <li>No stopping between children</li>
+              <li>PR tracks progress with status table</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Non-Interactive Mode -->
+      <div id="agent-mode" style="display: none">
+        <div class="section">
+          <div class="section-title">Two-Cycle Pattern (Orchestrated)</div>
+          <div class="flow-container">
+            <div style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.85rem">
+              Autonomous execution requires two invocations per issue
+            </div>
+
+            <div class="flow-row" style="margin-bottom: 0.5rem">
+              <span style="color: var(--phase1); font-weight: 600; min-width: 80px">Cycle 1:</span>
+            </div>
+            <div class="flow-row">
+              <div class="flow-node trigger">/linear INT-XXX</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node router">Router</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node phase1">Phase 1</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node label">Add code-task</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node stop">STOP</div>
+            </div>
+
+            <div style="text-align: center; color: var(--text-muted); padding: 1rem 0">
+              ⏳ Next agent invocation / manual re-invocation
+            </div>
+
+            <div class="flow-row" style="margin-bottom: 0.5rem">
+              <span style="color: var(--phase2); font-weight: 600; min-width: 80px">Cycle 2:</span>
+            </div>
+            <div class="flow-row">
+              <div class="flow-node trigger">/linear INT-XXX</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node router">Router</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node phase2">Phase 2</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node success">PR + In Review</div>
+            </div>
+          </div>
+
+          <div class="details-panel">
+            <h3>Why Two Cycles?</h3>
+            <ul>
+              <li>Phase 1 ensures task is properly analyzed and enriched</li>
+              <li>Complex tasks get split into manageable children</li>
+              <li>STOP points prevent runaway automation</li>
+              <li>Labels act as state machine transitions</li>
+              <li>Each cycle is idempotent (safe to retry)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Random Todo Selection</div>
+          <div class="flow-container">
+            <div class="flow-row">
+              <div class="flow-node trigger">/linear (no args)</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node router">Query Todo state</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node router">Sort by priority</div>
+              <span class="flow-arrow">→</span>
+              <div class="flow-node label">Select issue</div>
+            </div>
+          </div>
+          <div class="details-panel">
+            <h3>Note: Backlog → Todo Gap</h3>
+            <ul>
+              <li>Issues are created in <strong>Backlog</strong> state</li>
+              <li>Random selection queries <strong>Todo</strong> state</li>
+              <li>Issues must be triaged (moved to Todo) manually</li>
+              <li>Or use <code>/linear INT-XXX</code> directly to bypass queue</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">State Transitions</div>
+          <table class="state-table">
+            <tr>
+              <th>Event</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Triggered By</th>
+            </tr>
+            <tr>
+              <td>Issue created</td>
+              <td>-</td>
+              <td>Backlog</td>
+              <td><span class="badge badge-phase1">create-issue.md</span></td>
+            </tr>
+            <tr>
+              <td>Triaged</td>
+              <td>Backlog</td>
+              <td>Todo</td>
+              <td>Manual (Linear UI)</td>
+            </tr>
+            <tr>
+              <td>Work started</td>
+              <td>Backlog/Todo</td>
+              <td>In Progress</td>
+              <td><span class="badge badge-phase2">Phase 2</span></td>
+            </tr>
+            <tr>
+              <td>PR created</td>
+              <td>In Progress</td>
+              <td>In Review</td>
+              <td><span class="badge badge-phase2">Phase 2</span></td>
+            </tr>
+            <tr>
+              <td>Merged</td>
+              <td>In Review</td>
+              <td>Done</td>
+              <td>Manual (user only)</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Label-Driven Flow Control</div>
+        <table class="state-table">
+          <tr>
+            <th>Label</th>
+            <th>Meaning</th>
+            <th>Effect on Router</th>
+          </tr>
+          <tr>
+            <td><span class="badge badge-label">code-task</span></td>
+            <td>Issue is ready for execution</td>
+            <td>Routes to Phase 2 (or parent-execution if has children)</td>
+          </tr>
+          <tr>
+            <td>
+              <span class="badge" style="background: var(--error); color: white">unclear</span>
+            </td>
+            <td>Needs human review</td>
+            <td>STOP immediately, don't process</td>
+          </tr>
+          <tr>
+            <td><em>neither</em></td>
+            <td>New/unprocessed issue</td>
+            <td>Routes to Phase 1 for enrichment</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--accent)"></div>
+          <span>Trigger</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #6366f1"></div>
+          <span>Router</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--phase1)"></div>
+          <span>Phase 1</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--phase2)"></div>
+          <span>Phase 2</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--warning)"></div>
+          <span>Label Action</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--success)"></div>
+          <span>Success</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--error)"></div>
+          <span>Stop</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function showMode(mode) {
+        document.querySelectorAll('.mode-btn').forEach((btn) => btn.classList.remove('active'));
+        event.target.classList.add('active');
+
+        if (mode === 'interactive') {
+          document.getElementById('interactive-mode').style.display = 'block';
+          document.getElementById('agent-mode').style.display = 'none';
+        } else {
+          document.getElementById('interactive-mode').style.display = 'none';
+          document.getElementById('agent-mode').style.display = 'block';
+        }
+      }
+    </script>
+  </body>
+</html>
