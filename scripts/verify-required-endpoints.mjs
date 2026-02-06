@@ -23,12 +23,7 @@ const REQUIRED_ENDPOINTS = [
   { path: '/docs', method: 'GET' },
 ];
 
-const EXEMPT_APPS = [
-  'api-docs-hub',
-  'web',
-  'commands-router',
-  'llm-orchestrator',
-];
+const EXEMPT_APPS = ['api-docs-hub', 'web', 'commands-router', 'llm-orchestrator'];
 
 function getApps() {
   return readdirSync(appsDir).filter((entry) => {

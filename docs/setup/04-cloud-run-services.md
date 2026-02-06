@@ -4,9 +4,9 @@ This document describes the Cloud Run service configuration and operations.
 
 ## Services Overview
 
-| Service        | Cloud Run Name            | Port | Health Endpoint |
-| -------------- | ------------------------- | ---- | --------------- |
-| Auth Service   | `intexuraos-user-service` | 8080 | `/health`       |
+| Service        | Cloud Run Name              | Port | Health Endpoint |
+| -------------- | --------------------------- | ---- | --------------- |
+| Auth Service   | `intexuraos-user-service`   | 8080 | `/health`       |
 | Notion Service | `intexuraos-notion-service` | 8080 | `/health`       |
 
 ## Service Configuration

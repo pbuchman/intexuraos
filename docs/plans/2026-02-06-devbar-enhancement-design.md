@@ -6,18 +6,19 @@
 ## Overview
 
 Enhance the DevBar with tabbed interface containing:
+
 1. **Commands** - Send command (moved to header) + results
 2. **Pub/Sub** - Real-time Pub/Sub event viewer with topic filtering
 3. **Logs** - Real-time PM2 log viewer with level/app filtering
 
 ## Design Decisions
 
-| Decision              | Choice                  | Rationale                                 |
-| --------------------- | ----------------------- | ----------------------------------------- |
-| Layout                | Tabbed interface        | Maximum space per feature                 |
-| Event/Log expansion   | Inline expansion        | View multiple items, natural flow         |
-| Default state         | Collapsed items         | Less noise, expand on interest            |
-| Topic filter default  | All topics visible      | Full visibility, filter to reduce         |
+| Decision             | Choice             | Rationale                         |
+| -------------------- | ------------------ | --------------------------------- |
+| Layout               | Tabbed interface   | Maximum space per feature         |
+| Event/Log expansion  | Inline expansion   | View multiple items, natural flow |
+| Default state        | Collapsed items    | Less noise, expand on interest    |
+| Topic filter default | All topics visible | Full visibility, filter to reduce |
 
 ## Architecture
 
@@ -118,25 +119,25 @@ components/devbar/
 
 All IntexuraOS topics visible by default:
 
-| Topic                      | Description                    |
-| -------------------------- | ------------------------------ |
-| `whatsapp-send-message`    | Outgoing WhatsApp messages     |
-| `research-process`         | Research agent processing      |
-| `llm-call`                 | LLM API calls                  |
-| `whatsapp-media-cleanup`   | Media file cleanup             |
-| `commands-ingest`          | Command ingestion              |
-| `whatsapp-webhook-process` | Webhook processing             |
-| `whatsapp-transcription`   | Audio transcription            |
-| `approval-reply`           | Approval workflow replies      |
-| `calendar-preview`         | Calendar preview generation    |
+| Topic                      | Description                 |
+| -------------------------- | --------------------------- |
+| `whatsapp-send-message`    | Outgoing WhatsApp messages  |
+| `research-process`         | Research agent processing   |
+| `llm-call`                 | LLM API calls               |
+| `whatsapp-media-cleanup`   | Media file cleanup          |
+| `commands-ingest`          | Command ingestion           |
+| `whatsapp-webhook-process` | Webhook processing          |
+| `whatsapp-transcription`   | Audio transcription         |
+| `approval-reply`           | Approval workflow replies   |
+| `calendar-preview`         | Calendar preview generation |
 
 ## Environment Support
 
-| Environment | Pub/Sub URL                       | Logs URL                          |
-| ----------- | --------------------------------- | --------------------------------- |
-| LOCAL       | `http://localhost:8105/events`    | `http://localhost:8106/logs`      |
-| PRE-DEV     | `${origin}/devbar/events`         | `${origin}/devbar/logs`           |
-| Production  | N/A (DevBar hidden)               | N/A (DevBar hidden)               |
+| Environment | Pub/Sub URL                    | Logs URL                     |
+| ----------- | ------------------------------ | ---------------------------- |
+| LOCAL       | `http://localhost:8105/events` | `http://localhost:8106/logs` |
+| PRE-DEV     | `${origin}/devbar/events`      | `${origin}/devbar/logs`      |
+| Production  | N/A (DevBar hidden)            | N/A (DevBar hidden)          |
 
 ## Implementation Plan
 
@@ -151,6 +152,7 @@ All IntexuraOS topics visible by default:
 ## File Changes
 
 ### New Files
+
 - `apps/web/src/components/devbar/ExpandableItem.tsx`
 - `apps/web/src/components/devbar/FilterChip.tsx`
 - `apps/web/src/components/devbar/ConnectionStatus.tsx`
@@ -161,4 +163,5 @@ All IntexuraOS topics visible by default:
 - `apps/web/src/components/devbar/index.ts`
 
 ### Modified Files
+
 - `apps/web/src/components/DevBar.tsx` - Refactor to use new components
