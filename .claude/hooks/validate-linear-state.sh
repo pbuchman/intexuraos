@@ -49,7 +49,7 @@ The maximum state an agent can set is "In Review".
 Moving to QA or Done requires explicit user instruction.
 
 Allowed transitions:
-  - Backlog → In Progress
+  - Backlog/Todo → In Progress
   - In Progress → In Review
 
 Forbidden transitions:

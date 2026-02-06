@@ -89,12 +89,12 @@ After completing any analysis, investigation, or review phase:
 
 ## ⛔ Linear State Transition Gate (READ BEFORE UPDATING ISSUES)
 
-| Transition              | Allowed?                                |
-| ----------------------- | --------------------------------------- |
-| Backlog → In Progress   | ✅ Yes                                  |
-| In Progress → In Review | ✅ Yes (maximum agent-controlled state) |
-| Any → QA                | ❌ **BLOCKED BY HOOK**                  |
-| Any → Done              | ❌ **BLOCKED BY HOOK**                  |
+| Transition                 | Allowed?                                |
+| -------------------------- | --------------------------------------- |
+| Backlog/Todo → In Progress | ✅ Yes                                  |
+| In Progress → In Review    | ✅ Yes (maximum agent-controlled state) |
+| Any → QA                   | ❌ **BLOCKED BY HOOK**                  |
+| Any → Done                 | ❌ **BLOCKED BY HOOK**                  |
 
 **Enforcement:** The `validate-linear-state.sh` hook blocks all Linear MCP calls that attempt to set status to QA or Done. This is a hard gate — agents cannot bypass it.
 
