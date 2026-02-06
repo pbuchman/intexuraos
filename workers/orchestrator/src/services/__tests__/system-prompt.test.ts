@@ -54,8 +54,36 @@ describe('system-prompt', () => {
           linearIssueLabels: [],
         });
 
-        expect(result).toContain('After creating the PR and adding the label, **STOP**');
+        expect(result).toContain('After creating the PR and adding EITHER');
         expect(result).toContain('Phase 1 Complete');
+      });
+
+      it('should include WORKER-MODE marker in Phase 1', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: [],
+        });
+
+        expect(result).toContain('[WORKER-MODE]');
+      });
+
+      it('should include PHASE:1 marker in Phase 1', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: [],
+        });
+
+        expect(result).toContain('[PHASE:1]');
+      });
+
+      it('should mention both code-task and unclear labels in Phase 1', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: [],
+        });
+
+        expect(result).toContain('code-task');
+        expect(result).toContain('unclear');
       });
 
       it('should include user supplemental instructions in Phase 1', () => {
@@ -70,9 +98,11 @@ describe('system-prompt', () => {
       });
 
       it('should handle missing Linear issue ID in Phase 1', () => {
+        // Omit linearIssueId entirely (exactOptionalPropertyTypes doesn't allow explicit undefined)
+        const { linearIssueId: _, ...paramsWithoutIssueId } = baseParams;
+        void _;
         const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueId: undefined,
+          ...paramsWithoutIssueId,
           linearIssueLabels: [],
         });
 
@@ -148,6 +178,36 @@ describe('system-prompt', () => {
 
         expect(result).toContain('[USER SUPPLEMENTAL INSTRUCTIONS]');
         expect(result).toContain('Implement the fix from the design doc');
+      });
+
+      it('should include WORKER-MODE marker in Phase 2', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        expect(result).toContain('[WORKER-MODE]');
+      });
+
+      it('should include PHASE:2 marker in Phase 2', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        expect(result).toContain('[PHASE:2]');
+      });
+
+      it('should include completion statement requirement in Phase 2', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        expect(result).toContain('Completion Statement (MANDATORY)');
+        expect(result).toContain('PR created');
+        expect(result).toContain('CI passed');
+        expect(result).toContain('Linear updated');
       });
     });
 

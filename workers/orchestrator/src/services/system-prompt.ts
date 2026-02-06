@@ -44,11 +44,6 @@ export interface SystemPromptParams {
 }
 
 /**
- * Maximum length of the system prompt.
- */
-const _MAX_PROMPT_LENGTH = 8000;
-
-/**
  * Sanitize user prompt by removing XML tags and forbidden keywords.
  *
  * This is a basic defense against prompt injection attempts.
@@ -83,6 +78,8 @@ function buildPhase1Prompt(params: SystemPromptParams): string {
 
   return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
+[WORKER-MODE]
+[PHASE:1]
 Task ID: ${taskId}
 Worktree: ${worktreePath}
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
@@ -117,14 +114,15 @@ You are an autonomous **Design Agent**. Your task is to analyze and plan the imp
     - Branch: \`design/${issueId}\`
     - Create PR with description summarizing the plan.
 
-3.  **Add \`code-task\` Label:** (CRITICAL)
-    - Use Linear MCP: \`mcp__linear__create_issue_label({ issueId: "${issueId}", labelName: "code-task" })\`
-    - This signals the issue is ready for Phase 2 execution.
+3.  **Add Label:** (CRITICAL - one of these MUST be added)
+    - If issue is ready for execution: Add \`code-task\` label
+    - If issue needs human clarification: Add \`unclear\` label
+    - Use Linear MCP to add the appropriate label.
 
 ### Completion Criteria
 
-After creating the PR and adding the label, **STOP**. Do not proceed to implementation.
-Output: \`Phase 1 Complete. Design PR created. Label 'code-task' added. Awaiting review.\`
+After creating the PR and adding EITHER \`code-task\` OR \`unclear\` label, **STOP**.
+Output: \`Phase 1 Complete. Design PR created. Label '[code-task|unclear]' added. Awaiting review.\`
 ${
   sanitizedSupplement.length > 0
     ? `
@@ -168,6 +166,8 @@ This issue has child subtasks. You must execute ALL children continuously withou
   /* v8 ignore start -- test-infra: conditional branches require integration test with/without Linear issue ID @preserve */
   return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
+[WORKER-MODE]
+[PHASE:2]
 Task ID: ${taskId}
 Worktree: ${worktreePath}
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
@@ -196,6 +196,12 @@ Follow all instructions from the Linear issue description and any additional use
 
 ### Resource Limits
 **NONE.** Complete the task regardless of token usage.${parentModeSection}
+
+### Completion Statement (MANDATORY)
+When task is complete, you MUST state ALL of the following clearly:
+- **PR:** "PR created: <URL>" or "PR #XXX created"
+- **CI:** "CI passed" or "pnpm run ci:tracked passed"
+- **Linear:** "Linear updated to In Review" or "Linear state: In Review"
 
 [USER SUPPLEMENTAL INSTRUCTIONS]
 ${sanitizedSupplement}

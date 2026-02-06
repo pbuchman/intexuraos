@@ -31,6 +31,8 @@ export const CreateTaskRequestSchema = z.object({
   baseBranch: z.string().optional(),
   linearIssueId: z.string().optional(),
   linearIssueTitle: z.string().optional(),
+  linearIssueLabels: z.array(z.string()).default([]),
+  hasChildren: z.boolean().default(false),
   slug: z.string().optional(),
   webhookUrl: z.string().url(),
   webhookSecret: z.string().min(1),

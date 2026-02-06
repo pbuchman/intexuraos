@@ -193,6 +193,22 @@ For PRs to appear as attachments in Linear UI:
 
 When both conditions are met, GitHub integration automatically attaches PR to Linear issue.
 
+## Two-Phase Execution Model (Workers)
+
+When issues are processed by automated workers (orchestrator), they follow a two-phase model:
+
+| Phase   | Trigger               | Purpose             | Output                                 |
+| ------- | --------------------- | ------------------- | -------------------------------------- |
+| Phase 1 | No `code-task` label  | Design & Validation | Design doc, updated issue, label added |
+| Phase 2 | Has `code-task` label | Strict Execution    | Code, tests, PR, Linear "In Review"    |
+
+**Labels control phase:**
+
+- `code-task` → Phase 2 (execute autonomously)
+- `unclear` → Stop, await human review
+
+See: [Two-Phase Execution Reference](reference/two-phase-execution.md)
+
 ## References
 
 - Workflows: [`workflows/`](workflows/)
