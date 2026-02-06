@@ -175,11 +175,6 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       );
 
-      // Record guest usage after successful response
-      if (guestSessionId !== null) {
-        getServices().guestRateLimiter.record(guestSessionId);
-      }
-
       if (!result.ok) {
         /* v8 ignore start -- upstream: Fallback for unknown error codes from domain layer @preserve */
         // Map domain error codes to standard error codes
@@ -192,6 +187,11 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const errorCode = errorMap[result.error.code] ?? 'INTERNAL_ERROR';
         return await reply.fail(errorCode, result.error.message);
         /* v8 ignore stop @preserve */
+      }
+
+      // Record guest usage only after successful response
+      if (guestSessionId !== null) {
+        getServices().guestRateLimiter.record(guestSessionId);
       }
 
       return await reply.ok({
