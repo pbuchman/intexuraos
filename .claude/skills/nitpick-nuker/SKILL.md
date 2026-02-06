@@ -21,10 +21,10 @@ Autonomous PR comment triage that processes GitHub review comments, fixes action
 
 ## Invocation
 
-| Input | Action |
-|-------|--------|
-| `/nitpick-nuker` | Triage PR for current branch |
-| `/nitpick-nuker 616` | Triage PR #616 |
+| Input                | Action                       |
+| -------------------- | ---------------------------- |
+| `/nitpick-nuker`     | Triage PR for current branch |
+| `/nitpick-nuker 616` | Triage PR #616               |
 
 ## Workflow
 
@@ -34,12 +34,12 @@ Execute the workflow at: `.claude/skills/nitpick-nuker/workflows/triage-pr-comme
 
 All scripts are in `.claude/skills/nitpick-nuker/scripts/`:
 
-| Script | Purpose |
-|--------|---------|
-| `fetch-unprocessed-comments.sh` | Fetch comments without 🚀 from bot |
-| `add-reaction.sh` | Add 🚀 reaction to processed comment |
-| `post-summary.sh` | Post summary comment to PR |
-| `watch-ci.sh` | Watch CI with workflow filtering |
+| Script                          | Purpose                              |
+| ------------------------------- | ------------------------------------ |
+| `fetch-unprocessed-comments.sh` | Fetch comments without 🚀 from bot   |
+| `add-reaction.sh`               | Add 🚀 reaction to processed comment |
+| `post-summary.sh`               | Post summary comment to PR           |
+| `watch-ci.sh`                   | Watch CI with workflow filtering     |
 
 ## Comment Types
 
@@ -53,14 +53,14 @@ The skill processes three types of comments:
 
 For each comment, decide:
 
-| Criteria | Action |
-|----------|--------|
-| Clear actionable fix (typo, style, naming) | FIX |
-| Code change with clear intent | FIX |
-| Question or discussion | SKIP - "Discussion/question" |
-| Disagree with suggestion | SKIP - "Intentional design" |
-| Already addressed elsewhere | SKIP - "Addressed in other fix" |
-| Outside PR scope | SKIP - "Out of scope" |
+| Criteria                                   | Action                          |
+| ------------------------------------------ | ------------------------------- |
+| Clear actionable fix (typo, style, naming) | FIX                             |
+| Code change with clear intent              | FIX                             |
+| Question or discussion                     | SKIP - "Discussion/question"    |
+| Disagree with suggestion                   | SKIP - "Intentional design"     |
+| Already addressed elsewhere                | SKIP - "Addressed in other fix" |
+| Outside PR scope                           | SKIP - "Out of scope"           |
 
 ## CI Loop
 

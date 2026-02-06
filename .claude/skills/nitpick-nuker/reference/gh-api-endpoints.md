@@ -58,7 +58,13 @@ gh api graphql -f query='
 ## GraphQL Query for Fetching All Comments
 
 ```graphql
-query($owner: String!, $repo: String!, $pr: Int!, $commentsCursor: String, $reviewsCursor: String) {
+query (
+  $owner: String!
+  $repo: String!
+  $pr: Int!
+  $commentsCursor: String
+  $reviewsCursor: String
+) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
       # Issue comments (general PR conversation)
@@ -70,14 +76,18 @@ query($owner: String!, $repo: String!, $pr: Int!, $commentsCursor: String, $revi
         nodes {
           id
           databaseId
-          author { login }
+          author {
+            login
+          }
           body
           url
           createdAt
           reactions(first: 100) {
             nodes {
               content
-              user { login }
+              user {
+                login
+              }
             }
           }
         }
@@ -91,7 +101,9 @@ query($owner: String!, $repo: String!, $pr: Int!, $commentsCursor: String, $revi
         nodes {
           id
           databaseId
-          author { login }
+          author {
+            login
+          }
           body
           url
           state
@@ -99,14 +111,18 @@ query($owner: String!, $repo: String!, $pr: Int!, $commentsCursor: String, $revi
           reactions(first: 100) {
             nodes {
               content
-              user { login }
+              user {
+                login
+              }
             }
           }
           comments(first: 100) {
             nodes {
               id
               databaseId
-              author { login }
+              author {
+                login
+              }
               body
               url
               path
@@ -115,7 +131,9 @@ query($owner: String!, $repo: String!, $pr: Int!, $commentsCursor: String, $revi
               reactions(first: 100) {
                 nodes {
                   content
-                  user { login }
+                  user {
+                    login
+                  }
                 }
               }
             }
@@ -129,24 +147,24 @@ query($owner: String!, $repo: String!, $pr: Int!, $commentsCursor: String, $revi
 
 ## Reaction Content Values
 
-| Display | API Value |
-|---------|-----------|
-| 👍 | `+1` or `THUMBS_UP` |
-| 👎 | `-1` or `THUMBS_DOWN` |
-| 😄 | `laugh` or `LAUGH` |
-| 🎉 | `hooray` or `HOORAY` |
-| 😕 | `confused` or `CONFUSED` |
-| ❤️ | `heart` or `HEART` |
-| 🚀 | `rocket` or `ROCKET` |
-| 👀 | `eyes` or `EYES` |
+| Display | API Value                |
+| ------- | ------------------------ |
+| 👍      | `+1` or `THUMBS_UP`      |
+| 👎      | `-1` or `THUMBS_DOWN`    |
+| 😄      | `laugh` or `LAUGH`       |
+| 🎉      | `hooray` or `HOORAY`     |
+| 😕      | `confused` or `CONFUSED` |
+| ❤️      | `heart` or `HEART`       |
+| 🚀      | `rocket` or `ROCKET`     |
+| 👀      | `eyes` or `EYES`         |
 
 ## ID Formats
 
-| Type | Database ID | Node ID (GraphQL) |
-|------|-------------|-------------------|
-| Issue Comment | `IC_kwDOAAA...` (node) or numeric | `IC_kwDOAAA...` |
+| Type           | Database ID                         | Node ID (GraphQL) |
+| -------------- | ----------------------------------- | ----------------- |
+| Issue Comment  | `IC_kwDOAAA...` (node) or numeric   | `IC_kwDOAAA...`   |
 | Review Comment | `PRRC_kwDOAAA...` (node) or numeric | `PRRC_kwDOAAA...` |
-| Review | `PRR_kwDOAAA...` (node) or numeric | `PRR_kwDOAAA...` |
+| Review         | `PRR_kwDOAAA...` (node) or numeric  | `PRR_kwDOAAA...`  |
 
 **Note:** GraphQL returns node IDs (`IC_`, `PRRC_`, `PRR_` prefixed). REST APIs use numeric IDs.
 
@@ -178,9 +196,9 @@ gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"'
 
 ## Error Handling
 
-| Status | Meaning | Action |
-|--------|---------|--------|
-| 401 | Unauthorized | Run `gh auth login` |
-| 403 | Forbidden / Rate limited | Check rate limit, wait |
-| 404 | Not found | Verify IDs and permissions |
-| 422 | Validation failed | Check request body |
+| Status | Meaning                  | Action                     |
+| ------ | ------------------------ | -------------------------- |
+| 401    | Unauthorized             | Run `gh auth login`        |
+| 403    | Forbidden / Rate limited | Check rate limit, wait     |
+| 404    | Not found                | Verify IDs and permissions |
+| 422    | Validation failed        | Check request body         |
