@@ -227,6 +227,30 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.linearIssueTitle).toBe('Fix bug');
       expect(result.value.linearFallback).toBe(true);
     });
+
+    it('stores PR correlation fields (INT-465)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput({
+        prNumber: 123,
+        prBranch: 'feature/test',
+        parentTaskId: 'task_parent-123',
+        followUpReason: 'pr_comment',
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.prNumber).toBe(123);
+      expect(result.value.prBranch).toBe('feature/test');
+      expect(result.value.parentTaskId).toBe('task_parent-123');
+      expect(result.value.followUpReason).toBe('pr_comment');
+    });
   });
 
   describe('findById', () => {
@@ -885,6 +909,64 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe('NOT_FOUND');
+    });
+  });
+
+  describe('findByPR (INT-465)', () => {
+    it('returns task when repository and prNumber match', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 456,
+        prBranch: 'feature/test',
+      }));
+      expect(created.ok).toBe(true);
+
+      const result = await repo.findByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).not.toBeNull();
+      expect(result.value?.prNumber).toBe(456);
+      expect(result.value?.repository).toBe('test/repo');
+    });
+
+    it('returns null when no task exists for PR', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.findByPR('test/repo', 999);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
+
+    it('returns null when repository does not match', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        repository: 'test/repo',
+        prNumber: 123,
+      }));
+
+      const result = await repo.findByPR('other/repo', 123);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
     });
   });
 });

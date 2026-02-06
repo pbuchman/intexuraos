@@ -44,6 +44,50 @@ Execute the task autonomously. The issue has been prepared (Phase 1) and is read
 
 ## Steps
 
+### 0. Execute GLM Delegation Plan (if present)
+
+**0a. Check for GLM Delegation Plan**
+
+Look for `## GLM Delegation Plan` section in the Linear issue description:
+
+| Section Found   | Action                            |
+| --------------- | --------------------------------- |
+| Section exists  | Execute it (steps 0b-0d)          |
+| Section missing | Skip to Step 1 (normal execution) |
+
+**0b. Verify MCP Tools Available**
+
+```
+ToolSearch: "select:mcp__glm-coder__generate_code"
+```
+
+| Result            | Action                                         |
+| ----------------- | ---------------------------------------------- |
+| Tools available   | Proceed with delegation                        |
+| Tools unavailable | Log warning: "GLM unavailable", skip to Step 1 |
+
+**0c. Execute GLM-Generated Files FIRST**
+
+For EACH file in the "GLM-Generated" table:
+
+1. Load context files specified in the table
+2. Call the specified tool (`generate_code` or `generate_tests`)
+3. Review output for correctness
+4. **If output acceptable:** Write to file using Write tool
+5. **If GLM fails or output incorrect:** Fall back to Direct Implementation with warning:
+   ```
+   ⚠️ GLM FALLBACK: <file> - <reason>. Implementing directly.
+   ```
+6. Run relevant tests to verify
+
+**0d. Then Proceed to Direct Implementation**
+
+Only after ALL GLM files are handled (written or fallen back), proceed to Step 5 for "Direct Implementation" items only. Do NOT re-implement GLM files in Step 5.
+
+**RULE:** Prefer GLM tools, but fall back to Direct if GLM produces unusable output.
+
+---
+
 ### 1. Verify Tools
 
 Verify Linear MCP, GitHub CLI, GCloud available. Fail fast if unavailable.
@@ -79,13 +123,13 @@ Set state: "In Progress"
 
 BEFORE any code changes.
 
-### 5. Implement
+### 5. Implement (Direct Implementation Only)
 
-Follow the requirements from the Linear issue description:
+Implement items from the "Direct Implementation" table (GLM files already handled in Step 0):
 
 1. Write tests first (from Test Requirements section)
-2. Implement code (from Requirements section)
-3. Follow Files to Modify list
+2. Implement code for "Modified Files" and any GLM fallbacks
+3. Do NOT re-implement files already written by GLM
 
 ### 6. CI Gate (MANDATORY)
 

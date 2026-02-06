@@ -86,13 +86,20 @@ The orchestrator uses a two-phase model to process Linear issues based on label 
    - `## Requirements` (Functional / Non-Functional)
    - `## Scope` (In Scope / Out of Scope)
    - `## Files to Modify`
+   - `## GLM Delegation Plan` (if GLM MCP tools available)
    - `## Acceptance Criteria`
 
-2. **Create subissues (if needed)** - Split complex issues into specific, labeled children:
+2. **GLM Delegation Plan (CONDITIONAL)** - If GLM MCP tools are available:
+   - GLM-Generated table (files, tools, task descriptions)
+   - Direct Implementation table (files, reasons)
+   - Criteria checklist showing analysis was done
+   - **Purpose:** Allocate work to GLM before Phase 2 to reduce costs
+
+3. **Create subissues (if needed)** - Split complex issues into specific, labeled children:
    - Each child has detailed scope and test requirements
    - All children have `code-task` label (ready for Phase 2)
 
-3. **Label added** - ONE of:
+4. **Label added** - ONE of:
    - `code-task` - Issue is ready for execution
    - `unclear` - Issue needs human clarification
 
