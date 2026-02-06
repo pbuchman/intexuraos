@@ -25,6 +25,7 @@ import { WorktreeManager } from './services/worktree-manager.js';
 import { LogForwarder } from './services/log-forwarder.js';
 import { createHeartbeatManager } from './heartbeat.js';
 import { createIsolationProvider, TokenRefresher } from './services/isolation/index.js';
+import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
 import type { IsolationConfig } from './services/task-dispatcher.js';
 
@@ -104,7 +105,11 @@ async function bootstrap(): Promise<void> {
   const orchestratorDir = join(home, '.claude-orchestrator');
   const worktreeDir = join(home, 'claude-workers', 'worktrees');
   const logsDir = join(orchestratorDir, 'logs');
-  const repoPath = getOptionalEnv('REPOSITORY_PATH', join(home, 'personal', 'intexuraos-3'));
+  const defaultRepoPath = join(orchestratorDir, 'repo');
+
+  // Repository configuration
+  const repoUrl = getRequiredEnv('INTEXURAOS_REPOSITORY_URL');
+  const repoPath = getOptionalEnv('INTEXURAOS_REPOSITORY_PATH', defaultRepoPath);
 
   // Ensure directories exist
   ensureDirectoryExists(orchestratorDir);
@@ -154,6 +159,9 @@ async function bootstrap(): Promise<void> {
   );
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
+
+  // Ensure repository is cloned and up-to-date
+  await ensureRepository(repoUrl, repoPath, logger);
 
   // Create services
   const statePersistence = new StatePersistence(config.stateFilePath, logger);
