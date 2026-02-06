@@ -28,7 +28,6 @@ const EXEMPT_APPS = [
   'web',
   'commands-router',
   'llm-orchestrator',
-  'promptvault-service',
 ];
 
 function getApps() {

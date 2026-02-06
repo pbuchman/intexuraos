@@ -17,7 +17,7 @@ All internal endpoints follow the pattern:
 **Components:**
 
 - `/internal` - Fixed prefix indicating internal-only endpoint
-- `{service-prefix}` - Short service identifier (e.g., `notion`, `user`, `promptvault`)
+- `{service-prefix}` - Short service identifier (e.g., `notion`, `user`, `calendar`)
 - `{resource-path}` - REST-style resource path (e.g., `users/:userId/context`)
 
 ### Service Prefixes

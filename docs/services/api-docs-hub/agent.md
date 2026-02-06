@@ -92,7 +92,6 @@ Navigate to: https://api-docs-hub.intexuraos.app/docs
 - user-service
 - mobile-notifications-service
 - notion-service
-- promptvault-service
 - app-settings-service
 - data-insights-agent
 
