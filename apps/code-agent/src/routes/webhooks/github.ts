@@ -159,7 +159,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
       /* v8 ignore start -- upstream: null check for unhandled GitHub event types @preserve */
       // Null means event type is not stored (e.g., unknown events)
       if (parsedEvent === null) {
-        logger.debug({ eventType }, 'Event type not stored, acknowledging');
+        logger.info({ eventType }, 'Unhandled GitHub event type, acknowledging');
         return await reply.ok({ message: 'acknowledged' });
       }
       /* v8 ignore stop @preserve */

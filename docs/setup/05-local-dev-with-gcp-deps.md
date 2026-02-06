@@ -152,7 +152,7 @@ Tests use **in-memory fake repositories** via dependency injection—no external
 
 ```bash
 pnpm run test          # Run all tests
-pppnpm run test:coverage # Run with coverage report
+pnpm run test:coverage # Run with coverage report
 pnpm run ci            # Full CI pipeline
 ```
 

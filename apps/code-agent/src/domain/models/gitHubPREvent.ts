@@ -12,14 +12,32 @@ export type GitHubEventType =
   | 'ping';
 
 export type GitHubPRAction =
+  // pull_request actions
   | 'opened'
   | 'closed'
   | 'edited'
-  | 'synchronized'
+  | 'synchronize'
+  | 'reopened'
   | 'ready_for_review'
   | 'converted_to_draft'
+  | 'assigned'
+  | 'unassigned'
+  | 'labeled'
+  | 'unlabeled'
+  | 'locked'
+  | 'unlocked'
+  | 'review_requested'
+  | 'review_request_removed'
+  | 'milestoned'
+  | 'demilestoned'
+  | 'enqueued'
+  | 'dequeued'
+  | 'auto_merge_enabled'
+  | 'auto_merge_disabled'
+  // pull_request_review actions
   | 'submitted'
   | 'dismissed'
+  // pull_request_review_comment actions
   | 'created'
   | 'deleted';
 

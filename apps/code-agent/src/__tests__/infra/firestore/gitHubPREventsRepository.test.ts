@@ -289,21 +289,12 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       }
     });
 
-    it('should handle Firestore Timestamp objects with toDate method for mergedAt', async () => {
-      const createdAtDate = new Date('2024-01-01T00:00:00Z');
-      const processedAtDate = new Date('2024-01-01T00:05:00Z');
-      const mergedAtDate = new Date('2024-01-02T00:00:00Z');
+    it('should handle Firestore Timestamp objects for dates', async () => {
+      const createdAtDate = new Date('2024-01-02T00:00:00Z');
+      const processedAtDate = new Date('2024-01-02T00:05:00Z');
+      const mergedAtDate = new Date('2024-01-03T00:00:00Z');
 
-      // Mock Firestore Timestamp-like objects with toDate() method
-      // Uses a class to ensure it's NOT instanceof Date but HAS toDate method
-      class MockTimestamp {
-        constructor(private date: Date) {}
-        toDate(): Date {
-          return this.date;
-        }
-      }
-
-      const eventData = {
+      const eventDataWithTimestamps = {
         githubEventId: 111,
         repository: 'intexuraos/test-repo',
         repositoryId: 987654321,
@@ -314,16 +305,16 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         senderLogin: 'user1',
         senderId: 111,
         senderType: 'User',
-        title: 'Merged PR',
+        title: 'PR with Timestamps',
         body: 'Body',
         state: 'closed',
-        mergedAt: new MockTimestamp(mergedAtDate),
-        createdAt: new MockTimestamp(createdAtDate),
-        processedAt: new MockTimestamp(processedAtDate),
+        mergedAt: { toDate: (): Date => mergedAtDate },
+        createdAt: { toDate: (): Date => createdAtDate },
+        processedAt: { toDate: (): Date => processedAtDate },
         payload: {},
       };
 
-      const doc = createMockDocSnapshot('doc1', eventData);
+      const doc = createMockDocSnapshot('doc1', eventDataWithTimestamps);
 
       const mockQuery = {
         where: vi.fn().mockReturnThis(),
@@ -520,68 +511,6 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       }
     });
 
-    it('should handle Firestore Timestamp objects with toDate method', async () => {
-      const createdAtDate = new Date('2024-01-01T00:00:00Z');
-      const processedAtDate = new Date('2024-01-01T00:05:00Z');
-      const mergedAtDate = new Date('2024-01-02T00:00:00Z');
-
-      // Mock Firestore Timestamp-like objects with toDate() method
-      // Uses a class to ensure it's NOT instanceof Date but HAS toDate method
-      class MockTimestamp {
-        constructor(private date: Date) {}
-        toDate(): Date {
-          return this.date;
-        }
-      }
-
-      const eventData = {
-        githubEventId: 111,
-        repository: 'intexuraos/test-repo',
-        repositoryId: 987654321,
-        pullRequestNumber: 42,
-        pullRequestId: 123456789,
-        eventType: 'pull_request',
-        action: 'closed',
-        senderLogin: 'user1',
-        senderId: 111,
-        senderType: 'User',
-        title: 'Merged PR',
-        body: 'Body',
-        state: 'closed',
-        mergedAt: new MockTimestamp(mergedAtDate),
-        createdAt: new MockTimestamp(createdAtDate),
-        processedAt: new MockTimestamp(processedAtDate),
-        payload: {},
-      };
-
-      const doc = createMockDocSnapshot('doc1', eventData);
-
-      const mockQuery = {
-        where: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
-      };
-
-      mockGetFirestore.mockReturnValue({
-        collection: vi.fn(() => mockQuery),
-      } as never);
-
-      const repository = createFirestoreGitHubPREventsRepository({
-        logger: mockLogger,
-      });
-
-      const result = await repository.findByRepository('intexuraos/test-repo');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        const firstEvent = result.value[0];
-        expect(firstEvent?.createdAt).toEqual(createdAtDate);
-        expect(firstEvent?.processedAt).toEqual(processedAtDate);
-        expect(firstEvent?.mergedAt).toEqual(mergedAtDate);
-      }
-    });
-
     it('should handle events with null mergedAt', async () => {
       const eventData: Omit<GitHubPREvent, 'id'> = {
         githubEventId: 111,
@@ -626,6 +555,59 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       if (result.ok) {
         const firstEvent = result.value[0];
         expect(firstEvent?.mergedAt).toBeNull();
+      }
+    });
+
+    it('should handle Firestore Timestamp objects for dates', async () => {
+      const mergedAtDate = new Date('2024-01-15T12:00:00Z');
+      const createdAtDate = new Date('2024-01-01T00:00:00Z');
+      const processedAtDate = new Date('2024-01-01T00:05:00Z');
+
+      const eventDataWithTimestamps = {
+        githubEventId: 98765,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request',
+        action: 'closed',
+        senderLogin: 'testuser',
+        senderId: 12345,
+        senderType: 'User',
+        title: 'Test PR',
+        body: 'Test body',
+        state: 'closed',
+        mergedAt: { toDate: (): Date => mergedAtDate },
+        createdAt: { toDate: (): Date => createdAtDate },
+        processedAt: { toDate: (): Date => processedAtDate },
+        payload: {},
+      };
+
+      const doc = createMockDocSnapshot('doc-with-timestamps', eventDataWithTimestamps);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findByRepository('intexuraos/test-repo');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const event = result.value[0];
+        expect(event?.createdAt).toEqual(createdAtDate);
+        expect(event?.processedAt).toEqual(processedAtDate);
+        expect(event?.mergedAt).toEqual(mergedAtDate);
       }
     });
   });
@@ -768,41 +750,32 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       }
     });
 
-    it('should handle Firestore Timestamp objects with toDate method for mergedAt', async () => {
+    it('should handle Firestore Timestamp objects for dates', async () => {
       const createdAtDate = new Date('2024-01-02T00:00:00Z');
       const processedAtDate = new Date('2024-01-02T00:05:00Z');
       const mergedAtDate = new Date('2024-01-03T00:00:00Z');
 
-      // Mock Firestore Timestamp-like objects with toDate() method
-      // Uses a class to ensure it's NOT instanceof Date but HAS toDate method
-      class MockTimestamp {
-        constructor(private date: Date) {}
-        toDate(): Date {
-          return this.date;
-        }
-      }
-
-      const eventData = {
-        githubEventId: 333,
-        repository: 'intexuraos/repo-c',
-        repositoryId: 333333,
-        pullRequestNumber: 3,
-        pullRequestId: 100003,
+      const eventDataWithTimestamps = {
+        githubEventId: 111,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
         eventType: 'pull_request',
         action: 'closed',
-        senderLogin: 'user3',
-        senderId: 333,
+        senderLogin: 'user1',
+        senderId: 111,
         senderType: 'User',
-        title: 'PR 3',
-        body: 'Body 3',
+        title: 'PR with Timestamps',
+        body: 'Body',
         state: 'closed',
-        mergedAt: new MockTimestamp(mergedAtDate),
-        createdAt: new MockTimestamp(createdAtDate),
-        processedAt: new MockTimestamp(processedAtDate),
+        mergedAt: { toDate: (): Date => mergedAtDate },
+        createdAt: { toDate: (): Date => createdAtDate },
+        processedAt: { toDate: (): Date => processedAtDate },
         payload: {},
       };
 
-      const doc = createMockDocSnapshot('doc1', eventData);
+      const doc = createMockDocSnapshot('doc1', eventDataWithTimestamps);
 
       const mockQuery = {
         orderBy: vi.fn().mockReturnThis(),

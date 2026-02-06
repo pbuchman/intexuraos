@@ -106,14 +106,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for task-complete webhook');
-        reply.status(401);
-        return {
-          success: false,
-          error: {
-            code: 'UNAUTHORIZED',
-            message: 'Internal authentication failed',
-          },
-        };
+        return reply.fail('UNAUTHORIZED', 'Internal authentication failed');
       }
 
       // Step 2: Validate HMAC signature
@@ -133,15 +126,15 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!signatureResult.ok) {
         request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed');
-        reply.status(401);
-        return {
         /* v8 ignore stop @preserve */
+        // @allow-raw-send: preserve domain-specific signature error codes for webhook validation
+        return reply.status(401).send({
           success: false,
           error: {
             code: signatureResult.error.code.toUpperCase(),
             message: signatureResult.error.message,
           },
-        };
+        });
       }
 
       const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, logger } = getServices();
@@ -170,14 +163,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       /* v8 ignore stop @preserve */
       if (!taskResult.ok) {
         request.log.error({ taskId, error: taskResult.error }, 'Task not found');
-        reply.status(404);
-        return {
-          success: false,
-          error: {
-            code: 'TASK_NOT_FOUND',
-            message: 'Task not found',
-          },
-        };
+        return reply.fail('NOT_FOUND', 'Task not found');
       }
 
       const task = taskResult.value;
@@ -192,14 +178,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed');
-          reply.status(500);
-          return {
-            success: false,
-            error: {
-              code: updateResult.error.code,
-              message: updateResult.error.message,
-            },
-          };
+          return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
         // Notify actions-agent if task has actionId
@@ -271,14 +250,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as failed');
-          reply.status(500);
-          return {
-            success: false,
-            error: {
-              code: updateResult.error.code,
-              message: updateResult.error.message,
-            },
-          };
+          return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
         // Notify actions-agent if task has actionId
@@ -345,14 +317,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as interrupted');
-          reply.status(500);
-          return {
-            success: false,
-            error: {
-              code: updateResult.error.code,
-              message: updateResult.error.message,
-            },
-          };
+          return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
         // Notify actions-agent if task has actionId
@@ -396,14 +361,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       /* v8 ignore stop @preserve */
 
       // Should not reach here, but TypeScript needs it
-      reply.status(400);
-      return {
-        success: false,
-        error: {
-          code: 'INVALID_STATUS',
-          message: 'Unknown task status',
-        },
-      };
+      return reply.fail('INVALID_REQUEST', 'Unknown task status');
     }
   );
 
@@ -481,14 +439,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for log chunk upload');
-        reply.status(401);
-        return {
-          success: false,
-          error: {
-            code: 'UNAUTHORIZED',
-            message: 'Internal authentication failed',
-          },
-        };
+        return reply.fail('UNAUTHORIZED', 'Internal authentication failed');
       }
 
       // Step 2: Validate HMAC signature
@@ -509,14 +460,14 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!signatureResult.ok) {
         request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed for logs');
-        reply.status(401);
-        return {
+        // @allow-raw-send: preserve domain-specific signature error codes for webhook validation
+        return reply.status(401).send({
           success: false,
           error: {
             code: signatureResult.error.code.toUpperCase(),
             message: signatureResult.error.message,
           },
-        };
+        });
       }
 
       const { logChunkRepo, codeTaskRepo, statusMirrorService } = getServices();
@@ -556,14 +507,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!storeResult.ok) {
         request.log.error({ taskId, error: storeResult.error }, 'Failed to store log chunks');
-        reply.status(500);
-        return {
-          success: false,
-          error: {
-            code: storeResult.error.code,
-            message: storeResult.error.message,
-          },
-        };
+        return reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
       request.log.debug({ taskId, count: chunks.length }, 'Log chunks stored successfully');
