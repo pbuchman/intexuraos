@@ -503,6 +503,8 @@ module "secret_manager" {
     "INTEXURAOS_GITHUB_APP_PRIVATE_KEY" = "GitHub App private key (PEM format) for code worker authentication"
     "INTEXURAOS_GITHUB_APP_ID"          = "GitHub App ID for code worker"
     "INTEXURAOS_GITHUB_INSTALLATION_ID" = "GitHub App installation ID for pbuchman/intexuraos"
+    # Orchestrator repository management (INT-515)
+    "INTEXURAOS_REPOSITORY_URL" = "GitHub repository URL for orchestrator self-managed clone"
     # Pre-dev environment secrets
     "INTEXURAOS_PREDEV_ENV_VARS"       = "Aggregated environment variables for pre-dev VM .envrc.local"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation (predev branch switch)"
