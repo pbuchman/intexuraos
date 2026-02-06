@@ -86,6 +86,24 @@ The skill automatically detects intent from input:
 
 \*Routes to [parent-execution.md](workflows/parent-execution.md) if issue has child subissues
 
+### Note: Backlog → Todo Transition
+
+**`/linear` (no args) queries "Todo" state**, but `create-issue.md` creates issues in **"Backlog" state**.
+
+This gap is intentional:
+- **Backlog**: Raw issues, may need triage/refinement
+- **Todo**: Prioritized and ready for work
+
+**To make an issue appear in `/linear` (no args) queue:**
+1. Move issue from Backlog → Todo in Linear UI (manual triage), OR
+2. Use `/linear INT-XXX` to work on a specific issue directly (bypasses queue)
+
+> ⚠️ **Important:** Issues created via `/linear <description>` will NOT appear in the random queue until manually triaged to "Todo" state.
+
+**Two-cycle pattern (cron mode):**
+1. First invocation: `/linear INT-XXX` runs Phase 1, adds `code-task` label, STOPS
+2. Second invocation: `/linear INT-XXX` runs Phase 2 (execution)
+
 ## Auto-Splitting Detection
 
 For complex multi-step tasks, auto-splitting is triggered when:
@@ -192,6 +210,75 @@ For PRs to appear as attachments in Linear UI:
 2. **PR title MUST contain Linear issue ID** - e.g., `[INT-123] Fix auth`
 
 When both conditions are met, GitHub integration automatically attaches PR to Linear issue.
+
+## Two-Phase Execution Model
+
+All issue work follows a two-phase model (both interactive and worker modes):
+
+| Phase   | Trigger               | Purpose             | Output                                                        |
+| ------- | --------------------- | ------------------- | ------------------------------------------------------------- |
+| Phase 1 | No `code-task` label  | Design & Validation | Enriched issue (in-place), subissues if complex, label added  |
+| Phase 2 | Has `code-task` label | Strict Execution    | Code, tests, PR, Linear "In Review"                           |
+
+**Labels control phase:**
+
+- `code-task` → Phase 2 (execute)
+- `unclear` → Stop, await human review
+
+**Phase 1 outputs (in-place on Linear issue):**
+1. Enriched description with Unified Issue Template sections
+2. Subissues with `code-task` label (if complex)
+3. `code-task` or `unclear` label added to parent
+4. Optional: Design doc PR for complex architectural decisions
+
+See: [Two-Phase Execution Reference](reference/two-phase-execution.md)
+
+## Verbose Transition Logging (MANDATORY)
+
+**All workflow transitions MUST be printed for debugging purposes.**
+
+### Log Format Reference
+
+| Emoji | Category | Usage |
+|-------|----------|-------|
+| 🔍 | FETCH/SEARCH | Querying Linear API |
+| 🏷️ | LABELS | Reading or adding labels |
+| 🔀 | ROUTING | Phase/workflow routing decisions |
+| 📋 | CREATED/FOUND | Issue creation or search results |
+| 🎯 | SELECTED | Issue selection from queue |
+| 📍 | STATE | Linear state transitions |
+| 🔧 | PHASE 1 | Design & validation phase |
+| 🚀 | PHASE 2 | Execution phase |
+| 🌿 | BRANCH | Git branch operations |
+| ✅ | COMPLETE | Phase/workflow completion |
+| ⏹️ | STOPPING | Explicit workflow stop |
+| ❓ | UNCLEAR | Issue needs clarification |
+
+### Examples
+
+**Routing to Phase 2:**
+```
+🔍 FETCH: Getting issue INT-123 details...
+🏷️ LABELS: ["feature", "code-task"]
+🔀 ROUTING: INT-123 → Phase 2 (has code-task label)
+```
+
+**Phase 1 completion:**
+```
+🔧 PHASE 1: Starting Design & Validation for INT-456
+📝 ENRICH: Updated issue with template sections
+🏷️ LABEL: Adding 'code-task' label
+✅ PHASE 1 COMPLETE: Issue enriched
+⏹️ STOPPING: User must re-invoke for Phase 2
+```
+
+**Random todo selection:**
+```
+🔍 SEARCH: Looking for Todo issues in IntexuraOS...
+📋 FOUND: 3 issues in Todo state
+🎯 SELECTED: INT-789 "[bug] Fix auth" (priority: High)
+🔀 ROUTING: Delegating to work-existing.md
+```
 
 ## References
 

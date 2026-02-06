@@ -245,6 +245,8 @@ describe('POST /code/submit', () => {
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-123',
         linearIssueTitle: 'Fix the login bug',
+        linearIssueLabels: [],
+        hasChildren: false,
         linearFallback: false,
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
@@ -289,6 +291,8 @@ describe('POST /code/submit', () => {
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-124',
         linearIssueTitle: 'Fix the login bug',
+        linearIssueLabels: [],
+        hasChildren: false,
         linearFallback: false,
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
@@ -329,6 +333,8 @@ describe('POST /code/submit', () => {
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-305',
         linearIssueTitle: 'Fix the login bug',
+        linearIssueLabels: [],
+        hasChildren: false,
         linearFallback: false,
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
@@ -619,6 +625,8 @@ describe('POST /code/submit', () => {
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValue({
         linearIssueId: 'INT-123',
         linearIssueTitle: prompt,
+        linearIssueLabels: [],
+        hasChildren: false,
         linearFallback: false,
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValue(undefined);
@@ -681,6 +689,8 @@ describe('POST /code/submit', () => {
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValue({
         linearIssueId,
         linearIssueTitle: 'First task',
+        linearIssueLabels: [],
+        hasChildren: false,
         linearFallback: false,
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValue(undefined);
@@ -726,6 +736,8 @@ describe('POST /code/submit', () => {
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValue({
         linearIssueId: 'INT-123',
         linearIssueTitle: 'Fix the bug',
+        linearIssueLabels: [],
+        hasChildren: false,
         linearFallback: false,
       });
       vi.spyOn(linearService, 'markInProgress').mockResolvedValue(undefined);

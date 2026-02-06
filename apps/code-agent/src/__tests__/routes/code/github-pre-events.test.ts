@@ -220,7 +220,49 @@ describe('GET /code/github-pr-events', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('should return 400 for missing repository parameter', async () => {
+  it('should return 200 with events when no repository filter (fetch all)', async () => {
+    // Create GitHub PR events in different repos
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    await repo.save({
+      githubEventId: 11111,
+      repository: 'intexuraos/repo-a',
+      repositoryId: 111111,
+      pullRequestNumber: 1,
+      pullRequestId: 100001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'user1',
+      senderId: 111,
+      senderType: 'User',
+      title: 'PR in repo A',
+      body: 'Body',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+
+    await repo.save({
+      githubEventId: 22222,
+      repository: 'intexuraos/repo-b',
+      repositoryId: 222222,
+      pullRequestNumber: 2,
+      pullRequestId: 100002,
+      eventType: 'pull_request',
+      action: 'closed',
+      senderLogin: 'user2',
+      senderId: 222,
+      senderType: 'User',
+      title: 'PR in repo B',
+      body: 'Body',
+      state: 'closed',
+      mergedAt: null,
+      createdAt: new Date('2024-01-02T00:00:00Z'),
+      payload: {},
+    });
+
     const response = await server.inject({
       method: 'GET',
       url: '/code/github-pr-events',
@@ -229,8 +271,10 @@ describe('GET /code/github-pr-events', () => {
       },
     });
 
-    // Fastify returns 400 for missing required query params
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.events).toHaveLength(2);
   });
 
   it('should return 400 for invalid repository format', async () => {

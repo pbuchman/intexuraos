@@ -70,8 +70,8 @@ Scan the codebase for these smell categories (in priority order):
 
 ```bash
 pnpm run lint                    # ESLint catches many smells
-ppnpm run verify:boundaries       # Boundary violations
-ppppnpm run test:coverage           # Low coverage may indicate dead code
+pnpm run verify:boundaries       # Boundary violations
+pnpm run test:coverage           # Low coverage may indicate dead code
 ```
 
 **Manual grep patterns:**
@@ -143,7 +143,7 @@ grep -rn "as any" packages/ apps/ --include="*.ts" | grep -v "__tests__"
 **Then:**
 
 1. Make the fix.
-2. Run `ppnpm run ci` — must pass.
+2. Run `pnpm run ci` — must pass.
 3. If this is a **new smell pattern** not in CLAUDE.md:
    - Add it to the "Code Smells (Fix & Document)" section.
    - Include the appropriate category (Error Handling, DI, Architecture, Code Quality).
@@ -188,6 +188,6 @@ Produce a report with this structure:
 
 - Fix **one smell per pass** — keeps changes reviewable.
 - **Always update CLAUDE.md** when fixing a new pattern type.
-- **Never claim done** until `ppnpm run ci` passes.
+- **Never claim done** until `pnpm run ci` passes.
 - If no smells found, report clean scan.
 - Reference CLAUDE.md patterns, don't duplicate documentation.

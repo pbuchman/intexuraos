@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parsePullRequestEvent,
   parsePullRequestReviewEvent,
+  parsePullRequestReviewCommentEvent,
   parsePushEvent,
   parseGitHubWebhookEvent,
   shouldProcessRepository,
@@ -206,12 +207,15 @@ describe('github-event-parser', () => {
     });
 
     it('should validate known PR actions', () => {
-      const validActions: ('opened' | 'closed' | 'edited' | 'synchronized')[] = [
+      const validActions = [
         'opened',
         'closed',
         'edited',
-        'synchronized',
-      ];
+        'synchronize',
+        'reopened',
+        'assigned',
+        'review_requested',
+      ] as const;
 
       validActions.forEach((action) => {
         const payload = {
@@ -533,6 +537,316 @@ describe('github-event-parser', () => {
     });
   });
 
+  describe('parsePullRequestReviewCommentEvent', () => {
+    const validCommentPayload = {
+      id: 12345,
+      action: 'created',
+      repository: {
+        id: 456,
+        full_name: 'intexuraos/code-agent',
+      },
+      pull_request: {
+        id: 101,
+        number: 42,
+        title: 'Test PR',
+        state: 'open',
+      },
+      comment: {
+        id: 789,
+        body: 'Nice code!',
+        path: 'src/index.ts',
+        line: 10,
+      },
+      sender: {
+        login: 'reviewer',
+        id: 111,
+        type: 'User',
+      },
+    };
+
+    it('should parse valid review comment event', () => {
+      const result = parsePullRequestReviewCommentEvent(validCommentPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toMatchObject({ // @allow-result-access -- narrowed by result.ok
+          githubEventId: 12345,
+          repository: 'intexuraos/code-agent',
+          pullRequestNumber: 42,
+          eventType: 'pull_request_review_comment',
+          action: 'created',
+          senderLogin: 'reviewer',
+          body: 'Nice code!',
+        });
+      }
+    });
+
+    it('should handle missing comment body', () => {
+      const payloadWithoutCommentBody = {
+        ...validCommentPayload,
+        comment: {
+          id: 789,
+          path: 'src/index.ts',
+        },
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payloadWithoutCommentBody);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.body).toBeNull(); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should handle missing comment object entirely', () => {
+      const payloadWithoutComment = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        pull_request: {
+          id: 101,
+          number: 42,
+        },
+        sender: {
+          login: 'reviewer',
+          id: 111,
+        },
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payloadWithoutComment);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.body).toBeNull(); // @allow-result-access -- no comment object
+      }
+    });
+
+    it('should return error for non-object payload', () => {
+      const result = parsePullRequestReviewCommentEvent(null);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Payload is not an object');
+      }
+    });
+
+    it('should return error for missing sender', () => {
+      const payload = {
+        id: 12345,
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        pull_request: {
+          id: 101,
+          number: 42,
+        },
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Missing or invalid sender');
+      }
+    });
+
+    it('should return error for missing repository', () => {
+      const payload = {
+        id: 12345,
+        pull_request: {
+          id: 101,
+          number: 42,
+        },
+        sender: {
+          login: 'reviewer',
+          id: 111,
+        },
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Missing repository');
+      }
+    });
+
+    it('should return error for invalid repository data', () => {
+      const payload = {
+        id: 12345,
+        repository: {
+          id: 'not-a-number',
+          full_name: 'intexuraos/code-agent',
+        },
+        pull_request: {
+          id: 101,
+          number: 42,
+        },
+        sender: {
+          login: 'reviewer',
+          id: 111,
+        },
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Invalid repository data');
+      }
+    });
+
+    it('should return error for missing pull_request', () => {
+      const payload = {
+        id: 12345,
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        sender: {
+          login: 'reviewer',
+          id: 111,
+        },
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Missing pull_request');
+      }
+    });
+
+    it('should return error for invalid pull_request data', () => {
+      const payload = {
+        id: 12345,
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        pull_request: {
+          id: 'not-a-number',
+          number: 42,
+        },
+        sender: {
+          login: 'reviewer',
+          id: 111,
+        },
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Invalid pull_request data');
+      }
+    });
+
+    it('should handle merged_at string', () => {
+      const payloadWithMergedAt = {
+        ...validCommentPayload,
+        pull_request: {
+          ...validCommentPayload.pull_request,
+          merged_at: '2024-01-15T12:00:00Z',
+        },
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payloadWithMergedAt);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.mergedAt).toBeInstanceOf(Date); // @allow-result-access -- narrowed by result.ok
+        expect(result.value.mergedAt?.toISOString()).toBe('2024-01-15T12:00:00.000Z'); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should handle Date instance for created_at', () => {
+      const createdDate = new Date('2024-01-15T12:00:00Z');
+      const payloadWithDateObject = {
+        ...validCommentPayload,
+        created_at: createdDate,
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payloadWithDateObject);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.createdAt).toBeInstanceOf(Date); // @allow-result-access -- narrowed by result.ok
+        expect(result.value.createdAt).toEqual(createdDate); // @allow-result-access -- Date instance passed through
+      }
+    });
+
+    it('should filter unknown actions to null', () => {
+      const payloadWithUnknownAction = {
+        ...validCommentPayload,
+        action: 'unknown_action',
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payloadWithUnknownAction);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBeNull(); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should handle deleted action', () => {
+      const payloadWithDeleted = {
+        ...validCommentPayload,
+        action: 'deleted',
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payloadWithDeleted);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.action).toBe('deleted'); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should use Date.now() when event id is missing', () => {
+      const payloadWithoutId = {
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        pull_request: {
+          id: 101,
+          number: 42,
+        },
+        comment: {
+          id: 789,
+          body: 'Nice code!',
+        },
+        sender: {
+          login: 'reviewer',
+          id: 111,
+        },
+      };
+
+      const beforeTime = Date.now();
+      const result = parsePullRequestReviewCommentEvent(payloadWithoutId);
+      const afterTime = Date.now();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.githubEventId).toBeGreaterThanOrEqual(beforeTime);
+        expect(result.value.githubEventId).toBeLessThanOrEqual(afterTime);
+      }
+    });
+  });
+
   describe('parseGitHubWebhookEvent', () => {
     it('should parse pull_request events', () => {
       const payload = {
@@ -585,6 +899,37 @@ describe('github-event-parser', () => {
       if (result.ok) {
         expect(result.value).not.toBeNull(); // @allow-result-access -- narrowed by result.ok
         expect(result.value?.eventType).toBe('pull_request_review'); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should parse pull_request_review_comment events', () => {
+      const payload = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        pull_request: {
+          id: 101,
+          number: 42,
+        },
+        comment: {
+          id: 789,
+          body: 'Nice code!',
+        },
+        sender: {
+          login: 'reviewer',
+          id: 111,
+        },
+      };
+
+      const result = parseGitHubWebhookEvent('pull_request_review_comment', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).not.toBeNull(); // @allow-result-access -- narrowed by result.ok
+        expect(result.value?.eventType).toBe('pull_request_review_comment'); // @allow-result-access -- narrowed by result.ok
       }
     });
 

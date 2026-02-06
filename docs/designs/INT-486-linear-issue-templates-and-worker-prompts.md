@@ -30,6 +30,16 @@ This document defines a unified template system for Linear issues and a two-phas
 
 ---
 
+## Endpoint Changes
+
+| Service      | Method | Path                                  | Change                                                      |
+| ------------ | ------ | ------------------------------------- | ----------------------------------------------------------- |
+| linear-agent | GET    | `/internal/linear/issues/:identifier` | Add `labels: string[]` and `childCount: number` to response |
+
+**Breaking Change:** This is a backward-incompatible change to an internal API contract. The `labels` and `childCount` fields are now included in all responses. Internal consumers must be updated to handle these new fields.
+
+---
+
 ## Table of Contents
 
 1. [Two-Phase Execution Model](#two-phase-execution-model)
@@ -88,23 +98,21 @@ This document defines a unified template system for Linear issues and a two-phas
 **Goal:** Produce a complete execution plan and update the Linear issue.
 
 **Output Artifacts:**
+
 1.  **Updated Linear Issue:** Fill in `Test Requirements`, `Files to Modify`, etc.
 2.  **Design PR:** Create a PR containing ONLY `docs/plans/INT-XXX-design.md` with the reasoning log.
 
 **Agent Behavior:**
-*   Analyze the request.
-*   Iterate on design (internally).
-*   Update Linear description with the strict template.
-*   Create branch `design/INT-XXX`.
-*   Commit `docs/plans/INT-XXX-design.md`.
-*   Create PR.
-*   **STOP.** (Do not execute code).
 
-
+- Analyze the request.
+- Iterate on design (internally).
+- Update Linear description with the strict template.
+- Create branch `design/INT-XXX`.
+- Commit `docs/plans/INT-XXX-design.md`.
+- Create PR.
+- **STOP.** (Do not execute code).
 
 **Agent:** Specialized (Opus recommended for deep analysis)
-
-
 
 ### Quality Checks
 
@@ -134,7 +142,8 @@ This document defines a unified template system for Linear issues and a two-phas
 
 **OVERRIDE:**
 User may explicitly override with: "Execute anyway" or "Skip validation"
-```
+
+````
 
 ### Phase 2: Execution (Strict)
 
@@ -171,7 +180,7 @@ User may explicitly override with: "Execute anyway" or "Skip validation"
 - ❌ Asking "Ready to commit?"
 - ❌ Asking for clarification on scope
 - ❌ Adding "smart improvements" not in scope
-```
+````
 
 ---
 

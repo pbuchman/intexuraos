@@ -15,6 +15,30 @@ import type {
 } from '../../domain/repositories/gitHubPREventRepository.js';
 import { getFirestore } from '@intexuraos/infra-firestore';
 
+/**
+ * Convert Firestore Timestamp or Date to JavaScript Date.
+ * Handles both real Firestore Timestamp objects and plain Date objects from fake Firestore.
+ * Uses duck typing to detect Timestamp objects (which have a toDate method).
+ */
+function toDate(value: unknown): Date {
+  /* v8 ignore start -- ts-type: type guard for Date vs Firestore Timestamp @preserve */
+  if (value instanceof Date) {
+    return value;
+  }
+  /* v8 ignore stop @preserve */
+  /* v8 ignore start -- ts-type: null guard for unknown type, callers always have null guards so this is unreachable @preserve */
+  // Firestore Timestamps and mock objects with toDate method
+  if (value !== null && typeof value === 'object' && 'toDate' in value) {
+    /* v8 ignore stop @preserve */
+    const obj = value as { toDate: () => Date };
+    return obj.toDate();
+  }
+  /* v8 ignore start -- ts-type: fallback branch for string parsing, unreachable with proper typed callers @preserve */
+  // Last resort: try to parse as date string
+  return new Date(String(value));
+  /* v8 ignore stop @preserve */
+}
+
 const COLLECTION_NAME = 'github-pr-events';
 
 export function createFirestoreGitHubPREventsRepository(deps: {
@@ -141,12 +165,11 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
-            createdAt: data.createdAt as Date,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
-            processedAt: data.processedAt as Date,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
-            mergedAt: data.mergedAt as Date | null,
+            createdAt: toDate(data.createdAt),
+            processedAt: toDate(data.processedAt),
+            /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */
+            mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
+            /* v8 ignore stop @preserve */
           };
         });
 
@@ -184,12 +207,9 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           return {
             ...data,
             id: doc.id,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
-            createdAt: data.createdAt as Date,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
-            processedAt: data.processedAt as Date,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Firestore returns unknown for Date fields
-            mergedAt: data.mergedAt as Date | null,
+            createdAt: toDate(data.createdAt),
+            processedAt: toDate(data.processedAt),
+            mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
           };
         });
 
@@ -199,6 +219,39 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           { error, repository },
           'Failed to find GitHub PR events by repository'
         );
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
+    async findAll(limit = 50): Promise<Result<GitHubPREvent[], RepositoryError>> {
+      try {
+        const query = collection.orderBy('createdAt', 'desc').limit(limit);
+
+        const snapshot = await query.get();
+
+        const events: GitHubPREvent[] = snapshot.docs.map((doc) => {
+          const data = doc.data() as Omit<GitHubPREvent, 'id'> & {
+            createdAt: unknown;
+            processedAt: unknown;
+            mergedAt: unknown;
+          };
+          return {
+            ...data,
+            id: doc.id,
+            createdAt: toDate(data.createdAt),
+            processedAt: toDate(data.processedAt),
+            /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */
+            mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
+            /* v8 ignore stop @preserve */
+          };
+        });
+
+        return ok(events);
+      } catch (error) {
+        logger.error({ error }, 'Failed to find all GitHub PR events');
         return err({
           code: 'FIRESTORE_ERROR',
           message: getErrorMessage(error, 'Unknown error'),

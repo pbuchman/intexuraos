@@ -121,4 +121,5 @@ echo "[entrypoint] Received prompt (${#PROMPT} chars): ${PROMPT:0:100}..."
 # Execute Claude in print mode (non-interactive)
 # --print: Process prompt and exit, bypasses interactive onboarding
 # --dangerously-skip-permissions: Required for automated operation
-exec claude --print --dangerously-skip-permissions "$PROMPT"
+# --verbose: Shows detailed tool calls and API interactions
+exec claude --print --dangerously-skip-permissions --verbose "$PROMPT"
