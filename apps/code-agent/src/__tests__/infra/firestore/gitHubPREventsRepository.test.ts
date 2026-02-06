@@ -288,6 +288,59 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         expect(mockLogger.error).toHaveBeenCalled();
       }
     });
+
+    it('should handle Firestore Timestamp objects for dates', async () => {
+      const createdAtDate = new Date('2024-01-02T00:00:00Z');
+      const processedAtDate = new Date('2024-01-02T00:05:00Z');
+      const mergedAtDate = new Date('2024-01-03T00:00:00Z');
+
+      const eventDataWithTimestamps = {
+        githubEventId: 111,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request',
+        action: 'closed',
+        senderLogin: 'user1',
+        senderId: 111,
+        senderType: 'User',
+        title: 'PR with Timestamps',
+        body: 'Body',
+        state: 'closed',
+        mergedAt: { toDate: (): Date => mergedAtDate },
+        createdAt: { toDate: (): Date => createdAtDate },
+        processedAt: { toDate: (): Date => processedAtDate },
+        payload: {},
+      };
+
+      const doc = createMockDocSnapshot('doc1', eventDataWithTimestamps);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findByPullRequest('intexuraos/test-repo', 42);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const firstEvent = result.value[0];
+        expect(firstEvent?.createdAt).toEqual(createdAtDate);
+        expect(firstEvent?.processedAt).toEqual(processedAtDate);
+        expect(firstEvent?.mergedAt).toEqual(mergedAtDate);
+      }
+    });
   });
 
   describe('findByRepository()', () => {
@@ -504,6 +557,59 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         expect(firstEvent?.mergedAt).toBeNull();
       }
     });
+
+    it('should handle Firestore Timestamp objects for dates', async () => {
+      const mergedAtDate = new Date('2024-01-15T12:00:00Z');
+      const createdAtDate = new Date('2024-01-01T00:00:00Z');
+      const processedAtDate = new Date('2024-01-01T00:05:00Z');
+
+      const eventDataWithTimestamps = {
+        githubEventId: 98765,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request',
+        action: 'closed',
+        senderLogin: 'testuser',
+        senderId: 12345,
+        senderType: 'User',
+        title: 'Test PR',
+        body: 'Test body',
+        state: 'closed',
+        mergedAt: { toDate: (): Date => mergedAtDate },
+        createdAt: { toDate: (): Date => createdAtDate },
+        processedAt: { toDate: (): Date => processedAtDate },
+        payload: {},
+      };
+
+      const doc = createMockDocSnapshot('doc-with-timestamps', eventDataWithTimestamps);
+
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findByRepository('intexuraos/test-repo');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const event = result.value[0];
+        expect(event?.createdAt).toEqual(createdAtDate);
+        expect(event?.processedAt).toEqual(processedAtDate);
+        expect(event?.mergedAt).toEqual(mergedAtDate);
+      }
+    });
   });
 
   describe('findAll()', () => {
@@ -641,6 +747,58 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
         expect(mockLogger.error).toHaveBeenCalled();
+      }
+    });
+
+    it('should handle Firestore Timestamp objects for dates', async () => {
+      const createdAtDate = new Date('2024-01-02T00:00:00Z');
+      const processedAtDate = new Date('2024-01-02T00:05:00Z');
+      const mergedAtDate = new Date('2024-01-03T00:00:00Z');
+
+      const eventDataWithTimestamps = {
+        githubEventId: 111,
+        repository: 'intexuraos/test-repo',
+        repositoryId: 987654321,
+        pullRequestNumber: 42,
+        pullRequestId: 123456789,
+        eventType: 'pull_request',
+        action: 'closed',
+        senderLogin: 'user1',
+        senderId: 111,
+        senderType: 'User',
+        title: 'PR with Timestamps',
+        body: 'Body',
+        state: 'closed',
+        mergedAt: { toDate: (): Date => mergedAtDate },
+        createdAt: { toDate: (): Date => createdAtDate },
+        processedAt: { toDate: (): Date => processedAtDate },
+        payload: {},
+      };
+
+      const doc = createMockDocSnapshot('doc1', eventDataWithTimestamps);
+
+      const mockQuery = {
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([doc])),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repository = createFirestoreGitHubPREventsRepository({
+        logger: mockLogger,
+      });
+
+      const result = await repository.findAll();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const firstEvent = result.value[0];
+        expect(firstEvent?.createdAt).toEqual(createdAtDate);
+        expect(firstEvent?.processedAt).toEqual(processedAtDate);
+        expect(firstEvent?.mergedAt).toEqual(mergedAtDate);
       }
     });
   });
