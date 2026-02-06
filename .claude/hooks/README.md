@@ -76,6 +76,7 @@ Use `query-hooks.sh` to search and filter hook logs:
 | `validate-terraform`         | Terraform validation                    |
 | `validate-gcloud-resources`  | GCloud resources via Terraform only     |
 | `validate-gcloud-builds`     | Streaming for gcloud builds             |
+| `validate-linear-state`      | Blocks agent transitions to QA/Done     |
 
 ## Consolidated Pattern Detection
 
@@ -119,20 +120,21 @@ log_info "$HOOK_NAME" "pattern-name" "$message" "$suggestion"
 
 Common patterns logged by hooks:
 
-| Pattern                   | Level   | Hook                       | Description                              |
-| ------------------------- | ------- | -------------------------- | ---------------------------------------- |
-| `pino-import`             | WARNED  | detect-common-patterns     | Direct pino import (use createAppLogger) |
-| `reply-send`              | WARNED  | detect-common-patterns     | Raw reply.send() (use reply.ok/fail)     |
-| `missing-js-extension`    | WARNED  | detect-common-patterns     | Import without `.js` extension           |
-| `bad-undefined-type`      | WARNED  | detect-common-patterns     | `\| undefined` instead of `?:`           |
-| `result-value-without-ok` | WARNED  | detect-common-patterns     | `.value` without `.ok` check             |
-| `migration-immutable`     | WARNED  | detect-common-patterns     | Modifying existing migration file        |
-| `coverage-with-grep`      | BLOCKED | validate-coverage-commands | Parsing coverage with grep instead of jq |
-| `output-truncation`       | BLOCKED | validate-ci-output-capture | Piping CI output to tail/head            |
-| `gh-pr-checks-polling`    | BLOCKED | validate-polling           | Using sleep + gh pr checks               |
-| `ownership-violation`     | BLOCKED | ownership-check            | Using forbidden ownership language       |
-| `phase1-incomplete`       | BLOCKED | completion-validator       | Phase 1 missing code-task/unclear label  |
-| `phase2-incomplete`       | BLOCKED | completion-validator       | Phase 2 missing PR/CI/Linear artifacts   |
+| Pattern                      | Level   | Hook                       | Description                              |
+| ---------------------------- | ------- | -------------------------- | ---------------------------------------- |
+| `pino-import`                | WARNED  | detect-common-patterns     | Direct pino import (use createAppLogger) |
+| `reply-send`                 | WARNED  | detect-common-patterns     | Raw reply.send() (use reply.ok/fail)     |
+| `missing-js-extension`       | WARNED  | detect-common-patterns     | Import without `.js` extension           |
+| `bad-undefined-type`         | WARNED  | detect-common-patterns     | `\| undefined` instead of `?:`           |
+| `result-value-without-ok`    | WARNED  | detect-common-patterns     | `.value` without `.ok` check             |
+| `migration-immutable`        | WARNED  | detect-common-patterns     | Modifying existing migration file        |
+| `coverage-with-grep`         | BLOCKED | validate-coverage-commands | Parsing coverage with grep instead of jq |
+| `output-truncation`          | BLOCKED | validate-ci-output-capture | Piping CI output to tail/head            |
+| `gh-pr-checks-polling`       | BLOCKED | validate-polling           | Using sleep + gh pr checks               |
+| `ownership-violation`        | BLOCKED | ownership-check            | Using forbidden ownership language       |
+| `forbidden-state-transition` | BLOCKED | validate-linear-state      | Agent trying to set QA/Done status       |
+| `phase1-incomplete`          | BLOCKED | completion-validator       | Phase 1 missing code-task/unclear label  |
+| `phase2-incomplete`          | BLOCKED | completion-validator       | Phase 2 missing PR/CI/Linear artifacts   |
 
 ## Testing Hooks
 

@@ -82,6 +82,15 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-coverage-config.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__linear__update_issue|mcp__linear-server__update_issue",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-linear-state.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

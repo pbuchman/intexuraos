@@ -89,32 +89,35 @@ After completing any analysis, investigation, or review phase:
 
 ## ⛔ Linear State Transition Gate (READ BEFORE UPDATING ISSUES)
 
-| Transition              | Allowed?                                  |
-| ----------------------- | ----------------------------------------- |
-| Backlog → In Progress   | ✅ Yes                                    |
-| In Progress → In Review | ✅ Yes                                    |
-| In Review → QA          | ✅ Yes                                    |
-| QA → Done               | ❌ **REQUIRES EXPLICIT USER INSTRUCTION** |
-| Any status → Done       | ❌ **REQUIRES EXPLICIT USER INSTRUCTION** |
+| Transition                 | Allowed?                                |
+| -------------------------- | --------------------------------------- |
+| Backlog/Todo → In Progress | ✅ Yes                                  |
+| In Progress → In Review    | ✅ Yes (maximum agent-controlled state) |
+| Any → QA                   | ❌ **BLOCKED BY HOOK**                  |
+| Any → Done                 | ❌ **BLOCKED BY HOOK**                  |
 
-**The "Done" status is NEVER automatic.** Even if PR merged, tests pass, code deployed.
+**Enforcement:** The `validate-linear-state.sh` hook blocks all Linear MCP calls that attempt to set status to QA or Done. This is a hard gate — agents cannot bypass it.
+
+**The maximum state an agent can set is "In Review".** Even if PR merged, tests pass, code deployed.
 
 ### The Rationalization Trap
 
-| Your Thought                                  | Reality                          |
-| --------------------------------------------- | -------------------------------- |
-| "The PR is merged, so it's obviously done"    | Merged ≠ Done. User decides.     |
-| "All child issues are complete"               | Complete ≠ Done. User confirms.  |
-| "This is just bookkeeping, I'll mark it done" | Bookkeeping requires permission. |
+| Your Thought                                  | Reality                                |
+| --------------------------------------------- | -------------------------------------- |
+| "The PR is merged, so it's obviously done"    | Merged ≠ Done. Hook blocks it.         |
+| "All child issues are complete"               | Complete ≠ Done. User confirms.        |
+| "This is just bookkeeping, I'll mark it done" | Bookkeeping requires permission.       |
+| "Ready for QA, let me move it there"          | QA is beyond agent scope. Hook blocks. |
 
 ### Correct Behavior
 
 ```
 ❌ WRONG: "PR #600 merged. Marking INT-245 as Done."
-✅ RIGHT: "PR #600 merged. INT-245 should move to QA. Mark as Done?"
+❌ WRONG: "PR #600 merged. Moving INT-245 to QA."
+✅ RIGHT: "PR #600 opened. Moving INT-245 to In Review."
 ```
 
-**Why:** Done = business decision (deployment, production check, release timing).
+**Why:** QA and Done = business decisions (testing schedules, deployment, production checks).
 
 ---
 
