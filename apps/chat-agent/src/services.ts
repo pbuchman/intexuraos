@@ -7,9 +7,12 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
+import { createGlmClient } from '@intexuraos/infra-glm';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { FirestoreEmbeddingRepository } from './infra/firestore/embeddingRepository.js';
 import { EmbeddingClient } from './infra/llm/embeddingClient.js';
 import { createChatClient } from './infra/llm/chatClient.js';
+import { createGuestRateLimiter, type GuestRateLimiter } from './infra/rateLimit/index.js';
 import OpenAI from 'openai';
 import type { CreateEmbeddingResponse } from 'openai/resources';
 import type { EmbeddingRepositoryPort } from './domain/models/docChunk.js';
@@ -38,6 +41,8 @@ export interface ServiceContainer {
   readonly embeddingClient: EmbeddingClientInterface;
   readonly userServiceClient: UserServiceClient;
   readonly logger: Logger;
+  readonly guestRateLimiter: GuestRateLimiter;
+  readonly guestLlmClient: LlmGenerateClient;
 }
 
 let container: ServiceContainer | null = null;
@@ -76,6 +81,7 @@ export async function initializeServices(): Promise<void> {
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   const appSettingsServiceUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
+  const guestZaiApiKey = process.env['INTEXURAOS_GUEST_ZAI_API_KEY'];
 
   if (openaiApiKey === undefined || openaiApiKey.length === 0) {
     throw new Error('INTEXURAOS_OPENAI_API_KEY environment variable is required');
@@ -91,6 +97,10 @@ export async function initializeServices(): Promise<void> {
 
   if (appSettingsServiceUrl === undefined || appSettingsServiceUrl.length === 0) {
     throw new Error('INTEXURAOS_APP_SETTINGS_SERVICE_URL environment variable is required');
+  }
+
+  if (guestZaiApiKey === undefined || guestZaiApiKey.length === 0) {
+    throw new Error('INTEXURAOS_GUEST_ZAI_API_KEY environment variable is required');
   }
 
   const logger = createAppLogger({
@@ -113,6 +123,15 @@ export async function initializeServices(): Promise<void> {
   // Create OpenAI instance for embeddings
   const openai = new OpenAI({ apiKey: openaiApiKey });
 
+  // Create guest LLM client with platform-owned Zai API key (GLM-4.7-Flash is free)
+  const guestLlmClient = createGlmClient({
+    apiKey: guestZaiApiKey,
+    model: LlmModels.Glm47Flash,
+    userId: 'guest',
+    pricing: pricingContext.getPricing(LlmModels.Glm47Flash),
+    logger,
+  });
+
   container = {
     generateId: (): string => crypto.randomUUID(),
     embeddingRepository: new FirestoreEmbeddingRepository(),
@@ -127,5 +146,7 @@ export async function initializeServices(): Promise<void> {
       logger,
     }),
     logger,
+    guestRateLimiter: createGuestRateLimiter(),
+    guestLlmClient,
   };
 }

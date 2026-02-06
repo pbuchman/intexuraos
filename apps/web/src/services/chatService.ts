@@ -1,21 +1,44 @@
 /**
  * Chat service for Intex Chat feature.
  * Handles API communication and localStorage session persistence.
+ * Supports both authenticated users and guest sessions.
  */
 
 import { config } from '../config.js';
-import { apiRequest } from './apiClient.js';
+import { apiRequest, ApiError } from './apiClient.js';
 import type {
   ChatMessage,
   ChatResponse,
   ChatSession,
   SuggestedAction,
-} from '../types/chat';
+} from '../types/chat.js';
 
 const LOCAL_STORAGE_KEY = 'intex-chat-session';
+const GUEST_SESSION_KEY = 'intex-guest-session-id';
+
+// Re-export ApiError for consumers
+export { ApiError };
 
 /**
- * Send a message to the chat agent and get a response.
+ * Get or create a guest session ID for anonymous users.
+ * The session ID is stored in localStorage and persists across page refreshes.
+ */
+export function getOrCreateGuestSessionId(): string {
+  try {
+    let sessionId = localStorage.getItem(GUEST_SESSION_KEY);
+    if (sessionId === null) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem(GUEST_SESSION_KEY, sessionId);
+    }
+    return sessionId;
+  } catch {
+    // localStorage unavailable - generate ephemeral ID
+    return crypto.randomUUID();
+  }
+}
+
+/**
+ * Send a message to the chat agent as an authenticated user.
  *
  * @param accessToken - Auth token for API request
  * @param message - User message to send
@@ -42,6 +65,63 @@ export async function sendMessage(
       },
     }
   );
+}
+
+/**
+ * Send a message to the chat agent as a guest (unauthenticated).
+ * Uses a session ID stored in localStorage for rate limiting.
+ *
+ * @param message - User message to send
+ * @param conversationHistory - Previous messages in the conversation
+ * @param pendingAction - Optional pending action to confirm
+ * @returns The chat response with answer, sources, and suggested action
+ */
+export async function sendGuestMessage(
+  message: string,
+  conversationHistory: ChatMessage[],
+  pendingAction?: SuggestedAction
+): Promise<ChatResponse> {
+  const guestSessionId = getOrCreateGuestSessionId();
+  const url = `${config.chatAgentUrl}/chat`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Guest-Session': guestSessionId,
+    },
+    body: JSON.stringify({
+      message,
+      conversationHistory,
+      ...(pendingAction !== undefined && { pendingAction }),
+    }),
+  });
+
+  const json: unknown = await response.json();
+
+  if (
+    typeof json !== 'object' ||
+    json === null ||
+    !('success' in json)
+  ) {
+    throw new ApiError('UNKNOWN', 'Invalid response format', response.status);
+  }
+
+  const data = json as { success: boolean; data?: ChatResponse; error?: { code: string; message: string } };
+
+  if (!data.success) {
+    const error = data.error;
+    if (error === undefined) {
+      throw new ApiError('UNKNOWN', 'An unexpected error occurred', response.status);
+    }
+    throw new ApiError(error.code, error.message, response.status);
+  }
+
+  if (data.data === undefined) {
+    throw new ApiError('UNKNOWN', 'Missing response data', response.status);
+  }
+
+  return data.data;
 }
 
 /**

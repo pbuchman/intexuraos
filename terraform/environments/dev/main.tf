@@ -492,6 +492,7 @@ module "secret_manager" {
     "INTEXURAOS_OPENAI_API_KEY"    = "OpenAI API key for chat-agent LLM features"
     "INTEXURAOS_ANTHROPIC_API_KEY" = "Anthropic API key for Claude worker containers"
     "INTEXURAOS_ZAI_API_KEY"       = "ZAI API key for Claude worker containers (Z.ai provider)"
+    "INTEXURAOS_GUEST_ZAI_API_KEY" = "ZAI API key for guest chat sessions (GLM-4.7-Flash)"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to Claude worker containers"
     "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to Claude worker containers"
@@ -1532,7 +1533,8 @@ module "chat_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/chat-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_OPENAI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_API_KEY"]
+    INTEXURAOS_OPENAI_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_API_KEY"]
+    INTEXURAOS_GUEST_ZAI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_GUEST_ZAI_API_KEY"]
   })
   env_vars = local.common_service_env_vars
 
