@@ -37,6 +37,10 @@ export interface ValidatedIssue {
   identifier: string;
   title: string;
   url: string;
+  /** Label names associated with the issue */
+  labels: string[];
+  /** Number of child issues */
+  childCount: number;
 }
 
 export interface GenerateTitleRequest {

@@ -29,7 +29,7 @@ This issue is part of **parent issue execution**. The workflow:
 
 ## Template
 
-````markdown
+`````markdown
 ## Test Requirements (MANDATORY - implement first)
 
 **Backend Tests (`apps/<service>/src/__tests__/`):**
@@ -43,71 +43,6 @@ This issue is part of **parent issue execution**. The workflow:
 
 - <test case 1>
 - <test case 2>
-
----
-
-## 🚨 MANDATORY EXECUTION RULES (NON-NEGOTIABLE)
-
-### Parent Branch Requirement — CRITICAL
-
-**This is a CHILD ISSUE of a parent issue.** You MUST work on the **PARENT BRANCH**, not create a new branch.
-
-```bash
-# Check you're on the parent branch
-git branch --show-current  # Should show: feature/INT-<PARENT> or similar
-
-# If NOT on parent branch, switch to it:
-git fetch origin
-git checkout feature/INT-<PARENT>  # Use the PARENT issue ID, not this child's ID
-```
-
-**⚠️ FORBIDDEN:** Creating a branch named after THIS child issue (e.g., `feature/INT-<THIS-CHILD>`).
-**✅ REQUIRED:** Working on the PARENT issue branch (e.g., `feature/INT-<PARENT>`).
-
-All child issues share ONE branch. All commits go to ONE PR. This enables continuity and proper review.
-
-### Branch Verification — TASK FAILS WITHOUT THIS
-
-If you start working on `development` or `main`, **THE TASK HAS FAILED BY DEFINITION**. Stop immediately and switch to the parent branch.
-
-### Full CI Verification — NON-NEGOTIABLE
-
-**`pnpm run ci:tracked` MUST pass before marking this task complete.**
-
-- Running only `vitest` or `tsc` is NOT sufficient
-- Running only workspace-level checks is NOT sufficient
-- The ONLY acceptable verification is `pnpm run ci:tracked` passing locally
-- If CI fails, fix ALL errors (even in other workspaces) — you OWN them
-
-### Test Coverage — 95% is MINIMUM, Not Target
-
-- You MUST implement ALL required tests listed in this issue's Test Requirements table
-- 95% branch coverage is the MINIMUM acceptable threshold
-- Do NOT simplify work to save tokens or time
-- Do NOT skip edge cases or "nice to have" tests
-- Every test scenario in the Test Requirements table MUST be implemented
-
-### Commit, Push, Update PR — MANDATORY CYCLE
-
-**After completing this task's implementation:**
-
-1. **Commit** with this child's issue ID: `git commit -m "INT-<THIS-CHILD>: <summary>"`
-2. **Push** to the parent branch: `git push`
-3. **Update PR description** to mark this child as ✅ Done and add to Progress Log
-4. **Then** continue to the next child issue
-
-This cycle ensures reviewers can see incremental progress and the PR stays current.
-
-### Continuation — YOUR NEXT ACTION
-
-**After completing this task (commit, push, update PR), execute the next child issue.**
-
-Your next tool call MUST be one of:
-
-- `mcp__linear__update_issue` to mark next child "In Progress"
-- Code edit to begin implementing the next child
-
-**FORBIDDEN:** Outputting "Next Step: INT-YYY" or similar announcements. These end your turn without executing. Silent transition only.
 
 ---
 
@@ -194,23 +129,6 @@ describe('featureName', () => {
 1. <Edge case 1>
 2. <Edge case 2>
 3. ...
-````
-
-## Notes
-
-<Implementation hints, gotchas, or context from parent plan>
-
----
-
-## 🚨 AFTER COMPLETION — YOUR NEXT ACTIONS
-
-1. ✅ Verify `pnpm run ci:tracked` passes (NON-NEGOTIABLE)
-2. ✅ Commit all changes with message: `INT-XXX <task description>`
-3. ✅ Push to parent branch: `git push`
-4. ✅ Update PR description: mark this child ✅ Done, add to Progress Log
-5. ✅ **YOUR NEXT TOOL CALL:** Start INT-YYY implementation
-
-**SILENT TRANSITION REQUIRED.** After step 4, your very next action must be starting the next child. Do not output "Next Step: ..." — that ends your turn without executing. Just start the next task.
 
 ````
 
@@ -219,7 +137,6 @@ describe('featureName', () => {
 | Section                    | Required    | Purpose                                       |
 | -------------------------- | ----------- | --------------------------------------------- |
 | Test Requirements          | Yes         | **QUALITY GATE** - exact tests to implement   |
-| Mandatory Execution Rules  | Yes         | Branch, CI, coverage, continuation rules      |
 | Context                    | Yes         | Links to parent, shows tier/sequence          |
 | Scope                      | Yes         | What this specific task covers                |
 | Requirements               | Yes         | Specific deliverables                         |
@@ -227,7 +144,6 @@ describe('featureName', () => {
 | Dependencies               | Yes         | What blocks this / what this blocks           |
 | Verification               | Yes         | Commands to run                               |
 | Implementation Suggestions | Conditional | Required for code changes (see below)         |
-| Testing Scenarios          | Conditional | Additional test details if needed             |
 | Continuation               | Varies      | Include for all except final task             |
 
 ## When to Include Implementation Suggestions
@@ -251,7 +167,7 @@ Always include tier and sequence in context section:
 
 ```markdown
 Tier: 0 | Sequence: 1
-````
+```
 
 This helps quickly identify:
 
@@ -273,3 +189,5 @@ The continuation directive ensures uninterrupted execution through the entire ta
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to the next unblocked task without waiting for user input.
 ```
+````
+`````

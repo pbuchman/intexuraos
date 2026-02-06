@@ -20,7 +20,6 @@ import { signDispatchRequest, generateNonce } from './hmacSigning.js';
  */
 interface WorkerTaskRequest {
   taskId: string;
-  linearIssueId?: string;
   prompt: string;
   systemPromptHash: string;
   repository: string;
@@ -28,6 +27,11 @@ interface WorkerTaskRequest {
   workerType: 'opus' | 'auto' | 'glm';
   webhookUrl: string;
   webhookSecret: string;
+  /** Labels from the validated Linear issue */
+  linearIssueLabels: string[];
+  /** Whether the issue has child issues */
+  hasChildren: boolean;
+  linearIssueId?: string;
   traceId?: string;
 }
 
@@ -66,7 +70,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   async dispatch(request: DispatchRequest): Promise<Result<DispatchResult, DispatchError>> {
     this.logger.info({ taskId: request.taskId }, 'Dispatching task to worker');
 
-    // Build request body
+    // Build request body (field order must match DispatchRequest for consistent HMAC)
     const taskRequest: WorkerTaskRequest = {
       taskId: request.taskId,
       prompt: request.prompt,
@@ -76,6 +80,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       workerType: request.workerType,
       webhookUrl: request.webhookUrl,
       webhookSecret: request.webhookSecret,
+      linearIssueLabels: request.linearIssueLabels,
+      hasChildren: request.hasChildren,
     };
 
     // Only add linearIssueId if provided
@@ -88,7 +94,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       taskRequest.traceId = request.traceId;
     }
 
-const body = JSON.stringify(taskRequest);
+    const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();
 
     // Get workers from per-request credentials

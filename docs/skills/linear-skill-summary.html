@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Linear Skill - Summary</title>
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --surface: #141414;
+        --border: #2a2a2a;
+        --text: #e5e5e5;
+        --text-muted: #888;
+        --phase1: #8b5cf6;
+        --phase2: #06b6d4;
+        --success: #22c55e;
+        --warning: #f59e0b;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        background: var(--bg);
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 2rem;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 3rem;
+        max-width: 600px;
+        width: 100%;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+      }
+
+      .title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--phase1), var(--phase2));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+      }
+
+      .subtitle {
+        color: var(--text-muted);
+        font-size: 1rem;
+      }
+
+      .flow {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+      }
+
+      .phase {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .phase-badge {
+        min-width: 100px;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        font-weight: 600;
+        text-align: center;
+        font-size: 0.9rem;
+      }
+
+      .phase-badge.p1 {
+        background: var(--phase1);
+      }
+      .phase-badge.p2 {
+        background: var(--phase2);
+      }
+
+      .phase-desc {
+        flex: 1;
+        font-size: 0.95rem;
+        line-height: 1.4;
+      }
+
+      .phase-desc strong {
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+
+      .phase-desc span {
+        color: var(--text-muted);
+      }
+
+      .connector {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+      }
+
+      .connector-line {
+        width: 2px;
+        height: 20px;
+        background: var(--border);
+      }
+
+      .key-points {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+      }
+
+      .point {
+        text-align: center;
+        padding: 1rem;
+        background: var(--bg);
+        border-radius: 10px;
+      }
+
+      .point-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .point-value {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
+
+      .point-label {
+        color: var(--text-muted);
+        font-size: 0.75rem;
+      }
+
+      .footer {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+      }
+
+      .footer strong {
+        color: var(--text);
+      }
+
+      .labels {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+
+      .label-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+      }
+
+      .label-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="header">
+        <div class="title">Linear Skill</div>
+        <div class="subtitle">Two-Phase Autonomous Task Execution</div>
+      </div>
+
+      <div class="flow">
+        <div class="phase">
+          <div class="phase-badge p1">Phase 1</div>
+          <div class="phase-desc">
+            <strong>Design & Validation</strong>
+            <span>Analyze issue, enrich template, split if complex</span>
+          </div>
+        </div>
+
+        <div class="connector">
+          <div class="connector-line"></div>
+          <span>code-task label</span>
+          <div class="connector-line"></div>
+        </div>
+
+        <div class="phase">
+          <div class="phase-badge p2">Phase 2</div>
+          <div class="phase-desc">
+            <strong>Strict Execution</strong>
+            <span>Branch, implement, test, PR, state update</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="key-points">
+        <div class="point">
+          <div class="point-icon">🏷️</div>
+          <div class="point-value">Labels</div>
+          <div class="point-label">Control flow</div>
+        </div>
+        <div class="point">
+          <div class="point-icon">🔄</div>
+          <div class="point-value">2 Cycles</div>
+          <div class="point-label">Orchestrated</div>
+        </div>
+        <div class="point">
+          <div class="point-icon">✅</div>
+          <div class="point-value">CI Gate</div>
+          <div class="point-label">Non-negotiable</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <strong>Autonomous coding pipeline</strong><br />
+        WhatsApp → Linear → Claude Code → PR
+
+        <div class="labels">
+          <div class="label-item">
+            <div class="label-dot" style="background: var(--phase1)"></div>
+            <span>Design</span>
+          </div>
+          <div class="label-item">
+            <div class="label-dot" style="background: var(--phase2)"></div>
+            <span>Execute</span>
+          </div>
+          <div class="label-item">
+            <div class="label-dot" style="background: var(--success)"></div>
+            <span>Ship</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

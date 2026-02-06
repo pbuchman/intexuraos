@@ -213,16 +213,16 @@ describe('DockerProvider', () => {
       }
     });
 
-    it('sends combined system and user prompt to container with delimiter', async () => {
+    it('sends system prompt with delimiter to container', async () => {
       const config = createTestConfig({
-        prompt: 'Hello Claude',
+        prompt: 'Hello Claude', // User prompt is now embedded in systemPrompt by buildSystemPrompt
         systemPrompt: 'You are a helpful assistant',
       });
       await provider.createWorker(config);
 
-      // System prompt + double newline + user prompt + delimiter
+      // With new design, only systemPrompt is sent (user prompt embedded by buildSystemPrompt)
       expect(mocks.mockAttachStream.write).toHaveBeenCalledWith(
-        'You are a helpful assistant\n\nHello Claude\n---END_PROMPT---\n'
+        'You are a helpful assistant\n---END_PROMPT---\n'
       );
     });
   });

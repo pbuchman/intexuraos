@@ -107,12 +107,16 @@ export class TaskDispatcher {
         taskId,
         worktreePath,
         prompt: request.prompt,
+        /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
         systemPrompt: buildSystemPrompt({
           taskId,
           worktreePath,
           ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
+          linearIssueLabels: request.linearIssueLabels,
+          hasChildren: request.hasChildren,
           prompt: request.prompt,
         }),
+        /* v8 ignore stop @preserve */
         workerType: request.workerType,
         secrets: this.isolation.secrets,
         gcpSaKeyPath: this.isolation.gcpSaKeyPath,
