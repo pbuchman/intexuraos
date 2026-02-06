@@ -21,6 +21,8 @@ import pino from 'pino';
 import type { Logger } from 'pino';
 import type { GitHubPREventRepository } from '../../../domain/repositories/gitHubPREventRepository.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
+import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
+import type { PRTaskLockRepository } from '../../../domain/repositories/prTaskLockRepository.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
@@ -77,11 +79,39 @@ describe('POST /webhooks/github', () => {
       findAll: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
     };
 
+    // Create mock codeTaskRepo for processPRCommentForTask
+    const mockCodeTaskRepo: CodeTaskRepository = {
+      create: vi.fn().mockResolvedValue(ok({ id: 'task-123' })),
+      findById: vi.fn().mockResolvedValue(ok(null)),
+      findByIdForUser: vi.fn().mockResolvedValue(ok(null)),
+      update: vi.fn().mockResolvedValue(ok(undefined)),
+      list: vi.fn().mockResolvedValue(ok([])),
+      hasActiveTaskForLinearIssue: vi.fn().mockResolvedValue(ok(false)),
+      findZombieTasks: vi.fn().mockResolvedValue(ok([])),
+      countByUserToday: vi.fn().mockResolvedValue(ok(0)),
+      findArchivableTasks: vi.fn().mockResolvedValue(ok([])),
+      archiveTaskLogs: vi.fn().mockResolvedValue(ok(undefined)),
+      findByPR: vi.fn().mockResolvedValue(ok(null)),
+    };
+
+    // Create mock prTaskLockRepo - returns NOT_ACTIONABLE for most comments
+    const mockPrTaskLockRepo: PRTaskLockRepository = {
+      acquireLock: vi.fn().mockResolvedValue(ok({
+        id: 'lock-123',
+        activeTaskId: 'pending',
+        lockedAt: { toDate: () => new Date() },
+        lockedBy: 'github-webhook',
+        expiresAt: { toDate: () => new Date(Date.now() + 30 * 60 * 1000) },
+      })),
+      releaseLock: vi.fn().mockResolvedValue(ok(undefined)),
+      findLock: vi.fn().mockResolvedValue(ok(null)),
+    };
+
     // Setup services with all required fields
     const mockServices: ServiceContainer = {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
-      codeTaskRepo: {} as never,
+      codeTaskRepo: mockCodeTaskRepo,
       logChunkRepo: {} as never,
       taskDispatcher: {} as never,
       whatsappNotifier: {} as never,
@@ -97,6 +127,7 @@ describe('POST /webhooks/github', () => {
       workerSettingsRepo: {} as never,
       workerHealthProbe: {} as never,
       gitHubPREventRepo: mockEventRepo,
+      prTaskLockRepo: mockPrTaskLockRepo,
     };
 
     setServices(mockServices);
@@ -380,6 +411,174 @@ describe('POST /webhooks/github', () => {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
           'x-github-event': 'push',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+  });
+
+  describe('issue_comment events', () => {
+    it('processes issue_comment created event and calls processPRCommentForTask', async () => {
+      const issueCommentPayload = {
+        action: 'created',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: {
+            login: 'author',
+            id: 111,
+            type: 'User',
+          },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 12345,
+          body: '@claude-bot please fix the linting errors',
+          user: {
+            login: 'reviewer',
+            id: 222,
+            type: 'User',
+          },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: {
+            login: 'test',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'reviewer',
+          id: 222,
+          type: 'User',
+        },
+      };
+
+      // Return event with issue_comment type to trigger processPRCommentForTask
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 12345,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'created' as const,
+        senderLogin: 'reviewer',
+        senderId: 222,
+        senderType: 'User',
+        title: 'Test PR',
+        body: '@claude-bot please fix the linting errors',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: {},
+      }));
+
+      const { payload, signature } = signPayload(issueCommentPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+
+    it('skips processPRCommentForTask for issue_comment deleted events', async () => {
+      const issueCommentPayload = {
+        action: 'deleted',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: {
+            login: 'author',
+            id: 111,
+            type: 'User',
+          },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 12345,
+          body: '@claude-bot please fix the linting errors',
+          user: {
+            login: 'reviewer',
+            id: 222,
+            type: 'User',
+          },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: {
+            login: 'test',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'reviewer',
+          id: 222,
+          type: 'User',
+        },
+      };
+
+      // Return event with issue_comment type but deleted action
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 12345,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'deleted' as const,
+        senderLogin: 'reviewer',
+        senderId: 222,
+        senderType: 'User',
+        title: 'Test PR',
+        body: '@claude-bot please fix the linting errors',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: {},
+      }));
+
+      const { payload, signature } = signPayload(issueCommentPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
         },
         body: payload,
       });

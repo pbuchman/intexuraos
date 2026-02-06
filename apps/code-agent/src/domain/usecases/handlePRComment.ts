@@ -40,39 +40,101 @@ export interface HandlePRCommentResult {
 }
 
 /**
+ * Build a richer context section from the original task.
+ */
+function buildOriginalTaskContext(originalTask: CodeTask): string {
+  const lines: string[] = [];
+
+  // Linear issue info
+  if (originalTask.linearIssueId !== undefined) {
+    const issueType = originalTask.linearIssueType !== undefined
+      ? ` (${originalTask.linearIssueType})`
+      : '';
+    const title = originalTask.linearIssueTitle !== undefined
+      ? `: ${originalTask.linearIssueTitle}`
+      : '';
+    lines.push(`**Linear Issue:** ${originalTask.linearIssueId}${issueType}${title}`);
+  }
+
+  // Labels if available
+  if (originalTask.linearIssueLabels !== undefined && originalTask.linearIssueLabels.length > 0) {
+    lines.push(`**Labels:** ${originalTask.linearIssueLabels.join(', ')}`);
+  }
+
+  // Branch info
+  const branch = originalTask.result?.branch ?? originalTask.prBranch;
+  if (branch !== undefined) {
+    lines.push(`**Branch:** ${branch}`);
+  }
+
+  // Repository context
+  lines.push(`**Repository:** ${originalTask.repository}`);
+  lines.push(`**Base Branch:** ${originalTask.baseBranch}`);
+
+  // Original prompt (truncated)
+  const promptPreview = originalTask.prompt.length > 800
+    ? `${originalTask.prompt.slice(0, 800)}...`
+    : originalTask.prompt;
+  lines.push(`\n**Original Task:**\n${promptPreview}`);
+
+  // Previous result summary if available
+  if (originalTask.result?.summary !== undefined) {
+    const summaryPreview = originalTask.result.summary.length > 300
+      ? `${originalTask.result.summary.slice(0, 300)}...`
+      : originalTask.result.summary;
+    lines.push(`\n**Previous Work Summary:**\n${summaryPreview}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Build the prompt for a PR comment follow-up task.
  */
 function buildPRCommentPrompt(
   event: GitHubPREvent,
   originalTask: CodeTask | null
 ): string {
+  // PR title for context
+  /* v8 ignore start -- ts-type: null title is rare but possible @preserve */
+  const prTitle = event.title ?? `PR #${String(event.pullRequestNumber)}`;
+  /* v8 ignore stop @preserve */
+
   const context = originalTask
-    ? `You previously worked on this PR for Linear issue ${originalTask.linearIssueId ?? 'unknown'}.
-Original task: ${originalTask.prompt.slice(0, 500)}${originalTask.prompt.length > 500 ? '...' : ''}
-Branch: ${originalTask.result?.branch ?? originalTask.prBranch ?? 'unknown'}`
-    : `This is a new task to address feedback on PR #${String(event.pullRequestNumber)}`;
+    ? buildOriginalTaskContext(originalTask)
+    : `This is a new task to address feedback on PR #${String(event.pullRequestNumber)} in ${event.repository}.\nNo previous task context available.`;
 
   /* v8 ignore start -- ts-type: null body returns NOT_ACTIONABLE before reaching here @preserve */
   const bodyText = event.body ?? '(no body)';
   /* v8 ignore stop @preserve */
 
   return `
-## Context
+## PR Comment Follow-Up Task
+
+### Pull Request
+**PR:** #${String(event.pullRequestNumber)} - ${prTitle}
+**Repository:** ${event.repository}
+**State:** ${event.state ?? 'open'}
+
+### Original Task Context
 ${context}
 
-## PR Comment to Address
+### Comment to Address
 **From:** ${event.senderLogin}
-**On PR:** #${String(event.pullRequestNumber)} in ${event.repository}
 **Comment:**
+\`\`\`
 ${bodyText}
+\`\`\`
 
-## Instructions
-1. Review the comment and understand what's being requested
-2. Make the necessary changes to address the feedback
-3. Commit and push to the existing branch
-4. Reply to the comment summarizing what you changed
+### Instructions
+1. Read the comment carefully and understand what changes are being requested
+2. Review the relevant code in the PR to understand the current state
+3. Make the necessary changes to address the feedback
+4. Run tests to ensure your changes don't break anything
+5. Commit and push to the existing branch
+6. Reply to the comment summarizing what you changed and why
 
-Note: The worktree and branch for this PR should already exist. Resume work on the existing branch.
+**Important:** The worktree and branch for this PR should already exist. Resume work on the existing branch. Do NOT create a new branch or PR.
 `.trim();
 }
 

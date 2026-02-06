@@ -150,6 +150,34 @@ function getStyleGuidance(style: 'minimal' | 'documented' | 'defensive'): string
   }
 }
 
+/**
+ * Map TypeScript error codes to actionable fix guidance.
+ */
+function getErrorGuidance(error: string): string {
+  if (error.includes('TS2307') || error.includes('Cannot find module')) {
+    return 'Check that the import path has .js extension for local files';
+  }
+  if (error.includes('TS2339') || error.includes('does not exist on type')) {
+    return 'Check property names match the interface definition exactly';
+  }
+  if (error.includes('TS2345') || error.includes('not assignable to parameter')) {
+    return 'Verify parameter types match the expected function signature';
+  }
+  if (error.includes('TS2532') || error.includes('possibly undefined')) {
+    return 'Add explicit undefined check before accessing the value';
+  }
+  if (error.includes('TS2322') || error.includes('not assignable to type')) {
+    return 'Check return type matches the function signature';
+  }
+  if (error.includes('TS18048') || error.includes('possibly null')) {
+    return 'Add null check before accessing the property';
+  }
+  if (error.includes('Unbalanced')) {
+    return 'Check for missing closing braces, parentheses, or brackets';
+  }
+  return 'Review the error message and fix the code accordingly';
+}
+
 export function buildUserPrompt(
   task: string,
   fileContext: string,
@@ -162,8 +190,19 @@ export function buildUserPrompt(
   }
 
   if (previousErrors !== undefined && previousErrors.length > 0) {
-    parts.push(`\n\n## Previous Attempt Errors\nFix these issues:\n${previousErrors.join('\n')}`);
+    parts.push('\n\n## CRITICAL: Previous Attempt Failed');
+    parts.push('The previous code failed validation. Fix ALL of these errors:');
+    parts.push('');
+
+    for (const error of previousErrors.slice(0, 5)) {
+      const guidance = getErrorGuidance(error);
+      parts.push(`ERROR: ${error}`);
+      parts.push(`FIX: ${guidance}`);
+      parts.push('');
+    }
+
+    parts.push('Generate corrected code that addresses ALL the errors above.');
   }
 
-  return parts.join('');
+  return parts.join('\n');
 }

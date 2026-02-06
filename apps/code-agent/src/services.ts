@@ -36,6 +36,8 @@ import { createWorkerSettingsRepository } from './infra/firestore/workerSettings
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
 import type { GitHubPREventRepository } from './domain/repositories/gitHubPREventRepository.js';
 import { createFirestoreGitHubPREventsRepository } from './infra/firestore/gitHubPREventsRepository.js';
+import type { PRTaskLockRepository } from './domain/repositories/prTaskLockRepository.js';
+import { createFirestorePRTaskLockRepository } from './infra/firestore/firestorePRTaskLockRepository.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -56,6 +58,7 @@ export interface ServiceContainer {
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
   gitHubPREventRepo: GitHubPREventRepository;
+  prTaskLockRepo: PRTaskLockRepository;
 }
 
 // Configuration required to initialize services
@@ -224,6 +227,7 @@ export function initServices(config: ServiceConfig): void {
     workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
     workerHealthProbe: createWorkerHealthProbe(),
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+    prTaskLockRepo: createFirestorePRTaskLockRepository({ firestore, logger }),
   };
 }
 

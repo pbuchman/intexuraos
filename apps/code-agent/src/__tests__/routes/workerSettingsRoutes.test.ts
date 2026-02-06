@@ -45,6 +45,7 @@ import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ServiceContainer } from '../../services.js';
 import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
 
 describe('Worker Settings Routes', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -150,6 +151,10 @@ describe('Worker Settings Routes', () => {
       workerSettingsRepo,
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
+        logger,
+      }),
+      prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
     } as ServiceContainer);

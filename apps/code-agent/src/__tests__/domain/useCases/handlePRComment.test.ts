@@ -254,8 +254,8 @@ describe('handlePRComment', () => {
       if (result.ok) {
         expect(result.value.mode).toBe('resumed');
         expect(result.value.originalTaskId).toBe('task-original-123');
-        expect(result.value.prompt).toContain('You previously worked on this PR');
-        expect(result.value.prompt).toContain('INT-123');
+        expect(result.value.prompt).toContain('### Original Task Context');
+        expect(result.value.prompt).toContain('**Linear Issue:** INT-123');
       }
     });
 
@@ -351,13 +351,17 @@ describe('handlePRComment', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.prompt).toContain('unknown');
+        // Should NOT contain Linear Issue line when linearIssueId is missing
+        expect(result.value.prompt).not.toContain('**Linear Issue:**');
+        // Should still have the Original Task Context section
+        expect(result.value.prompt).toContain('### Original Task Context');
       }
     });
 
     it('truncates long prompts in context', async () => {
       const event = createMockEvent();
-      const longPrompt = 'A'.repeat(600);
+      // Use 900 chars to exceed the 800 char truncation threshold
+      const longPrompt = 'A'.repeat(900);
       const originalTask = createMockTask({
         prompt: longPrompt,
       });
@@ -373,7 +377,7 @@ describe('handlePRComment', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.prompt).toContain('...');
-        expect(result.value.prompt).not.toContain('A'.repeat(600));
+        expect(result.value.prompt).not.toContain('A'.repeat(900));
       }
     });
 
@@ -394,7 +398,10 @@ describe('handlePRComment', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.prompt).toContain('Branch: unknown');
+        // Should NOT contain Branch line when neither result.branch nor prBranch exists
+        expect(result.value.prompt).not.toContain('**Branch:**');
+        // Should still have the Original Task Context section
+        expect(result.value.prompt).toContain('### Original Task Context');
       }
     });
 
@@ -416,7 +423,153 @@ describe('handlePRComment', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.prompt).toContain('Branch: fallback-branch');
+        expect(result.value.prompt).toContain('**Branch:** fallback-branch');
+      }
+    });
+
+    it('includes linearIssueType in prompt when present', async () => {
+      const event = createMockEvent();
+      const originalTask = createMockTask({
+        linearIssueId: 'INT-456',
+        linearIssueType: 'feature',
+      });
+
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(originalTask));
+
+      const result = await handlePRComment(
+        event,
+        'user-123',
+        createDeps(mockCodeTaskRepo, mockPrTaskLockRepo, mockLogger)
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.prompt).toContain('**Linear Issue:** INT-456 (feature)');
+      }
+    });
+
+    it('includes linearIssueTitle in prompt when present', async () => {
+      const event = createMockEvent();
+      const originalTask = createMockTask({
+        linearIssueId: 'INT-789',
+        linearIssueTitle: 'Add user authentication',
+      });
+
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(originalTask));
+
+      const result = await handlePRComment(
+        event,
+        'user-123',
+        createDeps(mockCodeTaskRepo, mockPrTaskLockRepo, mockLogger)
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.prompt).toContain('**Linear Issue:** INT-789: Add user authentication');
+      }
+    });
+
+    it('includes labels in prompt when present', async () => {
+      const event = createMockEvent();
+      const originalTask = createMockTask({
+        linearIssueLabels: ['frontend', 'urgent', 'bug'],
+      });
+
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(originalTask));
+
+      const result = await handlePRComment(
+        event,
+        'user-123',
+        createDeps(mockCodeTaskRepo, mockPrTaskLockRepo, mockLogger)
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.prompt).toContain('**Labels:** frontend, urgent, bug');
+      }
+    });
+
+    it('truncates long result summary in context', async () => {
+      const event = createMockEvent();
+      const longSummary = 'B'.repeat(400);
+      const originalTask = createMockTask({
+        result: {
+          branch: 'feature/test',
+          commits: 1,
+          summary: longSummary,
+        },
+      });
+
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(originalTask));
+
+      const result = await handlePRComment(
+        event,
+        'user-123',
+        createDeps(mockCodeTaskRepo, mockPrTaskLockRepo, mockLogger)
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.prompt).toContain('**Previous Work Summary:**');
+        expect(result.value.prompt).toContain('...');
+        expect(result.value.prompt).not.toContain('B'.repeat(400));
+      }
+    });
+
+    it('uses PR title in prompt header', async () => {
+      const event = createMockEvent({
+        title: 'Fix authentication flow',
+      });
+
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(null));
+
+      const result = await handlePRComment(
+        event,
+        'user-123',
+        createDeps(mockCodeTaskRepo, mockPrTaskLockRepo, mockLogger)
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.prompt).toContain('#42 - Fix authentication flow');
+      }
+    });
+
+    it('uses fallback PR title when title is null', async () => {
+      const event = createMockEvent({
+        title: null,
+      });
+
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(null));
+
+      const result = await handlePRComment(
+        event,
+        'user-123',
+        createDeps(mockCodeTaskRepo, mockPrTaskLockRepo, mockLogger)
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.prompt).toContain('#42 - PR #42');
+      }
+    });
+
+    it('uses fallback state when state is null', async () => {
+      const event = createMockEvent({
+        state: null,
+      });
+
+      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(null));
+
+      const result = await handlePRComment(
+        event,
+        'user-123',
+        createDeps(mockCodeTaskRepo, mockPrTaskLockRepo, mockLogger)
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok === true) {
+        expect(result.value.prompt).toContain('**State:** open');
       }
     });
   });
