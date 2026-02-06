@@ -23,6 +23,7 @@ Analyze, clarify, and prepare the Linear issue for execution. Work **IN-PLACE** 
 ```
 
 Or if unclear:
+
 ```
 🔧 PHASE 1: Starting Design & Validation for INT-456
 ❓ UNCLEAR: Requirements ambiguous - need clarification on scope
@@ -48,10 +49,10 @@ Verify Linear MCP, GitHub CLI, GCloud available. Fail fast if unavailable.
 
 **Short-circuit if `unclear` label present:**
 
-| Label Found | Action |
-|-------------|--------|
-| `unclear` | STOP with message: `⏸️ Issue INT-XXX already marked 'unclear'. Awaiting human review.` |
-| Neither `unclear` nor `code-task` | Continue to Step 3 |
+| Label Found                       | Action                                                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------------- |
+| `unclear`                         | STOP with message: `⏸️ Issue INT-XXX already marked 'unclear'. Awaiting human review.` |
+| Neither `unclear` nor `code-task` | Continue to Step 3                                                                     |
 
 ### 3. Analyze Issue
 
@@ -117,10 +118,10 @@ Use `mcp__linear__update_issue` to update the description.
 
 **When to use this step vs plan-splitting.md:**
 
-| Complexity | Children | Use |
-|------------|----------|-----|
-| Simple | 2-3 independent tasks | This step (Phase 1) |
-| Complex | 4+ tasks with tiers/dependencies | [plan-splitting.md](plan-splitting.md) |
+| Complexity | Children                         | Use                                    |
+| ---------- | -------------------------------- | -------------------------------------- |
+| Simple     | 2-3 independent tasks            | This step (Phase 1)                    |
+| Complex    | 4+ tasks with tiers/dependencies | [plan-splitting.md](plan-splitting.md) |
 
 **Simple splitting:** No tier prefixes, no dependency chains, just parallel subtasks.
 
@@ -132,10 +133,10 @@ Use `mcp__linear__update_issue` to update the description.
 Call mcp__linear__list_issues(parentId: "<issue-uuid>", team: "IntexuraOS")
 ```
 
-| Result | Action |
-|--------|--------|
+| Result         | Action                                                                                            |
+| -------------- | ------------------------------------------------------------------------------------------------- |
 | Children exist | Skip creation. Add `code-task` to parent. Log: `📋 EXISTING: Found N children, skipping creation` |
-| No children | Create children as below |
+| No children    | Create children as below                                                                          |
 
 **If no existing children, create specific child issues:**
 
@@ -180,6 +181,7 @@ For complex architectural decisions that need preserved reasoning:
 **Print verbose completion message:**
 
 If `code-task` added:
+
 ```
 ✅ PHASE 1 COMPLETE: INT-XXX enriched with template sections.
 🏷️ LABEL: 'code-task' added (issue ready for execution)
@@ -187,6 +189,7 @@ If `code-task` added:
 ```
 
 If `unclear` added:
+
 ```
 ⏸️ PHASE 1 COMPLETE: INT-XXX marked for human review.
 🏷️ LABEL: 'unclear' added (requirements need clarification)
