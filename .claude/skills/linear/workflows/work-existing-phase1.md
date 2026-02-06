@@ -145,7 +145,19 @@ ToolSearch: "select:mcp__glm-coder__generate_code"
    | <10 lines                                           | **Direct**             | Overhead not worth it           |
    | Wiring/integration code (services.ts, routes)       | **Direct**             | Needs service container context |
 
-**5c. Create the tables in the issue:**
+**5c. Select Context Files**
+
+For each GLM-delegated file, identify 1-3 context files using these criteria:
+
+| Criteria                                         | Examples                                |
+| ------------------------------------------------ | --------------------------------------- |
+| **Type definitions** the new file will import    | `types.ts`, `codeTask.ts`, `result.ts`  |
+| **Similar utilities** in the same domain         | If creating a repo, look at other repos |
+| **Pattern examples** showing project conventions | `existingSimilarFile.ts`                |
+
+**Maximum 3 files per GLM task** to avoid context bloat.
+
+**5d. Create the tables in the issue:**
 
 Add `## GLM Delegation Plan` section with:
 
@@ -153,14 +165,19 @@ Add `## GLM Delegation Plan` section with:
 - Direct Implementation table (file paths, reasons)
 - Criteria checklist showing analysis was done
 
-**Context files:** For each GLM file, identify 1-3 files that provide types, patterns, or examples GLM needs.
-
-**5d. Validation:**
+**5e. Validation:**
 
 | Condition               | Status                                  |
 | ----------------------- | --------------------------------------- |
 | MCP tools available     | Phase 1 incomplete without this section |
-| MCP tools NOT available | Skip this section entirely              |
+| MCP tools NOT available | Skip this step entirely (see below)     |
+
+**When GLM MCP tools are NOT available:**
+
+- Skip the entire `## GLM Delegation Plan` section
+- Keep `## Files to Change` as a flat list (no New/Modified split required)
+- All implementation will be handled via Direct Implementation in Phase 2
+- The issue is still valid for execution without GLM
 
 ---
 

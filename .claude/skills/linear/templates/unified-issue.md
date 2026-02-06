@@ -70,12 +70,12 @@
 
 ## Files to Change
 
-**New Files (candidates for GLM delegation):**
+**New Files:**
 
 - \`path/to/new/utility.ts\` - <what it does>
 - \`path/to/new/utility.test.ts\` - <test coverage>
 
-**Modified Files (direct implementation):**
+**Modified Files:**
 
 - \`path/to/existing/file.ts\` - <what changes expected>
 
@@ -100,9 +100,13 @@ _Include this section ONLY if GLM MCP tools are available. Skip entirely otherwi
 
 ### Direct Implementation (I write after GLM files)
 
+_Files identified upfront as requiring direct implementation._
+
 | File Path                      | Reason                                                                        |
 | ------------------------------ | ----------------------------------------------------------------------------- |
 | \`<path/to/existing/file.ts>\` | _Why GLM can't do it (editing existing, needs deep context, <10 lines, etc.)_ |
+
+**Note:** If GLM output fails validation during Phase 2, those files also move here as fallbacks.
 
 ### Criteria Applied
 
