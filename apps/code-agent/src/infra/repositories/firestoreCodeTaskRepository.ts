@@ -164,6 +164,18 @@ export const createFirestoreCodeTaskRepository = (deps: {
           if (input.retriedFrom !== undefined) {
             taskData.retriedFrom = input.retriedFrom;
           }
+          if (input.prNumber !== undefined) {
+            taskData.prNumber = input.prNumber;
+          }
+          if (input.prBranch !== undefined) {
+            taskData.prBranch = input.prBranch;
+          }
+          if (input.parentTaskId !== undefined) {
+            taskData.parentTaskId = input.parentTaskId;
+          }
+          if (input.followUpReason !== undefined) {
+            taskData.followUpReason = input.followUpReason;
+          }
           /* v8 ignore stop @preserve */
 
           const docRef = collection.doc(taskId);
@@ -551,6 +563,40 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok({ logCount, archivedAt });
       } catch (error) {
         logger.error({ error, taskId }, 'Failed to archive task logs');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    findByPR: async (
+      repository: string,
+      prNumber: number
+    ): Promise<Result<CodeTask | null, RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('repository', '==', repository)
+          .where('prNumber', '==', prNumber)
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        const data = doc.data();
+        const task: CodeTask = {
+          ...data,
+          id: doc.id,
+          createdAt: data['createdAt'],
+          updatedAt: data['updatedAt'],
+        } as CodeTask;
+
+        return ok(task);
+      } catch (error) {
+        logger.error({ error, repository, prNumber }, 'Failed to find task by PR');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

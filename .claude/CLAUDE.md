@@ -707,6 +707,16 @@ All skill documentation in `.claude/skills/<name>/SKILL.md`. For complex multi-s
 
 ---
 
+## GLM-Coder MCP (Code Generation)
+
+**Tools:** `generate_code`, `generate_tests`, `glm_stats` — GLM-4.7 via MCP.
+
+**Conditional:** When running on Opus (not Z.ai), a SessionStart hook injects usage instructions. See `.claude/reference/glm-coder.md` for full documentation.
+
+**Quick reference:** Use for isolated code generation (new functions, tests). Don't use for debugging, small edits, or multi-file refactoring.
+
+---
+
 ## Documentation
 
 **RULE:** All tables MUST have proper column alignment for readability.

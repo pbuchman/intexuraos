@@ -27,6 +27,14 @@ export interface CreateTaskInput {
    * Used for tracking retry chains and debugging.
    */
   retriedFrom?: string;
+
+  // PR Correlation (INT-465)
+  prNumber?: number;
+  prBranch?: string;
+
+  // Follow-up tracking (INT-465)
+  parentTaskId?: string;
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry';
 }
 
 export interface UpdateTaskInput {
@@ -132,4 +140,13 @@ export interface CodeTaskRepository {
     taskId: string,
     batchSize: number
   ): Promise<Result<{ logCount: number; archivedAt: Date }, RepositoryError>>;
+
+  /**
+   * Find the task that created a specific PR.
+   * Used for PR comment auto-response to link back to original task (INT-465).
+   */
+  findByPR(
+    repository: string,
+    prNumber: number
+  ): Promise<Result<CodeTask | null, RepositoryError>>;
 }

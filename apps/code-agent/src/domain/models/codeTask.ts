@@ -123,6 +123,14 @@ export interface CodeTask {
   hasChildren?: boolean;         // Whether the issue has child issues
   linearFallback?: boolean;     // True if Linear was unavailable (design lines 290-296)
 
+  // PR Correlation (for linking tasks to PRs - INT-465)
+  prNumber?: number;           // GitHub PR number (populated on completion)
+  prBranch?: string;           // Branch name (queryable, redundant with result.branch)
+
+  // Resume/Follow-up tracking (for PR comment auto-response - INT-465)
+  parentTaskId?: string;       // If this task is a follow-up to another
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry';
+
   // Results
   result?: TaskResult;
   error?: TaskError;

@@ -21,23 +21,47 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 /linear <sentry-url>              # Create issue from Sentry error
 ```
 
-## Core Mandates
+## Core Mandates (5 Essential Rules)
 
-1. **Test Requirements First (QUALITY GATE)**: EVERY implementation issue MUST start with a "Test Requirements" section listing exact test cases in a table format. Issues without explicit test specifications are incomplete — do NOT create them.
-2. **Branch First**: EVERY task MUST start with branch creation from `origin/development`. Task FAILS if work starts on `development` or `main`.
-3. **Fail Fast**: If Linear, GitHub CLI, or GCloud are unavailable, STOP immediately
-4. **No Guessing**: When issue type is ambiguous, ASK the user
-5. **Cross-Linking**: Every issue MUST link between systems (Linear <-> GitHub <-> Sentry)
-6. **CI Gate**: `pnpm run ci:tracked` MUST pass before PR creation — NON-NEGOTIABLE, no shortcuts
-7. **State Management (MANDATORY)**: EVERY issue MUST transition through states: Backlog → In Progress (when starting) → In Review (when PR created). NEVER skip or delay state updates.
-8. **One Issue at a Time**: Complete verification, commit, and PR for EACH issue before starting the next
-9. **Checkpoint Pattern**: After completing an issue, STOP and wait for user instruction before proceeding
-10. **Done Forbidden**: Never move issues to Done — maximum agent-controlled state is QA
-11. **95% Coverage MINIMUM**: All tests listed in issues MUST be implemented. Do NOT simplify work.
-12. **Parent Execution Mode**: When working on parent issues with children, execute ALL children continuously without stopping between them. Single branch and single PR for the parent.
-13. **PR Continuity Pattern (Parent Issues)**: Create PR early (before first child), then after EACH child: commit → push → update PR description. PR description MUST list all children with status and maintain a progress log.
-14. **Automatic Completion (NO ASKING)**: After implementation, AUTOMATICALLY run: CI → commit → push → PR → Linear "In Review". NEVER ask "Would you like me to commit?" — this is a task failure. The only pause point is CI failure.
-15. **Silent Child Transitions**: When moving between child issues in parent execution mode, do NOT output "Next Step: INT-YYY" or similar announcements. These end your turn without executing. Your next tool call after completing a child MUST be starting the next child directly.
+1. **Test Requirements First**: EVERY issue MUST have a "Test Requirements" section with specific test cases. No exceptions.
+2. **Branch First**: EVERY task starts with branch from `origin/development`. Working on `main` = task failure.
+3. **CI Gate**: `pnpm run ci:tracked` MUST pass before commit. NON-NEGOTIABLE.
+4. **State Management**: Issues transition: Backlog → In Progress → In Review. Never skip states.
+5. **Cross-Linking**: Every issue links Linear ↔ GitHub ↔ Sentry. PRs require `[INT-XXX]` in title.
+
+---
+
+### Execution Behaviors
+
+| Behavior       | Rule                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------ |
+| Fail Fast      | If Linear/GitHub/GCloud unavailable, STOP immediately                                |
+| No Guessing    | When ambiguous, ASK the user                                                         |
+| One at a Time  | Complete PR for each issue before starting next                                      |
+| Checkpoint     | After issue completion, STOP and wait for instruction                                |
+| Done Forbidden | Maximum agent state is "In Review" (never "QA" or "Done")                            |
+| 95% Coverage   | All listed tests MUST be implemented                                                 |
+| Auto-Complete  | After implementation: CI → commit → push → PR → Linear. Never ask "Should I commit?" |
+
+---
+
+### Parent Execution Mode (Issues with Children)
+
+When working on parent issues that have child subissues:
+
+1. **Single Branch/PR**: One branch and one PR for the parent, covering all children
+2. **Continuous Execution**: Execute ALL children without stopping between them
+3. **PR Continuity**: Create PR early, update after EACH child with status
+4. **Silent Transitions**: No "Next Step: INT-YYY" announcements between children
+
+---
+
+### Conditional: GLM Delegation
+
+**Applies only when GLM MCP tools are available.**
+
+- **Phase 1**: Create GLM Delegation Plan allocating new files to `generate_code`/`generate_tests` or Direct
+- **Phase 2**: Execute GLM-designated files FIRST. Fall back to Direct if GLM fails.
 
 ## Test Requirements Quality Gate
 
@@ -231,9 +255,10 @@ All issue work follows a two-phase model (both interactive and worker modes):
 **Phase 1 outputs (in-place on Linear issue):**
 
 1. Enriched description with Unified Issue Template sections
-2. Subissues with `code-task` label (if complex)
-3. `code-task` or `unclear` label added to parent
-4. Optional: Design doc PR for complex architectural decisions
+2. GLM Delegation Plan (if GLM MCP tools available)
+3. Subissues with `code-task` label (if complex)
+4. `code-task` or `unclear` label added to parent
+5. Optional: Design doc PR for complex architectural decisions
 
 See: [Two-Phase Execution Reference](reference/two-phase-execution.md)
 
