@@ -921,13 +921,6 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 - `docs/services/notion-service/tutorial.md`
 - `docs/services/notion-service/technical-debt.md`
 
-**promptvault-service** (4 files)
-
-- `docs/services/promptvault-service/features.md`
-- `docs/services/promptvault-service/technical.md`
-- `docs/services/promptvault-service/tutorial.md`
-- `docs/services/promptvault-service/technical-debt.md`
-
 ### Aggregated Content (3 files)
 
 - `docs/services/index.md`
@@ -954,7 +947,6 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 | api-docs-hub                 | Unified API documentation                        | Multi-spec aggregation with service selector         | Live API testing                       |
 | app-settings-service         | LLM pricing and usage tracking                   | Per-model cost analytics                             | More providers, budget alerts          |
 | notion-service               | Notion integration management                    | Connection lifecycle with workspace detection        | Two-way sync                           |
-| promptvault-service          | Prompt template management                       | Notion database sync for prompts                     | Version history, sharing               |
 
 **Documentation Coverage:** 100%
 
@@ -978,8 +970,7 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 | api-docs-hub                 | 0     | 0           | 0         | 0           |
 | app-settings-service         | 0     | 0           | 0         | 0           |
 | notion-service               | 0     | 0           | 0         | 0           |
-| promptvault-service          | 0     | 0           | 0         | 0           |
 
-**Total:** 8 code smells identified across 17 services (all low severity)
+**Total:** 8 code smells identified across 16 services (all low severity)
 
 ---
