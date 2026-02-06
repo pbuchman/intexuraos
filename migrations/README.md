@@ -57,7 +57,7 @@ export async function up(context) {
 pnpm run migrate
 
 # Show migration status
-ppnpm run migrate:status
+pnpm run migrate:status
 
 # Preview without applying
 node scripts/migrate.mjs --dry-run

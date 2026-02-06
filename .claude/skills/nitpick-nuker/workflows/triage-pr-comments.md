@@ -8,6 +8,10 @@ gh auth status
 
 # 2. Verify we're in a git repo
 git rev-parse --is-inside-work-tree
+
+# 3. CRITICAL: Ensure working directory is repo root
+# Scripts use relative paths from repo root
+cd "$(git rev-parse --show-toplevel)"
 ```
 
 ## Step 1: Determine PR Number
@@ -31,7 +35,7 @@ echo "Processing PR #$PR_NUMBER"
 ## Step 2: Fetch Unprocessed Comments
 
 ```bash
-# Run from skill directory
+# Run from repo root (scripts use relative paths)
 SKILL_DIR=".claude/skills/nitpick-nuker"
 COMMENTS_JSON=$("$SKILL_DIR/scripts/fetch-unprocessed-comments.sh" "$PR_NUMBER")
 
@@ -80,15 +84,29 @@ Read the comment and determine:
 
 ```bash
 # Add 🚀 reaction to mark as processed
+# IMPORTANT: Must run from repo root for script path to work
 "$SKILL_DIR/scripts/add-reaction.sh" "<comment_type>" "<comment_id>"
 ```
 
 **IMPORTANT:** Add reaction AFTER processing, not before. This ensures we don't lose track if interrupted.
 
-## Step 4: Commit and Push (if fixes applied)
+## Step 4: Run Local CI Verification
+
+**CRITICAL: Run `pnpm run ci:tracked` BEFORE committing to catch issues early.**
 
 ```bash
-# Only if we made fixes
+# Run full CI locally - this catches 90% of issues before push
+pnpm run ci:tracked 2>&1 | tee /tmp/ci-local-$(date +%H%M%S).txt
+
+# If CI fails, fix the issue before proceeding
+# Check the output file for errors:
+# rg "error|FAIL" /tmp/ci-local-*.txt -C3
+```
+
+## Step 5: Commit and Push (if fixes applied AND local CI passes)
+
+```bash
+# Only if we made fixes AND local CI passed
 if [ "$FIXES_APPLIED" -gt 0 ]; then
   # Stage all changes
   git add -A
@@ -110,37 +128,27 @@ EOF
 fi
 ```
 
-## Step 5: CI Loop
+## Step 6: Watch Remote CI
 
 ```bash
-# Watch CI (ignores zai-claude-code-review.yml by default)
-"$SKILL_DIR/scripts/watch-ci.sh" "$PR_NUMBER"
-CI_STATUS=$?
+# Watch CI using gh pr checks (built-in streaming)
+# This is more reliable than custom watch script
+gh pr checks "$PR_NUMBER" --watch
 
-# Loop until green
-while [ "$CI_STATUS" -ne 0 ]; do
-  echo "CI failed. Analyzing and fixing..."
-
-  # Analyze the failure (use gh pr checks to see what failed)
-  gh pr checks "$PR_NUMBER" --json name,conclusion,state | jq '.[] | select(.conclusion == "FAILURE")'
-
-  # Fix the issue (this is where Claude analyzes and fixes)
-  # ... apply fix ...
-
-  # Commit and push
-  git add -A
-  git commit -m "Fix CI failure: [description]"
-  git push
-
-  # Watch again
-  "$SKILL_DIR/scripts/watch-ci.sh" "$PR_NUMBER"
-  CI_STATUS=$?
-done
-
-echo "CI passed! ✅"
+# Check final status
+gh pr checks "$PR_NUMBER" --json name,state | jq -r '.[] | "\(.name): \(.state)"' | grep -v SKIPPED
 ```
 
-## Step 6: Post Summary
+**Note:** The `--watch` flag provides real-time streaming updates and handles all edge cases.
+
+**If CI fails:**
+
+1. Analyze: `gh run view <run-id> --log-failed`
+2. Fix the issue
+3. Commit and push
+4. Watch again
+
+## Step 7: Post Summary
 
 ```bash
 # Create summary JSON
@@ -205,13 +213,14 @@ Or for skipped:
 
 ## Error Handling
 
-| Error            | Recovery                                |
-| ---------------- | --------------------------------------- |
-| `gh auth` fails  | Prompt user to run `gh auth login`      |
-| No PR for branch | Error with message to provide PR number |
-| Script not found | Check skill directory path              |
-| API rate limit   | Wait and retry with exponential backoff |
-| CI keeps failing | After 3 attempts, stop and report       |
+| Error                             | Recovery                                                                      |
+| --------------------------------- | ----------------------------------------------------------------------------- |
+| `gh auth` fails                   | Prompt user to run `gh auth login`                                            |
+| No PR for branch                  | Error with message to provide PR number                                       |
+| Script not found                  | Verify working directory is repo root (`cd $(git rev-parse --show-toplevel)`) |
+| API rate limit                    | Wait and retry with exponential backoff                                       |
+| CI keeps failing                  | After 3 attempts, stop and report                                             |
+| `gh pr checks --json` field error | Use only valid fields: `name`, `state`, `workflow` (not `conclusion`)         |
 
 ## Completion
 

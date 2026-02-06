@@ -89,7 +89,7 @@ function PREventsGroup({
   repository,
   events,
 }: PREventsGroupProps): React.JSX.Element {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const prUrl = `https://github.com/${repository}/pull/${String(pullRequestNumber)}`;
 

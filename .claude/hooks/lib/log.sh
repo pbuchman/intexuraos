@@ -8,6 +8,7 @@ _LOG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _LOG_HOOKS_DIR="$(cd "$_LOG_LIB_DIR/.." && pwd)"
 # Allow override via env var for test isolation
 LOG_FILE="${CLAUDE_HOOKS_LOG_FILE:-${_LOG_HOOKS_DIR}/hooks.log}"
+SESSION_BLOCKED_FILE="${CLAUDE_HOOKS_SESSION_FILE:-${_LOG_HOOKS_DIR}/session-blocked.log}"
 
 # Get ISO 8601 timestamp in UTC
 # Usage: log_timestamp
@@ -59,8 +60,11 @@ log_warned() {
 
 # Convenience function for BLOCKED entries
 # Usage: log_blocked <hook> <pattern> <message> [<suggestion>]
+# Also appends to session-blocked.log for session-scoped metrics
 log_blocked() {
     log_write "BLOCKED" "$1" "$2" "-" "$3" "${4:--}"
+    # Append to session log (atomic append, safe for concurrent hooks)
+    echo "$1" >> "$SESSION_BLOCKED_FILE" 2>/dev/null || true
 }
 
 # Convenience function for INFO entries
