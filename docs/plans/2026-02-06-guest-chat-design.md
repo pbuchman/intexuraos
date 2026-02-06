@@ -10,16 +10,16 @@ Enable non-logged-in users to use the chat feature with rate limiting and a plat
 
 ## Decisions
 
-| Aspect                   | Decision                       | Rationale                             |
-| ------------------------ | ------------------------------ | ------------------------------------- |
-| **LLM Model**            | GLM-4.7-Flash                  | Free tier, no API costs               |
-| **Provider**             | Zai (Zhipu AI)                 | Provides GLM models                   |
-| **Secret Name**          | `INTEXURAOS_GUEST_ZAI_API_KEY` | Stored in GCP Secret Manager          |
-| **Rate Limit**           | 100 messages/hour              | Generous since model is free          |
-| **Session Tracking**     | In-memory Map                  | Simple, resets on deploy (acceptable) |
-| **Guest Identification** | UUID in localStorage           | Sent via `X-Guest-Session` header     |
-| **RAG Access**           | Full documentation search      | Same experience as logged-in users    |
-| **Auth Detection**       | Missing `Authorization` header | Triggers guest flow                   |
+| Aspect | Decision | Rationale |
+|--------|----------|-----------|
+| **LLM Model** | GLM-4.7-Flash | Free tier, no API costs |
+| **Provider** | Zai (Zhipu AI) | Provides GLM models |
+| **Secret Name** | `INTEXURAOS_GUEST_ZAI_API_KEY` | Stored in GCP Secret Manager |
+| **Rate Limit** | 100 messages/hour | Generous since model is free |
+| **Session Tracking** | In-memory Map | Simple, resets on deploy (acceptable) |
+| **Guest Identification** | UUID in localStorage | Sent via `X-Guest-Session` header |
+| **RAG Access** | Full documentation search | Same experience as logged-in users |
+| **Auth Detection** | Missing `Authorization` header | Triggers guest flow |
 
 ## Architecture
 
@@ -140,14 +140,12 @@ if (user !== null) {
 **File:** `apps/chat-agent/src/services.ts`
 
 Add to `ServiceContainer`:
-
 ```typescript
 readonly guestRateLimiter: GuestRateLimiter;
 readonly guestLlmClient: LlmGenerateClient;
 ```
 
 Initialize in `initializeServices()`:
-
 ```typescript
 const guestZaiApiKey = process.env['INTEXURAOS_GUEST_ZAI_API_KEY'];
 
@@ -169,7 +167,6 @@ container = {
 **File:** `apps/web/src/services/chatService.ts`
 
 Add guest session ID management:
-
 ```typescript
 const GUEST_SESSION_KEY = 'intex-guest-session-id';
 
@@ -186,7 +183,6 @@ export function getOrCreateGuestSessionId(): string {
 **File:** `apps/web/src/components/Chat/Chat.tsx`
 
 Modify `handleSendMessage`:
-
 ```typescript
 const handleSendMessage = useCallback(async (content: string): Promise<void> => {
   const { isAuthenticated, getAccessToken } = useAuth();
@@ -206,21 +202,21 @@ const handleSendMessage = useCallback(async (content: string): Promise<void> => 
 
 ## Files to Change
 
-| File                                                      | Change                                             |
-| --------------------------------------------------------- | -------------------------------------------------- |
-| `apps/chat-agent/src/routes/chatRoutes.ts`                | Add guest branch with `tryAuth()`                  |
-| `apps/chat-agent/src/services.ts`                         | Add `guestRateLimiter` and `guestLlmClient`        |
-| `apps/chat-agent/src/infra/rateLimit/guestRateLimiter.ts` | New file                                           |
-| `apps/chat-agent/src/index.ts`                            | Add `INTEXURAOS_GUEST_ZAI_API_KEY` to required env |
-| `apps/web/src/services/chatService.ts`                    | Add guest session ID handling                      |
-| `apps/web/src/components/Chat/Chat.tsx`                   | Generate/store session ID, conditional auth        |
-| `terraform/environments/dev/main.tf`                      | Add secret for guest API key                       |
-| `ecosystem.config.cjs`                                    | Add env var for local dev                          |
+| File | Change |
+|------|--------|
+| `apps/chat-agent/src/routes/chatRoutes.ts` | Add guest branch with `tryAuth()` |
+| `apps/chat-agent/src/services.ts` | Add `guestRateLimiter` and `guestLlmClient` |
+| `apps/chat-agent/src/infra/rateLimit/guestRateLimiter.ts` | New file |
+| `apps/chat-agent/src/index.ts` | Add `INTEXURAOS_GUEST_ZAI_API_KEY` to required env |
+| `apps/web/src/services/chatService.ts` | Add guest session ID handling |
+| `apps/web/src/components/Chat/Chat.tsx` | Generate/store session ID, conditional auth |
+| `terraform/environments/dev/main.tf` | Add secret for guest API key |
+| `ecosystem.config.cjs` | Add env var for local dev |
 
 ## Environment Variables
 
-| Variable                       | Location       | Value                         |
-| ------------------------------ | -------------- | ----------------------------- |
+| Variable | Location | Value |
+|----------|----------|-------|
 | `INTEXURAOS_GUEST_ZAI_API_KEY` | Secret Manager | Zai API key for GLM-4.7-Flash |
 
 ## Testing Considerations
