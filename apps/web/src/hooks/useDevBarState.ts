@@ -25,7 +25,7 @@ interface DevBarState {
 
 const STORAGE_KEY = 'intexuraos-devbar-state';
 const DEFAULT_HEIGHT = 320;
-const DEFAULT_WIDTH = window.innerWidth;
+const DEFAULT_WIDTH = typeof window !== 'undefined' ? window.innerWidth : 1920;
 const MIN_HEIGHT = 200;
 const MAX_HEIGHT = 600;
 const MIN_WIDTH = 400;
@@ -66,9 +66,9 @@ export function useDevBarState(): {
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
   height: number;
-  setHeight: (height: number) => void;
+  setHeight: (height: number | ((prev: number) => number)) => void;
   width: number;
-  setWidth: (width: number) => void;
+  setWidth: (width: number | ((prev: number) => number)) => void;
   persistedLogs: Pm2LogEntry[];
   persistLogs: (logs: Pm2LogEntry[]) => void;
   persistedPubSubEvents: PubSubEvent[];
@@ -103,19 +103,25 @@ export function useDevBarState(): {
     saveState({ ...current, activeTab: tab });
   }, []);
 
-  const setHeight = useCallback((newHeight: number) => {
-    const clamped = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, newHeight));
-    setHeightState(clamped);
-    const current = loadState();
-    saveState({ ...current, height: clamped });
+  const setHeight = useCallback((newHeight: number | ((prev: number) => number)) => {
+    setHeightState((prev) => {
+      const value = typeof newHeight === 'function' ? newHeight(prev) : newHeight;
+      const clamped = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, value));
+      const current = loadState();
+      saveState({ ...current, height: clamped });
+      return clamped;
+    });
   }, []);
 
-  const setWidth = useCallback((newWidth: number) => {
-    const maxWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
-    const clamped = Math.min(maxWidth, Math.max(MIN_WIDTH, newWidth));
-    setWidthState(clamped);
-    const current = loadState();
-    saveState({ ...current, width: clamped });
+  const setWidth = useCallback((newWidth: number | ((prev: number) => number)) => {
+    setWidthState((prev) => {
+      const value = typeof newWidth === 'function' ? newWidth(prev) : newWidth;
+      const maxWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+      const clamped = Math.min(maxWidth, Math.max(MIN_WIDTH, value));
+      const current = loadState();
+      saveState({ ...current, width: clamped });
+      return clamped;
+    });
   }, []);
 
   const persistLogs = useCallback((logs: Pm2LogEntry[]) => {
@@ -126,7 +132,7 @@ export function useDevBarState(): {
   }, []);
 
   const persistPubSubEvents = useCallback((events: PubSubEvent[]) => {
-    const trimmed = events.slice(0, 100);
+    const trimmed = events.slice(-100);
     setPersistedPubSubEvents(trimmed);
     const current = loadState();
     saveState({ ...current, pubsubEvents: trimmed });

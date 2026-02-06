@@ -18,7 +18,8 @@ function formatTimeSeparator(timestamp: number): string {
   const date = new Date(timestamp);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
   const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
   const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });

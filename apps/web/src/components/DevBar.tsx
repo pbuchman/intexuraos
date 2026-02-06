@@ -89,15 +89,23 @@ export function DevBar(): React.JSX.Element | null {
   }, [livePubsubEvents, persistedPubSubEvents]);
 
   useEffect(() => {
-    if (liveLogs.length > 0) {
+    if (liveLogs.length === 0) return undefined;
+    const handler = setTimeout(() => {
       persistLogs(liveLogs);
-    }
+    }, 1000);
+    return (): void => {
+      clearTimeout(handler);
+    };
   }, [liveLogs, persistLogs]);
 
   useEffect(() => {
-    if (livePubsubEvents.length > 0) {
+    if (livePubsubEvents.length === 0) return undefined;
+    const handler = setTimeout(() => {
       persistPubSubEvents(livePubsubEvents);
-    }
+    }, 1000);
+    return (): void => {
+      clearTimeout(handler);
+    };
   }, [livePubsubEvents, persistPubSubEvents]);
 
   const clearLogs = useCallback(() => {
@@ -154,17 +162,17 @@ export function DevBar(): React.JSX.Element | null {
   const handleHeightResize = useCallback(
     (delta: number) => {
       setIsResizing(true);
-      setHeight(height + delta);
+      setHeight((prev) => prev + delta);
     },
-    [height, setHeight]
+    [setHeight]
   );
 
   const handleWidthResize = useCallback(
     (delta: number) => {
       setIsResizing(true);
-      setWidth(width + delta);
+      setWidth((prev) => prev + delta);
     },
-    [width, setWidth]
+    [setWidth]
   );
 
   const handleResizeEnd = useCallback(() => {
