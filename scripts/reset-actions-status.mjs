@@ -54,10 +54,10 @@ async function main() {
 
   // Initialize Firebase Admin
   if (getApps().length === 0) {
-    const projectId = process.env.INTEXURAOS_GCP_PROJECT_ID || process.env.GCLOUD_PROJECT;
+    const projectId = process.env.INTEXURAOS_GCP_PROJECT_ID;
 
     if (!projectId) {
-      console.error('❌ Error: INTEXURAOS_GCP_PROJECT_ID or GCLOUD_PROJECT must be set');
+      console.error('❌ Error: INTEXURAOS_GCP_PROJECT_ID must be set');
       process.exit(1);
     }
 
