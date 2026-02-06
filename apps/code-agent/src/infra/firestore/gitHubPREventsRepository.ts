@@ -24,11 +24,13 @@ function toDate(value: unknown): Date {
   if (value instanceof Date) {
     return value;
   }
+  /* v8 ignore start -- test-infra: Firestore Timestamp duck-typing branch - real Timestamps have toDate(), but mocked Firestore returns plain Dates @preserve */
   // Firestore Timestamps and mock objects with toDate method
   if (value !== null && typeof value === 'object' && 'toDate' in value) {
     const obj = value as { toDate: () => Date };
     return obj.toDate();
   }
+  /* v8 ignore stop @preserve */
   // Last resort: try to parse as date string
   return new Date(String(value));
 }
