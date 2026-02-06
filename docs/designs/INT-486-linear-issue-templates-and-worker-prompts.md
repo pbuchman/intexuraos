@@ -30,6 +30,16 @@ This document defines a unified template system for Linear issues and a two-phas
 
 ---
 
+## Endpoint Changes
+
+| Service      | Method | Path                                  | Change                                                      |
+| ------------ | ------ | ------------------------------------- | ----------------------------------------------------------- |
+| linear-agent | GET    | `/internal/linear/issues/:identifier` | Add `labels: string[]` and `childCount: number` to response |
+
+**Breaking Change:** This is a backward-incompatible change to an internal API contract. The `labels` and `childCount` fields are now included in all responses. Internal consumers must be updated to handle these new fields.
+
+---
+
 ## Table of Contents
 
 1. [Two-Phase Execution Model](#two-phase-execution-model)
@@ -81,24 +91,28 @@ This document defines a unified template system for Linear issues and a two-phas
 | Failure Mode     | Stop, report gap            | Stop on error only               |
 | Key Skill        | Identifying missing context | Implementing specified artifacts |
 
-### Phase 1: Design & Validation Gate
+### Phase 1: Design & Validation (Default)
 
-**Trigger:** Issue is selected for execution (via `/linear INT-XXX` or worker dispatch)
+**Trigger:** Issue assigned to worker WITHOUT `code-task` label.
 
-**Validation Checklist:**
+**Goal:** Produce a complete execution plan and update the Linear issue.
 
-```markdown
-## Phase 1: Issue Template Validation
+**Output Artifacts:**
+
+1.  **Updated Linear Issue:** Fill in `Test Requirements`, `Files to Modify`, etc.
+2.  **Design PR:** Create a PR containing ONLY `docs/plans/INT-XXX-design.md` with the reasoning log.
+
+**Agent Behavior:**
+
+- Analyze the request.
+- Iterate on design (internally).
+- Update Linear description with the strict template.
+- Create branch `design/INT-XXX`.
+- Commit `docs/plans/INT-XXX-design.md`.
+- Create PR.
+- **STOP.** (Do not execute code).
 
 **Agent:** Specialized (Opus recommended for deep analysis)
-
-### Required Sections (ALL must be present)
-
-- [ ] ## Test Requirements (MANDATORY - implement first)
-- [ ] ## Original User Instruction
-- [ ] ## Summary
-- [ ] ## Requirements
-- [ ] ## Acceptance Criteria
 
 ### Quality Checks
 
@@ -128,11 +142,14 @@ This document defines a unified template system for Linear issues and a two-phas
 
 **OVERRIDE:**
 User may explicitly override with: "Execute anyway" or "Skip validation"
-```
 
-### Phase 2: Execution
+````
 
-**Trigger:** Phase 1 validation passed OR user override
+### Phase 2: Execution (Strict)
+
+**Trigger:** Issue assigned to worker WITH `code-task` label.
+
+**Pre-requisite:** Phase 1 complete (or issue manually created with all sections).
 
 **Execution Mode:** NON-INTERACTIVE
 
@@ -143,17 +160,19 @@ User may explicitly override with: "Execute anyway" or "Skip validation"
 
 ### Execution Rules
 
-1. Follow ALL instructions from validated issue
-2. Complete checkpoints automatically:
-   - Write tests (from Test Requirements)
-   - Implement code (from Requirements)
-   - Run CI (pnpm run ci:tracked)
-   - Commit if CI passes
-   - Push to remote
-   - Create PR
-   - Update Linear to "In Review"
-3. NEVER stop to ask for permission
-4. On CI failure: fix, retry, continue
+1.  **Validation:** Check if issue has `code-task` label. If missing -> STOP (or fallback to Phase 1 logic if safe).
+2.  **Follow Instructions:** Execute strictly based on the issue description.
+3.  **Complete Checkpoints:**
+    -   Write tests (from Test Requirements)
+    -   Implement code (from Requirements)
+    -   Run CI (pnpm run ci:tracked)
+    -   Commit if CI passes
+    -   Push to remote
+    -   Create PR
+    -   Update Linear to "In Review"
+
+### Resource Limits
+**NONE.** The user has explicitly accepted the risk of high token usage/loops to ensure completion of complex tasks.
 
 ### Forbidden in Phase 2
 
@@ -161,7 +180,7 @@ User may explicitly override with: "Execute anyway" or "Skip validation"
 - ❌ Asking "Ready to commit?"
 - ❌ Asking for clarification on scope
 - ❌ Adding "smart improvements" not in scope
-```
+````
 
 ---
 

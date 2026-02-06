@@ -98,6 +98,8 @@ describe('internalRoutes', () => {
       updatedAt: now,
       completedAt: null,
       teamId: 'team-456',
+      labels: [],
+      childCount: 0,
       ...overrides,
     };
   }
@@ -204,6 +206,8 @@ describe('internalRoutes', () => {
       expect(body.data.identifier).toBe('INT-123');
       expect(body.data.title).toBe('Test Issue');
       expect(body.data.url).toBe('https://linear.app/team/issue/INT-123');
+      expect(body.data.labels).toEqual([]);
+      expect(body.data.childCount).toBe(0);
     });
 
     it('handles connection repository errors', async () => {

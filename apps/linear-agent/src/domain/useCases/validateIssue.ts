@@ -24,6 +24,10 @@ export interface ValidatedIssue {
   identifier: string;
   title: string;
   url: string;
+  /** Labels from the Linear issue */
+  labels: string[];
+  /** Number of child issues */
+  childCount: number;
 }
 
 export interface ValidateIssueError {
@@ -98,5 +102,7 @@ export async function validateIssue(
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,
+    labels: issue.labels,
+    childCount: issue.childCount,
   });
 }

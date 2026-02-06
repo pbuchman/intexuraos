@@ -174,6 +174,8 @@ export function registerRoutes(
       prompt: parsed.prompt,
       webhookUrl: parsed.webhookUrl,
       webhookSecret: parsed.webhookSecret,
+      linearIssueLabels: parsed.linearIssueLabels,
+      hasChildren: parsed.hasChildren,
       ...(parsed.repository !== undefined && { repository: parsed.repository }),
       /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       ...(parsed.baseBranch !== undefined && { baseBranch: parsed.baseBranch }),

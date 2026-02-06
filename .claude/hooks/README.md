@@ -54,7 +54,13 @@ Use `query-hooks.sh` to search and filter hook logs:
 | Hook                     | Purpose                                                       |
 | ------------------------ | ------------------------------------------------------------- |
 | `detect-common-patterns` | **Consolidated checker** for CI-breaking patterns (see below) |
-| `ownership-check`        | Detects ownership-deflecting language in responses            |
+
+### Stop (Session Completion Checks)
+
+| Hook                   | Purpose                                                                   |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `ownership-check`      | Detects ownership-deflecting language in responses                        |
+| `completion-validator` | Validates worker task completion (Phase 1: labels, Phase 2: PR/CI/Linear) |
 
 ### PreToolUse (Command Blocking)
 
@@ -127,6 +133,8 @@ Common patterns logged by hooks:
 | `gh-pr-checks-polling`       | BLOCKED | validate-polling           | Using sleep + gh pr checks               |
 | `ownership-violation`        | BLOCKED | ownership-check            | Using forbidden ownership language       |
 | `forbidden-state-transition` | BLOCKED | validate-linear-state      | Agent trying to set QA/Done status       |
+| `phase1-incomplete`          | BLOCKED | completion-validator       | Phase 1 missing code-task/unclear label  |
+| `phase2-incomplete`          | BLOCKED | completion-validator       | Phase 2 missing PR/CI/Linear artifacts   |
 
 ## Testing Hooks
 
