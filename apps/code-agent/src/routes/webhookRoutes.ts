@@ -127,7 +127,14 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!signatureResult.ok) {
         request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed');
         /* v8 ignore stop @preserve */
-        return reply.fail('UNAUTHORIZED', signatureResult.error.message);
+        // @allow-raw-send: preserve domain-specific signature error codes for webhook validation
+        return reply.status(401).send({
+          success: false,
+          error: {
+            code: signatureResult.error.code.toUpperCase(),
+            message: signatureResult.error.message,
+          },
+        });
       }
 
       const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, logger } = getServices();
@@ -453,7 +460,14 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!signatureResult.ok) {
         request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed for logs');
-        return reply.fail('UNAUTHORIZED', signatureResult.error.message);
+        // @allow-raw-send: preserve domain-specific signature error codes for webhook validation
+        return reply.status(401).send({
+          success: false,
+          error: {
+            code: signatureResult.error.code.toUpperCase(),
+            message: signatureResult.error.message,
+          },
+        });
       }
 
       const { logChunkRepo, codeTaskRepo, statusMirrorService } = getServices();

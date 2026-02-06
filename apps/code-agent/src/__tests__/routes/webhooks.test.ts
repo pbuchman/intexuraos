@@ -904,7 +904,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.json()).toMatchObject({
         success: false,
         error: {
-          code: 'FIRESTORE_ERROR',
+          code: 'INTERNAL_ERROR',
         },
       });
 
@@ -1071,7 +1071,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(500);
       expect(response.json()).toMatchObject({
         success: false,
-        error: { code: 'FIRESTORE_ERROR' },
+        error: { code: 'INTERNAL_ERROR' },
       });
 
       updateSpy.mockRestore();
@@ -1120,7 +1120,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(500);
       expect(response.json()).toMatchObject({
         success: false,
-        error: { code: 'FIRESTORE_ERROR' },
+        error: { code: 'INTERNAL_ERROR' },
       });
 
       updateSpy.mockRestore();
@@ -1857,7 +1857,7 @@ describe('POST /internal/logs', () => {
     expect(response.statusCode).toBe(500);
     const body = JSON.parse(response.body);
     expect(body.success).toBe(false);
-    expect(body.error.code).toBe('FIRESTORE_ERROR');
+    expect(body.error.code).toBe('INTERNAL_ERROR');
 
     storeSpy.mockRestore();
   });

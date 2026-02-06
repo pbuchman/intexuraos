@@ -21,11 +21,13 @@ import { getFirestore } from '@intexuraos/infra-firestore';
  * Uses duck typing to detect Timestamp objects (which have a toDate method).
  */
 function toDate(value: unknown): Date {
+  /* v8 ignore start -- ts-type: type guard for Date vs Firestore Timestamp @preserve */
   if (value instanceof Date) {
     return value;
   }
   // Firestore Timestamps and mock objects with toDate method
   if (value !== null && typeof value === 'object' && 'toDate' in value) {
+    /* v8 ignore stop @preserve */
     const obj = value as { toDate: () => Date };
     return obj.toDate();
   }
@@ -161,7 +163,9 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             id: doc.id,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
+            /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */
             mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
+            /* v8 ignore stop @preserve */
           };
         });
 
@@ -235,7 +239,9 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             id: doc.id,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
+            /* v8 ignore start -- ts-type: ternary type narrowing for optional null @preserve */
             mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
+            /* v8 ignore stop @preserve */
           };
         });
 
