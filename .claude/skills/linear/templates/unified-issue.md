@@ -85,36 +85,6 @@
 
 ---
 
-## GLM Delegation Plan (CONDITIONAL)
-
-_Include this section ONLY if GLM MCP tools are available. Skip entirely otherwise._
-
-**Purpose:** Allocate work to GLM before Phase 2 execution to reduce costs.
-
-### GLM-Generated (call FIRST in Phase 2)
-
-| File Path                  | Tool           | Task Description | Context Files                     |
-| -------------------------- | -------------- | ---------------- | --------------------------------- |
-| \`<path/to/new/file.ts>\`  | generate_code  | _What it does_   | \`types.ts\`, \`similar-util.ts\` |
-| \`<path/to/file.test.ts>\` | generate_tests | _Test coverage_  | \`source-file.ts\`                |
-
-### Direct Implementation (I write after GLM files)
-
-_Files identified upfront as requiring direct implementation._
-
-| File Path                      | Reason                                                                        |
-| ------------------------------ | ----------------------------------------------------------------------------- |
-| \`<path/to/existing/file.ts>\` | _Why GLM can't do it (editing existing, needs deep context, <10 lines, etc.)_ |
-
-**Note:** If GLM output fails validation during Phase 2, those files also move here as fallbacks.
-
-### Criteria Applied
-
-- [ ] Each new file evaluated against delegation criteria
-- [ ] No new isolated utilities assigned to Direct without reason
-
----
-
 ## Acceptance Criteria
 
 - [ ] All tests in Test Requirements table pass
@@ -175,7 +145,6 @@ _Files identified upfront as requiring direct implementation._
 | Acceptance Criteria       | YES         | At least 3 checkboxes, includes tests/CI/PR/Linear |
 | Scope                     | YES         | In Scope list present                              |
 | Files to Change           | Conditional | Required for code changes (New Files + Modified)   |
-| GLM Delegation Plan       | Conditional | Required if GLM MCP tools available                |
 | Dependencies              | Conditional | Required if blocked/blocks exist                   |
 | Technical Context         | Optional    | N/A                                                |
 | Related                   | Optional    | N/A                                                |
@@ -183,10 +152,6 @@ _Files identified upfront as requiring direct implementation._
 ### Conditional Rules
 
 ```
-IF GLM MCP tools are available (mcp__glm-coder__generate_code exists):
-  THEN "GLM Delegation Plan" is REQUIRED
-  AND all new files must be evaluated against delegation criteria
-
 IF issue involves code changes:
   THEN "Files to Modify" is REQUIRED
   AND "Technical Context" is RECOMMENDED
