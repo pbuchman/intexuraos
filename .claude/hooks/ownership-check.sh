@@ -44,7 +44,9 @@ if [[ -z "$RECENT_RESPONSES" ]]; then
   exit 0
 fi
 
-# Check each pattern (avoiding associative arrays for Bash 3.2 compatibility)
+# Collect all violations (avoiding associative arrays for Bash 3.2 compatibility)
+VIOLATIONS=""
+
 check_pattern() {
   local pattern="$1"
   local description="$2"
@@ -62,35 +64,41 @@ check_pattern() {
         fi
         # Found pattern NOT in backticks - this is a violation
 
-        # Log the ownership violation
+        # Log each ownership violation
         log_blocked "$HOOK_NAME" "ownership-violation" \
-            "Used forbidden language: '$pattern'" \
-            "See CLAUDE.md: Ownership Mindset (MANDATORY)"
+            "Used forbidden language: '$pattern' ($description)" \
+            "State ownership explicitly with action"
 
-        cat << EOF
-{
-  "decision": "block",
-  "reason": "⚠️ OWNERSHIP CHECK: You used '$pattern' in your response. This violates the Ownership Mindset rules in CLAUDE.md. Please acknowledge this warning and rephrase without ownership-deflecting language. See: Ownership Mindset (MANDATORY) section."
-}
-EOF
-        # Log duration
-        END_TIME=$(date +%s%N 2>/dev/null || date +%s)
-        if [[ "$START_TIME" =~ ^[0-9]+$ ]] && [[ "$END_TIME" =~ ^[0-9]+$ ]]; then
-          DURATION_MS=$(( (END_TIME - START_TIME) / 1000000 ))
-          log_info "$HOOK_NAME" "timing" "Hook completed in ${DURATION_MS}ms (blocked)"
-        fi
-        exit 0
+        # Collect violation for final message
+        VIOLATIONS+="• '$pattern' ($description)\n"
+        break  # Only count each pattern once
       fi
     done <<< "$RECENT_RESPONSES"
-    return 1
   fi
-  return 1
 }
 
-check_pattern "pre-existing" "deflecting to prior state" || true
-check_pattern "already broken" "deflecting blame to prior state" || true
-check_pattern "legacy issue" "deflecting to legacy as excuse" || true
-check_pattern "CI should now pass" "assuming CI passes without verification" || true
+check_pattern "pre-existing" "deflecting to prior state"
+check_pattern "already broken" "deflecting blame to prior state"
+check_pattern "legacy issue" "deflecting to legacy as excuse"
+check_pattern "CI should now pass" "assuming CI passes without verification"
+
+# Output all violations at once
+if [[ -n "$VIOLATIONS" ]]; then
+  cat << EOF
+{
+  "decision": "block",
+  "reason": "⚠️ OWNERSHIP CHECK: Your response contains ownership-deflecting language:\n${VIOLATIONS}\nTo continue, you MUST:\n1. Acknowledge the issue: 'I own [specific problem]'\n2. State your action: '[What I will do to fix it]'\n\nExample: 'I own the failing tests in auth-service. Fixing them now.'\n\nSee CLAUDE.md: Ownership Mindset (MANDATORY) section."
+}
+EOF
+
+  # Log duration
+  END_TIME=$(date +%s%N 2>/dev/null || date +%s)
+  if [[ "$START_TIME" =~ ^[0-9]+$ ]] && [[ "$END_TIME" =~ ^[0-9]+$ ]] && [[ ${#START_TIME} -gt 10 ]]; then
+    DURATION_MS=$(( (END_TIME - START_TIME) / 1000000 ))
+    log_info "$HOOK_NAME" "timing" "Hook completed in ${DURATION_MS}ms (blocked)"
+  fi
+  exit 0
+fi
 
 # Log successful completion with timing
 END_TIME=$(date +%s%N 2>/dev/null || date +%s)
