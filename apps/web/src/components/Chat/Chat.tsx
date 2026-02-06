@@ -4,13 +4,22 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { useAuth } from '../../context';
+import { useAuth } from '../../context/index.js';
 import { ChatFAB } from './ChatFAB.js';
 import { ChatPanel, type ChatPanelSize } from './ChatPanel.js';
 import { ChatBottomSheet } from './ChatBottomSheet.js';
-import { sendMessage, saveSession, loadSession, clearSession, savePanelSize, loadPanelSize } from '../../services/chatService.js';
+import {
+  sendMessage,
+  sendGuestMessage,
+  saveSession,
+  loadSession,
+  clearSession,
+  savePanelSize,
+  loadPanelSize,
+  ApiError,
+} from '../../services/chatService.js';
 import { createCommand } from '../../services/commandsApi.js';
-import type { ChatMessage, SuggestedAction } from '../../types/chat';
+import type { ChatMessage, SuggestedAction } from '../../types/chat.js';
 
 export function Chat(): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,7 +28,7 @@ export function Chat(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<SuggestedAction | null>(null);
   const [panelSize, setPanelSize] = useState<ChatPanelSize | undefined>(undefined);
-  const { getAccessToken, user } = useAuth();
+  const { getAccessToken, user, isAuthenticated } = useAuth();
 
   // Load panel size from localStorage on mount
   useEffect(() => {
@@ -48,8 +57,6 @@ export function Chat(): React.JSX.Element {
 
   const handleSendMessage = useCallback(
     async (content: string): Promise<void> => {
-      const token = await getAccessToken();
-
       const userMessage: ChatMessage = {
         id: `msg-${crypto.randomUUID()}`,
         role: 'user',
@@ -63,9 +70,24 @@ export function Chat(): React.JSX.Element {
       setError(null);
 
       try {
-        const response = await sendMessage(token, content, messages, pendingAction ?? undefined);
+        // Use authenticated or guest API based on auth state
+        let response;
+        let token: string | null = null;
 
-        if (response.suggestedAction !== null && !response.suggestedAction.awaitingConfirmation) {
+        if (isAuthenticated) {
+          token = await getAccessToken();
+          response = await sendMessage(token, content, messages, pendingAction ?? undefined);
+        } else {
+          response = await sendGuestMessage(content, messages, pendingAction ?? undefined);
+        }
+
+        // Handle command creation (only for authenticated users)
+        if (
+          isAuthenticated &&
+          token !== null &&
+          response.suggestedAction !== null &&
+          !response.suggestedAction.awaitingConfirmation
+        ) {
           const assistantResponseMessage: ChatMessage = {
             id: `msg-${crypto.randomUUID()}`,
             role: 'assistant',
@@ -119,20 +141,25 @@ export function Chat(): React.JSX.Element {
 
         setMessages(finalMessages);
 
-        if (response.suggestedAction?.awaitingConfirmation) {
+        if (response.suggestedAction?.awaitingConfirmation === true) {
           setPendingAction(response.suggestedAction);
         } else {
           setPendingAction(null);
         }
 
         saveSession({ messages: finalMessages, createdAt: Date.now(), lastActivityAt: Date.now() });
-      } catch {
-        setError('Failed to send message. Please try again.');
+      } catch (err) {
+        // Handle rate limit errors with specific message
+        if (err instanceof ApiError && err.code === 'RATE_LIMITED') {
+          setError(err.message);
+        } else {
+          setError('Failed to send message. Please try again.');
+        }
       } finally {
         setIsLoading(false);
       }
     },
-    [messages, pendingAction, getAccessToken]
+    [messages, pendingAction, getAccessToken, isAuthenticated]
   );
 
   const handleClear = useCallback((): void => {
