@@ -11,9 +11,11 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-// Mock execAsync function - will be configured per test
-let mockExecAsyncImpl: (
-  command: string,
+// Mock execFileAsync function - will be configured per test
+// Signature: (file: string, args: string[], options?: {cwd?: string}) => Promise<{stdout, stderr}>
+let mockExecFileAsyncImpl: (
+  file: string,
+  args: string[],
   options?: { cwd?: string }
 ) => Promise<{ stdout: string; stderr: string }>;
 
@@ -23,9 +25,10 @@ vi.mock('node:util', async () => {
     ...actual,
     promisify: vi.fn((_fn: unknown) => {
       return (
-        command: string,
+        file: string,
+        args: string[],
         options?: { cwd?: string }
-      ): Promise<{ stdout: string; stderr: string }> => mockExecAsyncImpl(command, options);
+      ): Promise<{ stdout: string; stderr: string }> => mockExecFileAsyncImpl(file, args, options);
     }),
   };
 });
@@ -48,17 +51,18 @@ describe('RepoManager', () => {
     vi.clearAllMocks();
 
     // Default mock implementation - successful git commands
-    mockExecAsyncImpl = async (
-      command: string,
+    mockExecFileAsyncImpl = async (
+      file: string,
+      args: string[],
       _options?: { cwd?: string }
     ): Promise<{ stdout: string; stderr: string }> => {
-      if (command.includes('git clone')) {
+      if (file === 'git' && args[0] === 'clone') {
         return { stdout: '', stderr: '' };
       }
-      if (command.includes('git fetch')) {
+      if (file === 'git' && args[0] === 'fetch') {
         return { stdout: '', stderr: '' };
       }
-      if (command.includes('git remote get-url')) {
+      if (file === 'git' && args[0] === 'remote') {
         return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
       }
       return { stdout: '', stderr: '' };
@@ -137,7 +141,7 @@ describe('RepoManager', () => {
       mkdirSync(join(repoPath, '.git'), { recursive: true });
 
       // Mock returns different URL
-      mockExecAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => ({
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => ({
         stdout: 'https://github.com/other/repo.git\n',
         stderr: '',
       });
@@ -145,6 +149,20 @@ describe('RepoManager', () => {
       await expect(
         validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
       ).rejects.toThrow('has wrong remote origin');
+    });
+
+    it('should throw when git remote get-url fails', async () => {
+      const { validateRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'no-origin');
+      mkdirSync(join(repoPath, '.git'), { recursive: true });
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        throw new Error("fatal: No such remote 'origin'");
+      };
+
+      await expect(
+        validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
+      ).rejects.toThrow('Failed to get remote origin URL');
     });
 
     it('should throw when package.json name is not intexuraos', async () => {
@@ -156,6 +174,17 @@ describe('RepoManager', () => {
       await expect(
         validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
       ).rejects.toThrow('does not appear to be IntexuraOS');
+    });
+
+    it('should throw when package.json is malformed', async () => {
+      const { validateRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'malformed-package');
+      mkdirSync(join(repoPath, '.git'), { recursive: true });
+      writeFileSync(join(repoPath, 'package.json'), '{ invalid json }');
+
+      await expect(
+        validateRepository(repoPath, 'https://github.com/pbuchman/intexuraos.git', mockLogger)
+      ).rejects.toThrow('Failed to read or parse package.json');
     });
 
     it('should pass validation when package.json is missing', async () => {
@@ -186,24 +215,27 @@ describe('RepoManager', () => {
       const { cloneRepository } = await loadRepoManager();
       const repoPath = join(tempDir, 'new-clone');
 
-      let cloneCommand = '';
-      mockExecAsyncImpl = async (command: string): Promise<{ stdout: string; stderr: string }> => {
-        cloneCommand = command;
+      let cloneArgs: string[] = [];
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        cloneArgs = args;
         return { stdout: '', stderr: '' };
       };
 
       await cloneRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger);
 
-      expect(cloneCommand).toContain('git clone');
-      expect(cloneCommand).toContain('https://github.com/pbuchman/intexuraos.git');
-      expect(cloneCommand).toContain(repoPath);
+      expect(cloneArgs[0]).toBe('clone');
+      expect(cloneArgs[1]).toBe('https://github.com/pbuchman/intexuraos.git');
+      expect(cloneArgs[2]).toBe(repoPath);
     });
 
     it('should handle clone failure gracefully', async () => {
       const { cloneRepository } = await loadRepoManager();
       const repoPath = join(tempDir, 'failed-clone');
 
-      mockExecAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
         throw new Error('fatal: repository not found');
       };
 
@@ -216,13 +248,49 @@ describe('RepoManager', () => {
       const { cloneRepository } = await loadRepoManager();
       const repoPath = join(tempDir, 'failed-clone-2');
 
-      mockExecAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
         throw new Error('permission denied');
       };
 
       await expect(
         cloneRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
       ).rejects.toThrow('permission denied');
+    });
+
+    it('should include stderr in error message when available', async () => {
+      const { cloneRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'failed-clone-stderr');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        const error = new Error('Command failed') as Error & { stderr: string };
+        error.stderr = 'Cloning into: Permission denied';
+        throw error;
+      };
+
+      await expect(
+        cloneRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).rejects.toThrow('Git output: Cloning into: Permission denied');
+    });
+
+    it('should log error with context before throwing', async () => {
+      const { cloneRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'failed-clone-log');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        throw new Error('network error');
+      };
+
+      await expect(
+        cloneRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).rejects.toThrow();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://github.com/pbuchman/intexuraos.git',
+          path: repoPath,
+        }),
+        'Failed to clone repository'
+      );
     });
   });
 
@@ -232,20 +300,21 @@ describe('RepoManager', () => {
       const repoPath = join(tempDir, 'repo-to-fetch');
       mkdirSync(repoPath, { recursive: true });
 
-      let fetchCommand = '';
+      let fetchArgs: string[] = [];
       let fetchCwd = '';
-      mockExecAsyncImpl = async (
-        command: string,
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[],
         options?: { cwd?: string }
       ): Promise<{ stdout: string; stderr: string }> => {
-        fetchCommand = command;
+        fetchArgs = args;
         fetchCwd = options?.cwd ?? '';
         return { stdout: '', stderr: '' };
       };
 
       await fetchRemote(repoPath, mockLogger);
 
-      expect(fetchCommand).toBe('git fetch origin');
+      expect(fetchArgs).toEqual(['fetch', 'origin']);
       expect(fetchCwd).toBe(repoPath);
     });
 
@@ -253,7 +322,7 @@ describe('RepoManager', () => {
       const { fetchRemote } = await loadRepoManager();
       const repoPath = join(tempDir, 'repo-fetch-fail');
 
-      mockExecAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
         throw new Error('Could not resolve host: github.com');
       };
 
@@ -266,11 +335,44 @@ describe('RepoManager', () => {
       const { fetchRemote } = await loadRepoManager();
       const repoPath = join(tempDir, 'repo-fetch-fail-2');
 
-      mockExecAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
         throw new Error('network timeout');
       };
 
       await expect(fetchRemote(repoPath, mockLogger)).rejects.toThrow('network timeout');
+    });
+
+    it('should include stderr in error message when available', async () => {
+      const { fetchRemote } = await loadRepoManager();
+      const repoPath = join(tempDir, 'repo-fetch-stderr');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        const error = new Error('Command failed') as Error & { stderr: string };
+        error.stderr = 'fatal: Could not read from remote repository';
+        throw error;
+      };
+
+      await expect(fetchRemote(repoPath, mockLogger)).rejects.toThrow(
+        'Git output: fatal: Could not read from remote repository'
+      );
+    });
+
+    it('should log error with context before throwing', async () => {
+      const { fetchRemote } = await loadRepoManager();
+      const repoPath = join(tempDir, 'repo-fetch-log');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        throw new Error('network error');
+      };
+
+      await expect(fetchRemote(repoPath, mockLogger)).rejects.toThrow();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: repoPath,
+        }),
+        'Failed to fetch from remote'
+      );
     });
   });
 
@@ -280,8 +382,11 @@ describe('RepoManager', () => {
       const repoPath = join(tempDir, 'fresh-clone');
 
       let cloneCalled = false;
-      mockExecAsyncImpl = async (command: string): Promise<{ stdout: string; stderr: string }> => {
-        if (command.includes('git clone')) {
+      mockExecFileAsyncImpl = async (
+        file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (file === 'git' && args[0] === 'clone') {
           cloneCalled = true;
         }
         return { stdout: '', stderr: '' };
@@ -299,11 +404,14 @@ describe('RepoManager', () => {
       writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ name: 'intexuraos' }));
 
       let fetchCalled = false;
-      mockExecAsyncImpl = async (command: string): Promise<{ stdout: string; stderr: string }> => {
-        if (command.includes('git fetch')) {
+      mockExecFileAsyncImpl = async (
+        file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (file === 'git' && args[0] === 'fetch') {
           fetchCalled = true;
         }
-        if (command.includes('git remote get-url')) {
+        if (file === 'git' && args[0] === 'remote') {
           return { stdout: 'https://github.com/pbuchman/intexuraos.git\n', stderr: '' };
         }
         return { stdout: '', stderr: '' };
@@ -323,6 +431,46 @@ describe('RepoManager', () => {
       await expect(
         ensureRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
       ).rejects.toThrow('is not a git repository');
+    });
+
+    it('should log error when validation fails', async () => {
+      const { ensureRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'invalid-repo-log');
+      mkdirSync(repoPath, { recursive: true });
+
+      await expect(
+        ensureRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).rejects.toThrow();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: repoPath,
+          url: 'https://github.com/pbuchman/intexuraos.git',
+        }),
+        'Repository validation or fetch failed'
+      );
+    });
+
+    it('should log error when clone fails', async () => {
+      const { ensureRepository } = await loadRepoManager();
+      const repoPath = join(tempDir, 'clone-fail-log');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        throw new Error('clone failed');
+      };
+
+      await expect(
+        ensureRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger)
+      ).rejects.toThrow();
+
+      // ensureRepository logs error at high level
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: repoPath,
+          url: 'https://github.com/pbuchman/intexuraos.git',
+        }),
+        'Repository clone failed'
+      );
     });
 
     it('should create parent directories when cloning', async () => {
