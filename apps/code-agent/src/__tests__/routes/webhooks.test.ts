@@ -48,6 +48,7 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -169,6 +170,10 @@ describe('POST /internal/webhooks/task-complete', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -188,6 +193,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
     app = await buildServer();
@@ -1345,6 +1351,10 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1364,6 +1374,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
     app = await buildServer();
@@ -1668,6 +1679,10 @@ describe('POST /internal/logs', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1687,6 +1702,7 @@ describe('POST /internal/logs', () => {
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
     app = await buildServer();
@@ -2094,6 +2110,10 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -2113,6 +2133,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
     app = await buildServer();

@@ -45,6 +45,7 @@ import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRep
 import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from './helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestorePRTaskLockRepository } from '../infra/firestore/firestorePRTaskLockRepository.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -138,6 +139,10 @@ describe('OpenAPI contract', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -157,6 +162,7 @@ describe('OpenAPI contract', () => {
       cleanupTaskLogs: import('../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      prTaskLockRepo: import('../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
     app = await buildServer();

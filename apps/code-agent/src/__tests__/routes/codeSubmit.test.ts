@@ -40,6 +40,7 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
@@ -158,6 +159,10 @@ describe('POST /code/submit', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -177,6 +182,7 @@ describe('POST /code/submit', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
     // Set up worker settings for the test user

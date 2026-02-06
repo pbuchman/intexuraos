@@ -21,6 +21,7 @@ const REQUIRED_ENV = [
  * - INTEXURAOS_WHATSAPP_SERVICE_URL, INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: WhatsApp integration
  * - INTEXURAOS_LINEAR_AGENT_URL, INTEXURAOS_ACTIONS_AGENT_URL: Service integrations
  * - INTEXURAOS_SERVICE_URL: Worker configuration
+ * - INTEXURAOS_WEB_URL: Web app URL for generating task links (defaults to https://intexuraos.cloud)
  * - INTEXURAOS_AUTH_AUDIENCE, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_JWKS_URL: Auth0 JWT
  */
 
