@@ -81,6 +81,7 @@ Execute the entire workflow automatically:
 ### 1. Validate Entry Conditions
 
 **This workflow executes when issue has BOTH:**
+
 - `code-task` label (ready for execution)
 - Child subissues (non-empty children array)
 
@@ -92,6 +93,7 @@ Execute the entire workflow automatically:
 4. Children array is non-empty
 
 **How we arrive here:**
+
 - Via `work-existing.md` router (most common)
 - User re-invokes `/linear INT-parent` after plan-splitting completed
 
@@ -374,12 +376,12 @@ All artifacts cross-linked via GitHub integration.
 
 ## State Transitions
 
-| Event                    | Issue  | From                      | To          |
-| ------------------------ | ------ | ------------------------- | ----------- |
-| Start parent execution   | Parent | Backlog/Todo (any)        | In Progress |
-| Begin child work         | Child  | Backlog                   | In Progress |
-| Complete child work      | Child  | In Progress               | In Review   |
-| All children done, PR up | Parent | In Progress               | In Review   |
+| Event                    | Issue  | From               | To          |
+| ------------------------ | ------ | ------------------ | ----------- |
+| Start parent execution   | Parent | Backlog/Todo (any) | In Progress |
+| Begin child work         | Child  | Backlog            | In Progress |
+| Complete child work      | Child  | In Progress        | In Review   |
+| All children done, PR up | Parent | In Progress        | In Review   |
 
 > **Note:** Parent may start from any pre-execution state (Backlog, Todo). The workflow sets "In Progress" regardless of starting state.
 

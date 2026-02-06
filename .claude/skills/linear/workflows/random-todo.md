@@ -14,11 +14,11 @@ Select a Todo issue and delegate to [work-existing.md](work-existing.md) for exe
 
 **This mode operates WITHOUT user interaction. The following rules are absolute:**
 
-| Rule             | Description                                                       |
-| ---------------- | ----------------------------------------------------------------- |
+| Rule             | Description                                                        |
+| ---------------- | ------------------------------------------------------------------ |
 | **NO PROMPTS**   | Never ask "what should I do?", "which task?", or "ready to start?" |
-| **AUTO-PROCEED** | Always proceed with the selected Todo item automatically          |
-| **NO TASKS**     | If Todo state is empty, print message and exit gracefully         |
+| **AUTO-PROCEED** | Always proceed with the selected Todo item automatically           |
+| **NO TASKS**     | If Todo state is empty, print message and exit gracefully          |
 
 ---
 
@@ -71,6 +71,7 @@ If no items in Todo state:
 ```
 
 **STOP.** Do NOT:
+
 - Ask to create a new issue
 - Ask what to do instead
 - Pick from Backlog state
@@ -78,6 +79,7 @@ If no items in Todo state:
 ### 5. Select and Delegate
 
 **Print:**
+
 ```
 🎯 SELECTED: INT-XXX "<title>" (priority: <priority>)
 🔀 ROUTING: Delegating to work-existing.md workflow
@@ -92,6 +94,7 @@ If no items in Todo state:
 ## What Happens Next
 
 The `work-existing.md` router will:
+
 1. Fetch full issue details
 2. Check labels for phase routing
 3. Execute Phase 1 or Phase 2 as appropriate

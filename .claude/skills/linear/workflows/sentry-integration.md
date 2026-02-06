@@ -84,12 +84,13 @@ If possible, add comment linking to Linear issue.
 
 **Check if user's input contains explicit execution keywords:**
 
-| Keywords Found | Action |
-|----------------|--------|
+| Keywords Found                                | Action                                                                                         |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | "fix now", "implement", "work on", "fix this" | Ask: "Start working immediately?" → If yes, transition to [work-existing.md](work-existing.md) |
-| No execution keywords | **STOP.** Issue created. Do not offer to work on it. |
+| No execution keywords                         | **STOP.** Issue created. Do not offer to work on it.                                           |
 
 **Output:**
+
 ```
 📋 CREATED: INT-XXX "[sentry] <error>"
 📍 STATE: Backlog

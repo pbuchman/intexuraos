@@ -16,6 +16,7 @@
 ```
 
 Or if simple:
+
 ```
 📋 CREATE: Parsing task description...
 🔍 DETECT: Keywords ["fix", "bug"] → type: bug
@@ -94,6 +95,7 @@ If task appears complex (multiple phases, many checkboxes), ask:
 "This appears to be a multi-step task. Split into child issues?"
 
 **If yes:** This is a **FULL HANDOFF** to [plan-splitting.md](plan-splitting.md):
+
 - Pass the issue created in Step 4
 - The existing issue becomes the parent (ledger)
 - **Step 7 does NOT run** — splitting is Phase 1 design work
@@ -102,13 +104,16 @@ If task appears complex (multiple phases, many checkboxes), ask:
 **If no (or not complex):** Continue to Step 7.
 
 **Output (verbose logging):**
+
 ```
 📋 CREATED: INT-XXX "[type] <title>"
 📍 STATE: Backlog
 📋 SPLIT: Detected 3 phases, asking user about splitting...
 🔀 ROUTING: User confirmed split → delegating to plan-splitting.md (full handoff)
 ```
+
 Or if not complex:
+
 ```
 📋 CREATED: INT-XXX "[type] <title>"
 📍 STATE: Backlog
@@ -119,16 +124,19 @@ Or if not complex:
 
 **Check if user's description contains explicit execution keywords:**
 
-| Keywords Found | Action |
-|----------------|--------|
+| Keywords Found                                        | Action                                                                                         |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | "implement", "execute", "work on", "build", "fix now" | Ask: "Start working immediately?" → If yes, transition to [work-existing.md](work-existing.md) |
-| No execution keywords | **STOP.** Issue created. Do not offer to work on it. |
+| No execution keywords                                 | **STOP.** Issue created. Do not offer to work on it.                                           |
 
 **Output (verbose logging):**
+
 ```
 🔀 ROUTING: Creation complete. No execution keywords detected. Stopping.
 ```
+
 Or if execution keywords present:
+
 ```
 🔀 ROUTING: Execution keywords detected ("implement"). Asking user to confirm.
 ```

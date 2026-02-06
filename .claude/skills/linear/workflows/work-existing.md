@@ -21,6 +21,7 @@ This file is a **ROUTER ONLY**. It determines which phase workflow to execute ba
 ```
 
 Or:
+
 ```
 🔍 FETCH: Getting issue INT-456 details...
 🏷️ LABELS: ["feature"]
@@ -51,10 +52,10 @@ Verify Linear MCP, GitHub CLI, GCloud available. Fail fast if unavailable.
 Print: 🏷️ LABELS: [<labels>]
 ```
 
-| Labels Include | Action |
-| -------------- | ------ |
+| Labels Include | Action                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------- |
 | No `code-task` | `🔀 ROUTING: INT-XXX → Phase 1 (no code-task label)` → [work-existing-phase1.md](work-existing-phase1.md) |
-| `code-task`    | Continue to Step 4 (check for children) |
+| `code-task`    | Continue to Step 4 (check for children)                                                                   |
 
 **Rationale:** Parent issues must have `code-task` label before execution. Phase 1 enriches parent first.
 
@@ -66,9 +67,9 @@ Call mcp__linear__list_issues(parentId: "<issue-uuid>", team: "IntexuraOS")
 
 **Routing Decision:**
 
-| Result                    | Action                                                     |
-| ------------------------- | ---------------------------------------------------------- |
-| Children array non-empty  | `🔀 ROUTING: Parent with children → parent-execution.md` → [parent-execution.md](parent-execution.md) |
+| Result                    | Action                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Children array non-empty  | `🔀 ROUTING: Parent with children → parent-execution.md` → [parent-execution.md](parent-execution.md)             |
 | Children array empty/null | `🔀 ROUTING: INT-XXX → Phase 2 (has code-task, no children)` → [work-existing-phase2.md](work-existing-phase2.md) |
 
 ### 5. Delegate to Workflow
@@ -80,6 +81,7 @@ Call mcp__linear__list_issues(parentId: "<issue-uuid>", team: "IntexuraOS")
 ## Phase Transition (Phase 1 → Phase 2)
 
 When Phase 1 completes:
+
 1. Phase 1 adds `code-task` or `unclear` label
 2. Phase 1 **STOPS**
 3. User must re-invoke `/linear INT-XXX` to start Phase 2
