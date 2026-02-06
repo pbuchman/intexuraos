@@ -28,12 +28,12 @@ The orchestrator uses a two-phase model to process Linear issues based on label 
                     v                           v
         +---------------------+     +-------------------------+
         | Execute /linear     |     | Analyze issue           |
-        | Follow requirements |     | Create design document  |
-        | Write tests + code  |     | Update issue template   |
-        | Run CI              |     +------------+------------+
-        | Create PR           |                  |
-        | Update Linear state |       +----------+----------+
-        +----------+----------+       |                     |
+        | Follow requirements |     | Update issue IN-PLACE   |
+        | Write tests + code  |     | Create subissues if     |
+        | Run CI              |     | complex (with labels)   |
+        | Create PR           |     +------------+------------+
+        | Update Linear state |                  |
+        +----------+----------+       +----------+----------+
                    |           Ready for code?      Needs clarification?
                    |                  |                     |
                    |                  v                     v
@@ -72,18 +72,37 @@ The orchestrator uses a two-phase model to process Linear issues based on label 
 
 ## Phase Descriptions
 
-### Phase 1: Design & Validation
+### Phase 1: Design & Validation (In-Place Model)
 
 **Trigger:** Issue does NOT have `code-task` label
 
-**Purpose:** Analyze requirements and prepare for execution
+**Purpose:** Analyze requirements and prepare for execution **in-place** on the Linear issue itself
 
-**Outputs:**
+**In-Place Design Outputs:**
 
-1. Updated Linear issue matching Unified Issue Template
-2. Design document at `docs/plans/{issue-id}-design.md`
-3. Design PR on `design/{issue-id}` branch
-4. Label added: `code-task` OR `unclear`
+1. **Updated Linear issue** - Enrich with Unified Issue Template sections:
+   - `## Test Requirements` (with table format)
+   - `## Summary`
+   - `## Requirements` (Functional / Non-Functional)
+   - `## Scope` (In Scope / Out of Scope)
+   - `## Files to Modify`
+   - `## Acceptance Criteria`
+
+2. **Create subissues (if needed)** - Split complex issues into specific, labeled children:
+   - Each child has detailed scope and test requirements
+   - All children have `code-task` label (ready for Phase 2)
+
+3. **Label added** - ONE of:
+   - `code-task` - Issue is ready for execution
+   - `unclear` - Issue needs human clarification
+
+**Optional Design Document (Complex Cases Only):**
+
+For complex architectural decisions that need preserved reasoning:
+
+1. Create design document at `docs/plans/{issue-id}-design.md`
+2. Create PR on `design/{issue-id}` branch (required to preserve the work)
+3. PR description references the Linear issue
 
 **Exit Conditions:**
 
@@ -123,7 +142,13 @@ The `completion-validator.sh` hook enforces output requirements:
 
 ### Phase 1 Validation
 
-**Required:** Agent must add ONE of these labels:
+**Required outputs (at least one):**
+
+1. **In-place design** - Linear issue enriched with template sections, OR
+2. **Subissues created** - Child issues with `code-task` labels, OR
+3. **Design PR** - For complex cases needing preserved reasoning
+
+**AND** agent must add ONE of these labels to the parent issue:
 
 - `code-task` - Issue is ready for Phase 2 execution
 - `unclear` - Issue needs human clarification

@@ -19,7 +19,7 @@ describe('system-prompt', () => {
           linearIssueLabels: ['bug', 'high-priority'],
         });
 
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION]');
+        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
         expect(result).toContain('Design Agent');
         expect(result).toContain('DO NOT EXECUTE CODE');
       });
@@ -41,11 +41,20 @@ describe('system-prompt', () => {
           linearIssueLabels: [],
         });
 
-        expect(result).toContain('Updated Linear Issue');
+        expect(result).toContain('Enrich Linear Issue Description');
         expect(result).toContain('Unified Issue Template');
-        expect(result).toContain('Design Document PR');
-        expect(result).toContain('docs/plans/INT-123-design.md');
+        expect(result).toContain('Create Subissues (if complex)');
         expect(result).toContain('code-task');
+      });
+
+      it('should include optional design document section in Phase 1', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: [],
+        });
+
+        expect(result).toContain('Design Document PR (Complex Cases Only)');
+        expect(result).toContain('docs/plans/INT-123-design.md');
       });
 
       it('should include completion criteria in Phase 1', () => {
@@ -54,8 +63,9 @@ describe('system-prompt', () => {
           linearIssueLabels: [],
         });
 
-        expect(result).toContain('After creating the PR and adding EITHER');
+        expect(result).toContain('After enriching the issue and adding EITHER');
         expect(result).toContain('Phase 1 Complete');
+        expect(result).toContain('Issue enriched');
       });
 
       it('should include WORKER-MODE marker in Phase 1', () => {
@@ -106,7 +116,7 @@ describe('system-prompt', () => {
           linearIssueLabels: [],
         });
 
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION]');
+        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
         // Should not have the "Linear Issue: XXX" line in system context
         expect(result).not.toContain('\nLinear Issue: ');
         expect(result).toContain('INT-UNKNOWN');
@@ -267,7 +277,7 @@ describe('system-prompt', () => {
           linearIssueLabels: [],
         });
 
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION]');
+        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
       });
 
       it('should detect Phase 1 when code-task label is not present', () => {
@@ -276,7 +286,7 @@ describe('system-prompt', () => {
           linearIssueLabels: ['bug', 'enhancement'],
         });
 
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION]');
+        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
       });
 
       it('should detect Phase 2 when code-task label is present among others', () => {
@@ -294,7 +304,7 @@ describe('system-prompt', () => {
           linearIssueLabels: ['CODE-TASK'],
         });
 
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION]');
+        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
       });
     });
   });

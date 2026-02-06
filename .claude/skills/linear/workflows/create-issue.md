@@ -2,6 +2,31 @@
 
 **Trigger:** User calls `/linear <task description>`
 
+---
+
+## Verbose Transition Logging (MANDATORY)
+
+```
+📋 CREATE: Parsing task description...
+🔍 DETECT: Keywords ["add", "implement"] → type: feature
+📋 CREATED: INT-XXX "[feature] <title>"
+📍 STATE: Backlog
+📋 SPLIT: Detected 3 phases, asking user about splitting...
+🔀 ROUTING: User confirmed split → delegating to plan-splitting.md (full handoff)
+```
+
+Or if simple:
+```
+📋 CREATE: Parsing task description...
+🔍 DETECT: Keywords ["fix", "bug"] → type: bug
+📋 CREATED: INT-XXX "[bug] <title>"
+📍 STATE: Backlog
+📋 SPLIT: No splitting needed (simple task)
+⏹️ STOPPING: Issue created. No execution keywords detected.
+```
+
+---
+
 ## Issue Type Detection
 
 ### Automatic Detection
@@ -61,19 +86,52 @@ _This is the original user instruction, transcribed verbatim. May include typos 
 - Disclaimer - Include the italicized note
 - Position - Place at the TOP of the issue description
 
-### 6. Offer to Start Working
+### 6. Check for Auto-Splitting
 
-Ask: "Ready to start working on this issue?"
-
-If yes: Transition to [work-existing.md](work-existing.md) flow
-
-### 7. Check for Auto-Splitting
+> **Why splitting comes before execution intent:** Even if user says "implement now", complex tasks should be split first. A multi-step feature with execution keywords still needs proper breakdown. Splitting ensures quality; execution intent just controls timing.
 
 If task appears complex (multiple phases, many checkboxes), ask:
 "This appears to be a multi-step task. Split into child issues?"
 
-If yes: Proceed to [plan-splitting.md](plan-splitting.md) **with the issue created in step 4**.
-The existing issue becomes the parent (ledger) — do NOT create a new parent issue.
+**If yes:** This is a **FULL HANDOFF** to [plan-splitting.md](plan-splitting.md):
+- Pass the issue created in Step 4
+- The existing issue becomes the parent (ledger)
+- **Step 7 does NOT run** — splitting is Phase 1 design work
+- After splitting completes → STOP (user re-invokes for execution)
+
+**If no (or not complex):** Continue to Step 7.
+
+**Output (verbose logging):**
+```
+📋 CREATED: INT-XXX "[type] <title>"
+📍 STATE: Backlog
+📋 SPLIT: Detected 3 phases, asking user about splitting...
+🔀 ROUTING: User confirmed split → delegating to plan-splitting.md (full handoff)
+```
+Or if not complex:
+```
+📋 CREATED: INT-XXX "[type] <title>"
+📍 STATE: Backlog
+📋 SPLIT: No splitting needed (simple task) → continuing to Step 7
+```
+
+### 7. Execution Intent Detection (Only if NOT split)
+
+**Check if user's description contains explicit execution keywords:**
+
+| Keywords Found | Action |
+|----------------|--------|
+| "implement", "execute", "work on", "build", "fix now" | Ask: "Start working immediately?" → If yes, transition to [work-existing.md](work-existing.md) |
+| No execution keywords | **STOP.** Issue created. Do not offer to work on it. |
+
+**Output (verbose logging):**
+```
+🔀 ROUTING: Creation complete. No execution keywords detected. Stopping.
+```
+Or if execution keywords present:
+```
+🔀 ROUTING: Execution keywords detected ("implement"). Asking user to confirm.
+```
 
 ## Issue Naming Conventions
 

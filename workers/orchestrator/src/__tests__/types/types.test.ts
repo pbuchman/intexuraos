@@ -19,6 +19,8 @@ describe('Orchestrator Types', () => {
         prompt: 'Test prompt',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
       };
 
       expect(request.taskId).toBe('test-123');
@@ -36,12 +38,16 @@ describe('Orchestrator Types', () => {
         webhookSecret: 'secret',
         linearIssueId: 'INT-123',
         linearIssueTitle: 'Test issue',
+        linearIssueLabels: ['code-task', 'bug'],
+        hasChildren: true,
         slug: 'test-slug',
         actionId: 'action-789',
       };
 
       expect(request.repository).toBe('intexuraos/intexuraos-2');
       expect(request.linearIssueId).toBe('INT-123');
+      expect(request.linearIssueLabels).toContain('code-task');
+      expect(request.hasChildren).toBe(true);
     });
 
     it('validates HealthResponse structure', () => {

@@ -4,6 +4,25 @@
 
 ---
 
+## Verbose Transition Logging (MANDATORY)
+
+```
+📋 SPLIT: Analyzing issue for splitting...
+📋 SPLIT: Detected 4 phases, creating tiered children
+🔗 PARENT: Using INT-456 as ledger (existing issue)
+👶 CHILD: Created INT-457 "[tier-0] Setup infrastructure"
+🏷️ LABEL: Added 'code-task' to INT-457
+👶 CHILD: Created INT-458 "[tier-1] Implement core logic"
+🏷️ LABEL: Added 'code-task' to INT-458
+👶 CHILD: Created INT-459 "[tier-2] Integration tests"
+🏷️ LABEL: Added 'code-task' to INT-459
+🏷️ LABEL: Added 'code-task' to parent INT-456
+✅ SPLIT COMPLETE: 3 children created under INT-456
+⏹️ STOPPING: User must re-invoke `/linear INT-456` to start execution
+```
+
+---
+
 ## 🚨 CRITICAL: Mandatory Rules for ALL Created Subtasks
 
 When creating multiple subtasks in a row, **EACH subtask MUST contain**:
@@ -80,24 +99,19 @@ For each extracted task:
 
 #### Step 3: Use Existing Issue as Parent (Ledger)
 
-**IMPORTANT:** If an issue was already created in `create-issue.md`, REUSE it as the parent.
-Do NOT create a new parent issue — this would orphan the original.
+**IMPORTANT:** This workflow is ONLY invoked from `create-issue.md` Step 6, so an issue ALWAYS exists.
+REUSE the existing issue as the parent — do NOT create a new one.
 
 ```
-IF issue already exists (from create-issue.md step 4):
-  - Use that issue as the parent
-  - UPDATE its description to ledger format
-  - UPDATE its state to "In Progress"
-
-ELSE (direct invocation without existing issue):
-  - CREATE new parent issue via mcp__linear__create_issue
+- Use the issue from create-issue.md Step 4 as the parent
+- UPDATE its description to ledger format
+- State remains unchanged (Phase 2 sets "In Progress" when execution begins)
 ```
 
 Use [ledger-template.md](../templates/ledger-template.md) format for the description:
 
 ```
 Title: [feature] <original plan title>  (update if needed)
-State: In Progress
 Team: IntexuraOS
 Description: Full ledger format (see template)
 ```
@@ -111,8 +125,13 @@ Title: [tier-X] <task title>
 State: Backlog
 Team: IntexuraOS
 parentId: <parent issue ID>
+Labels: ["code-task"]  ← MANDATORY: Children are execution-ready
 Description: Subtask template format
 ```
+
+**CRITICAL: All children MUST have `code-task` label.**
+
+The splitting process IS the Phase 1 design work. Children are created ready for Phase 2 execution.
 
 **⚠️ CRITICAL: Every child issue description MUST include:**
 
@@ -155,6 +174,22 @@ After creating child issues with `parentId`:
 - When parent is created before children, placeholder IDs like `INT-XXX-1` never match real IDs
 - Linear's parent-child hierarchy is the source of truth
 - Scope section describes WHAT, Linear tracks WHO
+
+#### Step 7: Add `code-task` Label to Parent (MANDATORY)
+
+**After all children are created, add `code-task` label to the PARENT issue:**
+
+```
+Call mcp__linear__update_issue:
+  - Issue: Parent issue
+  - Labels: Add 'code-task' to existing labels
+```
+
+**Why this matters:**
+
+- Parent needs `code-task` so next invocation routes to `parent-execution.md`
+- Without this label, `/linear INT-parent` would route to Phase 1 (wrong!)
+- Splitting IS the Phase 1 design work — parent is now ready for execution
 
 ## Naming Convention for Child Issues
 
@@ -225,18 +260,6 @@ For validation/parsing tasks, enumerate 8-10 edge cases:
 ```
 
 This detail level enables less specialized LLM agents to execute tasks reliably.
-
-## Execution Protocol
-
-After splitting:
-
-1. **Move parent to In Progress**
-2. **Start with Tier 0 tasks** (all can run in parallel)
-3. **When Tier 0 complete**, start Tier 1 tasks
-4. **Continue tier by tier** until all complete
-5. **Move parent to Done** when all children Done
-
-Linear automatically tracks child status — no manual ledger updates needed.
 
 ## Continuation Directive
 
@@ -329,3 +352,37 @@ Results in:
 | 3    | INT-161 | [tier-3] Update documentation             |
 
 Parent INT-156 serves as the ledger tracking overall progress.
+
+---
+
+## Completion (MANDATORY)
+
+**After all steps complete, output verbose completion message and STOP:**
+
+```
+✅ SPLIT COMPLETE: INT-XXX split into N children
+   👶 Children: INT-YYY, INT-ZZZ, ...
+   🏷️ All children have 'code-task' label
+   🏷️ Parent INT-XXX has 'code-task' label
+
+⏹️ STOPPING: Splitting complete. This is Phase 1 design work.
+   To start execution: re-invoke `/linear INT-XXX`
+   → Routes to parent-execution.md (sets 'In Progress' and begins work)
+```
+
+**DO NOT automatically continue to execution.** Splitting is a full handoff from `create-issue.md`. User must explicitly re-invoke to start Phase 2.
+
+---
+
+## Workflow Transition
+
+This workflow is invoked from:
+
+- `create-issue.md` Step 6 (when complex task detected)
+
+After completion:
+
+- **STOP** — do not continue to execution
+- User re-invokes `/linear INT-parent`
+- `work-existing.md` sees `code-task` label + children
+- Routes to `parent-execution.md`

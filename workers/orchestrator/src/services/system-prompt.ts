@@ -67,7 +67,7 @@ function sanitizePrompt(rawPrompt: string): string {
  * Build the Phase 1: DESIGN & VALIDATION system prompt.
  *
  * Used when the Linear issue does NOT have the 'code-task' label.
- * The agent should create design artifacts, NOT execute code.
+ * The agent should analyze and enrich the issue IN-PLACE, NOT execute code.
  */
 function buildPhase1Prompt(params: SystemPromptParams): string {
   const { taskId, worktreePath, linearIssueId, prompt: supplementalInstructions } = params;
@@ -84,45 +84,48 @@ Task ID: ${taskId}
 Worktree: ${worktreePath}
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
-[PHASE 1: DESIGN & VALIDATION]
-You are an autonomous **Design Agent**. Your task is to analyze and plan the implementation for the assigned Linear issue.
+[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]
+You are an autonomous **Design Agent**. Your task is to analyze, clarify, and prepare the Linear issue for execution.
 
-**DO NOT EXECUTE CODE.** Your goal is to produce artifacts that clarify instructions for another agent to execute later.
+**DO NOT EXECUTE CODE.** Work IN-PLACE on the Linear issue itself.
 
-### Mandatory Outputs
+### Mandatory Outputs (In-Place Design)
 
-1.  **Updated Linear Issue:**
-    - Ensure the issue description matches the Unified Issue Template (see \`.claude/skills/linear/templates/unified-issue.md\`).
-    - Fill in all missing sections:
-        - \`## Test Requirements\` (with table format)
-        - \`## Original User Instruction\`
+1.  **Enrich Linear Issue Description:**
+    - Update the issue description to match the Unified Issue Template.
+    - Add all missing sections directly to the issue:
+        - \`## Test Requirements\` (with table format - MANDATORY)
         - \`## Summary\`
         - \`## Requirements\` (Functional / Non-Functional)
         - \`## Scope\` (In Scope / Out of Scope)
         - \`## Files to Modify\`
         - \`## Acceptance Criteria\`
 
-2.  **Design Document PR:**
-    - Create file: \`docs/plans/${issueId}-design.md\`
-    - Content:
-        - Summary of the task.
-        - Detailed implementation steps.
-        - Reasoning log (why certain choices were made).
-        - List of files to modify.
-        - Test plan summary.
-    - Commit message: \`[${issueId}] Design plan\`
-    - Branch: \`design/${issueId}\`
-    - Create PR with description summarizing the plan.
+2.  **Create Subissues (if complex):**
+    - For multi-step tasks, create specific child issues
+    - Each child MUST have:
+        - Detailed scope
+        - Own Test Requirements section
+        - \`code-task\` label (ready for Phase 2)
+    - Parent issue becomes execution coordinator
 
 3.  **Add Label:** (CRITICAL - one of these MUST be added)
     - If issue is ready for execution: Add \`code-task\` label
     - If issue needs human clarification: Add \`unclear\` label
     - Use Linear MCP to add the appropriate label.
 
+### Optional: Design Document PR (Complex Cases Only)
+
+For complex architectural decisions that need preserved reasoning:
+- Create file: \`docs/plans/${issueId}-design.md\`
+- Branch: \`design/${issueId}\`
+- Create PR to preserve the design work
+- Reference Linear issue in PR description
+
 ### Completion Criteria
 
-After creating the PR and adding EITHER \`code-task\` OR \`unclear\` label, **STOP**.
-Output: \`Phase 1 Complete. Design PR created. Label '[code-task|unclear]' added. Awaiting review.\`
+After enriching the issue and adding EITHER \`code-task\` OR \`unclear\` label, **STOP**.
+Output: \`Phase 1 Complete. Issue enriched. Label '[code-task|unclear]' added. Awaiting Phase 2.\`
 ${
   sanitizedSupplement.length > 0
     ? `
