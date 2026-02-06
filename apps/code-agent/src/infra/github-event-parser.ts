@@ -152,14 +152,32 @@ export function parsePullRequestEvent(
  */
 function isValidGitHubPRAction(value: string): value is GitHubPRAction {
   const validActions: GitHubPRAction[] = [
+    // pull_request actions
     'opened',
     'closed',
     'edited',
-    'synchronized',
+    'synchronize',
+    'reopened',
     'ready_for_review',
     'converted_to_draft',
+    'assigned',
+    'unassigned',
+    'labeled',
+    'unlabeled',
+    'locked',
+    'unlocked',
+    'review_requested',
+    'review_request_removed',
+    'milestoned',
+    'demilestoned',
+    'enqueued',
+    'dequeued',
+    'auto_merge_enabled',
+    'auto_merge_disabled',
+    // pull_request_review actions
     'submitted',
     'dismissed',
+    // pull_request_review_comment actions
     'created',
     'deleted',
   ];
@@ -256,6 +274,92 @@ export function parsePullRequestReviewEvent(
 }
 
 /**
+ * Parse a pull_request_review_comment event payload.
+ * These are inline comments on PR diffs.
+ */
+export function parsePullRequestReviewCommentEvent(
+  payload: unknown
+): Result<CreateGitHubPREventInput, { code: 'INVALID_PAYLOAD'; message: string }> {
+  if (!payload || typeof payload !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Payload is not an object' });
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  const senderResult = extractSender(payload);
+  if (!senderResult.ok) {
+    return senderResult;
+  }
+
+  const action = p['action'];
+  const repository = p['repository'];
+  const pullRequest = p['pull_request'];
+  const comment = p['comment'];
+
+  if (!repository || typeof repository !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing repository' });
+  }
+
+  const repo = repository as Record<string, unknown>;
+  const repoName = repo['full_name'];
+  const repoId = repo['id'];
+
+  if (typeof repoName !== 'string' || typeof repoId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid repository data' });
+  }
+
+  if (!pullRequest || typeof pullRequest !== 'object') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Missing pull_request' });
+  }
+
+  const pr = pullRequest as Record<string, unknown>;
+  const prNumber = pr['number'];
+  const prId = pr['id'];
+  const prTitle = pr['title'] ?? null;
+  const prState = pr['state'] ?? null;
+  const prMergedAt = pr['merged_at'];
+
+  if (typeof prNumber !== 'number' || typeof prId !== 'number') {
+    return err({ code: 'INVALID_PAYLOAD', message: 'Invalid pull_request data' });
+  }
+
+  // Extract comment body if available
+  let commentBody: unknown = null;
+  if (comment && typeof comment === 'object') {
+    const commentObj = comment as Record<string, unknown>;
+    commentBody = commentObj['body'] ?? null;
+  }
+
+  const createdAt = p['created_at'] ?? new Date().toISOString();
+
+  // Validate action is a known GitHubPRAction or null
+  const validatedAction =
+    typeof action === 'string' && isValidGitHubPRAction(action) ? action : null;
+
+  return ok({
+    githubEventId: (p as { id?: number })['id'] ?? Date.now(),
+    repository: repoName,
+    repositoryId: repoId,
+    pullRequestNumber: prNumber,
+    pullRequestId: prId,
+    eventType: 'pull_request_review_comment' as GitHubEventType,
+    action: validatedAction,
+    senderLogin: senderResult.value.login,
+    senderId: senderResult.value.id,
+    senderType: senderResult.value.type,
+    title: typeof prTitle === 'string' ? prTitle : null,
+    body: typeof commentBody === 'string' ? commentBody : null,
+    state: typeof prState === 'string' ? prState : null,
+    mergedAt:
+      prMergedAt && typeof prMergedAt === 'string'
+        ? new Date(prMergedAt)
+        : null,
+    createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
+    payload,
+  });
+}
+
+/**
  * Parse a push event payload.
  * Push events are optional for context, so we return null if not PR-related.
  */
@@ -324,6 +428,8 @@ export function parseGitHubWebhookEvent(
       return parsePullRequestEvent(payload);
     case 'pull_request_review':
       return parsePullRequestReviewEvent(payload);
+    case 'pull_request_review_comment':
+      return parsePullRequestReviewCommentEvent(payload);
     case 'push':
       return parsePushEvent(payload);
     case 'ping':

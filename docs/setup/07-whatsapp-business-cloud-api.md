@@ -562,7 +562,7 @@ The service:
 
 ```bash
 # From repo root
-ppnpm install
+pnpm install
 
 # Set required environment variables
 export INTEXURAOS_WHATSAPP_VERIFY_TOKEN="your-verify-token"

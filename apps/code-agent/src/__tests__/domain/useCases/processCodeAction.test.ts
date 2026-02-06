@@ -6,6 +6,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import { err, ok } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
+import type { LinearIssueService } from '../../../domain/services/linearIssueService.js';
 import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
 import type { Logger } from 'pino';
 import type { MetricsClient } from '../../../infra/metrics.js';
@@ -16,6 +17,7 @@ describe('processCodeAction', () => {
   let logger: Logger;
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
+  let linearIssueService: LinearIssueService;
   let whatsappNotifier: WhatsAppNotifier;
   let metricsClient: MetricsClient;
   let workerSettingsRepo: WorkerSettingsRepository;
@@ -38,6 +40,18 @@ describe('processCodeAction', () => {
     taskDispatcher = {
       dispatch: vi.fn(),
     } as unknown as TaskDispatcherService;
+
+    linearIssueService = {
+      ensureIssueExists: vi.fn().mockResolvedValue(
+        ok({
+          linearIssueId: 'INT-123',
+          linearIssueTitle: 'Test Issue',
+          linearIssueLabels: [],
+          hasChildren: false,
+          linearFallback: false,
+        })
+      ),
+    } as unknown as LinearIssueService;
 
     whatsappNotifier = {
       notifyTaskComplete: vi.fn().mockResolvedValue(ok(undefined)),
@@ -84,7 +98,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -111,7 +125,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -138,7 +152,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -211,7 +225,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -269,7 +283,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -352,7 +366,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -426,7 +440,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -479,7 +493,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -561,7 +575,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',

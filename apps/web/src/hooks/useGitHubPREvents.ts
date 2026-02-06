@@ -18,13 +18,12 @@ export interface GroupedPREvents {
  * Options for fetching PR events
  */
 export interface UseGitHubPREventsOptions {
-  repository?: string;
   limit?: number;
   enabled?: boolean;
 }
 
 /**
- * Hook for fetching GitHub PR events with optional repository filter.
+ * Hook for fetching GitHub PR events.
  * Groups events by pull request number for display.
  */
 export function useGitHubPREvents(options?: UseGitHubPREventsOptions): {
@@ -33,15 +32,12 @@ export function useGitHubPREvents(options?: UseGitHubPREventsOptions): {
   refreshing: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  repository: string | undefined;
-  setRepository: (repo: string) => void;
 } {
   const { getAccessToken, isAuthenticated } = useAuth();
   const [events, setEvents] = useState<GitHubPREvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [repository, setRepository] = useState<string>(options?.repository ?? 'intexuraos/code-agent');
   const isMountedRef = useRef(true);
 
   const fetchEvents = useCallback(
@@ -61,10 +57,7 @@ export function useGitHubPREvents(options?: UseGitHubPREventsOptions): {
 
       try {
         const token = await getAccessToken();
-        const requestOptions: { repository?: string; limit?: number } = {};
-        if (repository !== '') {
-          requestOptions.repository = repository;
-        }
+        const requestOptions: { limit?: number } = {};
         if (options?.limit !== undefined) {
           requestOptions.limit = options.limit;
         }
@@ -86,7 +79,7 @@ export function useGitHubPREvents(options?: UseGitHubPREventsOptions): {
         }
       }
     },
-    [getAccessToken, isAuthenticated, repository, options?.enabled, options?.limit]
+    [getAccessToken, isAuthenticated, options?.enabled, options?.limit]
   );
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -129,7 +122,5 @@ export function useGitHubPREvents(options?: UseGitHubPREventsOptions): {
     refreshing,
     error,
     refresh,
-    repository,
-    setRepository,
   };
 }

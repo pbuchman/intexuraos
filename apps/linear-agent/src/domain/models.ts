@@ -38,6 +38,10 @@ export interface LinearIssue {
 /** Linear issue with team ID for validation */
 export interface LinearIssueWithTeam extends LinearIssue {
   teamId: string;
+  /** Label names associated with the issue (e.g., ['bug', 'code-task']) */
+  labels: string[];
+  /** Number of child issues (subtasks) */
+  childCount: number;
 }
 
 /** Linear team from API */

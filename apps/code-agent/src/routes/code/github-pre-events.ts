@@ -19,10 +19,9 @@ export interface CodeRoutesOptions {
 const githubPREventsQuerySchema = {
   type: 'object',
   properties: {
-    repository: { type: 'string', description: 'Repository name (e.g., "intexuraos/code-agent")' },
+    repository: { type: 'string', description: 'Optional repository name (e.g., "intexuraos/code-agent"). If omitted, returns events from all repositories.' },
     limit: { type: 'number', minimum: 1, maximum: 100, default: 50, description: 'Maximum number of events to return' },
   },
-  required: ['repository'],
 };
 
 // Response schema for a single event
@@ -96,7 +95,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
     fastify.addHook('onRequest', jwtValidator);
 
     fastify.get<{
-      Querystring: { repository: string; limit?: number };
+      Querystring: { repository?: string; limit?: number };
     }>(
       '/code/github-pr-events',
       {
@@ -110,24 +109,28 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           },
         },
       },
-      async (request: FastifyRequest<{ Querystring: { repository: string; limit?: number } }>, reply: FastifyReply) => {
+      async (request: FastifyRequest<{ Querystring: { repository?: string; limit?: number } }>, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to GET /code/github-pr-events',
         });
 
         const { repository, limit = 50 } = request.query;
 
-        // Validate repository format (owner/repo)
-        if (!REPOSITORY_PATTERN.test(repository)) {
+        // Validate repository format if provided
+        if (repository !== undefined && !REPOSITORY_PATTERN.test(repository)) {
           request.log.warn({ repository }, 'Invalid repository format');
           return await reply.fail('INVALID_REQUEST', 'Repository must be in format "owner/repo"');
         }
 
         const { gitHubPREventRepo } = getServices();
 
-        request.log.info({ repository, limit }, 'Fetching GitHub PR events');
+        request.log.info({ repository: repository ?? 'all', limit }, 'Fetching GitHub PR events');
 
-        const result = await gitHubPREventRepo.findByRepository(repository, limit);
+        // Use findAll when no repository filter, otherwise findByRepository
+        const result =
+          repository !== undefined
+            ? await gitHubPREventRepo.findByRepository(repository, limit)
+            : await gitHubPREventRepo.findAll(limit);
 
         /* v8 ignore start -- upstream: error handling for external database failures @preserve */
         if (!result.ok) {
