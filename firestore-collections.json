@@ -178,6 +178,10 @@
     "github-pr-events": {
       "owner": "code-agent",
       "description": "GitHub pull request webhook events for PR timeline and context in Code Agent UI"
+    },
+    "pr_task_locks": {
+      "owner": "code-agent",
+      "description": "PR task locks ensuring only one Claude task runs per PR at a time (INT-465)"
     }
   }
 }
