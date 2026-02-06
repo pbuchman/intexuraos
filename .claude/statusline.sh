@@ -454,10 +454,10 @@ if [ -f "$mega_sessions_file" ] && [ -n "$session_id" ]; then
 fi
 
 # Line 3: Port metrics and load average
-# Get load average (1 min only for brevity)
-load_avg=$(uptime | sed -E 's/.*load averages?: ([0-9.]+).*/\1/')
+# Get all 3 load averages (1min, 5min, 15min)
+load_avg=$(uptime | sed -E 's/.*load averages?: ([0-9.]+)[, ]+([0-9.]+)[, ]+([0-9.]+).*/\1 \2 \3/')
 load_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
-line3="$port_metrics  ⚡ $(load_color)${load_avg}$(rst)"
+line3="$port_metrics  📈 $(load_color)${load_avg}$(rst)"
 
 # Line 4: Cost and usage analytics (optional)
 line4=""
