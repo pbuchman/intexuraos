@@ -281,7 +281,14 @@ if [ -n "$hooks_dir" ]; then
 
   # Show metrics if any activity exists
   if [ "$session_cmds" -gt 0 ] || [ "$session_blocked" -gt 0 ] || [ "$total_blocked" -gt 0 ]; then
-    hook_metrics="🛡️ ✓${session_cmds} ✗${session_blocked} session | ✗${total_blocked} total"
+    # Calculate session block rate percentage
+    session_total=$((session_cmds + session_blocked))
+    if [ "$session_total" -gt 0 ]; then
+      session_pct=$((session_blocked * 100 / session_total))
+    else
+      session_pct=0
+    fi
+    hook_metrics="🛡️ ✓${session_cmds} ✗${session_blocked} (${session_pct}%) | ✗${total_blocked} total"
   fi
 fi
 
