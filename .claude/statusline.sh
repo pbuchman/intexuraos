@@ -431,9 +431,9 @@ fi
 # Line 2: Context and hook metrics
 line2=""
 if [ -n "$context_used_pct" ]; then
-  line2="🧠 $(context_color)Ctx ${context_used_pct}% used$(rst)"
+  line2="🧠 $(context_color)${context_used_pct}%$(rst)"
 else
-  line2="🧠 $(context_color)Ctx -$(rst)"
+  line2="🧠 $(context_color)-$(rst)"
 fi
 if [ -n "$hook_metrics" ]; then
   line2="$line2  $hook_metrics"
@@ -453,8 +453,11 @@ if [ -f "$mega_sessions_file" ] && [ -n "$session_id" ]; then
   fi
 fi
 
-# Line 3: Port metrics (docker, dev, web, orchestrator)
-line3="$port_metrics"
+# Line 3: Port metrics and load average
+# Get load average (1 min only for brevity)
+load_avg=$(uptime | sed -E 's/.*load averages?: ([0-9.]+).*/\1/')
+load_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
+line3="$port_metrics  ⚡ $(load_color)${load_avg}$(rst)"
 
 # Line 4: Cost and usage analytics (optional)
 line4=""
