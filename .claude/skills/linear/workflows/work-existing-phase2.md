@@ -79,69 +79,12 @@ Set state: "In Progress"
 
 BEFORE any code changes.
 
-### 4a. Execute GLM Delegation Plan (if present)
+### 5. Implement
 
-**IMPORTANT:** This step runs AFTER `pnpm build` to enable TypeScript validation of GLM output.
-
-**Check for GLM Delegation Plan:**
-
-Look for `## GLM Delegation Plan` section in the Linear issue description:
-
-| Section Found   | Action                            |
-| --------------- | --------------------------------- |
-| Section exists  | Execute steps below               |
-| Section missing | Skip to Step 5 (normal execution) |
-
-**Verify MCP Tools Available:**
-
-```
-ToolSearch: "select:mcp__glm-coder__generate_code"
-```
-
-| Result            | Action                                         |
-| ----------------- | ---------------------------------------------- |
-| Tools available   | Proceed with delegation                        |
-| Tools unavailable | Log warning: "GLM unavailable", skip to Step 5 |
-
-**Execute GLM-Generated Files:**
-
-For EACH file in the "GLM-Generated" table:
-
-1. Load context files specified in the table
-2. Call the specified tool (`generate_code` or `generate_tests`)
-3. **Validate output** using checklist below
-4. **If validation passes:** Write to file using Write tool
-5. **If validation fails:** Fall back to Direct Implementation:
-   ```
-   ⚠️ GLM FALLBACK: <file> - <reason>. Implementing directly.
-   ```
-6. Run relevant tests to verify
-
-**GLM Output Validation Checklist:**
-
-| Check        | Criteria                                       | On Failure |
-| ------------ | ---------------------------------------------- | ---------- |
-| TypeScript   | No type errors when file is created            | Fall back  |
-| Imports      | All imports are available in the project       | Fall back  |
-| Signatures   | Function signatures match task description     | Fall back  |
-| Completeness | No placeholder comments like "TODO: implement" | Fall back  |
-| Style        | Follows project patterns from context files    | Fall back  |
-
-**If ANY check fails → Fall back to Direct Implementation for that file.**
-
-**Then Proceed:**
-
-Only after ALL GLM files are handled (written or fallen back), proceed to Step 5 for "Direct Implementation" items only. Do NOT re-implement files already written by GLM.
-
----
-
-### 5. Implement (Direct Implementation Only)
-
-Implement items from the "Direct Implementation" table (GLM files already handled in Step 0):
+Implement items from the "Files to Change" section:
 
 1. Write tests first (from Test Requirements section)
-2. Implement code for "Modified Files" and any GLM fallbacks
-3. Do NOT re-implement files already written by GLM
+2. Implement code changes
 
 ### 6. CI Gate (MANDATORY)
 
