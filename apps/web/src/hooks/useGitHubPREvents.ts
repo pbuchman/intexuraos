@@ -95,8 +95,11 @@ export function useGitHubPREvents(options?: UseGitHubPREventsOptions): {
   }, [fetchEvents]);
 
   // Group events by pull request number
+  // Filter out PR #0 (push events that aren't PR-specific)
+  const prEvents = events.filter((event) => event.pullRequestNumber !== 0);
+
   const groupedEvents: GroupedPREvents[] = Array.from(
-    events.reduce((map, event) => {
+    prEvents.reduce((map, event) => {
       const key = event.pullRequestNumber;
       if (!map.has(key)) {
         map.set(key, {
