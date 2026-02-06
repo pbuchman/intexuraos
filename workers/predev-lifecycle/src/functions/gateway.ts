@@ -46,9 +46,10 @@ function getStartingPage(branch: string): string {
           .then(function(r) { return r.json(); })
           .then(function(data) {
             if (data.status === 'running') {
-              document.querySelector('.status').textContent = 'VM ready! Redirecting...';
-              // Force hard reload to bypass any caching
-              window.location.href = window.location.href.split('?')[0] + '?t=' + Date.now();
+              document.querySelector('.status').textContent = 'VM ready! Reloading...';
+              // Force hard reload - location.href assignment can fail silently
+              // Using reload() ensures the browser fetches fresh content from the gateway
+              window.location.reload();
             } else {
               setTimeout(checkStatus, 3000);
             }

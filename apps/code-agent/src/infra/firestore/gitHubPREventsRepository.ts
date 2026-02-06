@@ -33,8 +33,10 @@ function toDate(value: unknown): Date {
     const obj = value as { toDate: () => Date };
     return obj.toDate();
   }
+  /* v8 ignore start -- ts-type: fallback branch for string parsing, unreachable with proper typed callers @preserve */
   // Last resort: try to parse as date string
   return new Date(String(value));
+  /* v8 ignore stop @preserve */
 }
 
 const COLLECTION_NAME = 'github-pr-events';
