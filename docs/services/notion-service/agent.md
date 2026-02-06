@@ -104,8 +104,7 @@ await disconnectNotion();
                                                        │
                                                        ▼
                                               ┌─────────────────┐
-                                              │ promptvault-    │
-                                              │ service         │
+                                              │ research-agent  │
                                               │ (uses token)    │
                                               └─────────────────┘
 ```
@@ -114,16 +113,15 @@ await disconnectNotion();
 
 ## Internal Endpoints
 
-| Method | Path                     | Purpose                                          |
-| ------ | ------------------------ | ------------------------------------------------ |
-| GET    | `/internal/notion/token` | Get Notion token (called by promptvault-service) |
-| POST   | `/webhook`               | Handle Notion webhook events                     |
+| Method | Path                     | Purpose                                       |
+| ------ | ------------------------ | --------------------------------------------- |
+| GET    | `/internal/notion/token` | Get Notion token (called by research-agent)   |
+| POST   | `/webhook`               | Handle Notion webhook events                  |
 
 ---
 
 ## Used By
 
-- **promptvault-service** - Stores prompts in Notion databases
 - **research-agent** - Can export research to Notion pages
 
 ---
