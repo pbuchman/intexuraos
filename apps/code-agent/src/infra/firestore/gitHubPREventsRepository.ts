@@ -20,6 +20,7 @@ import { getFirestore } from '@intexuraos/infra-firestore';
  * Handles both real Firestore Timestamp objects and plain Date objects from fake Firestore.
  * Uses duck typing to detect Timestamp objects (which have a toDate method).
  */
+/* v8 ignore start -- upstream: Firestore returns different types (Timestamp, Date, string) depending on context @preserve */
 function toDate(value: unknown): Date {
   /* v8 ignore start -- ts-type: type guard for Date vs Firestore Timestamp @preserve */
   if (value instanceof Date) {
@@ -38,6 +39,7 @@ function toDate(value: unknown): Date {
   return new Date(String(value));
   /* v8 ignore stop @preserve */
 }
+/* v8 ignore stop @preserve */
 
 const COLLECTION_NAME = 'github-pr-events';
 

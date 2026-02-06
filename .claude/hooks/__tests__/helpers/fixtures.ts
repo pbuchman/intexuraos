@@ -35,6 +35,15 @@ export interface SessionStartInput {
   session_type: 'SessionStart';
 }
 
+export interface LinearUpdateIssueInput extends HookInput {
+  tool_name: 'mcp__linear__update_issue' | 'mcp__linear-server__update_issue';
+  tool_input: {
+    id: string;
+    state?: string;
+    [key: string]: unknown;
+  };
+}
+
 /**
  * Builder for creating hook input fixtures
  */
@@ -83,6 +92,32 @@ export const HookFixtureBuilder = {
     return {
       session_type: 'SessionStart',
     } as SessionStartInput;
+  },
+
+  /**
+   * Creates a Linear update_issue MCP tool input fixture
+   */
+  linearUpdateIssue(
+    id: string,
+    updates: { state?: string; [key: string]: unknown } = {}
+  ): LinearUpdateIssueInput {
+    return {
+      tool_name: 'mcp__linear__update_issue',
+      tool_input: { id, ...updates },
+    };
+  },
+
+  /**
+   * Creates a Linear update_issue MCP tool input fixture (alternate server)
+   */
+  linearServerUpdateIssue(
+    id: string,
+    updates: { state?: string; [key: string]: unknown } = {}
+  ): LinearUpdateIssueInput {
+    return {
+      tool_name: 'mcp__linear-server__update_issue',
+      tool_input: { id, ...updates },
+    };
   },
 
   /**
