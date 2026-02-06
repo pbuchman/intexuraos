@@ -52,24 +52,27 @@ For each comment in the JSON array:
 ### 3a. Analyze the Comment
 
 Read the comment and determine:
+
 - **What is being requested?**
 - **Is this actionable?**
 - **Can this be fixed in the current codebase?**
 
 ### 3b. Make Decision
 
-| Decision | Criteria |
-|----------|----------|
-| **FIX** | Clear, actionable feedback that can be implemented |
+| Decision | Criteria                                            |
+| -------- | --------------------------------------------------- |
+| **FIX**  | Clear, actionable feedback that can be implemented  |
 | **SKIP** | Discussion, question, disagreement, or out of scope |
 
 ### 3c. Execute Decision
 
 **If FIX:**
+
 1. Make the code change
 2. Track: `{ id, type, author, action: "fixed", details: "what was changed" }`
 
 **If SKIP:**
+
 1. Document reason
 2. Track: `{ id, type, author, action: "skipped", reason: "why skipped" }`
 
@@ -202,17 +205,18 @@ Or for skipped:
 
 ## Error Handling
 
-| Error | Recovery |
-|-------|----------|
-| `gh auth` fails | Prompt user to run `gh auth login` |
+| Error            | Recovery                                |
+| ---------------- | --------------------------------------- |
+| `gh auth` fails  | Prompt user to run `gh auth login`      |
 | No PR for branch | Error with message to provide PR number |
-| Script not found | Check skill directory path |
-| API rate limit | Wait and retry with exponential backoff |
-| CI keeps failing | After 3 attempts, stop and report |
+| Script not found | Check skill directory path              |
+| API rate limit   | Wait and retry with exponential backoff |
+| CI keeps failing | After 3 attempts, stop and report       |
 
 ## Completion
 
 After successful run:
+
 1. All processed comments have 🚀 reaction
 2. Summary comment posted to PR
 3. CI is green

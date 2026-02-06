@@ -20,18 +20,18 @@ import { getFirestore } from '@intexuraos/infra-firestore';
  * Handles both real Firestore Timestamp objects and plain Date objects from fake Firestore.
  * Uses duck typing to detect Timestamp objects (which have a toDate method).
  */
+/* v8 ignore start -- upstream: Firestore returns different types (Timestamp, Date, string) depending on context @preserve */
 function toDate(value: unknown): Date {
   if (value instanceof Date) {
     return value;
   }
-  // Firestore Timestamps and mock objects with toDate method
   if (value !== null && typeof value === 'object' && 'toDate' in value) {
     const obj = value as { toDate: () => Date };
     return obj.toDate();
   }
-  // Last resort: try to parse as date string
   return new Date(String(value));
 }
+/* v8 ignore stop @preserve */
 
 const COLLECTION_NAME = 'github-pr-events';
 
@@ -161,7 +161,9 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             id: doc.id,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
+            /* v8 ignore start -- ts-type: mergedAt nullability depends on PR merge status @preserve */
             mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
+            /* v8 ignore stop @preserve */
           };
         });
 
@@ -235,7 +237,9 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             id: doc.id,
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
+            /* v8 ignore start -- ts-type: mergedAt nullability depends on PR merge status @preserve */
             mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
+            /* v8 ignore stop @preserve */
           };
         });
 

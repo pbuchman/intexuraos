@@ -450,6 +450,104 @@ describe.sequential('Claude Hooks - Validation', () => {
     });
   });
 
+  describe('validate-linear-state.sh', () => {
+    it('blocks setting state to Done', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', { state: 'Done' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+        messageIncludes: 'In Review',
+      });
+    });
+
+    it('blocks setting state to QA', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', { state: 'QA' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+      });
+    });
+
+    it('blocks setting state to Done by state ID', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', {
+          state: 'e95d5420-217a-4085-a8ea-3d01b4926e90',
+        }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+      });
+    });
+
+    it('blocks setting state to QA by state ID', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', {
+          state: '0834f4c6-ed6b-4992-8340-023648f472d6',
+        }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+      });
+    });
+
+    it('blocks linear-server variant setting Done', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearServerUpdateIssue('INT-123', { state: 'Done' }),
+      });
+
+      expectBlocked(result, {
+        pattern: /BLOCKED/i,
+      });
+    });
+
+    it('allows setting state to In Progress', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', { state: 'In Progress' }),
+      });
+
+      expectAllowed(result);
+    });
+
+    it('allows setting state to In Review', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', { state: 'In Review' }),
+      });
+
+      expectAllowed(result);
+    });
+
+    it('allows updates without state change', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.linearUpdateIssue('INT-123', { title: 'New title' }),
+      });
+
+      expectAllowed(result);
+    });
+
+    it('ignores non-Linear tools', () => {
+      const result = executeHookSync({
+        hookName: 'validate-linear-state',
+        input: HookFixtureBuilder.bash('echo hello'),
+      });
+
+      expectAllowed(result);
+    });
+  });
+
   describe('validate-terraform.sh', () => {
     it('blocks terraform plan without cleared env vars in command', () => {
       const result = executeHookSync({
