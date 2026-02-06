@@ -39,6 +39,7 @@ import { createWorkerSettingsRepository } from '../../../infra/firestore/workerS
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
 import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { createFirestorePRTaskLockRepository } from '../../../infra/firestore/firestorePRTaskLockRepository.js';
 
 describe('GET /code/github-pr-events', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -178,6 +179,10 @@ describe('GET /code/github-pr-events', () => {
       }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo,
+      prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -197,6 +202,7 @@ describe('GET /code/github-pr-events', () => {
       workerSettingsRepo: ReturnType<typeof createWorkerSettingsRepository>;
       workerHealthProbe: import('../../../domain/ports/workerHealthProbe.js').WorkerHealthProbe;
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      prTaskLockRepo: import('../../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
     server = await buildServer();
