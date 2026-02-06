@@ -21,7 +21,7 @@ Analyze branch coverage gaps and convert them into Linear issues or documented e
 
 100% branch coverage means every uncovered branch is accounted for:
 
-| Category        | What It Meaning                                              |
+| Category        | What It Means                                                |
 | --------------- | ------------------------------------------------------------ |
 | **Covered**     | Tests exercise the branch                                    |
 | **Exempted**    | Inline `/* v8 ignore <CATEGORY> -- reason */` comment present |
