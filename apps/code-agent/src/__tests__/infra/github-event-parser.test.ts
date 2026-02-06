@@ -7,6 +7,7 @@ import {
   parsePullRequestEvent,
   parsePullRequestReviewEvent,
   parsePullRequestReviewCommentEvent,
+  parseIssueCommentEvent,
   parsePushEvent,
   parseGitHubWebhookEvent,
   shouldProcessRepository,
@@ -847,6 +848,357 @@ describe('github-event-parser', () => {
     });
   });
 
+  describe('parseIssueCommentEvent', () => {
+    const validIssueCommentPayload = {
+      id: 12345,
+      action: 'created',
+      repository: {
+        id: 456,
+        full_name: 'intexuraos/code-agent',
+      },
+      issue: {
+        id: 101,
+        number: 42,
+        title: 'Test PR',
+        state: 'open',
+        pull_request: {
+          url: 'https://api.github.com/repos/intexuraos/code-agent/pulls/42',
+        },
+      },
+      comment: {
+        id: 789,
+        body: 'Great work on this PR!',
+      },
+      sender: {
+        login: 'commenter',
+        id: 111,
+        type: 'User',
+      },
+    };
+
+    it('should parse valid issue_comment on a PR', () => {
+      const result = parseIssueCommentEvent(validIssueCommentPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value).toMatchObject({
+          githubEventId: 12345,
+          repository: 'intexuraos/code-agent',
+          pullRequestNumber: 42,
+          pullRequestId: 101,
+          eventType: 'issue_comment',
+          action: 'created',
+          senderLogin: 'commenter',
+          body: 'Great work on this PR!',
+          title: 'Test PR',
+          state: 'open',
+        });
+      }
+    });
+
+    it('should return null for comments on issues (not PRs)', () => {
+      const issueOnlyPayload = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Bug report',
+          state: 'open',
+          // No pull_request field - this is a regular issue
+        },
+        comment: {
+          id: 789,
+          body: 'Thanks for reporting!',
+        },
+        sender: {
+          login: 'maintainer',
+          id: 111,
+        },
+      };
+
+      const result = parseIssueCommentEvent(issueOnlyPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('should handle missing comment body', () => {
+      const payloadWithoutCommentBody = {
+        ...validIssueCommentPayload,
+        comment: {
+          id: 789,
+        },
+      };
+
+      const result = parseIssueCommentEvent(payloadWithoutCommentBody);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.body).toBeNull();
+      }
+    });
+
+    it('should handle missing comment object entirely', () => {
+      const payloadWithoutComment = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        issue: {
+          id: 101,
+          number: 42,
+          pull_request: { url: 'https://api.github.com/...' },
+        },
+        sender: {
+          login: 'commenter',
+          id: 111,
+        },
+      };
+
+      const result = parseIssueCommentEvent(payloadWithoutComment);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.body).toBeNull();
+      }
+    });
+
+    it('should return error for non-object payload', () => {
+      const result = parseIssueCommentEvent(null);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Payload is not an object');
+      }
+    });
+
+    it('should return error for missing issue', () => {
+      const payload = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        comment: {
+          id: 789,
+          body: 'Hello!',
+        },
+        sender: {
+          login: 'commenter',
+          id: 111,
+        },
+      };
+
+      const result = parseIssueCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Missing issue');
+      }
+    });
+
+    it('should return error for missing sender', () => {
+      const payload = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        issue: {
+          id: 101,
+          number: 42,
+          pull_request: { url: 'https://...' },
+        },
+        comment: {
+          id: 789,
+          body: 'Hello!',
+        },
+      };
+
+      const result = parseIssueCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Missing or invalid sender');
+      }
+    });
+
+    it('should return error for missing repository', () => {
+      const payload = {
+        id: 12345,
+        action: 'created',
+        issue: {
+          id: 101,
+          number: 42,
+          pull_request: { url: 'https://...' },
+        },
+        comment: {
+          id: 789,
+          body: 'Hello!',
+        },
+        sender: {
+          login: 'commenter',
+          id: 111,
+        },
+      };
+
+      const result = parseIssueCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Missing repository');
+      }
+    });
+
+    it('should return error for invalid repository data', () => {
+      const payload = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 'not-a-number',
+          full_name: 'intexuraos/code-agent',
+        },
+        issue: {
+          id: 101,
+          number: 42,
+          pull_request: { url: 'https://...' },
+        },
+        sender: {
+          login: 'commenter',
+          id: 111,
+        },
+      };
+
+      const result = parseIssueCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Invalid repository data');
+      }
+    });
+
+    it('should return error for invalid issue data', () => {
+      const payload = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        issue: {
+          id: 'not-a-number',
+          number: 42,
+          pull_request: { url: 'https://...' },
+        },
+        sender: {
+          login: 'commenter',
+          id: 111,
+        },
+      };
+
+      const result = parseIssueCommentEvent(payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_PAYLOAD');
+        expect(result.error.message).toBe('Invalid issue data');
+      }
+    });
+
+    it('should filter unknown actions to null', () => {
+      const payloadWithUnknownAction = {
+        ...validIssueCommentPayload,
+        action: 'unknown_action',
+      };
+
+      const result = parseIssueCommentEvent(payloadWithUnknownAction);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.action).toBeNull();
+      }
+    });
+
+    it('should handle deleted action', () => {
+      const payloadWithDeleted = {
+        ...validIssueCommentPayload,
+        action: 'deleted',
+      };
+
+      const result = parseIssueCommentEvent(payloadWithDeleted);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.action).toBe('deleted');
+      }
+    });
+
+    it('should handle Date instance for created_at', () => {
+      const createdDate = new Date('2024-01-15T12:00:00Z');
+      const payloadWithDateObject = {
+        ...validIssueCommentPayload,
+        created_at: createdDate,
+      };
+
+      const result = parseIssueCommentEvent(payloadWithDateObject);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.createdAt).toBeInstanceOf(Date);
+        expect(result.value.createdAt).toEqual(createdDate);
+      }
+    });
+
+    it('should use Date.now() when event id is missing', () => {
+      const payloadWithoutId = {
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        issue: {
+          id: 101,
+          number: 42,
+          pull_request: { url: 'https://...' },
+        },
+        comment: {
+          id: 789,
+          body: 'Hello!',
+        },
+        sender: {
+          login: 'commenter',
+          id: 111,
+        },
+      };
+
+      const beforeTime = Date.now();
+      const result = parseIssueCommentEvent(payloadWithoutId);
+      const afterTime = Date.now();
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.githubEventId).toBeGreaterThanOrEqual(beforeTime);
+        expect(result.value.githubEventId).toBeLessThanOrEqual(afterTime);
+      }
+    });
+  });
+
   describe('parseGitHubWebhookEvent', () => {
     it('should parse pull_request events', () => {
       const payload = {
@@ -953,6 +1305,69 @@ describe('github-event-parser', () => {
       if (result.ok) {
         expect(result.value).not.toBeNull(); // @allow-result-access -- narrowed by result.ok
         expect(result.value?.eventType).toBe('push'); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should parse issue_comment events on PRs', () => {
+      const payload = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        issue: {
+          id: 101,
+          number: 42,
+          pull_request: { url: 'https://api.github.com/...' },
+        },
+        comment: {
+          id: 789,
+          body: 'Great work!',
+        },
+        sender: {
+          login: 'commenter',
+          id: 111,
+        },
+      };
+
+      const result = parseGitHubWebhookEvent('issue_comment', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).not.toBeNull(); // @allow-result-access -- narrowed by result.ok
+        expect(result.value?.eventType).toBe('issue_comment'); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should return null for issue_comment on non-PR issues', () => {
+      const payload = {
+        id: 12345,
+        action: 'created',
+        repository: {
+          id: 456,
+          full_name: 'intexuraos/code-agent',
+        },
+        issue: {
+          id: 101,
+          number: 42,
+          // No pull_request field - this is a regular issue
+        },
+        comment: {
+          id: 789,
+          body: 'Thanks for reporting!',
+        },
+        sender: {
+          login: 'commenter',
+          id: 111,
+        },
+      };
+
+      const result = parseGitHubWebhookEvent('issue_comment', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull(); // @allow-result-access -- ignored for non-PR issues
       }
     });
 

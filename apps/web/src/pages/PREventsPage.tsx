@@ -32,6 +32,20 @@ function PREventItem({ eventType, action, senderLogin, createdAt }: PREventItemP
         color: 'text-purple-700 dark:text-purple-400',
       };
     }
+    if (eventType === 'pull_request_review_comment') {
+      return {
+        icon: '📝',
+        label: 'Inline Comment',
+        color: 'text-orange-700 dark:text-orange-400',
+      };
+    }
+    if (eventType === 'issue_comment') {
+      return {
+        icon: '💭',
+        label: 'Comment',
+        color: 'text-cyan-700 dark:text-cyan-400',
+      };
+    }
     if (eventType === 'push') {
       return {
         icon: '📤',
