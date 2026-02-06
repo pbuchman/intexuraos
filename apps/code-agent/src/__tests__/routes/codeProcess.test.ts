@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
+import nock from 'nock';
 
 // Mock jose library for JWT validation
 vi.mock('jose', () => ({
@@ -56,6 +57,17 @@ describe('POST /internal/code/process', () => {
   let _logChunkRepo: LogChunkRepository;
 
   beforeEach(async () => {
+    // Mock HTTP endpoints to avoid hanging DNS lookups in CI
+    nock('http://actions-agent')
+      .persist()
+      .patch(/\/internal\/actions\/.*\/status/)
+      .reply(200, { success: true });
+
+    nock('http://linear-agent:8086')
+      .persist()
+      .post(/\/.*/)
+      .reply(200, { success: true });
+
     // Set jwtVerify to resolve by default (simulating valid token)
     mockedJwtVerify.mockResolvedValue({
       payload: { sub: 'test-user-id', email: 'test@example.com' },
@@ -193,6 +205,7 @@ describe('POST /internal/code/process', () => {
   });
 
   afterEach(() => {
+    nock.cleanAll();
     resetServices();
     resetFirestore();
     vi.clearAllMocks();
