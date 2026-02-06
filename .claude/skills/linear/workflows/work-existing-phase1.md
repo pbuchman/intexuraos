@@ -114,74 +114,7 @@ Update the Linear issue description with Unified Issue Template sections:
 
 Use `mcp__linear__update_issue` to update the description.
 
-### 5. Create GLM Delegation Plan (if MCP available)
-
-**5a. Check MCP Tool Availability**
-
-First, verify GLM MCP tools are available:
-
-```
-ToolSearch: "select:mcp__glm-coder__generate_code"
-```
-
-| Result           | Action                                        |
-| ---------------- | --------------------------------------------- |
-| Tools returned   | Proceed with GLM Delegation Plan (step 5b-5d) |
-| No tools / error | Skip to Step 6 (no GLM available)             |
-
-**5b. For every file identified in "Files to Change":**
-
-1. **Is it in "New Files" section?**
-   - Yes → Evaluate for GLM delegation
-   - No (in "Modified Files") → Add to Direct Implementation
-
-2. **For new files, apply criteria:**
-
-   | Condition                                           | Delegate To            | Rationale                       |
-   | --------------------------------------------------- | ---------------------- | ------------------------------- |
-   | Isolated utility/function with clear inputs/outputs | **GLM generate_code**  | No project context needed       |
-   | Test file for existing source                       | **GLM generate_tests** | Purpose-built tool              |
-   | Needs 5+ project imports or deep context            | **Direct**             | Needs type context              |
-   | <10 lines                                           | **Direct**             | Overhead not worth it           |
-   | Wiring/integration code (services.ts, routes)       | **Direct**             | Needs service container context |
-
-**5c. Select Context Files**
-
-For each GLM-delegated file, identify 1-3 context files using these criteria:
-
-| Criteria                                         | Examples                                |
-| ------------------------------------------------ | --------------------------------------- |
-| **Type definitions** the new file will import    | `types.ts`, `codeTask.ts`, `result.ts`  |
-| **Similar utilities** in the same domain         | If creating a repo, look at other repos |
-| **Pattern examples** showing project conventions | `existingSimilarFile.ts`                |
-
-**Maximum 3 files per GLM task** to avoid context bloat.
-
-**5d. Create the tables in the issue:**
-
-Add `## GLM Delegation Plan` section with:
-
-- GLM-Generated table (file paths, tools, task descriptions, **context files**)
-- Direct Implementation table (file paths, reasons)
-- Criteria checklist showing analysis was done
-
-**5e. Validation:**
-
-| Condition               | Status                                  |
-| ----------------------- | --------------------------------------- |
-| MCP tools available     | Phase 1 incomplete without this section |
-| MCP tools NOT available | Skip this step entirely (see below)     |
-
-**When GLM MCP tools are NOT available:**
-
-- Skip the entire `## GLM Delegation Plan` section
-- Keep `## Files to Change` as a flat list (no New/Modified split required)
-- All implementation will be handled via Direct Implementation in Phase 2
-- The issue is still valid for execution without GLM
-
----
-
-### 6. Create Subissues (If Complex)
+### 5. Create Subissues (If Complex)
 
 **When to use this step vs plan-splitting.md:**
 
@@ -216,7 +149,7 @@ Call mcp__linear__list_issues(parentId: "<issue-uuid>", team: "IntexuraOS")
 
 Use `mcp__linear__create_issue` with `parentId` set to parent's UUID.
 
-### 7. Add Label (CRITICAL)
+### 6. Add Label (CRITICAL)
 
 **One of these MUST be added:**
 
@@ -227,7 +160,7 @@ Use `mcp__linear__create_issue` with `parentId` set to parent's UUID.
 
 Use `mcp__linear__update_issue` to add labels array.
 
-### 8. Optional: Design Document (Complex Cases Only)
+### 7. Optional: Design Document (Complex Cases Only)
 
 For complex architectural decisions that need preserved reasoning:
 
@@ -243,7 +176,7 @@ For complex architectural decisions that need preserved reasoning:
 - Non-obvious trade-offs made
 - Future maintainers need context
 
-### 9. Completion (MANDATORY OUTPUT)
+### 8. Completion (MANDATORY OUTPUT)
 
 **Print verbose completion message:**
 

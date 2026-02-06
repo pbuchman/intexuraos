@@ -56,13 +56,6 @@ When working on parent issues that have child subissues:
 
 ---
 
-### Conditional: GLM Delegation
-
-**Applies only when GLM MCP tools are available.**
-
-- **Phase 1**: Create GLM Delegation Plan allocating new files to `generate_code`/`generate_tests` or Direct
-- **Phase 2**: Execute GLM-designated files FIRST. Fall back to Direct if GLM fails.
-
 ## Test Requirements Quality Gate
 
 **Every implementation issue (features, bugs, refactors) MUST include test requirements as the FIRST section.**
@@ -255,10 +248,9 @@ All issue work follows a two-phase model (both interactive and worker modes):
 **Phase 1 outputs (in-place on Linear issue):**
 
 1. Enriched description with Unified Issue Template sections
-2. GLM Delegation Plan (if GLM MCP tools available)
-3. Subissues with `code-task` label (if complex)
-4. `code-task` or `unclear` label added to parent
-5. Optional: Design doc PR for complex architectural decisions
+2. Subissues with `code-task` label (if complex)
+3. `code-task` or `unclear` label added to parent
+4. Optional: Design doc PR for complex architectural decisions
 
 See: [Two-Phase Execution Reference](reference/two-phase-execution.md)
 
