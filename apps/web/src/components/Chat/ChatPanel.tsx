@@ -11,6 +11,62 @@ import { ChatMessage } from './ChatMessage.js';
 import { ChatInput } from './ChatInput.js';
 import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat.js';
 
+/**
+ * Format time for separator display (e.g., "11:33 AM" or "Yesterday, 3:45 PM")
+ */
+function formatTimeSeparator(timestamp: number): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  if (messageDate.getTime() === today.getTime()) {
+    return timeStr;
+  } else if (messageDate.getTime() === yesterday.getTime()) {
+    return `Yesterday, ${timeStr}`;
+  } else {
+    const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `${dateStr}, ${timeStr}`;
+  }
+}
+
+/**
+ * Determine if a time separator should be shown before this message.
+ * Shows separator when: first message, different day, or >5 min gap.
+ */
+function shouldShowTimeSeparator(
+  message: ChatMessageType,
+  prevMessage?: ChatMessageType
+): boolean {
+  if (prevMessage === undefined) return true;
+
+  const currTime = new Date(message.timestamp);
+  const prevTime = new Date(prevMessage.timestamp);
+
+  const currDate = new Date(currTime.getFullYear(), currTime.getMonth(), currTime.getDate());
+  const prevDate = new Date(prevTime.getFullYear(), prevTime.getMonth(), prevTime.getDate());
+  if (currDate.getTime() !== prevDate.getTime()) return true;
+
+  const gapMinutes = (message.timestamp - prevMessage.timestamp) / (1000 * 60);
+  return gapMinutes > 5;
+}
+
+/**
+ * Time separator component - centered timestamp between message groups
+ */
+function TimeSeparator({ timestamp }: { timestamp: number }): React.JSX.Element {
+  return (
+    <div className="flex justify-center my-3">
+      <span className="text-xs text-gray-400 dark:text-gray-500">
+        {formatTimeSeparator(timestamp)}
+      </span>
+    </div>
+  );
+}
+
 /** Default dimensions for the chat panel */
 const DEFAULT_WIDTH = 384; // w-96 in Tailwind
 const DEFAULT_HEIGHT = 500;
@@ -188,24 +244,40 @@ export function ChatPanel({
       </div>
 
       {/* Messages area */}
-      <div className="flex max-h-[60vh] min-h-[200px] flex-col overflow-y-auto px-4 py-3">
+      <div className="flex-1 flex flex-col overflow-y-auto px-4 py-3">
         {messages.length === 0 && !isLoading && !error && (
-          <div className="flex flex-1 items-center justify-center text-gray-500 dark:text-gray-400">
-            <p className="text-center text-sm">
-              Ask me anything about IntexuraOS.<br />
-              I can help you navigate the system.
-            </p>
+          <div className="flex gap-2 mb-2">
+            <img
+              src="/apple-touch-icon-180x180.png"
+              alt="Intex"
+              className="h-8 w-8 shrink-0 rounded-full"
+            />
+            <div className="max-w-[80%] rounded-2xl bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 px-4 py-2">
+              <p className="text-sm">
+                👋 Hi! I'm <strong>Intex</strong>, your IntexuraOS assistant.
+              </p>
+              <p className="text-sm mt-1 text-gray-600 dark:text-gray-400">
+                I can help you navigate the system, answer questions, and assist with commands.
+              </p>
+            </div>
           </div>
         )}
 
-        {messages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            message={message}
-            isUser={message.role === 'user'}
-            {...(message.role === 'user' && userPicture !== undefined && { userPicture })}
-          />
-        ))}
+        {messages.map((message, index) => {
+          const prevMessage = index > 0 ? messages[index - 1] : undefined;
+          const showSeparator = shouldShowTimeSeparator(message, prevMessage);
+
+          return (
+            <div key={message.id}>
+              {showSeparator && <TimeSeparator timestamp={message.timestamp} />}
+              <ChatMessage
+                message={message}
+                isUser={message.role === 'user'}
+                {...(message.role === 'user' && userPicture !== undefined && { userPicture })}
+              />
+            </div>
+          );
+        })}
 
         {/* Typing indicator */}
         {isLoading && (
