@@ -90,6 +90,8 @@ describe('chat-agent services', () => {
         embeddingClient: null as unknown as ServiceContainer['embeddingClient'],
         userServiceClient: mockUserServiceClient,
         logger: mockLogger as unknown as ServiceContainer['logger'],
+        guestRateLimiter: null as unknown as ServiceContainer['guestRateLimiter'],
+        guestLlmClient: null as unknown as ServiceContainer['guestLlmClient'],
       };
       setServices(customServices);
       const services = getServices();
@@ -118,6 +120,8 @@ describe('chat-agent services', () => {
         embeddingClient: null as unknown as ServiceContainer['embeddingClient'],
         userServiceClient: null as unknown as ServiceContainer['userServiceClient'],
         logger: mockLogger as unknown as ServiceContainer['logger'],
+        guestRateLimiter: null as unknown as ServiceContainer['guestRateLimiter'],
+        guestLlmClient: null as unknown as ServiceContainer['guestLlmClient'],
       };
       setServices(customServices);
       expect(() => getServices()).not.toThrow();

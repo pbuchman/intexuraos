@@ -383,6 +383,9 @@ importers:
       '@intexuraos/infra-firestore':
         specifier: workspace:*
         version: link:../../packages/infra-firestore
+      '@intexuraos/infra-glm':
+        specifier: workspace:*
+        version: link:../../packages/infra-glm
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry

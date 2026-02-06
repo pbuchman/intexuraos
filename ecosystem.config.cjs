@@ -136,6 +136,8 @@ const SERVICE_ENV_MAPPINGS = {
   'chat-agent': {
     // OpenAI API key for embeddings (from .envrc)
     INTEXURAOS_OPENAI_API_KEY: process.env.INTEXURAOS_OPENAI_API_KEY ?? '',
+    // ZAI API key for guest chat sessions (GLM-4.7-Flash is free)
+    INTEXURAOS_GUEST_ZAI_API_KEY: process.env.INTEXURAOS_GUEST_ZAI_API_KEY ?? '',
   },
 };
 
