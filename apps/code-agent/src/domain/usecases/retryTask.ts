@@ -1,5 +1,5 @@
 /**
- * Use case: Retry a failed code task.
+ * Use case: Retry a failed or cancelled code task.
  *
  * Creates a new task with the same prompt, optionally with additional context.
  * Links the new task to the original via retriedFrom field.
@@ -45,7 +45,7 @@ const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
  * Request to retry a failed task.
  */
 export interface RetryTaskRequest {
-  /** The ID of the failed task to retry */
+  /** The ID of the failed or cancelled task to retry */
   originalTaskId: string;
   /** User ID requesting the retry */
   userId: string;
@@ -93,11 +93,11 @@ export interface RetryTaskDeps {
 }
 
 /**
- * Retry a failed code task use case.
+ * Retry a failed or cancelled code task use case.
  *
  * Workflow:
  * 1. Fetch original task and validate it belongs to user
- * 2. Validate status is 'failed'
+ * 2. Validate status is 'failed' or 'cancelled'
  * 3. Validate cool-off period has elapsed (5 minutes)
  * 4. Check for active tasks on same Linear issue
  * 5. Reconstruct prompt with additional context if provided
@@ -127,21 +127,20 @@ export async function retryTask(
 
   const originalTask = originalTaskResult.value;
 
-  // Step 2: Validate status is failed
-  if (originalTask.status !== 'failed') {
-    logger.warn({ taskId: originalTask.id, status: originalTask.status }, 'Attempted to retry non-failed task');
+  // Step 2: Validate status is failed or cancelled
+  if (!['failed', 'cancelled'].includes(originalTask.status)) {
+    logger.warn({ taskId: originalTask.id, status: originalTask.status }, 'Attempted to retry non-retryable task');
     return err({
       code: 'invalid_status',
-      message: `Cannot retry task with status "${originalTask.status}". Only failed tasks can be retried.`,
+      message: `Cannot retry task with status "${originalTask.status}". Only failed or cancelled tasks can be retried.`,
     });
   }
 
   // Step 3: Validate cool-off period
+  // Cancelled tasks bypass cool-off — cancellation is user-initiated so immediate retry is appropriate
   const completedAt = originalTask.completedAt;
 
-  // Only enforce cool-off if we have a completedAt timestamp
-  // Tasks without completedAt (e.g., interrupted) can be retried immediately
-  if (completedAt !== undefined) {
+  if (originalTask.status !== 'cancelled' && completedAt !== undefined) {
     const now = Date.now();
     let completedAtTime: number;
 
@@ -329,12 +328,19 @@ ${additionalContext.trim()}
       { taskId: retryTask.id, error: dispatchError },
       'Dispatch failed for retry task, but task was created'
     );
-    await codeTaskRepo.update(retryTask.id, {
+    const updateWithErrorResult = await codeTaskRepo.update(retryTask.id, {
       error: {
         code: dispatchError.code,
         message: dispatchError.message,
       },
     });
+
+    if (!updateWithErrorResult.ok) {
+      logger.warn(
+        { taskId: retryTask.id, error: updateWithErrorResult.error },
+        'Failed to persist dispatch error on retry task'
+      );
+    }
 
     // Safe to access [0] because we return early if enabledWorkers.length === 0
     /* v8 ignore start -- ts-type: optional chaining with nullish coalescing creates type narrowing branch @preserve */
@@ -372,7 +378,7 @@ ${additionalContext.trim()}
     }
 
     // Step 12: Add comment to Linear issue
-    const commentBody = `Retrying failed task **${originalTaskId}**.
+    const commentBody = `Retrying ${originalTask.status} task **${originalTaskId}**.
 
 **New task:** ${retryTask.id}
 

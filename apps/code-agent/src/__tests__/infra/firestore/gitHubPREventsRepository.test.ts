@@ -232,7 +232,10 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       if (result.ok) {
         expect(result.value).toHaveLength(1);
         const firstEvent = result.value[0];
-        expect(firstEvent?.githubEventId).toBe(111);
+        if (firstEvent === undefined) {
+          throw new Error('firstEvent is undefined');
+        }
+        expect(firstEvent.githubEventId).toBe(111);
         expect(mockQuery.where).toHaveBeenCalledWith('repository', '==', 'intexuraos/test-repo');
         expect(mockQuery.where).toHaveBeenCalledWith('pullRequestNumber', '==', 42);
         expect(mockQuery.orderBy).toHaveBeenCalledWith('createdAt', 'desc');
