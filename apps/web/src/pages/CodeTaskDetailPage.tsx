@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
@@ -145,9 +145,6 @@ export function CodeTaskDetailPage(): React.JSX.Element {
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error ?? 'Task not found'}
         </div>
-        <Link to="/code-tasks" className="text-blue-600 underline dark:text-blue-400">
-          Back to list
-        </Link>
       </Layout>
     );
   }
@@ -160,12 +157,6 @@ export function CodeTaskDetailPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mb-4">
-        <Link to="/code-tasks" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
-          ← Back to list
-        </Link>
-      </div>
-
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-3">
           {task.linearIssueId !== undefined ? (
@@ -269,14 +260,12 @@ const PromptCard = memo(function PromptCard({
   copiedSection,
 }: PromptCardProps): React.JSX.Element {
   return (
-    <Card title="Prompt" className="mb-6">
-      <div className="mb-2 flex justify-end">
+    <Card title="Task Instructions" className="mb-6">
+      <div className="mb-4 flex justify-end">
         <Button
           variant="secondary"
           onClick={() => {
-            onCopy(prompt, 'prompt').catch(() => {
-              // Silently ignore copy errors
-            });
+            void onCopy(prompt, 'prompt');
           }}
         >
           <Copy className="h-4 w-4 sm:mr-2" />
