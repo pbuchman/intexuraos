@@ -13,7 +13,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { Button, Layout, RefreshIndicator } from '@/components';
+import { Button, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useFailedLinearIssues } from '@/hooks';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
@@ -514,6 +514,20 @@ export function LinearIssuesPage(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <button
             onClick={(): void => {
+              void handleRefresh();
+            }}
+            disabled={refreshing || syncing}
+            className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-blue-400"
+            title="Refresh"
+          >
+            {refreshing ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-5 w-5" />
+            )}
+          </button>
+          <button
+            onClick={(): void => {
               void handleSync();
             }}
             disabled={syncing || refreshing}
@@ -528,8 +542,6 @@ export function LinearIssuesPage(): React.JSX.Element {
           </button>
         </div>
       </div>
-
-      <RefreshIndicator show={refreshing} />
 
       {successMessage !== null && (
         <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">

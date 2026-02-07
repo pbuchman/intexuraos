@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BarChart3, Check, ChevronDown, Plus, Trash2, RefreshCw, Clock, AlertCircle } from 'lucide-react';
-import { Button, Card, Layout, RefreshIndicator } from '@/components';
+import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useCompositeFeed, useDataSources } from '@/hooks';
 import { createCompositeFeed } from '@/services/compositeFeedApi';
@@ -303,7 +303,6 @@ export function CompositeFeedFormPage(): React.JSX.Element {
   const {
     compositeFeed,
     loading: fetchLoading,
-    refreshing,
     error: fetchError,
     updateCompositeFeed,
     getSnapshot,
@@ -526,8 +525,6 @@ export function CompositeFeedFormPage(): React.JSX.Element {
           </Link>
         ) : null}
       </div>
-
-      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">

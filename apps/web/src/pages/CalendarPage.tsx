@@ -11,7 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { Button, Layout, RefreshIndicator } from '@/components';
+import { Button, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useCalendarEvents, useFailedCalendarEvents } from '@/hooks';
 import { deleteFailedEvent, retryFailedEvent } from '@/services/calendarApi.js';
@@ -363,7 +363,7 @@ function NeedsAttentionSection({
 export function CalendarPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
   const [monthRange, setMonthRange] = useState<MonthRange>(getCurrentMonthRange());
-  const { events, loading, refreshing, error, setFilters, refresh } = useCalendarEvents({
+  const { events, loading, error, setFilters, refresh } = useCalendarEvents({
     timeMin: monthRange.start.toISOString(),
     timeMax: monthRange.end.toISOString(),
   });
@@ -482,8 +482,6 @@ export function CalendarPage(): React.JSX.Element {
           <RefreshCw className={`h-5 w-5 ${isManualRefreshing ? 'animate-spin' : ''}`} />
         </button>
       </div>
-
-      <RefreshIndicator show={refreshing || isManualRefreshing} />
 
       {successMessage !== null && (
         <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">

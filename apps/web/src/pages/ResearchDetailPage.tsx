@@ -28,7 +28,6 @@ import {
   Layout,
   ModelSelector,
   PROVIDER_MODELS,
-  RefreshIndicator,
   getSelectedModelsList,
 } from '@/components';
 import { useAuth } from '@/context';
@@ -185,7 +184,7 @@ function getModelDisplayName(modelId: SupportedModel): string {
 
 export function ResearchDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { research, loading, refreshing, error, refresh } = useResearch(id ?? '');
+  const { research, loading, error, refresh } = useResearch(id ?? '');
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
   const navigate = useNavigate();
@@ -547,8 +546,6 @@ export function ResearchDetailPage(): React.JSX.Element {
           ← Back to list
         </Link>
       </div>
-
-      <RefreshIndicator show={refreshing} />
 
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-3">

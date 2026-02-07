@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Calendar, Edit2, FileText, Link2, Plus, RotateCcw, Tag, Trash2, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
+import { Button, Card, Input, Layout } from '@/components';
 import { useNotes } from '@/hooks';
 import { formatDate } from '@/utils/dateFormat';
 import { stripMarkdown } from '@/utils';
@@ -462,7 +462,7 @@ function NoteRow({ note, onOpen, onDelete }: NoteRowProps): React.JSX.Element {
 }
 
 export function NotesListPage(): React.JSX.Element {
-  const { notes, loading, refreshing, error, createNote, updateNote, deleteNote } = useNotes();
+  const { notes, loading, error, createNote, updateNote, deleteNote } = useNotes();
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -506,8 +506,6 @@ export function NotesListPage(): React.JSX.Element {
           <span className="hidden sm:inline">New Note</span>
         </Button>
       </div>
-
-      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
