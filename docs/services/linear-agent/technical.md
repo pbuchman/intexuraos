@@ -301,7 +301,7 @@ Uses Gemini 2.5 Flash or GLM-4.7 to parse natural language into structured issue
 
 - Primary: Gemini 2.5 Flash (fast, cost-effective)
 - Alternative: GLM-4.7 (multilingual support)
-- Free tier: GLM-4.7-Flash (cost-effective)
+- Lightweight: GLM-4.7-Flash (cost-effective)
 
 ### Priority Inference
 

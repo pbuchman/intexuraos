@@ -5,7 +5,7 @@
 - Added WhatsApp text reply support for approval requests with LLM-based intent classification (INT-161, INT-203)
 - Added WhatsApp reactions (👍/👎) for approving/rejecting approval messages
 - Added calendar event preview generation showing title, time, duration before approval (INT-189)
-- Added GLM-4.7-Flash as free Zai AI model with 200K context window (INT-187)
+- Added GLM-4.7-Flash as Zai AI model with 200K context window (INT-187)
 - Added LLM model selection in WhatsApp research messages (e.g., "research AI using gemini and claude") (INT-178)
 - Added AI-generated bookmark summaries delivered via WhatsApp (INT-210)
 - Added `/linear` skill with auto-splitting for complex multi-step tasks (INT-209)

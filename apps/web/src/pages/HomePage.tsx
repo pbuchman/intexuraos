@@ -412,7 +412,7 @@ function RecentUpdatesSection(): React.JSX.Element {
               and GPT&quot; or &quot;all models except Perplexity&quot; — you&apos;re in control.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
-              GLM-4.7-Flash: Free tier for cost-conscious queries.
+              GLM-4.7-Flash: Fast, lightweight model for cost-conscious queries.
             </p>
           </BrutalistCard>
           <BrutalistCard title="Linear Dashboard" icon={Database} className="bg-orange-50">

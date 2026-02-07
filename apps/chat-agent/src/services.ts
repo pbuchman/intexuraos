@@ -7,8 +7,7 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
-import { createGlmClient } from '@intexuraos/infra-glm';
-import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { FirestoreEmbeddingRepository } from './infra/firestore/embeddingRepository.js';
 import { EmbeddingClient } from './infra/llm/embeddingClient.js';
 import { createChatClient } from './infra/llm/chatClient.js';
@@ -123,8 +122,8 @@ export async function initializeServices(): Promise<void> {
   // Create OpenAI instance for embeddings
   const openai = new OpenAI({ apiKey: openaiApiKey });
 
-  // Create guest LLM client with platform-owned Zai API key (GLM-4.7-Flash is free)
-  const guestLlmClient = createGlmClient({
+  // Create guest LLM client with platform-owned Zai API key (GLM-4.7-Flash at $0 cost)
+  const guestLlmClient = createLlmClient({
     apiKey: guestZaiApiKey,
     model: LlmModels.Glm47Flash,
     userId: 'guest',

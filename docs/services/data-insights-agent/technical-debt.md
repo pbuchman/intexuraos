@@ -30,7 +30,7 @@ Based on recent INT-269 and INT-218 migrations:
    - All LLM service creation now uses `createUserServiceClient()`
    - Removed direct user-service HTTP implementations
 
-3. **GLM-4.7-Flash support** — Added free Zai AI model option (2c3a98c)
+3. **GLM-4.7-Flash support** — Added Zai AI model option (2c3a98c)
 
 4. **Visualization service** — Placeholder fields in services.ts for `visualizationRepository` and `visualizationGenerationService` remain unused
 
