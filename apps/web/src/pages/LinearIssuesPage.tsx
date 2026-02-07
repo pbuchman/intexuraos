@@ -514,6 +514,20 @@ export function LinearIssuesPage(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <button
             onClick={(): void => {
+              void handleRefresh();
+            }}
+            disabled={refreshing || syncing}
+            className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-blue-400"
+            title="Refresh"
+          >
+            {refreshing ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-5 w-5" />
+            )}
+          </button>
+          <button
+            onClick={(): void => {
               void handleSync();
             }}
             disabled={syncing || refreshing}
@@ -525,16 +539,6 @@ export function LinearIssuesPage(): React.JSX.Element {
             ) : (
               <CloudDownload className="h-5 w-5" />
             )}
-          </button>
-          <button
-            onClick={(): void => {
-              void handleRefresh();
-            }}
-            disabled={refreshing || syncing}
-            className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-            title="Refresh"
-          >
-            <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
