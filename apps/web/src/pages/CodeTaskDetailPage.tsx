@@ -3,12 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Copy,
   ExternalLink,
   GitBranch,
   GitCommit,
   Loader2,
+  Link2,
   RotateCcw,
   StopCircle,
   Terminal,
@@ -300,21 +302,90 @@ const TaskResultCard = memo(function TaskResultCard({ task }: TaskResultCardProp
   const result = task.result;
   if (result === undefined) return null;
 
+  const [linksExpanded, setLinksExpanded] = useState(false);
+
+  // Build links array - all links in result card have URLs
+  const links: { label: string; url: string; text: string }[] = [];
+
+  // Linear issue link (first)
+  if (task.linearIssueId !== undefined) {
+    links.push({
+      label: 'Linear',
+      url: `https://linear.app/intexuraos/issue/${task.linearIssueId}`,
+      text: task.linearIssueId,
+    });
+  }
+
+  // PR link (second)
+  if (result.prUrl !== undefined) {
+    links.push({
+      label: 'Pull Request',
+      url: result.prUrl,
+      text: 'View Pull Request',
+    });
+  }
+
   return (
     <Card title="Result" className="mb-6">
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-6">
-          {result.prUrl !== undefined ? (
-            <a
-              href={result.prUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-blue-600 hover:underline dark:text-blue-400"
+        {/* Collapsible Links Section */}
+        {links.length > 0 ? (
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                setLinksExpanded(!linksExpanded);
+              }}
+              className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
             >
-              <ExternalLink className="h-4 w-4" />
-              View Pull Request
-            </a>
-          ) : null}
+              <span className="flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Links
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${linksExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {linksExpanded ? (
+              <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+                {links.map((link, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-24">
+                      {link.label}:
+                    </span>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 truncate text-sm text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      {link.text}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(link.url);
+                      }}
+                      className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                      title="Copy link"
+                    >
+                      <Copy className="h-3.5 w-3.5 text-slate-400" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Summary section */}
+        <div>
+          <h4 className="mb-2 font-medium text-slate-700 dark:text-slate-200">Summary</h4>
+          <p className="whitespace-pre-wrap text-slate-600 dark:text-slate-300">{result.summary}</p>
+        </div>
+
+        {/* Additional info */}
+        <div className="flex flex-wrap gap-6">
           <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
             <GitBranch className="h-4 w-4" />
             <code className="rounded bg-slate-100 px-2 py-0.5 text-sm dark:bg-slate-700 dark:text-slate-300">{result.branch}</code>
@@ -346,11 +417,6 @@ const TaskResultCard = memo(function TaskResultCard({ task }: TaskResultCardProp
               : '⚠️ Rebase was skipped.'}
           </div>
         ) : null}
-
-        <div>
-          <h4 className="mb-2 font-medium text-slate-700 dark:text-slate-200">Summary</h4>
-          <p className="whitespace-pre-wrap text-slate-600 dark:text-slate-300">{result.summary}</p>
-        </div>
       </div>
     </Card>
   );
@@ -368,11 +434,40 @@ const TaskErrorCard = memo(function TaskErrorCard({ task }: TaskErrorCardProps):
   const error = task.error;
   if (error === undefined) return null;
 
+  const [linksExpanded, setLinksExpanded] = useState(false);
+
+  // Build links array
+  const links: { label: string; url: string | undefined; text: string }[] = [];
+
+  // Linear issue link (first)
+  if (task.linearIssueId !== undefined) {
+    links.push({
+      label: 'Linear',
+      url: `https://linear.app/intexuraos/issue/${task.linearIssueId}`,
+      text: task.linearIssueId,
+    });
+  }
+
+  // PR link or error message (second)
+  if (task.result?.prUrl !== undefined) {
+    links.push({
+      label: 'Pull Request',
+      url: task.result.prUrl,
+      text: 'View Pull Request',
+    });
+  } else if (error.code === 'NO_PR_CREATED') {
+    links.push({
+      label: 'Pull Request',
+      url: undefined,
+      text: 'Task completed but no PR was created',
+    });
+  }
+
   return (
     <Card className="mb-6 border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30">
       <div className="flex items-start gap-3">
         <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
-        <div>
+        <div className="flex-1">
           <h3 className="font-semibold text-red-800 dark:text-red-300">Error: {error.code}</h3>
           <p className="mt-1 text-sm text-red-700 dark:text-red-400">{error.message}</p>
           {error.remediation !== undefined ? (
@@ -392,6 +487,65 @@ const TaskErrorCard = memo(function TaskErrorCard({ task }: TaskErrorCardProps):
                   <ExternalLink className="h-3.5 w-3.5" />
                   Get help
                 </a>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Collapsible Links Section */}
+          {links.length > 0 ? (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setLinksExpanded(!linksExpanded);
+                }}
+                className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+              >
+                <span className="flex items-center gap-2">
+                  <Link2 className="h-4 w-4" />
+                  Links
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${linksExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {linksExpanded ? (
+                <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+                  {links.map((link, idx) => {
+                    const url = link.url;
+                    return (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-24">
+                          {link.label}:
+                        </span>
+                        {url !== undefined ? (
+                          <>
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 truncate text-sm text-blue-600 hover:underline dark:text-blue-400"
+                            >
+                              {link.text}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void navigator.clipboard.writeText(url);
+                              }}
+                              className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                              title="Copy link"
+                            >
+                              <Copy className="h-3.5 w-3.5 text-slate-400" />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="flex-1 text-sm text-slate-600 dark:text-slate-400">{link.text}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -416,8 +570,13 @@ const LogViewer = memo(function LogViewer({ taskId, isActive }: LogViewerProps):
   const [logsLoading, setLogsLoading] = useState(true);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [logsHeight, setLogsHeight] = useState(384); // max-h-96 = 384px
+  const [isResizing, setIsResizing] = useState(false);
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const resizeHandleRef = useRef<HTMLDivElement>(null);
   const unsubscribeRef = useRef<Unsubscribe | null>(null);
   const firebaseAuthenticatedRef = useRef(false);
   const isMountedRef = useRef(true);
@@ -430,10 +589,41 @@ const LogViewer = memo(function LogViewer({ taskId, isActive }: LogViewerProps):
   }, [autoScroll]);
 
   const scrollToBottom = useCallback((): void => {
-    if (autoScrollRef.current && logsEndRef.current !== null) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (autoScrollRef.current && logsContainerRef.current !== null) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
     }
   }, []); // No dependencies - uses ref instead
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+
+    const startY = e.clientY;
+    const startHeight = logsHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent): void => {
+      const deltaY = startY - moveEvent.clientY;
+      const newHeight = Math.max(200, Math.min(800, startHeight + deltaY));
+      setLogsHeight(newHeight);
+    };
+
+    const handleMouseUp = (): void => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [logsHeight]);
+
+  const copyLogEntry = useCallback((logMessage: string, logId: string) => {
+    void navigator.clipboard.writeText(logMessage);
+    setCopiedLogId(logId);
+    setTimeout(() => {
+      setCopiedLogId(null);
+    }, 2000);
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -525,7 +715,7 @@ const LogViewer = memo(function LogViewer({ taskId, isActive }: LogViewerProps):
   // Memoize logs rendering to avoid recalculating on every parent re-render
   const logsElements = useMemo(() => {
     return logs.map((log) => (
-      <div key={log.id} className="flex gap-2 py-0.5 hover:bg-slate-800/50">
+      <div key={log.id} className="group flex gap-2 py-0.5 hover:bg-slate-800/50 relative">
         <span className="text-slate-500 shrink-0">{formatLogTime(log.timestamp)}</span>
         <span className={`shrink-0 uppercase w-12 ${getLevelColor(log.level)}`}>
           [{log.level}]
@@ -533,10 +723,24 @@ const LogViewer = memo(function LogViewer({ taskId, isActive }: LogViewerProps):
         {log.tool !== undefined ? (
           <span className="text-blue-400 shrink-0">[{log.tool}]</span>
         ) : null}
-        <span className="text-slate-200 break-all whitespace-pre-wrap">{log.message}</span>
+        <span className="text-slate-200 break-all whitespace-pre-wrap flex-1">{log.message}</span>
+        <button
+          type="button"
+          onClick={() => {
+            copyLogEntry(log.message, log.id);
+          }}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-200 p-0.5"
+          title="Copy log entry"
+        >
+          {copiedLogId === log.id ? (
+            <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
       </div>
     ));
-  }, [logs]);
+  }, [logs, copiedLogId, copyLogEntry]);
 
   return (
     <Card
@@ -571,7 +775,12 @@ const LogViewer = memo(function LogViewer({ taskId, isActive }: LogViewerProps):
         </label>
       </div>
 
-      <div className="rounded-lg bg-slate-900 p-4 font-mono text-sm max-h-96 overflow-y-auto">
+      <div className="relative">
+        <div
+          ref={logsContainerRef}
+          className="rounded-lg bg-slate-900 p-4 font-mono text-sm overflow-y-auto"
+          style={{ height: `${String(logsHeight)}px` }} // eslint-disable-line no-restricted-syntax -- dynamic height value for resizable logs
+        >
         {logsLoading ? (
           <div className="flex items-center gap-2 text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -587,6 +796,13 @@ const LogViewer = memo(function LogViewer({ taskId, isActive }: LogViewerProps):
             <div ref={logsEndRef} />
           </>
         )}
+        </div>
+        <div
+          ref={resizeHandleRef}
+          onMouseDown={handleMouseDown}
+          className={`absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize border-t-2 border-transparent hover:border-slate-500 dark:hover:border-slate-400 transition-colors ${isResizing ? 'border-slate-500 dark:border-slate-400' : ''}`}
+          title="Drag to resize"
+        />
       </div>
     </Card>
   );
