@@ -188,6 +188,7 @@ async function bootstrap(): Promise<void> {
       repositoryPath: repoPath,
       worktreeBasePath: config.worktreeBasePath,
       mcpConfigTemplatePath: join(repoPath, '.mcp.json'),
+      claudeSettings: { outputStyle: 'Explanatory' },
     },
     logger
   );

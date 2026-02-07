@@ -284,6 +284,8 @@ terraform validate
 
 **RULE:** ALL infrastructure via Terraform only. See reference for CLI-to-Terraform mapping.
 
+**Predev Environment:** See `docs/designs/predev-environment.md` for predev VM architecture (scale-to-zero GCP Spot instance). The `INTEXURAOS_PREDEV_ENV_VARS` secret stores all env vars for the predev VM and is excluded from `sync-secrets.sh`.
+
 ---
 
 ## Architecture

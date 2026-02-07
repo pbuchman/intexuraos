@@ -2,8 +2,8 @@
 
 Run the full IntexuraOS development stack in GCP with automatic branch switching, scale-to-zero idle shutdown, and on-demand startup.
 
-**Status:** Design Complete
-**Last Updated:** 2026-01-29
+**Status:** Implemented
+**Last Updated:** 2026-02-07
 
 ---
 
@@ -51,18 +51,11 @@ A cloud-based development environment that mirrors local `pnpm run dev` but runs
 │            │                │                │                │               │
 │            ▼                ▼                ▼                ▼               │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │                      Spot VM (e2-medium, 4GB)                           │   │
-│  │  ┌───────────────────────────────────────────────────────────────────┐ │   │
-│  │  │  Docker Compose (emulators)                                       │ │   │
-│  │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐               │ │   │
-│  │  │  │  Firestore  │  │    GCS      │  │  Pub/Sub    │               │ │   │
-│  │  │  │  Emulator   │  │  Emulator   │  │  Emulator   │               │ │   │
-│  │  │  │  :8101      │  │  :8103      │  │  :8102      │               │ │   │
-│  │  │  └─────────────┘  └─────────────┘  └─────────────┘               │ │   │
-│  │  └───────────────────────────────────────────────────────────────────┘ │   │
+│  │                      Spot VM (e2-highmem-4, 16GB)                        │   │
 │  │                                                                         │   │
 │  │  ┌───────────────────────────────────────────────────────────────────┐ │   │
-│  │  │  pnpm run dev:services (17 apps + workers)                        │ │   │
+│  │  │  PM2 Services (17 apps + workers)                                  │ │   │
+│  │  │  Port range: 8110-8128, 3000 (web)                                │ │   │
 │  │  │  Port range: 8110-8128, 3000 (web)                                │ │   │
 │  │  │  Hot reload via tsx watch                                         │ │   │
 │  │  └───────────────────────────────────────────────────────────────────┘ │   │
@@ -297,19 +290,35 @@ execute on VM:
 update Firestore: { branch: targetBranch, vmStatus: "running" }
 ```
 
-### 5. Spot VM (e2-medium)
+### 5. Spot VM (e2-highmem-4)
 
 **Purpose:** Run the full dev stack.
 
-**Specs:**
+**Actual Implementation:**
 
-- Machine type: `e2-medium` (1-2 vCPU, 4GB RAM)
-- Disk: 50GB SSD (for node_modules, Docker images)
+- Machine type: `e2-highmem-4` (4 vCPU, 16GB RAM)
+- Disk: 20GB SSD
 - OS: Ubuntu 24.04 LTS
 - Provisioning: Spot (preemptible)
-- Network: Static external IP
+- Network: Static external IP, firewall for ports 3000, 8105-8128
 
-**Startup Script:**
+**Startup Script:** See `terraform/modules/predev-environment/scripts/startup.sh`
+
+Key steps:
+1. Install dependencies (Node.js 22, pnpm, PM2)
+2. Clone/checkout target branch (from Firestore)
+3. Fetch `INTEXURAOS_PREDEV_ENV_VARS` from Secret Manager → `.envrc.local`
+4. Install dependencies (`pnpm install --frozen-lockfile`)
+5. Build packages (`pnpm build`)
+6. Start services via PM2 (`pm2 start ecosystem.config.cjs`)
+7. Start update listener for hot code reloads
+
+**What's NOT running:**
+- ❌ No Docker containers
+- ❌ No local emulators (Firestore, Pub/Sub connect directly to GCP dev)
+- ❌ No Caddy (Cloud Functions gateway handles routing)
+
+**VM .envrc.local (from Secret Manager):**
 
 ```bash
 #!/bin/bash

@@ -22,6 +22,9 @@ START_TIME=$(date +%s%N 2>/dev/null || date +%s)
 INPUT=$(cat)
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 
+# Canary: prove hook execution in Docker containers (stdout → log forwarder → /internal/logs)
+echo "[HOOK-CANARY] completion-validator fired at $(date -u +%Y-%m-%dT%H:%M:%SZ) | transcript_path=${TRANSCRIPT_PATH:-none}"
+
 if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
   exit 0
 fi
