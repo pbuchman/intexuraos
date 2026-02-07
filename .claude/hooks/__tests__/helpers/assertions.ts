@@ -180,6 +180,7 @@ export function expectNoLogEntry(
 
 /**
  * Asserts JSON output from hooks like ownership-check
+ * Handles canary echo or other stdout prefixes by extracting the last JSON object
  */
 export function expectJsonOutput(
   result: HookExecutionResult,
@@ -192,7 +193,13 @@ export function expectJsonOutput(
 
   let json: unknown;
   try {
-    json = JSON.parse(stdout.trim());
+    // Extract JSON from stdout - find the last { to handle canary echo or other prefixes
+    const lastBrace = stdout.lastIndexOf('{');
+    if (lastBrace === -1) {
+      throw new Error(`No JSON found in stdout:\n${stdout}`);
+    }
+    const jsonStr = stdout.slice(lastBrace).trim();
+    json = JSON.parse(jsonStr);
   } catch {
     throw new Error(`Expected valid JSON output, but got:\n${stdout}`);
   }
@@ -262,6 +269,7 @@ export function expectStderrExcludes(result: HookExecutionResult, text: string):
 /**
  * Asserts that a hook soft-blocked via JSON decision (exit 0, stdout contains decision: block)
  * This is different from hard block (exit 2) - used by ownership-check and detect-common-patterns
+ * Handles canary echo or other stdout prefixes by extracting the last JSON object
  */
 export function expectSoftBlock(
   result: HookExecutionResult,
@@ -281,7 +289,13 @@ export function expectSoftBlock(
 
   let json: unknown;
   try {
-    json = JSON.parse(stdout.trim());
+    // Extract JSON from stdout - find the last { to handle canary echo or other prefixes
+    const lastBrace = stdout.lastIndexOf('{');
+    if (lastBrace === -1) {
+      throw new Error(`No JSON found in stdout:\n${stdout}`);
+    }
+    const jsonStr = stdout.slice(lastBrace).trim();
+    json = JSON.parse(jsonStr);
   } catch {
     throw new Error(`Expected JSON output for soft block, but got:\n${stdout}`);
   }
