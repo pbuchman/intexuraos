@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
+import { Button, Card, Input, Layout } from '@/components';
 import { useTodos } from '@/hooks';
 import { formatDate, formatDateForInput } from '@/utils/dateFormat';
 import { sortTodoItems } from '@/utils/todoItemSort.js';
@@ -994,7 +994,6 @@ export function TodosListPage(): React.JSX.Element {
   const {
     todos,
     loading,
-    refreshing,
     error,
     createTodo,
     updateTodo,
@@ -1049,8 +1048,6 @@ export function TodosListPage(): React.JSX.Element {
           <span className="hidden sm:inline">New Todo</span>
         </Button>
       </div>
-
-      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">

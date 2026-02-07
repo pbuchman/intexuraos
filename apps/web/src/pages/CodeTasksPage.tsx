@@ -8,7 +8,7 @@ import {
   Plus,
   XCircle,
 } from 'lucide-react';
-import { Button, Card, Layout, RefreshIndicator } from '@/components';
+import { Button, Card, Layout } from '@/components';
 import { useCodeTasks } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus } from '@/types';
@@ -30,7 +30,7 @@ const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
 };
 
 export function CodeTasksPage(): React.JSX.Element {
-  const { tasks, loading, loadingMore, refreshing, error, hasMore, loadMore } = useCodeTasks();
+  const { tasks, loading, loadingMore, error, hasMore, loadMore } = useCodeTasks();
 
   if (loading && tasks.length === 0) {
     return (
@@ -56,8 +56,6 @@ export function CodeTasksPage(): React.JSX.Element {
           </Button>
         </Link>
       </div>
-
-      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">

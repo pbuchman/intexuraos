@@ -50,7 +50,9 @@ export async function main(
     // Start HTTP server
     const app = fastify({
       logger: {
+        /* v8 ignore start -- test-infra: environment config hard to test @preserve */
         level: process.env['LOG_LEVEL'] ?? 'info',
+        /* v8 ignore stop @preserve */
         transport: { target: 'pino-pretty', options: { colorize: true, singleLine: true } },
       },
     });

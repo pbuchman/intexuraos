@@ -9,7 +9,7 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
-import { Button, Card, Layout, RefreshIndicator } from '@/components';
+import { Card, Layout } from '@/components';
 import { useGitHubPREvents } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
 
@@ -189,23 +189,22 @@ export function PREventsPage(): React.JSX.Element {
           <p className="text-slate-600 dark:text-slate-300">View pull request activity</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
+          <button
+            type="button"
             onClick={() => {
               void refresh();
             }}
             disabled={refreshing}
+            className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-blue-400"
+            title="Refresh"
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            <span className="ml-2">Refresh</span>
-          </Button>
+            <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
           <Link to="/code-tasks" className="text-sm text-blue-600 underline dark:text-blue-400">
             Back to Code Tasks
           </Link>
         </div>
       </div>
-
-      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
