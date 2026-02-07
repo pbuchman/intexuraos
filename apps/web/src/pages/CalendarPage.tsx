@@ -425,12 +425,12 @@ export function CalendarPage(): React.JSX.Element {
       const token = await getAccessToken();
       await deleteFailedEvent(token, id);
       await refreshFailedEvents();
-      setSuccessMessage('Failed event deleted');
+      setSuccessMessage('Successfully discarded event');
       setTimeout(() => {
         setSuccessMessage(null);
       }, 3000);
     } catch (e) {
-      setActionError(getErrorMessage(e, 'Failed to delete event'));
+      setActionError(getErrorMessage(e, 'Unable to delete event'));
     } finally {
       setDeletingFailedEventId(null);
     }
