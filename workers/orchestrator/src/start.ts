@@ -150,16 +150,20 @@ async function bootstrap(): Promise<void> {
     orchestratorSecret,
   };
 
-  // Create logger
-  const logger = pino(
-    process.env['NODE_ENV'] !== 'production'
-      ? {
-          level: process.env['LOG_LEVEL'] ?? 'info',
-          transport: { target: 'pino-pretty', options: { colorize: true } },
-          serializers: errorSerializers,
-        }
-      : { level: process.env['LOG_LEVEL'] ?? 'info', serializers: errorSerializers }
-  );
+  const logFilePath = join(logsDir, 'orchestrator.log');
+  const logLevel = process.env['LOG_LEVEL'] ?? 'info';
+
+  // Create logger — pretty stdout + JSON file for debugging
+  const logger = pino({
+    level: logLevel,
+    transport: {
+      targets: [
+        { target: 'pino-pretty', options: { colorize: true, singleLine: true }, level: logLevel },
+        { target: 'pino/file', options: { destination: logFilePath }, level: logLevel },
+      ],
+    },
+    serializers: errorSerializers,
+  });
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
 

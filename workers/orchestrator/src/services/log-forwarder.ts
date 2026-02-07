@@ -33,7 +33,7 @@ export interface ForwardingState {
 const MAX_CHUNK_SIZE = 8 * 1024; // 8KB
 const MAX_CHUNKS_PER_TASK = 500;
 const MAX_TOTAL_LOG_SIZE = 4 * 1024 * 1024; // 4MB
-const CHUNK_INTERVAL_MS = 10 * 1000; // 10 seconds
+const CHUNK_INTERVAL_MS = 3 * 1000; // 3 seconds
 const MAX_BATCH_SIZE = 5;
 
 export class LogForwarder {
