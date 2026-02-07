@@ -621,7 +621,7 @@ describe('retryTask use case', () => {
       }
     });
 
-    it('should return error when task dispatch fails', async () => {
+    it('should return ok with task ID when dispatch fails (task was created)', async () => {
       const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
       const mockTask = createMockTask({ completedAt: sixMinutesAgo });
       const retryTaskId = 'retry-task-1';
@@ -659,12 +659,13 @@ describe('retryTask use case', () => {
         userId,
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('internal_error');
-        expect(result.error.message).toContain('No workers available');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe(retryTaskId);
+        expect(result.value.workerLocation).toBe('home-mac');
+        expect(result.value.retriedFrom).toBe(originalTaskId);
       }
-      // Verify task was updated with error
+      // Verify task was updated with dispatch error
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
         retryTaskId,
         expect.objectContaining({

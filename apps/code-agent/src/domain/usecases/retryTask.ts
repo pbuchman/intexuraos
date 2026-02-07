@@ -324,8 +324,11 @@ ${additionalContext.trim()}
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
 
   if (!dispatchResult.ok) {
-    // Update task with error
     const dispatchError = dispatchResult.error;
+    logger.warn(
+      { taskId: retryTask.id, error: dispatchError },
+      'Dispatch failed for retry task, but task was created'
+    );
     await codeTaskRepo.update(retryTask.id, {
       error: {
         code: dispatchError.code,
@@ -333,9 +336,16 @@ ${additionalContext.trim()}
       },
     });
 
-    return err({
-      code: 'internal_error',
-      message: dispatchError.message,
+    // Safe to access [0] because we return early if enabledWorkers.length === 0
+    /* v8 ignore start -- ts-type: optional chaining with nullish coalescing creates type narrowing branch @preserve */
+    const fallbackLocation = enabledWorkers[0]?.name ?? 'unknown';
+    /* v8 ignore stop @preserve */
+
+    return ok({
+      codeTaskId: retryTask.id,
+      resourceUrl: `/#/code-tasks/${retryTask.id}`,
+      workerLocation: fallbackLocation,
+      retriedFrom: originalTaskId,
     });
   }
 

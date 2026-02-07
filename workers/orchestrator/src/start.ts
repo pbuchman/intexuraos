@@ -30,7 +30,7 @@ import type { OrchestratorConfig } from './types/config.js';
 import type { IsolationConfig } from './services/task-dispatcher.js';
 
 const DEFAULT_PORT = 8199;
-const DEFAULT_CAPACITY = 1;
+const DEFAULT_CAPACITY = 2;
 const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 
 function getRequiredEnv(name: string): string {
@@ -130,7 +130,10 @@ async function bootstrap(): Promise<void> {
 
   // Load optional env vars
   const port = parseInt(getOptionalEnv('PORT', String(DEFAULT_PORT)), 10);
-  const capacity = parseInt(getOptionalEnv('WORKER_CAPACITY', String(DEFAULT_CAPACITY)), 10);
+  const capacity = parseInt(
+    getOptionalEnv('INTEXURAOS_WORKER_CAPACITY', String(DEFAULT_CAPACITY)),
+    10
+  );
 
   // Build config
   const config: OrchestratorConfig = {
@@ -221,7 +224,7 @@ async function bootstrap(): Promise<void> {
       SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
       ZAI_API_KEY: getOptionalEnv('INTEXURAOS_ZAI_API_KEY', ''),
     },
-    gcpSaKeyPath: process.env['GOOGLE_APPLICATION_CREDENTIALS'] ?? '',
+    gcpSaKeyPath: getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS'),
     githubAppKeyPath: config.githubAppPrivateKeyPath,
   };
 

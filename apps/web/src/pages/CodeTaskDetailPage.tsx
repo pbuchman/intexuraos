@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
@@ -9,6 +9,7 @@ import {
   GitBranch,
   GitCommit,
   Loader2,
+  RotateCcw,
   StopCircle,
   Terminal,
   XCircle,
@@ -81,10 +82,13 @@ const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
 
 export function CodeTaskDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { task, loading, error, cancelTask } = useCodeTask(id ?? '');
+  const navigate = useNavigate();
+  const { task, loading, error, cancelTask, retryTask } = useCodeTask(id ?? '');
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const handleCancel = async (): Promise<void> => {
     if (task === null) return;
@@ -98,6 +102,22 @@ export function CodeTaskDetailPage(): React.JSX.Element {
       setCancelError(err instanceof Error ? err.message : 'Failed to cancel task');
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleRetry = async (): Promise<void> => {
+    if (task === null) return;
+
+    setRetrying(true);
+    setRetryError(null);
+
+    try {
+      const newTaskId = await retryTask();
+      void navigate(`/code-tasks/${newTaskId}`);
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : 'Failed to retry task');
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -136,6 +156,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   const StatusIcon = status.icon;
   const isRunning = task.status === 'running' || task.status === 'dispatched';
   const canCancel = isRunning;
+  const canRetry = task.status === 'failed';
 
   return (
     <Layout>
@@ -174,25 +195,45 @@ export function CodeTaskDetailPage(): React.JSX.Element {
           </span>
         </div>
 
-        {canCancel ? (
+        {canCancel || canRetry ? (
           <div className="mt-4 flex gap-3">
-            <Button
-              variant="danger"
-              onClick={(): void => {
-                void handleCancel();
-              }}
-              disabled={cancelling}
-              isLoading={cancelling}
-            >
-              <StopCircle className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Cancel Task</span>
-            </Button>
+            {canCancel ? (
+              <Button
+                variant="danger"
+                onClick={(): void => {
+                  void handleCancel();
+                }}
+                disabled={cancelling}
+                isLoading={cancelling}
+              >
+                <StopCircle className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Cancel Task</span>
+              </Button>
+            ) : null}
+            {canRetry ? (
+              <Button
+                onClick={(): void => {
+                  void handleRetry();
+                }}
+                disabled={retrying}
+                isLoading={retrying}
+              >
+                <RotateCcw className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Retry Task</span>
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
         {cancelError !== null ? (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
             {cancelError}
+          </div>
+        ) : null}
+
+        {retryError !== null ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
+            {retryError}
           </div>
         ) : null}
       </div>
