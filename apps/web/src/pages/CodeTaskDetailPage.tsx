@@ -156,7 +156,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   const StatusIcon = status.icon;
   const isRunning = task.status === 'running' || task.status === 'dispatched';
   const canCancel = isRunning;
-  const canRetry = task.status === 'failed';
+  const canRetry = task.status === 'failed' || task.status === 'cancelled';
 
   return (
     <Layout>
