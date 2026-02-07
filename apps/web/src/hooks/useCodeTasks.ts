@@ -7,6 +7,7 @@ import {
   getCodeTask as getCodeTaskApi,
   submitCodeTask as submitCodeTaskApi,
   cancelCodeTask as cancelCodeTaskApi,
+  retryCodeTask as retryCodeTaskApi,
   getWorkersStatus as getWorkersStatusApi,
   refreshWorkersStatus as refreshWorkersStatusApi,
 } from '@/services/codeAgentApi';
@@ -28,6 +29,7 @@ export function useCodeTask(id: string): {
   error: string | null;
   refresh: (showLoading?: boolean) => Promise<void>;
   cancelTask: () => Promise<void>;
+  retryTask: (additionalContext?: string) => Promise<string>;
 } {
   const { getAccessToken, isAuthenticated, user } = useAuth();
   const [task, setTask] = useState<CodeTask | null>(null);
@@ -164,7 +166,18 @@ export function useCodeTask(id: string): {
     await refresh(false);
   }, [task, getAccessToken, refresh]);
 
-  return { task, loading, refreshing, error, refresh, cancelTask };
+  const retryTask = useCallback(async (additionalContext?: string): Promise<string> => {
+    if (task === null) throw new Error('No task to retry');
+    const token = await getAccessToken();
+    const request: { taskId: string; additionalContext?: string } = { taskId: task.id };
+    if (additionalContext !== undefined && additionalContext.trim().length > 0) {
+      request.additionalContext = additionalContext.trim();
+    }
+    const result = await retryCodeTaskApi(token, request);
+    return result.codeTaskId;
+  }, [task, getAccessToken]);
+
+  return { task, loading, refreshing, error, refresh, cancelTask, retryTask };
 }
 
 /**
