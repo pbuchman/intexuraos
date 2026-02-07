@@ -1133,6 +1133,24 @@ export interface SubmitCodeTaskResponse {
 }
 
 /**
+ * Request to retry a failed code task
+ */
+export interface RetryCodeTaskRequest {
+  taskId: string;
+  additionalContext?: string;
+}
+
+/**
+ * Response from retrying a failed code task
+ */
+export interface RetryCodeTaskResponse {
+  codeTaskId: string;
+  resourceUrl: string;
+  workerLocation: string;
+  retriedFrom: string;
+}
+
+/**
  * Response from listing code tasks
  */
 export interface ListCodeTasksResponse {
