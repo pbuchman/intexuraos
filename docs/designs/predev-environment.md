@@ -305,6 +305,7 @@ update Firestore: { branch: targetBranch, vmStatus: "running" }
 **Startup Script:** See `terraform/modules/predev-environment/scripts/startup.sh`
 
 Key steps:
+
 1. Install dependencies (Node.js 22, pnpm, PM2)
 2. Clone/checkout target branch (from Firestore)
 3. Fetch `INTEXURAOS_PREDEV_ENV_VARS` from Secret Manager → `.envrc.local`
@@ -314,6 +315,7 @@ Key steps:
 7. Start update listener for hot code reloads
 
 **What's NOT running:**
+
 - ❌ No Docker containers
 - ❌ No local emulators (Firestore, Pub/Sub connect directly to GCP dev)
 - ❌ No Caddy (Cloud Functions gateway handles routing)

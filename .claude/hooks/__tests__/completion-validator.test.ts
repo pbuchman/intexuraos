@@ -109,7 +109,8 @@ describe.sequential('Claude Hooks - Completion Validator', () => {
         });
 
         expectAllowed(result);
-        expect(result.stdout).toBe('');
+        // Canary echo fires for all sessions, not just worker mode
+        expect(result.stdout).toContain('[HOOK-CANARY]');
 
         cleanupTranscript(transcriptPath);
       });

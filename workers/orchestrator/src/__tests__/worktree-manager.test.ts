@@ -268,7 +268,12 @@ describe('WorktreeManager', () => {
 
       await manager.createWorktree('task-settings', 'feature-branch');
 
-      const settingsPath = join(worktreeBasePath, 'task-settings', '.claude', 'settings.local.json');
+      const settingsPath = join(
+        worktreeBasePath,
+        'task-settings',
+        '.claude',
+        'settings.local.json'
+      );
       expect(existsSync(settingsPath)).toBe(true);
 
       const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
