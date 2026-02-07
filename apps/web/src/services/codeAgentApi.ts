@@ -5,6 +5,8 @@ import type {
   CodeTaskStatus,
   GitHubPREventsResponse,
   ListCodeTasksResponse,
+  RetryCodeTaskRequest,
+  RetryCodeTaskResponse,
   SubmitCodeTaskRequest,
   SubmitCodeTaskResponse,
   WorkersStatusResponse,
@@ -51,6 +53,19 @@ export async function submitCodeTask(
   request: SubmitCodeTaskRequest
 ): Promise<SubmitCodeTaskResponse> {
   return await apiRequest<SubmitCodeTaskResponse>(config.codeAgentUrl, '/code/submit', accessToken, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+/**
+ * Retry a failed code task
+ */
+export async function retryCodeTask(
+  accessToken: string,
+  request: RetryCodeTaskRequest
+): Promise<RetryCodeTaskResponse> {
+  return await apiRequest<RetryCodeTaskResponse>(config.codeAgentUrl, '/code/retry', accessToken, {
     method: 'POST',
     body: request,
   });
