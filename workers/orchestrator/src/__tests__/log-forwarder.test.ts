@@ -230,7 +230,7 @@ describe('LogForwarder', () => {
   });
 
   describe('retry logic', () => {
-    it('should retry 3x on 5xx errors with exponential backoff', { timeout: 25000 }, async () => {
+    it('should retry 3x on 5xx errors with exponential backoff', { timeout: 15000 }, async () => {
       let attempts = 0;
 
       mockFetch.mockImplementation(async () => {
@@ -258,8 +258,8 @@ describe('LogForwarder', () => {
 
       writeFileSync(logFile, 'Test content\n');
 
-      // Wait for two timer intervals (20s) to ensure flush happens
-      await new Promise((resolve) => setTimeout(resolve, 21000));
+      // Wait for two timer intervals (6s) to ensure flush happens
+      await new Promise((resolve) => setTimeout(resolve, 7000));
 
       // Check dropped count BEFORE stopping (state is deleted on stop)
       expect(forwarder.getDroppedChunkCount('task-retry')).toBe(0);
@@ -270,7 +270,7 @@ describe('LogForwarder', () => {
       expect(attempts).toBe(3);
     });
 
-    it('should not retry on 4xx errors and log as error', { timeout: 25000 }, async () => {
+    it('should not retry on 4xx errors and log as error', { timeout: 15000 }, async () => {
       let attempts = 0;
       vi.mocked(mockLogger.error).mockReset();
 
@@ -293,7 +293,7 @@ describe('LogForwarder', () => {
 
       writeFileSync(logFile, 'Test content\n');
 
-      await new Promise((resolve) => setTimeout(resolve, 21000));
+      await new Promise((resolve) => setTimeout(resolve, 7000));
 
       // Check dropped count - should have dropped chunks
       expect(forwarder.getDroppedChunkCount('task-no-retry')).toBe(1);
@@ -314,7 +314,7 @@ describe('LogForwarder', () => {
       );
     });
 
-    it('should drop chunks after max retries exceeded', { timeout: 25000 }, async () => {
+    it('should drop chunks after max retries exceeded', { timeout: 15000 }, async () => {
       mockFetch.mockImplementation(async () => {
         return {
           ok: false,
@@ -333,7 +333,7 @@ describe('LogForwarder', () => {
 
       writeFileSync(logFile, 'Test\n');
 
-      await new Promise((resolve) => setTimeout(resolve, 21000));
+      await new Promise((resolve) => setTimeout(resolve, 7000));
 
       // Check dropped count BEFORE stopping (state is deleted on stop)
       expect(forwarder.getDroppedChunkCount('task-drop')).toBe(1);
@@ -371,7 +371,7 @@ describe('LogForwarder', () => {
       await forwarder.stopForwarding('task-chunk');
     });
 
-    it('should chunk by time every 10 seconds', { timeout: 15000 }, async () => {
+    it('should chunk by time every 3 seconds', { timeout: 10000 }, async () => {
       const forwarder = createMockForwarder();
       captureUploadedChunks();
 
@@ -381,7 +381,7 @@ describe('LogForwarder', () => {
       writeFileSync(logFile, 'Small content\n');
 
       // Wait for timer-triggered flush
-      await new Promise((resolve) => setTimeout(resolve, 11 * 1000));
+      await new Promise((resolve) => setTimeout(resolve, 4 * 1000));
 
       const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-time');
       expect(taskUploads.length).toBeGreaterThan(0);
@@ -498,7 +498,7 @@ describe('LogForwarder', () => {
       expect(forwarder.getDroppedChunkCount('non-existent')).toBe(0);
     });
 
-    it('should return dropped chunk count for active task', { timeout: 25000 }, async () => {
+    it('should return dropped chunk count for active task', { timeout: 15000 }, async () => {
       mockFetch.mockImplementation(async () => {
         return {
           ok: false,
@@ -517,8 +517,8 @@ describe('LogForwarder', () => {
 
       writeFileSync(logFile, 'Test\n');
 
-      // Wait for polling, chunking, and retries (21s for two timer intervals)
-      await new Promise((resolve) => setTimeout(resolve, 21000));
+      // Wait for polling, chunking, and retries (7s for two timer intervals)
+      await new Promise((resolve) => setTimeout(resolve, 7000));
 
       expect(forwarder.getDroppedChunkCount('task-dropped')).toBe(1);
 

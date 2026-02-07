@@ -48,17 +48,12 @@ export async function main(
 
   try {
     // Start HTTP server
-    const isProd = process.env['NODE_ENV'] === 'production';
-    /* v8 ignore start -- ts-type: fastify logger config branches based on isProd ternary @preserve */
     const app = fastify({
-      logger: isProd
-        ? { level: process.env['LOG_LEVEL'] ?? 'info' }
-        : {
-            level: process.env['LOG_LEVEL'] ?? 'info',
-            transport: { target: 'pino-pretty', options: { colorize: true } },
-          },
+      logger: {
+        level: process.env['LOG_LEVEL'] ?? 'info',
+        transport: { target: 'pino-pretty', options: { colorize: true, singleLine: true } },
+      },
     });
-    /* v8 ignore stop @preserve */
 
     void app.register(cors);
 
