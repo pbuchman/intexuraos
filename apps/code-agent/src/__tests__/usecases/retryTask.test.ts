@@ -3,7 +3,7 @@
  *
  * Test Requirements from INT-520:
  * 1. Returns error when original task not found
- * 2. Returns error when task status is not 'failed'
+ * 2. Returns error when task status is not 'failed' or 'cancelled'
  * 3. Returns error when task failed less than 5 minutes ago (cool-off period)
  * 4. Successfully creates retry task with retriedFrom set
  * 5. Updates Linear issue state to In Progress
@@ -54,59 +54,6 @@ describe('retryTask use case', () => {
   const originalTaskId = 'task_abc123';
   const linearIssueId = 'INT-520';
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    // Mock logger
-    mockLogger = {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-      fatal: vi.fn(),
-      trace: vi.fn(),
-      level: 'info',
-      isLevelEnabled: vi.fn(() => true),
-    } as unknown as Logger;
-
-    // Mock code task repo
-    mockCodeTaskRepo = {
-      findByIdForUser: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      hasActiveTaskForLinearIssue: vi.fn(),
-    };
-
-    // Mock Linear agent client
-    mockLinearAgentClient = {
-      updateIssueState: vi.fn(),
-      validateIssue: vi.fn(),
-      generateTitle: vi.fn(),
-      createIssue: vi.fn(),
-      addComment: vi.fn(),
-    };
-
-    // Mock task dispatcher
-    mockTaskDispatcher = {
-      dispatch: vi.fn(),
-    };
-
-    // Mock WhatsApp notifier
-    mockWhatsAppNotifier = {
-      notifyTaskStarted: vi.fn(),
-    };
-
-    // Mock worker settings repo
-    mockWorkerSettingsRepo = {
-      getSettings: vi.fn(),
-    };
-
-    // Mock metrics client
-    mockMetricsClient = {
-      incrementTasksSubmitted: vi.fn(),
-    };
-  });
-
   function createMockTask(overrides: Partial<CodeTask> = {}): CodeTask {
     const now = Timestamp.now();
     const task: CodeTask = {
@@ -144,6 +91,59 @@ describe('retryTask use case', () => {
     return task;
   }
 
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // Mock logger
+    mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      fatal: vi.fn(),
+      trace: vi.fn(),
+      level: 'info',
+      isLevelEnabled: vi.fn(() => true),
+    } as unknown as Logger;
+
+    // Mock code task repo
+    mockCodeTaskRepo = {
+      findByIdForUser: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn().mockResolvedValue(ok(createMockTask())),
+      hasActiveTaskForLinearIssue: vi.fn(),
+    };
+
+    // Mock Linear agent client
+    mockLinearAgentClient = {
+      updateIssueState: vi.fn(),
+      validateIssue: vi.fn(),
+      generateTitle: vi.fn(),
+      createIssue: vi.fn(),
+      addComment: vi.fn(),
+    };
+
+    // Mock task dispatcher
+    mockTaskDispatcher = {
+      dispatch: vi.fn(),
+    };
+
+    // Mock WhatsApp notifier
+    mockWhatsAppNotifier = {
+      notifyTaskStarted: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+
+    // Mock worker settings repo
+    mockWorkerSettingsRepo = {
+      getSettings: vi.fn(),
+    };
+
+    // Mock metrics client
+    mockMetricsClient = {
+      incrementTasksSubmitted: vi.fn().mockResolvedValue(undefined),
+    };
+  });
+
   function createDeps(): RetryTaskDeps {
     return {
       logger: mockLogger,
@@ -175,10 +175,10 @@ describe('retryTask use case', () => {
       }
     });
 
-    it('should return error when task status is not failed', async () => {
-      const nonFailedStatuses: TaskStatus[] = ['dispatched', 'running', 'completed', 'interrupted', 'cancelled'];
+    it('should return error when task status is not failed or cancelled', async () => {
+      const nonRetryableStatuses: TaskStatus[] = ['dispatched', 'running', 'completed', 'interrupted'];
 
-      for (const status of nonFailedStatuses) {
+      for (const status of nonRetryableStatuses) {
         vi.clearAllMocks();
         const mockTask = createMockTask({ status });
         mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
@@ -192,7 +192,7 @@ describe('retryTask use case', () => {
         expect(result.ok).toBe(false);
         if (!result.ok) {
           expect(result.error.code).toBe('invalid_status');
-          expect(result.error.message).toContain('Only failed tasks can be retried');
+          expect(result.error.message).toContain('Only failed or cancelled tasks can be retried');
         }
       }
     });
@@ -214,6 +214,141 @@ describe('retryTask use case', () => {
         expect(result.error.code).toBe('too_soon');
         // The message should contain "minute(s)" showing remaining time
         expect(result.error.message).toMatch(/minute\(s\)/);
+      }
+    });
+
+    it('should successfully retry a cancelled task and bypass cool-off', async () => {
+      const retryTaskId = 'task_retry_cancelled';
+      const mockCancelledTask = createMockTask({
+        status: 'cancelled',
+      }) as unknown as Record<string, unknown>;
+      delete mockCancelledTask['completedAt'];
+      delete mockCancelledTask['error'];
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockCancelledTask as unknown as CodeTask));
+
+      mockCodeTaskRepo.create.mockImplementation((input) => {
+        const newTask: CodeTask = {
+          id: retryTaskId,
+          userId: input.userId,
+          traceId: input.traceId,
+          prompt: input.prompt,
+          sanitizedPrompt: input.sanitizedPrompt,
+          systemPromptHash: input.systemPromptHash,
+          workerType: input.workerType,
+          workerLocation: input.workerLocation,
+          repository: input.repository,
+          baseBranch: input.baseBranch,
+          status: 'dispatched',
+          dedupKey: 'new-dedup-key',
+          callbackReceived: false,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          retriedFrom: originalTaskId,
+          webhookSecret: input.webhookSecret ?? 'whsec_secret',
+          linearIssueId,
+          linearIssueTitle: 'Retry mechanism test',
+        };
+        return Promise.resolve(ok(newTask));
+      });
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ orchestratorTaskId: 'orch-123', workerLocation: 'home-mac' })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(ok({ hasActive: false }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'https://worker.example.com',
+            enabled: true,
+            cfAccessClientId: 'client-id',
+            cfAccessClientSecret: 'client-secret',
+            dispatchSigningSecret: 'webhook-secret',
+          }],
+        })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe(retryTaskId);
+        expect(result.value.retriedFrom).toBe(originalTaskId);
+      }
+
+      // Verify Linear comment uses dynamic status text
+      expect(mockLinearAgentClient.addComment).toHaveBeenCalledWith({
+        userId,
+        issueId: linearIssueId,
+        body: expect.stringContaining('Retrying cancelled task'),
+      });
+    });
+
+    it('should bypass cool-off for cancelled task even with completedAt set', async () => {
+      // A cancelled task with completedAt should still bypass cool-off
+      const twoMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 2 * 60 * 1000));
+      const retryTaskId = 'task_retry_cancelled_with_completed';
+      const mockCancelledTask = createMockTask({
+        status: 'cancelled',
+        completedAt: twoMinutesAgo,
+      }) as unknown as Record<string, unknown>;
+      delete mockCancelledTask['error'];
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockCancelledTask as unknown as CodeTask));
+
+      mockCodeTaskRepo.create.mockImplementation((input) => {
+        const newTask: CodeTask = {
+          id: retryTaskId,
+          userId: input.userId,
+          traceId: input.traceId,
+          prompt: input.prompt,
+          sanitizedPrompt: input.sanitizedPrompt,
+          systemPromptHash: input.systemPromptHash,
+          workerType: input.workerType,
+          workerLocation: input.workerLocation,
+          repository: input.repository,
+          baseBranch: input.baseBranch,
+          status: 'dispatched',
+          dedupKey: 'new-dedup-key',
+          callbackReceived: false,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          retriedFrom: originalTaskId,
+          webhookSecret: input.webhookSecret ?? 'whsec_secret',
+          linearIssueId,
+          linearIssueTitle: 'Retry mechanism test',
+        };
+        return Promise.resolve(ok(newTask));
+      });
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ orchestratorTaskId: 'orch-123', workerLocation: 'home-mac' })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(ok({ hasActive: false }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'https://worker.example.com',
+            enabled: true,
+            cfAccessClientId: 'client-id',
+            cfAccessClientSecret: 'client-secret',
+            dispatchSigningSecret: 'webhook-secret',
+          }],
+        })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      // Should succeed — cancelled tasks bypass cool-off regardless of completedAt
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe(retryTaskId);
       }
     });
 
@@ -430,6 +565,13 @@ describe('retryTask use case', () => {
         userId,
         issueId: linearIssueId,
         state: 'in_progress',
+      });
+
+      // Verify Linear comment uses dynamic status text for failed tasks
+      expect(mockLinearAgentClient.addComment).toHaveBeenCalledWith({
+        userId,
+        issueId: linearIssueId,
+        body: expect.stringContaining('Retrying failed task'),
       });
     });
 
@@ -674,6 +816,47 @@ describe('retryTask use case', () => {
             message: 'No workers available',
           },
         })
+      );
+    });
+
+    it('should log warning when update fails on dispatch failure path', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
+      const retryTaskId = 'retry-task-update-fail';
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'http://localhost:3000',
+            enabled: true,
+            cfAccessClientId: undefined,
+            cfAccessClientSecret: undefined,
+            dispatchSigningSecret: 'secret',
+          }],
+        })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'WORKER_UNAVAILABLE', message: 'No workers available' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        err({ code: 'NOT_FOUND', message: 'Task not found for update' })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      // Should still return ok — task was created even though update failed
+      expect(result.ok).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: retryTaskId }),
+        'Failed to persist dispatch error on retry task'
       );
     });
 

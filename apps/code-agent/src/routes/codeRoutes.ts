@@ -2701,15 +2701,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
-  // POST /code/retry - Retry a failed code task (INT-520)
+  // POST /code/retry - Retry a failed or cancelled code task (INT-520)
   fastify.post(
     '/code/retry',
     {
       onRequest: jwtValidator,
       schema: {
         operationId: 'retryCodeTask',
-        summary: 'Retry a failed code task',
-        description: 'Creates a new task based on a failed task, with optional additional context. Requires Auth0 JWT.',
+        summary: 'Retry a failed or cancelled code task',
+        description: 'Creates a new task based on a failed or cancelled task, with optional additional context. Requires Auth0 JWT.',
         tags: ['public'],
         body: {
           type: 'object',
@@ -2717,7 +2717,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             taskId: {
               type: 'string',
-              description: 'The ID of the failed task to retry',
+              description: 'The ID of the failed or cancelled task to retry',
             },
             additionalContext: {
               type: 'string',
