@@ -11,6 +11,7 @@ export interface WorktreeManagerConfig {
   repositoryPath: string;
   worktreeBasePath: string;
   mcpConfigTemplatePath: string;
+  claudeSettings?: Record<string, unknown>;
 }
 
 export class WorktreeManager {
@@ -51,6 +52,11 @@ export class WorktreeManager {
       // Copy MCP config template if provided
       if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
         await this.copyMcpConfig(worktreePath);
+      }
+
+      // Write Claude settings (output style, permissions, etc.)
+      if (this.config.claudeSettings !== undefined) {
+        await this.writeClaudeSettings(worktreePath);
       }
 
       // Install dependencies with timeout
@@ -166,6 +172,13 @@ export class WorktreeManager {
       throw new Error(`Failed to copy MCP config: ${message}`);
       /* v8 ignore stop @preserve */
     }
+  }
+
+  private async writeClaudeSettings(worktreePath: string): Promise<void> {
+    const claudeDir = join(worktreePath, '.claude');
+    await mkdir(claudeDir, { recursive: true });
+    const settingsPath = join(claudeDir, 'settings.local.json');
+    await writeFile(settingsPath, JSON.stringify(this.config.claudeSettings, null, 2), 'utf-8');
   }
 
   private async installDependencies(worktreePath: string): Promise<void> {

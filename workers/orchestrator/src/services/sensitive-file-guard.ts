@@ -13,6 +13,8 @@ export class SensitiveFileGuard {
   constructor(private readonly logger: Logger) {
     this.patterns = [
       '**/.env',
+      '**/.envrc',
+      '**/.envrc.local',
       '**/.env.*',
       '**/credentials.json',
       '**/serviceAccountKey.json',
