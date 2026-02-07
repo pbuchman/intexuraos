@@ -260,14 +260,12 @@ const PromptCard = memo(function PromptCard({
   copiedSection,
 }: PromptCardProps): React.JSX.Element {
   return (
-    <Card title="Prompt" className="mb-6">
-      <div className="mb-2 flex justify-end">
+    <Card title="Task Instructions" className="mb-6">
+      <div className="mb-4 flex justify-end">
         <Button
           variant="secondary"
           onClick={() => {
-            onCopy(prompt, 'prompt').catch(() => {
-              // Silently ignore copy errors
-            });
+            void onCopy(prompt, 'prompt');
           }}
         >
           <Copy className="h-4 w-4 sm:mr-2" />
