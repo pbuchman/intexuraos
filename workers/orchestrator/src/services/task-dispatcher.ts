@@ -443,15 +443,20 @@ export class TaskDispatcher {
     try {
       const execOptions = { cwd: task.worktreePath };
 
-      // Check for pull requests
+      // Get current branch name from worktree
+      const { stdout: branchOutput } = await execAsync('git branch --show-current', execOptions);
+      const currentBranch = branchOutput.trim();
+
+      // Check for pull requests on this branch
       const { stdout: prOutput } = await execAsync(
-        'gh pr list --head "*" --json url,number,title,commits --jq .',
+        `gh pr list --head "${currentBranch}" --json url,number,headRefName,title,commits --jq .`,
         execOptions
       );
       const prs = JSON.parse(prOutput) as {
         url: string;
+        number: number;
         headRefName: string;
-        commits?: { totalCount: number };
+        commits?: unknown[];
         title: string;
       }[];
 
@@ -462,17 +467,24 @@ export class TaskDispatcher {
           return undefined;
         }
         const branch = pr.headRefName;
-        const commits = pr.commits?.totalCount ?? 0;
+        const commits = Array.isArray(pr.commits) ? pr.commits.length : 0;
         /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
 
         // Check CI status
-        const { stdout: ciOutput } = await execAsync(
-          /* v8 ignore stop @preserve */
-          `gh pr checks ${branch} --json status --jq .status`,
-          execOptions
-        );
-        const ciStatus = JSON.parse(ciOutput) as string;
-        const ciFailed = ciStatus === 'FAILURE';
+        let ciFailed = false;
+        try {
+          const { stdout: ciOutput } = await execAsync(
+            /* v8 ignore stop @preserve */
+            `gh pr checks ${String(pr.number)} --json state --jq '[.[] | select(.state == "FAILURE")] | length'`,
+            execOptions
+          );
+          ciFailed = parseInt(ciOutput.trim(), 10) > 0;
+        } catch {
+          this.logger.warn(
+            { taskId: task.taskId },
+            'Failed to check CI status, assuming not failed'
+          );
+        }
 
         // Check for rebase result
         let rebaseResult: TaskResult['rebaseResult'] | undefined;
