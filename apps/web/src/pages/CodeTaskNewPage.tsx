@@ -186,6 +186,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   setPrompt(value ?? '');
                 }}
                 preview="edit"
+                visibleDragbar={false}
                 height={200}
                 previewOptions={{
                   rehypePlugins: [rehypeSanitize],
@@ -204,6 +205,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   setPrompt(value ?? '');
                 }}
                 preview="edit"
+                visibleDragbar={false}
                 height={200}
                 previewOptions={{
                   rehypePlugins: [rehypeSanitize],
