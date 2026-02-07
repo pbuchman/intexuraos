@@ -12,7 +12,7 @@
 - **Zod Schema Validation** — ResearchContext and SynthesisContext use Zod for field-level error reporting
 - **Parser + Repair Pattern** — Automatic LLM response repair when validation fails
 - **LLM Package Restructuring** — `llm-common` split into `llm-factory`, `llm-prompts`, `llm-utils`
-- **GLM-4.7-Flash** — Free model added for cost-sensitive classification tasks
+- **GLM-4.7-Flash** — Lightweight model added for cost-sensitive classification tasks
 
 ---
 
@@ -97,19 +97,19 @@ graph TB
 
 Models capable of complex reasoning, web search, and multi-step analysis.
 
-| Model                 | Provider   | Strengths                                 |
-| --------------------- | ---------- | ----------------------------------------- |
-| Gemini 2.5 Pro        | Google     | Long context (1M tokens), grounded search |
-| Gemini 2.5 Flash      | Google     | Fast, cost-effective, good reasoning      |
-| GPT-5.2               | OpenAI     | Latest OpenAI flagship, strong reasoning  |
-| O4 Mini Deep Research | OpenAI     | Agentic research with tool use            |
-| Claude Opus 4.5       | Anthropic  | Best reasoning, nuanced analysis          |
-| Claude Sonnet 4.5     | Anthropic  | Balanced performance/cost                 |
-| Sonar                 | Perplexity | Real-time web search                      |
-| Sonar Pro             | Perplexity | Enhanced web search with more sources     |
-| Sonar Deep Research   | Perplexity | Multi-step agentic research               |
-| GLM-4.7               | Zai        | Alternative provider, good multilingual   |
-| GLM-4.7-Flash         | Zai        | Fast, free model for cost-sensitive tasks |
+| Model                 | Provider   | Strengths                                        |
+| --------------------- | ---------- | ------------------------------------------------ |
+| Gemini 2.5 Pro        | Google     | Long context (1M tokens), grounded search        |
+| Gemini 2.5 Flash      | Google     | Fast, cost-effective, good reasoning             |
+| GPT-5.2               | OpenAI     | Latest OpenAI flagship, strong reasoning         |
+| O4 Mini Deep Research | OpenAI     | Agentic research with tool use                   |
+| Claude Opus 4.5       | Anthropic  | Best reasoning, nuanced analysis                 |
+| Claude Sonnet 4.5     | Anthropic  | Balanced performance/cost                        |
+| Sonar                 | Perplexity | Real-time web search                             |
+| Sonar Pro             | Perplexity | Enhanced web search with more sources            |
+| Sonar Deep Research   | Perplexity | Multi-step agentic research                      |
+| GLM-4.7               | Zai        | Alternative provider, good multilingual          |
+| GLM-4.7-Flash         | Zai        | Fast, lightweight model for cost-sensitive tasks |
 
 ### Fast Models (4)
 
@@ -119,7 +119,7 @@ Optimized for quick, low-cost operations like classification and extraction.
 | ---------------- | -------- | ----------------------------------------- |
 | Gemini 2.5 Flash | Google   | Intent classification, title generation   |
 | Gemini 2.0 Flash | Google   | API key validation, quick inference       |
-| GLM-4.7-Flash    | Zai      | Free classification, cost-effective tasks |
+| GLM-4.7-Flash    | Zai      | Fast classification, cost-effective tasks |
 
 ### Image Models (2)
 
@@ -141,7 +141,7 @@ Cheap, fast models for API key validation and simple tasks.
 | GPT-4o Mini      | OpenAI     | $0.15/M input  |
 | Sonar            | Perplexity | $1.00/M input  |
 | GLM-4.7          | Zai        | $0.60/M input  |
-| GLM-4.7-Flash    | Zai        | Free           |
+| GLM-4.7-Flash    | Zai        | $0             |
 
 ---
 

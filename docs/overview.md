@@ -100,13 +100,13 @@ New 3-column layout optimized for workflow visibility:
 
 IntexuraOS integrates with **5 AI providers** and **17 models**, treating them as a **council of experts** rather than a single oracle:
 
-| Provider   | Models                                      | Capabilities                                  |
-| ---------- | ------------------------------------------- | --------------------------------------------- |
-| Google     | Gemini 2.5 Pro, Flash, Flash-Image          | Reasoning, classification, images             |
-| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, images              |
-| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Analysis, research, validation                |
-| Perplexity | Sonar, Sonar Pro, Sonar Deep Research       | Web search, real-time information             |
-| Zai        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, free tier (v2.0.0: Flash added) |
+| Provider   | Models                                      | Capabilities                                    |
+| ---------- | ------------------------------------------- | ----------------------------------------------- |
+| Google     | Gemini 2.5 Pro, Flash, Flash-Image          | Reasoning, classification, images               |
+| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, images                |
+| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Analysis, research, validation                  |
+| Perplexity | Sonar, Sonar Pro, Sonar Deep Research       | Web search, real-time information               |
+| Zai        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, lightweight (v2.0.0: Flash added) |
 
 ### Intelligent Routing
 

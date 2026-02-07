@@ -155,13 +155,13 @@ Single-model assistants hallucinate. IntexuraOS queries multiple AI experts simu
 
 IntexuraOS treats LLMs as a **council of experts**:
 
-| Provider       | Models                                      | Specialty                                     |
-| -------------- | ------------------------------------------- | --------------------------------------------- |
-| **Google**     | Gemini 2.5 Pro, Flash, Flash-Image          | Fast classification, image generation         |
-| **OpenAI**     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, creative content               |
-| **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Nuanced analysis, safety                      |
-| **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research       | Real-time web search                          |
-| **Zai**        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, free tier (Flash new in v2.0.0) |
+| Provider       | Models                                      | Specialty                                       |
+| -------------- | ------------------------------------------- | ----------------------------------------------- |
+| **Google**     | Gemini 2.5 Pro, Flash, Flash-Image          | Fast classification, image generation           |
+| **OpenAI**     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, creative content                 |
+| **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Nuanced analysis, safety                        |
+| **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research       | Real-time web search                            |
+| **Zai**        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, lightweight (Flash new in v2.0.0) |
 
 **Total**: 17 models across 5 providers
 
@@ -343,7 +343,7 @@ Built by [Piotr Buchman](https://www.linkedin.com/in/piotrbuchman/) — open to 
 | **Natural Language Models** | "Research with Claude and GPT"                     |
 | **5-Step Classification**   | URL isolation, explicit intent, Polish support     |
 | **Zod Validation**          | Type-safe LLM response handling                    |
-| **GLM-4.7-Flash**           | New free-tier model                                |
+| **GLM-4.7-Flash**           | New lightweight model                              |
 | **Linear Dashboard**        | 3-column layout (Planning → Work → Closed)         |
 
 ---

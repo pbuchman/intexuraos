@@ -159,19 +159,19 @@ Progressive Web App providing the unified dashboard for IntexuraOS.
 
 Used for deep research queries with parallel execution. **v2.0.0:** Users can specify models in natural language ("research with Claude and GPT").
 
-| Model                 | Provider   | Specialty                     |
-| --------------------- | ---------- | ----------------------------- |
-| Gemini 2.5 Pro        | Google     | Reasoning, analysis           |
-| Gemini 2.5 Flash      | Google     | Fast responses                |
-| GPT-5.2               | OpenAI     | Creative synthesis            |
-| o4-mini-deep-research | OpenAI     | Deep research                 |
-| Claude Opus 4.5       | Anthropic  | Nuanced analysis              |
-| Claude Sonnet 4.5     | Anthropic  | Balanced performance          |
-| Sonar                 | Perplexity | Real-time web search          |
-| Sonar Pro             | Perplexity | Enhanced search               |
-| Sonar Deep Research   | Perplexity | Comprehensive search          |
-| GLM-4.7               | Zai        | Multilingual                  |
-| GLM-4.7-Flash         | Zai        | Free, fast responses (v2.0.0) |
+| Model                 | Provider   | Specialty                            |
+| --------------------- | ---------- | ------------------------------------ |
+| Gemini 2.5 Pro        | Google     | Reasoning, analysis                  |
+| Gemini 2.5 Flash      | Google     | Fast responses                       |
+| GPT-5.2               | OpenAI     | Creative synthesis                   |
+| o4-mini-deep-research | OpenAI     | Deep research                        |
+| Claude Opus 4.5       | Anthropic  | Nuanced analysis                     |
+| Claude Sonnet 4.5     | Anthropic  | Balanced performance                 |
+| Sonar                 | Perplexity | Real-time web search                 |
+| Sonar Pro             | Perplexity | Enhanced search                      |
+| Sonar Deep Research   | Perplexity | Comprehensive search                 |
+| GLM-4.7               | Zai        | Multilingual                         |
+| GLM-4.7-Flash         | Zai        | Fast, lightweight responses (v2.0.0) |
 
 ### Classification Models (3)
 
@@ -181,7 +181,7 @@ Used for intent classification and fast tasks. **v2.0.0:** 5-step decision tree 
 | ---------------- | -------- | -------------------------------------------- |
 | Gemini 2.5 Flash | Google   | Command classification, title generation     |
 | GLM-4.7          | Zai      | Alternative classifier                       |
-| GLM-4.7-Flash    | Zai      | Free classification, cost-effective (v2.0.0) |
+| GLM-4.7-Flash    | Zai      | Fast classification, cost-effective (v2.0.0) |
 
 ### Image Models (2)
 

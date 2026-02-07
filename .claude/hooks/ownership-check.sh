@@ -30,14 +30,13 @@ fi
 # See: https://github.com/anthropics/claude-code/issues/XXX (if filed)
 sleep 0.1
 
-# Get text content from RECENT assistant messages (last 2 to catch current turn)
-# This addresses the issue where the "last" message might be a tool_use with no text.
-# We check 2 recent messages to catch text while avoiding re-flagging old violations.
+# Get text content from the CURRENT assistant message only
+# Checking only the latest message avoids re-flagging violations from previous turns
+# which would create an infinite loop once a violation is triggered.
 # NOTE: Use -s (slurp) because transcripts are JSONL format (one object per line).
 RECENT_RESPONSES=$(jq -rs '
-  [.[] | select(.type == "assistant")] | .[-2:] |
-  map(.message.content // [] | map(.text // .thinking // empty) | join("\n")) |
-  join("\n")
+  [.[] | select(.type == "assistant")] | .[-1] |
+  .message.content // [] | map(.text // .thinking // empty) | join("\n")
 ' "$TRANSCRIPT_PATH" 2>/dev/null) || true
 
 if [[ -z "$RECENT_RESPONSES" ]]; then

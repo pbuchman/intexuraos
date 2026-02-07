@@ -12,10 +12,10 @@ Enable non-logged-in users to use the chat feature with rate limiting and a plat
 
 | Aspect                   | Decision                       | Rationale                             |
 | ------------------------ | ------------------------------ | ------------------------------------- |
-| **LLM Model**            | GLM-4.7-Flash                  | Free tier, no API costs               |
+| **LLM Model**            | GLM-4.7-Flash                  | Lightweight, cost-effective           |
 | **Provider**             | Zai (Zhipu AI)                 | Provides GLM models                   |
 | **Secret Name**          | `INTEXURAOS_GUEST_ZAI_API_KEY` | Stored in GCP Secret Manager          |
-| **Rate Limit**           | 100 messages/hour              | Generous since model is free          |
+| **Rate Limit**           | 100 messages/hour              | Cost-effective rate limiting          |
 | **Session Tracking**     | In-memory Map                  | Simple, resets on deploy (acceptable) |
 | **Guest Identification** | UUID in localStorage           | Sent via `X-Guest-Session` header     |
 | **RAG Access**           | Full documentation search      | Same experience as logged-in users    |

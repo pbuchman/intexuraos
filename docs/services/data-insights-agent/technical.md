@@ -80,7 +80,7 @@ sequenceDiagram
 | `88cec45`  | INT-269 Migrate to `@intexuraos/internal-clients`      | 2025-01-25 |
 | `b1c7a4b`  | INT-269 Create internal-clients package                | 2025-01-24 |
 | `8aad909`  | INT-241/242 Migrate imports, delete llm-common         | 2025-01-21 |
-| `2c3a98c`  | Add GLM-4.7-Flash support as free Zai AI model         | 2025-01-21 |
+| `2c3a98c`  | Add GLM-4.7-Flash support as Zai AI model              | 2025-01-21 |
 | `a68f5fd`  | INT-160 Fix empty chart definition                     | 2025-01-19 |
 | `06b1361`  | INT-137 Relax LM response sentence count validation    | 2025-01-17 |
 | `0664d57`  | INT-79 Add LLM response repair pattern for insights    | 2025-01-15 |

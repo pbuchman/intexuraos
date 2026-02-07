@@ -282,7 +282,7 @@ sequenceDiagram
 
 **Idempotency key format** - `{sourceType}:{externalId}` must be unique. WhatsApp message IDs can be reused across different phone numbers.
 
-**Classification pricing** - Uses Gemini 2.5 Flash at ~$0.001 per classification, GLM-4.7-Flash is free.
+**Classification pricing** - Uses Gemini 2.5 Flash at ~$0.001 per classification, GLM-4.7-Flash at $0.
 
 **Pub/Sub push authentication** - Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls.
 
