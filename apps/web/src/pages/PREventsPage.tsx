@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   AlertCircle,
   ChevronDown,
@@ -200,9 +199,6 @@ export function PREventsPage(): React.JSX.Element {
           >
             <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
-          <Link to="/code-tasks" className="text-sm text-blue-600 underline dark:text-blue-400">
-            Back to Code Tasks
-          </Link>
         </div>
       </div>
 

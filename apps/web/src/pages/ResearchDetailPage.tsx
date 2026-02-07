@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle,
@@ -514,9 +514,6 @@ export function ResearchDetailPage(): React.JSX.Element {
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error ?? 'Research not found'}
         </div>
-        <Link to="/research" className="text-blue-600 underline dark:text-blue-400">
-          Back to list
-        </Link>
       </Layout>
     );
   }
@@ -541,12 +538,6 @@ export function ResearchDetailPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mb-4">
-        <Link to="/research" className="text-sm text-blue-600 hover:underline">
-          ← Back to list
-        </Link>
-      </div>
-
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{getDisplayTitle()}</h2>
