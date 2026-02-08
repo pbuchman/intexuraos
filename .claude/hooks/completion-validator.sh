@@ -125,9 +125,13 @@ if [[ "$PHASE" == "1" ]] && [[ $VALIDATION_RESULT -eq 0 ]]; then
   validate_phase1 || VALIDATION_RESULT=1
 fi
 
-# Always log completion (sentinel for container lifecycle management)
+# Sentinel for container lifecycle management
+# Uses a dedicated file so the orchestrator can detect completion unambiguously,
+# regardless of other hooks' log ordering.
+SENTINEL_FILE="${SCRIPT_DIR}/validation-passed"
 if [[ $VALIDATION_RESULT -eq 0 ]]; then
   log_info "$HOOK_NAME" "completed" "Hook completed (phase ${PHASE:-none} allowed)"
+  echo "PASSED $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$SENTINEL_FILE"
 fi
 
 exit 0
