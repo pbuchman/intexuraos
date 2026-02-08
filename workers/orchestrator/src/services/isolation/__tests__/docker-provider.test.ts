@@ -148,6 +148,10 @@ class TestableDockerProvider extends DockerProvider {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any).docker = mockDocker;
   }
+
+  protected override async waitForContainerReady(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 describe('DockerProvider', () => {

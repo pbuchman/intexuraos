@@ -36,6 +36,14 @@ verify_network_restrictions &
 mkdir -p /home/claude/.config/gcloud /home/claude/.claude
 
 # ------------------------------------------------------------------------------
+# Restore Claude config defaults (skips onboarding on fresh tmpfs)
+# ------------------------------------------------------------------------------
+if [ -d "/opt/claude-defaults" ]; then
+    cp -a /opt/claude-defaults/. /home/claude/
+    echo "[entrypoint] Claude config defaults restored"
+fi
+
+# ------------------------------------------------------------------------------
 # Verify mounts
 # ------------------------------------------------------------------------------
 if [ ! -d "/repo" ]; then
