@@ -58,7 +58,7 @@ describe('OpenAPI contract', () => {
 
     const fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);
-    const logger = pino({ name: 'test' }) as unknown as Logger;
+    const logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
     const rateLimitService: RateLimitService = {
       async checkLimits() {

@@ -20,7 +20,7 @@ describe('ActionsAgentClient', () => {
   let mockFetchWithAuth: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    logger = pino({ name: 'test' }) as unknown as Logger;
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
     mockFetchWithAuth = fetchWithAuth as ReturnType<typeof vi.fn>;
     vi.clearAllMocks();
   });
