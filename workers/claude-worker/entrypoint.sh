@@ -104,12 +104,17 @@ setup_github_token
 ) &
 
 # ------------------------------------------------------------------------------
+# Configure pnpm to use persistent store (shared volume across containers)
+# ------------------------------------------------------------------------------
+pnpm config set store-dir /home/claude/pnpm-store --global
+
+# ------------------------------------------------------------------------------
 # Install dependencies (Linux-native node_modules via shared pnpm store)
 # ------------------------------------------------------------------------------
 if [ -f "/repo/pnpm-lock.yaml" ]; then
     echo "[entrypoint] Installing dependencies..."
     cd /repo
-    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile 2>&1
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile --store-dir /home/claude/pnpm-store 2>&1
     echo "[entrypoint] Dependencies installed"
 fi
 
@@ -122,10 +127,17 @@ if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
     echo "[entrypoint] Git branch: $(git -C /repo branch --show-current 2>/dev/null || echo 'unknown')"
 fi
 
-# Signal to orchestrator that entrypoint setup is done and Claude is about to launch.
-# The orchestrator polls for this file before sending the API key approval sequence,
-# preventing the prompt from being dumped into bash while pnpm install is still running.
-touch /tmp/claude-ready
+# ------------------------------------------------------------------------------
+# Pre-approve API key so Claude skips the interactive TUI prompt
+# ------------------------------------------------------------------------------
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    CLAUDE_JSON="/home/claude/.claude.json"
+    if [ -f "$CLAUDE_JSON" ]; then
+        UPDATED=$(jq --arg key "$ANTHROPIC_API_KEY" '.customApiKeyResponses[$key] = true' "$CLAUDE_JSON")
+        echo "$UPDATED" > "$CLAUDE_JSON"
+        echo "[entrypoint] API key pre-approved in claude.json"
+    fi
+fi
 
 echo "[entrypoint] Starting Claude in interactive mode..."
 exec claude -d --dangerously-skip-permissions --verbose
