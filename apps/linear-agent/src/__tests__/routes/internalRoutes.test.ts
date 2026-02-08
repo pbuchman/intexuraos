@@ -57,6 +57,7 @@ describe('internalRoutes', () => {
       processedActionRepository: fakeProcessedActionRepo,
       issueRepository: fakeIssueRepo,
       userServiceClient: fakeUserServiceClient,
+      commentRepository: null as unknown as import('../../domain/index.js').LinearCommentRepository,
     });
 
     app = await buildServer();
@@ -104,11 +105,11 @@ describe('internalRoutes', () => {
     };
   }
 
-  describe('GET /internal/linear/issues/:identifier', () => {
+  describe('GET /internal/linear/issues/:identifier/validate', () => {
     it('returns 401 when no internal auth header provided', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/linear/issues/INT-123?userId=user-456',
+        url: '/internal/linear/issues/INT-123/validate?userId=user-456',
       });
 
       expect(response.statusCode).toBe(401);
@@ -120,7 +121,7 @@ describe('internalRoutes', () => {
     it('returns 401 when internal auth header is invalid', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/linear/issues/INT-123?userId=user-456',
+        url: '/internal/linear/issues/INT-123/validate?userId=user-456',
         headers: { 'x-internal-auth': 'invalid-token' },
       });
 
@@ -133,7 +134,7 @@ describe('internalRoutes', () => {
     it('returns 400 when identifier format is invalid', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/linear/issues/invalid-format?userId=user-456',
+        url: '/internal/linear/issues/invalid-format/validate?userId=user-456',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -146,7 +147,7 @@ describe('internalRoutes', () => {
     it('returns 403 when user is not connected', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/linear/issues/INT-123?userId=user-456',
+        url: '/internal/linear/issues/INT-123/validate?userId=user-456',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -161,7 +162,7 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/linear/issues/INT-999?userId=user-456',
+        url: '/internal/linear/issues/INT-999/validate?userId=user-456',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -178,7 +179,7 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/linear/issues/INT-123?userId=user-456',
+        url: '/internal/linear/issues/INT-123/validate?userId=user-456',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -195,7 +196,7 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/linear/issues/INT-123?userId=user-456',
+        url: '/internal/linear/issues/INT-123/validate?userId=user-456',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -218,7 +219,7 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/linear/issues/INT-123?userId=user-456',
+        url: '/internal/linear/issues/INT-123/validate?userId=user-456',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -236,7 +237,7 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/linear/issues/INT-123?userId=user-456',
+        url: '/internal/linear/issues/INT-123/validate?userId=user-456',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 

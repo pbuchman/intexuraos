@@ -12,6 +12,7 @@ import {
   FakeProcessedActionRepository,
   FakeUserServiceClient,
   FakeLinearIssueRepository,
+  FakeLinearCommentRepository,
 } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
 
@@ -169,6 +170,7 @@ export interface TestContext {
   failedIssueRepository: FakeFailedIssueRepository;
   processedActionRepository: FakeProcessedActionRepository;
   issueRepository: FakeLinearIssueRepository;
+  commentRepository: FakeLinearCommentRepository;
   userServiceClient: FakeUserServiceClient;
   withTestLogger?: boolean;
 }
@@ -182,6 +184,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     failedIssueRepository: null as unknown as FakeFailedIssueRepository,
     processedActionRepository: null as unknown as FakeProcessedActionRepository,
     issueRepository: null as unknown as FakeLinearIssueRepository,
+    commentRepository: null as unknown as FakeLinearCommentRepository,
     userServiceClient: null as unknown as FakeUserServiceClient,
     withTestLogger,
   };
@@ -203,6 +206,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.failedIssueRepository = new FakeFailedIssueRepository();
     context.processedActionRepository = new FakeProcessedActionRepository();
     context.issueRepository = new FakeLinearIssueRepository();
+    context.commentRepository = new FakeLinearCommentRepository();
     context.userServiceClient = new FakeUserServiceClient();
     setServices({
       connectionRepository: context.connectionRepository,
@@ -211,6 +215,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
       failedIssueRepository: context.failedIssueRepository,
       processedActionRepository: context.processedActionRepository,
       issueRepository: context.issueRepository,
+      commentRepository: context.commentRepository,
       userServiceClient: context.userServiceClient,
     });
     clearJwksCache();
@@ -229,6 +234,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.failedIssueRepository.reset();
     context.processedActionRepository.reset();
     context.issueRepository.reset();
+    context.commentRepository.reset();
     context.userServiceClient.reset();
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   });

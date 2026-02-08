@@ -150,6 +150,10 @@
       "owner": "linear-agent",
       "description": "Locally synced Linear issues with webhook and full-sync support"
     },
+    "linear_issue_comments": {
+      "owner": "linear-agent",
+      "description": "Synced Linear issue comments from webhook events"
+    },
     "code_tasks": {
       "owner": "code-agent",
       "description": "Code execution tasks",

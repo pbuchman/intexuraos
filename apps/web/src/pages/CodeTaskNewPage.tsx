@@ -176,7 +176,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">
-              Task Description <span className="text-red-500">*</span>
+              Task Instructions <span className="text-red-500">*</span>
             </label>
             <div data-color-mode="light" className="dark:hidden">
               <MDEditor

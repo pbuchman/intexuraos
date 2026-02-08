@@ -40,3 +40,26 @@ export interface LinearWebhookEvent {
   webhookTimestamp: number;
   webhookId: string;
 }
+
+export interface LinearCommentWebhookPayload {
+  id: string;
+  issueId: string;
+  /** Issue identifier (e.g., "INT-123") */
+  issueIdentifier: string;
+  /** Comment author */
+  user: {
+    id: string;
+    name: string;
+  };
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LinearCommentWebhookEvent {
+  action: WebhookAction;
+  type: string;
+  data: LinearCommentWebhookPayload;
+  webhookTimestamp: number;
+  webhookId: string;
+}

@@ -188,3 +188,16 @@ export interface SyncedLinearIssue {
   updatedAt: string; /* ISO timestamp from Linear */
   syncedAt: string; /* When we last synced this issue */
 }
+
+/** Locally synced Linear comment (stored in Firestore) */
+export interface LinearComment {
+  id: string; /* Linear UUID (document ID) */
+  issueId: string; /* Linear issue UUID */
+  issueIdentifier: string; /* e.g., "INT-444" */
+  userId: string; /* Comment author Linear user ID */
+  userName: string; /* Comment author display name */
+  body: string; /* Comment body (can include markdown) */
+  createdAt: string; /* ISO timestamp from Linear */
+  updatedAt: string; /* ISO timestamp from Linear */
+  syncedAt: string; /* When we last synced this comment */
+}

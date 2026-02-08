@@ -11,6 +11,7 @@ import {
   FakeFailedIssueRepository,
   FakeProcessedActionRepository,
   FakeUserServiceClient,
+  FakeLinearCommentRepository,
 } from '../fakes.js';
 import { setServices, resetServices } from '../../services.js';
 import crypto from 'node:crypto';
@@ -18,6 +19,7 @@ import crypto from 'node:crypto';
 describe('Linear Webhook Routes', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let issueRepo: FakeLinearIssueRepository;
+  let commentRepo: FakeLinearCommentRepository;
   let connectionRepo: FakeLinearConnectionRepository;
   let linearApiClient: FakeLinearApiClient;
   let extractionService: FakeLinearActionExtractionService;
@@ -34,6 +36,7 @@ describe('Linear Webhook Routes', () => {
     // Webhook secrets are now per-connection
 
     issueRepo = new FakeLinearIssueRepository();
+    commentRepo = new FakeLinearCommentRepository();
     connectionRepo = new FakeLinearConnectionRepository();
     linearApiClient = new FakeLinearApiClient();
     extractionService = new FakeLinearActionExtractionService();
@@ -60,6 +63,7 @@ describe('Linear Webhook Routes', () => {
       failedIssueRepository: failedIssueRepo,
       processedActionRepository: processedActionRepo,
       issueRepository: issueRepo,
+      commentRepository: commentRepo,
       userServiceClient,
     });
 
@@ -72,6 +76,7 @@ describe('Linear Webhook Routes', () => {
     resetServices();
     connectionRepo.reset();
     issueRepo.reset();
+    commentRepo.reset();
     linearApiClient.reset();
     extractionService.reset();
     failedIssueRepo.reset();
@@ -163,7 +168,7 @@ describe('Linear Webhook Routes', () => {
     });
 
     it('returns 200 for non-Issue webhook events', async () => {
-      const payload = createLinearWebhookPayload({ type: 'Comment' });
+      const payload = createLinearWebhookPayload({ type: 'Label' });
       const signature = computeLinearSignature(payload);
 
       const response = await app.inject({
@@ -223,6 +228,7 @@ describe('Linear Webhook Routes', () => {
         failedIssueRepository: failedIssueRepo,
         processedActionRepository: processedActionRepo,
         issueRepository: issueRepo,
+        commentRepository: commentRepo,
         userServiceClient,
       });
 

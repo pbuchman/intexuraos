@@ -63,6 +63,18 @@ export interface AddCommentResponse {
   commentId: string;
 }
 
+export interface LinearIssueForDisplay {
+  identifier: string;
+  title: string;
+  state: { name: string; type: string };
+  priority: number;
+  assignee: { id: string; name: string } | null;
+  labels: { id: string; name: string }[];
+  url: string;
+  commentCount: number;
+  lastCommentAt: string | null;
+}
+
 export interface LinearAgentError {
   code: 'UNAVAILABLE' | 'RATE_LIMITED' | 'INVALID_REQUEST' | 'NOT_FOUND' | 'UNKNOWN';
   message: string;
@@ -98,4 +110,10 @@ export interface LinearAgentClient {
    * Used for adding retry context when retrying failed tasks.
    */
   addComment(request: AddCommentRequest): Promise<Result<AddCommentResponse, LinearAgentError>>;
+
+  /**
+   * Fetch Linear issue data for display in task detail view.
+   * Returns structured issue data from linear-agent's internal API.
+   */
+  fetchIssueForDisplay(request: ValidateIssueRequest): Promise<Result<LinearIssueForDisplay, LinearAgentError>>;
 }

@@ -166,6 +166,20 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
+ * Format elapsed time as human-friendly "5s" / "3m 5s" / "1h 30m"
+ * Use for: Task duration display, elapsed time indicators
+ */
+export function formatElapsedTime(seconds: number): string {
+  if (seconds < 60) return `${String(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return `${String(minutes)}m ${String(remainingSeconds)}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${String(hours)}h ${String(remainingMinutes)}m`;
+}
+
+/**
  * Format time only as "14:30:45" (24-hour format with seconds)
  * Use for: Event logs, DevBar, precise timestamps
  */

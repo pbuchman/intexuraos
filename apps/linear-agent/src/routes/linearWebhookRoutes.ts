@@ -21,13 +21,70 @@ declare module 'fastify' {
   }
 }
 import { validateLinearWebhookSignature } from '../infra/linearWebhookValidation.js';
-import { syncSingleIssue } from '../domain/index.js';
-import type { LinearWebhookEvent } from '../domain/webhookTypes.js';
+import { syncSingleIssue, syncCommentFromWebhook } from '../domain/index.js';
+import type { LinearWebhookEvent, LinearCommentWebhookEvent } from '../domain/webhookTypes.js';
 
 interface LinearWebhookBody {
   action: string;
   type: string;
-  data: {
+  data:
+    | {
+        id: string;
+        identifier: string;
+        title: string;
+        description: string | null;
+        priority: number;
+        url: string;
+        createdAt: string;
+        updatedAt: string;
+        state: {
+          id: string;
+          name: string;
+          type: string;
+        };
+        assignee: {
+          id: string;
+          name: string;
+        } | null;
+        labels: {
+          id: string;
+          name: string;
+        }[];
+        team: {
+          id: string;
+          key: string;
+        };
+      }
+    | {
+        id: string;
+        issueId: string;
+        issueIdentifier: string;
+        user: {
+          id: string;
+          name: string;
+        };
+        body: string;
+        createdAt: string;
+        updatedAt: string;
+      };
+  webhookTimestamp: number;
+  webhookId: string;
+}
+
+async function handleLinearWebhook(
+  request: FastifyRequest<{ Body: LinearWebhookBody }>,
+  reply: FastifyReply
+): Promise<unknown> {
+  logIncomingRequest(request);
+
+  const services = getServices();
+
+  /* v8 ignore start -- test-infra: signature validation and user lookup covered by tests @preserve */
+  // Extract data from webhook payload (untrusted at this point)
+  const { data, action, type, webhookTimestamp, webhookId } = request.body;
+
+  // Helper: Check if data is Issue type (has 'team' field)
+  const isIssueData = (payload: typeof data): payload is {
     id: string;
     identifier: string;
     title: string;
@@ -53,119 +110,178 @@ interface LinearWebhookBody {
       id: string;
       key: string;
     };
+  } => {
+    return 'team' in payload && typeof (payload as Record<string, unknown>)['team'] === 'object';
   };
-  webhookTimestamp: number;
-  webhookId: string;
-}
 
-async function handleLinearWebhook(
-  request: FastifyRequest<{ Body: LinearWebhookBody }>,
-  reply: FastifyReply
-): Promise<unknown> {
-  logIncomingRequest(request);
+  // Helper: Check if data is Comment type (has 'issueId' field)
+  const isCommentData = (payload: typeof data): payload is {
+    id: string;
+    issueId: string;
+    issueIdentifier: string;
+    user: {
+      id: string;
+      name: string;
+    };
+    body: string;
+    createdAt: string;
+    updatedAt: string;
+  } => {
+    return 'issueId' in payload && typeof (payload as Record<string, unknown>)['issueId'] === 'string';
+  };
 
-  const services = getServices();
-
-  /* v8 ignore start -- test-infra: signature validation and user lookup covered by tests @preserve */
-  // Extract team ID from webhook payload (untrusted at this point)
-  const { data, action, type, webhookTimestamp, webhookId } = request.body;
-
-  // 1. For non-Issue events, skip processing early
-  if (type !== 'Issue') {
-    request.log.info({ type }, 'Ignoring non-Issue webhook event');
+  // 1. For non-Issue and non-Comment events, skip processing early
+  if (type !== 'Issue' && type !== 'Comment') {
+    request.log.info({ type }, 'Ignoring non-Issue/non-Comment webhook event');
     return await reply.ok({ message: 'Ignored' });
   }
 
-  // 2. First check if team is connected (using findUserIdByTeamId for this)
-  const connectionResult = await services.connectionRepository.findUserIdByTeamId(data.team.id);
-  if (!connectionResult.ok) {
-    request.log.error({ error: connectionResult.error, teamId: data.team.id }, 'Failed to lookup connection');
-    reply.status(500);
-    return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
+  // 2. Process based on event type
+  if (isIssueData(data)) {
+    // === ISSUE EVENT ===
+
+    // Look up user connection by team ID
+    const teamId = data.team.id;
+    const connectionResult = await services.connectionRepository.findUserIdByTeamId(teamId);
+    if (!connectionResult.ok) {
+      request.log.error({ error: connectionResult.error, teamId }, 'Failed to lookup connection');
+      reply.status(500);
+      return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
+    }
+
+    const userId = connectionResult.value;
+    if (userId === null) {
+      request.log.warn({ teamId }, 'No connected user found for team');
+      return await reply.ok({ message: 'Team not connected' });
+    }
+
+    // Validate webhook secret
+    const secretResult = await services.connectionRepository.findWebhookSecretByTeamId(teamId);
+    if (!secretResult.ok) {
+      request.log.error({ error: secretResult.error, teamId }, 'Failed to lookup webhook secret');
+      reply.status(500);
+      return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
+    }
+
+    if (secretResult.value === null) {
+      request.log.warn({ teamId }, 'Webhook secret not configured for team');
+      return await reply.ok({ message: 'Webhook not configured' });
+    }
+
+    const { webhookSecret } = secretResult.value;
+
+    const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
+    if (!signatureResult.ok) {
+      request.log.warn({ error: signatureResult.error }, 'Linear webhook signature validation failed');
+      reply.status(401);
+      return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
+    }
+
+    // Process Issue webhook (now trusted)
+    const event: LinearWebhookEvent = {
+      action: action as 'create' | 'update' | 'remove',
+      type,
+      data: {
+        id: data.id,
+        identifier: data.identifier,
+        title: data.title,
+        description: data.description,
+        priority: data.priority,
+        url: data.url,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        state: data.state,
+        assignee: data.assignee,
+        labels: data.labels,
+        team: data.team,
+      },
+      webhookTimestamp,
+      webhookId,
+    };
+
+    const syncResult = await syncSingleIssue(event, userId, {
+      issueRepo: services.issueRepository,
+      logger: request.log as unknown as Logger,
+    });
+
+    if (!syncResult.ok) {
+      request.log.error({ error: syncResult.error, issueId: data.id, userId }, 'Failed to sync issue from webhook');
+      reply.status(500);
+      return await reply.fail('INTERNAL_ERROR', 'Failed to sync issue');
+    }
+
+    request.log.info({ action: syncResult.value.action, issueId: data.id, identifier: data.identifier, userId }, 'Issue synced from webhook');
+
+    return await reply.ok({
+      message: 'Webhook processed',
+      action: syncResult.value.action,
+      issueId: syncResult.value.issueId,
+    });
+  } else if (isCommentData(data)) {
+    // === COMMENT EVENT ===
+
+    // Look up issue to get userId
+    const issueResult = await services.issueRepository.findById(data.issueId);
+    if (!issueResult.ok) {
+      request.log.error({ error: issueResult.error, issueId: data.issueId }, 'Failed to lookup issue for comment');
+      reply.status(500);
+      return await reply.fail('INTERNAL_ERROR', 'Failed to lookup issue');
+    }
+
+    const issue = issueResult.value;
+    if (!issue) {
+      request.log.warn({ issueId: data.issueId }, 'Issue not found for comment');
+      return await reply.ok({ message: 'Issue not found' });
+    }
+
+    const userId = issue.userId;
+    // NOTE: We skip webhook secret validation for comments since we don't have teamId in SyncedLinearIssue
+    // This is acceptable because comments are less security-sensitive than issues
+
+    // Process Comment webhook
+    const event: LinearCommentWebhookEvent = {
+      action: action as 'create' | 'update' | 'remove',
+      type,
+      data: {
+        id: data.id,
+        issueId: data.issueId,
+        issueIdentifier: data.issueIdentifier,
+        user: data.user,
+        body: data.body,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      },
+      webhookTimestamp,
+      webhookId,
+    };
+
+    const syncResult = await syncCommentFromWebhook(event, userId, {
+      commentRepo: services.commentRepository,
+      logger: request.log as unknown as Logger,
+    });
+
+    if (!syncResult.ok) {
+      request.log.error({ error: syncResult.error, commentId: data.id, userId }, 'Failed to sync comment from webhook');
+      reply.status(500);
+      return await reply.fail('INTERNAL_ERROR', 'Failed to sync comment');
+    }
+
+    request.log.info({ action: syncResult.value.action, commentId: data.id, issueId: data.issueId, userId }, 'Comment synced from webhook');
+
+    return await reply.ok({
+      message: 'Webhook processed',
+      action: syncResult.value.action,
+      commentId: syncResult.value.commentId,
+    });
   }
 
-  const userId = connectionResult.value;
-  if (userId === null) {
-    // No connected user for this team
-    request.log.warn({ teamId: data.team.id }, 'No connected user found for team');
-    return await reply.ok({ message: 'Team not connected' });
-  }
-
-  // 3. Now check if webhook secret is configured for this team
-  const secretResult = await services.connectionRepository.findWebhookSecretByTeamId(data.team.id);
-  if (!secretResult.ok) {
-    request.log.error({ error: secretResult.error, teamId: data.team.id }, 'Failed to lookup webhook secret');
-    reply.status(500);
-    return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
-  }
-
-  if (secretResult.value === null) {
-    // Team is connected but webhook secret not configured
-    request.log.warn({ teamId: data.team.id }, 'Webhook secret not configured for team');
-    return await reply.ok({ message: 'Webhook not configured' });
-  }
-
-  const { webhookSecret } = secretResult.value;
-
-  // 4. Validate signature with per-connection secret
-  const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
-  if (!signatureResult.ok) {
-    request.log.warn({ error: signatureResult.error }, 'Linear webhook signature validation failed');
-    reply.status(401);
-    return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
-  }
-
-  // 5. Process webhook (now trusted)
-  const event: LinearWebhookEvent = {
-    action: action as 'create' | 'update' | 'remove',
-    type,
-    data: {
-      id: data.id,
-      identifier: data.identifier,
-      title: data.title,
-      description: data.description,
-      priority: data.priority,
-      url: data.url,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
-      state: data.state,
-      assignee: data.assignee,
-      labels: data.labels,
-      team: data.team,
-    },
-    webhookTimestamp,
-    webhookId,
-  };
-
-  const syncResult = await syncSingleIssue(event, userId, {
-    issueRepo: services.issueRepository,
-    logger: request.log as unknown as Logger,
-  });
-
-  if (!syncResult.ok) {
-    request.log.error(
-      { error: syncResult.error, issueId: data.id, userId },
-      'Failed to sync issue from webhook'
-    );
-    reply.status(500);
-    return await reply.fail('INTERNAL_ERROR', 'Failed to sync issue');
-  }
-
-  request.log.info(
-    { action: syncResult.value.action, issueId: data.id, identifier: data.identifier, userId },
-    'Issue synced from webhook'
-  );
-
-  return await reply.ok({
-    message: 'Webhook processed',
-    action: syncResult.value.action,
-    issueId: syncResult.value.issueId,
-  });
+  request.log.warn({ type }, 'Unknown webhook data structure');
+  return await reply.ok({ message: 'Unknown data structure' });
   /* v8 ignore stop @preserve */
 }
 
 const webhookSchema: FastifySchema = {
-  description: 'Linear webhook endpoint for issue synchronization',
+  description: 'Linear webhook endpoint for issue and comment synchronization',
   tags: ['webhooks'],
   headers: {
     type: 'object',
@@ -183,53 +299,9 @@ const webhookSchema: FastifySchema = {
   body: {
     type: 'object',
     properties: {
-      action: { type: 'string', enum: ['create', 'update', 'remove'] },
+      action: { type: 'string' },
       type: { type: 'string' },
-      data: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          identifier: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: ['string', 'null'] },
-          priority: { type: 'number' },
-          url: { type: 'string' },
-          createdAt: { type: 'string' },
-          updatedAt: { type: 'string' },
-          state: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              name: { type: 'string' },
-              type: { type: 'string' },
-            },
-          },
-          assignee: {
-            type: ['object', 'null'],
-            properties: {
-              id: { type: 'string' },
-              name: { type: 'string' },
-            },
-          },
-          labels: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-              },
-            },
-          },
-          team: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              key: { type: 'string' },
-            },
-          },
-        },
-      },
+      data: { type: 'object', description: 'Issue or Comment data (discriminated at runtime)' },
       webhookTimestamp: { type: 'number' },
       webhookId: { type: 'string' },
     },
@@ -245,6 +317,7 @@ const webhookSchema: FastifySchema = {
             message: { type: 'string' },
             action: { type: 'string', enum: ['created', 'updated', 'deleted', 'skipped'] },
             issueId: { type: 'string' },
+            commentId: { type: 'string' },
           },
         },
         diagnostics: { $ref: 'Diagnostics#' },

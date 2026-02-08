@@ -10,6 +10,7 @@ import {
   FakeProcessedActionRepository,
   FakeUserServiceClient,
   FakeLinearIssueRepository,
+  FakeLinearCommentRepository,
 } from '../fakes.js';
 
 describe('linearRoutes', () => {
@@ -1182,6 +1183,573 @@ describe('linearRoutes', () => {
       });
     });
   });
+
+  describe('GET /linear/issues/:identifier', () => {
+    it('returns issue data for authenticated owner', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: 'Test description',
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: null,
+        assigneeName: null,
+        labels: ['bug', 'high-priority'],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T01:00:00Z',
+        syncedAt: '2025-01-15T01:00:00Z',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe('issue-1');
+      expect(body.data.identifier).toBe('ENG-123');
+      expect(body.data.title).toBe('Test Issue');
+      expect(body.data.state).toEqual({ name: 'In Progress', type: 'started' });
+      expect(body.data.assignee).toBeNull();
+      expect(body.data.labels).toEqual([
+        { id: 'bug', name: 'bug' },
+        { id: 'high-priority', name: 'high-priority' },
+      ]);
+      expect(body.data.commentCount).toBe(0);
+      expect(body.data.lastCommentAt).toBeNull();
+    });
+
+    it('returns 401 when no auth token provided', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when issue not found', async () => {
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-999',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 404 when issue owned by different user', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Other User Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'other-user',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 500 when issueRepository fails', async () => {
+      ctx.issueRepository.setFailure(true, { code: 'INTERNAL_ERROR', message: 'Database error' });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when commentRepository countByIssueId fails', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+      ctx.commentRepository.setCountByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'Count failed' });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns issue with assignee when assigneeId is not null', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Assigned Issue',
+        description: null,
+        state: 'In Progress',
+        stateType: 'started',
+        priority: 2,
+        assigneeId: 'user-abc',
+        assigneeName: 'John Doe',
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T01:00:00Z',
+        syncedAt: '2025-01-15T01:00:00Z',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data.assignee.id).toBe('user-abc');
+      expect(body.data.assignee.name).toBe('John Doe');
+    });
+
+    it('returns issue with lastCommentAt when comments exist', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Commented Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+
+      await ctx.commentRepository.save({
+        id: 'comment-1',
+        issueId: 'issue-1',
+        issueIdentifier: 'ENG-123',
+        userId: 'test-user-123',
+        userName: 'Test User',
+        body: 'First comment',
+        createdAt: '2025-01-15T10:00:00Z',
+        updatedAt: '2025-01-15T10:00:00Z',
+        syncedAt: '2025-01-15T10:00:00Z',
+      });
+
+      await ctx.commentRepository.save({
+        id: 'comment-2',
+        issueId: 'issue-1',
+        issueIdentifier: 'ENG-123',
+        userId: 'test-user-123',
+        userName: 'Test User',
+        body: 'Second comment',
+        createdAt: '2025-01-15T11:00:00Z',
+        updatedAt: '2025-01-15T11:00:00Z',
+        syncedAt: '2025-01-15T11:00:00Z',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data.commentCount).toBe(2);
+      expect(body.data.lastCommentAt).toBe('2025-01-15T11:00:00Z');
+    });
+  });
+
+  describe('GET /linear/issues/:identifier/comments', () => {
+    it('returns paginated comments for authenticated owner', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+
+      await ctx.commentRepository.save({
+        id: 'comment-1',
+        issueId: 'issue-1',
+        issueIdentifier: 'ENG-123',
+        userId: 'test-user-123',
+        userName: 'Test User',
+        body: 'First comment',
+        createdAt: '2025-01-15T10:00:00Z',
+        updatedAt: '2025-01-15T10:00:00Z',
+        syncedAt: '2025-01-15T10:00:00Z',
+      });
+
+      await ctx.commentRepository.save({
+        id: 'comment-2',
+        issueId: 'issue-1',
+        issueIdentifier: 'ENG-123',
+        userId: 'test-user-123',
+        userName: 'Test User',
+        body: 'Second comment',
+        createdAt: '2025-01-15T11:00:00Z',
+        updatedAt: '2025-01-15T11:00:00Z',
+        syncedAt: '2025-01-15T11:00:00Z',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.comments).toHaveLength(2);
+      expect(body.data.total).toBe(2);
+      expect(body.data.limit).toBe(20);
+      expect(body.data.offset).toBe(0);
+      expect(body.data.hasMore).toBe(false);
+      expect(body.data.comments[0].body).toBe('First comment');
+    });
+
+    it('returns 401 when no auth token provided', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when issue not found', async () => {
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-999/comments',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 404 when issue owned by different user', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Other User Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'other-user',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 500 when issueRepository fails', async () => {
+      ctx.issueRepository.setFailure(true, { code: 'INTERNAL_ERROR', message: 'Database error' });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when commentRepository listByIssueId fails', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+      ctx.commentRepository.setListByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'List failed' });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when commentRepository countByIssueId fails', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+      ctx.commentRepository.setCountByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'Count failed' });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('respects limit query parameter', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+
+      for (let i = 1; i <= 5; i++) {
+        await ctx.commentRepository.save({
+          id: `comment-${i}`,
+          issueId: 'issue-1',
+          issueIdentifier: 'ENG-123',
+          userId: 'test-user-123',
+          userName: 'Test User',
+          body: `Comment ${i}`,
+          createdAt: `2025-01-15T1${i}:00:00Z`,
+          updatedAt: `2025-01-15T1${i}:00:00Z`,
+          syncedAt: `2025-01-15T1${i}:00:00Z`,
+        });
+      }
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments?limit=2',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data.comments).toHaveLength(2);
+      expect(body.data.limit).toBe(2);
+      expect(body.data.total).toBe(5);
+      expect(body.data.hasMore).toBe(true);
+    });
+
+    it('respects offset query parameter', async () => {
+      ctx.issueRepository.seedIssue({
+        id: 'issue-1',
+        identifier: 'ENG-123',
+        title: 'Test Issue',
+        description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
+        priority: 0,
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
+        url: 'https://linear.app/issue/ENG-123',
+        userId: 'test-user-123',
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+        syncedAt: '2025-01-15T00:00:00Z',
+      });
+
+      for (let i = 1; i <= 5; i++) {
+        await ctx.commentRepository.save({
+          id: `comment-${i}`,
+          issueId: 'issue-1',
+          issueIdentifier: 'ENG-123',
+          userId: 'test-user-123',
+          userName: 'Test User',
+          body: `Comment ${i}`,
+          createdAt: `2025-01-15T1${i}:00:00Z`,
+          updatedAt: `2025-01-15T1${i}:00:00Z`,
+          syncedAt: `2025-01-15T1${i}:00:00Z`,
+        });
+      }
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/issues/ENG-123/comments?offset=3',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data.comments).toHaveLength(2);
+      expect(body.data.offset).toBe(3);
+      expect(body.data.hasMore).toBe(false);
+    });
+  });
 });
 
 // Logging coverage tests - use beforeEach to build server with test logger
@@ -1195,6 +1763,7 @@ describe('linearRoutes logging coverage', () => {
     processedActionRepository: new FakeProcessedActionRepository(),
     issueRepository: new FakeLinearIssueRepository(),
     userServiceClient: new FakeUserServiceClient(),
+    commentRepository: new FakeLinearCommentRepository(),
   };
 
   beforeAll(async () => {

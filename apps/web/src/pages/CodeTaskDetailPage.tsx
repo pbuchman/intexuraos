@@ -31,7 +31,7 @@ import {
   isFirebaseAuthenticated,
   initializeFirebase,
 } from '@/services/firebase';
-import { formatDateTime, formatRelative } from '@/utils/dateFormat';
+import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus } from '@/types';
 
 interface LogEntry {
@@ -51,6 +51,7 @@ const formatLogTime = (timestamp: string): string => {
     second: '2-digit',
   });
 };
+
 
 const getLevelColor = (level: LogEntry['level']): string => {
   switch (level) {
@@ -90,6 +91,26 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [linksExpanded, setLinksExpanded] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches
+  );
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  // Calculate elapsed time for running tasks
+  useEffect(() => {
+    if (task === null || task.status !== 'running' && task.status !== 'dispatched') {
+      setElapsedTime(0);
+      return;
+    }
+
+    const startTime = new Date(task.createdAt).getTime();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setElapsedTime(Math.floor((now - startTime) / 1000));
+    }, 1000);
+
+    return (): void => { clearInterval(interval); };
+  }, [task?.id, task?.status, task?.createdAt]);
 
   const handleCancel = async (): Promise<void> => {
     if (task === null) return;
@@ -156,6 +177,28 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   const canCancel = isRunning;
   const canRetry = task.status === 'failed' || task.status === 'cancelled';
 
+  // Build links array - Linear and PR
+  const links: { label: string; url: string | undefined; text: string; type?: string }[] = [];
+  if (task.linearIssueId !== undefined) {
+    const typeLabel = task.linearIssueType ? ` [${task.linearIssueType}]` : '';
+    const linkItem: { label: string; url: string; text: string; type?: string } = {
+      label: 'Linear',
+      url: `https://linear.app/intexuraos/issue/${task.linearIssueId}`,
+      text: `${task.linearIssueId}${typeLabel} ${task.linearIssueTitle ?? ''}`,
+    };
+    if (task.linearIssueType !== undefined) {
+      linkItem.type = task.linearIssueType;
+    }
+    links.push(linkItem);
+  }
+  if (task.result?.prUrl !== undefined) {
+    links.push({
+      label: 'Pull Request',
+      url: task.result.prUrl,
+      text: 'View Pull Request',
+    });
+  }
+
   return (
     <Layout>
       <div className="mb-6">
@@ -172,6 +215,12 @@ export function CodeTaskDetailPage(): React.JSX.Element {
             <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
             {status.label}
           </span>
+          {isRunning && elapsedTime > 0 ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+              <Clock className="h-4 w-4" />
+              {formatElapsedTime(elapsedTime)}
+            </span>
+          ) : null}
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
@@ -185,6 +234,33 @@ export function CodeTaskDetailPage(): React.JSX.Element {
           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
             {task.workerLocation}
           </span>
+          {task.linearIssue !== undefined && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                task.linearIssue.state.type === 'completed' ? 'bg-green-100 text-green-700' :
+                task.linearIssue.state.type === 'started' ? 'bg-blue-100 text-blue-700' :
+                task.linearIssue.state.type === 'cancelled' ? 'bg-red-100 text-red-700' :
+                'bg-gray-100 text-gray-700'
+              }`}>
+                {task.linearIssue.state.name}
+              </span>
+              {task.linearIssue.assignee !== null && (
+                <span className="text-xs text-green-600">
+                  {task.linearIssue.assignee.name}
+                </span>
+              )}
+              {task.linearIssue.commentCount > 0 && (
+                <span className="text-xs text-gray-500">
+                  {String(task.linearIssue.commentCount)} comments
+                </span>
+              )}
+              {task.linearIssue.labels.map(label => (
+                <span key={label.id} className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
+                  {label.name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {canCancel || canRetry ? (
@@ -228,7 +304,102 @@ export function CodeTaskDetailPage(): React.JSX.Element {
             {retryError}
           </div>
         ) : null}
+
+        {/* Collapsible Links Section */}
+        {links.length > 0 ? (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                setLinksExpanded(!linksExpanded);
+              }}
+              className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+            >
+              <span className="flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Links
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${linksExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {linksExpanded ? (
+              <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+                {links.map((link, idx) => {
+                  const url = link.url;
+                  return (
+                    <div key={idx} className="flex items-start gap-2">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-16 mt-0.5">
+                        {link.label}:
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        {url !== undefined ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                            >
+                              {link.text}
+                            </a>
+                            {link.type ? (
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                link.type === 'feature'
+                                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
+                                  : link.type === 'bug'
+                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'
+                                    : link.type === 'refactor'
+                                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                              }`}>
+                                {link.type}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-600 dark:text-slate-400">{link.text}</span>
+                        )}
+                      </div>
+                      {url !== undefined ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(url);
+                          }}
+                          className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 flex-shrink-0"
+                          title="Copy link"
+                        >
+                          <Copy className="h-3.5 w-3.5 text-slate-400" />
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+
+      {/* Active Task Progress Indicator */}
+      {isRunning && task.error === undefined ? (
+        <Card className="mb-6 border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/30">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
+            <div className="flex-1">
+              <p className="font-medium text-blue-900 dark:text-blue-200">
+                {task.status === 'dispatched' ? 'Task queued...' : 'Working on your task...'}
+              </p>
+              <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+                {elapsedTime > 0
+                  ? `Elapsed time: ${formatElapsedTime(elapsedTime)}`
+                  : 'Starting work...'}
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       <PromptCard
         prompt={task.prompt}
@@ -241,7 +412,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
 
       {task.error !== undefined ? <TaskErrorCard task={task} /> : null}
 
-      <LogViewer taskId={task.id} isActive={isRunning} />
+      <LogViewer taskId={task.id} isActive={isRunning && task.error === undefined} />
     </Layout>
   );
 }
@@ -305,81 +476,8 @@ const TaskResultCard = memo(function TaskResultCard({ task }: TaskResultCardProp
   const result = task.result;
   if (result === undefined) return null;
 
-  const [linksExpanded, setLinksExpanded] = useState(false);
-
-  // Build links array - all links in result card have URLs
-  const links: { label: string; url: string; text: string }[] = [];
-
-  // Linear issue link (first)
-  if (task.linearIssueId !== undefined) {
-    links.push({
-      label: 'Linear',
-      url: `https://linear.app/intexuraos/issue/${task.linearIssueId}`,
-      text: task.linearIssueId,
-    });
-  }
-
-  // PR link (second)
-  if (result.prUrl !== undefined) {
-    links.push({
-      label: 'Pull Request',
-      url: result.prUrl,
-      text: 'View Pull Request',
-    });
-  }
-
   return (
     <Card className="mb-6">
-      {/* Collapsible Links Section - Top Level */}
-      {links.length > 0 ? (
-        <div className="mb-4">
-          <button
-            type="button"
-            onClick={() => {
-              setLinksExpanded(!linksExpanded);
-            }}
-            className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
-          >
-            <span className="flex items-center gap-2">
-              <Link2 className="h-4 w-4" />
-              Links
-            </span>
-            <ChevronDown
-              className={`h-4 w-4 transition-transform ${linksExpanded ? 'rotate-180' : ''}`}
-            />
-          </button>
-          {linksExpanded ? (
-            <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
-              {links.map((link, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-24">
-                    {link.label}:
-                  </span>
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 truncate text-sm text-blue-600 hover:underline dark:text-blue-400"
-                  >
-                    {link.text}
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(link.url);
-                    }}
-                    className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
-                    title="Copy link"
-                  >
-                    <Copy className="h-3.5 w-3.5 text-slate-400" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
       <div className="space-y-4">
         {/* Summary section */}
         <div>
@@ -437,98 +535,13 @@ const TaskErrorCard = memo(function TaskErrorCard({ task }: TaskErrorCardProps):
   const error = task.error;
   if (error === undefined) return null;
 
-  const [linksExpanded, setLinksExpanded] = useState(false);
-
-  // Build links array
-  const links: { label: string; url: string | undefined; text: string }[] = [];
-
-  // Linear issue link (first)
-  if (task.linearIssueId !== undefined) {
-    links.push({
-      label: 'Linear',
-      url: `https://linear.app/intexuraos/issue/${task.linearIssueId}`,
-      text: task.linearIssueId,
-    });
-  }
-
-  // PR link or error message (second)
-  if (task.result?.prUrl !== undefined) {
-    links.push({
-      label: 'Pull Request',
-      url: task.result.prUrl,
-      text: 'View Pull Request',
-    });
-  } else if (error.code === 'NO_PR_CREATED') {
-    links.push({
-      label: 'Pull Request',
-      url: undefined,
-      text: 'Task completed but no PR was created',
-    });
-  }
-
   return (
     <Card className="mb-6 border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30">
       <div className="flex items-start gap-3">
         <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
         <div className="flex-1">
-          {/* Collapsible Links Section - Top Level */}
-          {links.length > 0 ? (
-            <div className="mb-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setLinksExpanded(!linksExpanded);
-                }}
-                className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
-              >
-                <span className="flex items-center gap-2">
-                  <Link2 className="h-4 w-4" />
-                  Links
-                </span>
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${linksExpanded ? 'rotate-180' : ''}`}
-                />
-              </button>
-              {linksExpanded ? (
-                <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
-                  {links.map((link, idx) => {
-                    const url = link.url;
-                    return (
-                      <div key={idx} className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-24">
-                          {link.label}:
-                        </span>
-                        {url !== undefined ? (
-                          <>
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 truncate text-sm text-blue-600 hover:underline dark:text-blue-400"
-                            >
-                              {link.text}
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                void navigator.clipboard.writeText(url);
-                              }}
-                              className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
-                              title="Copy link"
-                            >
-                              <Copy className="h-3.5 w-3.5 text-slate-400" />
-                            </button>
-                          </>
-                        ) : (
-                          <span className="flex-1 text-sm text-slate-600 dark:text-slate-400">{link.text}</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <h3 className="font-medium text-red-800 dark:text-red-300">Task Failed</h3>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-400">{error.message}</p>
         </div>
       </div>
     </Card>

@@ -341,6 +341,325 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     return await reply.ok({ issue: createResult.value });
   });
 
+  // Get single issue by identifier
+  fastify.get(
+    '/linear/issues/:identifier',
+    {
+      schema: {
+        operationId: 'getLinearIssue',
+        summary: 'Get Linear issue by identifier',
+        description: 'Fetches a single Linear issue with comment count and metadata',
+        tags: ['linear'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['identifier'],
+          properties: {
+            identifier: { type: 'string', description: 'Issue identifier (e.g., INT-123)' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  identifier: { type: 'string' },
+                  title: { type: 'string' },
+                  description: { type: ['string', 'null'] },
+                  state: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      type: { type: 'string', enum: ['backlog', 'unstarted', 'started', 'completed', 'cancelled'] },
+                    },
+                  },
+                  priority: { type: 'number' },
+                  assignee: {
+                    type: ['object', 'null'],
+                    properties: {
+                      id: { type: 'string' },
+                      name: { type: 'string' },
+                    },
+                  },
+                  labels: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        name: { type: 'string' },
+                      },
+                    },
+                  },
+                  url: { type: 'string' },
+                  createdAt: { type: 'string' },
+                  updatedAt: { type: 'string' },
+                  commentCount: { type: 'number' },
+                  lastCommentAt: { type: ['string', 'null'] },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          404: {
+            description: 'Issue not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { identifier: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { identifier } = request.params;
+      const services = getServices();
+
+      request.log.info({ userId: user.userId, identifier }, 'Fetching Linear issue');
+
+      // Find issue by identifier
+      const issueResult = await services.issueRepository.findByIdentifier(identifier);
+      if (!issueResult.ok) {
+        request.log.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
+        return await handleLinearError(issueResult.error, reply);
+      }
+
+      const issue = issueResult.value;
+      if (issue === null) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
+      }
+
+      // Check if user owns this issue
+      if (issue.userId !== user.userId) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
+      }
+
+      // Get comment count
+      const commentCountResult = await services.commentRepository.countByIssueId(issue.id);
+      if (!commentCountResult.ok) {
+        request.log.error({ error: commentCountResult.error, issueId: issue.id }, 'Failed to fetch comment count');
+        return await handleLinearError(commentCountResult.error, reply);
+      }
+
+      // Get last comment timestamp
+      const commentsResult = await services.commentRepository.listByIssueId(issue.id);
+      let lastCommentAt: string | null = null;
+      if (commentsResult.ok && commentsResult.value.length > 0) {
+        // Comments are ordered by createdAt ASC, so last is at the end
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
+        const lastComment = commentsResult.value[commentsResult.value.length - 1];
+        if (lastComment !== undefined) {
+          lastCommentAt = lastComment.createdAt;
+        }
+        /* v8 ignore stop @preserve */
+      }
+
+      return await reply.ok({
+        id: issue.id,
+        identifier: issue.identifier,
+        title: issue.title,
+        description: issue.description,
+        state: { name: issue.state, type: issue.stateType },
+        priority: issue.priority,
+        /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
+        assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
+        /* v8 ignore stop @preserve */
+        labels: issue.labels.map((name: string) => ({ id: name, name })),
+        url: issue.url,
+        createdAt: issue.createdAt,
+        updatedAt: issue.updatedAt,
+        commentCount: commentCountResult.value,
+        lastCommentAt,
+      });
+    }
+  );
+
+  // Get comments for an issue
+  fastify.get(
+    '/linear/issues/:identifier/comments',
+    {
+      schema: {
+        operationId: 'getLinearIssueComments',
+        summary: 'Get comments for a Linear issue',
+        description: 'Fetches paginated comments for a Linear issue',
+        tags: ['linear'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['identifier'],
+          properties: {
+            identifier: { type: 'string', description: 'Issue identifier (e.g., INT-123)' },
+          },
+        },
+        querystring: {
+          type: 'object',
+          properties: {
+            limit: { type: 'number', minimum: 1, maximum: 100, default: 20 },
+            offset: { type: 'number', minimum: 0, default: 0 },
+          },
+        },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  comments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        userId: { type: 'string' },
+                        userName: { type: 'string' },
+                        body: { type: 'string' },
+                        createdAt: { type: 'string' },
+                        updatedAt: { type: 'string' },
+                      },
+                    },
+                  },
+                  total: { type: 'number' },
+                  limit: { type: 'number' },
+                  offset: { type: 'number' },
+                  hasMore: { type: 'boolean' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          404: {
+            description: 'Issue not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { identifier: string }; Querystring: { limit?: string; offset?: string } }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { identifier } = request.params;
+      /* v8 ignore start -- schema: Fastify schema default fills limit/offset before handler runs @preserve */
+      const limit = Number.parseInt(request.query.limit ?? '20', 10);
+      const offset = Number.parseInt(request.query.offset ?? '0', 10);
+      /* v8 ignore stop @preserve */
+      const services = getServices();
+
+      request.log.info({ userId: user.userId, identifier, limit, offset }, 'Fetching Linear issue comments');
+
+      // Find issue by identifier
+      const issueResult = await services.issueRepository.findByIdentifier(identifier);
+      if (!issueResult.ok) {
+        request.log.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
+        return await handleLinearError(issueResult.error, reply);
+      }
+
+      const issue = issueResult.value;
+      if (issue === null) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
+      }
+
+      // Check if user owns this issue
+      if (issue.userId !== user.userId) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
+      }
+
+      // Get all comments for the issue (already ordered by createdAt ASC)
+      const commentsResult = await services.commentRepository.listByIssueId(issue.id);
+      if (!commentsResult.ok) {
+        request.log.error({ error: commentsResult.error, issueId: issue.id }, 'Failed to fetch comments');
+        return await handleLinearError(commentsResult.error, reply);
+      }
+
+      // Get total count
+      const countResult = await services.commentRepository.countByIssueId(issue.id);
+      if (!countResult.ok) {
+        request.log.error({ error: countResult.error, issueId: issue.id }, 'Failed to count comments');
+        return await handleLinearError(countResult.error, reply);
+      }
+
+      // Apply pagination
+      const total = countResult.value;
+      const comments = commentsResult.value.slice(offset, offset + limit);
+      const hasMore = offset + limit < total;
+
+      return await reply.ok({
+        comments,
+        total,
+        limit,
+        offset,
+        hasMore,
+      });
+    }
+  );
+
   // Full sync endpoint for user-triggered sync
   fastify.post(
     '/linear/sync',
