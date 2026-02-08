@@ -41,7 +41,6 @@ interface WorkerEntry {
 }
 
 export const PNPM_STORE_VOLUME = 'claude-pnpm-store';
-export const NODE_MODULES_VOLUME_PREFIX = 'claude-node-modules-';
 
 export class DockerProvider implements IsolationProvider {
   private readonly docker: Docker;
@@ -197,9 +196,7 @@ export class DockerProvider implements IsolationProvider {
     this.logger.info({ taskId, worktreePath, workerType }, 'Creating worker container');
 
     /* v8 ignore start -- test-infra: volume creation requires Docker daemon @preserve */
-    const nodeModulesVolume = `${NODE_MODULES_VOLUME_PREFIX}${taskId}`;
     await this.ensureVolume(PNPM_STORE_VOLUME);
-    await this.ensureVolume(nodeModulesVolume);
     /* v8 ignore stop @preserve */
 
     /* v8 ignore start -- test-infra: image pull requires Docker daemon with registry access @preserve */
@@ -245,11 +242,8 @@ export class DockerProvider implements IsolationProvider {
         Binds: [
           `${worktreePath}:/repo:rw`,
           `${taskSecretsPath}:/secrets:ro`,
-          // Named volumes for Linux-native pnpm store (shared) and node_modules (per-task).
-          // The node_modules volume shadows the host bind mount, preventing Mac-native
-          // binaries (e.g. @esbuild/darwin-arm64) from leaking into the Linux container.
+          // Shared named volume for pnpm's content-addressable store (safe for concurrent access).
           `${PNPM_STORE_VOLUME}:/home/claude/pnpm-store:rw`,
-          `${nodeModulesVolume}:/repo/node_modules:rw`,
           /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
           ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
           /* v8 ignore stop @preserve */
@@ -257,15 +251,13 @@ export class DockerProvider implements IsolationProvider {
         Memory: this.config.memoryLimitBytes,
         NanoCpus: this.config.cpuCount * 1e9,
         NetworkMode: this.config.networkName,
-        // ReadonlyRootfs: false - Claude Code writes to /home/claude/.claude/ for
-        // settings, session cache, and MCP server state. With /home/claude as tmpfs,
-        // this would work, but the Alpine base image also needs writes to /etc/passwd
-        // for user creation at runtime. Keeping rootfs writable is a pragmatic choice.
         ReadonlyRootfs: false,
         Tmpfs: {
           '/tmp': 'rw,noexec,nosuid,size=2g',
-          // uid=1001,gid=1001 ensures claude user (1001) can write to tmpfs
           '/home/claude': 'rw,noexec,nosuid,size=500m,uid=1001,gid=1001',
+          // Shadows the Mac host's node_modules (bind-mounted via /repo), giving the
+          // container an empty writable dir for Linux-native pnpm install.
+          '/repo/node_modules': 'rw,exec,nosuid,size=4g,uid=1001,gid=1001',
         },
         CapDrop: ['ALL'],
         // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude
@@ -561,15 +553,6 @@ export class DockerProvider implements IsolationProvider {
         );
       }
 
-      /* v8 ignore start -- test-infra: volume removal requires Docker daemon @preserve */
-      try {
-        const volume = this.docker.getVolume(`${NODE_MODULES_VOLUME_PREFIX}${taskId}`);
-        await volume.remove();
-        this.logger.debug({ taskId }, 'Removed node_modules volume');
-      } catch (err: unknown) {
-        this.logger.debug({ taskId, error: err }, 'Failed to remove node_modules volume');
-      }
-      /* v8 ignore stop @preserve */
     } finally {
       this.workers.delete(taskId);
     }
