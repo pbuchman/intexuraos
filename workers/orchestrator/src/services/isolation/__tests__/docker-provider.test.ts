@@ -152,6 +152,14 @@ class TestableDockerProvider extends DockerProvider {
   protected override async waitForContainerReady(): Promise<void> {
     return Promise.resolve();
   }
+
+  protected override async writePromptToTTY(
+    attachStream: NodeJS.ReadWriteStream,
+    prompt: string
+  ): Promise<void> {
+    attachStream.write(prompt);
+    attachStream.write('\r');
+  }
 }
 
 describe('DockerProvider', () => {
@@ -224,8 +232,8 @@ describe('DockerProvider', () => {
       });
       await provider.createWorker(config);
 
-      // In interactive mode, prompt is sent as first stdin message (no delimiter needed)
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('You are a helpful assistant\n');
+      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('You are a helpful assistant');
+      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('\r');
     });
   });
 
@@ -298,12 +306,13 @@ describe('DockerProvider', () => {
   });
 
   describe('sendInput', () => {
-    it('writes to attach stream with newline', async () => {
+    it('writes prompt then submits with carriage return', async () => {
       await provider.createWorker(createTestConfig());
 
       await provider.sendInput('test-task-123', 'test input');
 
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('test input\n');
+      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('test input');
+      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('\r');
       expect(mockLogger.debug).toHaveBeenCalledWith(
         { taskId: 'test-task-123', inputLength: 10 },
         'Sending input to worker'

@@ -227,7 +227,7 @@ export class DockerProvider implements IsolationProvider {
 
     await this.waitForContainerReady(attachStream as unknown as NodeJS.ReadWriteStream, taskId);
     this.logger.debug({ taskId }, 'Container ready — sending system prompt');
-    attachStream.write(systemPrompt + '\n');
+    await this.writePromptToTTY(attachStream, systemPrompt, taskId);
 
     const handle: WorkerHandle = {
       taskId,
@@ -308,6 +308,29 @@ export class DockerProvider implements IsolationProvider {
           if (!settled) attachStream.write('\r');
         }, 500);
       }, INITIAL_WAIT_MS);
+    });
+  }
+  /* v8 ignore stop @preserve */
+
+  /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, TTY paste-then-submit requires real terminal @preserve */
+  protected async writePromptToTTY(
+    attachStream: NodeJS.ReadWriteStream,
+    prompt: string,
+    taskId: string
+  ): Promise<void> {
+    const SUBMIT_DELAY_MS = 300;
+
+    attachStream.write(prompt);
+    this.logger.debug(
+      { taskId, promptLength: prompt.length },
+      'Prompt written — waiting before submit'
+    );
+
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        attachStream.write('\r');
+        resolve();
+      }, SUBMIT_DELAY_MS);
     });
   }
   /* v8 ignore stop @preserve */
@@ -480,7 +503,7 @@ export class DockerProvider implements IsolationProvider {
     /* v8 ignore stop @preserve */
 
     this.logger.debug({ taskId, inputLength: input.length }, 'Sending input to worker');
-    worker.attachStream.write(input + '\n');
+    await this.writePromptToTTY(worker.attachStream, input, taskId);
   }
 
   async attachTTY(taskId: string): Promise<TTYStreams> {
