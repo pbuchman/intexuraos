@@ -188,7 +188,6 @@ async function bootstrap(): Promise<void> {
       repositoryPath: repoPath,
       worktreeBasePath: config.worktreeBasePath,
       mcpConfigTemplatePath: join(repoPath, '.mcp.json'),
-      claudeSettings: { outputStyle: 'Explanatory' },
     },
     logger
   );
@@ -206,7 +205,11 @@ async function bootstrap(): Promise<void> {
   // Create Docker isolation provider
   const secretsBasePath = join(orchestratorDir, 'secrets');
   const gcpSaKeyPath = getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS');
-  const isolationProvider = await createIsolationProvider({ secretsBasePath, gcpSaKeyPath }, logger);
+  const keepContainersAlive = process.env['KEEP_CONTAINERS_ALIVE'] === '1';
+  if (keepContainersAlive) {
+    logger.info('Debug mode: containers will be kept alive after task completion');
+  }
+  const isolationProvider = await createIsolationProvider({ secretsBasePath, gcpSaKeyPath, keepContainersAlive }, logger);
   const tokenRefresher = new TokenRefresher(
     {
       secretsBasePath,

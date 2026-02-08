@@ -19,6 +19,7 @@ export interface DockerProviderConfig {
   timeoutMs: number;
   secretsBasePath: string;
   gcpSaKeyPath: string;
+  keepContainersAlive: boolean;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -30,6 +31,7 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   timeoutMs: 2 * 60 * 60 * 1000,
   secretsBasePath: '/tmp/claude-secrets',
   gcpSaKeyPath: '',
+  keepContainersAlive: false,
 };
 
 interface WorkerEntry {
@@ -37,6 +39,9 @@ interface WorkerEntry {
   handle: WorkerHandle;
   attachStream?: NodeJS.ReadWriteStream;
 }
+
+export const PNPM_STORE_VOLUME = 'claude-pnpm-store';
+export const NODE_MODULES_VOLUME_PREFIX = 'claude-node-modules-';
 
 export class DockerProvider implements IsolationProvider {
   private readonly docker: Docker;
@@ -50,6 +55,18 @@ export class DockerProvider implements IsolationProvider {
     this.logger = logger;
     this.workers = new Map();
   }
+
+  /* v8 ignore start -- test-infra: volume creation requires Docker daemon @preserve */
+  private async ensureVolume(name: string): Promise<void> {
+    try {
+      const volume = this.docker.getVolume(name);
+      await volume.inspect();
+    } catch {
+      await this.docker.createVolume({ Name: name });
+      this.logger.info({ volume: name }, 'Created Docker volume');
+    }
+  }
+  /* v8 ignore stop @preserve */
 
   /**
    * Clean up orphaned worker containers from previous orchestrator runs.
@@ -167,6 +184,7 @@ export class DockerProvider implements IsolationProvider {
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
       'CLAUDE_PROJECT_DIR=/repo',
       'CLAUDE_WORKER_MODE=1',
+      'PNPM_STORE_DIR=/home/claude/pnpm-store',
       // Exit 10s after idle - Claude exits automatically when no input arrives
       'CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=10000',
     ];
@@ -177,6 +195,12 @@ export class DockerProvider implements IsolationProvider {
     /* v8 ignore stop @preserve */
 
     this.logger.info({ taskId, worktreePath, workerType }, 'Creating worker container');
+
+    /* v8 ignore start -- test-infra: volume creation requires Docker daemon @preserve */
+    const nodeModulesVolume = `${NODE_MODULES_VOLUME_PREFIX}${taskId}`;
+    await this.ensureVolume(PNPM_STORE_VOLUME);
+    await this.ensureVolume(nodeModulesVolume);
+    /* v8 ignore stop @preserve */
 
     /* v8 ignore start -- test-infra: image pull requires Docker daemon with registry access @preserve */
     try {
@@ -221,9 +245,12 @@ export class DockerProvider implements IsolationProvider {
         Binds: [
           `${worktreePath}:/repo:rw`,
           `${taskSecretsPath}:/secrets:ro`,
+          // Named volumes for Linux-native pnpm store (shared) and node_modules (per-task).
+          // The node_modules volume shadows the host bind mount, preventing Mac-native
+          // binaries (e.g. @esbuild/darwin-arm64) from leaking into the Linux container.
+          `${PNPM_STORE_VOLUME}:/home/claude/pnpm-store:rw`,
+          `${nodeModulesVolume}:/repo/node_modules:rw`,
           /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
-          // Mount main git dir for worktree support (worktrees reference parent .git)
-          // Must be read-write for git operations (commit, push) to work
           ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
           /* v8 ignore stop @preserve */
         ],
@@ -314,13 +341,44 @@ export class DockerProvider implements IsolationProvider {
     attachStream: NodeJS.ReadWriteStream,
     taskId: string
   ): Promise<void> {
-    const TOTAL_TIMEOUT_MS = 60_000;
-    const INITIAL_WAIT_MS = 8_000;
+    const TOTAL_TIMEOUT_MS = 180_000;
+    const SENTINEL_POLL_MS = 2_000;
     const READY_MARKER = 'bypass permissions on';
+    const SENTINEL_PATH = '/tmp/claude-ready';
 
+    // Phase 1: Poll for entrypoint sentinel (waits for pnpm install to finish)
+    const containerId = this.workers.get(taskId)?.containerId;
+    if (containerId !== undefined) {
+      const startTime = Date.now();
+      while (Date.now() - startTime < TOTAL_TIMEOUT_MS) {
+        try {
+          const container = this.docker.getContainer(containerId);
+          const exec = await container.exec({
+            Cmd: ['sh', '-c', `[ -f ${SENTINEL_PATH} ] && echo READY || echo WAIT`],
+            AttachStdout: true,
+            Tty: true,
+          });
+          const stream = await exec.start({ Tty: true });
+          const chunks: Buffer[] = [];
+          stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+          await new Promise<void>((resolve) => stream.on('end', resolve));
+          const output = Buffer.concat(chunks).toString('utf-8');
+
+          if (output.includes('READY')) {
+            this.logger.info({ taskId }, 'Entrypoint ready sentinel detected');
+            break;
+          }
+        } catch {
+          // Container not ready for exec yet
+        }
+        await new Promise((resolve) => setTimeout(resolve, SENTINEL_POLL_MS));
+      }
+    }
+
+    // Phase 2: Send API key approval and wait for TUI ready marker
+    const POST_SENTINEL_WAIT_MS = 5_000;
     await new Promise<void>((resolve) => {
       let done = false;
-      let approvalSent = false;
 
       const finish = (): void => {
         if (done) return;
@@ -331,12 +389,12 @@ export class DockerProvider implements IsolationProvider {
       };
 
       const hardTimeout = setTimeout(() => {
-        this.logger.warn({ taskId }, 'Container ready timeout — proceeding anyway');
+        this.logger.warn({ taskId }, 'TUI ready timeout — proceeding anyway');
         finish();
-      }, TOTAL_TIMEOUT_MS);
+      }, 30_000);
 
       const onData = (chunk: Buffer): void => {
-        if (approvalSent && !done) {
+        if (!done) {
           const text = chunk.toString('utf-8');
           if (text.includes(READY_MARKER)) {
             this.logger.info({ taskId }, 'TUI ready marker detected');
@@ -349,13 +407,12 @@ export class DockerProvider implements IsolationProvider {
 
       setTimeout(() => {
         if (done) return;
-        approvalSent = true;
         this.logger.debug({ taskId }, 'Sending API key approval');
         attachStream.write('\x1b[A');
         setTimeout(() => {
           if (!done) attachStream.write('\r');
         }, 500);
-      }, INITIAL_WAIT_MS);
+      }, POST_SENTINEL_WAIT_MS);
     });
   }
   /* v8 ignore stop @preserve */
@@ -432,10 +489,14 @@ export class DockerProvider implements IsolationProvider {
 
         if (output.includes('DONE')) {
           clearInterval(interval);
-          this.logger.info({ taskId }, 'Stop hooks completed — stopping container');
-          await container.stop({ t: 5 }).catch((_err: unknown) => {
-            // Container may already be stopped
-          });
+          if (this.config.keepContainersAlive) {
+            this.logger.info({ taskId }, 'Stop hooks completed — keeping container alive (debug mode)');
+          } else {
+            this.logger.info({ taskId }, 'Stop hooks completed — stopping container');
+            await container.stop({ t: 5 }).catch((_err: unknown) => {
+              // Container may already be stopped
+            });
+          }
         }
       } catch (error) {
         this.logger.warn(
@@ -499,6 +560,16 @@ export class DockerProvider implements IsolationProvider {
           'Failed to remove task secrets directory'
         );
       }
+
+      /* v8 ignore start -- test-infra: volume removal requires Docker daemon @preserve */
+      try {
+        const volume = this.docker.getVolume(`${NODE_MODULES_VOLUME_PREFIX}${taskId}`);
+        await volume.remove();
+        this.logger.debug({ taskId }, 'Removed node_modules volume');
+      } catch (err: unknown) {
+        this.logger.debug({ taskId, error: err }, 'Failed to remove node_modules volume');
+      }
+      /* v8 ignore stop @preserve */
     } finally {
       this.workers.delete(taskId);
     }
