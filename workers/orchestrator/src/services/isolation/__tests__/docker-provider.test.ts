@@ -155,13 +155,18 @@ class TestableDockerProvider extends DockerProvider {
 
   protected override async writePromptToTTY(
     attachStream: NodeJS.ReadWriteStream,
-    prompt: string
+    prompt: string,
+    _taskId: string
   ): Promise<void> {
     attachStream.write(prompt + '\n');
     attachStream.write('\r');
   }
 
-  protected override monitorForResponseCompletion(): void {
+  protected override monitorForResponseCompletion(
+    _attachStream: NodeJS.ReadWriteStream,
+    _taskId: string,
+    _containerId: string
+  ): void {
     // No-op in tests
   }
 }

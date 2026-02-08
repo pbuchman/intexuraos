@@ -391,7 +391,11 @@ export class DockerProvider implements IsolationProvider {
             // Container may already be stopped
           });
         }
-      } catch {
+      } catch (error) {
+        this.logger.warn(
+          { taskId, error },
+          'Poll error in monitorForResponseCompletion — stopping monitoring'
+        );
         clearInterval(interval);
       }
     };
