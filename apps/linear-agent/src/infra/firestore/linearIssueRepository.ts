@@ -28,6 +28,7 @@ interface SyncedLinearIssueDoc {
   createdAt: string;
   updatedAt: string;
   syncedAt: string;
+  teamId?: string;
 }
 
 const COLLECTION_NAME = 'linear_issues';
@@ -55,6 +56,7 @@ export async function saveLinearIssue(
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
       syncedAt: issue.syncedAt,
+      teamId: issue.teamId,
     };
 
     await docRef.set(doc);
@@ -162,6 +164,7 @@ function docToIssue(data: SyncedLinearIssueDoc): SyncedLinearIssue {
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
     syncedAt: data.syncedAt,
+    teamId: data.teamId ?? '',
   };
 }
 

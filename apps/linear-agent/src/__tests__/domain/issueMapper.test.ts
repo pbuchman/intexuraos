@@ -57,6 +57,7 @@ describe('issueMapper', () => {
       expect(result.createdAt).toBe('2025-01-01T00:00:00.000Z');
       expect(result.updatedAt).toBe('2025-01-02T00:00:00.000Z');
       expect(result.syncedAt).toBe('2025-01-15T12:00:00.000Z');
+      expect(result.teamId).toBe('team-1');
     });
 
     it('handles null assignee', () => {
@@ -139,7 +140,7 @@ describe('issueMapper', () => {
     it('maps all fields correctly', () => {
       const issue = createApiIssue();
 
-      const result = mapApiIssueToSyncedIssue(issue, userId);
+      const result = mapApiIssueToSyncedIssue(issue, userId, 'team-1');
 
       expect(result.id).toBe('issue-uuid-2');
       expect(result.identifier).toBe('INT-456');
@@ -150,12 +151,13 @@ describe('issueMapper', () => {
       expect(result.priority).toBe(1);
       expect(result.userId).toBe(userId);
       expect(result.syncedAt).toBe('2025-01-15T12:00:00.000Z');
+      expect(result.teamId).toBe('team-1');
     });
 
     it('sets assignee fields to null (not available in API response)', () => {
       const issue = createApiIssue();
 
-      const result = mapApiIssueToSyncedIssue(issue, userId);
+      const result = mapApiIssueToSyncedIssue(issue, userId, 'team-1');
 
       expect(result.assigneeId).toBeNull();
       expect(result.assigneeName).toBeNull();
@@ -164,7 +166,7 @@ describe('issueMapper', () => {
     it('sets labels to empty array (not available in API response)', () => {
       const issue = createApiIssue();
 
-      const result = mapApiIssueToSyncedIssue(issue, userId);
+      const result = mapApiIssueToSyncedIssue(issue, userId, 'team-1');
 
       expect(result.labels).toEqual([]);
     });

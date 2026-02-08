@@ -82,7 +82,7 @@ export async function fullSync(
   // Upsert all issues from Linear
   /* v8 ignore start -- test-infra: save error with continue path tested @preserve */
   for (const linearIssue of linearIssues) {
-    const syncedIssue = mapApiIssueToSyncedIssue(linearIssue, userId);
+    const syncedIssue = mapApiIssueToSyncedIssue(linearIssue, userId, connection.teamId);
     const saveResult = await issueRepo.save(syncedIssue);
     if (!saveResult.ok) {
       logger.error({ error: saveResult.error, issueId: linearIssue.id }, 'Failed to save issue');

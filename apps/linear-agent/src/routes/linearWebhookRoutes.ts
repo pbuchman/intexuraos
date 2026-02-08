@@ -235,8 +235,25 @@ async function handleLinearWebhook(
     }
 
     const userId = issue.userId;
-    // NOTE: We skip webhook secret validation for comments since we don't have teamId in SyncedLinearIssue
-    // This is acceptable because comments are less security-sensitive than issues
+
+    if (issue.teamId !== '') {
+      const secretResult = await services.connectionRepository.findWebhookSecretByTeamId(issue.teamId);
+      if (!secretResult.ok) {
+        request.log.error({ error: secretResult.error, teamId: issue.teamId }, 'Failed to lookup webhook secret for comment');
+        reply.status(500);
+        return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
+      }
+
+      if (secretResult.value !== null) {
+        const { webhookSecret } = secretResult.value;
+        const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
+        if (!signatureResult.ok) {
+          request.log.warn({ error: signatureResult.error }, 'Comment webhook signature validation failed');
+          reply.status(401);
+          return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
+        }
+      }
+    }
 
     // Process Comment webhook
     const event: LinearCommentWebhookEvent = {

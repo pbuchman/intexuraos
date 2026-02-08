@@ -187,6 +187,7 @@ export interface SyncedLinearIssue {
   createdAt: string; /* ISO timestamp from Linear */
   updatedAt: string; /* ISO timestamp from Linear */
   syncedAt: string; /* When we last synced this issue */
+  teamId: string; /* Linear team ID (for webhook secret lookup) */
 }
 
 /** Locally synced Linear comment (stored in Firestore) */

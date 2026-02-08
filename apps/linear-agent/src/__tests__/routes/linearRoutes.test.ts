@@ -1202,6 +1202,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T01:00:00Z',
         syncedAt: '2025-01-15T01:00:00Z',
+        teamId: 'team-1',
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -1244,6 +1245,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
 
       const response = await ctx.app.inject({
@@ -1285,6 +1287,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -1333,6 +1336,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
       ctx.commentRepository.setCountByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'Count failed' });
 
@@ -1366,6 +1370,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T01:00:00Z',
         syncedAt: '2025-01-15T01:00:00Z',
+        teamId: 'team-1',
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -1398,6 +1403,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
 
       await ctx.commentRepository.save({
@@ -1456,6 +1462,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
 
       await ctx.commentRepository.save({
@@ -1517,6 +1524,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
 
       const response = await ctx.app.inject({
@@ -1558,6 +1566,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -1606,6 +1615,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
       ctx.commentRepository.setListByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'List failed' });
 
@@ -1639,6 +1649,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
       ctx.commentRepository.setCountByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'Count failed' });
 
@@ -1672,6 +1683,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
 
       for (let i = 1; i <= 5; i++) {
@@ -1720,6 +1732,7 @@ describe('linearRoutes', () => {
         createdAt: '2025-01-15T00:00:00Z',
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
+        teamId: 'team-1',
       });
 
       for (let i = 1; i <= 5; i++) {
