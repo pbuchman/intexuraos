@@ -124,6 +124,23 @@ describe('firestoreCodeTaskRepository', () => {
       }
     });
 
+    it('Layer 2: skips dedup check for retried tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const input = createTaskInput();
+      const first = await repo.create(input);
+
+      expect(first.ok).toBe(true);
+
+      const retryInput = createTaskInput({ retriedFrom: 'original-task-id' });
+      const second = await repo.create(retryInput);
+
+      expect(second.ok).toBe(true);
+    });
+
     it('Layer 2: allows same prompt after 5 minutes', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
