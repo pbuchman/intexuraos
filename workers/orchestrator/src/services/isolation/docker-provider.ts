@@ -297,7 +297,7 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
-    await this.waitForContainerReady(attachStream as unknown as NodeJS.ReadWriteStream, taskId);
+    await this.waitForContainerReady(attachStream as unknown as NodeJS.ReadWriteStream, taskId, container.id);
     this.logger.debug({ taskId }, 'Container ready — sending system prompt');
     await this.writePromptToTTY(attachStream, systemPrompt, taskId);
 
@@ -339,7 +339,8 @@ export class DockerProvider implements IsolationProvider {
   /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, real handshake requires running container with TTY @preserve */
   protected async waitForContainerReady(
     attachStream: NodeJS.ReadWriteStream,
-    taskId: string
+    taskId: string,
+    containerId?: string
   ): Promise<void> {
     const TOTAL_TIMEOUT_MS = 180_000;
     const SENTINEL_POLL_MS = 2_000;
@@ -347,7 +348,6 @@ export class DockerProvider implements IsolationProvider {
     const SENTINEL_PATH = '/tmp/claude-ready';
 
     // Phase 1: Poll for entrypoint sentinel (waits for pnpm install to finish)
-    const containerId = this.workers.get(taskId)?.containerId;
     if (containerId !== undefined) {
       const startTime = Date.now();
       while (Date.now() - startTime < TOTAL_TIMEOUT_MS) {
