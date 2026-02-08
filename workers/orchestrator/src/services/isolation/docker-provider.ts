@@ -289,7 +289,7 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
-    await this.waitForContainerReady(attachStream as unknown as NodeJS.ReadWriteStream, taskId, container.id);
+    await this.waitForContainerReady(attachStream as unknown as NodeJS.ReadWriteStream, taskId);
     this.logger.debug({ taskId }, 'Container ready — sending system prompt');
     await this.writePromptToTTY(attachStream, systemPrompt, taskId);
 
@@ -331,46 +331,15 @@ export class DockerProvider implements IsolationProvider {
   /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, real handshake requires running container with TTY @preserve */
   protected async waitForContainerReady(
     attachStream: NodeJS.ReadWriteStream,
-    taskId: string,
-    containerId?: string
+    taskId: string
   ): Promise<void> {
     const TOTAL_TIMEOUT_MS = 180_000;
-    const SENTINEL_POLL_MS = 2_000;
-    const READY_MARKER = 'bypass permissions on';
-    const SENTINEL_PATH = '/tmp/claude-ready';
+    const ENTRYPOINT_READY = 'Starting Claude in interactive mode';
+    const TUI_READY_MARKER = 'bypass permissions on';
 
-    // Phase 1: Poll for entrypoint sentinel (waits for pnpm install to finish)
-    if (containerId !== undefined) {
-      const startTime = Date.now();
-      while (Date.now() - startTime < TOTAL_TIMEOUT_MS) {
-        try {
-          const container = this.docker.getContainer(containerId);
-          const exec = await container.exec({
-            Cmd: ['sh', '-c', `[ -f ${SENTINEL_PATH} ] && echo READY || echo WAIT`],
-            AttachStdout: true,
-            Tty: true,
-          });
-          const stream = await exec.start({ Tty: true });
-          const chunks: Buffer[] = [];
-          stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-          await new Promise<void>((resolve) => stream.on('end', resolve));
-          const output = Buffer.concat(chunks).toString('utf-8');
-
-          if (output.includes('READY')) {
-            this.logger.info({ taskId }, 'Entrypoint ready sentinel detected');
-            break;
-          }
-        } catch {
-          // Container not ready for exec yet
-        }
-        await new Promise((resolve) => setTimeout(resolve, SENTINEL_POLL_MS));
-      }
-    }
-
-    // Phase 2: Send API key approval and wait for TUI ready marker
-    const POST_SENTINEL_WAIT_MS = 5_000;
     await new Promise<void>((resolve) => {
       let done = false;
+      let entrypointReady = false;
 
       const finish = (): void => {
         if (done) return;
@@ -381,30 +350,36 @@ export class DockerProvider implements IsolationProvider {
       };
 
       const hardTimeout = setTimeout(() => {
-        this.logger.warn({ taskId }, 'TUI ready timeout — proceeding anyway');
+        this.logger.warn({ taskId, entrypointReady }, 'Container ready timeout — proceeding anyway');
         finish();
-      }, 30_000);
+      }, TOTAL_TIMEOUT_MS);
 
       const onData = (chunk: Buffer): void => {
-        if (!done) {
-          const text = chunk.toString('utf-8');
-          if (text.includes(READY_MARKER)) {
-            this.logger.info({ taskId }, 'TUI ready marker detected');
-            finish();
-          }
+        if (done) return;
+        const text = chunk.toString('utf-8');
+
+        // Phase 1: Wait for entrypoint to finish (pnpm install done, Claude about to start)
+        if (!entrypointReady && text.includes(ENTRYPOINT_READY)) {
+          entrypointReady = true;
+          this.logger.info({ taskId }, 'Entrypoint ready — sending API key approval');
+          // Wait for Claude TUI to initialize before sending approval
+          setTimeout(() => {
+            if (done) return;
+            attachStream.write('\x1b[A');
+            setTimeout(() => {
+              if (!done) attachStream.write('\r');
+            }, 500);
+          }, 5_000);
+        }
+
+        // Phase 2: Detect TUI ready after approval sent
+        if (entrypointReady && text.includes(TUI_READY_MARKER)) {
+          this.logger.info({ taskId }, 'TUI ready marker detected');
+          finish();
         }
       };
 
       attachStream.on('data', onData);
-
-      setTimeout(() => {
-        if (done) return;
-        this.logger.debug({ taskId }, 'Sending API key approval');
-        attachStream.write('\x1b[A');
-        setTimeout(() => {
-          if (!done) attachStream.write('\r');
-        }, 500);
-      }, POST_SENTINEL_WAIT_MS);
     });
   }
   /* v8 ignore stop @preserve */
