@@ -134,11 +134,11 @@ export class TaskDispatcher {
       this.logForwarder.registerTask(taskId, request.webhookSecret);
 
       try {
+        // Mint GitHub token BEFORE container starts so entrypoint finds it at /secrets/github-token
+        await this.isolation.tokenRefresher.registerTask(taskId);
+
         const handle = await this.isolation.provider.createWorker(workerConfig);
         containerId = handle.containerId;
-
-        // Register task with token refresher for GitHub token refresh
-        await this.isolation.tokenRefresher.registerTask(taskId);
       } catch (error) {
         this.runningCount--;
         /* v8 ignore start -- ts-type: ternary type narrowing for error message extraction @preserve */
