@@ -9,6 +9,7 @@ import type {
   FailedIssueRepository,
   ProcessedActionRepository,
   LinearIssueRepository,
+  LinearCommentRepository,
 } from './domain/index.js';
 import { createLinearConnectionRepository } from './infra/firestore/linearConnectionRepository.js';
 import { createLinearApiClient } from './infra/linear/linearApiClient.js';
@@ -16,6 +17,7 @@ import { createLinearActionExtractionService } from './infra/llm/linearActionExt
 import { createFailedIssueRepository } from './infra/firestore/failedIssueRepository.js';
 import { createProcessedActionRepository } from './infra/firestore/processedActionRepository.js';
 import { createLinearIssueRepository } from './infra/firestore/linearIssueRepository.js';
+import { createLinearCommentRepository } from './infra/firestore/linearCommentRepository.js';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
@@ -31,6 +33,7 @@ export interface ServiceContainer {
   failedIssueRepository: FailedIssueRepository;
   processedActionRepository: ProcessedActionRepository;
   issueRepository: LinearIssueRepository;
+  commentRepository: LinearCommentRepository;
   userServiceClient: UserServiceClient;
 }
 
@@ -59,6 +62,7 @@ export function initServices(config: ServiceConfig): void {
     failedIssueRepository: createFailedIssueRepository(),
     processedActionRepository: createProcessedActionRepository(),
     issueRepository: createLinearIssueRepository(),
+    commentRepository: createLinearCommentRepository(),
     userServiceClient,
   };
 }

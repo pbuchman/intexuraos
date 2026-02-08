@@ -21,6 +21,7 @@ import type {
   AddCommentRequest,
   AddCommentResponse,
   LinearAgentError,
+  LinearIssueForDisplay,
 } from '../../domain/ports/linearAgentClient.js';
 
 export interface LinearAgentHttpClientConfig {
@@ -162,7 +163,7 @@ export function createLinearAgentHttpClient(
     },
 
     async validateIssue(request: ValidateIssueRequest): Promise<Result<ValidatedIssue, LinearAgentError>> {
-      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.identifier)}?userId=${encodeURIComponent(request.userId)}`;
+      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.identifier)}/validate?userId=${encodeURIComponent(request.userId)}`;
 
       logger.info({ identifier: request.identifier }, 'Validating Linear issue via linear-agent');
 
@@ -367,6 +368,84 @@ export function createLinearAgentHttpClient(
         /* v8 ignore stop @preserve */
 
         logger.error({ error }, 'linear-agent addComment request failed');
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
+    async fetchIssueForDisplay(request: ValidateIssueRequest): Promise<Result<LinearIssueForDisplay, LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.identifier)}`;
+
+      logger.info({ identifier: request.identifier }, 'Fetching Linear issue for display');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.warn({ status: response.status, error: errorText }, 'linear-agent fetchIssueForDisplay failed');
+          return err({ code: 'UNAVAILABLE', message: errorText });
+        }
+
+        const body = await response.json() as {
+          success: boolean;
+          data?: {
+            id: string;
+            identifier: string;
+            title: string;
+            description: string | null;
+            state: { name: string; type: string };
+            priority: number;
+            assignee: { id: string; name: string } | null;
+            labels: { id: string; name: string }[];
+            url: string;
+            createdAt: string;
+            updatedAt: string;
+            commentCount: number;
+            lastCommentAt: string | null;
+          };
+        };
+
+        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
+        if (!body.success || body.data === undefined) {
+          logger.error({ body }, 'Invalid response from linear-agent');
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+        /* v8 ignore stop @preserve */
+
+        return ok({
+          identifier: body.data.identifier,
+          title: body.data.title,
+          state: body.data.state,
+          priority: body.data.priority,
+          assignee: body.data.assignee,
+          labels: body.data.labels,
+          url: body.data.url,
+          commentCount: body.data.commentCount,
+          lastCommentAt: body.data.lastCommentAt,
+        });
+      } catch (error) {
+        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.error({ timeoutMs }, 'linear-agent request timed out');
+          return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
+        }
+        /* v8 ignore stop @preserve */
+
+        logger.error({ error }, 'linear-agent fetchIssueForDisplay request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
       } finally {
         clearTimeout(timeoutId);

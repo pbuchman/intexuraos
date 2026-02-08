@@ -339,7 +339,7 @@ describe('linearAgentHttpClient', () => {
       };
 
       nock(baseUrl)
-        .get('/internal/linear/issues/INT-123')
+        .get('/internal/linear/issues/INT-123/validate')
         .query({ userId: 'test-user-123' })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, mockResponse);
@@ -365,7 +365,7 @@ describe('linearAgentHttpClient', () => {
 
     it('should return NOT_FOUND on 404 error', async () => {
       nock(baseUrl)
-        .get('/internal/linear/issues/INT-999')
+        .get('/internal/linear/issues/INT-999/validate')
         .query({ userId: 'test-user-123' })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(404, 'Issue not found');
@@ -389,7 +389,7 @@ describe('linearAgentHttpClient', () => {
 
     it('should return UNAVAILABLE on non-404 error', async () => {
       nock(baseUrl)
-        .get('/internal/linear/issues/INT-123')
+        .get('/internal/linear/issues/INT-123/validate')
         .query({ userId: 'test-user-123' })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(500, 'Internal Server Error');
@@ -412,7 +412,7 @@ describe('linearAgentHttpClient', () => {
 
     it('should return UNAVAILABLE on request timeout', async () => {
       nock(baseUrl)
-        .get('/internal/linear/issues/INT-123')
+        .get('/internal/linear/issues/INT-123/validate')
         .query({ userId: 'test-user-123' })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .delay(6000)
@@ -433,7 +433,7 @@ describe('linearAgentHttpClient', () => {
 
     it('should log info before validating issue', async () => {
       nock(baseUrl)
-        .get('/internal/linear/issues/INT-456')
+        .get('/internal/linear/issues/INT-456/validate')
         .query({ userId: 'test-user-123' })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
@@ -571,6 +571,130 @@ describe('linearAgentHttpClient', () => {
       const result = await client.generateTitle({
         userId: 'test-user-123',
         description: 'Test description',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Request timed out');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { timeoutMs: 5000 },
+          'linear-agent request timed out'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+  });
+
+  describe('fetchIssueForDisplay', () => {
+    it('should fetch issue for display successfully', async () => {
+      const mockResponse = {
+        success: true,
+        data: {
+          id: 'issue-123',
+          identifier: 'INT-123',
+          title: 'Test Issue',
+          description: null,
+          state: { name: 'Backlog', type: 'backlog' },
+          priority: 0,
+          assignee: { id: 'user-123', name: 'Test User' },
+          labels: [],
+          url: 'https://linear.app/intexuraos/issue/INT-123',
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-01T00:00:00Z',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      };
+
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(200, mockResponse);
+
+      const result = await client.fetchIssueForDisplay({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
+
+      if (result.ok) {
+        expect(result.value.identifier).toBe('INT-123');
+        expect(result.value.title).toBe('Test Issue');
+        expect(result.value.state.name).toBe('Backlog');
+        expect(result.value.priority).toBe(0);
+        expect(result.value.assignee?.name).toBe('Test User');
+        expect(result.value.url).toBe('https://linear.app/intexuraos/issue/INT-123');
+        expect(result.value.commentCount).toBe(0);
+        expect(result.value.lastCommentAt).toBeNull();
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          { identifier: 'INT-123' },
+          'Fetching Linear issue for display'
+        );
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('should return UNAVAILABLE on 500 error', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-456')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(500, 'Internal Server Error');
+
+      const result = await client.fetchIssueForDisplay({
+        userId: 'test-user-123',
+        identifier: 'INT-456',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Internal Server Error');
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          { status: 500, error: 'Internal Server Error' },
+          'linear-agent fetchIssueForDisplay failed'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNAVAILABLE on 404 error', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-999')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .reply(404, 'Issue not found');
+
+      const result = await client.fetchIssueForDisplay({
+        userId: 'test-user-123',
+        identifier: 'INT-999',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Issue not found');
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          { status: 404, error: 'Issue not found' },
+          'linear-agent fetchIssueForDisplay failed'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNAVAILABLE on request timeout', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-789')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .delay(6000)
+        .reply(200, {});
+
+      const result = await client.fetchIssueForDisplay({
+        userId: 'test-user-123',
+        identifier: 'INT-789',
       });
 
       if (!result.ok) {

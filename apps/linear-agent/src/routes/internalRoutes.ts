@@ -154,7 +154,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: { identifier: string }; Querystring: { userId: string } }>(
-    '/internal/linear/issues/:identifier',
+    '/internal/linear/issues/:identifier/validate',
     {
       schema: {
         operationId: 'validateIssue',

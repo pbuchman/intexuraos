@@ -150,6 +150,21 @@ function CodeTaskCard({ task }: CodeTaskCardProps): React.JSX.Element {
         </span>
       </div>
 
+      {task.linearIssue !== undefined && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${
+            task.linearIssue.state.type === 'completed' ? 'bg-green-500' :
+            task.linearIssue.state.type === 'started' ? 'bg-blue-500' :
+            task.linearIssue.state.type === 'cancelled' ? 'bg-red-500' :
+            'bg-gray-400'
+          }`} />
+          <span className="text-xs text-gray-500">{task.linearIssue.state.name}</span>
+          {task.linearIssue.assignee !== null && (
+            <span className="text-xs text-gray-400">&middot; {task.linearIssue.assignee.name}</span>
+          )}
+        </div>
+      )}
+
       <div className="mt-4 flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
         <div className="flex gap-4">
           <span>Created: {formatDateTime(task.createdAt)}</span>

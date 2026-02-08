@@ -198,3 +198,44 @@ body.dark {
 .prose em {
   @apply italic;
 }
+
+/* MDEditor overrides - remove blue lines and borders */
+.w-md-editor {
+  border-color: rgb(226 232 240) !important; /* slate-200 */
+}
+
+.dark .w-md-editor {
+  border-color: rgb(51 65 85) !important; /* slate-700 */
+}
+
+.w-md-editor-text-pre,
+.w-md-editor-text-input,
+.w-md-editor-text-area {
+  border: none !important;
+}
+
+.w-md-editor-text-pre:focus,
+.w-md-editor-text-input:focus,
+.w-md-editor-text-area:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.w-md-editor-toolbar {
+  border-bottom: 1px solid rgb(226 232 240) !important; /* slate-200 */
+}
+
+.dark .w-md-editor-toolbar {
+  border-bottom: 1px solid rgb(51 65 85) !important; /* slate-700 */
+}
+
+.w-md-editor-toolbar button:focus-visible {
+  outline: 2px solid rgb(37 99 235) !important; /* blue-600 */
+  outline-offset: 2px !important;
+}
+
+/* Remove the blue separator line between toolbar and textarea */
+.w-md-editor .w-md-editor-toolbar + .w-md-editor-content {
+  border-top: none !important;
+}
+

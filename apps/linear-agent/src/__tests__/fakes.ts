@@ -22,6 +22,8 @@ import type {
   WorkflowState,
   LinearIssueRepository,
   SyncedLinearIssue,
+  LinearCommentRepository,
+  LinearComment,
 } from '../domain/index.js';
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
@@ -662,5 +664,80 @@ export class FakeUserServiceClient implements UserServiceClient {
   reset(): void {
     this.llmClient = new FakeLlmGenerateClient();
     this.shouldFail = false;
+  }
+}
+
+export class FakeLinearCommentRepository implements LinearCommentRepository {
+  private comments = new Map<string, LinearComment>();
+  private shouldFail = false;
+  private shouldFailSave = false;
+  private shouldFailListByIssueId = false;
+  private shouldFailCountByIssueId = false;
+  private shouldFailDeleteById = false;
+  private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
+
+  async save(comment: LinearComment): Promise<Result<LinearComment, LinearError>> {
+    if (this.shouldFail || this.shouldFailSave) return err(this.failError);
+    this.comments.set(comment.id, { ...comment });
+    return ok(comment);
+  }
+
+  async findById(id: string): Promise<Result<LinearComment | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(this.comments.get(id) ?? null);
+  }
+
+  async listByIssueId(issueId: string): Promise<Result<LinearComment[], LinearError>> {
+    if (this.shouldFail || this.shouldFailListByIssueId) return err(this.failError);
+    const issueComments = Array.from(this.comments.values())
+      .filter((c) => c.issueId === issueId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return ok(issueComments);
+  }
+
+  async countByIssueId(issueId: string): Promise<Result<number, LinearError>> {
+    if (this.shouldFail || this.shouldFailCountByIssueId) return err(this.failError);
+    const count = Array.from(this.comments.values()).filter((c) => c.issueId === issueId).length;
+    return ok(count);
+  }
+
+  async deleteById(id: string): Promise<Result<void, LinearError>> {
+    if (this.shouldFail || this.shouldFailDeleteById) return err(this.failError);
+    this.comments.delete(id);
+    return ok(undefined);
+  }
+
+  setFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFail = fail;
+    if (error) this.failError = error;
+  }
+
+  setSaveFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailSave = fail;
+    if (error) this.failError = error;
+  }
+
+  setListByIssueIdFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailListByIssueId = fail;
+    if (error) this.failError = error;
+  }
+
+  setCountByIssueIdFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailCountByIssueId = fail;
+    if (error) this.failError = error;
+  }
+
+  setDeleteByIdFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailDeleteById = fail;
+    if (error) this.failError = error;
+  }
+
+  reset(): void {
+    this.comments.clear();
+    this.shouldFail = false;
+    this.shouldFailSave = false;
+    this.shouldFailListByIssueId = false;
+    this.shouldFailCountByIssueId = false;
+    this.shouldFailDeleteById = false;
   }
 }

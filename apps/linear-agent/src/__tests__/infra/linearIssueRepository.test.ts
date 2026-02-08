@@ -31,6 +31,7 @@ function createTestIssue(overrides: Partial<SyncedLinearIssue> = {}): SyncedLine
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-02T00:00:00.000Z',
     syncedAt: '2025-01-03T00:00:00.000Z',
+    teamId: 'team-1',
     ...overrides,
   };
 }
@@ -91,6 +92,39 @@ describe('linearIssueRepository', () => {
       if (result.ok) {
         expect(result.value).not.toBeNull();
         expect(result.value?.identifier).toBe('INT-123');
+      }
+    });
+
+    it('defaults teamId to empty string for legacy docs without it', async () => {
+      fakeFirestore.seedCollection('linear_issues', [
+        {
+          id: 'legacy-issue',
+          data: {
+            id: 'legacy-issue',
+            identifier: 'INT-LEGACY',
+            title: 'Legacy Issue',
+            description: null,
+            state: 'Backlog',
+            stateType: 'backlog',
+            priority: 0,
+            assigneeId: null,
+            assigneeName: null,
+            labels: [],
+            url: 'https://linear.app/issue/INT-LEGACY',
+            userId: 'user-123',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+            syncedAt: '2025-01-01T00:00:00.000Z',
+          },
+        },
+      ]);
+
+      const result = await findLinearIssueById('legacy-issue');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).not.toBeNull();
+        expect(result.value?.teamId).toBe('');
       }
     });
 

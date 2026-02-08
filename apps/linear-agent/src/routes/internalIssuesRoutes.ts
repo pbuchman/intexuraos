@@ -394,5 +394,170 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
     }
   );
 
+  // GET /internal/linear/issues/:identifier - Get issue with comment data
+  fastify.get<{ Params: { identifier: string } }>(
+    '/internal/linear/issues/:identifier',
+    {
+      schema: {
+        operationId: 'getLinearIssueInternal',
+        summary: 'Get Linear issue with comment data (internal)',
+        description: 'Fetches a Linear issue with comment count and last comment timestamp. Used by code-agent.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          required: ['identifier'],
+          properties: {
+            identifier: { type: 'string', description: 'Issue identifier (e.g., INT-123)' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  identifier: { type: 'string' },
+                  title: { type: 'string' },
+                  description: { type: ['string', 'null'] },
+                  state: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      type: { type: 'string', enum: ['backlog', 'unstarted', 'started', 'completed', 'cancelled'] },
+                    },
+                  },
+                  priority: { type: 'number' },
+                  assignee: {
+                    type: ['object', 'null'],
+                    properties: {
+                      id: { type: 'string' },
+                      name: { type: 'string' },
+                    },
+                  },
+                  labels: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        name: { type: 'string' },
+                      },
+                    },
+                  },
+                  url: { type: 'string' },
+                  createdAt: { type: 'string' },
+                  updatedAt: { type: 'string' },
+                  commentCount: { type: 'number' },
+                  lastCommentAt: { type: ['string', 'null'] },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          404: {
+            description: 'Issue not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { identifier: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const { identifier } = request.params;
+      const services = getServices();
+      const logger = request.log as unknown as Logger;
+
+      logger.info({ identifier }, 'internal/getLinearIssue: fetching issue');
+
+      // Find issue by identifier
+      const issueResult = await services.issueRepository.findByIdentifier(identifier);
+      if (!issueResult.ok) {
+        logger.error({ error: issueResult.error, identifier }, 'Failed to fetch issue');
+        reply.status(500);
+        return await handleLinearError(issueResult.error, reply);
+      }
+
+      const issue = issueResult.value;
+      if (issue === null) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
+      }
+
+      // Get comments (count and last comment timestamp from single query)
+      /* v8 ignore start -- test-infra: error paths require Linear API fault injection testing @preserve */
+      const commentsResult = await services.commentRepository.listByIssueId(issue.id);
+      if (!commentsResult.ok) {
+        logger.error({ error: commentsResult.error, issueId: issue.id, identifier }, 'Failed to fetch comments');
+        reply.status(500);
+        return await handleLinearError(commentsResult.error, reply);
+      }
+      /* v8 ignore stop @preserve */
+
+      const commentCount = commentsResult.value.length;
+      let lastCommentAt: string | null = null;
+      if (commentCount > 0) {
+        // Comments are ordered by createdAt ASC, so last is at the end
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
+        const lastComment = commentsResult.value[commentCount - 1];
+        if (lastComment !== undefined) {
+          lastCommentAt = lastComment.createdAt;
+        }
+        /* v8 ignore stop @preserve */
+      }
+
+      return await reply.ok({
+        id: issue.id,
+        identifier: issue.identifier,
+        title: issue.title,
+        description: issue.description,
+        state: { name: issue.state, type: issue.stateType },
+        priority: issue.priority,
+        /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
+        assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
+        /* v8 ignore stop @preserve */
+        labels: issue.labels.map((name: string) => ({ id: name, name })),
+        url: issue.url,
+        createdAt: issue.createdAt,
+        updatedAt: issue.updatedAt,
+        commentCount,
+        lastCommentAt,
+      });
+    }
+  );
+
   done();
 };
