@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -10,7 +10,6 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { Loader2, Terminal } from 'lucide-react';
-import { Card } from '@/components/ui';
 import { useAuth } from '@/context';
 import {
   getFirestoreClient,
@@ -18,6 +17,8 @@ import {
   isFirebaseAuthenticated,
   initializeFirebase,
 } from '@/services/firebase';
+
+const MIN_TERMINAL_ROWS = 10;
 
 interface TerminalLogViewerProps {
   taskId: string;
@@ -31,8 +32,6 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const { getAccessToken } = useAuth();
   const [logsLoading, setLogsLoading] = useState(true);
   const [logsError, setLogsError] = useState<string | null>(null);
-  const [logsHeight, setLogsHeight] = useState(384);
-  const [isResizing, setIsResizing] = useState(false);
   const [chunkCount, setChunkCount] = useState(0);
 
   const terminalContainerRef = useRef<HTMLDivElement>(null);
@@ -43,33 +42,19 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const isMountedRef = useRef(true);
   const lastSequenceRef = useRef(-1);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-
-    const startY = e.clientY;
-    const startHeight = logsHeight;
-
-    const handleMouseMove = (moveEvent: MouseEvent): void => {
-      const deltaY = startY - moveEvent.clientY;
-      const newHeight = Math.max(200, Math.min(800, startHeight + deltaY));
-      setLogsHeight(newHeight);
-    };
-
-    const handleMouseUp = (): void => {
-      setIsResizing(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [logsHeight]);
-
   useEffect(() => {
     isMountedRef.current = true;
     return (): void => {
       isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = '.terminal-flow .xterm-viewport { overflow-y: hidden !important; }';
+    document.head.appendChild(style);
+    return (): void => {
+      document.head.removeChild(style);
     };
   }, []);
 
@@ -92,9 +77,9 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     terminal.loadAddon(fitAddon);
     terminal.open(terminalContainerRef.current);
 
-    // Small delay to let the container settle before fitting
     requestAnimationFrame(() => {
       fitAddon.fit();
+      terminal.resize(terminal.cols, MIN_TERMINAL_ROWS);
     });
 
     terminalRef.current = terminal;
@@ -103,7 +88,10 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     const container = terminalContainerRef.current;
     const resizeObserver = new ResizeObserver(() => {
       requestAnimationFrame(() => {
-        fitAddon.fit();
+        const dims = fitAddon.proposeDimensions();
+        if (dims !== undefined && dims.cols !== terminal.cols) {
+          terminal.resize(dims.cols, terminal.rows);
+        }
       });
     });
     resizeObserver.observe(container);
@@ -115,15 +103,6 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
       fitAddonRef.current = null;
     };
   }, []);
-
-  // Re-fit when height changes
-  useEffect(() => {
-    if (fitAddonRef.current !== null) {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-      });
-    }
-  }, [logsHeight]);
 
   // Subscribe to Firestore logs
   useEffect(() => {
@@ -163,6 +142,14 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
             if (newChunks > 0) {
               setChunkCount((prev) => prev + newChunks);
+              terminal.write('', () => {
+                const t = terminalRef.current;
+                if (t === null) return;
+                const totalLines = t.buffer.active.length;
+                if (totalLines > t.rows) {
+                  t.resize(t.cols, totalLines);
+                }
+              });
             }
             setLogsLoading(false);
           },
@@ -192,46 +179,45 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   }, [taskId, getAccessToken]);
 
   return (
-    <Card className="mb-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Terminal className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Execution Logs</h3>
+    <div className="mt-6 mb-6">
+      <div className="flex items-center justify-between rounded-t-lg bg-slate-800 px-4 py-2 border-b border-slate-700">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-full bg-red-500/70" />
+            <span className="h-3 w-3 rounded-full bg-yellow-500/70" />
+            <span className="h-3 w-3 rounded-full bg-green-500/70" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-slate-400" />
+            <span className="text-sm font-medium text-slate-300">Execution Logs</span>
+          </div>
           {isActive ? (
-            <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/50 dark:text-green-300">
+            <span className="flex items-center gap-1.5 rounded-full bg-green-900/50 px-2 py-0.5 text-xs text-green-300">
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
               Live
             </span>
           ) : null}
         </div>
-        <span className="text-sm text-slate-500 dark:text-slate-400">
+        <span className="text-xs text-slate-500">
           {chunkCount} chunk{chunkCount !== 1 ? 's' : ''}
         </span>
       </div>
 
-      <div className="relative">
-        <div
-          className="relative rounded-lg bg-slate-900 overflow-hidden"
-          style={{ height: `${String(logsHeight)}px` }}  // eslint-disable-line no-restricted-syntax -- dynamic height value for resizable terminal
-        >
-          <div ref={terminalContainerRef} className="h-full w-full" />
-          {logsLoading ? (
-            <div className="absolute inset-0 flex items-center gap-2 p-4 text-slate-400 font-mono text-sm bg-slate-900">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading logs...
-            </div>
-          ) : null}
-          {logsError !== null ? (
-            <div className="absolute inset-0 p-4 text-red-400 font-mono text-sm bg-slate-900">Error: {logsError}</div>
-          ) : null}
-        </div>
-        <div
-          onMouseDown={handleMouseDown}
-          className={`absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize border-t-2 border-transparent hover:border-slate-500 dark:hover:border-slate-400 transition-colors ${isResizing ? 'border-slate-500 dark:border-slate-400' : ''}`}
-          title="Drag to resize"
-        />
+      <div className="terminal-flow relative rounded-b-lg bg-slate-900 min-h-[200px]">
+        <div ref={terminalContainerRef} className="w-full" />
+        {logsLoading ? (
+          <div className="absolute inset-0 flex items-center gap-2 rounded-b-lg p-4 text-slate-400 font-mono text-sm bg-slate-900">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading logs...
+          </div>
+        ) : null}
+        {logsError !== null ? (
+          <div className="absolute inset-0 rounded-b-lg p-4 text-red-400 font-mono text-sm bg-slate-900">
+            Error: {logsError}
+          </div>
+        ) : null}
       </div>
-    </Card>
+    </div>
   );
 }, (prevProps, nextProps) => {
   return prevProps.taskId === nextProps.taskId && prevProps.isActive === nextProps.isActive;
