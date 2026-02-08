@@ -36,6 +36,14 @@ verify_network_restrictions &
 mkdir -p /home/claude/.config/gcloud /home/claude/.claude
 
 # ------------------------------------------------------------------------------
+# Restore Claude config defaults (skips onboarding on fresh tmpfs)
+# ------------------------------------------------------------------------------
+if [ -d "/opt/claude-defaults" ]; then
+    cp -a /opt/claude-defaults/. /home/claude/
+    echo "[entrypoint] Claude config defaults restored"
+fi
+
+# ------------------------------------------------------------------------------
 # Verify mounts
 # ------------------------------------------------------------------------------
 if [ ! -d "/repo" ]; then
@@ -102,24 +110,5 @@ if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
     echo "[entrypoint] Git branch: $(git -C /repo branch --show-current 2>/dev/null || echo 'unknown')"
 fi
 
-# Read prompt from stdin (sent by orchestrator via attachStream)
-# The prompt is multi-line (system context + user prompt), ending with ---END_PROMPT---
-# Read all lines until the delimiter
-PROMPT=""
-while IFS= read -r line; do
-    if [[ "$line" == "---END_PROMPT---" ]]; then
-        break
-    fi
-    if [[ -n "$PROMPT" ]]; then
-        PROMPT="${PROMPT}"$'\n'"${line}"
-    else
-        PROMPT="$line"
-    fi
-done
-echo "[entrypoint] Received prompt (${#PROMPT} chars): ${PROMPT:0:100}..."
-
-# Execute Claude in print mode (non-interactive)
-# --print: Process prompt and exit, bypasses interactive onboarding
-# --dangerously-skip-permissions: Required for automated operation
-# --verbose: Shows detailed tool calls and API interactions
-exec claude --print --dangerously-skip-permissions --verbose "$PROMPT"
+echo "[entrypoint] Starting Claude in interactive mode..."
+exec claude --dangerously-skip-permissions --verbose

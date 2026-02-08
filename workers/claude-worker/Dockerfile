@@ -53,6 +53,11 @@ RUN addgroup -S claude && adduser -S claude -G claude -u 1001
 RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gcloud \
     && chown -R claude:claude /repo /secrets /tmp /home/claude
 
+# Bake Claude default config to skip onboarding on fresh tmpfs
+# /home/claude is tmpfs so image contents are wiped — entrypoint.sh copies these at startup
+COPY --chown=claude:claude config-defaults/claude.json /opt/claude-defaults/.claude.json
+COPY --chown=claude:claude config-defaults/settings.json /opt/claude-defaults/.claude/settings.json
+
 # Copy entrypoint
 COPY --chown=claude:claude entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

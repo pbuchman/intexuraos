@@ -990,6 +990,15 @@ export interface LinearConnectionStatus {
 }
 
 /**
+ * Linear webhook configuration from linear-agent
+ */
+export interface LinearWebhookConfig {
+  webhookUrl: string;
+  hasWebhookSecret: boolean;
+  teamId: string;
+}
+
+/**
  * Grouped issues by dashboard column
  */
 export interface GroupedIssues {

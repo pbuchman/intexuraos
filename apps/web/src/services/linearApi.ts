@@ -5,6 +5,7 @@ import type {
   ListIssuesResponse,
   LinearTeam,
   FailedLinearIssue,
+  LinearWebhookConfig,
 } from '@/types';
 
 interface ValidateResponse {
@@ -206,6 +207,55 @@ export async function syncFromLinear(
     '/linear/sync',
     accessToken,
     { method: 'POST' }
+  );
+}
+
+interface WebhookConfigSaveResponse {
+  configured: boolean;
+}
+
+/**
+ * Get webhook configuration (URL and secret status)
+ */
+export async function getWebhookConfig(
+  accessToken: string
+): Promise<LinearWebhookConfig> {
+  return await apiRequest<LinearWebhookConfig>(
+    config.linearAgentUrl,
+    '/linear/webhook-config',
+    accessToken
+  );
+}
+
+/**
+ * Save or update webhook signing secret
+ */
+export async function saveWebhookSecret(
+  accessToken: string,
+  secret: string
+): Promise<WebhookConfigSaveResponse> {
+  return await apiRequest<WebhookConfigSaveResponse>(
+    config.linearAgentUrl,
+    '/linear/webhook-config',
+    accessToken,
+    {
+      method: 'POST',
+      body: { secret },
+    }
+  );
+}
+
+/**
+ * Remove webhook signing secret
+ */
+export async function removeWebhookSecret(
+  accessToken: string
+): Promise<WebhookConfigSaveResponse> {
+  return await apiRequest<WebhookConfigSaveResponse>(
+    config.linearAgentUrl,
+    '/linear/webhook-config',
+    accessToken,
+    { method: 'DELETE' }
   );
 }
 

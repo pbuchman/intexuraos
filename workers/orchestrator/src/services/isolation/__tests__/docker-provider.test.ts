@@ -148,6 +148,10 @@ class TestableDockerProvider extends DockerProvider {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any).docker = mockDocker;
   }
+
+  protected override async waitForContainerReady(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 describe('DockerProvider', () => {
@@ -213,17 +217,15 @@ describe('DockerProvider', () => {
       }
     });
 
-    it('sends system prompt with delimiter to container', async () => {
+    it('sends system prompt to container stdin', async () => {
       const config = createTestConfig({
         prompt: 'Hello Claude', // User prompt is now embedded in systemPrompt by buildSystemPrompt
         systemPrompt: 'You are a helpful assistant',
       });
       await provider.createWorker(config);
 
-      // With new design, only systemPrompt is sent (user prompt embedded by buildSystemPrompt)
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith(
-        'You are a helpful assistant\n---END_PROMPT---\n'
-      );
+      // In interactive mode, prompt is sent as first stdin message (no delimiter needed)
+      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('You are a helpful assistant\n');
     });
   });
 

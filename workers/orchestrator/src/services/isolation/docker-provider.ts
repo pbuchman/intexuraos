@@ -149,7 +149,8 @@ export class DockerProvider implements IsolationProvider {
       `LINEAR_API_KEY=${secrets.LINEAR_API_KEY}`,
       `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
-      // Exit 10s after idle - no resume functionality yet (see INT-491)
+      'CLAUDE_PROJECT_DIR=/repo',
+      // Exit 10s after idle - Claude exits automatically when no input arrives
       'CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=10000',
     ];
 
@@ -216,7 +217,6 @@ export class DockerProvider implements IsolationProvider {
     await container.start();
 
     // Set up log listener BEFORE writing prompt to avoid race condition
-    // With --print mode, container may emit logs immediately after receiving prompt
     /* v8 ignore start -- test-infra: optional onLog callback tested via test mock @preserve */
     if (config.onLog !== undefined) {
       attachStream.on('data', (chunk: Buffer) => {
@@ -225,10 +225,9 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
-    // Write system prompt to worker
-    // User prompt is embedded in system prompt as [USER SUPPLEMENTAL INSTRUCTIONS]
-    // The delimiter ---END_PROMPT--- signals end of multi-line prompt to entrypoint.sh
-    attachStream.write(systemPrompt + '\n---END_PROMPT---\n');
+    await this.waitForContainerReady(attachStream as unknown as NodeJS.ReadWriteStream, taskId);
+    this.logger.debug({ taskId }, 'Container ready — sending system prompt');
+    attachStream.write(systemPrompt + '\n');
 
     const handle: WorkerHandle = {
       taskId,
@@ -262,6 +261,56 @@ export class DockerProvider implements IsolationProvider {
 
     return handle;
   }
+
+  /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, real handshake requires running container with TTY @preserve */
+  protected async waitForContainerReady(
+    attachStream: NodeJS.ReadWriteStream,
+    taskId: string
+  ): Promise<void> {
+    const TOTAL_TIMEOUT_MS = 30_000;
+    const INITIAL_WAIT_MS = 8_000;
+    const SETTLE_MS = 2_000;
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      let settleTimer: ReturnType<typeof setTimeout> | null = null;
+      let approvalSent = false;
+
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(hardTimeout);
+        if (settleTimer) clearTimeout(settleTimer);
+        attachStream.removeListener('data', onData);
+        resolve();
+      };
+
+      const hardTimeout = setTimeout(() => {
+        this.logger.warn({ taskId }, 'Container ready timeout — proceeding anyway');
+        finish();
+      }, TOTAL_TIMEOUT_MS);
+
+      const onData = (): void => {
+        if (approvalSent && !settled) {
+          if (settleTimer) clearTimeout(settleTimer);
+          settleTimer = setTimeout(finish, SETTLE_MS);
+        }
+      };
+
+      attachStream.on('data', onData);
+
+      setTimeout(() => {
+        if (settled) return;
+        approvalSent = true;
+        this.logger.debug({ taskId }, 'Sending API key approval');
+        attachStream.write('\x1b[A');
+        setTimeout(() => {
+          if (!settled) attachStream.write('\r');
+        }, 500);
+      }, INITIAL_WAIT_MS);
+    });
+  }
+  /* v8 ignore stop @preserve */
 
   async destroyWorker(taskId: string, forceKill = false): Promise<void> {
     const worker = this.workers.get(taskId);
