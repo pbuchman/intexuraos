@@ -239,6 +239,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
                 }}
                 disabled={retrying}
                 isLoading={retrying}
+                loadingText="Retrying..."
               >
                 <RotateCcw className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Retry Task</span>
