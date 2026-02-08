@@ -54,6 +54,9 @@ export class DockerProvider implements IsolationProvider {
    * Should be called on startup to prevent name collisions.
    */
   async cleanupOrphanedContainers(): Promise<void> {
+    const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
     try {
       const containers = await this.docker.listContainers({
         all: true,
@@ -61,10 +64,21 @@ export class DockerProvider implements IsolationProvider {
       });
 
       for (const containerInfo of containers) {
+        const createdAt = containerInfo.Created * 1000;
+        const ageMs = now - createdAt;
+
+        if (ageMs < MAX_AGE_MS) {
+          this.logger.debug(
+            { name: containerInfo.Names[0], ageHours: Math.round(ageMs / 3_600_000) },
+            'Skipping recent container'
+          );
+          continue;
+        }
+
         const container = this.docker.getContainer(containerInfo.Id);
         this.logger.info(
-          { containerId: containerInfo.Id, name: containerInfo.Names[0] },
-          'Cleaning up orphaned container'
+          { containerId: containerInfo.Id, name: containerInfo.Names[0], ageHours: Math.round(ageMs / 3_600_000) },
+          'Cleaning up old container'
         );
 
         try {
@@ -79,7 +93,7 @@ export class DockerProvider implements IsolationProvider {
               name: containerInfo.Names[0],
               error: err,
             },
-            'Failed to remove orphaned container'
+            'Failed to remove old container'
           );
         }
       }
@@ -438,20 +452,18 @@ export class DockerProvider implements IsolationProvider {
       return;
     }
 
-    this.logger.info({ taskId, forceKill }, 'Destroying worker container');
+    this.logger.info({ taskId, forceKill }, 'Stopping worker container');
 
     try {
       const container = this.docker.getContainer(worker.containerId);
 
       try {
-        // Force kill (SIGKILL) for timeout scenarios, graceful stop otherwise
         if (forceKill) {
           await container.kill({ signal: 'SIGKILL' });
         } else {
           await container.stop({ t: 10 });
         }
       } catch (err: unknown) {
-        // Docker returns specific error when container is already stopped/not found
         const isAlreadyStopped =
           err instanceof Error &&
           (err.message.includes('No such container') ||
@@ -464,12 +476,6 @@ export class DockerProvider implements IsolationProvider {
         } else {
           this.logger.error({ taskId, error: err }, 'Failed to stop/kill container');
         }
-      }
-
-      try {
-        await container.remove({ force: true });
-      } catch {
-        this.logger.debug({ taskId }, 'Remove failed');
       }
 
       const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
@@ -485,7 +491,7 @@ export class DockerProvider implements IsolationProvider {
       this.workers.delete(taskId);
     }
 
-    this.logger.info({ taskId }, 'Worker container destroyed');
+    this.logger.info({ taskId }, 'Worker container stopped');
   }
 
   async isWorkerRunning(taskId: string): Promise<boolean> {
