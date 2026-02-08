@@ -33,6 +33,7 @@ describe('linearIssueService', () => {
     validateIssue: (...args: Parameters<LinearAgentClient['validateIssue']>) => mockValidateIssue(...args),
     generateTitle: (...args: Parameters<LinearAgentClient['generateTitle']>) => mockGenerateTitle(...args),
     addComment: (...args: Parameters<LinearAgentClient['addComment']>) => mockAddComment(...args),
+    fetchIssueForDisplay: vi.fn(),
   };
 
   const testUserId = 'test-user-123';

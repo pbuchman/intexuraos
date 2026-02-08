@@ -55,6 +55,7 @@ describe('GET /code/tasks endpoints', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
   let codeTaskRepo: CodeTaskRepository;
+  let linearAgentClient: LinearAgentClient;
 
   beforeEach(async () => {
     // Set jwtVerify to resolve by default (simulating valid token)
@@ -113,7 +114,7 @@ describe('GET /code/tasks endpoints', () => {
       },
     };
 
-    const linearAgentClient = createLinearAgentHttpClient({
+    linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
       timeoutMs: 10000,
@@ -558,6 +559,134 @@ describe('GET /code/tasks endpoints', () => {
         expect(body.error.message).toBe('Database unavailable');
 
         findByIdForUserSpy.mockRestore();
+      });
+    });
+
+    describe('linear issue enrichment', () => {
+      it('includes linearIssue when task has linearIssueId', async () => {
+        const task = await codeTaskRepo.create({
+          userId: 'test-user-id',
+          prompt: 'Task with linear issue',
+          sanitizedPrompt: 'Task with linear issue',
+          systemPromptHash: 'default',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_linear',
+          linearIssueId: 'INT-100',
+        });
+
+        if (!task.ok) {
+          throw new Error(`Failed to create test task: ${task.error.message}`);
+        }
+
+        const mockLinearIssue = {
+          identifier: 'INT-100',
+          title: 'Test Linear Issue',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 2,
+          assignee: { id: 'user-1', name: 'Test User' },
+          labels: [{ id: 'label-1', name: 'Code Task' }],
+          url: 'https://linear.app/intexura/issue/INT-100',
+          commentCount: 3,
+          lastCommentAt: '2026-01-15T10:00:00.000Z',
+        };
+
+        const fetchSpy = vi.spyOn(linearAgentClient, 'fetchIssueForDisplay')
+          .mockResolvedValueOnce(ok(mockLinearIssue));
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/code/tasks/${task.value.id}`,
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.linearIssue).toEqual(mockLinearIssue);
+        expect(fetchSpy).toHaveBeenCalledWith({
+          userId: 'test-user-id',
+          identifier: 'INT-100',
+        });
+
+        fetchSpy.mockRestore();
+      });
+
+      it('returns task without linearIssue when task has no linearIssueId', async () => {
+        const task = await codeTaskRepo.create({
+          userId: 'test-user-id',
+          prompt: 'Task without linear issue',
+          sanitizedPrompt: 'Task without linear issue',
+          systemPromptHash: 'default',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_no_linear',
+        });
+
+        if (!task.ok) {
+          throw new Error(`Failed to create test task: ${task.error.message}`);
+        }
+
+        const fetchSpy = vi.spyOn(linearAgentClient, 'fetchIssueForDisplay');
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/code/tasks/${task.value.id}`,
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.linearIssue).toBeUndefined();
+        expect(fetchSpy).not.toHaveBeenCalled();
+
+        fetchSpy.mockRestore();
+      });
+
+      it('returns task without linearIssue when fetch fails', async () => {
+        const task = await codeTaskRepo.create({
+          userId: 'test-user-id',
+          prompt: 'Task with failing linear fetch',
+          sanitizedPrompt: 'Task with failing linear fetch',
+          systemPromptHash: 'default',
+          workerType: 'auto',
+          workerLocation: 'mac',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace_fail_linear',
+          linearIssueId: 'INT-999',
+        });
+
+        if (!task.ok) {
+          throw new Error(`Failed to create test task: ${task.error.message}`);
+        }
+
+        const fetchSpy = vi.spyOn(linearAgentClient, 'fetchIssueForDisplay')
+          .mockResolvedValueOnce(err({ code: 'UNAVAILABLE', message: 'linear-agent down' }));
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/code/tasks/${task.value.id}`,
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.linearIssue).toBeUndefined();
+
+        fetchSpy.mockRestore();
       });
     });
   });

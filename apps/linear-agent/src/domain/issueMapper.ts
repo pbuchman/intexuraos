@@ -30,6 +30,7 @@ export function mapWebhookToSyncedIssue(
     createdAt: payload.createdAt,
     updatedAt: payload.updatedAt,
     syncedAt: new Date().toISOString(),
+    teamId: payload.team.id,
   };
 }
 
@@ -38,7 +39,8 @@ export function mapWebhookToSyncedIssue(
  */
 export function mapApiIssueToSyncedIssue(
   issue: LinearIssue,
-  userId: string
+  userId: string,
+  teamId: string
 ): SyncedLinearIssue {
   return {
     id: issue.id,
@@ -56,6 +58,7 @@ export function mapApiIssueToSyncedIssue(
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
     syncedAt: new Date().toISOString(),
+    teamId,
   };
 }
 

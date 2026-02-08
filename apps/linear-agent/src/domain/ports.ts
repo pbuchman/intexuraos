@@ -16,6 +16,7 @@ import type {
   ProcessedAction,
   WorkflowState,
   SyncedLinearIssue,
+  LinearComment,
 } from './models.js';
 import type { LinearError } from './errors.js';
 
@@ -160,5 +161,23 @@ export interface LinearIssueRepository {
   listByUserId(userId: string): Promise<Result<SyncedLinearIssue[], LinearError>>;
 
   /** Delete issue by ID */
+  deleteById(id: string): Promise<Result<void, LinearError>>;
+}
+
+/** Repository for locally synced Linear comments */
+export interface LinearCommentRepository {
+  /** Save or update a synced comment */
+  save(comment: LinearComment): Promise<Result<LinearComment, LinearError>>;
+
+  /** Find comment by Linear UUID */
+  findById(id: string): Promise<Result<LinearComment | null, LinearError>>;
+
+  /** List comments for an issue (ordered by creation date) */
+  listByIssueId(issueId: string): Promise<Result<LinearComment[], LinearError>>;
+
+  /** Count comments for an issue */
+  countByIssueId(issueId: string): Promise<Result<number, LinearError>>;
+
+  /** Delete comment by ID */
   deleteById(id: string): Promise<Result<void, LinearError>>;
 }

@@ -6,8 +6,9 @@ import {
   FakeLinearConnectionRepository,
   FakeLinearApiClient,
   FakeLinearIssueRepository,
+  FakeLinearCommentRepository,
 } from '../fakes.js';
-import type { LinearConnection, LinearIssue } from '../../domain/models.js';
+import type { LinearConnection, LinearIssue, SyncedLinearIssue, LinearComment } from '../../domain/models.js';
 
 // Set up internal auth token for testing
 process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
@@ -17,6 +18,7 @@ describe('internalIssuesRoutes', () => {
   let fakeConnectionRepo: FakeLinearConnectionRepository;
   let fakeLinearClient: FakeLinearApiClient;
   let fakeIssueRepo: FakeLinearIssueRepository;
+  let fakeCommentRepo: FakeLinearCommentRepository;
 
   const testUserId = 'user-123';
   const testApiKey = 'linear-api-key-test';
@@ -35,6 +37,7 @@ describe('internalIssuesRoutes', () => {
     fakeConnectionRepo = new FakeLinearConnectionRepository();
     fakeLinearClient = new FakeLinearApiClient();
     fakeIssueRepo = new FakeLinearIssueRepository();
+    fakeCommentRepo = new FakeLinearCommentRepository();
 
     setServices({
       connectionRepository: fakeConnectionRepo,
@@ -44,6 +47,7 @@ describe('internalIssuesRoutes', () => {
       processedActionRepository: null as unknown as import('../../domain/index.js').ProcessedActionRepository,
       issueRepository: fakeIssueRepo,
       userServiceClient: null as unknown as import('@intexuraos/internal-clients').UserServiceClient,
+      commentRepository: fakeCommentRepo,
     });
 
     app = await buildServer();
@@ -311,6 +315,192 @@ describe('internalIssuesRoutes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('GET /internal/linear/issues/:identifier', () => {
+    const testIssueId = 'linear-issue-123';
+    const testIssueIdentifier = 'ENG-456';
+    const testIssue: SyncedLinearIssue = {
+      id: testIssueId,
+      identifier: testIssueIdentifier,
+      title: 'Test Issue Title',
+      description: 'Test issue description',
+      state: 'In Progress',
+      stateType: 'started',
+      priority: 2,
+      assigneeId: 'user-456',
+      assigneeName: 'John Doe',
+      labels: ['bug', 'high-priority'],
+      url: 'https://linear.app/test/ENG-456',
+      userId: testUserId,
+      createdAt: '2024-01-15T10:00:00.000Z',
+      updatedAt: '2024-01-16T12:30:00.000Z',
+      syncedAt: '2024-01-16T12:30:00.000Z',
+      teamId: 'team-1',
+    };
+
+    const testIssueWithoutAssignee: SyncedLinearIssue = {
+      ...testIssue,
+      id: 'linear-issue-789',
+      identifier: 'ENG-789',
+      assigneeId: null,
+      assigneeName: null,
+    };
+
+    it('should return issue data with comment count and last comment timestamp', async () => {
+      fakeIssueRepo.seedIssue(testIssue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIssueIdentifier}`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          id: string;
+          identifier: string;
+          title: string;
+          description: string | null;
+          state: { name: string; type: string };
+          priority: number;
+          assignee: { id: string; name: string } | null;
+          labels: { id: string; name: string }[];
+          url: string;
+          createdAt: string;
+          updatedAt: string;
+          commentCount: number;
+          lastCommentAt: string | null;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe(testIssueId);
+      expect(body.data.identifier).toBe(testIssueIdentifier);
+      expect(body.data.title).toBe('Test Issue Title');
+      expect(body.data.description).toBe('Test issue description');
+      expect(body.data.state).toEqual({ name: 'In Progress', type: 'started' });
+      expect(body.data.priority).toBe(2);
+      expect(body.data.assignee).toEqual({ id: 'user-456', name: 'John Doe' });
+      expect(body.data.labels).toEqual([
+        { id: 'bug', name: 'bug' },
+        { id: 'high-priority', name: 'high-priority' },
+      ]);
+      expect(body.data.url).toBe('https://linear.app/test/ENG-456');
+      expect(body.data.commentCount).toBe(0);
+      expect(body.data.lastCommentAt).toBeNull();
+    });
+
+    it('should return issue with assignee null when no assignee', async () => {
+      fakeIssueRepo.seedIssue(testIssueWithoutAssignee);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/ENG-789`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body) as { success: boolean; data: { assignee: unknown } };
+      expect(body.success).toBe(true);
+      expect(body.data.assignee).toBeNull();
+    });
+
+    it('should return 401 when X-Internal-Auth is missing', async () => {
+      fakeIssueRepo.seedIssue(testIssue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIssueIdentifier}`,
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('should return 404 when issue not found', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/ENG-999',
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+      expect(body.error.message).toContain('ENG-999 not found');
+    });
+
+    it('should return 500 when issue repository fails', async () => {
+      fakeIssueRepo.setFailure(true, { code: 'INTERNAL_ERROR', message: 'Database error' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIssueIdentifier}`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(502);
+
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('should include comment count and last comment timestamp when comments exist', async () => {
+      fakeIssueRepo.seedIssue(testIssue);
+
+      const comment1: LinearComment = {
+        id: 'comment-1',
+        issueId: testIssueId,
+        issueIdentifier: testIssueIdentifier,
+        userId: 'user-1',
+        userName: 'Alice',
+        body: 'First comment',
+        createdAt: '2024-01-16T10:00:00.000Z',
+        updatedAt: '2024-01-16T10:00:00.000Z',
+        syncedAt: '2024-01-16T10:00:00.000Z',
+      };
+
+      const comment2: LinearComment = {
+        id: 'comment-2',
+        issueId: testIssueId,
+        issueIdentifier: testIssueIdentifier,
+        userId: 'user-2',
+        userName: 'Bob',
+        body: 'Second comment',
+        createdAt: '2024-01-17T14:30:00.000Z',
+        updatedAt: '2024-01-17T14:30:00.000Z',
+        syncedAt: '2024-01-17T14:30:00.000Z',
+      };
+
+      await fakeCommentRepo.save(comment1);
+      await fakeCommentRepo.save(comment2);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/linear/issues/${testIssueIdentifier}`,
+        headers: internalAuthHeader,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { commentCount: number; lastCommentAt: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.commentCount).toBe(2);
+      expect(body.data.lastCommentAt).toBe('2024-01-17T14:30:00.000Z');
     });
   });
 });

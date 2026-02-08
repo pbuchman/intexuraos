@@ -131,6 +131,20 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         commentId: `comment-${String(Date.now())}`,
       }));
     },
+    fetchIssueForDisplay(request): ReturnType<LinearAgentClient['fetchIssueForDisplay']> {
+      logger.info({ identifier: request.identifier }, '[E2E] Mock Linear issue fetch for display');
+      return Promise.resolve(ok({
+        identifier: request.identifier,
+        title: `Mock ${request.identifier}`,
+        state: { name: 'In Progress', type: 'started' },
+        priority: 2,
+        assignee: null,
+        labels: [],
+        url: `https://linear.app/intexura/issue/${request.identifier}`,
+        commentCount: 0,
+        lastCommentAt: null,
+      }));
+    },
   };
 }
 

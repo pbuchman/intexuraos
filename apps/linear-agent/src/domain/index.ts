@@ -11,6 +11,7 @@ export type {
   LinearActionExtractionService,
   ProcessedActionRepository,
   LinearIssueRepository,
+  LinearCommentRepository,
 } from './ports.js';
 export {
   processLinearAction,
@@ -39,13 +40,18 @@ export {
   type ValidatedIssue,
   type ValidateIssueError,
 } from './useCases/validateIssue.js';
-export type { LinearWebhookEvent, LinearWebhookPayload, WebhookAction } from './webhookTypes.js';
+export type { LinearWebhookEvent, LinearWebhookPayload, WebhookAction, LinearCommentWebhookEvent, LinearCommentWebhookPayload } from './webhookTypes.js';
 export { mapWebhookToSyncedIssue, mapApiIssueToSyncedIssue } from './issueMapper.js';
 export {
   syncSingleIssue,
   type SyncSingleIssueDeps,
   type SyncSingleIssueResult,
 } from './useCases/syncSingleIssueUseCase.js';
+export {
+  syncCommentFromWebhook,
+  type SyncCommentDeps,
+  type SyncCommentResult,
+} from './useCases/syncCommentFromWebhook.js';
 export {
   fullSync,
   fullSyncAllUsers,
