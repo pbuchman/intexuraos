@@ -205,7 +205,7 @@ async function bootstrap(): Promise<void> {
 
   // Create Docker isolation provider
   const secretsBasePath = join(orchestratorDir, 'secrets');
-  const isolationProvider = createIsolationProvider({ secretsBasePath }, logger);
+  const isolationProvider = await createIsolationProvider({ secretsBasePath }, logger);
   const tokenRefresher = new TokenRefresher(
     {
       secretsBasePath,

@@ -86,6 +86,17 @@ describe('system-prompt', () => {
         expect(result).toContain('[PHASE:1]');
       });
 
+      it('should include mandatory response format in Phase 1', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: [],
+        });
+
+        expect(result).toContain('MANDATORY Response Format (Hook-Verified)');
+        expect(result).toContain('https://github.com/intexura/intexuraos/pull/XXX');
+        expect(result).toContain('https://linear.app/intexura/issue/INT-XXX');
+      });
+
       it('should mention both code-task and unclear labels in Phase 1', () => {
         const result = buildSystemPrompt({
           ...baseParams,
@@ -208,16 +219,16 @@ describe('system-prompt', () => {
         expect(result).toContain('[PHASE:2]');
       });
 
-      it('should include completion statement requirement in Phase 2', () => {
+      it('should include mandatory response format in Phase 2', () => {
         const result = buildSystemPrompt({
           ...baseParams,
           linearIssueLabels: ['code-task'],
         });
 
-        expect(result).toContain('Completion Statement (MANDATORY)');
-        expect(result).toContain('PR created');
-        expect(result).toContain('CI passed');
-        expect(result).toContain('Linear updated');
+        expect(result).toContain('MANDATORY Response Format (Hook-Verified)');
+        expect(result).toContain('https://github.com/intexura/intexuraos/pull/XXX');
+        expect(result).toContain('https://linear.app/intexura/issue/INT-XXX');
+        expect(result).toContain('CI: passed');
       });
     });
 
