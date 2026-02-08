@@ -1,0 +1,228 @@
+# Orchestrator Deployment & Build Reference
+
+Consolidated reference for building, deploying, and managing the orchestrator and its claude-worker containers.
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ macOS Host (or Predev VM)                                   │
+│                                                             │
+│  orchestrator (Node.js process via LaunchAgent)             │
+│  ├── Fastify HTTP server on :8199                           │
+│  ├── Cloudflare Tunnel → cc-mac.intexuraos.cloud            │
+│  └── Docker SDK (dockerode) → spawns worker containers      │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ claude-worker container (Docker)                     │   │
+│  │ Image: gcr.io/intexuraos-dev-pbuchman/claude-worker  │   │
+│  │ Runs: claude --dangerously-skip-permissions --verbose │   │
+│  │ Mounts: /repo (worktree), /secrets (GCP SA, tokens)  │   │
+│  │ Network: claude-worker-net                           │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The orchestrator is **not** containerized — it runs as a native Node.js process. Only the claude-worker runs in Docker.
+
+---
+
+## Orchestrator (Node.js Process)
+
+### Build
+
+```bash
+pnpm --filter orchestrator build
+```
+
+Produces `workers/orchestrator/dist/index.js` — a bundled ESM file with all workspace dependencies inlined.
+
+### Run Locally (Dev)
+
+```bash
+pnpm --filter orchestrator dev     # tsx watch mode
+```
+
+### Run in Production
+
+```bash
+node workers/orchestrator/dist/index.js
+```
+
+Or via macOS LaunchAgent (see `workers/orchestrator/README.md` for plist template).
+
+### Key Files
+
+| File                   | Purpose                                          |
+| ---------------------- | ------------------------------------------------ |
+| `src/index.ts`         | Entry point, env validation, server start        |
+| `src/main.ts`          | Fastify app factory                              |
+| `src/routes.ts`        | HTTP endpoints                                   |
+| `src/services/`        | Business logic (task-dispatcher, worktree, etc.) |
+| `src/services/isolation/docker-provider.ts` | Docker container lifecycle     |
+| `scripts/start.sh`     | Production wrapper (exec node)                   |
+| `dist/index.js`        | Built artifact                                   |
+
+---
+
+## Claude Worker (Docker Image)
+
+### Image Registry
+
+```
+gcr.io/intexuraos-dev-pbuchman/claude-worker:latest
+```
+
+### Build
+
+```bash
+# Via helper script
+./scripts/build-worker-image.sh [tag]
+
+# Or directly (with --no-cache to bust layer cache)
+docker build --no-cache --platform linux/amd64 \
+  -t gcr.io/intexuraos-dev-pbuchman/claude-worker:latest \
+  -f workers/claude-worker/Dockerfile \
+  workers/claude-worker/
+```
+
+### Push
+
+```bash
+# Via helper script
+PUSH=true ./scripts/build-worker-image.sh latest
+
+# Or directly
+docker push gcr.io/intexuraos-dev-pbuchman/claude-worker:latest
+```
+
+### Cache Busting
+
+Docker layer cache can mask entrypoint changes because `COPY entrypoint.sh` is a late layer.
+Always use `--no-cache` when the entrypoint or any COPY'd file has changed.
+
+### Key Files
+
+| File                              | Purpose                                     |
+| --------------------------------- | ------------------------------------------- |
+| `workers/claude-worker/Dockerfile`      | Production image (node:22-alpine + Claude CLI) |
+| `workers/claude-worker/Dockerfile.test` | Test image (claude-stub instead of real CLI)   |
+| `workers/claude-worker/entrypoint.sh`   | Container entrypoint (starts Claude)           |
+| `scripts/build-worker-image.sh`         | Build + optional push helper                   |
+
+### What the Entrypoint Does
+
+1. Verifies non-root execution (UID 1001)
+2. Network restriction check (metadata server blocked)
+3. Creates runtime directories (`/home/claude/.config/gcloud`, `/home/claude/.claude`)
+4. Verifies `/repo` mount and git state
+5. Activates GCP service account
+6. Loads GitHub token (with background refresh loop)
+7. Starts Claude in interactive mode: `exec claude --dangerously-skip-permissions --verbose`
+
+The orchestrator writes the system prompt to Claude's stdin via the Docker attach stream.
+
+### Container Environment Variables
+
+Set by `docker-provider.ts` when creating containers:
+
+| Variable                           | Source                | Purpose                                |
+| ---------------------------------- | --------------------- | -------------------------------------- |
+| `TASK_ID`                          | Task config           | Task identifier                        |
+| `ANTHROPIC_API_KEY`                | Secrets               | Claude API authentication              |
+| `ANTHROPIC_BASE_URL`               | Worker type config    | API endpoint (varies by provider)      |
+| `ANTHROPIC_MODEL`                  | Worker type config    | Model override (optional)              |
+| `LINEAR_API_KEY`                   | Secrets               | Linear MCP integration                 |
+| `SENTRY_AUTH_TOKEN`                | Secrets               | Sentry MCP integration                 |
+| `GOOGLE_APPLICATION_CREDENTIALS`   | Hardcoded `/secrets/` | GCP auth inside container              |
+| `CLAUDE_PROJECT_DIR`               | Hardcoded `/repo`     | Hook path resolution                   |
+| `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY`| Hardcoded `10000`     | Exit 10s after idle                    |
+
+---
+
+## E2E Testing
+
+### Prerequisites
+
+```bash
+# Create docker network
+./scripts/setup-worker-network.sh
+
+# Build test image (uses claude-stub instead of real CLI)
+cd workers/claude-worker
+docker build -t claude-worker:test -f Dockerfile.test .
+```
+
+### Run
+
+```bash
+pnpm --filter orchestrator test:e2e
+```
+
+### Test Image vs Production Image
+
+| Aspect       | Production (`Dockerfile`)      | Test (`Dockerfile.test`)        |
+| ------------ | ------------------------------ | ------------------------------- |
+| Claude CLI   | Real (`claude.ai/install.sh`)  | Stub (`test-fixtures/claude-stub.sh`) |
+| gcloud CLI   | Installed                      | Not installed                   |
+| Terraform    | Installed                      | Not installed                   |
+| python3      | Installed                      | Not installed                   |
+| `NODE_ENV`   | `production`                   | `test`                          |
+
+---
+
+## Deployment Checklist
+
+### When `entrypoint.sh` Changes
+
+1. Build image: `docker build --no-cache ...`
+2. Push image: `docker push gcr.io/intexuraos-dev-pbuchman/claude-worker:latest`
+3. Running containers use the old image until recreated (no hot reload)
+
+### When Orchestrator Source Changes
+
+1. Rebuild: `pnpm --filter orchestrator build`
+2. Restart the orchestrator process (LaunchAgent or manual)
+
+### When Both Change (e.g., INT-491)
+
+1. Commit and push code
+2. Build and push claude-worker image (`--no-cache`)
+3. Rebuild orchestrator: `pnpm --filter orchestrator build`
+4. Restart orchestrator process
+
+---
+
+## Differences from Standard Apps
+
+| Aspect           | Standard App (`apps/*`)           | Orchestrator (`workers/orchestrator`) |
+| ---------------- | --------------------------------- | ------------------------------------- |
+| Deployment       | Cloud Run (Dockerfile)            | Native Node.js (LaunchAgent)          |
+| Cloud Build      | `cloudbuild.yaml` per service     | None — local build only               |
+| Artifact         | Docker image in Artifact Registry | `dist/index.js` bundle               |
+| Terraform        | Cloud Run service module          | Not managed by Terraform              |
+| Push script      | `push-missing-images.sh`          | Not included (apps/ only)             |
+| Docker images    | Self-contained                    | Orchestrator spawns claude-worker     |
+
+---
+
+## Useful Commands
+
+```bash
+# Check running worker containers
+docker ps --filter name=claude-worker-
+
+# View worker logs
+docker logs claude-worker-<task-id>
+
+# Kill orphaned containers
+docker rm -f $(docker ps -aq --filter name=claude-worker-)
+
+# Check orchestrator health
+curl http://localhost:8199/health
+
+# Force rebuild all packages + orchestrator
+pnpm build && pnpm --filter orchestrator build
+```
