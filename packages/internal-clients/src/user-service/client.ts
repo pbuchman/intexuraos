@@ -156,7 +156,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         };
 
         // Step 2: Determine model (use user's preference or default)
-        const rawModel = settingsBody.data.llmPreferences?.defaultModel ?? LlmModels.Gemini25Flash;
+        const rawModel = settingsBody.data.llmPreferences?.defaultModel ?? LlmModels.Glm47Flash;
 
         // Validate that the model is supported
         if (!isValidModel(rawModel)) {

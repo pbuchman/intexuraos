@@ -1,6 +1,7 @@
 /**
  * Tests for GET /users/:uid/settings
  */
+import { LlmModels } from '@intexuraos/llm-contract';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
@@ -237,6 +238,141 @@ describe('Settings Routes', () => {
         headers: {
           authorization: `Bearer ${token}`,
         },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('PATCH /users/:uid/settings', () => {
+    it('returns 401 when no auth token', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/users/user-123/settings',
+        payload: { defaultModel: LlmModels.Gemini25Flash },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 403 when updating another user settings', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const token = await createToken({ sub: 'auth0|user-123' });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/users/auth0|other-user/settings',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { defaultModel: LlmModels.Gemini25Flash },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 400 for invalid model', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-invalid-model';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { defaultModel: LlmModels.GPTImage1 },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain(LlmModels.GPTImage1);
+    });
+
+    it('returns 400 for completely invalid model string', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-bad-model';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { defaultModel: 'not-a-model' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('returns 200 and saves valid fast model', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-set-model';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { defaultModel: LlmModels.Gemini25Flash },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { defaultModel: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.defaultModel).toBe(LlmModels.Gemini25Flash);
+
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+    });
+
+    it('returns 500 when repository fails', { timeout: 20000 }, async () => {
+      fakeSettingsRepo.setFailNextUpdateLlmPreferences(true);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-repo-fail';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { defaultModel: LlmModels.Gemini20Flash },
       });
 
       expect(response.statusCode).toBe(500);

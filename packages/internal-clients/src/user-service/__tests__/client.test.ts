@@ -251,7 +251,7 @@ describe('createUserServiceClient', () => {
       };
 
       const mockKeys = {
-        google: 'google-key',
+        zai: 'zai-key',
       };
 
       nock('http://localhost:3000')
@@ -270,7 +270,7 @@ describe('createUserServiceClient', () => {
       if (result.ok) {
         expect(result.value).toBeDefined();
         expect(mockLogger.info).toHaveBeenCalledWith(
-          expect.objectContaining({ model: LlmModels.Gemini25Flash }),
+          expect.objectContaining({ model: LlmModels.Glm47Flash }),
           'LLM client created successfully'
         );
       } else {

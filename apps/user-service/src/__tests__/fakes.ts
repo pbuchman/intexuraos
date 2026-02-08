@@ -14,6 +14,7 @@ import type {
   AuthTokensPublic,
   RefreshResult,
 } from '../domain/identity/index.js';
+import type { LLMModel } from '@intexuraos/llm-contract';
 import type {
   LlmProvider,
   LlmTestResponse,
@@ -229,6 +230,7 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
   private shouldFailSave = false;
   private shouldFailUpdateLlmKey = false;
   private shouldFailDeleteLlmKey = false;
+  private shouldFailUpdateLlmPreferences = false;
 
   /**
    * Configure the fake to fail the next getSettings call.
@@ -263,6 +265,13 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
    */
   setFailNextDeleteLlmKey(fail: boolean): void {
     this.shouldFailDeleteLlmKey = fail;
+  }
+
+  /**
+   * Configure the fake to fail the next updateLlmPreferences call.
+   */
+  setFailNextUpdateLlmPreferences(fail: boolean): void {
+    this.shouldFailUpdateLlmPreferences = fail;
   }
 
   /**
@@ -397,6 +406,35 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
       };
       existing.llmTestResults = llmTestResults;
       existing.updatedAt = now;
+    }
+
+    this.settings.set(userId, existing);
+    return Promise.resolve(ok(undefined));
+  }
+
+  updateLlmPreferences(
+    userId: string,
+    defaultModel: LLMModel
+  ): Promise<Result<void, SettingsError>> {
+    if (this.shouldFailUpdateLlmPreferences) {
+      this.shouldFailUpdateLlmPreferences = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated update LLM preferences failure' })
+      );
+    }
+
+    let existing = this.settings.get(userId);
+    if (existing === undefined) {
+      const now = new Date().toISOString();
+      existing = {
+        userId,
+        llmPreferences: { defaultModel },
+        createdAt: now,
+        updatedAt: now,
+      };
+    } else {
+      existing.llmPreferences = { defaultModel };
+      existing.updatedAt = new Date().toISOString();
     }
 
     this.settings.set(userId, existing);

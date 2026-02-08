@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { MoreVertical, FlaskConical, Pencil, Trash2 } from 'lucide-react';
+import {
+  ALL_FAST_MODELS,
+  FAST_MODEL_DISPLAY_NAMES,
+  LlmProviders,
+  MODEL_PROVIDER_MAP,
+  type FastModel,
+  type LlmProvider as ContractLlmProvider,
+} from '@intexuraos/llm-contract';
 import { Button, Card, Input, Layout } from '@/components';
 import { useLlmKeys } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
@@ -17,6 +25,13 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'perplexity', name: 'Perplexity (Sonar)' },
   { id: 'zai', name: 'Zai (GLM)' },
 ];
+
+const PROVIDER_GROUP_LABELS: Record<string, string> = {
+  google: 'Google',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  zai: 'Zai',
+};
 
 /**
  * Validate API key format for each provider.
@@ -52,15 +67,45 @@ function validateApiKeyFormat(provider: LlmProvider, key: string): string | null
       }
       break;
     case 'zai':
-      // No format validation for zai
       break;
   }
 
   return null;
 }
 
+/**
+ * Group fast models by their provider for the dropdown.
+ */
+function groupModelsByProvider(
+  configuredProviders: Set<string>
+): { provider: string; label: string; models: { model: FastModel; name: string; disabled: boolean }[] }[] {
+  const groups = new Map<string, { model: FastModel; name: string; disabled: boolean }[]>();
+
+  for (const model of ALL_FAST_MODELS) {
+    const provider = MODEL_PROVIDER_MAP[model] as string;
+    const existing = groups.get(provider) ?? [];
+    existing.push({
+      model,
+      name: FAST_MODEL_DISPLAY_NAMES[model],
+      disabled: !configuredProviders.has(provider),
+    });
+    groups.set(provider, existing);
+  }
+
+  const result: { provider: string; label: string; models: { model: FastModel; name: string; disabled: boolean }[] }[] = [];
+  for (const [provider, models] of groups) {
+    result.push({
+      provider,
+      label: PROVIDER_GROUP_LABELS[provider] ?? provider,
+      models,
+    });
+  }
+
+  return result;
+}
+
 export function ApiKeysSettingsPage(): React.JSX.Element {
-  const { keys, loading, error, setKey, deleteKey, testKey } = useLlmKeys();
+  const { keys, defaultModel, loading, error, savingDefaultModel, setKey, deleteKey, testKey, setDefaultModel } = useLlmKeys();
 
   if (loading) {
     return (
@@ -72,12 +117,26 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
     );
   }
 
+  const configuredProviders = new Set<string>();
+  if (keys?.google !== null && keys?.google !== undefined) configuredProviders.add(LlmProviders.Google);
+  if (keys?.openai !== null && keys?.openai !== undefined) configuredProviders.add(LlmProviders.OpenAI);
+  if (keys?.anthropic !== null && keys?.anthropic !== undefined) configuredProviders.add(LlmProviders.Anthropic);
+  if (keys?.perplexity !== null && keys?.perplexity !== undefined) configuredProviders.add(LlmProviders.Perplexity);
+  if (keys?.zai !== null && keys?.zai !== undefined) configuredProviders.add(LlmProviders.Zai);
+
+  const modelGroups = groupModelsByProvider(configuredProviders);
+
+  const currentProvider = defaultModel !== null
+    ? (MODEL_PROVIDER_MAP[defaultModel as FastModel] as ContractLlmProvider | undefined) ?? null
+    : null;
+  const hasKeyForDefaultModel = currentProvider !== null && configuredProviders.has(currentProvider);
+
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">API Keys</h2>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">LLM Settings</h2>
         <p className="text-slate-600 dark:text-slate-300">
-          Configure your LLM API keys. Keys are encrypted and validated before storage.
+          Configure your LLM API keys and default model.
         </p>
       </div>
 
@@ -86,6 +145,50 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
           {error}
         </div>
       ) : null}
+
+      <Card className="mb-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="font-medium text-slate-900 dark:text-slate-100">Default Model</h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              The model used by default for generate() calls across your services.
+            </p>
+          </div>
+          <div className="relative flex items-center gap-2">
+            {savingDefaultModel ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            ) : null}
+            <select
+              value={defaultModel ?? ''}
+              onChange={(e): void => {
+                if (e.target.value !== '') {
+                  void setDefaultModel(e.target.value);
+                }
+              }}
+              disabled={savingDefaultModel}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+            >
+              <option value="" disabled>Select a model</option>
+              {modelGroups.map((group) => (
+                <optgroup key={group.provider} label={group.label}>
+                  {group.models.map((m) => (
+                    <option key={m.model} value={m.model} disabled={m.disabled}>
+                      {m.name}{m.disabled ? ' (No API key)' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        </div>
+        {defaultModel !== null && !hasKeyForDefaultModel ? (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/30">
+            <p className="text-sm text-amber-800 dark:text-amber-400">
+              No API key configured for this model&apos;s provider. Add one below or select a different model.
+            </p>
+          </div>
+        ) : null}
+      </Card>
 
       <div className="space-y-4">
         {PROVIDERS.map((provider) => (
@@ -193,7 +296,16 @@ function ApiKeyRow({
   }, []);
 
   return (
-    <Card>
+    <Card className="relative overflow-hidden">
+      {isTesting ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-slate-800/60">
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Testing...</span>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <span className="font-medium text-slate-900 dark:text-slate-100">{provider.name}</span>
@@ -232,7 +344,7 @@ function ApiKeyRow({
                       className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       <FlaskConical className="h-4 w-4" />
-                      {isTesting ? 'Testing...' : 'Test'}
+                      Test
                     </button>
                     <button
                       type="button"

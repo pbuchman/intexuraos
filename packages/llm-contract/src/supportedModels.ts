@@ -88,18 +88,12 @@ export type ResearchModel =
 /**
  * Models for API key validation (cheap, fast).
  */
-export type ValidationModel =
-  | ClaudeHaiku35
-  | Gemini20Flash
-  | GPT4oMini
-  | Sonar
-  | Glm47
-  | Glm47Flash;
+export type ValidationModel = ClaudeHaiku35 | Gemini20Flash | GPT4oMini | Sonar | Glm47Flash;
 
 /**
  * Fast models for quick tasks (classification, title generation).
  */
-export type FastModel = Gemini25Flash | Gemini20Flash | Glm47Flash;
+export type FastModel = Gemini25Flash | Gemini20Flash | Glm47Flash | ClaudeHaiku35 | GPT4oMini;
 
 /**
  * General-purpose models.
@@ -213,6 +207,17 @@ export const ALL_LLM_MODELS: LLMModel[] = [
   LlmModels.Glm47Flash,
 ] as const;
 
+/**
+ * Array of all fast models for runtime validation.
+ */
+export const ALL_FAST_MODELS: FastModel[] = [
+  LlmModels.Gemini25Flash,
+  LlmModels.Gemini20Flash,
+  LlmModels.Glm47Flash,
+  LlmModels.ClaudeHaiku35,
+  LlmModels.GPT4oMini,
+] as const;
+
 // =============================================================================
 // Provider Mapping
 // =============================================================================
@@ -245,6 +250,17 @@ export const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider> = {
 } as const;
 
 /**
+ * Human-readable display names for fast models.
+ */
+export const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string> = {
+  [LlmModels.Gemini25Flash]: 'Gemini 2.5 Flash',
+  [LlmModels.Gemini20Flash]: 'Gemini 2.0 Flash',
+  [LlmModels.Glm47Flash]: 'GLM-4.7 Flash',
+  [LlmModels.ClaudeHaiku35]: 'Claude 3.5 Haiku',
+  [LlmModels.GPT4oMini]: 'GPT-4o Mini',
+};
+
+/**
  * Get provider for a model.
  */
 export function getProviderForModel(model: LLMModel): LlmProvider {
@@ -256,4 +272,11 @@ export function getProviderForModel(model: LLMModel): LlmProvider {
  */
 export function isValidModel(model: string): model is LLMModel {
   return ALL_LLM_MODELS.includes(model as LLMModel);
+}
+
+/**
+ * Check if a string is a valid fast model.
+ */
+export function isFastModel(model: string): model is FastModel {
+  return ALL_FAST_MODELS.includes(model as FastModel);
 }

@@ -6,6 +6,7 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
+import { isFastModel } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { getUserSettings, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
 
@@ -119,6 +120,124 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(result.value);
+    }
+  );
+
+  // PATCH /users/:uid/settings
+  fastify.patch(
+    '/users/:uid/settings',
+    {
+      schema: {
+        operationId: 'updateUserSettings',
+        summary: 'Update user settings',
+        description: 'Update user preferences such as default LLM model.',
+        tags: ['settings'],
+        params: {
+          type: 'object',
+          properties: {
+            uid: { type: 'string', description: 'User ID' },
+          },
+          required: ['uid'],
+        },
+        body: {
+          type: 'object',
+          required: ['defaultModel'],
+          properties: {
+            defaultModel: {
+              type: 'string',
+              description: 'Default fast model for generate() calls',
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Settings updated successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  defaultModel: { type: 'string' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /users/:uid/settings',
+      });
+
+      const user = await requireAuth(request, reply);
+      if (!user) {
+        return;
+      }
+
+      const params = request.params as { uid: string };
+      const body = request.body as { defaultModel: string };
+
+      if (params.uid !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Cannot update other user settings');
+      }
+
+      if (!isFastModel(body.defaultModel)) {
+        return await reply.fail('INVALID_REQUEST', `Invalid model: ${body.defaultModel}. Must be a supported fast model.`);
+      }
+
+      const { userSettingsRepository } = getServices();
+
+      const result = await userSettingsRepository.updateLlmPreferences(params.uid, body.defaultModel);
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok({ defaultModel: body.defaultModel });
     }
   );
 

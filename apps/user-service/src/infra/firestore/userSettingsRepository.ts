@@ -6,7 +6,9 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { EncryptedValue } from '../encryption.js';
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
+import type { LLMModel } from '@intexuraos/llm-contract';
 import type {
+  LlmPreferences,
   LlmProvider,
   LlmTestResult,
   SettingsError,
@@ -35,6 +37,7 @@ interface UserSettingsDoc {
     perplexity?: LlmTestResult;
     zai?: LlmTestResult;
   };
+  llmPreferences?: LlmPreferences;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,6 +68,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       if (data.llmTestResults !== undefined) {
         settings.llmTestResults = data.llmTestResults;
       }
+      if (data.llmPreferences !== undefined) {
+        settings.llmPreferences = data.llmPreferences;
+      }
       return ok(settings);
     } catch (error) {
       return err({
@@ -89,6 +95,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       }
       if (settings.llmTestResults !== undefined) {
         doc.llmTestResults = settings.llmTestResults;
+      }
+      if (settings.llmPreferences !== undefined) {
+        doc.llmPreferences = settings.llmPreferences;
       }
 
       await docRef.set(doc);
@@ -231,6 +240,39 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       return err({
         code: 'INTERNAL_ERROR',
         message: `Failed to update LLM last used: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
+  async updateLlmPreferences(
+    userId: string,
+    defaultModel: LLMModel
+  ): Promise<Result<void, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(userId);
+      const doc = await docRef.get();
+
+      if (!doc.exists) {
+        const now = new Date().toISOString();
+        await docRef.set({
+          userId,
+          llmPreferences: { defaultModel },
+          createdAt: now,
+          updatedAt: now,
+        });
+      } else {
+        await docRef.update({
+          'llmPreferences.defaultModel': defaultModel,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      return ok(undefined);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to update LLM preferences: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
