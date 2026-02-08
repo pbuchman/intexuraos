@@ -157,8 +157,12 @@ class TestableDockerProvider extends DockerProvider {
     attachStream: NodeJS.ReadWriteStream,
     prompt: string
   ): Promise<void> {
-    attachStream.write(prompt);
+    attachStream.write(prompt + '\n');
     attachStream.write('\r');
+  }
+
+  protected override monitorForResponseCompletion(): void {
+    // No-op in tests — real implementation monitors stream for idle and sends /exit
   }
 }
 
@@ -232,7 +236,7 @@ describe('DockerProvider', () => {
       });
       await provider.createWorker(config);
 
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('You are a helpful assistant');
+      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('You are a helpful assistant\n');
       expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('\r');
     });
   });
@@ -311,7 +315,7 @@ describe('DockerProvider', () => {
 
       await provider.sendInput('test-task-123', 'test input');
 
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('test input');
+      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('test input\n');
       expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('\r');
       expect(mockLogger.debug).toHaveBeenCalledWith(
         { taskId: 'test-task-123', inputLength: 10 },
