@@ -149,7 +149,8 @@ export class DockerProvider implements IsolationProvider {
       `LINEAR_API_KEY=${secrets.LINEAR_API_KEY}`,
       `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
-      // Exit 10s after idle - no resume functionality yet (see INT-491)
+      'CLAUDE_PROJECT_DIR=/repo',
+      // Exit 10s after idle - Claude exits automatically when no input arrives
       'CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=10000',
     ];
 
@@ -216,7 +217,6 @@ export class DockerProvider implements IsolationProvider {
     await container.start();
 
     // Set up log listener BEFORE writing prompt to avoid race condition
-    // With --print mode, container may emit logs immediately after receiving prompt
     /* v8 ignore start -- test-infra: optional onLog callback tested via test mock @preserve */
     if (config.onLog !== undefined) {
       attachStream.on('data', (chunk: Buffer) => {
@@ -225,10 +225,9 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
-    // Write system prompt to worker
-    // User prompt is embedded in system prompt as [USER SUPPLEMENTAL INSTRUCTIONS]
-    // The delimiter ---END_PROMPT--- signals end of multi-line prompt to entrypoint.sh
-    attachStream.write(systemPrompt + '\n---END_PROMPT---\n');
+    // Write system prompt to worker via stdin
+    // In interactive mode, Claude reads this as the first user message
+    attachStream.write(systemPrompt + '\n');
 
     const handle: WorkerHandle = {
       taskId,
