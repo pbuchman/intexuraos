@@ -205,7 +205,8 @@ async function bootstrap(): Promise<void> {
 
   // Create Docker isolation provider
   const secretsBasePath = join(orchestratorDir, 'secrets');
-  const isolationProvider = await createIsolationProvider({ secretsBasePath }, logger);
+  const gcpSaKeyPath = getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS');
+  const isolationProvider = await createIsolationProvider({ secretsBasePath, gcpSaKeyPath }, logger);
   const tokenRefresher = new TokenRefresher(
     {
       secretsBasePath,
@@ -229,7 +230,7 @@ async function bootstrap(): Promise<void> {
       SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
       ZAI_API_KEY: getOptionalEnv('INTEXURAOS_ZAI_API_KEY', ''),
     },
-    gcpSaKeyPath: getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS'),
+    gcpSaKeyPath,
     githubAppKeyPath: config.githubAppPrivateKeyPath,
   };
 

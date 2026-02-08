@@ -18,6 +18,7 @@ export interface DockerProviderConfig {
   cpuCount: number;
   timeoutMs: number;
   secretsBasePath: string;
+  gcpSaKeyPath: string;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -28,6 +29,7 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   cpuCount: 4,
   timeoutMs: 2 * 60 * 60 * 1000,
   secretsBasePath: '/tmp/claude-secrets',
+  gcpSaKeyPath: '',
 };
 
 interface WorkerEntry {
@@ -178,7 +180,17 @@ export class DockerProvider implements IsolationProvider {
 
     /* v8 ignore start -- test-infra: image pull requires Docker daemon with registry access @preserve */
     try {
-      const pullStream = await this.docker.pull(this.config.imageName);
+      const pullOpts: Record<string, unknown> = { platform: 'linux/amd64' };
+      if (this.config.gcpSaKeyPath !== '' && fs.existsSync(this.config.gcpSaKeyPath)) {
+        const saKey = fs.readFileSync(this.config.gcpSaKeyPath, 'utf-8');
+        const registry = this.config.imageName.split('/')[0] ?? '';
+        pullOpts['authconfig'] = {
+          username: '_json_key',
+          password: saKey,
+          serveraddress: `https://${registry}`,
+        };
+      }
+      const pullStream = await this.docker.pull(this.config.imageName, pullOpts);
       await new Promise<void>((resolve, reject) => {
         this.docker.modem.followProgress(
           pullStream,
