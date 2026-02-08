@@ -99,11 +99,7 @@ EOF
   exit 0
 fi
 
-# Log successful completion with timing
-END_TIME=$(date +%s%N 2>/dev/null || date +%s)
-if [[ "$START_TIME" =~ ^[0-9]+$ ]] && [[ "$END_TIME" =~ ^[0-9]+$ ]] && [[ ${#START_TIME} -gt 10 ]]; then
-  DURATION_MS=$(( (END_TIME - START_TIME) / 1000000 ))
-  log_info "$HOOK_NAME" "timing" "Hook completed in ${DURATION_MS}ms (allowed)"
-fi
+# Always log completion (sentinel for container lifecycle management)
+log_info "$HOOK_NAME" "completed" "Hook completed (allowed)"
 
 exit 0

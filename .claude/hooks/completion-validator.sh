@@ -100,32 +100,17 @@ EOF
 }
 
 validate_phase2() {
-  local missing=()
-
-  # Check for PR mention
-  if ! echo "$RECENT_RESPONSES" | grep -iqE "PR (created|#[0-9]+|https://github)|(pull request|PR).*created"; then
-    missing+=("PR")
-  fi
-
-  # Check for CI passed mention
-  if ! echo "$RECENT_RESPONSES" | grep -iqE "CI passed|ci:tracked passed|all.*tests.*pass|tests.*passing"; then
-    missing+=("CI passed")
-  fi
-
-  # Check for Linear update mention
-  if ! echo "$RECENT_RESPONSES" | grep -iqE "Linear.*(In Review|updated)|updated.*Linear|(In Review|state).*Linear"; then
-    missing+=("Linear updated")
-  fi
-
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    log_blocked "$HOOK_NAME" "phase2-incomplete" \
-        "Missing: ${missing[*]}" \
-        "Phase 2 requires PR, CI passed, and Linear update"
+  # PR link is the ONLY hard requirement enforced by hooks.
+  # CI status and Linear updates are handled by webhooks between GitHub and Linear.
+  if ! echo "$RECENT_RESPONSES" | grep -qE "https://github\.com/[^/]+/[^/]+/pull/[0-9]+"; then
+    log_blocked "$HOOK_NAME" "phase2-no-pr-link" \
+        "No GitHub PR link found in response" \
+        "A PR link (https://github.com/.../pull/NNN) is ALWAYS required"
 
     cat << EOF
 {
   "decision": "block",
-  "reason": "⚠️ PHASE 2 INCOMPLETE: You must clearly state all completion artifacts before stopping. Missing: ${missing[*]}. Required format: PR: '<URL or #number>', CI: 'passed', Linear: 'updated to In Review'"
+  "reason": "⚠️ PR REQUIRED: You MUST include a GitHub PR link before finalizing. A pull request is ALWAYS required — no exceptions. Include the full URL (e.g. https://github.com/owner/repo/pull/123) in your response, then stop again."
 }
 EOF
     return 1
@@ -142,13 +127,9 @@ elif [[ "$PHASE" == "2" ]]; then
   validate_phase2 || VALIDATION_RESULT=1
 fi
 
-# Log timing
-END_TIME=$(date +%s%N 2>/dev/null || date +%s)
-if [[ "$START_TIME" =~ ^[0-9]+$ ]] && [[ "$END_TIME" =~ ^[0-9]+$ ]] && [[ ${#START_TIME} -gt 10 ]]; then
-  DURATION_MS=$(( (END_TIME - START_TIME) / 1000000 ))
-  if [[ $VALIDATION_RESULT -eq 0 ]]; then
-    log_info "$HOOK_NAME" "timing" "Hook completed in ${DURATION_MS}ms (phase $PHASE allowed)"
-  fi
+# Always log completion (sentinel for container lifecycle management)
+if [[ $VALIDATION_RESULT -eq 0 ]]; then
+  log_info "$HOOK_NAME" "completed" "Hook completed (phase ${PHASE:-none} allowed)"
 fi
 
 exit 0
