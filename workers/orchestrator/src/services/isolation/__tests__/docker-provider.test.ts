@@ -3,10 +3,17 @@ import type { Mock } from 'vitest';
 import { DockerProvider, type DockerProviderConfig } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
 
+interface MockVolume {
+  inspect: ReturnType<typeof vi.fn>;
+  remove: ReturnType<typeof vi.fn>;
+}
+
 interface MockDocker {
   createContainer: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
   listContainers: ReturnType<typeof vi.fn>;
+  getVolume: ReturnType<typeof vi.fn>;
+  createVolume: ReturnType<typeof vi.fn>;
 }
 
 interface MockContainer {
@@ -32,6 +39,7 @@ interface MockDockerResult {
   mockDocker: MockDocker;
   mockContainer: MockContainer;
   mockAttachStream: MockAttachStream;
+  mockVolume: MockVolume;
   resolveContainerWait: (value: { StatusCode: number }) => void;
 }
 
@@ -78,16 +86,24 @@ function createMockDocker(): MockDockerResult {
     }),
   };
 
+  const mockVolume: MockVolume = {
+    inspect: vi.fn().mockResolvedValue({}),
+    remove: vi.fn().mockResolvedValue(undefined),
+  };
+
   const mockDocker = {
     createContainer: vi.fn().mockResolvedValue(mockContainer),
     getContainer: vi.fn().mockReturnValue(mockContainer),
     listContainers: vi.fn().mockResolvedValue([]),
+    getVolume: vi.fn().mockReturnValue(mockVolume),
+    createVolume: vi.fn().mockResolvedValue(mockVolume),
   };
 
   return {
     mockDocker,
     mockContainer,
     mockAttachStream,
+    mockVolume,
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- resolveContainerWait is set in Promise constructor
     resolveContainerWait: resolveContainerWait!,
   };
@@ -232,6 +248,25 @@ describe('DockerProvider', () => {
         dataCallback(Buffer.from('test output'));
         expect(onLog).toHaveBeenCalledWith('test output');
       }
+    });
+
+    it('mounts pnpm store and per-task node_modules volumes', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual('claude-pnpm-store:/home/claude/pnpm-store:rw');
+      expect(binds).toContainEqual('claude-node-modules-test-task-123:/repo/node_modules:rw');
+    });
+
+    it('sets PNPM_STORE_DIR env var', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContainEqual('PNPM_STORE_DIR=/home/claude/pnpm-store');
     });
 
     it('sends system prompt to container stdin', async () => {

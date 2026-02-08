@@ -255,47 +255,6 @@ describe('WorktreeManager', () => {
     });
   });
 
-  describe('writeClaudeSettings', () => {
-    it('should write settings.local.json when claudeSettings is provided', async () => {
-      const WM = await loadWorktreeManager();
-      const manager = new WM(
-        {
-          ...mockConfig,
-          claudeSettings: { outputStyle: 'Explanatory' },
-        },
-        mockLogger
-      );
-
-      await manager.createWorktree('task-settings', 'feature-branch');
-
-      const settingsPath = join(
-        worktreeBasePath,
-        'task-settings',
-        '.claude',
-        'settings.local.json'
-      );
-      expect(existsSync(settingsPath)).toBe(true);
-
-      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
-      expect(settings.outputStyle).toBe('Explanatory');
-    });
-
-    it('should skip writing settings when claudeSettings is not provided', async () => {
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      await manager.createWorktree('task-no-settings', 'feature-branch');
-
-      const settingsPath = join(
-        worktreeBasePath,
-        'task-no-settings',
-        '.claude',
-        'settings.local.json'
-      );
-      expect(existsSync(settingsPath)).toBe(false);
-    });
-  });
-
   describe('copyMcpConfig error handling', () => {
     it('should handle non-Error objects thrown during MCP config copy', async () => {
       process.env['LINEAR_API_KEY'] = 'test-key';

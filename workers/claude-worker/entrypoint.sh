@@ -39,7 +39,7 @@ mkdir -p /home/claude/.config/gcloud /home/claude/.claude
 # Restore Claude config defaults (skips onboarding on fresh tmpfs)
 # ------------------------------------------------------------------------------
 if [ -d "/opt/claude-defaults" ]; then
-    cp -a /opt/claude-defaults/. /home/claude/
+    cp -r /opt/claude-defaults/. /home/claude/
     echo "[entrypoint] Claude config defaults restored"
 fi
 
@@ -104,6 +104,16 @@ setup_github_token
 ) &
 
 # ------------------------------------------------------------------------------
+# Install dependencies (Linux-native node_modules via shared pnpm store)
+# ------------------------------------------------------------------------------
+if [ -f "/repo/pnpm-lock.yaml" ]; then
+    echo "[entrypoint] Installing dependencies..."
+    cd /repo
+    pnpm install --frozen-lockfile 2>&1 | tail -5
+    echo "[entrypoint] Dependencies installed"
+fi
+
+# ------------------------------------------------------------------------------
 # Start Claude in interactive mode
 # ------------------------------------------------------------------------------
 echo "[entrypoint] Starting Claude..."
@@ -111,6 +121,11 @@ echo "[entrypoint] Working directory: $(pwd)"
 if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
     echo "[entrypoint] Git branch: $(git -C /repo branch --show-current 2>/dev/null || echo 'unknown')"
 fi
+
+# Signal to orchestrator that entrypoint setup is done and Claude is about to launch.
+# The orchestrator polls for this file before sending the API key approval sequence,
+# preventing the prompt from being dumped into bash while pnpm install is still running.
+touch /tmp/claude-ready
 
 echo "[entrypoint] Starting Claude in interactive mode..."
 exec claude -d --dangerously-skip-permissions --verbose
