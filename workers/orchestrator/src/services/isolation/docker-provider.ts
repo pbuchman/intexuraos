@@ -368,13 +368,13 @@ export class DockerProvider implements IsolationProvider {
   ): void {
     const POLL_INTERVAL_MS = 5_000;
     const INITIAL_DELAY_MS = 30_000;
-    const SENTINEL_PATH = '/repo/.claude/hooks/hooks.log';
+    const SENTINEL_PATH = '/repo/.claude/hooks/validation-passed';
 
     const poll = async (interval: ReturnType<typeof setInterval>): Promise<void> => {
       try {
         const container = this.docker.getContainer(containerId);
         const exec = await container.exec({
-          Cmd: ['sh', '-c', `tail -1 ${SENTINEL_PATH} 2>/dev/null | grep -q "completed" && echo DONE || echo WAIT`],
+          Cmd: ['sh', '-c', `[ -f ${SENTINEL_PATH} ] && echo DONE || echo WAIT`],
           AttachStdout: true,
           Tty: true,
         });
