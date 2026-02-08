@@ -3,17 +3,10 @@ import type { Mock } from 'vitest';
 import { DockerProvider, type DockerProviderConfig } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
 
-interface MockVolume {
-  inspect: ReturnType<typeof vi.fn>;
-  remove: ReturnType<typeof vi.fn>;
-}
-
 interface MockDocker {
   createContainer: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
   listContainers: ReturnType<typeof vi.fn>;
-  getVolume: ReturnType<typeof vi.fn>;
-  createVolume: ReturnType<typeof vi.fn>;
 }
 
 interface MockContainer {
@@ -256,7 +249,7 @@ describe('DockerProvider', () => {
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const binds = createCall?.HostConfig?.Binds as string[];
-      expect(binds).toContainEqual('claude-pnpm-store:/home/claude/pnpm-store:rw');
+      expect(binds).toContainEqual(expect.stringContaining('pnpm-store:/home/claude/pnpm-store:rw'));
       const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
       expect(tmpfs['/repo/node_modules']).toContain('uid=1001');
     });
