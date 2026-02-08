@@ -40,7 +40,7 @@ interface WorkerEntry {
   attachStream?: NodeJS.ReadWriteStream;
 }
 
-export const PNPM_STORE_VOLUME = 'claude-pnpm-store';
+export const PNPM_STORE_DIR_NAME = 'pnpm-store';
 
 export class DockerProvider implements IsolationProvider {
   private readonly docker: Docker;
@@ -54,18 +54,6 @@ export class DockerProvider implements IsolationProvider {
     this.logger = logger;
     this.workers = new Map();
   }
-
-  /* v8 ignore start -- test-infra: volume creation requires Docker daemon @preserve */
-  private async ensureVolume(name: string): Promise<void> {
-    try {
-      const volume = this.docker.getVolume(name);
-      await volume.inspect();
-    } catch {
-      await this.docker.createVolume({ Name: name });
-      this.logger.info({ volume: name }, 'Created Docker volume');
-    }
-  }
-  /* v8 ignore stop @preserve */
 
   /**
    * Clean up orphaned worker containers from previous orchestrator runs.
@@ -194,9 +182,8 @@ export class DockerProvider implements IsolationProvider {
 
     this.logger.info({ taskId, worktreePath, workerType }, 'Creating worker container');
 
-    /* v8 ignore start -- test-infra: volume creation requires Docker daemon @preserve */
-    await this.ensureVolume(PNPM_STORE_VOLUME);
-    /* v8 ignore stop @preserve */
+    const pnpmStorePath = path.join(path.dirname(this.config.secretsBasePath), PNPM_STORE_DIR_NAME);
+    fs.mkdirSync(pnpmStorePath, { recursive: true });
 
     /* v8 ignore start -- test-infra: image pull requires Docker daemon with registry access @preserve */
     try {
@@ -241,8 +228,7 @@ export class DockerProvider implements IsolationProvider {
         Binds: [
           `${worktreePath}:/repo:rw`,
           `${taskSecretsPath}:/secrets:ro`,
-          // Shared named volume for pnpm's content-addressable store (safe for concurrent access).
-          `${PNPM_STORE_VOLUME}:/home/claude/pnpm-store:rw`,
+          `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
           /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
           ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
           /* v8 ignore stop @preserve */
