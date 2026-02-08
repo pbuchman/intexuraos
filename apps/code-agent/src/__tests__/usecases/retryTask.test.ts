@@ -3,7 +3,7 @@
  *
  * Test Requirements from INT-520:
  * 1. Returns error when original task not found
- * 2. Returns error when task status is not 'failed' or 'cancelled'
+ * 2. Returns error when task status is not 'failed', 'cancelled', or 'interrupted'
  * 3. Returns error when task failed less than 5 minutes ago (cool-off period)
  * 4. Successfully creates retry task with retriedFrom set
  * 5. Updates Linear issue state to In Progress
@@ -175,8 +175,8 @@ describe('retryTask use case', () => {
       }
     });
 
-    it('should return error when task status is not failed or cancelled', async () => {
-      const nonRetryableStatuses: TaskStatus[] = ['dispatched', 'running', 'completed', 'interrupted'];
+    it('should return error when task status is not failed, cancelled, or interrupted', async () => {
+      const nonRetryableStatuses: TaskStatus[] = ['dispatched', 'running', 'completed'];
 
       for (const status of nonRetryableStatuses) {
         vi.clearAllMocks();
@@ -192,7 +192,7 @@ describe('retryTask use case', () => {
         expect(result.ok).toBe(false);
         if (!result.ok) {
           expect(result.error.code).toBe('invalid_status');
-          expect(result.error.message).toContain('Only failed or cancelled tasks can be retried');
+          expect(result.error.message).toContain('Only failed, cancelled, or interrupted tasks can be retried');
         }
       }
     });
@@ -350,6 +350,83 @@ describe('retryTask use case', () => {
       if (result.ok) {
         expect(result.value.codeTaskId).toBe(retryTaskId);
       }
+    });
+
+    it('should successfully retry an interrupted task and bypass cool-off', async () => {
+      const retryTaskId = 'task_retry_interrupted';
+      const twoMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 2 * 60 * 1000));
+      const mockInterruptedTask = createMockTask({
+        status: 'interrupted',
+        completedAt: twoMinutesAgo,
+      }) as unknown as Record<string, unknown>;
+      delete mockInterruptedTask['error'];
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockInterruptedTask as unknown as CodeTask));
+
+      mockCodeTaskRepo.create.mockImplementation((input) => {
+        const newTask: CodeTask = {
+          id: retryTaskId,
+          userId: input.userId,
+          traceId: input.traceId,
+          prompt: input.prompt,
+          sanitizedPrompt: input.sanitizedPrompt,
+          systemPromptHash: input.systemPromptHash,
+          workerType: input.workerType,
+          workerLocation: input.workerLocation,
+          repository: input.repository,
+          baseBranch: input.baseBranch,
+          status: 'dispatched',
+          dedupKey: 'new-dedup-key',
+          callbackReceived: false,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          retriedFrom: originalTaskId,
+          webhookSecret: input.webhookSecret ?? 'whsec_secret',
+          linearIssueId,
+          linearIssueTitle: 'Retry mechanism test',
+        };
+        return Promise.resolve(ok(newTask));
+      });
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ orchestratorTaskId: 'orch-123', workerLocation: 'home-mac' })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(ok({ hasActive: false }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [{
+            name: 'home-mac',
+            url: 'https://worker.example.com',
+            enabled: true,
+            cfAccessClientId: 'client-id',
+            cfAccessClientSecret: 'client-secret',
+            dispatchSigningSecret: 'webhook-secret',
+          }],
+        })
+      );
+      mockWhatsAppNotifier.notifyTaskStarted.mockResolvedValue(ok(undefined));
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }) as unknown as CodeTask)
+      );
+      mockMetricsClient.incrementTasksSubmitted.mockResolvedValue(undefined);
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      // Should succeed despite completedAt being only 2 minutes ago (bypasses cool-off)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe(retryTaskId);
+        expect(result.value.retriedFrom).toBe(originalTaskId);
+      }
+
+      // Verify Linear comment uses dynamic status text
+      expect(mockLinearAgentClient.addComment).toHaveBeenCalledWith({
+        userId,
+        issueId: linearIssueId,
+        body: expect.stringContaining('Retrying interrupted task'),
+      });
     });
 
     it('should allow retry when task has no completedAt timestamp', async () => {
