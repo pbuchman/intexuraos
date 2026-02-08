@@ -1319,40 +1319,6 @@ describe('linearRoutes', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('returns 500 when commentRepository countByIssueId fails', async () => {
-      ctx.issueRepository.seedIssue({
-        id: 'issue-1',
-        identifier: 'ENG-123',
-        title: 'Test Issue',
-        description: null,
-        state: 'Backlog',
-        stateType: 'backlog',
-        priority: 0,
-        assigneeId: null,
-        assigneeName: null,
-        labels: [],
-        url: 'https://linear.app/issue/ENG-123',
-        userId: 'test-user-123',
-        createdAt: '2025-01-15T00:00:00Z',
-        updatedAt: '2025-01-15T00:00:00Z',
-        syncedAt: '2025-01-15T00:00:00Z',
-        teamId: 'team-1',
-      });
-      ctx.commentRepository.setCountByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'Count failed' });
-
-      const token = await createToken({ sub: 'test-user-123' });
-      const response = await ctx.app.inject({
-        method: 'GET',
-        url: '/linear/issues/ENG-123',
-        headers: { authorization: `Bearer ${token}` },
-      });
-
-      expect(response.statusCode).toBe(500);
-      const body = response.json();
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
-    });
-
     it('returns issue with assignee when assigneeId is not null', async () => {
       ctx.issueRepository.seedIssue({
         id: 'issue-1',

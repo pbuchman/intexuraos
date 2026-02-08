@@ -244,14 +244,17 @@ async function handleLinearWebhook(
         return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
       }
 
-      if (secretResult.value !== null) {
-        const { webhookSecret } = secretResult.value;
-        const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
-        if (!signatureResult.ok) {
-          request.log.warn({ error: signatureResult.error }, 'Comment webhook signature validation failed');
-          reply.status(401);
-          return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
-        }
+      if (secretResult.value === null) {
+        request.log.warn({ teamId: issue.teamId }, 'Webhook secret not configured for comment');
+        return await reply.ok({ message: 'Webhook not configured', action: 'ignored' });
+      }
+
+      const { webhookSecret } = secretResult.value;
+      const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
+      if (!signatureResult.ok) {
+        request.log.warn({ error: signatureResult.error }, 'Comment webhook signature validation failed');
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
       }
     }
 

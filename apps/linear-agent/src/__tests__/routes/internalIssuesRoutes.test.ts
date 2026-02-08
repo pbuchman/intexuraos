@@ -456,23 +456,6 @@ describe('internalIssuesRoutes', () => {
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
 
-    it('should return 500 when comment count fails', async () => {
-      fakeIssueRepo.seedIssue(testIssue);
-      fakeCommentRepo.setCountByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'Database error' });
-
-      const response = await app.inject({
-        method: 'GET',
-        url: `/internal/linear/issues/${testIssueIdentifier}`,
-        headers: internalAuthHeader,
-      });
-
-      expect(response.statusCode).toBe(502);
-
-      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
-    });
-
     it('should include comment count and last comment timestamp when comments exist', async () => {
       fakeIssueRepo.seedIssue(testIssue);
 

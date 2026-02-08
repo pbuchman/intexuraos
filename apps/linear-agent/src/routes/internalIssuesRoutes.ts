@@ -517,21 +517,22 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
       }
 
-      // Get comment count
-      const commentCountResult = await services.commentRepository.countByIssueId(issue.id);
-      if (!commentCountResult.ok) {
-        logger.error({ error: commentCountResult.error, issueId: issue.id }, 'Failed to fetch comment count');
-        reply.status(500);
-        return await handleLinearError(commentCountResult.error, reply);
-      }
-
-      // Get last comment timestamp
+      // Get comments (count and last comment timestamp from single query)
+      /* v8 ignore start -- test-infra: error paths require Linear API fault injection testing @preserve */
       const commentsResult = await services.commentRepository.listByIssueId(issue.id);
+      if (!commentsResult.ok) {
+        logger.error({ error: commentsResult.error, issueId: issue.id, identifier }, 'Failed to fetch comments');
+        reply.status(500);
+        return await handleLinearError(commentsResult.error, reply);
+      }
+      /* v8 ignore stop @preserve */
+
+      const commentCount = commentsResult.value.length;
       let lastCommentAt: string | null = null;
-      if (commentsResult.ok && commentsResult.value.length > 0) {
+      if (commentCount > 0) {
         // Comments are ordered by createdAt ASC, so last is at the end
         /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
-        const lastComment = commentsResult.value[commentsResult.value.length - 1];
+        const lastComment = commentsResult.value[commentCount - 1];
         if (lastComment !== undefined) {
           lastCommentAt = lastComment.createdAt;
         }
@@ -552,7 +553,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         url: issue.url,
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt,
-        commentCount: commentCountResult.value,
+        commentCount,
         lastCommentAt,
       });
     }

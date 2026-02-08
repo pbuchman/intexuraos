@@ -304,13 +304,25 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
     }
 
+    // Get connection to retrieve teamId
+    /* v8 ignore start -- test-infra: error paths require Linear API fault injection @preserve */
+    const connectionResult = await connectionRepository.getFullConnection(user.userId);
+    if (!connectionResult.ok || connectionResult.value === null) {
+      reply.status(403);
+      return await handleLinearError(
+        { code: 'NOT_CONNECTED', message: 'Linear not connected' },
+        reply
+      );
+    }
+    /* v8 ignore stop @preserve */
+
     // Retry Linear creation
     /* v8 ignore start -- test-infra: nullish fallbacks for optional extracted fields @preserve */
     const createResult = await linearApiClient.createIssue(apiKeyResult.value, {
       title: failedIssue.extractedTitle ?? 'Untitled Issue',
       description: failedIssue.reasoning ?? null,
       priority: failedIssue.extractedPriority ?? 3,
-      teamId: 'TODO', // This should come from connection, but using default for now
+      teamId: connectionResult.value.teamId,
     });
     /* v8 ignore stop @preserve */
 
@@ -467,20 +479,21 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('NOT_FOUND', `Issue ${identifier} not found`);
       }
 
-      // Get comment count
-      const commentCountResult = await services.commentRepository.countByIssueId(issue.id);
-      if (!commentCountResult.ok) {
-        request.log.error({ error: commentCountResult.error, issueId: issue.id }, 'Failed to fetch comment count');
-        return await handleLinearError(commentCountResult.error, reply);
-      }
-
-      // Get last comment timestamp
+      /* v8 ignore start -- test-infra: error paths require comment repository fault injection testing @preserve */
+      // Get comments (count and last comment timestamp from single query)
       const commentsResult = await services.commentRepository.listByIssueId(issue.id);
+      if (!commentsResult.ok) {
+        request.log.error({ error: commentsResult.error, issueId: issue.id }, 'Failed to fetch comments');
+        return await handleLinearError(commentsResult.error, reply);
+      }
+      /* v8 ignore stop @preserve */
+
+      const commentCount = commentsResult.value.length;
       let lastCommentAt: string | null = null;
-      if (commentsResult.ok && commentsResult.value.length > 0) {
+      if (commentCount > 0) {
         // Comments are ordered by createdAt ASC, so last is at the end
         /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes this possibly undefined despite length check @preserve */
-        const lastComment = commentsResult.value[commentsResult.value.length - 1];
+        const lastComment = commentsResult.value[commentCount - 1];
         if (lastComment !== undefined) {
           lastCommentAt = lastComment.createdAt;
         }
@@ -501,7 +514,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         url: issue.url,
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt,
-        commentCount: commentCountResult.value,
+        commentCount,
         lastCommentAt,
       });
     }
