@@ -1,5 +1,5 @@
 /**
- * Use case: Retry a failed or cancelled code task.
+ * Use case: Retry a failed, cancelled, or interrupted code task.
  *
  * Creates a new task with the same prompt, optionally with additional context.
  * Links the new task to the original via retriedFrom field.
@@ -45,7 +45,7 @@ const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
  * Request to retry a failed task.
  */
 export interface RetryTaskRequest {
-  /** The ID of the failed or cancelled task to retry */
+  /** The ID of the failed, cancelled, or interrupted task to retry */
   originalTaskId: string;
   /** User ID requesting the retry */
   userId: string;
@@ -93,11 +93,11 @@ export interface RetryTaskDeps {
 }
 
 /**
- * Retry a failed or cancelled code task use case.
+ * Retry a failed, cancelled, or interrupted code task use case.
  *
  * Workflow:
  * 1. Fetch original task and validate it belongs to user
- * 2. Validate status is 'failed' or 'cancelled'
+ * 2. Validate status is 'failed', 'cancelled', or 'interrupted'
  * 3. Validate cool-off period has elapsed (5 minutes)
  * 4. Check for active tasks on same Linear issue
  * 5. Reconstruct prompt with additional context if provided
@@ -127,20 +127,21 @@ export async function retryTask(
 
   const originalTask = originalTaskResult.value;
 
-  // Step 2: Validate status is failed or cancelled
-  if (!['failed', 'cancelled'].includes(originalTask.status)) {
+  // Step 2: Validate status is failed, cancelled, or interrupted
+  if (!['failed', 'cancelled', 'interrupted'].includes(originalTask.status)) {
     logger.warn({ taskId: originalTask.id, status: originalTask.status }, 'Attempted to retry non-retryable task');
     return err({
       code: 'invalid_status',
-      message: `Cannot retry task with status "${originalTask.status}". Only failed or cancelled tasks can be retried.`,
+      message: `Cannot retry task with status "${originalTask.status}". Only failed, cancelled, or interrupted tasks can be retried.`,
     });
   }
 
   // Step 3: Validate cool-off period
-  // Cancelled tasks bypass cool-off — cancellation is user-initiated so immediate retry is appropriate
+  // Cancelled and interrupted tasks bypass cool-off — cancellation is user-initiated and
+  // interruption is infrastructure-related, so immediate retry is appropriate for both
   const completedAt = originalTask.completedAt;
 
-  if (originalTask.status !== 'cancelled' && completedAt !== undefined) {
+  if (originalTask.status === 'failed' && completedAt !== undefined) {
     const now = Date.now();
     let completedAtTime: number;
 
