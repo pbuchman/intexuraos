@@ -8,7 +8,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 
@@ -27,7 +28,14 @@ const phases = [
   {
     name: 'Tests',
     parallel: false,
-    commands: [{ name: 'test:coverage', run: 'pnpm run test:coverage' }],
+    commands: [
+      {
+        name: 'test:coverage',
+        run: 'pnpm run test:coverage',
+        saveTo: 'scripts/test-results/test-output.txt',
+      },
+      { name: 'test-stdout', script: 'verify-test-stdout.mjs' },
+    ],
   },
   {
     name: 'Static Validation',
@@ -177,6 +185,12 @@ async function runCommand(cmd, abortSignal = null) {
           duration,
         });
         return;
+      }
+
+      if (cmd.saveTo) {
+        const savePath = join(repoRoot, cmd.saveTo);
+        mkdirSync(dirname(savePath), { recursive: true });
+        writeFileSync(savePath, output);
       }
 
       const summary = code === 0 ? extractSummary(output) : 'FAILED';
