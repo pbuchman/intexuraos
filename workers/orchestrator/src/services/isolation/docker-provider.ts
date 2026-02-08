@@ -227,7 +227,7 @@ export class DockerProvider implements IsolationProvider {
 
     await this.waitForContainerReady(attachStream as unknown as NodeJS.ReadWriteStream, taskId);
     this.logger.debug({ taskId }, 'Container ready — sending system prompt');
-    attachStream.write(systemPrompt + '\n');
+    await this.writePromptToTTY(attachStream, systemPrompt, taskId);
 
     const handle: WorkerHandle = {
       taskId,
@@ -256,6 +256,8 @@ export class DockerProvider implements IsolationProvider {
         this.logger.error({ taskId, error: err }, 'Container wait error');
       });
     /* v8 ignore stop @preserve */
+
+    this.monitorForResponseCompletion(attachStream, taskId, container.id);
 
     this.logger.info({ taskId, containerId: container.id }, 'Worker container started');
 
@@ -309,6 +311,103 @@ export class DockerProvider implements IsolationProvider {
         }, 500);
       }, INITIAL_WAIT_MS);
     });
+  }
+  /* v8 ignore stop @preserve */
+
+  /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, TTY paste-then-submit requires real terminal @preserve */
+  protected async writePromptToTTY(
+    attachStream: NodeJS.ReadWriteStream,
+    prompt: string,
+    taskId: string
+  ): Promise<void> {
+    const SETTLE_MS = 1_000;
+    const TIMEOUT_MS = 10_000;
+
+    attachStream.write(prompt + '\n');
+    this.logger.info(
+      { taskId, promptLength: prompt.length },
+      'Prompt written — waiting for TUI to settle before submit'
+    );
+
+    await new Promise<void>((resolve) => {
+      let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const finish = (): void => {
+        clearTimeout(hardTimeout);
+        if (settleTimer) clearTimeout(settleTimer);
+        attachStream.removeListener('data', onData);
+        attachStream.write('\r');
+        resolve();
+      };
+
+      const hardTimeout = setTimeout(() => {
+        this.logger.warn({ taskId }, 'Prompt settle timeout — submitting anyway');
+        finish();
+      }, TIMEOUT_MS);
+
+      const resetSettle = (): void => {
+        if (settleTimer) clearTimeout(settleTimer);
+        settleTimer = setTimeout(finish, SETTLE_MS);
+      };
+
+      const onData = (): void => {
+        resetSettle();
+      };
+
+      attachStream.on('data', onData);
+      resetSettle();
+    });
+  }
+  /* v8 ignore stop @preserve */
+
+  /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, requires real container lifecycle @preserve */
+  protected monitorForResponseCompletion(
+    _attachStream: NodeJS.ReadWriteStream,
+    taskId: string,
+    containerId: string
+  ): void {
+    const POLL_INTERVAL_MS = 5_000;
+    const INITIAL_DELAY_MS = 30_000;
+    const SENTINEL_PATH = '/repo/.claude/hooks/hooks.log';
+
+    const poll = async (interval: ReturnType<typeof setInterval>): Promise<void> => {
+      try {
+        const container = this.docker.getContainer(containerId);
+        const exec = await container.exec({
+          Cmd: ['sh', '-c', `[ -s ${SENTINEL_PATH} ] && echo DONE || echo WAIT`],
+          AttachStdout: true,
+          Tty: true,
+        });
+        const stream = await exec.start({ Tty: true });
+        const chunks: Buffer[] = [];
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+        await new Promise<void>((resolve) => stream.on('end', resolve));
+        const output = Buffer.concat(chunks).toString('utf-8');
+
+        if (output.includes('DONE')) {
+          clearInterval(interval);
+          this.logger.info({ taskId }, 'Stop hooks completed — stopping container');
+          await container.stop({ t: 5 }).catch((_err: unknown) => {
+            // Container may already be stopped
+          });
+        }
+      } catch (error) {
+        this.logger.warn(
+          { taskId, error },
+          'Poll error in monitorForResponseCompletion — stopping monitoring'
+        );
+        clearInterval(interval);
+      }
+    };
+
+    // Delay polling to avoid detecting sentinel before response completes.
+    // Simple tasks complete in ~15s; 30s delay ensures we don't stop during prompt processing.
+    setTimeout(() => {
+      const interval = setInterval(() => {
+        void poll(interval);
+      }, POLL_INTERVAL_MS);
+      void poll(interval);
+    }, INITIAL_DELAY_MS);
   }
   /* v8 ignore stop @preserve */
 
@@ -480,7 +579,7 @@ export class DockerProvider implements IsolationProvider {
     /* v8 ignore stop @preserve */
 
     this.logger.debug({ taskId, inputLength: input.length }, 'Sending input to worker');
-    worker.attachStream.write(input + '\n');
+    await this.writePromptToTTY(worker.attachStream, input, taskId);
   }
 
   async attachTTY(taskId: string): Promise<TTYStreams> {
