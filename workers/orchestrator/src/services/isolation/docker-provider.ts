@@ -162,6 +162,24 @@ export class DockerProvider implements IsolationProvider {
 
     this.logger.info({ taskId, worktreePath, workerType }, 'Creating worker container');
 
+    /* v8 ignore start -- test-infra: image pull requires Docker daemon with registry access @preserve */
+    try {
+      const pullStream = await this.docker.pull(this.config.imageName);
+      await new Promise<void>((resolve, reject) => {
+        this.docker.modem.followProgress(
+          pullStream,
+          (err: Error | null) => {
+            if (err !== null) reject(err);
+            else resolve();
+          }
+        );
+      });
+      this.logger.debug({ taskId, image: this.config.imageName }, 'Image pulled');
+    } catch (err: unknown) {
+      this.logger.warn({ taskId, error: err }, 'Image pull failed — using cached image');
+    }
+    /* v8 ignore stop @preserve */
+
     const container = await this.docker.createContainer({
       Image: this.config.imageName,
       name: `claude-worker-${taskId}`,
