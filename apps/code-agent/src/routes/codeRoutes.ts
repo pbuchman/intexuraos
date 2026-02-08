@@ -511,7 +511,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       return await reply.ok({
         status: 'submitted',
         codeTaskId: result.value.codeTaskId, // @allow-result-access -- .ok checked at line 461
-        resourceUrl: result.value.resourceUrl,
+        resourceUrl: result.value.resourceUrl, // @allow-result-access -- .ok checked at line 461
       });
     }
   );
@@ -748,7 +748,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore start -- ts-type: terminal status includes check @preserve */
       if (body.status !== undefined && terminalStatuses.includes(body.status)) {
       /* v8 ignore stop @preserve */
-        const userId = result.value.userId;
+        const userId = result.value.userId; // @allow-result-access -- .ok checked at line 736
         // Fire and forget - don't await to avoid delaying response
         // Note: Currently we don't receive actual cost from orchestrator, so we pass undefined
         rateLimitService.recordTaskComplete(userId, undefined).catch((err) => {
@@ -1164,6 +1164,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueId?: string;
         linearIssueTitle?: string;
         linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
+        linearIssueLabels?: string[];
+        hasChildren?: boolean;
         linearFallback?: boolean;
       } = {
         userId,
@@ -1192,13 +1194,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
         createInput.linearIssueType = issueResult.linearIssueType;
       }
+      // Save linearIssueLabels and hasChildren
+      createInput.linearIssueLabels = issueResult.linearIssueLabels;
+      createInput.hasChildren = issueResult.hasChildren;
       // Save fallback flag
       /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
       if (issueResult.linearFallback) {
       /* v8 ignore stop @preserve */
         createInput.linearFallback = true;
       }
-
       const createResult = await codeTaskRepo.create(createInput);
 
       if (!createResult.ok) {
@@ -1579,6 +1583,43 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     },
                   },
                   statusSummary: { type: 'object', nullable: true },
+                  linearIssue: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      identifier: { type: 'string' },
+                      title: { type: 'string' },
+                      state: {
+                        type: 'object',
+                        properties: {
+                          name: { type: 'string' },
+                          type: { type: 'string' },
+                        },
+                      },
+                      priority: { type: 'number' },
+                      assignee: {
+                        type: 'object',
+                        nullable: true,
+                        properties: {
+                          id: { type: 'string' },
+                          name: { type: 'string' },
+                        },
+                      },
+                      labels: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string' },
+                            name: { type: 'string' },
+                          },
+                        },
+                      },
+                      url: { type: 'string' },
+                      commentCount: { type: 'number' },
+                      lastCommentAt: { type: 'string', nullable: true },
+                    },
+                  },
                 },
               },
             },
@@ -1652,7 +1693,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, logger } = getServices();
+      const { codeTaskRepo, linearAgentClient, logger } = getServices();
       /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
@@ -1673,27 +1714,50 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', getResult.error.message);
       }
 
-      const apiResponse = taskToApiResponse(getResult.value);
+      const task = getResult.value; // @allow-result-access -- .ok checked at line 1703
+      const apiResponse = taskToApiResponse(task);
+
+      let linearIssue: undefined | {
+        identifier: string;
+        title: string;
+        state: { name: string; type: string };
+        priority: number;
+        assignee: { id: string; name: string } | null;
+        labels: Array<{ id: string; name: string }>;
+        url: string;
+        commentCount: number;
+        lastCommentAt: string | null;
+      };
+      if (task.linearIssueId !== undefined) {
+        const linearResult = await linearAgentClient.fetchIssueForDisplay({
+          userId: task.userId,
+          identifier: task.linearIssueId,
+        });
+        if (linearResult.ok) {
+          linearIssue = linearResult.value;
+        }
+      }
 
       logger.info(
         {
           taskId: request.params.taskId,
-          status: getResult.value.status,
+          status: task.status,
           /* v8 ignore start -- ts-type: optional chaining creates type narrowing branch @preserve */
-          hasResult: getResult.value.result !== undefined,
+          hasResult: task.result !== undefined,
           /* v8 ignore stop @preserve */
           /* v8 ignore start -- ts-type: ternary operator creates type narrowing branch @preserve */
-          resultKeys: getResult.value.result ? Object.keys(getResult.value.result) : [],
+          resultKeys: task.result ? Object.keys(task.result) : [],
           /* v8 ignore stop @preserve */
           apiResponseHasResult: apiResponse.result !== undefined,
           /* v8 ignore start -- ts-type: ternary operator creates type narrowing branch @preserve */
           apiResponseResultKeys: apiResponse.result ? Object.keys(apiResponse.result) : [],
           /* v8 ignore stop @preserve */
+          hasLinearIssue: linearIssue !== undefined,
         },
         'Returning task for GET /code/tasks/:taskId'
       );
 
-      return await reply.ok(apiResponse);
+      return await reply.ok({ ...apiResponse, linearIssue });
     }
   );
 

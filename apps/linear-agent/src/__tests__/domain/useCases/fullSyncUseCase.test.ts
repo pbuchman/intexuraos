@@ -92,6 +92,7 @@ describe('fullSync', () => {
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
         syncedAt: '2025-01-01T00:00:00.000Z',
+        teamId: 'team-1',
       });
 
       linearClient.seedIssue(createTestApiIssue({ id: 'issue-1', identifier: 'INT-1', title: 'New Title' }));
@@ -123,6 +124,7 @@ describe('fullSync', () => {
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
         syncedAt: '2025-01-01T00:00:00.000Z',
+        teamId: 'team-1',
       });
 
       linearClient.seedIssue(createTestApiIssue({ id: 'issue-1', identifier: 'INT-1' }));
@@ -237,6 +239,7 @@ describe('fullSync', () => {
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
         syncedAt: '2025-01-01T00:00:00.000Z',
+        teamId: 'team-1',
       });
       linearClient.seedIssue(createTestApiIssue({ id: 'issue-1', identifier: 'INT-1' }));
       issueRepo.setDeleteFailure(true);

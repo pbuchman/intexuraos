@@ -990,6 +990,15 @@ export interface LinearConnectionStatus {
 }
 
 /**
+ * Linear webhook configuration from linear-agent
+ */
+export interface LinearWebhookConfig {
+  webhookUrl: string;
+  hasWebhookSecret: boolean;
+  teamId: string;
+}
+
+/**
  * Grouped issues by dashboard column
  */
 export interface GroupedIssues {
@@ -1106,6 +1115,17 @@ export interface CodeTask {
   linearIssueTitle?: string;
   linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
   linearFallback?: boolean;
+  linearIssue?: {
+    identifier: string;
+    title: string;
+    state: { name: string; type: string };
+    priority: number;
+    assignee: { id: string; name: string } | null;
+    labels: { id: string; name: string }[];
+    url: string;
+    commentCount: number;
+    lastCommentAt: string | null;
+  };
   result?: CodeTaskResult;
   error?: CodeTaskError;
 }

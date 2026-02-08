@@ -162,7 +162,7 @@ class TestableDockerProvider extends DockerProvider {
   }
 
   protected override monitorForResponseCompletion(): void {
-    // No-op in tests — real implementation monitors stream for idle and sends /exit
+    // No-op in tests
   }
 }
 

@@ -761,7 +761,7 @@ module "pubsub_llm_call" {
   ]
 }
 
-# Topic for sending WhatsApp messages (actions-agent, research-agent -> whatsapp-service)
+# Topic for sending WhatsApp messages (actions-agent, research-agent, code-agent -> whatsapp-service)
 module "pubsub_whatsapp_send" {
   source = "../../modules/pubsub-push"
 
@@ -778,6 +778,7 @@ module "pubsub_whatsapp_send" {
     actions_agent   = module.iam.service_accounts["actions_agent"]
     research_agent  = module.iam.service_accounts["research_agent"]
     bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
+    code_agent      = module.iam.service_accounts["code_agent"]
   }
 
   depends_on = [
