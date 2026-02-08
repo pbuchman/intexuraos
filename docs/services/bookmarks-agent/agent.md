@@ -220,8 +220,8 @@ ogFetchStatus: 'processed', ogPreview populated
 Pub/Sub: bookmarks.summarize
       ↓
 web-agent generates AI summary
-      ↓
-aiSummary populated
+      ↓                          ↓ (transient error: 429, timeout, etc.)
+aiSummary populated              HTTP 503 → Pub/Sub retries with backoff
       ↓
 Pub/Sub: whatsapp.message.send
       ↓
@@ -232,14 +232,15 @@ WhatsApp message delivered to user
 
 ## Error Codes
 
-| Code              | HTTP | Meaning                             |
-| ----------------- | ---- | ----------------------------------- |
-| `INVALID_REQUEST` | 400  | Malformed request body or URL       |
-| `UNAUTHORIZED`    | 401  | Missing or invalid auth token       |
-| `FORBIDDEN`       | 403  | User cannot access this bookmark    |
-| `NOT_FOUND`       | 404  | Bookmark ID does not exist          |
-| `CONFLICT`        | 409  | URL already bookmarked by this user |
-| `INTERNAL_ERROR`  | 500  | Unexpected server error             |
+| Code              | HTTP | Meaning                                              |
+| ----------------- | ---- | ---------------------------------------------------- |
+| `INVALID_REQUEST` | 400  | Malformed request body or URL                        |
+| `UNAUTHORIZED`    | 401  | Missing or invalid auth token                        |
+| `FORBIDDEN`       | 403  | User cannot access this bookmark                     |
+| `NOT_FOUND`       | 404  | Bookmark ID does not exist                           |
+| `CONFLICT`        | 409  | URL already bookmarked by this user                  |
+| `INTERNAL_ERROR`  | 500  | Unexpected server error                              |
+| `TRANSIENT_ERROR` | 503  | Temporary failure (rate limit, timeout) - retryable  |
 
 ---
 
@@ -282,4 +283,4 @@ whatsapp-service's SendMessageWorker handles delivery using the userId to look u
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2026-02-08

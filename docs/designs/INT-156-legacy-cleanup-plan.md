@@ -8,13 +8,13 @@ All phases have been completed. The legacy worker discovery system has been full
 
 | Component                         | Status      | Notes                                                                                                                 |
 | --------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
-| WorkerDiscovery service           | ✅ Removed  | `workerDiscoveryImpl.ts` and `workerDiscovery.ts` deleted                                                             |
-| `INTEXURAOS_CODE_WORKERS` env var | ✅ Removed  | No longer used anywhere                                                                                               |
-| `/code/workers/status` endpoint   | ✅ Updated  | Returns `{ workers: [...] }` instead of `{ mac: {...}, vm: {...} }`                                                   |
-| Web app types                     | ✅ Updated  | `CodeTaskWorkerLocation` is now `string`, `WorkersStatusResponse` uses workers array                                  |
-| Test files                        | ✅ Updated  | All references to legacy env vars and services removed                                                                |
-| Terraform secrets                 | ✅ Cleaned  | Removed 4 dead secrets: `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, `CF_TUNNEL_TOKEN_MAC`, `CF_TUNNEL_TOKEN_VM` |
-| `DISPATCH_SIGNING_SECRET`         | ✅ Per-user | Moved from global env var to per-user worker settings in Firestore                                                    |
+| WorkerDiscovery service           | ✅ Removed   | `workerDiscoveryImpl.ts` and `workerDiscovery.ts` deleted                                                             |
+| `INTEXURAOS_CODE_WORKERS` env var | ✅ Removed   | No longer used anywhere                                                                                               |
+| `/code/workers/status` endpoint   | ✅ Updated   | Returns `{ workers: [...] }` instead of `{ mac: {...}, vm: {...} }`                                                   |
+| Web app types                     | ✅ Updated   | `CodeTaskWorkerLocation` is now `string`, `WorkersStatusResponse` uses workers array                                  |
+| Test files                        | ✅ Updated   | All references to legacy env vars and services removed                                                                |
+| Terraform secrets                 | ✅ Cleaned   | Removed 4 dead secrets: `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, `CF_TUNNEL_TOKEN_MAC`, `CF_TUNNEL_TOKEN_VM` |
+| `DISPATCH_SIGNING_SECRET`         | ✅ Per-user  | Moved from global env var to per-user worker settings in Firestore                                                    |
 
 ### Architecture: Per-User Worker Settings
 

@@ -96,27 +96,34 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit  | Description                                     | Date       |
-| ------- | ----------------------------------------------- | ---------- |
-| INT-269 | Migrate to @intexuraos/internal-clients package | 2025-01-25 |
-| INT-222 | Migrate to Zod schema for event validation      | 2025-01-25 |
-| INT-189 | Calendar preview generation before approval     | 2025-01-21 |
-| INT-200 | Calendar preview cleanup after event creation   | 2025-01-21 |
-| INT-171 | Improved test coverage for calendar-agent       | 2025-01-20 |
+| Commit  | Description                                                   | Date       |
+| ------- | ------------------------------------------------------------- | ---------- |
+| INT-427 | Enable strict 100% coverage enforcement (Phase 3)             | 2026-01-31 |
+| INT-311 | Add delete/retry for failed issues and events                 | 2026-01-31 |
+| INT-422 | Fix Polish date parsing in calendar actions                   | 2026-01-29 |
+|         | Improve calendar extraction with date-only support and repair | 2026-01-30 |
+|         | Add Sentry-enabled logger factory and migrate all apps        | 2026-01-30 |
+| INT-408 | Enforce mandatory env var registration for all services       | 2026-01-28 |
+| INT-301 | Consolidate user service client architecture                  | 2026-01-26 |
+| INT-269 | Migrate to @intexuraos/internal-clients package               | 2025-01-25 |
+| INT-222 | Migrate to Zod schema for event validation                    | 2025-01-25 |
+| INT-189 | Calendar preview generation before approval                   | 2025-01-21 |
 
 ## API Endpoints
 
 ### Public Endpoints
 
-| Method | Path                        | Description              | Auth         |
-| ------ | --------------------------- | ------------------------ | ------------ |
-| GET    | `/calendar/events`          | List events with filters | Bearer token |
-| GET    | `/calendar/events/:eventId` | Get specific event       | Bearer token |
-| POST   | `/calendar/events`          | Create event             | Bearer token |
-| PATCH  | `/calendar/events/:eventId` | Update event             | Bearer token |
-| DELETE | `/calendar/events/:eventId` | Delete event             | Bearer token |
-| POST   | `/calendar/freebusy`        | Get free/busy info       | Bearer token |
-| GET    | `/calendar/failed-events`   | List failed extractions  | Bearer token |
+| Method | Path                                | Description                       | Auth         |
+| ------ | ----------------------------------- | --------------------------------- | ------------ |
+| GET    | `/calendar/events`                  | List events with filters          | Bearer token |
+| GET    | `/calendar/events/:eventId`         | Get specific event                | Bearer token |
+| POST   | `/calendar/events`                  | Create event                      | Bearer token |
+| PATCH  | `/calendar/events/:eventId`         | Update event                      | Bearer token |
+| DELETE | `/calendar/events/:eventId`         | Delete event                      | Bearer token |
+| POST   | `/calendar/freebusy`                | Get free/busy info                | Bearer token |
+| GET    | `/calendar/failed-events`           | List failed extractions           | Bearer token |
+| DELETE | `/calendar/failed-events/:id`       | Delete a failed event             | Bearer token |
+| POST   | `/calendar/failed-events/:id/retry` | Retry creating from failed event  | Bearer token |
 
 ### Internal Endpoints
 
@@ -159,21 +166,21 @@ sequenceDiagram
 
 ### CalendarPreview (v2.0.0)
 
-| Field | Type | Description |
-| ------------- | ------------ | ----------------------------- | | |
-| `actionId` | string | Action ID (document ID) |
-| `userId` | string | User ID |
-| `status` | 'pending' \ | 'ready' \ | 'failed' | Preview generation status |
-| `summary` | string? | Extracted event title |
-| `start` | string? | ISO 8601 start datetime |
-| `end` | string? | ISO 8601 end datetime |
-| `location` | string? | Extracted location |
-| `description` | string? | Extracted description |
-| `duration` | string? | Human-readable duration |
-| `isAllDay` | boolean? | True if all-day event |
-| `error` | string? | Error message (if failed) |
-| `reasoning` | string? | LLM reasoning for extraction |
-| `generatedAt` | string | ISO 8601 generation timestamp |
+| Field         | Type          | Description                                       |
+| ------------- | ------------- | ------------------------------------------------- |
+| `actionId`    | string        | Action ID (document ID)                           |
+| `userId`      | string        | User ID                                           |
+| `status`      | PreviewStatus | pending, ready, or failed                         |
+| `summary`     | string?       | Extracted event title                             |
+| `start`       | string?       | ISO 8601 start datetime or YYYY-MM-DD for all-day |
+| `end`         | string?       | ISO 8601 end datetime                             |
+| `location`    | string?       | Extracted location                                |
+| `description` | string?       | Extracted description                             |
+| `duration`    | string?       | Human-readable duration                           |
+| `isAllDay`    | boolean?      | True if all-day event                             |
+| `error`       | string?       | Error message (if failed)                         |
+| `reasoning`   | string?       | LLM reasoning for extraction                      |
+| `generatedAt` | string        | ISO 8601 generation timestamp                     |
 
 ### ProcessedAction
 
@@ -253,10 +260,10 @@ interface GeneratePreviewMessage {
 
 ### Internal Services
 
-| Service        | Endpoint                       | Purpose                             |
-| -------------- | ------------------------------ | ----------------------------------- |
-| `user-service` | `/internal/google-oauth-token` | Fetch Google OAuth access token     |
-| `user-service` | `/internal/llm-client`         | Get LLM client for event extraction |
+| Service        | Endpoint                                      | Purpose                             |
+| -------------- | --------------------------------------------- | ----------------------------------- |
+| `user-service` | `/internal/users/:id/oauth/google/token`      | Fetch Google OAuth access token     |
+| `user-service` | `/internal/users/:id/llm-client`              | Get LLM client for event extraction |
 
 ### External APIs
 
@@ -269,6 +276,7 @@ interface GeneratePreviewMessage {
 
 | Environment Variable             | Required | Description                     |
 | -------------------------------- | -------- | ------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | GCP project ID                  |
 | `INTEXURAOS_USER_SERVICE_URL`    | Yes      | user-service base URL           |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth |
 
@@ -288,11 +296,23 @@ interface GeneratePreviewMessage {
 
 **LLM fallback** - If preview is not ready, processCalendarAction falls back to direct LLM extraction.
 
+**LLM repair** - When extraction returns invalid JSON or fails schema validation, a repair prompt is sent (up to 1 retry) before marking as failed.
+
+**Date context** - processCalendarAction includes day of week in currentDate (e.g., "2026-02-08 Saturday") for accurate relative date parsing across languages.
+
+**Date-only format** - LLM responses with date-only format (YYYY-MM-DD) are accepted for all-day events instead of requiring ISO datetime.
+
+**Smart singleEvents** - listEvents auto-sets `singleEvents=true` and `orderBy=startTime` when time filters (timeMin/timeMax) are provided. Explicit values override.
+
 **Patch vs update** - Update uses `events.patch` (partial), not `events.update` (full replace).
 
-**OAuth tokens** - Access tokens fetched from user-service on each request. No caching.
+**OAuth tokens** - Access tokens fetched via shared `@intexuraos/internal-clients` UserServiceClient with `getOAuthToken(userId, 'google')`. Error mapping via `mapUserServiceError()`.
 
-**Error mapping** - Google API errors mapped to IntexuraOS codes (403 PERMISSION_DENIED vs QUOTA_EXCEEDED).
+**Error mapping** - Google API errors mapped to IntexuraOS codes (403 PERMISSION_DENIED vs QUOTA_EXCEEDED). UserServiceError codes (CONNECTION_NOT_FOUND, TOKEN_REFRESH_FAILED) mapped to CalendarError codes.
+
+**Failed event retry** - Retry requires both start and end times. Returns 422 if missing. On success, deletes the failed event record (non-blocking on delete failure).
+
+**Failed event ownership** - Delete and retry endpoints verify userId ownership, returning 404 if the event belongs to a different user.
 
 **maxResults maximum** - Google caps at 2500. Requesting higher returns error.
 
@@ -321,10 +341,7 @@ apps/calendar-agent/src/
       processedActionRepository.ts # Idempotency tracking
       calendarPreviewRepository.ts # Preview storage (v2.0.0)
     gemini/
-      calendarActionExtractionService.ts # LLM extraction
-    user/
-      userServiceClient.ts       # user-service HTTP client (OAuth)
-      index.ts                   # Internal clients exports
+      calendarActionExtractionService.ts # LLM extraction with repair mechanism
   routes/
     calendarRoutes.ts            # Public endpoints
     internalRoutes.ts            # Internal + Pub/Sub endpoints
@@ -334,4 +351,4 @@ apps/calendar-agent/src/
 
 ---
 
-**Last updated:** 2025-01-25
+**Last updated:** 2026-02-08

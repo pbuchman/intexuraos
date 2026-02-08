@@ -73,3 +73,10 @@ Mobile-notifications-service manages the entire push flow:
 **Signature only shown once** - Lost tokens require reconnect
 
 **No sound/badge customization** - Basic notification only
+
+## Recent Changes
+
+- **Response contract standardization** - All endpoints now use `reply.ok(data)` / `reply.fail(code, message)` for consistent `{ success, data }` or `{ success, error: { code, message } }` responses
+- **DELETE endpoint updated** - `DELETE /mobile-notifications/notifications/:id` now returns 200 with `{ success: true, data: {} }` instead of 204 No Content
+- **Sentry-enabled logging** - Migrated from direct `pino()` to `createAppLogger()` for automatic Sentry error reporting
+- **100% branch coverage** - Added v8 ignore exemptions for TypeScript-only safety branches

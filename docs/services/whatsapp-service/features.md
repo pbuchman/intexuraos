@@ -22,11 +22,11 @@ Speak your thoughts naturally. Voice notes are transcribed using Speechmatics, t
 
 **Example:** Record a 90-second voice memo about a project status update. Within 30 seconds, you receive the full transcript plus a bullet-point summary highlighting "schedule meeting with vendor" and "review contract by Friday" as actionable items.
 
-### Approval via Replies and Reactions
+### Approval via Buttons, Replies, and Reactions
 
-Respond to action approval requests directly in WhatsApp. Reply with text ("yes", "no", "approve") or use emoji reactions for instant decisions.
+Respond to action approval requests directly in WhatsApp. Tap interactive buttons (Approve, Cancel, Convert), reply with text ("yes", "no", "approve"), or use emoji reactions for instant decisions.
 
-**Example:** The bookmarks-agent wants to add a URL to your reading list. You receive "Add 'AI Trends Report' to Reading List?" - reply with "yes" or react with thumbs-up to approve instantly, without leaving WhatsApp.
+**Example:** The bookmarks-agent wants to add a URL to your reading list. You receive "Add 'AI Trends Report' to Reading List?" with Approve/Cancel buttons. Tap Approve to confirm instantly, or reply with text or react with thumbs-up -- all work seamlessly.
 
 ### Image Handling with Thumbnails
 
@@ -40,14 +40,20 @@ URLs in your messages automatically trigger Open Graph metadata extraction, prov
 
 **Example:** Send a link to an interesting article. The service extracts the title, author, featured image, and summary - making your bookmarks immediately useful without manual curation.
 
+### Phone Number Verification
+
+Before connecting a WhatsApp number, verify ownership via a 6-digit code. The service sends a verification code to the phone number, and you confirm it to prove ownership.
+
+**Example:** You enter your phone number in the IntexuraOS web app. A 6-digit code arrives via WhatsApp within seconds. Enter the code in the app, and your number is verified and ready to connect.
+
 ## Use Case: Mobile Action Approval
 
 You're in transit when your todo-agent identifies a recurring task that should become automated:
 
-1. WhatsApp notification arrives: "Create automation: 'Weekly team sync reminder' every Monday 9am?"
-2. You react with thumbs-up emoji
-3. Whatsapp-service correlates the reaction to the original approval message
-4. ApprovalReplyEvent published to actions-agent
+1. WhatsApp notification arrives with interactive buttons: "Create automation: 'Weekly team sync reminder' every Monday 9am?" [Approve] [Cancel]
+2. You tap the Approve button (or react with thumbs-up emoji, or reply "yes")
+3. Whatsapp-service correlates the button click to the original approval message
+4. ApprovalReplyEvent published to actions-agent with button intent and nonce
 5. Automation is created without any app-switching
 
 The entire interaction takes 2 seconds while you continue walking.
@@ -56,7 +62,8 @@ The entire interaction takes 2 seconds while you continue walking.
 
 - **Zero friction capture** - WhatsApp is always accessible, no app switching required
 - **Natural voice input** - AI transcription with smart summaries extracts actionable items
-- **Instant approvals** - Emoji reactions or text replies for sub-second decisions
+- **Instant approvals** - Interactive buttons, emoji reactions, or text replies for sub-second decisions
+- **Phone verification** - SMS-style code verification proves phone number ownership before connecting
 - **Automatic enrichment** - Link previews, thumbnails, and transcriptions happen automatically
 - **Message correlation** - Outbound messages tracked via wamid for reliable reply threading
 
@@ -65,6 +72,7 @@ The entire interaction takes 2 seconds while you continue walking.
 - **WhatsApp Business API required** - Meta Business verification and API access needed
 - **24-hour messaging window** - WhatsApp limits proactive messages to 24 hours after last user message
 - **No video support** - Video messages are currently ignored
+- **Phone verification required** - Phone numbers must be verified before connecting
 - **Single phone number per user** - Each user maps to one WhatsApp number (multiple not yet supported)
 - **Rate limits** - Subject to WhatsApp API rate limits (varies by tier)
 - **No message editing** - Sent messages cannot be modified

@@ -1,0 +1,360 @@
+# Code Agent - Agent Reference
+
+Machine-readable reference for AI agents interacting with the code-agent service.
+
+## Identity
+
+```yaml
+name: code-agent
+version: 2.1.0
+port: 8128
+framework: fastify
+runtime: node22
+deploy: cloud-run
+collections:
+  - code_tasks (subcollections: logs)
+  - user_spend
+  - user_usage
+  - code_worker_settings
+  - github-pr-events
+  - pr_task_locks
+```
+
+## Capabilities
+
+### Task Submission
+
+```typescript
+// Internal (from actions-agent)
+interface ProcessCodeActionRequest {
+  actionId: string;
+  approvalEventId: string;
+  userId: string;
+  prompt: string;
+  workerType: 'opus' | 'auto' | 'glm';
+  linearIssueId?: string;
+  repository?: string;
+  baseBranch?: string;
+  traceId?: string;
+  source?: 'whatsapp' | 'web';
+}
+
+// Public (from web UI)
+interface SubmitCodeTaskRequest {
+  prompt: string;            // 1-100000 chars
+  workerType?: 'opus' | 'auto' | 'glm';  // default: 'auto'
+  workerLocation?: string;   // 1-32 chars
+  linearIssueId?: string;
+  linearIssueTitle?: string;
+}
+```
+
+### Task Lifecycle
+
+```typescript
+type TaskStatus = 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+
+// Transitions:
+// dispatched -> running (on first log chunk)
+// dispatched -> completed | failed | interrupted (on webhook)
+// dispatched | running -> cancelled (on cancel)
+// running -> completed | failed | interrupted (on webhook)
+// dispatched | running -> interrupted (zombie detection after 30 min)
+```
+
+### Task Completion Webhook
+
+```typescript
+interface TaskCompleteWebhook {
+  taskId: string;
+  status: 'completed' | 'failed' | 'interrupted';
+  result?: {
+    prUrl?: string;
+    branch: string;
+    commits: number;
+    summary: string;
+    ciFailed?: boolean;
+    partialWork?: boolean;
+    rebaseResult?: 'success' | 'conflict' | 'skipped';
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+  duration?: number;
+}
+```
+
+### Rate Limits
+
+```typescript
+const LIMITS = {
+  maxConcurrentTasks: 3,
+  maxTasksPerHour: 10,
+  maxPromptLength: 10000,
+  dailyCostCap: 20,      // dollars
+  monthlyCostCap: 200,   // dollars
+  estimatedCostPerTask: 1.17,
+};
+```
+
+### Task Retry
+
+```typescript
+interface RetryTaskRequest {
+  originalTaskId: string;
+  userId: string;
+  additionalContext?: string;
+}
+
+// Constraints:
+// - Original must be 'failed' or 'cancelled'
+// - 5-minute cool-off for failed tasks (cancelled bypass)
+// - No active task on same Linear issue
+// - User must have configured workers
+```
+
+### Task Feedback
+
+```typescript
+interface SubmitTaskFeedbackRequest {
+  originalTaskId: string;
+  userId: string;
+  feedback: string;
+}
+
+// Constraints:
+// - Original must be 'completed'
+// - No active task on same Linear issue
+// - User must have configured workers
+```
+
+### Worker Settings
+
+```typescript
+interface WorkerConfigInput {
+  name: string;                  // 3-32 chars, /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/
+  url: string;                   // URI format
+  cfAccessClientId: string;
+  cfAccessClientSecret: string;
+  dispatchSigningSecret: string;
+}
+
+// Constraints:
+// - Max 2 workers per user
+// - Name immutable after creation
+// - Secrets stored encrypted (AES-256-GCM)
+// - Masked in API responses (last 3 chars visible)
+```
+
+### Cancel via Nonce
+
+```typescript
+interface CancelTaskWithNonceRequest {
+  taskId: string;
+  nonce: string;   // 4 hex chars
+  userId: string;
+}
+
+// Constraints:
+// - Nonce must match task's cancelNonce
+// - Nonce must not be expired (15 min TTL)
+// - User must own the task
+// - Task must be in dispatched or running status
+```
+
+## Constraints
+
+### Authentication
+
+| Route Pattern          | Auth Method                        |
+| ---------------------- | ---------------------------------- |
+| `/code/*`              | Auth0 JWT (via `onRequest` hook)   |
+| `/internal/*`          | `X-Internal-Auth` header           |
+| `/internal/webhooks/*` | `X-Internal-Auth` + HMAC signature |
+| `/webhooks/github`     | GitHub HMAC-SHA256 signature       |
+
+### Deduplication Layers
+
+```
+Layer 0: approvalEventId (approval replay prevention)
+Layer 1: actionId (Pub/Sub retry prevention)
+Layer 2: dedupKey = sha256(userId + prompt)[0:16] (UI double-tap prevention)
+Layer 3: linearIssueId active check (one active task per issue)
+```
+
+### Rate Limit Error Codes
+
+```typescript
+type RateLimitErrorCode =
+  | 'concurrent_limit'    // 429 - max 3 concurrent
+  | 'hourly_limit'        // 429 - max 10/hour
+  | 'daily_cost_limit'    // 429 - $20/day cap
+  | 'monthly_cost_limit'  // 429 - $200/month cap
+  | 'prompt_too_long'     // 429 - >10000 chars
+  | 'service_unavailable'; // 503 - usage DB unreachable
+```
+
+## Usage Patterns
+
+### Submit task from actions-agent
+
+```
+POST /internal/code/process
+X-Internal-Auth: <token>
+X-Trace-Id: <trace-id>
+
+{
+  "actionId": "action-uuid",
+  "approvalEventId": "approval-uuid",
+  "userId": "auth0|user-id",
+  "payload": {
+    "prompt": "Implement cursor-based pagination for bookmarks",
+    "workerType": "auto",
+    "linearIssueId": "INT-500"
+  }
+}
+
+-> 200: { "success": true, "data": { "status": "submitted", "codeTaskId": "uuid", "resourceUrl": "/#/code-tasks/uuid" } }
+-> 409: { "success": false, "error": { "code": "CONFLICT", "message": "Duplicate: existing-task-id" } }
+-> 503: { "success": false, "error": { "code": "MISCONFIGURED", "message": "Worker unavailable" } }
+```
+
+### Submit task from web UI
+
+```
+POST /code/submit
+Authorization: Bearer <auth0-jwt>
+
+{
+  "prompt": "Add error handling to the login flow",
+  "workerType": "opus"
+}
+
+-> 200: { "success": true, "data": { "status": "submitted", "codeTaskId": "uuid" } }
+-> 429: { "success": false, "error": { "code": "concurrent_limit", "message": "Maximum 3 concurrent tasks" } }
+```
+
+### List tasks
+
+```
+GET /code/tasks?status=running&limit=10
+Authorization: Bearer <auth0-jwt>
+
+-> 200: { "success": true, "data": { "tasks": [...], "nextCursor": "cursor-id" } }
+```
+
+### Cancel task (from web UI)
+
+```
+POST /code/tasks/:taskId/cancel
+Authorization: Bearer <auth0-jwt>
+
+-> 200: { "success": true, "data": { "cancelled": true } }
+```
+
+### Cancel task (from WhatsApp via actions-agent)
+
+```
+POST /internal/code/cancel
+X-Internal-Auth: <token>
+
+{
+  "taskId": "uuid",
+  "nonce": "a1b2",
+  "userId": "auth0|user-id"
+}
+
+-> 200: { "success": true, "data": { "cancelled": true } }
+```
+
+### Receive task completion webhook
+
+```
+POST /internal/webhooks/task-complete
+X-Internal-Auth: <token>
+X-Webhook-Signature: sha256=<hmac>
+
+{
+  "taskId": "uuid",
+  "status": "completed",
+  "result": {
+    "prUrl": "https://github.com/org/repo/pull/42",
+    "branch": "feature/pagination",
+    "commits": 3,
+    "summary": "Added cursor-based pagination to bookmarks endpoint"
+  },
+  "duration": 847
+}
+
+-> 200: { "received": true }
+```
+
+## Error Handling
+
+### Error Response Format
+
+All errors follow the IntexuraOS contract:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable description"
+  }
+}
+```
+
+### Error Code Mapping
+
+| HTTP | Code                   | When                                        |
+| ---- | ---------------------- | ------------------------------------------- |
+| 401  | `UNAUTHORIZED`         | Missing or invalid auth                     |
+| 400  | `INVALID_REQUEST`      | Bad request body or params                  |
+| 400  | `INVALID_WORKER`       | Worker name doesn't match configured worker |
+| 404  | `NOT_FOUND`            | Task or worker not found                    |
+| 409  | `CONFLICT`             | Deduplication triggered                     |
+| 429  | `RATE_LIMITED`         | Rate limit exceeded (see code for type)     |
+| 503  | `MISCONFIGURED`        | Worker unavailable or no workers configured |
+| 500  | `INTERNAL_ERROR`       | Unexpected server error                     |
+
+## Events
+
+### Outgoing HTTP Calls
+
+| Target          | Endpoint                                          | When                              |
+| --------------- | ------------------------------------------------- | --------------------------------- |
+| Worker          | `POST {workerUrl}/tasks`                          | Task dispatch                     |
+| Worker          | `DELETE {workerUrl}/tasks/{taskId}`               | Task cancellation                 |
+| Worker          | `GET {workerUrl}/health`                          | Connectivity test                 |
+| linear-agent    | `POST /internal/linear/issues`                    | Issue creation                    |
+| linear-agent    | `PATCH /internal/linear/issues/{id}/state`        | State transition                  |
+| linear-agent    | `POST /internal/linear/issues/validate`           | Issue validation                  |
+| linear-agent    | `POST /internal/linear/issues/generate-title`     | LLM title generation              |
+| linear-agent    | `POST /internal/linear/issues/{id}/comments`      | Comment addition                  |
+| actions-agent   | `PATCH /internal/actions/{id}/status`             | Action status update              |
+
+### Outgoing Pub/Sub
+
+| Topic                         | When                                 | Payload                            |
+| ----------------------------- | ------------------------------------ | ---------------------------------- |
+| `intexuraos-whatsapp-send-*`  | Task started, completed, or failed   | WhatsApp message with task details |
+
+### Incoming Webhooks
+
+| Source       | Path                               | Trigger                           |
+| ------------ | ---------------------------------- | --------------------------------- |
+| Orchestrator | `/internal/webhooks/task-complete` | Task finished (completed/failed)  |
+| Orchestrator | `/internal/logs`                   | Log chunks during execution       |
+| GitHub       | `/webhooks/github`                 | PR events (push, review, comment) |
+
+### Metrics (Cloud Monitoring)
+
+| Metric                        | Type      | Labels                      |
+| ----------------------------- | --------- | --------------------------- |
+| `tasks_submitted`             | Counter   | `workerType`, `source`      |
+| `tasks_completed`             | Counter   | `workerType`, `status`      |
+| `task_duration_seconds`       | Histogram | `workerType`                |
+| `active_tasks`                | Gauge     | `workerLocation`            |
+| `task_cost_dollars`           | Counter   | `workerType`, `userId`      |

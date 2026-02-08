@@ -16,7 +16,7 @@ All decisions below are FINAL. No guessing during implementation.
 | ----------------- | ----------------------------------------------------- |
 | Docker SDK        | `dockerode` npm package                               |
 | Base image        | `node:22-alpine`                                      |
-| Claude install    | `curl -fsSL https://claude.ai/install.sh \| bash`     |
+| Claude install    | `curl -fsSL https://claude.ai/install.sh \            | bash` |
 | Image registry    | `gcr.io/intexuraos-dev-pbuchman/claude-worker:latest` |
 | Working directory | `/repo`                                               |
 | User              | `claude` (UID 1001, non-root) [^1]                    |

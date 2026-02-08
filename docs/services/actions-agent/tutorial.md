@@ -1,6 +1,6 @@
 # Actions Agent - Tutorial
 
-This tutorial will help you get started with the actions-agent service, from basic listing to advanced action management including the new WhatsApp approval workflow.
+This tutorial will help you get started with the actions-agent service, from basic listing to advanced action management including WhatsApp approval workflows and code action dispatching.
 
 ## Prerequisites
 
@@ -308,6 +308,57 @@ curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
 }
 ```
 
+## Part 8: Code Actions (New in v3.0.0)
+
+Code actions dispatch tasks to code-agent (Claude Code). They use interactive WhatsApp buttons with nonce-based approval.
+
+### How Code Action Approval Works
+
+1. Send a command: "Fix the authentication bug in the login module"
+2. Receive a WhatsApp message with interactive buttons:
+   - **Approve: a3f2** (4-char hex nonce for security)
+   - **Cancel** (reject the action)
+   - **Convert to Issue** (create a Linear issue instead)
+3. Tap "Approve: a3f2" to approve
+4. Receive confirmation: "Code task created! View it here: [link]"
+
+### Approval Message Content
+
+The approval message includes:
+- Prompt preview (truncated to 100 chars)
+- Estimated cost: $1-2
+- Estimated time: 30-60 min
+- Link to review in web UI
+
+### Text Fallback
+
+If interactive buttons fail, you can type: `approve a3f2` (replacing `a3f2` with the nonce shown in the button).
+
+### Nonce Expiration
+
+Approval nonces expire after 15 minutes. If you wait too long, you will need to re-approve the action from the web UI.
+
+### Execute a Code Action Manually
+
+```bash
+curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "actionId": "123e4567-e89b-12d3-a456-426614174000",
+    "status": "completed",
+    "resourceUrl": "/code-tasks/abc123",
+    "message": "Code task code-task-123 created successfully"
+  }
+}
+```
+
 ## Troubleshooting
 
 | Issue                           | Symptom                            | Solution                                                     |
@@ -320,6 +371,10 @@ curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
 | WhatsApp approval not working   | Reply not processed                | Ensure LLM API key is configured in user-service             |
 | Race condition errors           | Duplicate notifications            | System handles this automatically with `updateStatusIf`      |
 | Calendar preview returns null   | No preview available               | Wait for calendar-agent to generate preview                  |
+| Code action approval expired    | Nonce expired error                | Nonces expire after 15 min; re-approve from web UI           |
+| Code action worker unavailable  | Action marked as failed            | code-agent has no available workers; retry later             |
+| Duplicate code task             | Already exists message             | Task was already created (idempotent via approvalEventId)    |
+| Interactive buttons not showing | Plain text message instead         | WhatsApp client may not support interactive messages         |
 
 ## Exercises
 

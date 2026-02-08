@@ -128,10 +128,10 @@ const estimatedCost =
 
 ## Internal Endpoints
 
-| Method | Path                          | Purpose                                     |
-| ------ | ----------------------------- | ------------------------------------------- |
-| POST   | `/internal/usage/record`      | Record LLM usage (called by research-agent) |
-| GET    | `/internal/pricing/:provider` | Get pricing for specific provider           |
+| Method | Path                          | Purpose                                     | Response Format                                    |
+| ------ | ----------------------------- | ------------------------------------------- | -------------------------------------------------- |
+| POST   | `/internal/usage/record`      | Record LLM usage (called by research-agent) | `{ success, data }` or `{ success, error: {...} }` |
+| GET    | `/internal/pricing/:provider` | Get pricing for specific provider           | `{ success, data }` or `{ success, error: {...} }` |
 
 ---
 
@@ -147,4 +147,4 @@ const estimatedCost =
 
 ---
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-02-08

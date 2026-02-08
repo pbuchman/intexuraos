@@ -329,25 +329,79 @@ curl -X GET "https://calendar-agent.intexuraos.com/calendar/failed-events?limit=
         "actionId": "action-789",
         "originalText": "Meeting sometime next week",
         "summary": "Meeting",
+        "start": "2026-02-10T10:00:00Z",
+        "end": "2026-02-10T11:00:00Z",
         "error": "Could not determine specific date",
         "reasoning": "No day of week or date specified",
-        "createdAt": "2026-01-24T09:00:00Z"
+        "createdAt": "2026-02-08T09:00:00Z"
       }
     ]
   }
 }
 ```
 
+### Retry a Failed Event
+
+If the failed event has start and end times, retry creating it directly:
+
+```bash
+curl -X POST "https://calendar-agent.intexuraos.com/calendar/failed-events/failed-001/retry" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "event": {
+      "id": "newEvent456",
+      "summary": "Meeting",
+      "start": { "dateTime": "2026-02-10T10:00:00Z" },
+      "end": { "dateTime": "2026-02-10T11:00:00Z" }
+    }
+  }
+}
+```
+
+The failed event record is automatically deleted after successful retry.
+
+**Response (422 - Missing times):**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNPROCESSABLE_ENTITY",
+    "message": "Cannot retry: missing start or end time"
+  }
+}
+```
+
+### Delete a Failed Event
+
+Dismiss a failed event from the review queue:
+
+```bash
+curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/failed-001" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Response:** 204 No Content
+
 ## Troubleshooting
 
-| Issue            | Symptom              | Solution                                         |
-| ---------------- | -------------------- | ------------------------------------------------ |
-| NOT_CONNECTED    | 403 on all requests  | Connect Google account via user-service          |
-| Invalid time     | 400 error            | Use ISO 8601 format with timezone                |
-| Event not found  | 404                  | Verify eventId and calendarId                    |
-| Preview pending  | Status stays pending | Wait and poll, may take 2-5 seconds              |
-| Preview failed   | Status is failed     | Check error field, event saved for manual review |
-| Attendee ignored | Attendee not added   | Ensure email is valid email address              |
+| Issue             | Symptom              | Solution                                             |
+| ----------------- | -------------------- | ---------------------------------------------------- |
+| NOT_CONNECTED     | 403 on all requests  | Connect Google account via user-service              |
+| Invalid time      | 400 error            | Use ISO 8601 format with timezone                    |
+| Event not found   | 404                  | Verify eventId and calendarId                        |
+| Preview pending   | Status stays pending | Wait and poll, may take 2-5 seconds                  |
+| Preview failed    | Status is failed     | Check error field, event saved for manual review     |
+| Attendee ignored  | Attendee not added   | Ensure email is valid email address                  |
+| Retry returns 422 | Missing start/end    | Failed event has no extracted times, create manually |
+| Retry returns 404 | Wrong user           | Failed event belongs to a different user             |
 
 ## Best Practices
 
@@ -378,7 +432,8 @@ curl -X GET "https://calendar-agent.intexuraos.com/calendar/failed-events?limit=
 1. Find next available 1-hour slot for multiple attendees
 2. Implement preview polling with exponential backoff
 3. Handle all preview states (pending, ready, failed) in UI
+4. Build a failed events review flow with retry and delete support
 
 ---
 
-**Last updated:** 2025-01-25
+**Last updated:** 2026-02-08

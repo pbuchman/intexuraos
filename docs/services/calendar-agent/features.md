@@ -47,22 +47,33 @@ Complete control over calendar events with standard REST operations.
 
 ### Failed Event Recovery
 
-When extraction fails (ambiguous dates, missing info), events are saved for manual review rather than lost.
+When extraction fails (ambiguous dates, missing info), events are saved for manual review rather than lost. Failed events can be retried directly if start/end times are present, or deleted to dismiss.
 
 **Example:** "Meeting sometime next week" is too vague for automatic creation. The failed event is stored with the LLM's reasoning, allowing you to manually complete the details later.
 
+### LLM Extraction Repair
+
+When the initial LLM extraction produces invalid JSON or fails schema validation, the service automatically sends a repair prompt with the error details. This self-healing mechanism reduces failed extractions without user intervention.
+
+**Example:** If the LLM returns malformed JSON like `{summary: "Meeting"...`, the repair prompt includes the raw response and the specific parse error, giving the LLM a second chance to produce valid output.
+
+### Improved Date Parsing
+
+Date context now includes the day of week alongside the date, enabling accurate interpretation of relative date expressions in any language (e.g., Polish "nastepny czwartek" for "next Thursday"). Date-only formats (YYYY-MM-DD) are supported for all-day events.
+
 ## Use Cases
 
-### Voice-to-Calendar Flow (v2.1.0)
+### Voice-to-Calendar Flow (v2.3.0)
 
 1. User sends "Schedule dentist Tuesday 3pm" via WhatsApp
 2. commands-agent classifies as `calendar` action
 3. actions-agent creates action and publishes to `calendar-preview` topic
 4. calendar-agent generates preview asynchronously (pending -> ready)
-5. UI polls preview status and displays when ready
-6. User approves preview
-7. calendar-agent creates Google Calendar event using preview data (skips LLM)
-8. Preview is cleaned up after successful creation
+5. If LLM response is malformed, automatic repair attempt is made
+6. UI polls preview status and displays when ready
+7. User approves preview
+8. calendar-agent creates Google Calendar event using preview data (skips LLM)
+9. Preview is cleaned up after successful creation
 
 ### Check Availability Flow
 
@@ -83,7 +94,9 @@ When extraction fails (ambiguous dates, missing info), events are saved for manu
 
 **Natural language** - No need for structured input, AI extracts event details
 
-**Failed event recovery** - Vague requests aren't lost, saved for manual completion
+**Failed event recovery** - Vague requests aren't lost, saved for manual completion with retry and delete support
+
+**Self-healing extraction** - Automatic repair prompt when LLM returns invalid output
 
 **Native Google Calendar** - Works directly with user's existing calendar
 

@@ -1,0 +1,313 @@
+# Orchestrator - Tutorial
+
+This tutorial walks through setting up the orchestrator from scratch, verifying it works, and submitting your first code task.
+
+## Prerequisites
+
+- Node.js 22+
+- pnpm
+- Docker Desktop (running)
+- gcloud CLI (authenticated)
+- cloudflared (for remote access)
+- Access to GCP Secret Manager (`intexuraos-dev-pbuchman` project)
+
+## Part 1: Initial Setup
+
+### Step 1: Clone and build
+
+```bash
+git clone https://github.com/pbuchman/intexuraos.git
+cd intexuraos
+pnpm install
+pnpm build
+```
+
+### Step 2: Sync secrets from GCP
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
+PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh
+```
+
+This creates `.envrc` with secrets from Secret Manager.
+
+### Step 3: Configure local overrides
+
+Create `.envrc.local` with orchestrator-specific variables:
+
+```bash
+cat >> .envrc.local << 'EOF'
+export INTEXURAOS_REPOSITORY_URL=https://github.com/pbuchman/intexuraos.git
+export INTEXURAOS_REPOSITORY_PATH=$HOME/.claude-orchestrator/repo
+export INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman
+export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
+export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
+EOF
+```
+
+Reload environment:
+
+```bash
+direnv allow
+```
+
+### Step 4: Create required directories
+
+```bash
+mkdir -p ~/.claude-orchestrator/logs ~/claude-workers/worktrees
+```
+
+### Step 5: Set up Docker network
+
+The claude-worker containers need a Docker network:
+
+```bash
+./scripts/setup-worker-network.sh
+```
+
+Verify:
+
+```bash
+docker network inspect claude-worker-net
+```
+
+### Step 6: Start the orchestrator
+
+```bash
+pnpm --filter orchestrator dev
+```
+
+Expected output:
+
+```
+INFO: Starting orchestrator { port: 8199, capacity: 2 }
+INFO: Fetching GitHub private key from Secret Manager...
+INFO: Repository path exists, validating...
+INFO: Repository validation passed
+INFO: Orchestrator HTTP server started { port: 8199 }
+INFO: No interrupted tasks to recover
+INFO: Starting heartbeat manager { intervalMs: 600000 }
+INFO: Orchestrator ready
+```
+
+### Step 7: Verify health
+
+```bash
+curl http://localhost:8199/health | jq
+```
+
+Expected response:
+
+```json
+{
+  "status": "ready",
+  "capacity": 2,
+  "running": 0,
+  "available": 2,
+  "githubTokenExpiresAt": "2026-02-08T15:30:00.000Z"
+}
+```
+
+## Part 2: Submit a Task
+
+Tasks are submitted by code-agent via HMAC-signed requests. To test manually, generate the required headers.
+
+### Step 1: Generate HMAC signature
+
+Create a helper script `sign-request.sh`:
+
+```bash
+#!/bin/bash
+SECRET="${INTEXURAOS_ORCHESTRATOR_SECRET}"
+TIMESTAMP=$(date +%s%3N)
+NONCE=$(openssl rand -hex 16)
+BODY="$1"
+
+MESSAGE="${TIMESTAMP}.${NONCE}.${BODY}"
+SIGNATURE=$(echo -n "${MESSAGE}" | openssl dgst -sha256 -hmac "${SECRET}" | awk '{print $2}')
+
+echo "X-Dispatch-Timestamp: ${TIMESTAMP}"
+echo "X-Dispatch-Nonce: ${NONCE}"
+echo "X-Dispatch-Signature: ${SIGNATURE}"
+```
+
+### Step 2: Submit a task
+
+```bash
+BODY='{
+  "taskId": "test-task-001",
+  "workerType": "auto",
+  "prompt": "Create a hello world test file",
+  "linearIssueLabels": ["code-task"],
+  "hasChildren": false,
+  "webhookUrl": "http://localhost:3001/webhook",
+  "webhookSecret": "test-secret-123"
+}'
+
+# Generate headers
+eval $(bash sign-request.sh "$BODY")
+
+curl -X POST http://localhost:8199/tasks \
+  -H "Content-Type: application/json" \
+  -H "X-Dispatch-Timestamp: ${TIMESTAMP}" \
+  -H "X-Dispatch-Nonce: ${NONCE}" \
+  -H "X-Dispatch-Signature: ${SIGNATURE}" \
+  -d "$BODY"
+```
+
+Expected response:
+
+```json
+{
+  "taskId": "test-task-001",
+  "status": "accepted"
+}
+```
+
+### Step 3: Monitor the task
+
+Check task status:
+
+```bash
+curl http://localhost:8199/tasks/test-task-001 | jq
+```
+
+Watch Docker container logs:
+
+```bash
+docker logs -f claude-worker-test-task-001
+```
+
+View orchestrator health:
+
+```bash
+curl http://localhost:8199/health | jq
+```
+
+### Step 4: Cancel a task
+
+```bash
+curl -X DELETE http://localhost:8199/tasks/test-task-001
+```
+
+## Part 3: Running Tests
+
+### Unit tests
+
+```bash
+pnpm --filter orchestrator test
+```
+
+### Type checking
+
+```bash
+pnpm --filter orchestrator typecheck
+```
+
+### E2E tests (require Docker)
+
+Build the test image first:
+
+```bash
+cd workers/claude-worker
+docker build -t claude-worker:test -f Dockerfile.test .
+cd ../..
+```
+
+Run E2E tests:
+
+```bash
+pnpm --filter orchestrator test:e2e
+```
+
+## Part 4: Production Deployment
+
+### Build the artifact
+
+```bash
+pnpm --filter orchestrator build
+```
+
+This produces `workers/orchestrator/dist/index.js` -- a bundled ESM file.
+
+### Run in production
+
+```bash
+node workers/orchestrator/dist/index.js
+```
+
+### Set up macOS LaunchAgent
+
+Create `~/Library/LaunchAgents/com.intexuraos.orchestrator.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.intexuraos.orchestrator</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/node</string>
+        <string>/Users/YOUR_USERNAME/path/to/intexuraos/workers/orchestrator/dist/index.js</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/YOUR_USERNAME/path/to/intexuraos</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USERNAME/.claude-orchestrator/logs/orchestrator.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USERNAME/.claude-orchestrator/logs/orchestrator.err.log</string>
+</dict>
+</plist>
+```
+
+Manage the service:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.intexuraos.orchestrator.plist    # Start
+launchctl unload ~/Library/LaunchAgents/com.intexuraos.orchestrator.plist  # Stop
+launchctl list | grep orchestrator                                          # Status
+```
+
+## Part 5: Cloudflare Tunnel
+
+### Install
+
+```bash
+brew install cloudflared
+sudo cloudflared service install
+```
+
+### Verify tunnel
+
+```bash
+ps aux | grep cloudflared
+```
+
+### Test through tunnel
+
+```bash
+curl -H "CF-Access-Client-Id: <client-id>" \
+     -H "CF-Access-Client-Secret: <secret>" \
+     https://cc-mac.intexuraos.cloud/health
+```
+
+## Troubleshooting
+
+| Symptom                             | Cause                                           | Fix                                                               |
+| ----------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL not set` | Missing env var                                 | Add to `.envrc.local`, run `direnv allow`                         |
+| `Secret Manager fetch failed`       | Wrong credentials path                          | Verify `GOOGLE_APPLICATION_CREDENTIALS` file exists               |
+| `502 from tunnel`                   | Orchestrator not running                        | Start with `pnpm --filter orchestrator dev`                       |
+| `401 Invalid signature`             | HMAC secret mismatch                            | Match `INTEXURAOS_ORCHESTRATOR_SECRET` with UI setting            |
+| Docker `name already in use`        | Orphaned container from previous run            | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`      |
+| `Network not found`                 | Missing Docker network                          | `./scripts/setup-worker-network.sh`                               |
+| `Image not found`                   | Claude worker image not pulled/built            | `docker pull gcr.io/intexuraos-dev-pbuchman/claude-worker:latest` |
+| Tests skipped (E2E)                 | Docker network or test image missing            | See Part 3 prerequisites                                          |
+| `Cannot find module '@intexuraos'`  | Packages not built                              | Run `pnpm build` at repository root                               |

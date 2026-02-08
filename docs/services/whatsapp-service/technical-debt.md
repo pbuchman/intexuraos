@@ -1,7 +1,7 @@
 # WhatsApp Service - Technical Debt
 
-**Last Updated:** 2026-01-24
-**Version:** 2.0.0
+**Last Updated:** 2026-02-08
+**Version:** 3.0.0
 
 ---
 
@@ -33,10 +33,10 @@ Features that are planned but not yet implemented:
 
 ### Proposed Enhancements
 
-1. Firestore transactions for OutboundMessage save + WhatsApp send (atomicity)
-2. Retry mechanism for failed message deliveries
-3. Message read receipts tracking
-4. Approval message expiration notifications
+1. Retry mechanism for failed message deliveries
+2. Message read receipts tracking
+3. Approval message expiration notifications
+4. Button nonce validation on the receiving side (verify nonce matches expected value)
 
 ---
 
@@ -70,21 +70,26 @@ All endpoints and use cases have test coverage. The service maintains >95% cover
 
 ### Coverage Areas
 
-- Routes: Fully tested (webhook, message, mapping, pubsub)
+- Routes: Fully tested (webhook, message, mapping, pubsub, verification)
 - Use cases: All covered (processAudioMessage, processImageMessage, transcribeAudio)
-- Infrastructure: Tested via routes
+- Infrastructure: Tested via routes and dedicated infra tests
 - v2.0.0 features: Approval reply handling, reaction processing, OutboundMessage tracking
+- v3.0.0 features: Phone verification, interactive buttons, button response handling
 
-### Test Files (29 total)
+### Test Files
 
 Located in `apps/whatsapp-service/src/__tests__/`:
 
-- `routes/webhookRoutes.test.ts` - Webhook validation, signature verification
+- `webhookAsyncProcessing.test.ts` - Webhook processing including button responses
 - `routes/messageRoutes.test.ts` - Message CRUD operations
-- `routes/mappingRoutes.test.ts` - User phone number mapping
-- `routes/pubsubRoutes.test.ts` - Pub/Sub event handlers
+- `routes/mappingRoutes.test.ts` - User phone number mapping (with verification gate)
+- `routes/pubsubRoutes.test.ts` - Pub/Sub event handlers (including interactive messages)
+- `verificationRoutes.test.ts` - Phone verification send/confirm/status
+- `shared.test.ts` - Shared utility functions (extractButtonResponse, etc.)
 - `domain/usecases/*.test.ts` - Business logic
-- `infra/**/*.test.ts` - Repository implementations
+- `infra/phoneVerificationRepository.test.ts` - Verification repository
+- `infra/sender.test.ts` - WhatsApp sender (including sendInteractiveMessage)
+- `infra/**/*.test.ts` - Other repository implementations
 
 ---
 
@@ -100,19 +105,20 @@ No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
 
 ### Medium Priority
 
-| File                      | Lines | Issue                                               | Suggestion                                                   |
-| ------------------------- | ----- | --------------------------------------------------- | ------------------------------------------------------------ |
-| `routes/webhookRoutes.ts` | 1077  | Handles webhook validation, routing, and 4 handlers | Extract handleTextMessage, handleReactionMessage to usecases |
+| File                      | Lines | Issue                                               | Suggestion                                                                        |
+| ------------------------- | ----- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `routes/webhookRoutes.ts` | 1300  | Handles webhook validation, routing, and 5 handlers | Extract handleTextMessage, handleReactionMessage, handleButtonMessage to usecases |
 
-**Details:** The `webhookRoutes.ts` file has grown significantly with v2.0.0 changes. It now contains:
+**Details:** The `webhookRoutes.ts` file has grown further with v3.0.0 button handling. It now contains:
 
 - Webhook validation logic
-- Message type routing
+- Message type routing (text, image, audio, reaction, button)
 - Text message handling with reply/approval detection
 - Reaction message handling with emoji mapping
+- Button response handling with intent parsing and nonce validation
 - Image and audio message handlers (delegating to usecases)
 
-**Suggested Fix:** Extract `handleTextMessage` and `handleReactionMessage` into domain usecases for better testability and separation of concerns.
+**Suggested Fix:** Extract `handleTextMessage`, `handleReactionMessage`, and `handleButtonMessage` into domain usecases for better testability and separation of concerns.
 
 ---
 
@@ -163,12 +169,17 @@ No deprecated APIs or dependencies in use.
 
 ### Historical Issues
 
-| Date       | Issue                                      | Resolution                               |
-| ---------- | ------------------------------------------ | ---------------------------------------- |
-| 2026-01-16 | Approval events published without actionId | Only publish when actionId extracted     |
-| 2026-01-14 | Duplicate actions from approval replies    | Skip command.ingest for known approvals  |
-| 2026-01-13 | Reactions not triggering approval flow     | Add reaction handling with emoji mapping |
-| 2026-01-11 | No reply correlation for approval messages | Add OutboundMessage tracking             |
+| Date       | Issue                                          | Resolution                                               |
+| ---------- | ---------------------------------------------- | -------------------------------------------------------- |
+| 2026-02-06 | button_reply payload structure mismatch        | Fix payload extraction for WhatsApp button responses     |
+| 2026-01-30 | Response contract violations in Pub/Sub routes | Migrate to reply.ok()/reply.fail() contract              |
+| 2026-01-30 | Loggers missing Sentry integration             | Migrate to createAppLogger from @intexuraos/infra-sentry |
+| 2026-01-28 | OPTIONAL_ENV pattern causing startup issues    | Remove OPTIONAL_ENV, make WHATSAPP_SEND_TOPIC optional   |
+| 2026-01-28 | Env vars not registered in REQUIRED_ENV        | Add mandatory env var registration enforcement           |
+| 2026-01-16 | Approval events published without actionId     | Only publish when actionId extracted                     |
+| 2026-01-14 | Duplicate actions from approval replies        | Skip command.ingest for known approvals                  |
+| 2026-01-13 | Reactions not triggering approval flow         | Add reaction handling with emoji mapping                 |
+| 2026-01-11 | No reply correlation for approval messages     | Add OutboundMessage tracking                             |
 
 ---
 

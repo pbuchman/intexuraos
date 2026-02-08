@@ -17,4 +17,5 @@
 
 ## Resolved Issues
 
-None - initial documentation run.
+1. **PromptVault reference removed** - Removed `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` after PromptVault feature was removed from the platform (INT-319, resolved 2026-01-27)
+2. **Chat Agent added** - Added `INTEXURAOS_CHAT_AGENT_OPENAPI_URL` for new Intex Chat MVP feature (INT-431, resolved 2026-02-01)

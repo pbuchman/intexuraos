@@ -112,6 +112,50 @@ interface Action {
 - State-to-column mapping
 - Todo and To Test category support
 - Issue creation and management
+- Full sync from Linear (`POST /linear/sync`)
+- Webhook secret configuration (`GET/POST/DELETE /linear/webhook-config`)
+
+### Manage Code Tasks
+
+**Endpoint:** `GET /code/tasks` from code-agent
+
+**When to use:** When user creates, views, or manages code generation tasks
+
+**Features:**
+
+- Task list with status filtering and cursor-based pagination
+- Task creation with markdown editor, worker type selection (auto/opus/glm), and Linear issue linking
+- Task detail view with real-time xterm.js terminal log viewer (Firestore-backed)
+- Task retry, cancel, and conflict resolution (409 handling)
+- Worker status monitoring (health checks)
+- GitHub PR events aggregated view (`GET /code/github-pr-events`)
+
+### Intex Chat
+
+**Endpoint:** `POST /chat` from chat-agent
+
+**When to use:** When user interacts with the AI chat assistant
+
+**Features:**
+
+- Floating action button (FAB) with resizable panel (desktop) and bottom sheet (mobile)
+- Authenticated and guest chat sessions (guest uses `X-Guest-Session` header with rate limiting)
+- Command creation flow: chat can suggest actions that create commands via commands-agent
+- Session persistence in localStorage
+- Panel size persistence across sessions
+
+### Manage Worker Settings
+
+**Endpoint:** `GET /code/worker-settings` from code-agent
+
+**When to use:** When user configures code execution workers
+
+**Features:**
+
+- Add, update, delete worker configurations (max 2 workers)
+- Drag-and-drop priority reordering
+- Connectivity testing per worker
+- Masked secret display (Cloudflare Access credentials, orchestrator secret)
 
 ### Manage Integration Settings
 
@@ -119,12 +163,13 @@ interface Action {
 
 **Integrations:**
 
-- **Notion:** `GET /notion/connection` from notion-service
-- **WhatsApp:** `GET /whatsapp/connection` from whatsapp-service
+- **Notion:** `GET /notion/connection` from notion-service (includes research export page configuration)
+- **WhatsApp:** `GET /whatsapp/status` from whatsapp-service (includes phone verification flow)
 - **Google Calendar:** `GET /calendar/connection` from calendar-agent
-- **Linear:** `GET /linear/connection` from linear-agent
+- **Linear:** `GET /linear/connection` from linear-agent (includes webhook secret management)
 - **Mobile Notifications:** `GET /notifications/connection` from mobile-notifications-service
 - **API Keys:** `GET /api-keys` from user-service
+- **Workers:** `GET /code/worker-settings` from code-agent
 
 ## Constraints
 
@@ -195,53 +240,73 @@ None (web app is a consumer, not publisher).
 
 ## Dependencies
 
-| Service                      | Why Needed                   | Failure Behavior                     |
-| ---------------------------- | ---------------------------- | ------------------------------------ |
-| user-service                 | Authentication, settings     | Cannot authenticate or load settings |
-| actions-agent                | Action CRUD operations       | Cannot view or execute actions       |
-| commands-agent               | Command viewing              | Cannot see command queue             |
-| research-agent               | Research reports             | Cannot view research history         |
-| todos-agent                  | Todo management              | Cannot manage todos                  |
-| notes-agent                  | Note management              | Cannot manage notes                  |
-| bookmarks-agent              | Bookmark management          | Cannot manage bookmarks              |
-| calendar-agent               | Calendar integration         | Cannot view or manage events         |
-| linear-agent                 | Linear integration           | Cannot view or manage issues         |
-| data-insights-agent          | Data visualization           | Cannot view data insights            |
-| whatsapp-service             | WhatsApp connection          | Cannot connect WhatsApp              |
-| notion-service               | Notion connection            | Cannot connect Notion                |
-| mobile-notifications-service | Push notification management | Cannot manage push devices           |
-| app-settings-service         | LLM pricing, analytics       | Cannot view costs/pricing            |
-| Firestore                    | Real-time data sync          | Falls back to polling only           |
-| Auth0                        | User authentication          | Cannot log in                        |
+| Service                      | Why Needed                         | Failure Behavior                          |
+| ---------------------------- | ---------------------------------- | ----------------------------------------- |
+| user-service                 | Authentication, settings           | Cannot authenticate or load settings      |
+| actions-agent                | Action CRUD operations             | Cannot view or execute actions            |
+| commands-agent               | Command viewing + chat creation    | Cannot see command queue or use chat      |
+| research-agent               | Research reports + Notion settings | Cannot view research history              |
+| todos-agent                  | Todo management                    | Cannot manage todos                       |
+| notes-agent                  | Note management                    | Cannot manage notes                       |
+| bookmarks-agent              | Bookmark management                | Cannot manage bookmarks                   |
+| calendar-agent               | Calendar integration               | Cannot view or manage events              |
+| linear-agent                 | Linear integration + webhooks      | Cannot view or manage issues              |
+| data-insights-agent          | Data visualization                 | Cannot view data insights                 |
+| code-agent                   | Code tasks, workers, PR events     | Cannot manage code tasks or workers       |
+| chat-agent                   | AI chat assistant                  | Cannot use Intex Chat                     |
+| whatsapp-service             | WhatsApp connection + verification | Cannot connect WhatsApp                   |
+| notion-service               | Notion connection                  | Cannot connect Notion                     |
+| mobile-notifications-service | Push notification management       | Cannot manage push devices                |
+| app-settings-service         | LLM pricing, analytics             | Cannot view costs/pricing                 |
+| Firestore                    | Real-time data sync                | Falls back to polling only                |
+| Auth0                        | User authentication                | Cannot log in (chat still works as guest) |
 
 ## State Management
 
-| Type           | Implementation                     | Scope                              |
-| -------------- | ---------------------------------- | ---------------------------------- |
-| Global Auth    | React Context (`AuthContext`)      | App-wide                           |
-| Sync Queue     | React Context (`SyncQueueContext`) | App-wide                           |
-| PWA Install    | React Context (`PWAProvider`)      | App-wide                           |
-| UI State       | useState (component-level)         | Per component                      |
-| Preferences    | localStorage                       | Persisted across sessions          |
-| One-time Flags | sessionStorage                     | Current session only               |
-| Real-time Data | Firestore listeners                | Per component (cleanup on unmount) |
+| Type           | Implementation                      | Scope                              |
+| -------------- | ----------------------------------- | ---------------------------------- |
+| Global Auth    | React Context (`AuthContext`)       | App-wide                           |
+| Sync Queue     | React Context (`SyncQueueContext`)  | App-wide                           |
+| Theme          | React Context (`ThemeContext`)      | App-wide (light/dark/system)       |
+| Predev         | React Context (`PredevProvider`)    | App-wide (predev mode only)        |
+| PWA Install    | React Context (`PWAProvider`)       | App-wide                           |
+| UI State       | useState (component-level)          | Per component                      |
+| Preferences    | localStorage                        | Persisted across sessions          |
+| Chat Session   | localStorage (`intex-chat-session`) | Persisted chat conversation        |
+| DevBar State   | localStorage                        | Persisted tabs, height, logs       |
+| One-time Flags | sessionStorage                      | Current session only               |
+| Real-time Data | Firestore listeners                 | Per component (cleanup on unmount) |
 
 ## Route Reference
 
-| Route              | Auth | Purpose                   |
-| ------------------ | ---- | ------------------------- |
-| `/#/`              | No   | Landing page              |
-| `/#/login`         | No   | Auth0 login               |
-| `/#/inbox`         | Yes  | Commands and actions      |
-| `/#/research`      | Yes  | Research list             |
-| `/#/research/new`  | Yes  | Create research           |
-| `/#/research/:id`  | Yes  | Research detail           |
-| `/#/my-todos`      | Yes  | Todos                     |
-| `/#/my-notes`      | Yes  | Notes                     |
-| `/#/my-bookmarks`  | Yes  | Bookmarks                 |
-| `/#/calendar`      | Yes  | Calendar events           |
-| `/#/linear`        | Yes  | Linear issues             |
-| `/#/data-insights` | Yes  | Data insights             |
-| `/#/notifications` | Yes  | Push notification history |
-| `/#/settings/*`    | Yes  | Integration settings      |
-| `/#/share-target`  | Yes  | PWA share handler         |
+| Route                       | Auth | Purpose                    |
+| --------------------------- | ---- | -------------------------- |
+| `/#/`                       | No   | Landing page               |
+| `/#/login`                  | No   | Auth0 login                |
+| `/#/inbox`                  | Yes  | Commands and actions       |
+| `/#/research`               | Yes  | Research list              |
+| `/#/research/new`           | Yes  | Create research            |
+| `/#/research/:id`           | Yes  | Research detail            |
+| `/#/code-tasks`             | Yes  | Code task list             |
+| `/#/code-tasks/new`         | Yes  | Create code task           |
+| `/#/code-tasks/:id`         | Yes  | Code task detail with logs |
+| `/#/code-tasks/pr-events`   | Yes  | GitHub PR events           |
+| `/#/my-todos`               | Yes  | Todos                      |
+| `/#/my-notes`               | Yes  | Notes                      |
+| `/#/my-bookmarks`           | Yes  | Bookmarks                  |
+| `/#/notes`                  | Yes  | WhatsApp notes             |
+| `/#/calendar`               | Yes  | Calendar events            |
+| `/#/linear`                 | Yes  | Linear issues              |
+| `/#/data-insights`          | Yes  | Data insights              |
+| `/#/notifications`          | Yes  | Push notification history  |
+| `/#/settings/whatsapp`      | Yes  | WhatsApp connection        |
+| `/#/settings/mobile`        | Yes  | Mobile notifications       |
+| `/#/settings/notion`        | Yes  | Notion connection          |
+| `/#/settings/calendar`      | Yes  | Google Calendar connection |
+| `/#/settings/linear`        | Yes  | Linear + webhook config    |
+| `/#/settings/workers`       | Yes  | Worker configuration       |
+| `/#/settings/api-keys`      | Yes  | API key management         |
+| `/#/settings/llm-pricing`   | Yes  | LLM pricing                |
+| `/#/settings/usage-costs`   | Yes  | Usage cost tracking        |
+| `/#/settings/share-history` | Yes  | Share history              |
+| `/#/share-target`           | Yes  | PWA share handler          |

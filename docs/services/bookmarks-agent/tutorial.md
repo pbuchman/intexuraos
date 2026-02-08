@@ -214,8 +214,13 @@ curl "https://bookmarks-agent.intexuraos.com/images/proxy?url=https://example.co
 3. Summarization (Pub/Sub)
    └── /internal/bookmarks/pubsub/summarize receives event
        └── Calls web-agent /internal/page-summaries
-       └── Updates aiSummary, aiSummarizedAt
-       └── Published: whatsapp.message.send event (INT-210)
+       ├── Success:
+       │   └── Updates aiSummary, aiSummarizedAt
+       │   └── Published: whatsapp.message.send event (INT-210)
+       ├── Transient error (429, timeout, network): (INT-198)
+       │   └── Returns HTTP 503 → Pub/Sub retries with exponential backoff
+       └── Permanent error (NO_CONTENT, 400):
+           └── Returns HTTP 200 (graceful degradation, no retry)
 
 4. WhatsApp Delivery
    └── whatsapp-service SendMessageWorker receives event
@@ -225,15 +230,17 @@ curl "https://bookmarks-agent.intexuraos.com/images/proxy?url=https://example.co
 
 ## Troubleshooting
 
-| Issue                      | Symptom                   | Solution                                  |
-| -------------------------- | ------------------------- | ----------------------------------------- |
-| Auth failed                | 401 Unauthorized          | Check token validity                      |
-| Bookmark not found         | 404 error                 | Verify bookmark ID                        |
-| Invalid URL                | 400 error                 | Ensure URL is valid HTTP/HTTPS            |
-| Duplicate bookmark         | 409 Conflict              | URL already exists for user               |
-| Metadata fetch failed      | `ogFetchStatus: failed`   | Site may block scraping                   |
-| No WhatsApp notification   | Summary saved, no message | Check WhatsApp connection in user-service |
-| Enrichment never completes | `ogFetchStatus: pending`  | Check Pub/Sub subscription health         |
+| Issue                      | Symptom                     | Solution                                           |
+| -------------------------- | --------------------------- | -------------------------------------------------- |
+| Auth failed                | 401 Unauthorized            | Check token validity                               |
+| Bookmark not found         | 404 error                   | Verify bookmark ID                                 |
+| Invalid URL                | 400 error                   | Ensure URL is valid HTTP/HTTPS                     |
+| Duplicate bookmark         | 409 Conflict                | URL already exists for user                        |
+| Metadata fetch failed      | `ogFetchStatus: failed`     | Site may block scraping                            |
+| No WhatsApp notification   | Summary saved, no message   | Check WhatsApp connection in user-service          |
+| Enrichment never completes | `ogFetchStatus: pending`    | Check Pub/Sub subscription health                  |
+| Summary retrying           | 503 from summarize endpoint | Transient error (rate limit/timeout); auto-retries |
+| Summary silently skipped   | No aiSummary, no error      | Permanent error (NO_CONTENT); graceful degradation |
 
 ## Rate Limits
 

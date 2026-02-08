@@ -210,7 +210,7 @@ interface DeleteImageOutput {
 | Error Code      | Meaning                      | Recovery Action                      |
 | --------------- | ---------------------------- | ------------------------------------ |
 | `INVALID_KEY`   | User's API key is invalid    | User must update API key in settings |
-| `RATE_LIMITED`  | Provider rate limit exceeded | Retry with exponential backoff       |
+| `RATE_LIMITED`  | Provider rate limit exceeded | Retry with exponential backoff (429) |
 | `TIMEOUT`       | Provider request timed out   | Retry with longer timeout            |
 | `API_ERROR`     | Provider API error           | Check provider status, retry         |
 | `STORAGE_ERROR` | GCS upload failed            | Check GCS permissions, retry         |
@@ -245,4 +245,4 @@ None. Image-service does not publish Pub/Sub events.
 
 ---
 
-**Last updated:** 2025-01-25
+**Last updated:** 2026-02-08

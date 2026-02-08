@@ -1,16 +1,29 @@
 # Services Catalog
 
-Complete documentation for all IntexuraOS services, organized by AI capability.
+Complete documentation for all IntexuraOS services, workers, and packages.
 
-**Version 2.1.0** — January 25, 2026
+**Version 3.0.0** — February 8, 2026
 
 ---
 
-## v2.1.0 Highlights
+## v3.0.0 Highlights
+
+| Component            | Key Changes                                                          |
+| -------------------- | -------------------------------------------------------------------- |
+| **chat-agent**       | New: In-app AI assistant with RAG, guest access, command creation    |
+| **code-agent**       | New: Autonomous code execution with worker dispatch and dedup        |
+| **orchestrator**     | New: Local worker orchestration for Claude Code sessions via Docker  |
+| **claude-worker**    | New: Docker container image for isolated Claude Code execution       |
+| **log-cleanup**      | New: Cloud Function for scheduled log retention management           |
+| **vm-lifecycle**     | New: Cloud Functions for GCE VM start/stop lifecycle control         |
+| **predev-lifecycle** | New: Cloud Functions for pre-dev environment with scale-to-zero      |
+| **21 packages**      | New: All shared packages documented (common, infra, LLM stack)       |
+
+## v2.1.0 Highlights (Previous)
 
 | Service              | Key Changes                                             |
 | -------------------- | ------------------------------------------------------- |
-| **whatsapp-service** | Approval via text replies and emoji reactions (👍/👎)   |
+| **whatsapp-service** | Approval via text replies and emoji reactions            |
 | **actions-agent**    | Atomic status transitions, race condition prevention    |
 | **calendar-agent**   | Preview generation before commit                        |
 | **research-agent**   | Natural language model selection, Zod schema validation |
@@ -20,13 +33,11 @@ Complete documentation for all IntexuraOS services, organized by AI capability.
 | **linear-agent**     | 3-column dashboard with Todo/To Test categories         |
 | **user-service**     | Rate limit detection precedence fix                     |
 
-## v2.0.0 Highlights (Previous)
-
 ---
 
 ## AI Capabilities Overview
 
-IntexuraOS integrates **5 AI providers** with **17 models** across **18 microservices**:
+IntexuraOS integrates **5 AI providers** with **17 models** across **20 microservices**:
 
 ```mermaid
 graph TB
@@ -44,6 +55,7 @@ graph TB
         D[data-insights-agent]
         I[image-service]
         B[bookmarks-agent]
+        CH[chat-agent]
     end
 
     R --> G
@@ -57,6 +69,7 @@ graph TB
     I --> O
     I --> G
     B --> G
+    CH --> Z
 ```
 
 ---
@@ -95,6 +108,18 @@ graph TB
 | [web-agent](web-agent/features.md)             | Gemini 2.5 Flash   | Content extraction, summarization     |
 | [todos-agent](todos-agent/features.md)         | Via commands-agent | Task extraction from natural language |
 
+### Conversational AI
+
+| Service                                    | AI Models    | Capability                                         |
+| ------------------------------------------ | ------------ | -------------------------------------------------- |
+| [chat-agent](chat-agent/features.md)       | GLM-4.7-Flash | Documentation Q&A, command creation, guest access |
+
+### Autonomous Code Execution
+
+| Service                                    | AI Models     | Capability                                             |
+| ------------------------------------------ | ------------- | ------------------------------------------------------ |
+| [code-agent](code-agent/features.md)       | Claude (worker) | Task dispatch, deduplication, PR creation via workers |
+
 ### Voice & Transcription
 
 | Service                                          | AI Models    | Capability                                                    |
@@ -109,14 +134,16 @@ graph TB
 
 Services that directly invoke AI models for their core functionality.
 
-| Service                                                | Purpose                           | AI                              | Docs                                                                                                                                                                                                          |
-| ------------------------------------------------------ | --------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [research-agent](research-agent/features.md)           | Multi-LLM research orchestration  | Gemini, Claude, GPT, Sonar, GLM | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)      |
-| [commands-agent](commands-agent/features.md)           | AI command classification         | Gemini 2.5 Flash                | [features](commands-agent/features.md) / [technical](commands-agent/technical.md) / [debt](commands-agent/technical-debt.md) / [agent](commands-agent/agent.md)                                               |
-| [data-insights-agent](data-insights-agent/features.md) | AI-powered data analysis          | Gemini 2.5 Flash                | [features](data-insights-agent/features.md) / [technical](data-insights-agent/technical.md) / [debt](data-insights-agent/technical-debt.md) / [agent](data-insights-agent/agent.md)                           |
-| [image-service](image-service/features.md)             | AI image generation               | GPT Image 1, Gemini Flash Image | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)           |
-| [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries | Via web-agent                   | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md) |
-| [web-agent](web-agent/features.md)                     | Web scraping with AI              | Gemini 2.5 Flash                | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                                   |
+| Service                                                 | Purpose                           | AI                               | Docs                                                                                                                                                                                                          |
+| ------------------------------------------------------- | --------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [research-agent](research-agent/features.md)            | Multi-LLM research orchestration  | Gemini, Claude, GPT, Sonar, GLM  | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)      |
+| [commands-agent](commands-agent/features.md)            | AI command classification         | Gemini 2.5 Flash                 | [features](commands-agent/features.md) / [technical](commands-agent/technical.md) / [debt](commands-agent/technical-debt.md) / [agent](commands-agent/agent.md)                                               |
+| [data-insights-agent](data-insights-agent/features.md)  | AI-powered data analysis          | Gemini 2.5 Flash                 | [features](data-insights-agent/features.md) / [technical](data-insights-agent/technical.md) / [debt](data-insights-agent/technical-debt.md) / [agent](data-insights-agent/agent.md)                           |
+| [image-service](image-service/features.md)              | AI image generation               | GPT Image 1, Gemini Flash Image  | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)           |
+| [bookmarks-agent](bookmarks-agent/features.md)          | Link management with AI summaries | Via web-agent                    | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md) |
+| [web-agent](web-agent/features.md)                      | Web scraping with AI              | Gemini 2.5 Flash                 | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                                   |
+| [chat-agent](chat-agent/features.md)                    | In-app AI assistant with RAG      | GLM-4.7-Flash                    | [features](chat-agent/features.md) / [technical](chat-agent/technical.md) / [tutorial](chat-agent/tutorial.md) / [debt](chat-agent/technical-debt.md) / [agent](chat-agent/agent.md)                          |
+| [code-agent](code-agent/features.md)                    | Autonomous code execution         | Claude (via workers)             | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                          |
 
 ### Content Management Agents
 
@@ -150,6 +177,88 @@ Progressive Web App providing the unified dashboard for IntexuraOS.
 | Service                | Purpose                   | AI  | Docs                                                                                                                                              |
 | ---------------------- | ------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [web](web/features.md) | Progressive Web App (PWA) | -   | [features](web/features.md) / [technical](web/technical.md) / [tutorial](web/tutorial.md) / [debt](web/technical-debt.md) / [agent](web/agent.md) |
+
+---
+
+## Workers
+
+Cloud Functions and local services that run outside Cloud Run.
+
+| Worker                                                     | Type            | Purpose                                                      | Trigger                      |
+| ---------------------------------------------------------- | --------------- | ------------------------------------------------------------ | ---------------------------- |
+| [orchestrator](../../workers/orchestrator/README.md)       | Local service   | Spawns Claude Code sessions in Docker containers via worktrees | HTTP (HMAC-signed dispatch) |
+| claude-worker                                              | Docker image    | Isolated Claude Code execution environment with git and tools | Started by orchestrator      |
+| [log-cleanup](../packages/log-cleanup)                     | Cloud Function  | Deletes old task logs via code-agent cleanup API              | Pub/Sub (scheduled)          |
+| [vm-lifecycle](../packages/vm-lifecycle)                   | Cloud Functions | Starts and stops GCE VM instances with health polling        | HTTP (internal auth)         |
+| [predev-lifecycle](../packages/predev-lifecycle)            | Cloud Functions | Pre-dev environment gateway, idle detection, scale-to-zero   | HTTP + Pub/Sub (scheduled)   |
+
+### Worker Details
+
+**orchestrator** -- Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated git worktrees, spawns Claude Code sessions in Docker containers, and reports results via webhooks. Supports up to 2 concurrent tasks with state persistence across restarts.
+
+**claude-worker** -- Docker container (Node.js 22 Alpine) pre-loaded with Claude CLI, git, pnpm, GitHub CLI, ripgrep, terraform, and gcloud. Runs as non-root user with network restrictions. The orchestrator manages its lifecycle.
+
+**log-cleanup** -- Pub/Sub-triggered Cloud Function that calls the code-agent's internal cleanup API to delete task logs older than the configured retention period (default 90 days).
+
+**vm-lifecycle** -- Two HTTP-triggered Cloud Functions (`startVm` and `stopVm`) that manage GCE Spot VM instances. `startVm` polls for health after boot; `stopVm` gracefully drains running tasks before shutdown.
+
+**predev-lifecycle** -- Four Cloud Functions managing a pre-development environment:
+- `gateway` -- HTTP proxy that auto-starts the VM on first request and shows a loading page during boot
+- `idleCheck` -- Scheduled function that stops the VM after a configurable idle timeout
+- `webhook` -- Handles Cloud Build push notifications for branch deployments
+- `reportReady` -- Callback from the VM to signal readiness after startup
+
+---
+
+## Packages
+
+Shared libraries used across apps and workers.
+
+### Core & HTTP
+
+| Package                                                      | Purpose                                                 |
+| ------------------------------------------------------------ | ------------------------------------------------------- |
+| [common-core](../packages/common-core/README.md)             | Result types, Logger interface, error codes, tracing    |
+| [common-http](../packages/common-http/README.md)             | Fastify plugin (reply.ok/fail), JWT auth, request IDs   |
+| [http-contracts](../packages/http-contracts/README.md)       | OpenAPI and Fastify JSON Schema definitions             |
+| [http-server](../packages/http-server/README.md)             | Health checks, env validation, error handler            |
+
+### Infrastructure Adapters
+
+| Package                                                            | Purpose                                                |
+| ------------------------------------------------------------------ | ------------------------------------------------------ |
+| [infra-firestore](../packages/infra-firestore/README.md)          | Firestore singleton client and in-memory test fake     |
+| [infra-pubsub](../packages/infra-pubsub/README.md)                | Pub/Sub publishers for WhatsApp, todos, calendar       |
+| [infra-sentry](../packages/infra-sentry/README.md)                | Sentry error tracking, Pino log stream, logger factory |
+| [infra-whatsapp](../packages/infra-whatsapp/README.md)            | WhatsApp Cloud API client (send, media, read receipts) |
+| [infra-notion](../packages/infra-notion/README.md)                | Notion API client, token validation, page retrieval    |
+
+### LLM Provider Clients
+
+| Package                                                            | Provider   | Capabilities                               |
+| ------------------------------------------------------------------ | ---------- | ------------------------------------------ |
+| [infra-claude](../packages/infra-claude/README.md)                 | Anthropic  | Text generation, web search, prompt caching |
+| [infra-gemini](../packages/infra-gemini/README.md)                 | Google     | Text generation, web search, image gen     |
+| [infra-gpt](../packages/infra-gpt/README.md)                      | OpenAI     | Text generation, web search, DALL-E        |
+| [infra-glm](../packages/infra-glm/README.md)                      | Zai        | Text generation, web search, caching       |
+| [infra-perplexity](../packages/infra-perplexity/README.md)         | Perplexity | SSE-streamed research with citations       |
+
+### LLM Stack
+
+| Package                                                    | Purpose                                                     |
+| ---------------------------------------------------------- | ----------------------------------------------------------- |
+| [llm-contract](../packages/llm-contract/README.md)        | Model/provider types, LLMClient interface, pricing types    |
+| [llm-factory](../packages/llm-factory/README.md)          | Unified factory for creating provider-specific LLM clients  |
+| [llm-prompts](../packages/llm-prompts/README.md)          | Centralized prompt templates and Zod response schemas       |
+| [llm-pricing](../packages/llm-pricing/README.md)          | Runtime pricing lookups, usage logging to Firestore         |
+| [llm-audit](../packages/llm-audit/README.md)              | LLM request/response audit trail in Firestore              |
+| [llm-utils](../packages/llm-utils/README.md)              | Token redaction, LLM parse error handling, Zod formatting  |
+
+### Service Clients
+
+| Package                                                            | Purpose                                                    |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| [internal-clients](../packages/internal-clients/README.md)        | Typed HTTP clients for internal service APIs (user-service) |
 
 ---
 
@@ -214,6 +323,7 @@ graph TD
     subgraph "Entry Points"
         WA[whatsapp-service]
         WEB[Web Dashboard]
+        CHAT[chat-agent]
     end
 
     subgraph "Routing"
@@ -228,6 +338,7 @@ graph TD
         BOOK[bookmarks-agent]
         CAL[calendar-agent]
         LIN[linear-agent]
+        CODE[code-agent]
     end
 
     subgraph "Support"
@@ -235,6 +346,11 @@ graph TD
         IMG[image-service]
         WEB_A[web-agent]
         NOTIF[mobile-notifications]
+    end
+
+    subgraph "Workers"
+        ORCH[orchestrator]
+        CW[claude-worker]
     end
 
     WA --> CMD
@@ -247,6 +363,10 @@ graph TD
     ACT --> BOOK
     ACT --> CAL
     ACT --> LIN
+    ACT --> CODE
+
+    CODE --> ORCH
+    ORCH --> CW
 
     RES --> USER
     RES --> IMG
@@ -262,12 +382,16 @@ graph TD
 
 | Metric                 | Count    |
 | ---------------------- | -------- |
-| Total Services         | 18       |
-| With features.md       | 18       |
-| With technical.md      | 18       |
-| With tutorial.md       | 8        |
-| With technical-debt.md | 18       |
-| With agent.md          | 18       |
+| Total Apps             | 20       |
+| Total Workers          | 5        |
+| Total Packages         | 21       |
+| Apps with features.md  | 20       |
+| Apps with technical.md | 20       |
+| Apps with tutorial.md  | 10       |
+| Apps with tech-debt.md | 20       |
+| Apps with agent.md     | 20       |
+| Packages with README   | 21       |
+| Workers with docs      | 5        |
 | **Coverage**           | **100%** |
 
 ---
@@ -279,6 +403,8 @@ graph TD
 **I want to...**
 
 - **Do multi-model research**: [research-agent](research-agent/features.md)
+- **Ask questions about the platform**: [chat-agent](chat-agent/features.md)
+- **Automate coding tasks**: [code-agent](code-agent/features.md)
 - **Manage tasks via voice**: [todos-agent](todos-agent/features.md) + [whatsapp-service](whatsapp-service/features.md)
 - **Save and summarize links**: [bookmarks-agent](bookmarks-agent/features.md)
 - **Generate images**: [image-service](image-service/features.md)
@@ -293,9 +419,20 @@ graph TD
 - **Notion**: [notion-service](notion-service/features.md)
 - **Linear**: [linear-agent](linear-agent/features.md)
 - **Auth0**: [user-service](user-service/features.md)
+- **GitHub**: [code-agent](code-agent/features.md)
+- **Sentry**: [infra-sentry](../packages/infra-sentry/README.md)
+
+### By Package Category
+
+- **Core types and utilities**: [common-core](../packages/common-core/README.md)
+- **HTTP middleware**: [common-http](../packages/common-http/README.md) / [http-server](../packages/http-server/README.md)
+- **LLM integration**: [llm-contract](../packages/llm-contract/README.md) / [llm-factory](../packages/llm-factory/README.md)
+- **Error tracking**: [infra-sentry](../packages/infra-sentry/README.md)
+- **Database**: [infra-firestore](../packages/infra-firestore/README.md)
+- **Messaging**: [infra-pubsub](../packages/infra-pubsub/README.md) / [infra-whatsapp](../packages/infra-whatsapp/README.md)
 
 ---
 
-**Last updated:** 2026-01-25
+**Last updated:** 2026-02-08
 
-**Services documented:** 18 / 18 (100%)
+**Components documented:** 20 apps + 5 workers + 21 packages = 46 total (100%)

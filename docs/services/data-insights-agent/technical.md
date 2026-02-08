@@ -77,6 +77,11 @@ sequenceDiagram
 
 | Commit     | Description                                            | Date       |
 | ---------- | ------------------------------------------------------ | ---------- |
+| `c3198407` | Fix response contract violations (reply.ok/reply.fail) | 2026-01-30 |
+| `dfd702f1` | Migrate to Sentry-enabled createAppLogger              | 2026-01-30 |
+| `73e8375f` | INT-408 Enforce mandatory env var registration         | 2026-01-28 |
+| `1faa1d3b` | INT-301 Consolidate user service client architecture   | 2026-01-26 |
+| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement        | 2026-01-31 |
 | `88cec45`  | INT-269 Migrate to `@intexuraos/internal-clients`      | 2025-01-25 |
 | `b1c7a4b`  | INT-269 Create internal-clients package                | 2025-01-24 |
 | `8aad909`  | INT-241/242 Migrate imports, delete llm-common         | 2025-01-21 |
@@ -133,7 +138,7 @@ sequenceDiagram
 ### CompositeFeed
 
 | Field                 | Type                       | Description                 |
-| --------------------- | -------------------------- | --------------------------- | ------------------- |
+| --------------------- | -------------------------- | --------------------------- |  |
 | `id`                  | string                     | Unique identifier           |
 | `userId`              | string                     | Owner user ID               |
 | `name`                | string                     | AI-generated feed name      |
@@ -221,10 +226,10 @@ sequenceDiagram
 | `INTEXURAOS_AUTH_JWKS_URL`                    | Yes      | Auth0 JWKS endpoint                 |
 | `INTEXURAOS_AUTH_ISSUER`                      | Yes      | Auth0 issuer URL                    |
 | `INTEXURAOS_AUTH_AUDIENCE`                    | Yes      | Auth0 audience                      |
-| `INTEXURAOS_USER_SERVICE_URL`                 | No       | user-service base URL               |
-| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | No       | mobile-notifications base URL       |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | No       | app-settings base URL (for pricing) |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | No       | Internal service auth token         |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Internal service auth token         |
+| `INTEXURAOS_USER_SERVICE_URL`                 | Yes      | user-service base URL               |
+| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | mobile-notifications base URL       |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Yes      | app-settings base URL (for pricing) |
 
 ## Gotchas
 
@@ -234,6 +239,9 @@ sequenceDiagram
 - **Chart type IDs**: Use compact format (C1-C6) not full names in storage
 - **Snapshot expiration**: Snapshots expire after 15 minutes, scheduled job refreshes all feeds
 - **Internal client**: Uses `@intexuraos/internal-clients` package for user-service access (INT-269)
+- **Response contract**: All routes use `reply.ok()` / `reply.fail()` instead of raw `reply.send()`
+- **Sentry logging**: Uses `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`)
+- **OAuth token support**: UserServiceClient mock includes `getOAuthToken` method
 
 ## File Structure
 
@@ -270,7 +278,6 @@ apps/data-insights-agent/src/
 │   │   └── feedNameGenerationService.ts
 │   ├── http/                # External service clients
 │   │   └── mobileNotificationsClient.ts
-│   └── user/                # user-service client setup
 ├── routes/
 │   ├── dataSourceRoutes.ts
 │   ├── compositeFeedRoutes.ts
