@@ -78,10 +78,17 @@ export class TaskDispatcher {
       return capacityCheck;
     }
 
+    this.executeTaskSetup(request).catch((error: unknown) => {
+      this.logger.error({ taskId: request.taskId, error }, 'Unhandled error in async task setup');
+    });
+
+    return { ok: true, value: undefined };
+  }
+
+  private async executeTaskSetup(request: CreateTaskRequest): Promise<void> {
     const taskId = request.taskId;
 
     try {
-      // Get repository and base branch from GitHub API if not provided
       const repository = request.repository ?? this.getDefaultRepository(request);
       const baseBranch = request.baseBranch ?? 'development';
 
@@ -91,14 +98,8 @@ export class TaskDispatcher {
         worktreePath = await this.worktreeManager.createWorktree(taskId, baseBranch);
       } catch (error) {
         this.runningCount--;
-        return {
-          ok: false,
-          error: {
-            type: 'service_error',
-            message: 'Failed to create worktree',
-            originalError: error,
-          },
-        };
+        await this.sendSetupFailureWebhook(request, 'Failed to create worktree', error);
+        return;
       }
 
       // Start Docker container worker
@@ -125,16 +126,13 @@ export class TaskDispatcher {
           this.logForwarder.appendChunk(taskId, chunk);
         },
         onComplete: () => {
-          // Flush any remaining logs when container exits
           void this.logForwarder.flushAndStop(taskId);
         },
       };
 
-      // Register webhook secret for log forwarding signatures
       this.logForwarder.registerTask(taskId, request.webhookSecret);
 
       try {
-        // Mint GitHub token BEFORE container starts so entrypoint finds it at /secrets/github-token
         await this.isolation.tokenRefresher.registerTask(taskId);
 
         const handle = await this.isolation.provider.createWorker(workerConfig);
@@ -154,14 +152,8 @@ export class TaskDispatcher {
             'Failed to cleanup worktree after worker start failure'
           );
         });
-        return {
-          ok: false,
-          error: {
-            type: 'service_error',
-            message: 'Failed to start worker container',
-            originalError: error,
-          },
-        };
+        await this.sendSetupFailureWebhook(request, 'Failed to start worker container', error);
+        return;
       }
 
       // Create task object
@@ -186,25 +178,49 @@ export class TaskDispatcher {
         startedAt: new Date().toISOString(),
       };
 
-      // Save state
       await this.saveTask(task);
 
-      // Schedule timeout checks
       this.scheduleTimeoutWarning(taskId);
       this.scheduleTimeoutKill(taskId);
 
-      // Start completion monitoring
       this.startCompletionMonitoring(taskId);
 
       this.logger.info({ taskId, runningCount: this.runningCount }, 'Task started');
-
-      return { ok: true, value: undefined };
     } catch (error) {
       this.runningCount--;
-      return {
-        ok: false,
-        error: { type: 'service_error', message: 'Failed to start task', originalError: error },
-      };
+      await this.sendSetupFailureWebhook(request, 'Failed to start task', error);
+    }
+  }
+
+  private async sendSetupFailureWebhook(
+    request: CreateTaskRequest,
+    message: string,
+    originalError: unknown
+  ): Promise<void> {
+    this.logger.error(
+      { taskId: request.taskId, error: originalError },
+      `Task setup failed: ${message}`
+    );
+    try {
+      await this.webhookClient.send({
+        url: request.webhookUrl,
+        secret: request.webhookSecret,
+        payload: {
+          taskId: request.taskId,
+          status: 'failed',
+          error: {
+            code: 'SETUP_FAILED',
+            message,
+          },
+          duration: 0,
+        },
+        taskId: request.taskId,
+      });
+    } catch (webhookError) {
+      this.logger.error(
+        { taskId: request.taskId, webhookError },
+        'Failed to send setup failure webhook'
+      );
     }
   }
 
