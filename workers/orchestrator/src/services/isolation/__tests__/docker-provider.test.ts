@@ -250,14 +250,15 @@ describe('DockerProvider', () => {
       }
     });
 
-    it('mounts pnpm store and per-task node_modules volumes', async () => {
+    it('mounts pnpm store volume and node_modules tmpfs', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const binds = createCall?.HostConfig?.Binds as string[];
       expect(binds).toContainEqual('claude-pnpm-store:/home/claude/pnpm-store:rw');
-      expect(binds).toContainEqual('claude-node-modules-test-task-123:/repo/node_modules:rw');
+      const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
+      expect(tmpfs['/repo/node_modules']).toContain('uid=1001');
     });
 
     it('sets PNPM_STORE_DIR env var', async () => {

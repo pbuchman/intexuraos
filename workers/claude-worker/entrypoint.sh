@@ -109,7 +109,7 @@ setup_github_token
 if [ -f "/repo/pnpm-lock.yaml" ]; then
     echo "[entrypoint] Installing dependencies..."
     cd /repo
-    pnpm install --frozen-lockfile 2>&1 | tail -5
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile 2>&1
     echo "[entrypoint] Dependencies installed"
 fi
 
