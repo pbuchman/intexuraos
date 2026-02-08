@@ -113,4 +113,4 @@ if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
 fi
 
 echo "[entrypoint] Starting Claude in interactive mode..."
-exec claude --dangerously-skip-permissions --verbose
+exec claude -d --dangerously-skip-permissions --verbose
