@@ -318,19 +318,42 @@ export class DockerProvider implements IsolationProvider {
     prompt: string,
     taskId: string
   ): Promise<void> {
-    const SUBMIT_DELAY_MS = 300;
+    const SETTLE_MS = 1_000;
+    const TIMEOUT_MS = 10_000;
 
     attachStream.write(prompt);
-    this.logger.debug(
+    this.logger.info(
       { taskId, promptLength: prompt.length },
-      'Prompt written — waiting before submit'
+      'Prompt written — waiting for TUI to settle before submit'
     );
 
     await new Promise<void>((resolve) => {
-      setTimeout(() => {
+      let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const finish = (): void => {
+        clearTimeout(hardTimeout);
+        if (settleTimer) clearTimeout(settleTimer);
+        attachStream.removeListener('data', onData);
         attachStream.write('\r');
         resolve();
-      }, SUBMIT_DELAY_MS);
+      };
+
+      const hardTimeout = setTimeout(() => {
+        this.logger.warn({ taskId }, 'Prompt settle timeout — submitting anyway');
+        finish();
+      }, TIMEOUT_MS);
+
+      const resetSettle = (): void => {
+        if (settleTimer) clearTimeout(settleTimer);
+        settleTimer = setTimeout(finish, SETTLE_MS);
+      };
+
+      const onData = (): void => {
+        resetSettle();
+      };
+
+      attachStream.on('data', onData);
+      resetSettle();
     });
   }
   /* v8 ignore stop @preserve */
