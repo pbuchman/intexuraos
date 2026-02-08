@@ -58,3 +58,9 @@ API-docs-hub provides centralized documentation:
 **No versioning** - Shows latest docs only
 
 **No auth helper** - Must manually provide tokens
+
+## Recent Changes
+
+- **PromptVault removed** - PromptVault Service spec removed from aggregated sources following the feature removal (INT-319)
+- **Chat Agent added** - New Chat Agent API spec added to the aggregated documentation hub
+- **15 service specs** - Now aggregates OpenAPI specs from 15 services (was 16, minus PromptVault, plus Chat Agent)

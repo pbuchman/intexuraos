@@ -68,16 +68,17 @@ The app will be available at `http://localhost:3000`
 
 ---
 
-## Part 2: Connect to Backend Services (10 minutes
+## Part 2: Connect to Backend Services (10 minutes)
 
 ### Step 2.1: Local vs Remote Services
 
 The web app can connect to either:
 
-| Option          | When to Use         | How                              |
-| --------------- | ------------------- | -------------------------------- |
-| Cloud services  | Default integration | No config needed (uses env vars) |
-| Local emulators | Offline development | Set `FIRESTORE_EMULATOR_HOST`    |
+| Option          | When to Use          | How                               |
+| --------------- | -------------------- | --------------------------------- |
+| Cloud services  | Default integration  | No config needed (uses env vars)  |
+| Local emulators | Offline development  | Set `FIRESTORE_EMULATOR_HOST`     |
+| Predev mode     | Predev VM deployment | Set `INTEXURAOS_PREDEV_MODE=true` |
 
 ### Step 2.2: Service URLs
 
@@ -87,12 +88,16 @@ Configure backend URLs in your `.env` file:
 # Production URLs (default)
 INTEXURAOS_USER_SERVICE_URL=https://user-service.intexuraos.com
 INTEXURAOS_COMMANDS_AGENT_URL=https://commands-agent.intexuraos.com
+INTEXURAOS_CODE_AGENT_URL=https://code-agent.intexuraos.com
+INTEXURAOS_CHAT_AGENT_URL=https://chat-agent.intexuraos.com
 # ... etc
 
 # Or local development (if running services locally)
 INTEXURAOS_USER_SERVICE_URL=http://localhost:8001
 INTEXURAOS_COMMANDS_AGENT_URL=http://localhost:8002
 ```
+
+**Note:** In predev mode (`INTEXURAOS_PREDEV_MODE=true`), service URLs are ignored and requests go through the predev proxy using relative API paths (e.g., `/api/code`).
 
 ### Step 2.3: Firebase Configuration
 
@@ -223,13 +228,16 @@ Serves the production build locally at `http://localhost:3000`
 
 ## Troubleshooting
 
-| Problem                                 | Solution                                                    |
-| --------------------------------------- | ----------------------------------------------------------- |
-| "Missing required environment variable" | Check `.env` file has all `INTEXURAOS_*` variables          |
-| "Auth0 unauthorized"                    | Verify `AUTH_AUDIENCE` matches your Auth0 API configuration |
-| "CORS errors"                           | Ensure backend service allows requests from localhost       |
-| "Service worker not registering"        | Clear site data and reload in DevTools Application tab      |
-| "Vite HMR not working"                  | Check port 3000 is not already in use                       |
+| Problem                                 | Solution                                                                                   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------ |
+| "Missing required environment variable" | Check `.env` file has all `INTEXURAOS_*` variables                                         |
+| "Auth0 unauthorized"                    | Verify `AUTH_AUDIENCE` matches your Auth0 API configuration                                |
+| "CORS errors"                           | Ensure backend service allows requests from localhost                                      |
+| "Service worker not registering"        | Clear site data and reload in DevTools Application tab                                     |
+| "Vite HMR not working"                  | Check port 3000 is not already in use                                                      |
+| DevBar not showing                      | Only visible on `localhost` or `cloudfunctions.net` hostnames                              |
+| Chat not working as guest               | Guest sessions are rate-limited; clear `intex-guest-session-id` from localStorage to reset |
+| Dark mode not persisting                | Ensure localStorage is available (not in strict private mode)                              |
 
 ---
 
@@ -260,6 +268,8 @@ Now that you understand the basics:
 1. Explore the [`InboxPage.tsx`](../../../apps/web/src/pages/InboxPage.tsx) to learn real-time update patterns
 2. Read [`apiClient.ts`](../../../apps/web/src/services/apiClient.ts) for request handling
 3. Check [`App.tsx`](../../../apps/web/src/App.tsx) for routing structure
+4. Study the [`Chat`](../../../apps/web/src/components/Chat/Chat.tsx) component for the chat assistant architecture
+5. Review [`CodeTaskNewPage.tsx`](../../../apps/web/src/pages/CodeTaskNewPage.tsx) for a complex form with modals and API integration
 
 ---
 
@@ -267,7 +277,7 @@ Now that you understand the basics:
 
 Test your understanding:
 
-1. **Easy:** Add a new link to the sidebar in `Layout.tsx`
+1. **Easy:** Add a new link to the sidebar in `Sidebar.tsx`
 2. **Medium:** Create a new page that fetches and displays a list of items from an API
 3. **Hard:** Implement real-time updates using Firestore listeners for a new data type
 
@@ -276,7 +286,7 @@ Test your understanding:
 
 ### Exercise 1: Sidebar Link
 
-Edit `components/Layout.tsx`:
+Edit `components/Sidebar.tsx`:
 
 ```typescript
 <Link

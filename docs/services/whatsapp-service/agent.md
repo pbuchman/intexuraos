@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                                                |
-| -------- | ------------------------------------------------------------------------------------ |
-| **Name** | whatsapp-service                                                                     |
-| **Role** | WhatsApp Integration Service with Approval Workflow Support                          |
-| **Goal** | Receive WhatsApp messages, enable approval via replies/reactions, send notifications |
+| Field    | Value                                                                                        |
+| -------- | -------------------------------------------------------------------------------------------- |
+| **Name** | whatsapp-service                                                                             |
+| **Role** | WhatsApp Integration Service with Approval Workflow Support                                  |
+| **Goal** | Receive WhatsApp messages, enable approval via buttons/replies/reactions, send notifications |
 
 ---
 
@@ -30,8 +30,17 @@ interface SendMessageEvent {
   userId: string; // IntexuraOS user ID (phone number looked up internally)
   message: string; // Message text to send
   replyToMessageId?: string; // Optional: WhatsApp message ID to reply to
+  buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons (v3.0.0)
   correlationId: string; // For tracking; use approval format for approvals
   timestamp: string; // ISO 8601
+}
+
+interface WhatsAppInteractiveButton {
+  type: 'reply';
+  reply: {
+    id: string; // Format: "intent:actionId[:nonce]"
+    title: string; // Max 20 characters (truncated by WhatsApp API)
+  };
 }
 ```
 
@@ -48,7 +57,7 @@ interface SendMessageEvent {
 }
 ```
 
-### Send Approval Request
+### Send Approval Request with Buttons
 
 **Endpoint:** Pub/Sub topic `whatsapp-message-send`
 
@@ -60,16 +69,19 @@ interface SendMessageEvent {
 interface ApprovalMessageEvent {
   type: 'whatsapp.message.send';
   userId: string;
-  message: string; // Should include approval prompt
+  message: string; // Approval prompt text
+  buttons?: WhatsAppInteractiveButton[]; // Interactive buttons (recommended)
   correlationId: string; // MUST be: action-{type}-approval-{actionId}
   timestamp: string;
 }
 ```
 
-**Correlation ID Format:**
+**Button ID Format:**
 
 ```
-action-{actionType}-approval-{actionId}
+approve:{actionId}:{nonce}   -- Approve (nonce required for security)
+cancel:{actionId}            -- Cancel/reject
+convert:{actionId}           -- Convert to different type
 ```
 
 **Example:**
@@ -78,9 +90,13 @@ action-{actionType}-approval-{actionId}
 {
   "type": "whatsapp.message.send",
   "userId": "user-abc-123",
-  "message": "Create todo: 'Review quarterly report'?\n\nReply YES to approve or NO to reject.",
+  "message": "Create todo: 'Review quarterly report'?",
+  "buttons": [
+    { "type": "reply", "reply": { "id": "approve:act-xyz-789:a3f2", "title": "Approve" } },
+    { "type": "reply", "reply": { "id": "cancel:act-xyz-789", "title": "Cancel" } }
+  ],
   "correlationId": "action-todo-approval-act-xyz-789",
-  "timestamp": "2026-01-24T10:30:00Z"
+  "timestamp": "2026-02-08T10:30:00Z"
 }
 ```
 
@@ -185,10 +201,12 @@ interface OutboundMessage {
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
   replyToWamid: string; // Original approval message wamid
-  replyText: string; // User's reply text
+  replyText: string; // User's reply text (or "yes"/"no" for buttons/reactions)
   userId: string;
   timestamp: string;
-  actionId?: string; // Extracted from correlationId
+  actionId?: string; // Extracted from buttonId or correlationId
+  buttonId?: string; // Button ID if user tapped a button (v3.0.0)
+  buttonTitle?: string; // Button title if user tapped a button (v3.0.0)
 }
 ```
 
@@ -196,14 +214,17 @@ interface ApprovalReplyEvent {
 
 ## Constraints
 
-| Rule                    | Description                                            |
-| ----------------------- | ------------------------------------------------------ |
-| **Phone Number Mapped** | User must have WhatsApp number registered              |
-| **Media Expiration**    | Signed URLs expire after 15 minutes                    |
-| **Ownership**           | Users can only access their own messages               |
-| **Pagination**          | Maximum 100 messages per request                       |
-| **OutboundMessage TTL** | Reply correlation data expires after 7 days            |
-| **Approval Format**     | CorrelationId MUST match `action-{type}-approval-{id}` |
+| Rule                    | Description                                                      |
+| ----------------------- | ---------------------------------------------------------------- |
+| **Phone Number Mapped** | User must have WhatsApp number registered                        |
+| **Media Expiration**    | Signed URLs expire after 15 minutes                              |
+| **Ownership**           | Users can only access their own messages                         |
+| **Pagination**          | Maximum 100 messages per request                                 |
+| **OutboundMessage TTL** | Reply correlation data expires after 7 days                      |
+| **Approval Format**     | CorrelationId MUST match `action-{type}-approval-{id}`           |
+| **Button Nonce**        | Approve buttons MUST include nonce: `approve:{id}:{nonce}`       |
+| **Button Title Limit**  | Button titles truncated to 20 characters                         |
+| **Phone Verification**  | Phone must be verified before connecting via `/whatsapp/connect` |
 
 ---
 
@@ -218,15 +239,15 @@ interface ApprovalReplyEvent {
 4. No response expected
 ```
 
-### Pattern 2: Request Approval
+### Pattern 2: Request Approval with Buttons
 
 ```
-1. Publish SendMessageEvent with correlationId: action-{type}-approval-{actionId}
-2. WhatsApp-service sends message and saves OutboundMessage
-3. User replies with text OR reacts with 👍/👎
+1. Publish SendMessageEvent with buttons and correlationId: action-{type}-approval-{actionId}
+2. WhatsApp-service sends interactive message and saves OutboundMessage
+3. User taps button, replies with text, OR reacts with 👍/👎
 4. WhatsApp-service publishes ApprovalReplyEvent to action-approval-reply topic
-5. Your service receives event with actionId extracted
-6. Process approval/rejection
+5. Your service receives event with actionId and optional buttonId
+6. Process approval/rejection based on replyText or buttonId
 ```
 
 ### Pattern 3: Access Message Media
@@ -261,22 +282,30 @@ interface ApprovalReplyEvent {
 
 ## Error Handling
 
-| Error Code         | Meaning                                 | Recovery Action                 |
-| ------------------ | --------------------------------------- | ------------------------------- |
-| `NOT_FOUND`        | Message not found or not owned by user  | Verify message ID and ownership |
-| `DOWNSTREAM_ERROR` | Failed to communicate with WhatsApp/GCS | Retry with exponential backoff  |
-| `USER_NOT_MAPPED`  | User has no connected WhatsApp number   | Prompt user to connect WhatsApp |
-| `VALIDATION_ERROR` | Invalid request payload                 | Fix request according to schema |
+| Error Code            | Meaning                                   | Recovery Action                       |
+| --------------------- | ----------------------------------------- | ------------------------------------- |
+| `NOT_FOUND`           | Message not found or not owned by user    | Verify message ID and ownership       |
+| `DOWNSTREAM_ERROR`    | Failed to communicate with WhatsApp/GCS   | Retry with exponential backoff        |
+| `USER_NOT_MAPPED`     | User has no connected WhatsApp number     | Prompt user to connect WhatsApp       |
+| `VALIDATION_ERROR`    | Invalid request payload                   | Fix request according to schema       |
+| `PRECONDITION_FAILED` | Phone number not verified (v3.0.0)        | Verify phone before connecting        |
+| `CONFLICT`            | Phone already verified                    | No action needed, phone is ready      |
+| `RATE_LIMITED`        | Too many verification requests            | Wait for cooldown or rate limit reset |
+| `LOCKED`              | Max verification attempts exceeded        | Request a new verification code       |
+| `GONE`                | Verification code expired                 | Request a new verification code       |
 
 ---
 
 ## Rate Limits
 
-| Operation     | Limit      | Window |
-| ------------- | ---------- | ------ |
-| Send messages | 1000/day   | 24h    |
-| List messages | 100/minute | 1 min  |
-| Get media URL | 60/minute  | 1 min  |
+| Operation          | Limit           | Window   |
+| ------------------ | --------------- | -------- |
+| Send messages      | 1000/day        | 24h      |
+| List messages      | 100/minute      | 1 min    |
+| Get media URL      | 60/minute       | 1 min    |
+| Verify send        | 3/phone/hour    | 1 hour   |
+| Verify send        | 60s cooldown    | per req  |
+| Verify confirm     | 3 attempts/code | per code |
 
 ---
 
@@ -295,15 +324,20 @@ interface ApprovalReplyEvent {
 
 ### For Actions-Agent
 
-To enable approval via WhatsApp:
+To enable approval via WhatsApp with interactive buttons:
 
-1. **Send approval request:**
+1. **Send approval request with buttons:**
 
    ```typescript
+   const nonce = crypto.randomBytes(2).toString('hex');
    publish('whatsapp-message-send', {
      type: 'whatsapp.message.send',
      userId: action.userId,
      message: formatApprovalPrompt(action),
+     buttons: [
+       { type: 'reply', reply: { id: `approve:${action.id}:${nonce}`, title: 'Approve' } },
+       { type: 'reply', reply: { id: `cancel:${action.id}`, title: 'Cancel' } },
+     ],
      correlationId: `action-${action.type}-approval-${action.id}`,
      timestamp: new Date().toISOString(),
    });
@@ -315,6 +349,7 @@ To enable approval via WhatsApp:
    subscribe('action-approval-reply', async (event: ApprovalReplyEvent) => {
      if (event.actionId === undefined) return; // Not an approval reply
 
+     // Works for buttons, text replies, and reactions
      const intent = classifyIntent(event.replyText);
      if (intent === 'approve') {
        await executeAction(event.actionId);
@@ -324,16 +359,18 @@ To enable approval via WhatsApp:
    });
    ```
 
-### Reaction Mapping
+### Response Type Mapping
 
-| Emoji | Generated replyText | Intent  |
-| ----- | ------------------- | ------- |
-| `👍`  | "yes"               | approve |
-| `👎`  | "no"                | reject  |
+| Response Type    | `replyText` | `buttonId`             | `actionId`         |
+| ---------------- | ----------- | ---------------------- | ------------------ |
+| Button tap       | "yes"/"no"  | `approve:id:nonce`     | from buttonId      |
+| Text reply       | raw text    | undefined              | from correlationId |
+| Reaction `👍`    | "yes"       | undefined              | from correlationId |
+| Reaction `👎`    | "no"        | undefined              | from correlationId |
 
 Other emojis are ignored (not published as events).
 
 ---
 
-**Last updated:** 2026-01-24
-**Version:** 2.0.0
+**Last updated:** 2026-02-08
+**Version:** 3.0.0

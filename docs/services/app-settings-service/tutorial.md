@@ -24,6 +24,13 @@ curl -X GET "https://app-settings.intexuraos.com/settings/usage-costs?days=30" \
 
 **Response:** Personal usage statistics with monthly and model breakdowns.
 
+## Response Format
+
+All endpoints return a standardized response contract:
+
+- **Success:** `{ "success": true, "data": { ... } }`
+- **Error:** `{ "success": false, "error": { "code": "...", "message": "..." } }`
+
 ## Troubleshooting
 
 | Error      | Cause                | Solution      |

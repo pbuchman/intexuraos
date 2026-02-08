@@ -6,15 +6,26 @@
 
 Image-service is an internal service with no public endpoints. This tutorial covers the internal endpoints used by other services like research-agent.
 
-**Version:** 2.1.0 (INT-269 internal-clients migration)
+**Version:** 2.2.0 (response contract migration)
 
-## v2.1.0 Updates
+## Recent Updates
 
-**INT-269 Internal-Clients Migration (January 2025):**
+**Response Contract Migration (February 2026):**
 
-- User service client migrated to `@intexuraos/internal-clients/user-service` package
+- All internal endpoints now use standardized `reply.ok()` / `reply.fail()` response format
+- Auth failures return `{ success: false, error: { code: 'UNAUTHORIZED', message } }`
+- Rate limits return proper 429 status with `RATE_LIMITED` error code
+- Sentry-enabled logging via `createAppLogger()`
+
+**INT-301 Direct Import Consolidation (January 2026):**
+
+- Local user service client re-export removed
+- All types imported directly from `@intexuraos/internal-clients`
+
+**INT-269 Internal-Clients Migration (January 2026):**
+
+- User service client migrated to `@intexuraos/internal-clients` package
 - API key retrieval now uses shared client implementation
-- No breaking changes - endpoints and responses unchanged
 
 ---
 
@@ -127,11 +138,13 @@ curl -X POST https://image-service.intexuraos.com/internal/images/generate \
 {
   "success": false,
   "error": {
-    "code": "DOWNSTREAM_ERROR",
+    "code": "RATE_LIMITED",
     "message": "Rate limit exceeded for OpenAI API"
   }
 }
 ```
+
+HTTP status: 429
 
 **Cause:** The provider's rate limit has been exceeded.
 

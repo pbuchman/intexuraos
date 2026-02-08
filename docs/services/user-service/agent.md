@@ -46,11 +46,11 @@ interface UserServiceTools {
   getGoogleOAuthStatus(): Promise<OAuthConnectionStatus>;
   disconnectGoogleOAuth(): Promise<void>;
 
-  // Internal (service-to-service)
-  getDecryptedLlmKeys(userId: string): Promise<DecryptedLlmKeys>;
+  // Internal (service-to-service) — all wrapped in response contract
+  getDecryptedLlmKeys(userId: string): Promise<ApiResponse<DecryptedLlmKeys>>;
   updateLlmLastUsed(userId: string, provider: LlmProvider): Promise<void>;
-  getGoogleOAuthToken(userId: string): Promise<{ accessToken: string; email: string }>;
-  getUserLlmPreferences(userId: string): Promise<{ llmPreferences?: LlmPreferences }>;
+  getGoogleOAuthToken(userId: string): Promise<ApiResponse<{ accessToken: string; email: string }>>;
+  getUserLlmPreferences(userId: string): Promise<ApiResponse<{ llmPreferences?: LlmPreferences }>>;
 }
 ```
 
@@ -225,12 +225,12 @@ const keys = await getLlmApiKeys(userId);
 
 ```typescript
 // Called by research-agent to get decrypted keys
-const decrypted = await getDecryptedLlmKeys(userId);
-// decrypted.openai contains full "sk-proj-..." key
+const response = await getDecryptedLlmKeys(userId);
+// response.data.openai contains full "sk-proj-..." key
 
 // Called by calendar-agent to get OAuth token
 const oauth = await getGoogleOAuthToken(userId);
-// oauth.accessToken is valid (auto-refreshed if expired)
+// oauth.data.accessToken is valid (auto-refreshed if expired)
 ```
 
 ---
@@ -270,4 +270,4 @@ Keys are validated using cheap, fast models to minimize cost:
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2026-02-08

@@ -4,6 +4,14 @@
 
 Notes-agent provides simple CRUD operations for text notes with tag-based filtering and source tracking.
 
+## Recent Changes
+
+| Commit     | Description                                          | Date       |
+| ---------- | ---------------------------------------------------- | ---------- |
+| `c3198407` | Fix response contract violations (reply.fail)        | 2026-01-30 |
+| `09091782` | Fix branch coverage for legacy status default        | 2026-01-30 |
+| `9f1f8dc2` | INT-126: Standardize ServiceFeedback contract        | 2026-01-18 |
+
 ## API Endpoints
 
 ### Public Endpoints
@@ -28,30 +36,30 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 
 ### Note
 
-| Field | Type | Description |
-| ----------- | ---------- | ---------------------- | |
-| `id` | string | Unique note identifier |
-| `userId` | string | Owner user ID |
-| `title` | string | Note title |
-| `content` | string | Note content |
-| `tags` | string[] | User-defined tags |
-| `status` | 'draft' \ | 'active' | Draft or active |
-| `source` | string | Source system |
-| `sourceId` | string | ID in source system |
-| `createdAt` | Date | Creation timestamp |
-| `updatedAt` | Date | Last update timestamp |
+| Field       | Type       | Description            |
+| ----------- | ---------- | ---------------------- |  |
+| `id`        | string     | Unique note identifier |
+| `userId`    | string     | Owner user ID          |
+| `title`     | string     | Note title             |
+| `content`   | string     | Note content           |
+| `tags`      | string[]   | User-defined tags      |
+| `status`    | 'draft' \  | 'active'               | Draft or active |
+| `source`    | string     | Source system          |
+| `sourceId`  | string     | ID in source system    |
+| `createdAt` | Date       | Creation timestamp     |
+| `updatedAt` | Date       | Last update timestamp  |
 
 ### CreateNoteInput
 
-| Field | Type | Required |
-| ---------- | ---------- | -------- | |
-| `userId` | string | Yes |
-| `title` | string | Yes |
-| `content` | string | Yes |
-| `tags` | string[] | Yes |
-| `status` | 'draft' \ | 'active' | No (default: active) |
-| `source` | string | Yes |
-| `sourceId` | string | Yes |
+| Field      | Type       | Required |
+| ---------- | ---------- | -------- |  |
+| `userId`   | string     | Yes      |
+| `title`    | string     | Yes      |
+| `content`  | string     | Yes      |
+| `tags`     | string[]   | Yes      |
+| `status`   | 'draft' \  | 'active' | No (default: active) |
+| `source`   | string     | Yes      |
+| `sourceId` | string     | Yes      |
 
 ## Dependencies
 
@@ -64,6 +72,10 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 ## Configuration
 
 No service-specific environment variables beyond standard Firebase configuration.
+
+## Gotchas
+
+- **Legacy documents without status field**: The Firestore repository defaults `status` to `'active'` for documents that predate the status feature. This ensures backward compatibility.
 
 ## File Structure
 

@@ -196,9 +196,13 @@ When you call `/internal/page-summaries`:
 
 1. **PageContentFetcher** crawls the URL via Crawl4AI (headless browser)
 2. **userServiceClient** fetches the user's default LLM model and API keys
-3. **LlmSummarizer** generates a prompt with language preservation instructions
+3. **LlmSummarizer** generates a prompt with language preservation and content focus instructions
 4. **parseSummaryResponse** validates the output is prose (not JSON)
 5. If invalid, **repair prompt** triggers one retry automatically
+
+The content focus instructions ensure the LLM summarizes the actual page content rather than describing the platform (e.g., it won't start with "LinkedIn is a professional network...").
+
+**Note:** 401 responses now use the standard response contract format: `{ "success": false, "error": { "code": "UNAUTHORIZED", "message": "..." } }`.
 
 ### Step 3.3: Language Preservation
 
@@ -290,6 +294,23 @@ curl -X POST https://web-agent.intexuraos.com/internal/page-summaries \
 
 **Solution:** Page may be entirely JavaScript-rendered or blocked.
 
+### Error: Rate Limited
+
+```json
+{
+  "result": {
+    "url": "https://example.com",
+    "status": "failed",
+    "error": {
+      "code": "RATE_LIMITED",
+      "message": "Crawl4AI rate limited: HTTP 429"
+    }
+  }
+}
+```
+
+**Solution:** Too many requests to Crawl4AI. Wait and retry with exponential backoff.
+
 ---
 
 ## Part 5: Real-World Integration
@@ -363,14 +384,16 @@ export async function summarizePage(
 
 ## Troubleshooting
 
-| Problem                     | Symptom                    | Solution                                    |
-| --------------------------- | -------------------------- | ------------------------------------------- |
-| "401 Unauthorized"          | Missing auth header        | Add `X-Internal-Auth` header                |
-| "ACCESS_DENIED"             | 403 from target site       | Site blocks scrapers; try different URL     |
-| "No API key configured"     | Missing user LLM key       | User must add API key in settings           |
-| "Summary is JSON"           | Repair mechanism kicked in | Normal behavior - should auto-repair        |
-| "Summary in wrong language" | Old version                | Update to v2.0.0 with language preservation |
-| "Timeout"                   | Slow site or Crawl4AI      | Increase `timeoutMs` parameter              |
+| Problem                        | Symptom                    | Solution                                       |
+| ------------------------------ | -------------------------- | ---------------------------------------------- |
+| "401 Unauthorized"             | Missing auth header        | Add `X-Internal-Auth` header                   |
+| "ACCESS_DENIED"                | 403 from target site       | Site blocks scrapers; try different URL        |
+| "No API key configured"        | Missing user LLM key       | User must add API key in settings              |
+| "Summary is JSON"              | Repair mechanism kicked in | Normal behavior - should auto-repair           |
+| "Summary in wrong language"    | Old version                | Update to v2.0.0 with language preservation    |
+| "Timeout"                      | Slow site or Crawl4AI      | Increase `timeoutMs` parameter                 |
+| "RATE_LIMITED"                 | HTTP 429 from Crawl4AI     | Wait and retry with exponential backoff        |
+| "Summary describes platform"   | Content focus missing      | Update to latest with content focus prompt     |
 
 ---
 

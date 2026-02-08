@@ -52,7 +52,8 @@ type ClassificationType =
   | 'link'
   | 'calendar'
   | 'reminder'
-  | 'linear';
+  | 'linear'
+  | 'code';
 
 interface Classification {
   type: ClassificationType;
@@ -119,6 +120,7 @@ Step 5: Category Detection (Fallback)
   "remind me about X" → reminder
   "how does OAuth work?" → research
   "meeting notes: discussed X" → note
+  "fix the login bug" → code
   "buy groceries" → todo (default)
 ```
 
@@ -211,4 +213,4 @@ whatsapp-service → Pub/Sub (command.ingest) → /internal/commands → command
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2026-02-08

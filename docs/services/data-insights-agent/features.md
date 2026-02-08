@@ -45,11 +45,11 @@ You're tracking sales data across three sources: a monthly CSV export, inventory
 ## Limitations
 
 - **Text-based data only** — Binary formats (images, PDFs) not supported
-- **LLM API key required** — Analysis needs a configured Gemini or other LLM key
+- **LLM API key required** — Analysis needs a configured Gemini, GLM, or other supported LLM key
 - **15-minute cache window** — Snapshots refresh every 15 minutes via scheduled job
 - **Max 5 insights per feed** — Keeps analysis focused and actionable
 - **5 static sources per feed** — Ensures performance on large datasets
 
 ---
 
-_Part of [IntexuraOS](../overview.md) — Turn data into insights, not spreadsheets._
+_Part of [IntexuraOS](../overview.md) -- Turn data into insights, not spreadsheets._

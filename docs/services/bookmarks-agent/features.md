@@ -27,9 +27,9 @@ Links are analyzed by AI to generate concise summaries of the content. After sum
 
 ### Event-Driven Enrichment Pipeline
 
-Bookmarks are processed asynchronously through a three-stage pipeline: create, enrich (fetch metadata), and summarize (AI analysis). Each stage is decoupled via Pub/Sub, ensuring reliability and scalability.
+Bookmarks are processed asynchronously through a three-stage pipeline: create, enrich (fetch metadata), and summarize (AI analysis). Each stage is decoupled via Pub/Sub, ensuring reliability and scalability. Transient failures (rate limits, timeouts, network errors) trigger automatic Pub/Sub retries with exponential backoff.
 
-**Example:** Bookmark creation returns immediately. Metadata fetching and AI summarization happen in the background, with WhatsApp notification on completion.
+**Example:** Bookmark creation returns immediately. Metadata fetching and AI summarization happen in the background, with WhatsApp notification on completion. If Crawl4AI returns HTTP 429, the summarization automatically retries.
 
 ### Tag-Based Organization
 
@@ -68,7 +68,7 @@ Prevents saving the same URL twice per user. If you try to bookmark an existing 
 - **Rich metadata** - Title, description, images automatically extracted
 - **AI summaries** - Quick overview without visiting the page
 - **WhatsApp delivery** - Summaries sent directly to your chat (INT-210)
-- **Reliable processing** - Event-driven pipeline handles failures gracefully
+- **Reliable processing** - Event-driven pipeline with automatic retry for transient failures (INT-198)
 - **Tag-based filtering** - Organize by project, topic, or priority
 
 ## Limitations

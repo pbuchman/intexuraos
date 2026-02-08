@@ -29,8 +29,8 @@ interface MobileNotificationsServiceTools {
     title?: string; // Partial match
   }): Promise<NotificationsListResult>;
 
-  // Delete a notification
-  deleteNotification(notificationId: string): Promise<void>;
+  // Delete a notification (returns empty data object)
+  deleteNotification(notificationId: string): Promise<{ success: true; data: Record<string, never> }>;
 
   // Get filter options and saved filters
   getFilters(): Promise<FiltersData>;
@@ -161,10 +161,10 @@ const filters = await getFilters();
 
 ## Internal Endpoints
 
-| Method | Path                      | Purpose                                             |
-| ------ | ------------------------- | --------------------------------------------------- |
-| GET    | `/internal/notifications` | Query notifications (called by data-insights-agent) |
-| POST   | `/connect`                | Receive notifications from device                   |
+| Method | Path                      | Purpose                                             | Response Format                              |
+| ------ | ------------------------- | --------------------------------------------------- | -------------------------------------------- |
+| GET    | `/internal/notifications` | Query notifications (called by data-insights-agent) | `{ success, data }` or `{ success, error }`  |
+| POST   | `/connect`                | Receive notifications from device                   | `{ success, data }` or `{ success, error }`  |
 
 ---
 
@@ -177,4 +177,4 @@ const filters = await getFilters();
 
 ---
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-02-08

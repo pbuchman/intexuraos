@@ -84,6 +84,12 @@ Connect Google accounts for calendar access with automatic token refresh. Tokens
 
 **Rate limit awareness** - Error parser detects rate limits before API key errors, avoiding misleading diagnostics (v2.0.0)
 
+**Standardized response contract** - All internal endpoints use `reply.ok(data)` / `reply.fail(code, message)` for consistent responses
+
+**Sentry error tracking** - Logger integrated with Sentry for automatic error reporting
+
+**Auth0 namespaced claims** - Reads both namespaced (`https://intexuraos.cloud/email`) and bare JWT claims for profile data
+
 **Automatic token refresh** - OAuth tokens refreshed seamlessly before expiry
 
 **5 LLM providers supported** - Google (Gemini), OpenAI (GPT), Anthropic (Claude), Perplexity, and Zai (GLM)

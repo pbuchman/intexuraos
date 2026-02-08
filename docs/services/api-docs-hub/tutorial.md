@@ -19,6 +19,10 @@ Visit: `https://api-docs-hub.intexuraos.com/docs`
 curl https://api-docs-hub.intexuraos.com/health
 ```
 
+## Available Services (15)
+
+The hub currently aggregates specs from: User Service, Notion Service, WhatsApp Service, Mobile Notifications Service, Research Agent, Commands Agent, Actions Agent, Data Insights Agent, Image Service, Notes Agent, Todos Agent, Application Settings, Bookmarks Agent, Calendar Agent, and Chat Agent.
+
 ## Troubleshooting
 
 | Issue            | Cause                 | Solution                  |

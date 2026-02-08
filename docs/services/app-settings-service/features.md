@@ -69,3 +69,9 @@ Users view their spending over time, broken down by model and month.
 **No predictions** - No cost forecasting
 
 **No budgets** - No spending limits or alerts
+
+## Recent Changes
+
+- **Response contract standardization** - Internal endpoints now use `reply.ok(data)` / `reply.fail(code, message)` for consistent `{ success, data }` or `{ success, error: { code, message } }` responses
+- **Sentry-enabled logging** - `FirestoreUsageStatsRepository` migrated from direct `pino()` to `createAppLogger()` for automatic Sentry error reporting
+- **100% branch coverage** - Added v8 ignore exemptions for TypeScript-only safety branches

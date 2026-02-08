@@ -78,22 +78,21 @@ Navigate to: https://api-docs-hub.intexuraos.app/docs
 
 ### Available Service Specs
 
-- actions-agent
+- user-service
+- notion-service
+- whatsapp-service
+- mobile-notifications-service
 - research-agent
 - commands-agent
-- todos-agent
-- bookmarks-agent
-- notes-agent
-- calendar-agent
-- linear-agent
-- image-service
-- web-agent
-- whatsapp-service
-- user-service
-- mobile-notifications-service
-- notion-service
-- app-settings-service
+- actions-agent
 - data-insights-agent
+- image-service
+- notes-agent
+- todos-agent
+- app-settings-service
+- bookmarks-agent
+- calendar-agent
+- chat-agent
 
 ---
 
@@ -141,4 +140,4 @@ const sources: OpenApiSource[] = [
 
 ---
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-02-08

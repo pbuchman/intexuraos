@@ -160,7 +160,40 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 # → type: research, confidence: 0.90+
 ```
 
-## Part 5: Explicit Prefix Override
+## Part 5: Code Command Classification
+
+Test that programming-related commands classify as `code`:
+
+```bash
+curl -X POST https://commands-agent.intexuraos.com/commands \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "fix the login bug in the auth module",
+    "source": "pwa-shared"
+  }'
+```
+
+**Expected Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "command": {
+      "classification": {
+        "type": "code",
+        "confidence": 0.92,
+        "reasoning": "Programming-related command detected: fix bug"
+      }
+    }
+  }
+}
+```
+
+**Key Point:** Commands with programming context (fix, refactor, debug, implement, deploy) classify as `code` rather than generic `todo`.
+
+## Part 6: Explicit Prefix Override
 
 Override classification with explicit prefix:
 
@@ -193,7 +226,7 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 
 **Key Point:** Step 1 (explicit prefix) takes absolute priority. Even though "buy groceries" would normally be a todo, the prefix forces Linear classification.
 
-## Part 6: Graceful Degradation
+## Part 7: Graceful Degradation
 
 When no API key is configured, commands enter pending state:
 
@@ -224,7 +257,7 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 
 **Solution:** Configure API key in user-service. Cloud Scheduler calls `/internal/retry-pending` every 5 minutes to process pending commands.
 
-## Part 7: Command Lifecycle Management
+## Part 8: Command Lifecycle Management
 
 ### List commands
 
@@ -268,7 +301,7 @@ Only works for status: `classified`.
 
 ### Easy
 
-1. Create commands for each type: todo, research, note, link
+1. Create commands for each type: todo, research, note, link, code
 2. Verify confidence scores match the semantics table
 3. Archive a classified command
 
@@ -286,4 +319,4 @@ Only works for status: `classified`.
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2026-02-08

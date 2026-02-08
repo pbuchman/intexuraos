@@ -11,7 +11,7 @@
 | Code Duplicates     | 0     | -        |
 | Deprecations        | 0     | -        |
 
-Last updated: 2026-01-13
+Last updated: 2026-02-08
 
 ## Future Plans
 
@@ -71,8 +71,23 @@ No significant code duplication patterns identified.
 
 No deprecated APIs or dependencies in use.
 
+## Recent Improvements
+
+### Response Contract Compliance (2026-01-30)
+
+Migrated internal routes to use `reply.fail()` for authentication failures instead of raw `reply.status(401); return { error: 'Unauthorized' }`.
+
+### Legacy Document Status Default (2026-01-31)
+
+Added default `status: 'active'` for Firestore documents missing the `status` field, ensuring backward compatibility with legacy notes that predate the status feature.
+
+---
+
 ## Resolved Issues
 
 ### Historical Issues
 
-No previously resolved issues tracked.
+| Date       | Issue                                | Resolution                                         |
+| ---------- | ------------------------------------ | -------------------------------------------------- |
+| 2026-01-30 | Raw reply.send() in internal routes  | Migrated to reply.fail() for auth errors           |
+| 2026-01-31 | Legacy notes missing status field    | Added default status fallback in repository        |

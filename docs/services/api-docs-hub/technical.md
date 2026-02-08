@@ -63,6 +63,8 @@ Response includes:
 
 **Static config** - Changes require redeployment.
 
+**15 sources** - Currently aggregates 15 service OpenAPI specs: User Service, Notion Service, WhatsApp Service, Mobile Notifications Service, Research Agent, Commands Agent, Actions Agent, Data Insights Agent, Image Service, Notes Agent, Todos Agent, Application Settings, Bookmarks Agent, Calendar Agent, and Chat Agent.
+
 ## File Structure
 
 ```
