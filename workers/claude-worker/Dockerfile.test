@@ -36,6 +36,10 @@ RUN mkdir -p /repo /secrets /tmp /home/claude/.claude \
 COPY test-fixtures/claude-stub.sh /usr/local/bin/claude
 RUN chmod +x /usr/local/bin/claude
 
+# Bake Claude default config to skip onboarding (same as production)
+COPY --chown=claude:claude config-defaults/claude.json /opt/claude-defaults/.claude.json
+COPY --chown=claude:claude config-defaults/settings.json /opt/claude-defaults/.claude/settings.json
+
 # Copy entrypoint (same as production)
 COPY --chown=claude:claude entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

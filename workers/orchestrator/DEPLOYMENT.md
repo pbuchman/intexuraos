@@ -55,15 +55,15 @@ Or via macOS LaunchAgent (see `workers/orchestrator/README.md` for plist templat
 
 ### Key Files
 
-| File                   | Purpose                                          |
-| ---------------------- | ------------------------------------------------ |
-| `src/index.ts`         | Entry point, env validation, server start        |
-| `src/main.ts`          | Fastify app factory                              |
-| `src/routes.ts`        | HTTP endpoints                                   |
-| `src/services/`        | Business logic (task-dispatcher, worktree, etc.) |
-| `src/services/isolation/docker-provider.ts` | Docker container lifecycle     |
-| `scripts/start.sh`     | Production wrapper (exec node)                   |
-| `dist/index.js`        | Built artifact                                   |
+| File                                        | Purpose                                          |
+| ------------------------------------------- | ------------------------------------------------ |
+| `src/index.ts`                              | Entry point, env validation, server start        |
+| `src/main.ts`                               | Fastify app factory                              |
+| `src/routes.ts`                             | HTTP endpoints                                   |
+| `src/services/`                             | Business logic (task-dispatcher, worktree, etc.) |
+| `src/services/isolation/docker-provider.ts` | Docker container lifecycle                       |
+| `scripts/start.sh`                          | Production wrapper (exec node)                   |
+| `dist/index.js`                             | Built artifact                                   |
 
 ---
 
@@ -105,8 +105,8 @@ Always use `--no-cache` when the entrypoint or any COPY'd file has changed.
 
 ### Key Files
 
-| File                              | Purpose                                     |
-| --------------------------------- | ------------------------------------------- |
+| File                                    | Purpose                                        |
+| --------------------------------------- | ---------------------------------------------- |
 | `workers/claude-worker/Dockerfile`      | Production image (node:22-alpine + Claude CLI) |
 | `workers/claude-worker/Dockerfile.test` | Test image (claude-stub instead of real CLI)   |
 | `workers/claude-worker/entrypoint.sh`   | Container entrypoint (starts Claude)           |
@@ -128,17 +128,17 @@ The orchestrator writes the system prompt to Claude's stdin via the Docker attac
 
 Set by `docker-provider.ts` when creating containers:
 
-| Variable                           | Source                | Purpose                                |
-| ---------------------------------- | --------------------- | -------------------------------------- |
-| `TASK_ID`                          | Task config           | Task identifier                        |
-| `ANTHROPIC_API_KEY`                | Secrets               | Claude API authentication              |
-| `ANTHROPIC_BASE_URL`               | Worker type config    | API endpoint (varies by provider)      |
-| `ANTHROPIC_MODEL`                  | Worker type config    | Model override (optional)              |
-| `LINEAR_API_KEY`                   | Secrets               | Linear MCP integration                 |
-| `SENTRY_AUTH_TOKEN`                | Secrets               | Sentry MCP integration                 |
-| `GOOGLE_APPLICATION_CREDENTIALS`   | Hardcoded `/secrets/` | GCP auth inside container              |
-| `CLAUDE_PROJECT_DIR`               | Hardcoded `/repo`     | Hook path resolution                   |
-| `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY`| Hardcoded `10000`     | Exit 10s after idle                    |
+| Variable                            | Source                | Purpose                           |
+| ----------------------------------- | --------------------- | --------------------------------- |
+| `TASK_ID`                           | Task config           | Task identifier                   |
+| `ANTHROPIC_API_KEY`                 | Secrets               | Claude API authentication         |
+| `ANTHROPIC_BASE_URL`                | Worker type config    | API endpoint (varies by provider) |
+| `ANTHROPIC_MODEL`                   | Worker type config    | Model override (optional)         |
+| `LINEAR_API_KEY`                    | Secrets               | Linear MCP integration            |
+| `SENTRY_AUTH_TOKEN`                 | Secrets               | Sentry MCP integration            |
+| `GOOGLE_APPLICATION_CREDENTIALS`    | Hardcoded `/secrets/` | GCP auth inside container         |
+| `CLAUDE_PROJECT_DIR`                | Hardcoded `/repo`     | Hook path resolution              |
+| `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY` | Hardcoded `10000`     | Exit 10s after idle               |
 
 ---
 
@@ -163,13 +163,13 @@ pnpm --filter orchestrator test:e2e
 
 ### Test Image vs Production Image
 
-| Aspect       | Production (`Dockerfile`)      | Test (`Dockerfile.test`)        |
-| ------------ | ------------------------------ | ------------------------------- |
-| Claude CLI   | Real (`claude.ai/install.sh`)  | Stub (`test-fixtures/claude-stub.sh`) |
-| gcloud CLI   | Installed                      | Not installed                   |
-| Terraform    | Installed                      | Not installed                   |
-| python3      | Installed                      | Not installed                   |
-| `NODE_ENV`   | `production`                   | `test`                          |
+| Aspect     | Production (`Dockerfile`)     | Test (`Dockerfile.test`)              |
+| ---------- | ----------------------------- | ------------------------------------- |
+| Claude CLI | Real (`claude.ai/install.sh`) | Stub (`test-fixtures/claude-stub.sh`) |
+| gcloud CLI | Installed                     | Not installed                         |
+| Terraform  | Installed                     | Not installed                         |
+| python3    | Installed                     | Not installed                         |
+| `NODE_ENV` | `production`                  | `test`                                |
 
 ---
 
@@ -197,14 +197,14 @@ pnpm --filter orchestrator test:e2e
 
 ## Differences from Standard Apps
 
-| Aspect           | Standard App (`apps/*`)           | Orchestrator (`workers/orchestrator`) |
-| ---------------- | --------------------------------- | ------------------------------------- |
-| Deployment       | Cloud Run (Dockerfile)            | Native Node.js (LaunchAgent)          |
-| Cloud Build      | `cloudbuild.yaml` per service     | None — local build only               |
-| Artifact         | Docker image in Artifact Registry | `dist/index.js` bundle               |
-| Terraform        | Cloud Run service module          | Not managed by Terraform              |
-| Push script      | `push-missing-images.sh`          | Not included (apps/ only)             |
-| Docker images    | Self-contained                    | Orchestrator spawns claude-worker     |
+| Aspect        | Standard App (`apps/*`)           | Orchestrator (`workers/orchestrator`) |
+| ------------- | --------------------------------- | ------------------------------------- |
+| Deployment    | Cloud Run (Dockerfile)            | Native Node.js (LaunchAgent)          |
+| Cloud Build   | `cloudbuild.yaml` per service     | None — local build only               |
+| Artifact      | Docker image in Artifact Registry | `dist/index.js` bundle                |
+| Terraform     | Cloud Run service module          | Not managed by Terraform              |
+| Push script   | `push-missing-images.sh`          | Not included (apps/ only)             |
+| Docker images | Self-contained                    | Orchestrator spawns claude-worker     |
 
 ---
 
