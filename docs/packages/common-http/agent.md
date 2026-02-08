@@ -90,7 +90,12 @@ interface LogIncomingRequestOptions {
 ```typescript
 // http/response.ts (exported as apiOk, apiFail)
 function ok<T>(data: T, diagnostics?: Diagnostics): ApiOk<T>;
-function fail(code: ErrorCode, message: string, diagnostics?: Diagnostics, details?: unknown): ApiError;
+function fail(
+  code: ErrorCode,
+  message: string,
+  diagnostics?: Diagnostics,
+  details?: unknown
+): ApiError;
 
 // http/requestId.ts
 function getRequestId(headers: Record<string, string | string[] | undefined>): string;
@@ -159,7 +164,12 @@ declare module 'fastify' {
 
   interface FastifyReply {
     ok(data: unknown, diagnostics?: Partial<Diagnostics>): FastifyReply;
-    fail(code: ErrorCode, message: string, diagnostics?: Partial<Diagnostics>, details?: unknown): FastifyReply;
+    fail(
+      code: ErrorCode,
+      message: string,
+      diagnostics?: Partial<Diagnostics>,
+      details?: unknown
+    ): FastifyReply;
   }
 
   interface FastifyInstance {
@@ -187,8 +197,8 @@ common-core -> common-http -> http-server -> all apps
 ## Typical Service Registration Order
 
 ```typescript
-await app.register(intexuraFastifyPlugin);   // 1. reply.ok/fail + requestId
-await app.register(fastifyAuthPlugin);        // 2. JWT config (depends on intexura-plugin)
-registerQuietHealthCheckLogging(app);         // 3. Suppress /health logs
+await app.register(intexuraFastifyPlugin); // 1. reply.ok/fail + requestId
+await app.register(fastifyAuthPlugin); // 2. JWT config (depends on intexura-plugin)
+registerQuietHealthCheckLogging(app); // 3. Suppress /health logs
 app.setErrorHandler(createValidationErrorHandler()); // 4. (from http-server)
 ```

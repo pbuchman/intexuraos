@@ -27,9 +27,9 @@
 ```typescript
 interface ProcessActionInput {
   action: {
-    id: string;      // Unique action ID (for idempotency)
-    userId: string;   // User ID
-    text: string;     // Natural language description
+    id: string; // Unique action ID (for idempotency)
+    userId: string; // User ID
+    text: string; // Natural language description
     summary?: string; // Optional pre-extracted summary
   };
 }
@@ -41,8 +41,8 @@ interface ProcessActionInput {
 interface ProcessActionOutput {
   status: 'completed' | 'failed';
   message: string;
-  resourceUrl?: string;   // Linear issue URL (success only)
-  errorCode?: string;     // Error code (failure only)
+  resourceUrl?: string; // Linear issue URL (success only)
+  errorCode?: string; // Error code (failure only)
 }
 ```
 
@@ -87,7 +87,7 @@ interface ProcessActionOutput {
 interface CreateIssueInput {
   title: string;
   description: string;
-  labels?: string[];  // Accepted for future use
+  labels?: string[]; // Accepted for future use
 }
 ```
 
@@ -96,7 +96,7 @@ interface CreateIssueInput {
 ```typescript
 interface IssueResponse {
   id: string;
-  identifier: string;  // e.g., "INT-123"
+  identifier: string; // e.g., "INT-123"
   title: string;
   url: string;
 }
@@ -138,12 +138,12 @@ interface UpdateStateInput {
 
 **State Name Mapping:**
 
-| Input          | Linear State Name |
-| -------------- | ----------------- |
-| `backlog`      | Backlog           |
-| `in_progress`  | In Progress       |
-| `in_review`    | In Review         |
-| `qa`           | QA                |
+| Input         | Linear State Name |
+| ------------- | ----------------- |
+| `backlog`     | Backlog           |
+| `in_progress` | In Progress       |
+| `in_review`   | In Review         |
+| `qa`          | QA                |
 
 **Example:**
 
@@ -170,7 +170,7 @@ interface UpdateStateInput {
 
 ```typescript
 interface ValidateIssueRequest {
-  identifier: string;  // e.g., "INT-123"
+  identifier: string; // e.g., "INT-123"
   userId: string;
 }
 ```
@@ -209,7 +209,7 @@ interface GenerateIssueTitleRequest {
 
 ```typescript
 interface GeneratedTitle {
-  title: string;                                          // Max 80 characters
+  title: string; // Max 80 characters
   issueType: 'bug' | 'feature' | 'refactor' | 'research'; // Classified issue type
 }
 ```
@@ -233,23 +233,23 @@ interface ListIssuesQuery {
 ```typescript
 interface ListIssuesOutput {
   issues: {
-    todo: LinearIssue[];        // Ready to start
-    backlog: LinearIssue[];     // Planned
+    todo: LinearIssue[]; // Ready to start
+    backlog: LinearIssue[]; // Planned
     in_progress: LinearIssue[]; // Being worked on
-    in_review: LinearIssue[];   // In code review
-    to_test: LinearIssue[];     // Awaiting QA
-    done: LinearIssue[];        // Completed (last 7 days)
-    archive: LinearIssue[];     // Older completed
+    in_review: LinearIssue[]; // In code review
+    to_test: LinearIssue[]; // Awaiting QA
+    done: LinearIssue[]; // Completed (last 7 days)
+    archive: LinearIssue[]; // Older completed
   };
   teamName: string;
 }
 
 interface LinearIssue {
   id: string;
-  identifier: string;  // e.g., "INT-123"
+  identifier: string; // e.g., "INT-123"
   title: string;
   description: string | null;
-  priority: 0 | 1 | 2 | 3 | 4;  // 0=none, 1=urgent, 4=low
+  priority: 0 | 1 | 2 | 3 | 4; // 0=none, 1=urgent, 4=low
   state: {
     id: string;
     name: string;
@@ -341,6 +341,7 @@ interface FailedLinearIssue {
 ### Webhook Configuration
 
 **Endpoints:**
+
 - `GET /linear/webhook-config` - Get webhook URL and secret status
 - `POST /linear/webhook-config` - Set webhook signing secret (`{"secret": "..."}`)
 - `DELETE /linear/webhook-config` - Remove webhook signing secret
@@ -351,17 +352,17 @@ interface FailedLinearIssue {
 
 ## Constraints
 
-| Rule                        | Description                                                                      |
-| --------------------------- | -------------------------------------------------------------------------------- |
-| **Linear API Key Required** | User must have Linear API key configured via `/linear/connection`                |
-| **Team Scope**              | Issues created in user's configured team                                         |
-| **Priority Scale**          | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low                       |
-| **Idempotency**             | Same `actionId` returns cached result, no duplicate issues                       |
-| **Auth Required**           | Public endpoints require Bearer token, internal requires X-Internal-Auth         |
-| **Internal API Auth**       | Internal issues endpoints also require X-User-Id header                          |
-| **Webhook Secret**          | Webhook events require HMAC-SHA256 signature validation per connection           |
-| **Issue Identifier Format** | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)                 |
-| **Title Length**            | Generated titles are max 80 characters                                           |
+| Rule                        | Description                                                              |
+| --------------------------- | ------------------------------------------------------------------------ |
+| **Linear API Key Required** | User must have Linear API key configured via `/linear/connection`        |
+| **Team Scope**              | Issues created in user's configured team                                 |
+| **Priority Scale**          | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low               |
+| **Idempotency**             | Same `actionId` returns cached result, no duplicate issues               |
+| **Auth Required**           | Public endpoints require Bearer token, internal requires X-Internal-Auth |
+| **Internal API Auth**       | Internal issues endpoints also require X-User-Id header                  |
+| **Webhook Secret**          | Webhook events require HMAC-SHA256 signature validation per connection   |
+| **Issue Identifier Format** | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)         |
+| **Title Length**            | Generated titles are max 80 characters                                   |
 
 ---
 
@@ -469,22 +470,22 @@ Linear state names map to dashboard columns:
 
 ## Dependencies
 
-| Service              | Why Needed                 | Failure Behavior     |
-| -------------------- | -------------------------- | -------------------- |
-| user-service         | Get LLM API key for user   | Return NOT_CONNECTED |
-| app-settings-service | LLM pricing context        | Use default pricing  |
-| Linear API           | Create/list/update issues  | Return API_ERROR     |
-| Linear Webhooks      | Real-time issue events     | Retry by Linear      |
+| Service              | Why Needed                | Failure Behavior     |
+| -------------------- | ------------------------- | -------------------- |
+| user-service         | Get LLM API key for user  | Return NOT_CONNECTED |
+| app-settings-service | LLM pricing context       | Use default pricing  |
+| Linear API           | Create/list/update issues | Return API_ERROR     |
+| Linear Webhooks      | Real-time issue events    | Retry by Linear      |
 
 ---
 
 ## Internal Endpoints
 
-| Method | Path                                  | Purpose                            |
-| ------ | ------------------------------------- | ---------------------------------- |
-| POST   | `/internal/linear/process-action`     | Create issue from natural language |
-| POST   | `/internal/issues`                    | Create issue programmatically      |
-| PATCH  | `/internal/issues/:issueId/state`     | Update issue workflow state        |
+| Method | Path                              | Purpose                            |
+| ------ | --------------------------------- | ---------------------------------- |
+| POST   | `/internal/linear/process-action` | Create issue from natural language |
+| POST   | `/internal/issues`                | Create issue programmatically      |
+| PATCH  | `/internal/issues/:issueId/state` | Update issue workflow state        |
 
 ---
 

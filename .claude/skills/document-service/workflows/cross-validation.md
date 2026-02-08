@@ -5,6 +5,7 @@ Validate documentation consistency across services by tracing documented claims 
 ## Purpose
 
 After documentation generation, cross-validate that:
+
 1. Service docs agree with each other (caller docs match callee docs)
 2. Service docs agree with actual code (endpoints, models, collections match)
 3. Code agrees with infrastructure (Terraform IAM, env vars, topic definitions)
@@ -14,6 +15,7 @@ After documentation generation, cross-validate that:
 **CRITICAL: Start from docs, trace to code.** Not the reverse.
 
 Each validation agent:
+
 1. Reads all relevant documentation files
 2. Extracts claims (endpoints, topics, models, collections, env vars)
 3. Reads the actual code to verify each claim
@@ -40,6 +42,7 @@ Include: complete endpoint registry, cross-service call matrix, discrepancy list
 ```
 
 **Sources to check:**
+
 - `docs/services/*/technical.md` -- Internal Endpoints tables
 - `apps/*/src/routes/internalRoutes.ts` -- actual route definitions
 - `docs/services/*/agent.md` -- machine-readable endpoint specs
@@ -63,6 +66,7 @@ Include: complete topic inventory, publisher-subscriber map, IAM permission matr
 ```
 
 **Sources to check:**
+
 - `docs/services/*/technical.md` -- Event tables
 - `terraform/environments/dev/main.tf` -- Module definitions and IAM
 - `apps/*/src/infra/pubsub/*.ts` -- Publisher implementations
@@ -87,6 +91,7 @@ Include: master model inventory, count inconsistencies, naming variations
 ```
 
 **Sources to check:**
+
 - `packages/llm-contract/src/supportedModels.ts` -- Master registry
 - `packages/llm-factory/src/*.ts` -- Factory provider support
 - `apps/*/src/**/*.ts` -- Hardcoded model references
@@ -111,6 +116,7 @@ Include: master inventory, ownership conflicts, naming discrepancies
 ```
 
 **Sources to check:**
+
 - `firestore-collections.json` -- Registry
 - `apps/*/src/infra/*.ts` -- Firestore repository implementations
 - `docs/services/*/technical.md` -- Collection references
@@ -134,6 +140,7 @@ Include: dependency matrix, reverse dependency map, circular dep check
 ```
 
 **Sources to check:**
+
 - `packages/*/package.json` -- Actual dependencies
 - `docs/packages/*/README.md` -- Documented dependencies
 - `apps/*/package.json` -- App-level package usage
@@ -157,6 +164,7 @@ Include: per-service comparison tables, systemic issues, terraform coverage
 ```
 
 **Sources to check:**
+
 - `docs/services/*/technical.md` -- Configuration tables
 - `apps/*/src/index.ts` -- REQUIRED_ENV arrays
 - `terraform/environments/dev/main.tf` -- env_vars and secrets blocks
@@ -169,7 +177,7 @@ Include: per-service comparison tables, systemic issues, terraform coverage
 | Severity | Definition                                                          | Examples                                        |
 | -------- | ------------------------------------------------------------------- | ----------------------------------------------- |
 | CRITICAL | Production bug; service will fail at runtime                        | Missing IAM permission, wrong endpoint path     |
-| HIGH     | Incorrect documentation that would mislead developers significantly | Wrong env var names, missing required endpoints  |
+| HIGH     | Incorrect documentation that would mislead developers significantly | Wrong env var names, missing required endpoints |
 | MEDIUM   | Incomplete documentation or minor inconsistencies                   | Missing endpoints from table, count mismatches  |
 | LOW      | Cosmetic issues, naming conventions, minor omissions                | Naming style differences, optional vars missing |
 
@@ -199,12 +207,15 @@ Each validation report should follow this structure:
 ---
 
 ## Complete Inventory
+
 <tables showing all items checked>
 
 ## Discrepancies
+
 <D1, D2, ... with severity, location, problem, fix>
 
 ## Action Items
+
 <Prioritized list of fixes needed>
 ```
 
@@ -221,6 +232,7 @@ User: "Validate the HTTP contracts across all services"
 ```
 
 This is useful for:
+
 - Spot-checking after code changes
 - Pre-release validation
 - Debugging integration issues between services

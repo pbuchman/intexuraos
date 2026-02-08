@@ -13,7 +13,7 @@ All decisions below are FINAL. No guessing during implementation.
 ### Container Configuration
 
 | Setting           | Value                                                 |
-| ----------------- | ----------------------------------------------------- |
+| ----------------- | ----------------------------------------------------- | ----- |
 | Docker SDK        | `dockerode` npm package                               |
 | Base image        | `node:22-alpine`                                      |
 | Claude install    | `curl -fsSL https://claude.ai/install.sh \            | bash` |

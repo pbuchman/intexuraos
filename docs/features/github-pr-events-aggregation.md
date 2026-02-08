@@ -55,26 +55,26 @@ GitHub ──webhook──> code-agent: POST /webhooks/github
 
 **Owner:** `code-agent`
 
-| Field               | Type           | Description                                          | Indexed                                             |
-| ------------------- | -------------- | ---------------------------------------------------- | --------------------------------------------------- |
-| `id`                | string         | UUID (primary key)                                   | -                                                   |
-| `githubEventId`     | number         | GitHub event ID for deduplication                    | Yes                                                 |
-| `repository`        | string         | "owner/repo" format                                  | Yes                                                 |
-| `repositoryId`      | number         | GitHub repository numeric ID                         | -                                                   |
-| `pullRequestNumber` | number         | PR number                                            | Yes                                                 |
-| `pullRequestId`     | number         | GitHub PR node ID                                    | -                                                   |
-| `eventType`         | string         | Event type (pull_request, pull_request_review, etc.) | -                                                   |
-| `action`            | string \       | null                                                 | Action (opened, closed, submitted, dismissed, etc.) | - |
-| `senderLogin`       | string         | GitHub username of sender                            | -                                                   |
-| `senderId`          | number         | GitHub numeric ID of sender                          | -                                                   |
-| `senderType`        | string         | User type (User, Bot)                                | -                                                   |
-| `title`             | string \       | null                                                 | PR title                                            | - |
-| `body`              | string \       | null                                                 | PR description/review body                          | - |
-| `state`             | string \       | null                                                 | PR state (open, closed)                             | - |
-| `mergedAt`          | Date \         | null                                                 | When PR was merged                                  | - |
-| `createdAt`         | Date           | Event timestamp from GitHub                          | Yes                                                 |
-| `processedAt`       | Date           | Server timestamp                                     | -                                                   |
-| `payload`           | unknown        | Full webhook payload for debugging                   | -                                                   |
+| Field               | Type      | Description                                          | Indexed                                             |
+| ------------------- | --------- | ---------------------------------------------------- | --------------------------------------------------- | --- |
+| `id`                | string    | UUID (primary key)                                   | -                                                   |
+| `githubEventId`     | number    | GitHub event ID for deduplication                    | Yes                                                 |
+| `repository`        | string    | "owner/repo" format                                  | Yes                                                 |
+| `repositoryId`      | number    | GitHub repository numeric ID                         | -                                                   |
+| `pullRequestNumber` | number    | PR number                                            | Yes                                                 |
+| `pullRequestId`     | number    | GitHub PR node ID                                    | -                                                   |
+| `eventType`         | string    | Event type (pull_request, pull_request_review, etc.) | -                                                   |
+| `action`            | string \  | null                                                 | Action (opened, closed, submitted, dismissed, etc.) | -   |
+| `senderLogin`       | string    | GitHub username of sender                            | -                                                   |
+| `senderId`          | number    | GitHub numeric ID of sender                          | -                                                   |
+| `senderType`        | string    | User type (User, Bot)                                | -                                                   |
+| `title`             | string \  | null                                                 | PR title                                            | -   |
+| `body`              | string \  | null                                                 | PR description/review body                          | -   |
+| `state`             | string \  | null                                                 | PR state (open, closed)                             | -   |
+| `mergedAt`          | Date \    | null                                                 | When PR was merged                                  | -   |
+| `createdAt`         | Date      | Event timestamp from GitHub                          | Yes                                                 |
+| `processedAt`       | Date      | Server timestamp                                     | -                                                   |
+| `payload`           | unknown   | Full webhook payload for debugging                   | -                                                   |
 
 ### Composite Indexes
 
@@ -120,13 +120,13 @@ GitHub ──webhook──> code-agent: POST /webhooks/github
 - `400 Bad Request` - Invalid payload
 
 **Event Types Handled:**
-| Event Type                    | Action Stored                                                              |
+| Event Type | Action Stored |
 | ----------------------------- | -------------------------------------------------------------------------- |
-| `pull_request`                | opened, closed, edited, synchronized, ready_for_review, converted_to_draft |
-| `pull_request_review`         | submitted, edited, dismissed                                               |
-| `pull_request_review_comment` | created, edited, deleted                                                   |
-| `push`                        | Yes (for context, associated with PR via branch)                           |
-| `ping`                        | No (acknowledge only)                                                      |
+| `pull_request` | opened, closed, edited, synchronized, ready_for_review, converted_to_draft |
+| `pull_request_review` | submitted, edited, dismissed |
+| `pull_request_review_comment` | created, edited, deleted |
+| `push` | Yes (for context, associated with PR via branch) |
+| `ping` | No (acknowledge only) |
 
 ---
 
@@ -137,11 +137,11 @@ GitHub ──webhook──> code-agent: POST /webhooks/github
 **Auth:** Bearer token (JWT)
 
 **Query Parameters:**
-| Parameter           | Type   | Required   | Description                        |
+| Parameter | Type | Required | Description |
 | ------------------- | ------ | ---------- | ---------------------------------- |
-| `repository`        | string | Yes        | Repository in "owner/repo" format  |
-| `pullRequestNumber` | number | No         | Filter to specific PR              |
-| `limit`             | number | No         | Max events (default: 50, max: 100) |
+| `repository` | string | Yes | Repository in "owner/repo" format |
+| `pullRequestNumber` | number | No | Filter to specific PR |
+| `limit` | number | No | Max events (default: 50, max: 100) |
 
 **Response:**
 

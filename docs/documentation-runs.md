@@ -153,13 +153,16 @@ Log of all `/document-service` runs.
 **Scope:** 25 apps (18 updated, 2 new, 1 removed), 5 workers (all new), 21 packages (all new)
 
 **New Services:**
+
 - chat-agent - AI-powered conversational interface for natural language interactions
 - code-agent - AI-assisted coding with context-aware suggestions and completions
 
 **Removed Services:**
+
 - promptvault-service - Legacy service deprecated in favor of centralized configuration
 
 **New Workers:**
+
 - orchestrator - Coordinates multi-agent workflows and resource management
 - claude-worker - Handles Claude API interactions with retry logic and rate limiting
 - log-cleanup - Automated log rotation and archival system
@@ -167,6 +170,7 @@ Log of all `/document-service` runs.
 - vm-lifecycle - Virtual machine provisioning and lifecycle management
 
 **New Packages:**
+
 - All 21 infrastructure and common packages documented for the first time
 - Includes packages for auth, database, messaging, utilities, and AI integration
 
@@ -175,6 +179,7 @@ Log of all `/document-service` runs.
 **Quality Assurance:** Cross-validation phase verified contracts between services, ensuring API consistency and integration compatibility
 
 **Documentation Files:**
+
 - Apps: All 5 standard files per service (features.md, technical.md, tutorial.md, technical-debt.md, agent.md)
 - Workers: All 5 standard files per worker
 - Packages: 3 files per package (README.md, API.md, USAGE.md)

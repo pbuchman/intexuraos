@@ -25,6 +25,7 @@ const cachedTokens =
 ### Dual API Pattern (Responses + Chat Completions)
 
 The client uses two different OpenAI APIs:
+
 - `research()` uses `client.responses.create` (Responses API with tool support)
 - `generate()` uses `client.chat.completions.create` (Chat Completions API)
 

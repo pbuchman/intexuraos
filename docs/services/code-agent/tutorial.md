@@ -204,17 +204,17 @@ curl -X POST http://localhost:8128/internal/code/process \
 
 ## Troubleshooting
 
-| Symptom                                        | Cause                                              | Fix                                                                   |
-| ---------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
-| `worker_not_configured` on submit              | No workers configured for user                     | Add a worker via `POST /code/worker-settings/workers`                 |
-| `429` rate limit on submit                     | Concurrent, hourly, or cost limit exceeded         | Wait for tasks to complete, or wait for the time window to reset      |
-| `409 CONFLICT` on submit                       | Deduplication triggered (same prompt in 5 min)     | Wait 5 minutes or modify the prompt                                   |
-| Worker connectivity test fails                 | CF Access credentials wrong or tunnel not running  | Verify tunnel is running and credentials match CF dashboard           |
-| Task stuck in `dispatched` for >5 min          | Worker did not start processing                    | Check orchestrator logs; task will be marked `interrupted` after 30m  |
-| `UNAUTHORIZED` on webhook                      | HMAC signature mismatch                            | Verify `INTEXURAOS_ORCHESTRATOR_SECRET` matches on both sides         |
-| Logs not appearing in UI                       | Log chunks failing HMAC validation                 | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server |
-| `too_soon` error on retry                      | 5-minute cool-off period not elapsed               | Wait the specified number of minutes before retrying                  |
-| GitHub webhook returning 401                   | GitHub webhook secret mismatch                     | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings |
+| Symptom                               | Cause                                             | Fix                                                                   |
+| ------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------- |
+| `worker_not_configured` on submit     | No workers configured for user                    | Add a worker via `POST /code/worker-settings/workers`                 |
+| `429` rate limit on submit            | Concurrent, hourly, or cost limit exceeded        | Wait for tasks to complete, or wait for the time window to reset      |
+| `409 CONFLICT` on submit              | Deduplication triggered (same prompt in 5 min)    | Wait 5 minutes or modify the prompt                                   |
+| Worker connectivity test fails        | CF Access credentials wrong or tunnel not running | Verify tunnel is running and credentials match CF dashboard           |
+| Task stuck in `dispatched` for >5 min | Worker did not start processing                   | Check orchestrator logs; task will be marked `interrupted` after 30m  |
+| `UNAUTHORIZED` on webhook             | HMAC signature mismatch                           | Verify `INTEXURAOS_ORCHESTRATOR_SECRET` matches on both sides         |
+| Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server |
+| `too_soon` error on retry             | 5-minute cool-off period not elapsed              | Wait the specified number of minutes before retrying                  |
+| GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings |
 
 ## Exercises
 

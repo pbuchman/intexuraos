@@ -43,22 +43,22 @@ gcloud functions logs read intexuraos-log-cleanup-dev \
 
 Look for these log entries:
 
-| Log Message                               | Meaning                                   |
-| ----------------------------------------- | ----------------------------------------- |
-| "Log cleanup triggered by Pub/Sub"        | Function received the event               |
-| "Starting log cleanup via code-agent API" | About to call code-agent                  |
-| "Log cleanup completed successfully"      | Cleanup finished with metrics             |
-| "Log cleanup failed"                      | Cleanup encountered an error              |
+| Log Message                               | Meaning                       |
+| ----------------------------------------- | ----------------------------- |
+| "Log cleanup triggered by Pub/Sub"        | Function received the event   |
+| "Starting log cleanup via code-agent API" | About to call code-agent      |
+| "Log cleanup completed successfully"      | Cleanup finished with metrics |
+| "Log cleanup failed"                      | Cleanup encountered an error  |
 
 ## Part 4: Configure Retention Parameters
 
 Set optional environment variables in Terraform to control cleanup behavior:
 
-| Variable                         | Effect                                    |
-| -------------------------------- | ----------------------------------------- |
-| `INTEXURAOS_LOG_RETENTION_DAYS`  | How many days of logs to keep             |
-| `INTEXURAOS_LOG_BATCH_SIZE`      | How many logs to delete per batch         |
-| `INTEXURAOS_LOG_TASKS_PER_RUN`   | Cap on tasks processed per run            |
+| Variable                        | Effect                            |
+| ------------------------------- | --------------------------------- |
+| `INTEXURAOS_LOG_RETENTION_DAYS` | How many days of logs to keep     |
+| `INTEXURAOS_LOG_BATCH_SIZE`     | How many logs to delete per batch |
+| `INTEXURAOS_LOG_TASKS_PER_RUN`  | Cap on tasks processed per run    |
 
 These values pass through to code-agent. When unset, code-agent uses its own defaults.
 

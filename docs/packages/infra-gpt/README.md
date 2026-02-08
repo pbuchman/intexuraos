@@ -36,11 +36,11 @@ const client = createGptClient({
 
 **Methods on the returned client:**
 
-| Method                            | Signature                                                                                              | Description                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| `research(prompt)`                | `(prompt: string) => Promise<Result<ResearchResult, GptError>>`                                        | Web search research via Responses API     |
-| `generate(prompt)`                | `(prompt: string) => Promise<Result<GenerateResult, GptError>>`                                        | Text generation via Chat Completions API  |
-| `generateImage(prompt, options?)` | `(prompt: string, options?: ImageGenerateOptions) => Promise<Result<ImageGenerationResult, GptError>>` | Image generation via DALL-E               |
+| Method                            | Signature                                                                                              | Description                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| `research(prompt)`                | `(prompt: string) => Promise<Result<ResearchResult, GptError>>`                                        | Web search research via Responses API    |
+| `generate(prompt)`                | `(prompt: string) => Promise<Result<GenerateResult, GptError>>`                                        | Text generation via Chat Completions API |
+| `generateImage(prompt, options?)` | `(prompt: string, options?: ImageGenerateOptions) => Promise<Result<ImageGenerationResult, GptError>>` | Image generation via DALL-E              |
 
 ### `calculateTextCost(usage: TokenUsage, pricing: ModelPricing): number`
 
@@ -56,27 +56,27 @@ Converts raw OpenAI usage data into `NormalizedUsage`. Optionally includes `cach
 
 ## Exported Types
 
-| Type                    | Description                                     |
-| ----------------------- | ----------------------------------------------- |
-| `GptClient`             | Type alias for `LLMClient`                      |
-| `GptConfig`             | Configuration interface for `createGptClient`   |
-| `GptError`              | Re-export of `LLMError` from `llm-contract`     |
-| `ResearchResult`        | Re-export from `llm-contract`                   |
-| `GenerateResult`        | Re-export from `llm-contract`                   |
-| `ImageGenerationResult` | Re-export from `llm-contract`                   |
-| `ImageGenerateOptions`  | Re-export from `llm-contract`                   |
-| `SynthesisInput`        | Re-export from `llm-contract`                   |
+| Type                    | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `GptClient`             | Type alias for `LLMClient`                    |
+| `GptConfig`             | Configuration interface for `createGptClient` |
+| `GptError`              | Re-export of `LLMError` from `llm-contract`   |
+| `ResearchResult`        | Re-export from `llm-contract`                 |
+| `GenerateResult`        | Re-export from `llm-contract`                 |
+| `ImageGenerationResult` | Re-export from `llm-contract`                 |
+| `ImageGenerateOptions`  | Re-export from `llm-contract`                 |
+| `SynthesisInput`        | Re-export from `llm-contract`                 |
 
 ### GptConfig
 
 ```ts
 interface GptConfig {
-  apiKey: string;                // OpenAI API key from platform.openai.com
-  model: string;                 // e.g., 'gpt-4.1', 'gpt-4o-mini', 'o4-mini-deep-research'
-  userId: string;                // User ID for usage tracking
-  pricing: ModelPricing;         // Cost configuration for text operations
-  imagePricing?: ModelPricing;   // Separate pricing for image generation
-  logger: Logger;                // Pino logger for structured logging
+  apiKey: string; // OpenAI API key from platform.openai.com
+  model: string; // e.g., 'gpt-4.1', 'gpt-4o-mini', 'o4-mini-deep-research'
+  userId: string; // User ID for usage tracking
+  pricing: ModelPricing; // Cost configuration for text operations
+  imagePricing?: ModelPricing; // Separate pricing for image generation
+  logger: Logger; // Pino logger for structured logging
 }
 ```
 
@@ -84,9 +84,9 @@ interface GptConfig {
 
 ### Environment Variables
 
-| Variable                    | Description      | Required |
-| --------------------------- | ---------------- | -------- |
-| `INTEXURAOS_OPENAI_API_KEY` | OpenAI API key   | Yes      |
+| Variable                    | Description    | Required |
+| --------------------------- | -------------- | -------- |
+| `INTEXURAOS_OPENAI_API_KEY` | OpenAI API key | Yes      |
 
 ### Pricing Fields
 
@@ -102,13 +102,13 @@ interface GptConfig {
 
 All methods return `Result<T, GptError>`. Error mapping:
 
-| HTTP Status / Condition       | Error Code       | Description                   |
-| ----------------------------- | ---------------- | ----------------------------- |
-| 401                           | `INVALID_KEY`    | Invalid API key               |
-| 429                           | `RATE_LIMITED`   | Rate limit exceeded           |
-| `context_length_exceeded`     | `CONTEXT_LENGTH` | Prompt exceeds context window |
-| Contains "timeout"            | `TIMEOUT`        | Request timed out             |
-| Other `APIError`              | `API_ERROR`      | General API error             |
+| HTTP Status / Condition   | Error Code       | Description                   |
+| ------------------------- | ---------------- | ----------------------------- |
+| 401                       | `INVALID_KEY`    | Invalid API key               |
+| 429                       | `RATE_LIMITED`   | Rate limit exceeded           |
+| `context_length_exceeded` | `CONTEXT_LENGTH` | Prompt exceeds context window |
+| Contains "timeout"        | `TIMEOUT`        | Request timed out             |
+| Other `APIError`          | `API_ERROR`      | General API error             |
 
 ## Implementation Notes
 
@@ -127,17 +127,17 @@ All methods return `Result<T, GptError>`. Error mapping:
 
 ## Used By
 
-| App / Package    | Purpose                               |
-| ---------------- | ------------------------------------- |
-| `research-agent` | Research and text generation          |
-| `user-service`   | API key validation and usage          |
-| `image-service`  | Image generation via DALL-E           |
+| App / Package    | Purpose                      |
+| ---------------- | ---------------------------- |
+| `research-agent` | Research and text generation |
+| `user-service`   | API key validation and usage |
+| `image-service`  | Image generation via DALL-E  |
 
 ## Recent Changes
 
-| Commit     | Description                                        | When        |
-| ---------- | -------------------------------------------------- | ----------- |
-| `51b4a325` | Migrate LLM clients to UsageLogger class           | 2 weeks ago |
-| `8aad9098` | Migrate imports and delete llm-common              | 2 weeks ago |
-| `816afa55` | Add ESLint rule to ban optional logger parameters  | 3 weeks ago |
-| `6ec4205e` | Make logger mandatory in all LLM configs           | 3 weeks ago |
+| Commit     | Description                                       | When        |
+| ---------- | ------------------------------------------------- | ----------- |
+| `51b4a325` | Migrate LLM clients to UsageLogger class          | 2 weeks ago |
+| `8aad9098` | Migrate imports and delete llm-common             | 2 weeks ago |
+| `816afa55` | Add ESLint rule to ban optional logger parameters | 3 weeks ago |
+| `6ec4205e` | Make logger mandatory in all LLM configs          | 3 weeks ago |

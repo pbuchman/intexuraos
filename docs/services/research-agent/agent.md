@@ -139,9 +139,7 @@ interface ResearchAgentTools {
   }>;
 
   // Validate a Notion page ID and get preview (v2.2.0)
-  validateNotionPage(params: {
-    researchPageId: string;
-  }): Promise<{ title: string; url: string }>;
+  validateNotionPage(params: { researchPageId: string }): Promise<{ title: string; url: string }>;
 }
 ```
 
@@ -382,12 +380,12 @@ if (research.status === 'awaiting_confirmation') {
 
 ## Public Endpoints (v2.2.0 additions)
 
-| Method | Path                                 | Purpose                                   |
-| ------ | ------------------------------------ | ----------------------------------------- |
-| POST   | `/research/:id/export-notion`        | Manually export to Notion (v2.2.0)        |
-| GET    | `/research/settings/notion`          | Get Notion export settings (v2.2.0)       |
-| POST   | `/research/settings/notion`          | Save Notion export settings (v2.2.0)      |
-| POST   | `/research/settings/notion/validate` | Validate Notion page ID (v2.2.0)          |
+| Method | Path                                 | Purpose                              |
+| ------ | ------------------------------------ | ------------------------------------ |
+| POST   | `/research/:id/export-notion`        | Manually export to Notion (v2.2.0)   |
+| GET    | `/research/settings/notion`          | Get Notion export settings (v2.2.0)  |
+| POST   | `/research/settings/notion`          | Save Notion export settings (v2.2.0) |
+| POST   | `/research/settings/notion/validate` | Validate Notion page ID (v2.2.0)     |
 
 ## Internal Endpoints
 
@@ -439,18 +437,18 @@ draft ──approve──> pending ──process──> processing ──all_com
 
 ## Dependencies (v2.2.0)
 
-| Package                        | Purpose                                          |
-| ------------------------------ | ------------------------------------------------ |
-| `@intexuraos/internal-clients` | User service client (v2.1.0)                     |
-| `@intexuraos/infra-notion`     | Notion client and error mapping (NEW in v2.2.0)  |
-| `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                    |
-| `@intexuraos/llm-contract`     | Model types, provider mapping                    |
-| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                     |
-| `@intexuraos/llm-pricing`      | Pricing context interface                        |
-| `@intexuraos/llm-utils`        | Parse error formatting                           |
-| `@intexuraos/infra-gemini`     | Gemini client wrapper                            |
-| `@intexuraos/common-http`      | HTTP utilities, auth                             |
-| `@intexuraos/common-core`      | Result types, logging                            |
+| Package                        | Purpose                                         |
+| ------------------------------ | ----------------------------------------------- |
+| `@intexuraos/internal-clients` | User service client (v2.1.0)                    |
+| `@intexuraos/infra-notion`     | Notion client and error mapping (NEW in v2.2.0) |
+| `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                   |
+| `@intexuraos/llm-contract`     | Model types, provider mapping                   |
+| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                    |
+| `@intexuraos/llm-pricing`      | Pricing context interface                       |
+| `@intexuraos/llm-utils`        | Parse error formatting                          |
+| `@intexuraos/infra-gemini`     | Gemini client wrapper                           |
+| `@intexuraos/common-http`      | HTTP utilities, auth                            |
+| `@intexuraos/common-core`      | Result types, logging                           |
 
 ---
 

@@ -87,7 +87,7 @@ Added default `status: 'active'` for Firestore documents missing the `status` fi
 
 ### Historical Issues
 
-| Date       | Issue                                | Resolution                                         |
-| ---------- | ------------------------------------ | -------------------------------------------------- |
-| 2026-01-30 | Raw reply.send() in internal routes  | Migrated to reply.fail() for auth errors           |
-| 2026-01-31 | Legacy notes missing status field    | Added default status fallback in repository        |
+| Date       | Issue                               | Resolution                                  |
+| ---------- | ----------------------------------- | ------------------------------------------- |
+| 2026-01-30 | Raw reply.send() in internal routes | Migrated to reply.fail() for auth errors    |
+| 2026-01-31 | Legacy notes missing status field   | Added default status fallback in repository |

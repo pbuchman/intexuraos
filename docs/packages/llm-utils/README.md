@@ -22,10 +22,10 @@ Masks a token for safe logging. Shows first 4 and last 4 characters for tokens l
 ```typescript
 import { redactToken } from '@intexuraos/llm-utils';
 
-redactToken('sk-abcdefghijklmnop');  // 'sk-a...mnop'
-redactToken('short');                 // '[REDACTED]'
-redactToken(undefined);               // '[empty]'
-redactToken('');                      // '[empty]'
+redactToken('sk-abcdefghijklmnop'); // 'sk-a...mnop'
+redactToken('short'); // '[REDACTED]'
+redactToken(undefined); // '[empty]'
+redactToken(''); // '[empty]'
 ```
 
 #### `redactObject(obj: Record<string, unknown>, sensitiveFields: string[]): Record<string, unknown>`
@@ -46,9 +46,20 @@ Default list of field names that should be redacted:
 
 ```typescript
 const SENSITIVE_FIELDS = [
-  'password', 'token', 'access_token', 'refresh_token', 'id_token',
-  'device_code', 'authorization', 'secret', 'api_key', 'apiKey',
-  'client_secret', 'clientSecret', 'x-internal-auth', 'x-goog-iap-jwt-assertion',
+  'password',
+  'token',
+  'access_token',
+  'refresh_token',
+  'id_token',
+  'device_code',
+  'authorization',
+  'secret',
+  'api_key',
+  'apiKey',
+  'client_secret',
+  'clientSecret',
+  'x-internal-auth',
+  'x-goog-iap-jwt-assertion',
 ] as const;
 ```
 
@@ -63,10 +74,10 @@ import { createLlmParseError } from '@intexuraos/llm-utils';
 
 const details = createLlmParseError({
   errorMessage: 'Expected JSON, got plain text',
-  llmResponse: rawResponse,      // auto-truncated to 1000 chars
+  llmResponse: rawResponse, // auto-truncated to 1000 chars
   expectedSchema: '{ title: string, quality: 0 | 1 | 2 }',
   operation: 'parseTitleResponse',
-  prompt: originalPrompt,         // optional, truncated to 500 chars
+  prompt: originalPrompt, // optional, truncated to 500 chars
 });
 ```
 
@@ -77,7 +88,9 @@ Logs a parse error in structured format queryable in logging systems and Sentry.
 ```typescript
 import { logLlmParseError, createLlmParseError } from '@intexuraos/llm-utils';
 
-const details = createLlmParseError({ /* ... */ });
+const details = createLlmParseError({
+  /* ... */
+});
 logLlmParseError(logger, details);
 // Logs at warn level with operation, errorMessage, llmResponse, expectedSchema
 ```
@@ -149,14 +162,14 @@ interface LlmParseErrorDetails {
 
 ## Recent Changes
 
-| Commit   | Description                                        | Age     |
-| -------- | -------------------------------------------------- | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner   | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions     | 12 days |
-| c8d2797f | Add comprehensive error path tests for code-agent  | 2 weeks |
-| 35f4c699 | Migrate LLM validation to Zod schemas (3/8)        | 2 weeks |
-| 4fa0fed3 | Release v2.0.0                                     | 2 weeks |
-| 34d44c76 | Fix package exports for type resolution            | 2 weeks |
+| Commit   | Description                                       | Age     |
+| -------- | ------------------------------------------------- | ------- |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner  | 7 days  |
+| 21c1528a | Fix release skill to bump all package versions    | 12 days |
+| c8d2797f | Add comprehensive error path tests for code-agent | 2 weeks |
+| 35f4c699 | Migrate LLM validation to Zod schemas (3/8)       | 2 weeks |
+| 4fa0fed3 | Release v2.0.0                                    | 2 weeks |
+| 34d44c76 | Fix package exports for type resolution           | 2 weeks |
 
 ## Source Files
 

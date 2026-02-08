@@ -244,12 +244,12 @@ sequenceDiagram
 
 ### Packages
 
-| Package              | Purpose                          |
-| -------------------- | -------------------------------- |
-| `llm-prompts`        | Classification prompt builder    |
-| `llm-factory`        | LLM client abstraction           |
-| `internal-clients`   | Shared user-service HTTP client  |
-| `infra-sentry`       | Sentry-enabled logger factory    |
+| Package            | Purpose                         |
+| ------------------ | ------------------------------- |
+| `llm-prompts`      | Classification prompt builder   |
+| `llm-factory`      | LLM client abstraction          |
+| `internal-clients` | Shared user-service HTTP client |
+| `infra-sentry`     | Sentry-enabled logger factory   |
 
 ### Infrastructure
 

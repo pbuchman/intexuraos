@@ -8,11 +8,11 @@ Cloud Pub/Sub infrastructure adapters for cross-service messaging. Provides a `B
 
 ## Dependencies
 
-| Package                    | Purpose                           |
-| -------------------------- | --------------------------------- |
-| `@intexuraos/common-core`  | Result types, error handling      |
-| `@google-cloud/pubsub`     | GCP Pub/Sub client                |
-| `pino`                     | Logger type                       |
+| Package                   | Purpose                      |
+| ------------------------- | ---------------------------- |
+| `@intexuraos/common-core` | Result types, error handling |
+| `@google-cloud/pubsub`    | GCP Pub/Sub client           |
+| `pino`                    | Logger type                  |
 
 ## Architecture
 
@@ -131,7 +131,9 @@ interface TodosProcessingPublisher {
   }): Promise<Result<void, PublishError>>;
 }
 
-function createTodosProcessingPublisher(config: TodosProcessingPublisherConfig): TodosProcessingPublisher;
+function createTodosProcessingPublisher(
+  config: TodosProcessingPublisherConfig
+): TodosProcessingPublisher;
 ```
 
 **Event type:** `todos.processing.created`
@@ -168,7 +170,9 @@ interface CalendarPreviewPublisher {
   }): Promise<Result<void, PublishError>>;
 }
 
-function createCalendarPreviewPublisher(config: CalendarPreviewPublisherConfig): CalendarPreviewPublisher;
+function createCalendarPreviewPublisher(
+  config: CalendarPreviewPublisherConfig
+): CalendarPreviewPublisher;
 ```
 
 **Event type:** `calendar.preview.generate`

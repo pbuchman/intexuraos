@@ -55,6 +55,7 @@ Cloud Scheduler invokes these functions on a weekday schedule: start at 7 AM and
 **User Goal:** VM automatically starts before the workday begins.
 
 **Steps:**
+
 1. Cloud Scheduler sends a POST request to the startVm function at 7 AM Mon-Fri
 2. The function checks the VM's current state
 3. If RUNNING and healthy, returns immediately
@@ -67,6 +68,7 @@ Cloud Scheduler invokes these functions on a weekday schedule: start at 7 AM and
 **User Goal:** VM shuts down after business hours to save costs.
 
 **Steps:**
+
 1. Cloud Scheduler sends a POST request to the stopVm function at 11 PM daily
 2. The function checks the VM's current state
 3. If not RUNNING, returns immediately (already stopped)
@@ -80,6 +82,7 @@ Cloud Scheduler invokes these functions on a weekday schedule: start at 7 AM and
 **User Goal:** Start the VM outside the normal schedule.
 
 **Steps:**
+
 1. Send a POST request to the startVm function URL with the auth header
 2. The function follows the same health-check flow as scheduled starts
 3. Returns success with startup duration or failure with error message

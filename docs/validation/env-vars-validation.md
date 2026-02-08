@@ -12,18 +12,18 @@ Generated: 2026-02-08
 
 ## Summary
 
-| Service             | Docs | Code | Terraform | Ecosystem | Issues Found |
-| ------------------- | ---- | ---- | --------- | --------- | ------------ |
-| chat-agent          | OK   | OK   | OK        | OK        | 0            |
-| code-agent          | OK   | OK   | WARN      | OK        | 2            |
-| orchestrator        | OK   | OK   | N/A       | N/A       | 1            |
-| claude-worker       | OK   | N/A  | N/A       | N/A       | 0            |
-| actions-agent       | WARN | OK   | OK        | OK        | 2            |
-| research-agent      | WARN | OK   | WARN      | OK        | 3            |
-| commands-agent      | OK   | OK   | OK        | OK        | 0            |
-| whatsapp-service    | WARN | OK   | OK        | OK        | 5            |
-| user-service        | WARN | OK   | WARN      | WARN      | 5            |
-| linear-agent        | WARN | OK   | OK        | OK        | 1            |
+| Service          | Docs | Code | Terraform | Ecosystem | Issues Found |
+| ---------------- | ---- | ---- | --------- | --------- | ------------ |
+| chat-agent       | OK   | OK   | OK        | OK        | 0            |
+| code-agent       | OK   | OK   | WARN      | OK        | 2            |
+| orchestrator     | OK   | OK   | N/A       | N/A       | 1            |
+| claude-worker    | OK   | N/A  | N/A       | N/A       | 0            |
+| actions-agent    | WARN | OK   | OK        | OK        | 2            |
+| research-agent   | WARN | OK   | WARN      | OK        | 3            |
+| commands-agent   | OK   | OK   | OK        | OK        | 0            |
+| whatsapp-service | WARN | OK   | OK        | OK        | 5            |
+| user-service     | WARN | OK   | WARN      | WARN      | 5            |
+| linear-agent     | WARN | OK   | OK        | OK        | 1            |
 
 ---
 
@@ -33,17 +33,17 @@ Generated: 2026-02-08
 
 **Docs vs Code (REQUIRED_ENV):** MATCH
 
-| Documented Env Var                        | In REQUIRED_ENV | In Terraform             | In Ecosystem |
-| ----------------------------------------- | --------------- | ------------------------ | ------------ |
-| `INTEXURAOS_GCP_PROJECT_ID`               | Yes             | Yes (common)             | Yes (common) |
-| `INTEXURAOS_AUTH_JWKS_URL`                | Yes             | Yes (common secret)      | Yes (common) |
-| `INTEXURAOS_AUTH_ISSUER`                  | Yes             | Yes (common secret)      | Yes (common) |
-| `INTEXURAOS_AUTH_AUDIENCE`                | Yes             | Yes (common secret)      | Yes (common) |
-| `INTEXURAOS_OPENAI_API_KEY`              | Yes             | Yes (service secret)     | Yes          |
-| `INTEXURAOS_USER_SERVICE_URL`            | Yes             | Yes (common)             | Yes (common) |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`         | Yes             | Yes (common secret)      | Yes (common) |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`    | Yes             | Yes (common)             | Yes (common) |
-| `INTEXURAOS_GUEST_ZAI_API_KEY`           | Yes             | Yes (service secret)     | Yes          |
+| Documented Env Var                    | In REQUIRED_ENV | In Terraform         | In Ecosystem |
+| ------------------------------------- | --------------- | -------------------- | ------------ |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes             | Yes (common)         | Yes (common) |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes             | Yes (common secret)  | Yes (common) |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes             | Yes (common secret)  | Yes (common) |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes             | Yes (common secret)  | Yes (common) |
+| `INTEXURAOS_OPENAI_API_KEY`           | Yes             | Yes (service secret) | Yes          |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes             | Yes (common)         | Yes (common) |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes             | Yes (common secret)  | Yes (common) |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes             | Yes (common)         | Yes (common) |
+| `INTEXURAOS_GUEST_ZAI_API_KEY`        | Yes             | Yes (service secret) | Yes          |
 
 **Verdict:** Clean. All three sources aligned.
 
@@ -53,22 +53,22 @@ Generated: 2026-02-08
 
 **Docs vs Code (REQUIRED_ENV):** Partial match with documented split into Required/Production-Only.
 
-| Documented Env Var                          | In REQUIRED_ENV      | In Terraform               | In Ecosystem       |
-| ------------------------------------------- | -------------------- | -------------------------- | ------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`                 | Yes (core)           | Yes (common)               | Yes (common)        |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes (core)           | Yes (common secret)        | Yes (common)        |
-| `INTEXURAOS_WEBHOOK_VERIFY_SECRET`          | Yes (core)           | Yes (service secret)       | Yes                 |
-| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`           | Yes (core)           | Yes (service secret)       | Yes                 |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`            | Yes (core)           | Yes (service secret)       | Yes                 |
-| `INTEXURAOS_GITHUB_WEBHOOK_SECRET`          | Yes (core)           | Yes (service secret)       | Yes                 |
-| `INTEXURAOS_WHATSAPP_SERVICE_URL`           | Yes (prod-only)      | Yes (common)               | Yes (common)        |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes (prod-only)      | Yes (service env)          | Yes                 |
-| `INTEXURAOS_LINEAR_AGENT_URL`              | Yes (prod-only)      | Yes (common)               | Yes (common)        |
-| `INTEXURAOS_ACTIONS_AGENT_URL`             | Yes (prod-only)      | Yes (common)               | Yes (common)        |
-| `INTEXURAOS_SERVICE_URL`                   | Yes (prod-only)      | Yes (service env)          | Yes                 |
-| `INTEXURAOS_AUTH_AUDIENCE`                 | Yes (prod-only)      | Yes (common secret)        | Yes (common)        |
-| `INTEXURAOS_AUTH_ISSUER`                   | Yes (prod-only)      | Yes (common secret)        | Yes (common)        |
-| `INTEXURAOS_AUTH_JWKS_URL`                 | Yes (prod-only)      | Yes (common secret)        | Yes (common)        |
+| Documented Env Var                      | In REQUIRED_ENV | In Terraform         | In Ecosystem |
+| --------------------------------------- | --------------- | -------------------- | ------------ |
+| `INTEXURAOS_GCP_PROJECT_ID`             | Yes (core)      | Yes (common)         | Yes (common) |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes (core)      | Yes (common secret)  | Yes (common) |
+| `INTEXURAOS_WEBHOOK_VERIFY_SECRET`      | Yes (core)      | Yes (service secret) | Yes          |
+| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`       | Yes (core)      | Yes (service secret) | Yes          |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`        | Yes (core)      | Yes (service secret) | Yes          |
+| `INTEXURAOS_GITHUB_WEBHOOK_SECRET`      | Yes (core)      | Yes (service secret) | Yes          |
+| `INTEXURAOS_WHATSAPP_SERVICE_URL`       | Yes (prod-only) | Yes (common)         | Yes (common) |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Yes (prod-only) | Yes (service env)    | Yes          |
+| `INTEXURAOS_LINEAR_AGENT_URL`           | Yes (prod-only) | Yes (common)         | Yes (common) |
+| `INTEXURAOS_ACTIONS_AGENT_URL`          | Yes (prod-only) | Yes (common)         | Yes (common) |
+| `INTEXURAOS_SERVICE_URL`                | Yes (prod-only) | Yes (service env)    | Yes          |
+| `INTEXURAOS_AUTH_AUDIENCE`              | Yes (prod-only) | Yes (common secret)  | Yes (common) |
+| `INTEXURAOS_AUTH_ISSUER`                | Yes (prod-only) | Yes (common secret)  | Yes (common) |
+| `INTEXURAOS_AUTH_JWKS_URL`              | Yes (prod-only) | Yes (common secret)  | Yes (common) |
 
 **Issues Found:**
 
@@ -85,24 +85,24 @@ Generated: 2026-02-08
 
 **Docs vs Code:** Partial match. The orchestrator uses `getRequiredEnv()` / `getOptionalEnv()` instead of a REQUIRED_ENV array.
 
-| Documented Env Var                         | In Code (getRequiredEnv) | In Terraform | In Ecosystem |
-| ------------------------------------------ | ------------------------ | ------------ | ------------ |
-| `INTEXURAOS_REPOSITORY_URL`                | Yes (required)           | Secret Mgr   | N/A          |
-| `INTEXURAOS_CODE_AGENT_URL`                | Yes (required)           | N/A          | N/A          |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`           | Yes (required)           | Secret Mgr   | N/A          |
-| `INTEXURAOS_PROJECT_ID`                    | Yes (required)           | N/A          | N/A          |
-| `INTEXURAOS_GITHUB_APP_ID`                | Yes (required)           | Secret Mgr   | N/A          |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID`       | Yes (required)           | Secret Mgr   | N/A          |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes (required)           | N/A          | N/A          |
-| `INTEXURAOS_LINEAR_API_KEY`               | Yes (required)           | Secret Mgr   | N/A          |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`            | Yes (required)           | Secret Mgr   | N/A          |
-| `GOOGLE_APPLICATION_CREDENTIALS`           | Yes (required)           | N/A          | N/A          |
-| `INTEXURAOS_REPOSITORY_PATH`              | Yes (optional)           | N/A          | N/A          |
-| `INTEXURAOS_ANTHROPIC_API_KEY`            | Yes (optional)           | Secret Mgr   | N/A          |
-| `INTEXURAOS_ZAI_API_KEY`                  | Yes (optional)           | Secret Mgr   | N/A          |
-| `INTEXURAOS_WORKER_CAPACITY`              | Yes (optional)           | N/A          | N/A          |
-| `PORT`                                     | Yes (optional)           | N/A          | N/A          |
-| `LOG_LEVEL`                                | Yes (optional)           | N/A          | N/A          |
+| Documented Env Var                  | In Code (getRequiredEnv) | In Terraform | In Ecosystem |
+| ----------------------------------- | ------------------------ | ------------ | ------------ |
+| `INTEXURAOS_REPOSITORY_URL`         | Yes (required)           | Secret Mgr   | N/A          |
+| `INTEXURAOS_CODE_AGENT_URL`         | Yes (required)           | N/A          | N/A          |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`    | Yes (required)           | Secret Mgr   | N/A          |
+| `INTEXURAOS_PROJECT_ID`             | Yes (required)           | N/A          | N/A          |
+| `INTEXURAOS_GITHUB_APP_ID`          | Yes (required)           | Secret Mgr   | N/A          |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID` | Yes (required)           | Secret Mgr   | N/A          |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Yes (required)           | N/A          | N/A          |
+| `INTEXURAOS_LINEAR_API_KEY`         | Yes (required)           | Secret Mgr   | N/A          |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | Yes (required)           | Secret Mgr   | N/A          |
+| `GOOGLE_APPLICATION_CREDENTIALS`    | Yes (required)           | N/A          | N/A          |
+| `INTEXURAOS_REPOSITORY_PATH`        | Yes (optional)           | N/A          | N/A          |
+| `INTEXURAOS_ANTHROPIC_API_KEY`      | Yes (optional)           | Secret Mgr   | N/A          |
+| `INTEXURAOS_ZAI_API_KEY`            | Yes (optional)           | Secret Mgr   | N/A          |
+| `INTEXURAOS_WORKER_CAPACITY`        | Yes (optional)           | N/A          | N/A          |
+| `PORT`                              | Yes (optional)           | N/A          | N/A          |
+| `LOG_LEVEL`                         | Yes (optional)           | N/A          | N/A          |
 
 **Note:** Orchestrator runs on a local machine (not Cloud Run), so terraform and ecosystem.config.cjs are not applicable. Secrets are fetched from Secret Manager at runtime.
 
@@ -126,24 +126,24 @@ Claude-worker is a Docker container, not a Node.js service. It does not have `RE
 
 **Docs vs Code (REQUIRED_ENV):**
 
-| Documented Env Var                           | In REQUIRED_ENV | Notes                       |
-| -------------------------------------------- | --------------- | --------------------------- |
-| `INTEXURAOS_RESEARCH_AGENT_URL`              | Yes             | Match                       |
-| `INTEXURAOS_USER_SERVICE_URL`                | Yes             | Match                       |
-| `INTEXURAOS_COMMANDS_AGENT_URL`              | Yes             | Match                       |
-| `INTEXURAOS_TODOS_AGENT_URL`                 | Yes             | Match                       |
-| `INTEXURAOS_NOTES_AGENT_URL`                 | Yes             | Match                       |
-| `INTEXURAOS_BOOKMARKS_AGENT_URL`             | Yes             | Match                       |
-| `INTEXURAOS_CALENDAR_AGENT_URL`              | Yes             | Match                       |
-| `INTEXURAOS_LINEAR_AGENT_URL`                | Yes             | Match                       |
-| `INTEXURAOS_CODE_AGENT_URL`                  | Yes             | Match                       |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`        | Yes             | Match                       |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`             | Yes             | Match                       |
-| `INTEXURAOS_GCP_PROJECT_ID`                  | Yes             | Match                       |
-| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`            | Yes             | Match                       |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`     | Yes             | Match                       |
-| `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC`   | Yes             | Match                       |
-| `INTEXURAOS_WEB_APP_URL`                     | Yes             | Match                       |
+| Documented Env Var                         | In REQUIRED_ENV | Notes |
+| ------------------------------------------ | --------------- | ----- |
+| `INTEXURAOS_RESEARCH_AGENT_URL`            | Yes             | Match |
+| `INTEXURAOS_USER_SERVICE_URL`              | Yes             | Match |
+| `INTEXURAOS_COMMANDS_AGENT_URL`            | Yes             | Match |
+| `INTEXURAOS_TODOS_AGENT_URL`               | Yes             | Match |
+| `INTEXURAOS_NOTES_AGENT_URL`               | Yes             | Match |
+| `INTEXURAOS_BOOKMARKS_AGENT_URL`           | Yes             | Match |
+| `INTEXURAOS_CALENDAR_AGENT_URL`            | Yes             | Match |
+| `INTEXURAOS_LINEAR_AGENT_URL`              | Yes             | Match |
+| `INTEXURAOS_CODE_AGENT_URL`                | Yes             | Match |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`      | Yes             | Match |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes             | Match |
+| `INTEXURAOS_GCP_PROJECT_ID`                | Yes             | Match |
+| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`          | Yes             | Match |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes             | Match |
+| `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC` | Yes             | Match |
+| `INTEXURAOS_WEB_APP_URL`                   | Yes             | Match |
 
 **Issues Found:**
 
@@ -160,20 +160,20 @@ Claude-worker is a Docker container, not a Node.js service. It does not have `RE
 
 **Docs vs Code (REQUIRED_ENV):**
 
-| Documented Env Var                           | In REQUIRED_ENV | Notes                                            |
-| -------------------------------------------- | --------------- | ------------------------------------------------ |
-| `INTEXURAOS_USER_SERVICE_URL`                | Yes             | Match                                            |
-| `INTEXURAOS_IMAGE_SERVICE_URL`               | Yes             | Match                                            |
-| `INTEXURAOS_NOTION_SERVICE_URL`              | Yes             | Match                                            |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`             | Yes             | Match                                            |
-| `INTEXURAOS_GCP_PROJECT_ID`                  | Yes             | Match                                            |
-| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`          | Yes             | Match                                            |
-| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC`   | Yes             | Match                                            |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`     | Yes             | Match                                            |
-| `INTEXURAOS_WEB_APP_URL`                     | Yes             | Match                                            |
-| `INTEXURAOS_SHARED_CONTENT_BUCKET`           | Yes             | Match                                            |
-| `INTEXURAOS_SHARE_BASE_URL`                  | Yes             | Match                                            |
-| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`           | Yes             | Match                                            |
+| Documented Env Var                         | In REQUIRED_ENV | Notes |
+| ------------------------------------------ | --------------- | ----- |
+| `INTEXURAOS_USER_SERVICE_URL`              | Yes             | Match |
+| `INTEXURAOS_IMAGE_SERVICE_URL`             | Yes             | Match |
+| `INTEXURAOS_NOTION_SERVICE_URL`            | Yes             | Match |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes             | Match |
+| `INTEXURAOS_GCP_PROJECT_ID`                | Yes             | Match |
+| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Yes             | Match |
+| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | Yes             | Match |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes             | Match |
+| `INTEXURAOS_WEB_APP_URL`                   | Yes             | Match |
+| `INTEXURAOS_SHARED_CONTENT_BUCKET`         | Yes             | Match |
+| `INTEXURAOS_SHARE_BASE_URL`                | Yes             | Match |
+| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Yes             | Match |
 
 **Issues Found:**
 
@@ -194,19 +194,19 @@ Claude-worker is a Docker container, not a Node.js service. It does not have `RE
 
 The docs use **different env var names** than the code. This is a significant documentation problem.
 
-| Docs Name                                      | Code Name (REQUIRED_ENV)                           | Match?                       |
-| ---------------------------------------------- | -------------------------------------------------- | ---------------------------- |
-| `INTEXURAOS_APP_SECRET`                        | `INTEXURAOS_WHATSAPP_APP_SECRET`                   | MISMATCH -- docs uses short name |
-| `INTEXURAOS_VERIFY_TOKEN`                      | `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`                 | MISMATCH -- docs uses short name |
-| `INTEXURAOS_ALLOWED_WABA_IDS`                  | `INTEXURAOS_WHATSAPP_WABA_ID`                      | MISMATCH -- different name       |
-| `INTEXURAOS_ALLOWED_PHONE_NUMBER_IDS`          | `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`              | MISMATCH -- different name       |
-| `INTEXURAOS_GCS_BUCKET_NAME`                   | `INTEXURAOS_WHATSAPP_MEDIA_BUCKET`                 | MISMATCH -- different name       |
-| `INTEXURAOS_PUBSUB_WHATSAPP_WEBHOOK_PROCESS`   | `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`          | MISMATCH -- different name       |
-| `INTEXURAOS_PUBSUB_WHATSAPP_AUDIO_TRANSCRIBE`  | `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`            | MISMATCH -- different name       |
-| `INTEXURAOS_PUBSUB_COMMAND_INGEST`             | `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`          | MISMATCH -- different name       |
-| `INTEXURAOS_PUBSUB_WHATSAPP_LINKPREVIEW`       | (not in REQUIRED_ENV)                              | REMOVED from code                |
-| `INTEXURAOS_PUBSUB_WHATSAPP_MEDIA_CLEANUP`     | `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`            | MISMATCH -- different name       |
-| `INTEXURAOS_PUBSUB_ACTION_APPROVAL_REPLY`      | `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`           | MISMATCH -- different name       |
+| Docs Name                                     | Code Name (REQUIRED_ENV)                  | Match?                           |
+| --------------------------------------------- | ----------------------------------------- | -------------------------------- |
+| `INTEXURAOS_APP_SECRET`                       | `INTEXURAOS_WHATSAPP_APP_SECRET`          | MISMATCH -- docs uses short name |
+| `INTEXURAOS_VERIFY_TOKEN`                     | `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`        | MISMATCH -- docs uses short name |
+| `INTEXURAOS_ALLOWED_WABA_IDS`                 | `INTEXURAOS_WHATSAPP_WABA_ID`             | MISMATCH -- different name       |
+| `INTEXURAOS_ALLOWED_PHONE_NUMBER_IDS`         | `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`     | MISMATCH -- different name       |
+| `INTEXURAOS_GCS_BUCKET_NAME`                  | `INTEXURAOS_WHATSAPP_MEDIA_BUCKET`        | MISMATCH -- different name       |
+| `INTEXURAOS_PUBSUB_WHATSAPP_WEBHOOK_PROCESS`  | `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC` | MISMATCH -- different name       |
+| `INTEXURAOS_PUBSUB_WHATSAPP_AUDIO_TRANSCRIBE` | `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`   | MISMATCH -- different name       |
+| `INTEXURAOS_PUBSUB_COMMAND_INGEST`            | `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC` | MISMATCH -- different name       |
+| `INTEXURAOS_PUBSUB_WHATSAPP_LINKPREVIEW`      | (not in REQUIRED_ENV)                     | REMOVED from code                |
+| `INTEXURAOS_PUBSUB_WHATSAPP_MEDIA_CLEANUP`    | `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`   | MISMATCH -- different name       |
+| `INTEXURAOS_PUBSUB_ACTION_APPROVAL_REPLY`     | `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`  | MISMATCH -- different name       |
 
 **Issues Found:**
 
@@ -226,31 +226,31 @@ The docs use **different env var names** than the code. This is a significant do
 
 **Docs vs Code (REQUIRED_ENV):**
 
-| Documented Env Var                          | In REQUIRED_ENV | Notes                                     |
-| ------------------------------------------- | --------------- | ----------------------------------------- |
-| `INTEXURAOS_AUTH0_DOMAIN`                   | Yes             | Match                                     |
-| `INTEXURAOS_AUTH0_CLIENT_ID`                | Yes             | Match                                     |
-| `INTEXURAOS_AUTH0_CLIENT_SECRET`            | NO              | Docs say required, code does NOT require  |
-| `INTEXURAOS_AUTH0_AUDIENCE`                 | NO              | Docs say required, code does NOT require  |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes             | Match                                     |
-| `INTEXURAOS_ENCRYPTION_KEY`                 | Yes             | Match                                     |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`         | Yes             | Match                                     |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET`     | Yes             | Match                                     |
-| `INTEXURAOS_FIREBASE_PROJECT_ID`            | NO              | Docs say required, code does NOT require  |
-| `INTEXURAOS_FIREBASE_CLIENT_EMAIL`          | NO              | Docs say required, code does NOT require  |
-| `INTEXURAOS_FIREBASE_PRIVATE_KEY`           | NO              | Docs say required, code does NOT require  |
-| `INTEXURAOS_WEB_APP_URL`                    | Yes             | Match                                     |
+| Documented Env Var                      | In REQUIRED_ENV | Notes                                    |
+| --------------------------------------- | --------------- | ---------------------------------------- |
+| `INTEXURAOS_AUTH0_DOMAIN`               | Yes             | Match                                    |
+| `INTEXURAOS_AUTH0_CLIENT_ID`            | Yes             | Match                                    |
+| `INTEXURAOS_AUTH0_CLIENT_SECRET`        | NO              | Docs say required, code does NOT require |
+| `INTEXURAOS_AUTH0_AUDIENCE`             | NO              | Docs say required, code does NOT require |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes             | Match                                    |
+| `INTEXURAOS_ENCRYPTION_KEY`             | Yes             | Match                                    |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes             | Match                                    |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes             | Match                                    |
+| `INTEXURAOS_FIREBASE_PROJECT_ID`        | NO              | Docs say required, code does NOT require |
+| `INTEXURAOS_FIREBASE_CLIENT_EMAIL`      | NO              | Docs say required, code does NOT require |
+| `INTEXURAOS_FIREBASE_PRIVATE_KEY`       | NO              | Docs say required, code does NOT require |
+| `INTEXURAOS_WEB_APP_URL`                | Yes             | Match                                    |
 
 **Missing from docs but in REQUIRED_ENV:**
 
-| Code REQUIRED_ENV Var                       | In Docs | Notes                                     |
-| ------------------------------------------- | ------- | ----------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`                 | NO      | Not documented                            |
-| `INTEXURAOS_AUTH_JWKS_URL`                  | NO      | Not documented                            |
-| `INTEXURAOS_AUTH_ISSUER`                    | NO      | Not documented                            |
-| `INTEXURAOS_AUTH_AUDIENCE`                  | NO      | Not documented                            |
-| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`           | NO      | Not documented                            |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`       | NO      | Not documented                            |
+| Code REQUIRED_ENV Var                 | In Docs | Notes          |
+| ------------------------------------- | ------- | -------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | NO      | Not documented |
+| `INTEXURAOS_AUTH_JWKS_URL`            | NO      | Not documented |
+| `INTEXURAOS_AUTH_ISSUER`              | NO      | Not documented |
+| `INTEXURAOS_AUTH_AUDIENCE`            | NO      | Not documented |
+| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`     | NO      | Not documented |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | NO      | Not documented |
 
 **Issues Found:**
 
@@ -270,15 +270,15 @@ The docs use **different env var names** than the code. This is a significant do
 
 **Docs vs Code (REQUIRED_ENV):**
 
-| Documented Env Var                       | In REQUIRED_ENV | Notes                   |
-| ---------------------------------------- | --------------- | ----------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`            | Yes             | Match                   |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`         | Yes             | Match                   |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`    | Yes             | Match                   |
-| `INTEXURAOS_AUTH_JWKS_URL`               | Yes             | Match                   |
-| `INTEXURAOS_AUTH_ISSUER`                 | Yes             | Match                   |
-| `INTEXURAOS_AUTH_AUDIENCE`               | Yes             | Match                   |
-| `INTEXURAOS_SENTRY_DSN`                 | Yes (hardcoded) | Match -- code throws if missing |
+| Documented Env Var                    | In REQUIRED_ENV | Notes                           |
+| ------------------------------------- | --------------- | ------------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes             | Match                           |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes             | Match                           |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes             | Match                           |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes             | Match                           |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes             | Match                           |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes             | Match                           |
+| `INTEXURAOS_SENTRY_DSN`               | Yes (hardcoded) | Match -- code throws if missing |
 
 **Issues Found:**
 
@@ -327,39 +327,39 @@ The env var names in whatsapp-service docs do not match the actual code at all. 
 
 ### Common Service Env Vars (provided to ALL services)
 
-| Env Var                                        | Type   |
-| ---------------------------------------------- | ------ |
-| `INTEXURAOS_ENVIRONMENT`                       | env    |
-| `INTEXURAOS_GCP_PROJECT_ID`                    | env    |
-| `INTEXURAOS_USER_SERVICE_URL`                  | env    |
-| `INTEXURAOS_NOTION_SERVICE_URL`                | env    |
-| `INTEXURAOS_WHATSAPP_SERVICE_URL`              | env    |
-| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL`  | env    |
-| `INTEXURAOS_RESEARCH_AGENT_URL`                | env    |
-| `INTEXURAOS_COMMANDS_AGENT_URL`                | env    |
-| `INTEXURAOS_ACTIONS_AGENT_URL`                 | env    |
-| `INTEXURAOS_DATA_INSIGHTS_AGENT_URL`           | env    |
-| `INTEXURAOS_IMAGE_SERVICE_URL`                 | env    |
-| `INTEXURAOS_NOTES_AGENT_URL`                   | env    |
-| `INTEXURAOS_TODOS_AGENT_URL`                   | env    |
-| `INTEXURAOS_BOOKMARKS_AGENT_URL`               | env    |
-| `INTEXURAOS_CODE_AGENT_URL`                    | env    |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`          | env    |
-| `INTEXURAOS_CALENDAR_AGENT_URL`                | env    |
-| `INTEXURAOS_WEB_AGENT_URL`                     | env    |
-| `INTEXURAOS_LINEAR_AGENT_URL`                  | env    |
-| `INTEXURAOS_CHAT_AGENT_URL`                    | env    |
-| `INTEXURAOS_API_DOCS_HUB_URL`                 | env    |
+| Env Var                                       | Type |
+| --------------------------------------------- | ---- |
+| `INTEXURAOS_ENVIRONMENT`                      | env  |
+| `INTEXURAOS_GCP_PROJECT_ID`                   | env  |
+| `INTEXURAOS_USER_SERVICE_URL`                 | env  |
+| `INTEXURAOS_NOTION_SERVICE_URL`               | env  |
+| `INTEXURAOS_WHATSAPP_SERVICE_URL`             | env  |
+| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | env  |
+| `INTEXURAOS_RESEARCH_AGENT_URL`               | env  |
+| `INTEXURAOS_COMMANDS_AGENT_URL`               | env  |
+| `INTEXURAOS_ACTIONS_AGENT_URL`                | env  |
+| `INTEXURAOS_DATA_INSIGHTS_AGENT_URL`          | env  |
+| `INTEXURAOS_IMAGE_SERVICE_URL`                | env  |
+| `INTEXURAOS_NOTES_AGENT_URL`                  | env  |
+| `INTEXURAOS_TODOS_AGENT_URL`                  | env  |
+| `INTEXURAOS_BOOKMARKS_AGENT_URL`              | env  |
+| `INTEXURAOS_CODE_AGENT_URL`                   | env  |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | env  |
+| `INTEXURAOS_CALENDAR_AGENT_URL`               | env  |
+| `INTEXURAOS_WEB_AGENT_URL`                    | env  |
+| `INTEXURAOS_LINEAR_AGENT_URL`                 | env  |
+| `INTEXURAOS_CHAT_AGENT_URL`                   | env  |
+| `INTEXURAOS_API_DOCS_HUB_URL`                 | env  |
 
 ### Common Service Secrets (provided to ALL services)
 
-| Secret                                         |
-| ---------------------------------------------- |
-| `INTEXURAOS_AUTH_JWKS_URL`                     |
-| `INTEXURAOS_AUTH_ISSUER`                       |
-| `INTEXURAOS_AUTH_AUDIENCE`                     |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`               |
-| `INTEXURAOS_SENTRY_DSN`                        |
+| Secret                           |
+| -------------------------------- |
+| `INTEXURAOS_AUTH_JWKS_URL`       |
+| `INTEXURAOS_AUTH_ISSUER`         |
+| `INTEXURAOS_AUTH_AUDIENCE`       |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` |
+| `INTEXURAOS_SENTRY_DSN`          |
 
 ---
 

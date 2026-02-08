@@ -57,7 +57,7 @@ const client = createGlmClient({
   apiKey: env.INTEXURAOS_GLM_API_KEY,
   model: 'glm-4.7',
   userId,
-  pricing: { inputPricePerMillion: 0.60, outputPricePerMillion: 2.20, webSearchCostPerCall: 0.005 },
+  pricing: { inputPricePerMillion: 0.6, outputPricePerMillion: 2.2, webSearchCostPerCall: 0.005 },
   logger,
 });
 
@@ -81,13 +81,13 @@ if (result.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED':      // 429
-    case 'INVALID_KEY':       // 401
-    case 'OVERLOADED':        // 500+
-    case 'CONTEXT_LENGTH':    // context_length_exceeded
-    case 'CONTENT_FILTERED':  // sensitive/filtered content
-    case 'TIMEOUT':           // timeout
-    case 'API_ERROR':         // general error
+    case 'RATE_LIMITED': // 429
+    case 'INVALID_KEY': // 401
+    case 'OVERLOADED': // 500+
+    case 'CONTEXT_LENGTH': // context_length_exceeded
+    case 'CONTENT_FILTERED': // sensitive/filtered content
+    case 'TIMEOUT': // timeout
+    case 'API_ERROR': // general error
   }
 }
 ```

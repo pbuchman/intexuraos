@@ -70,7 +70,15 @@ interface ActionsAgentTools {
 ### Types
 
 ```typescript
-type ActionType = 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code';
+type ActionType =
+  | 'todo'
+  | 'research'
+  | 'note'
+  | 'link'
+  | 'calendar'
+  | 'reminder'
+  | 'linear'
+  | 'code';
 
 type ActionStatus =
   | 'pending'
@@ -98,7 +106,13 @@ interface Action {
   updatedAt: string;
 }
 
-type ResourceStatus = 'dispatched' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+type ResourceStatus =
+  | 'dispatched'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
 
 // Code action payload
 interface CodeActionPayload {

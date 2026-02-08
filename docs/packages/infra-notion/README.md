@@ -21,6 +21,7 @@ const page = await notion.pages.retrieve({ page_id: 'abc-123' });
 ```
 
 The logging wrapper:
+
 - Redacts the `Authorization` header to the first 20 characters
 - Logs request method, URL, headers, and body length
 - Logs response status, duration, and truncated body preview (500 chars max)
@@ -96,22 +97,22 @@ interface NotionPagePreview {
 
 ### Environment Variables
 
-| Variable                       | Description                | Required |
-| ------------------------------ | -------------------------- | -------- |
-| `INTEXURAOS_NOTION_TOKEN`      | Notion integration token   | Yes      |
+| Variable                  | Description              | Required |
+| ------------------------- | ------------------------ | -------- |
+| `INTEXURAOS_NOTION_TOKEN` | Notion integration token | Yes      |
 
 ## Error Handling
 
 All functions return `Result<T, NotionError>`. Error mapping:
 
-| Notion SDK Error Code  | Domain Error Code    | Description              |
-| ---------------------- | -------------------- | ------------------------ |
-| `Unauthorized`         | `UNAUTHORIZED`       | Invalid or expired token |
-| `ObjectNotFound`       | `NOT_FOUND`          | Page or block not found  |
-| `RateLimited`          | `RATE_LIMITED`       | API rate limit exceeded  |
-| `ValidationError`      | `VALIDATION_ERROR`   | Invalid request data     |
-| `InvalidJSON`          | `VALIDATION_ERROR`   | Malformed JSON request   |
-| Other/unknown          | `INTERNAL_ERROR`     | Unexpected error         |
+| Notion SDK Error Code | Domain Error Code  | Description              |
+| --------------------- | ------------------ | ------------------------ |
+| `Unauthorized`        | `UNAUTHORIZED`     | Invalid or expired token |
+| `ObjectNotFound`      | `NOT_FOUND`        | Page or block not found  |
+| `RateLimited`         | `RATE_LIMITED`     | API rate limit exceeded  |
+| `ValidationError`     | `VALIDATION_ERROR` | Invalid request data     |
+| `InvalidJSON`         | `VALIDATION_ERROR` | Malformed JSON request   |
+| Other/unknown         | `INTERNAL_ERROR`   | Unexpected error         |
 
 ## Used By
 

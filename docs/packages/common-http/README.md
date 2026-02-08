@@ -8,14 +8,14 @@ Fastify helpers, request ID handling, response envelopes, and authentication uti
 
 ## Dependencies
 
-| Package                   | Purpose                    |
-| ------------------------- | -------------------------- |
-| `@intexuraos/common-core` | Error types, Result        |
-| `@intexuraos/llm-utils`   | Sensitive data redaction   |
-| `fastify`                 | HTTP framework types       |
-| `fastify-plugin`          | Plugin encapsulation       |
-| `jose`                    | JWT/JWKS verification      |
-| `zod`                     | Schema validation          |
+| Package                   | Purpose                  |
+| ------------------------- | ------------------------ |
+| `@intexuraos/common-core` | Error types, Result      |
+| `@intexuraos/llm-utils`   | Sensitive data redaction |
+| `fastify`                 | HTTP framework types     |
+| `fastify-plugin`          | Plugin encapsulation     |
+| `jose`                    | JWT/JWKS verification    |
+| `zod`                     | Schema validation        |
 
 ## API Reference
 
@@ -35,7 +35,12 @@ After registration, `FastifyReply` gains two methods:
 ```typescript
 interface FastifyReply {
   ok(data: unknown, diagnostics?: Partial<Diagnostics>): FastifyReply;
-  fail(code: ErrorCode, message: string, diagnostics?: Partial<Diagnostics>, details?: unknown): FastifyReply;
+  fail(
+    code: ErrorCode,
+    message: string,
+    diagnostics?: Partial<Diagnostics>,
+    details?: unknown
+  ): FastifyReply;
 }
 ```
 
@@ -84,7 +89,12 @@ interface ErrorBody {
 type ApiResponse<T> = ApiOk<T> | ApiError;
 
 function ok<T>(data: T, diagnostics?: Diagnostics): ApiOk<T>;
-function fail(code: ErrorCode, message: string, diagnostics?: Diagnostics, details?: unknown): ApiError;
+function fail(
+  code: ErrorCode,
+  message: string,
+  diagnostics?: Diagnostics,
+  details?: unknown
+): ApiError;
 ```
 
 ### Request ID (`http/requestId.ts`)
@@ -108,6 +118,7 @@ await app.register(fastifyAuthPlugin);
 ```
 
 **Environment variables:**
+
 - `INTEXURAOS_AUTH_JWKS_URL` -- JWKS endpoint URL
 - `INTEXURAOS_AUTH_ISSUER` -- Expected JWT issuer
 - `INTEXURAOS_AUTH_AUDIENCE` -- Expected JWT audience
@@ -170,9 +181,9 @@ function shouldLogRequest(url: string | undefined): boolean;
 function registerQuietHealthCheckLogging(app: FastifyInstance): void;
 
 interface LogIncomingRequestOptions {
-  bodyPreviewLength?: number;   // default: 500
-  includeParams?: boolean;      // default: false
-  message?: string;             // default: 'Incoming request'
+  bodyPreviewLength?: number; // default: 500
+  includeParams?: boolean; // default: false
+  message?: string; // default: 'Incoming request'
   additionalFields?: Record<string, unknown>;
 }
 

@@ -325,6 +325,7 @@ Code actions dispatch tasks to code-agent (Claude Code). They use interactive Wh
 ### Approval Message Content
 
 The approval message includes:
+
 - Prompt preview (truncated to 100 chars)
 - Estimated cost: $1-2
 - Estimated time: 30-60 min

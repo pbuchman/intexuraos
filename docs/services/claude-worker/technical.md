@@ -53,62 +53,62 @@ graph TB
 
 ### Security Controls
 
-| Control             | Setting                             |
-| ------------------- | ----------------------------------- |
-| User                | claude (UID 1001, non-root)         |
-| CapDrop             | ALL                                 |
-| CapAdd              | NET_RAW (for network diagnostics)   |
-| SecurityOpt         | no-new-privileges                   |
-| Secrets mount       | Read-only bind mount                |
-| Repo mount          | Read-write bind mount               |
-| Root filesystem     | Writable (required by Claude Code)  |
-| Docker socket       | NOT mounted                         |
-| Removed binaries    | wget, nc                            |
+| Control          | Setting                            |
+| ---------------- | ---------------------------------- |
+| User             | claude (UID 1001, non-root)        |
+| CapDrop          | ALL                                |
+| CapAdd           | NET_RAW (for network diagnostics)  |
+| SecurityOpt      | no-new-privileges                  |
+| Secrets mount    | Read-only bind mount               |
+| Repo mount       | Read-write bind mount              |
+| Root filesystem  | Writable (required by Claude Code) |
+| Docker socket    | NOT mounted                        |
+| Removed binaries | wget, nc                           |
 
 ### Network Isolation
 
-| Target                                    | Access  | Enforcement                         |
-| ----------------------------------------- | ------- | ----------------------------------- |
-| Public internet                           | Allowed | Default Docker bridge               |
-| Cloud metadata                            | Blocked | iptables on production host         |
-| Localhost (127.0.0.0/8)                   | Blocked | iptables on production host         |
-| Private IPs (10/8, 172.16/12, 192.168/16) | Blocked | iptables on production host         |
+| Target                                    | Access  | Enforcement                 |
+| ----------------------------------------- | ------- | --------------------------- |
+| Public internet                           | Allowed | Default Docker bridge       |
+| Cloud metadata                            | Blocked | iptables on production host |
+| Localhost (127.0.0.0/8)                   | Blocked | iptables on production host |
+| Private IPs (10/8, 172.16/12, 192.168/16) | Blocked | iptables on production host |
 
 Network: `claude-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade enabled).
 
 ## Mount Points
 
-| Container Path      | Host Source                                  | Mode      | Purpose                        |
-| ------------------- | -------------------------------------------- | --------- | ------------------------------ |
-| `/repo`             | `~/.claude-orchestrator/worktrees/{taskId}`  | rw        | Git worktree for the task      |
-| `/secrets`          | `~/.claude-orchestrator/secrets/{taskId}`    | ro        | GCP SA key + GitHub token      |
-| `/tmp`              | tmpfs                                        | rw,noexec | Ephemeral scratch space        |
-| `/home/claude`      | tmpfs                                        | rw,noexec | Claude session state           |
-| `{mainGitDir}`      | Main `.git` directory (for worktrees)        | rw        | Git operations on worktrees    |
+| Container Path | Host Source                                 | Mode      | Purpose                     |
+| -------------- | ------------------------------------------- | --------- | --------------------------- |
+| `/repo`        | `~/.claude-orchestrator/worktrees/{taskId}` | rw        | Git worktree for the task   |
+| `/secrets`     | `~/.claude-orchestrator/secrets/{taskId}`   | ro        | GCP SA key + GitHub token   |
+| `/tmp`         | tmpfs                                       | rw,noexec | Ephemeral scratch space     |
+| `/home/claude` | tmpfs                                       | rw,noexec | Claude session state        |
+| `{mainGitDir}` | Main `.git` directory (for worktrees)       | rw        | Git operations on worktrees |
 
 ## Environment Variables
 
-| Variable                            | Source           | Description                              |
-| ----------------------------------- | ---------------- | ---------------------------------------- |
-| `TASK_ID`                           | Orchestrator     | Unique task identifier                   |
-| `ANTHROPIC_API_KEY`                 | Orchestrator env | API key for Anthropic (opus/auto types)  |
-| `ANTHROPIC_BASE_URL`                | Worker type map  | API endpoint URL                         |
-| `ANTHROPIC_MODEL`                   | Worker type map  | Model override (opus only)               |
-| `LINEAR_API_KEY`                    | Orchestrator env | Linear integration key                   |
-| `SENTRY_AUTH_TOKEN`                 | Orchestrator env | Sentry error tracking token              |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | Fixed            | `/secrets/gcp-sa.json`                   |
-| `CLAUDE_PROJECT_DIR`                | Fixed            | `/repo`                                  |
-| `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY` | Fixed            | `10000` (exit 10s after idle)            |
-| `HOME`                              | Dockerfile       | `/home/claude`                           |
-| `NODE_ENV`                          | Dockerfile       | `production` (or `test` in test image)   |
+| Variable                            | Source           | Description                             |
+| ----------------------------------- | ---------------- | --------------------------------------- |
+| `TASK_ID`                           | Orchestrator     | Unique task identifier                  |
+| `ANTHROPIC_API_KEY`                 | Orchestrator env | API key for Anthropic (opus/auto types) |
+| `ANTHROPIC_BASE_URL`                | Worker type map  | API endpoint URL                        |
+| `ANTHROPIC_MODEL`                   | Worker type map  | Model override (opus only)              |
+| `LINEAR_API_KEY`                    | Orchestrator env | Linear integration key                  |
+| `SENTRY_AUTH_TOKEN`                 | Orchestrator env | Sentry error tracking token             |
+| `GOOGLE_APPLICATION_CREDENTIALS`    | Fixed            | `/secrets/gcp-sa.json`                  |
+| `CLAUDE_PROJECT_DIR`                | Fixed            | `/repo`                                 |
+| `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY` | Fixed            | `10000` (exit 10s after idle)           |
+| `HOME`                              | Dockerfile       | `/home/claude`                          |
+| `NODE_ENV`                          | Dockerfile       | `production` (or `test` in test image)  |
 
 ## Worker Types
 
-| Type   | API Base URL                        | API Key Env Var      | Model Override              |
-| ------ | ----------------------------------- | -------------------- | --------------------------- |
-| `opus` | `https://api.anthropic.com`         | `ANTHROPIC_API_KEY`  | `claude-opus-4-5-20251101`  |
-| `auto` | `https://api.anthropic.com`         | `ANTHROPIC_API_KEY`  | None (API default)          |
-| `glm`  | `https://api.z.ai/api/anthropic`    | `ZAI_API_KEY`        | None                        |
+| Type   | API Base URL                     | API Key Env Var     | Model Override             |
+| ------ | -------------------------------- | ------------------- | -------------------------- |
+| `opus` | `https://api.anthropic.com`      | `ANTHROPIC_API_KEY` | `claude-opus-4-5-20251101` |
+| `auto` | `https://api.anthropic.com`      | `ANTHROPIC_API_KEY` | None (API default)         |
+| `glm`  | `https://api.z.ai/api/anthropic` | `ZAI_API_KEY`       | None                       |
 
 ## Entrypoint Flow
 
@@ -166,19 +166,19 @@ Pre-populates onboarding state to skip the interactive setup flow:
 
 The `DockerProvider` class in the orchestrator manages the full container lifecycle:
 
-| Operation                | Method                          | Description                                           |
-| ------------------------ | ------------------------------- | ----------------------------------------------------- |
-| Create container         | `createWorker(config)`          | Creates, attaches, starts, sends system prompt        |
-| Destroy container        | `destroyWorker(taskId, force?)` | SIGTERM (10s grace) or SIGKILL, then remove + cleanup |
-| Check status             | `isWorkerRunning(taskId)`       | Docker inspect on container state                     |
-| Get logs                 | `getWorkerLogs(taskId)`         | Full stdout/stderr with timestamps                    |
-| Stream logs              | `streamLogs(taskId, onChunk)`   | Real-time log streaming via Docker follow             |
-| Wait for completion      | `waitForCompletion(taskId, ms)` | Blocks until exit or timeout (returns exit code)      |
-| Send input               | `sendInput(taskId, input)`      | Writes to attach stream stdin                         |
-| Attach TTY               | `attachTTY(taskId)`             | Interactive bash session for debugging                |
-| Get resource usage       | `getResourceUsage(taskId)`      | CPU%, memory used/limit from Docker stats             |
-| List workers             | `listWorkers()`                 | All active worker handles                             |
-| Cleanup orphans          | `cleanupOrphanedContainers()`   | Remove containers from previous orchestrator runs     |
+| Operation           | Method                          | Description                                           |
+| ------------------- | ------------------------------- | ----------------------------------------------------- |
+| Create container    | `createWorker(config)`          | Creates, attaches, starts, sends system prompt        |
+| Destroy container   | `destroyWorker(taskId, force?)` | SIGTERM (10s grace) or SIGKILL, then remove + cleanup |
+| Check status        | `isWorkerRunning(taskId)`       | Docker inspect on container state                     |
+| Get logs            | `getWorkerLogs(taskId)`         | Full stdout/stderr with timestamps                    |
+| Stream logs         | `streamLogs(taskId, onChunk)`   | Real-time log streaming via Docker follow             |
+| Wait for completion | `waitForCompletion(taskId, ms)` | Blocks until exit or timeout (returns exit code)      |
+| Send input          | `sendInput(taskId, input)`      | Writes to attach stream stdin                         |
+| Attach TTY          | `attachTTY(taskId)`             | Interactive bash session for debugging                |
+| Get resource usage  | `getResourceUsage(taskId)`      | CPU%, memory used/limit from Docker stats             |
+| List workers        | `listWorkers()`                 | All active worker handles                             |
+| Cleanup orphans     | `cleanupOrphanedContainers()`   | Remove containers from previous orchestrator runs     |
 
 ### Container Ready Detection
 

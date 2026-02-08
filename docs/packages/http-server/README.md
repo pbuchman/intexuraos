@@ -8,12 +8,12 @@ Server setup utilities for IntexuraOS Fastify services. Provides health check in
 
 ## Dependencies
 
-| Package                       | Purpose                      |
-| ----------------------------- | ---------------------------- |
-| `@intexuraos/common-core`     | Error message extraction     |
-| `@intexuraos/common-http`     | Reply augmentation (fail)    |
-| `@intexuraos/infra-firestore` | Firestore health check       |
-| `fastify`                     | Framework types              |
+| Package                       | Purpose                   |
+| ----------------------------- | ------------------------- |
+| `@intexuraos/common-core`     | Error message extraction  |
+| `@intexuraos/common-http`     | Reply augmentation (fail) |
+| `@intexuraos/infra-firestore` | Firestore health check    |
+| `fastify`                     | Framework types           |
 
 ## API Reference
 
@@ -116,10 +116,7 @@ function buildHealthResponse(
 import { buildHealthResponse, checkSecrets, checkFirestore } from '@intexuraos/http-server';
 
 app.get('/health', async (_request, reply) => {
-  const checks = [
-    checkSecrets(REQUIRED_ENV),
-    await checkFirestore(),
-  ];
+  const checks = [checkSecrets(REQUIRED_ENV), await checkFirestore()];
   const response = buildHealthResponse('my-service', '2.1.0', checks);
   return reply.ok(response);
 });
@@ -139,11 +136,11 @@ function createValidationErrorHandler(): (
 
 Handles three cases:
 
-| Error Type                        | Response Code     | Details                            |
-| --------------------------------- | ----------------- | ---------------------------------- |
-| `FST_ERR_CTP_INVALID_JSON_BODY`   | `INVALID_REQUEST` | `'Invalid JSON body'`              |
-| Fastify validation error          | `INVALID_REQUEST` | `{ errors: [{ path, message }] }`  |
-| Any other error                   | `INTERNAL_ERROR`  | `'Internal error'`                 |
+| Error Type                      | Response Code     | Details                           |
+| ------------------------------- | ----------------- | --------------------------------- |
+| `FST_ERR_CTP_INVALID_JSON_BODY` | `INVALID_REQUEST` | `'Invalid JSON body'`             |
+| Fastify validation error        | `INVALID_REQUEST` | `{ errors: [{ path, message }] }` |
+| Any other error                 | `INTERNAL_ERROR`  | `'Internal error'`                |
 
 **Usage:**
 
@@ -159,17 +156,17 @@ app.setErrorHandler(createValidationErrorHandler());
 
 ## Recent Changes
 
-| Commit   | Description                                       | Age     |
-| -------- | ------------------------------------------------- | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner  | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions    | 12 days |
-| 4fa0fed3 | Release v2.0.0                                    | 2 weeks |
-| 4f5a3f96 | Release v1.0.0                                    | 3 weeks |
+| Commit   | Description                                      | Age     |
+| -------- | ------------------------------------------------ | ------- |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
+| 21c1528a | Fix release skill to bump all package versions   | 12 days |
+| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
+| 4f5a3f96 | Release v1.0.0                                   | 3 weeks |
 
 ## Source Files
 
-| File                        | Purpose                                    |
-| --------------------------- | ------------------------------------------ |
-| `src/index.ts`              | Entry point, re-exports                    |
-| `src/health.ts`             | Health check types and utility functions   |
-| `src/validation-handler.ts` | Fastify validation error handler           |
+| File                        | Purpose                                  |
+| --------------------------- | ---------------------------------------- |
+| `src/index.ts`              | Entry point, re-exports                  |
+| `src/health.ts`             | Health check types and utility functions |
+| `src/validation-handler.ts` | Fastify validation error handler         |

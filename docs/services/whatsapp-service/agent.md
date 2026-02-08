@@ -282,30 +282,30 @@ interface ApprovalReplyEvent {
 
 ## Error Handling
 
-| Error Code            | Meaning                                   | Recovery Action                       |
-| --------------------- | ----------------------------------------- | ------------------------------------- |
-| `NOT_FOUND`           | Message not found or not owned by user    | Verify message ID and ownership       |
-| `DOWNSTREAM_ERROR`    | Failed to communicate with WhatsApp/GCS   | Retry with exponential backoff        |
-| `USER_NOT_MAPPED`     | User has no connected WhatsApp number     | Prompt user to connect WhatsApp       |
-| `VALIDATION_ERROR`    | Invalid request payload                   | Fix request according to schema       |
-| `PRECONDITION_FAILED` | Phone number not verified (v3.0.0)        | Verify phone before connecting        |
-| `CONFLICT`            | Phone already verified                    | No action needed, phone is ready      |
-| `RATE_LIMITED`        | Too many verification requests            | Wait for cooldown or rate limit reset |
-| `LOCKED`              | Max verification attempts exceeded        | Request a new verification code       |
-| `GONE`                | Verification code expired                 | Request a new verification code       |
+| Error Code            | Meaning                                 | Recovery Action                       |
+| --------------------- | --------------------------------------- | ------------------------------------- |
+| `NOT_FOUND`           | Message not found or not owned by user  | Verify message ID and ownership       |
+| `DOWNSTREAM_ERROR`    | Failed to communicate with WhatsApp/GCS | Retry with exponential backoff        |
+| `USER_NOT_MAPPED`     | User has no connected WhatsApp number   | Prompt user to connect WhatsApp       |
+| `VALIDATION_ERROR`    | Invalid request payload                 | Fix request according to schema       |
+| `PRECONDITION_FAILED` | Phone number not verified (v3.0.0)      | Verify phone before connecting        |
+| `CONFLICT`            | Phone already verified                  | No action needed, phone is ready      |
+| `RATE_LIMITED`        | Too many verification requests          | Wait for cooldown or rate limit reset |
+| `LOCKED`              | Max verification attempts exceeded      | Request a new verification code       |
+| `GONE`                | Verification code expired               | Request a new verification code       |
 
 ---
 
 ## Rate Limits
 
-| Operation          | Limit           | Window   |
-| ------------------ | --------------- | -------- |
-| Send messages      | 1000/day        | 24h      |
-| List messages      | 100/minute      | 1 min    |
-| Get media URL      | 60/minute       | 1 min    |
-| Verify send        | 3/phone/hour    | 1 hour   |
-| Verify send        | 60s cooldown    | per req  |
-| Verify confirm     | 3 attempts/code | per code |
+| Operation      | Limit           | Window   |
+| -------------- | --------------- | -------- |
+| Send messages  | 1000/day        | 24h      |
+| List messages  | 100/minute      | 1 min    |
+| Get media URL  | 60/minute       | 1 min    |
+| Verify send    | 3/phone/hour    | 1 hour   |
+| Verify send    | 60s cooldown    | per req  |
+| Verify confirm | 3 attempts/code | per code |
 
 ---
 
@@ -361,12 +361,12 @@ To enable approval via WhatsApp with interactive buttons:
 
 ### Response Type Mapping
 
-| Response Type    | `replyText` | `buttonId`             | `actionId`         |
-| ---------------- | ----------- | ---------------------- | ------------------ |
-| Button tap       | "yes"/"no"  | `approve:id:nonce`     | from buttonId      |
-| Text reply       | raw text    | undefined              | from correlationId |
-| Reaction `👍`    | "yes"       | undefined              | from correlationId |
-| Reaction `👎`    | "no"        | undefined              | from correlationId |
+| Response Type | `replyText` | `buttonId`         | `actionId`         |
+| ------------- | ----------- | ------------------ | ------------------ |
+| Button tap    | "yes"/"no"  | `approve:id:nonce` | from buttonId      |
+| Text reply    | raw text    | undefined          | from correlationId |
+| Reaction `👍` | "yes"       | undefined          | from correlationId |
+| Reaction `👎` | "no"        | undefined          | from correlationId |
 
 Other emojis are ignored (not published as events).
 

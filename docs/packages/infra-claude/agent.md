@@ -82,9 +82,9 @@ if (!result.ok) {
   switch (result.error.code) {
     case 'RATE_LIMITED': // retry with backoff
     case 'INVALID_KEY': // configuration error
-    case 'OVERLOADED':  // retry after delay
-    case 'TIMEOUT':     // retry
-    case 'API_ERROR':   // log and handle
+    case 'OVERLOADED': // retry after delay
+    case 'TIMEOUT': // retry
+    case 'API_ERROR': // log and handle
   }
 }
 ```

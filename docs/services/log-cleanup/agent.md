@@ -18,9 +18,9 @@
 
 ### Trigger
 
-| Type       | Source                          | Entry Point    |
-| ---------- | ------------------------------- | -------------- |
-| Pub/Sub    | `intexuraos-log-cleanup-{env}`  | `cleanupLogs`  |
+| Type    | Source                         | Entry Point   |
+| ------- | ------------------------------ | ------------- |
+| Pub/Sub | `intexuraos-log-cleanup-{env}` | `cleanupLogs` |
 
 This worker has no HTTP endpoints. It reacts to Pub/Sub CloudEvents and calls code-agent's internal API.
 
@@ -104,13 +104,13 @@ gcloud functions logs read intexuraos-log-cleanup-dev \
 
 ## Environment Variables
 
-| Variable                         | Required | Description                    |
-| -------------------------------- | -------- | ------------------------------ |
-| `INTEXURAOS_CODE_AGENT_URL`      | Yes      | Base URL of code-agent         |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared internal auth token     |
-| `INTEXURAOS_LOG_RETENTION_DAYS`  | No       | Days to keep logs              |
-| `INTEXURAOS_LOG_BATCH_SIZE`      | No       | Logs per deletion batch        |
-| `INTEXURAOS_LOG_TASKS_PER_RUN`   | No       | Max tasks per run              |
+| Variable                         | Required | Description                |
+| -------------------------------- | -------- | -------------------------- |
+| `INTEXURAOS_CODE_AGENT_URL`      | Yes      | Base URL of code-agent     |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared internal auth token |
+| `INTEXURAOS_LOG_RETENTION_DAYS`  | No       | Days to keep logs          |
+| `INTEXURAOS_LOG_BATCH_SIZE`      | No       | Logs per deletion batch    |
+| `INTEXURAOS_LOG_TASKS_PER_RUN`   | No       | Max tasks per run          |
 
 ---
 

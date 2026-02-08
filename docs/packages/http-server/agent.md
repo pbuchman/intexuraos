@@ -44,11 +44,15 @@ interface HealthResponse {
 ```typescript
 // health.ts
 function checkSecrets(required: string[]): HealthCheck;
-function validateRequiredEnv(required: string[]): void;  // throws on missing vars
+function validateRequiredEnv(required: string[]): void; // throws on missing vars
 function checkFirestore(): Promise<HealthCheck>;
 function checkNotionSdk(): HealthCheck;
 function computeOverallStatus(checks: HealthCheck[]): HealthStatus;
-function buildHealthResponse(serviceName: string, version: string, checks: HealthCheck[]): HealthResponse;
+function buildHealthResponse(
+  serviceName: string,
+  version: string,
+  checks: HealthCheck[]
+): HealthResponse;
 
 // validation-handler.ts
 function createValidationErrorHandler(): (
@@ -92,8 +96,8 @@ app.get('/health', async (_req, reply) => {
 
 ## Health Check Name Registry
 
-| Function          | HealthCheck.name | Checks                          |
-| ----------------- | ---------------- | ------------------------------- |
-| `checkSecrets`    | `'secrets'`      | Env vars present and non-empty  |
-| `checkFirestore`  | `'firestore'`    | Doc read within 3s timeout      |
-| `checkNotionSdk`  | `'notion-sdk'`   | Always ok (passive)             |
+| Function         | HealthCheck.name | Checks                         |
+| ---------------- | ---------------- | ------------------------------ |
+| `checkSecrets`   | `'secrets'`      | Env vars present and non-empty |
+| `checkFirestore` | `'firestore'`    | Doc read within 3s timeout     |
+| `checkNotionSdk` | `'notion-sdk'`   | Always ok (passive)            |

@@ -28,7 +28,9 @@ Each method with a timeout duplicates the `AbortController` + `clearTimeout` pat
 
 ```ts
 const controller = new AbortController();
-const timeoutId = setTimeout(() => { controller.abort(); }, TIMEOUT_MS);
+const timeoutId = setTimeout(() => {
+  controller.abort();
+}, TIMEOUT_MS);
 try {
   // ...
   clearTimeout(timeoutId);

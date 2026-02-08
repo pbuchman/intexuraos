@@ -122,13 +122,13 @@ None identified.
 
 ## Code Duplicates
 
-| Pattern              | Locations                                                         | Suggestion                                       |
-| -------------------- | ----------------------------------------------------------------- | ------------------------------------------------ |
-| API error handling   | All `pages/` components                                           | Create `useApiCall` hook for try/catch pattern   |
-| Filter dropdown UI   | `InboxPage.tsx`, `LinearIssuesPage.tsx`                           | Extract to `FilterDropdown.tsx` component        |
-| Modal close handlers | All modal components                                              | Create `useModal` hook for close logic           |
-| Loading spinner      | Repeated in most page components                                  | Extract `PageLoader` component                   |
-| Dark mode classes    | `dark:bg-*` / `dark:text-*` repeated across all pages/components  | Consider shared theme utility classes            |
+| Pattern              | Locations                                                        | Suggestion                                     |
+| -------------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
+| API error handling   | All `pages/` components                                          | Create `useApiCall` hook for try/catch pattern |
+| Filter dropdown UI   | `InboxPage.tsx`, `LinearIssuesPage.tsx`                          | Extract to `FilterDropdown.tsx` component      |
+| Modal close handlers | All modal components                                             | Create `useModal` hook for close logic         |
+| Loading spinner      | Repeated in most page components                                 | Extract `PageLoader` component                 |
+| Dark mode classes    | `dark:bg-*` / `dark:text-*` repeated across all pages/components | Consider shared theme utility classes          |
 
 ---
 

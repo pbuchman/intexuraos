@@ -163,13 +163,13 @@ New 3-column layout optimized for workflow visibility:
 
 IntexuraOS integrates with **5 AI providers** and **17 models**, treating them as a **council of experts** rather than a single oracle:
 
-| Provider   | Models                                      | Capabilities                                               |
-| ---------- | ------------------------------------------- | ---------------------------------------------------------- |
-| Google     | Gemini 2.5 Pro, Flash, Flash-Image          | Reasoning, classification, images                          |
-| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, images, embeddings (RAG)         |
-| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Analysis, research, validation, autonomous code execution  |
-| Perplexity | Sonar, Sonar Pro, Sonar Deep Research       | Web search, real-time information                          |
-| Zai        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, lightweight, cost-efficient code tasks       |
+| Provider   | Models                                      | Capabilities                                              |
+| ---------- | ------------------------------------------- | --------------------------------------------------------- |
+| Google     | Gemini 2.5 Pro, Flash, Flash-Image          | Reasoning, classification, images                         |
+| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, images, embeddings (RAG)        |
+| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Analysis, research, validation, autonomous code execution |
+| Perplexity | Sonar, Sonar Pro, Sonar Deep Research       | Web search, real-time information                         |
+| Zai        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, lightweight, cost-efficient code tasks      |
 
 ### Intelligent Routing
 
@@ -266,19 +266,19 @@ IntexuraOS deploys **20 apps**, **5 workers**, and **21 packages** — a total o
 
 ### AI Agents (Primary Intelligence)
 
-| Agent                   | AI Capabilities                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| **research-agent**      | Multi-model orchestration, parallel queries, synthesis, Zod validation (v2.0.0) |
-| **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)        |
+| Agent                   | AI Capabilities                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| **research-agent**      | Multi-model orchestration, parallel queries, synthesis, Zod validation (v2.0.0)   |
+| **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)          |
 | **code-agent**          | Autonomous code execution, worker dispatch, deduplication, rate limiting (v3.0.0) |
-| **chat-agent**          | Documentation RAG Q&A, command creation, guest access (v3.0.0)                  |
-| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                        |
-| **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)         |
-| **todos-agent**         | Natural language task extraction, priority inference                            |
-| **calendar-agent**      | Preview generation before commit, duration/all-day detection (v2.0.0)           |
-| **linear-agent**        | 3-column dashboard, Todo/To Test categories (v2.0.0)                            |
-| **notes-agent**         | Content structuring, tag inference                                              |
-| **web-agent**           | Separated crawling from LLM summarization, parser+repair pattern (v2.0.0)       |
+| **chat-agent**          | Documentation RAG Q&A, command creation, guest access (v3.0.0)                    |
+| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                          |
+| **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)           |
+| **todos-agent**         | Natural language task extraction, priority inference                              |
+| **calendar-agent**      | Preview generation before commit, duration/all-day detection (v2.0.0)             |
+| **linear-agent**        | 3-column dashboard, Todo/To Test categories (v2.0.0)                              |
+| **notes-agent**         | Content structuring, tag inference                                                |
+| **web-agent**           | Separated crawling from LLM summarization, parser+repair pattern (v2.0.0)         |
 
 ### Infrastructure Services
 
@@ -302,13 +302,13 @@ Workers are event-driven components that run outside Cloud Run, either as Cloud 
 
 ### Workers
 
-| Worker                 | Runtime          | Purpose                                                                 |
-| ---------------------- | ---------------- | ----------------------------------------------------------------------- |
-| **orchestrator**       | Local (PM2)      | Dispatches code tasks to Docker containers, manages worktrees and logs  |
-| **claude-worker**      | Docker container | Sandboxed Claude Code execution with filesystem and resource isolation  |
-| **log-cleanup**        | Cloud Function   | Daily retention-based deletion of old execution logs (90-day default)   |
-| **predev-lifecycle**   | Cloud Function   | Scale-to-zero predev VM: gateway proxy, webhook, idle check, readiness |
-| **vm-lifecycle**       | Cloud Function   | Scheduled VM start/stop with health checks and graceful shutdown        |
+| Worker               | Runtime          | Purpose                                                                |
+| -------------------- | ---------------- | ---------------------------------------------------------------------- |
+| **orchestrator**     | Local (PM2)      | Dispatches code tasks to Docker containers, manages worktrees and logs |
+| **claude-worker**    | Docker container | Sandboxed Claude Code execution with filesystem and resource isolation |
+| **log-cleanup**      | Cloud Function   | Daily retention-based deletion of old execution logs (90-day default)  |
+| **predev-lifecycle** | Cloud Function   | Scale-to-zero predev VM: gateway proxy, webhook, idle check, readiness |
+| **vm-lifecycle**     | Cloud Function   | Scheduled VM start/stop with health checks and graceful shutdown       |
 
 ### Worker Deployment Model
 
@@ -348,13 +348,13 @@ The monorepo contains **21 shared packages** organized into four layers:
 
 ### Core Packages
 
-| Package            | Purpose                                                 |
-| ------------------ | ------------------------------------------------------- |
-| `common-core`      | Result types, error codes, redaction utilities           |
-| `common-http`      | Fastify plugins, JWT auth, API response helpers         |
-| `http-contracts`   | OpenAPI schemas, Fastify JSON schemas                   |
-| `http-server`      | Health check utilities, validation error handler        |
-| `internal-clients` | Shared HTTP clients for service-to-service calls        |
+| Package            | Purpose                                          |
+| ------------------ | ------------------------------------------------ |
+| `common-core`      | Result types, error codes, redaction utilities   |
+| `common-http`      | Fastify plugins, JWT auth, API response helpers  |
+| `http-contracts`   | OpenAPI schemas, Fastify JSON schemas            |
+| `http-server`      | Health check utilities, validation error handler |
+| `internal-clients` | Shared HTTP clients for service-to-service calls |
 
 ### Infrastructure Packages
 
@@ -368,24 +368,24 @@ The monorepo contains **21 shared packages** organized into four layers:
 
 ### AI Provider Packages
 
-| Package          | Provider   | Purpose                       |
-| ---------------- | ---------- | ----------------------------- |
-| `infra-claude`   | Anthropic  | Claude API client wrapper     |
-| `infra-gemini`   | Google     | Gemini API client wrapper     |
-| `infra-gpt`      | OpenAI     | GPT API client wrapper        |
-| `infra-glm`      | Zai        | GLM API client wrapper        |
-| `infra-perplexity` | Perplexity | Sonar API client wrapper     |
+| Package            | Provider   | Purpose                   |
+| ------------------ | ---------- | ------------------------- |
+| `infra-claude`     | Anthropic  | Claude API client wrapper |
+| `infra-gemini`     | Google     | Gemini API client wrapper |
+| `infra-gpt`        | OpenAI     | GPT API client wrapper    |
+| `infra-glm`        | Zai        | GLM API client wrapper    |
+| `infra-perplexity` | Perplexity | Sonar API client wrapper  |
 
 ### LLM Toolchain Packages
 
-| Package        | Purpose                                               |
-| -------------- | ----------------------------------------------------- |
-| `llm-contract` | Shared types and interfaces for LLM providers         |
-| `llm-factory`  | Provider creation and configuration                   |
-| `llm-prompts`  | Prompt templates and builders with Zod validation     |
-| `llm-utils`    | Shared utilities (redaction, error parsing)            |
-| `llm-pricing`  | Per-model cost calculation and usage aggregation      |
-| `llm-audit`    | LLM call audit logging and token usage tracking       |
+| Package        | Purpose                                           |
+| -------------- | ------------------------------------------------- |
+| `llm-contract` | Shared types and interfaces for LLM providers     |
+| `llm-factory`  | Provider creation and configuration               |
+| `llm-prompts`  | Prompt templates and builders with Zod validation |
+| `llm-utils`    | Shared utilities (redaction, error parsing)       |
+| `llm-pricing`  | Per-model cost calculation and usage aggregation  |
+| `llm-audit`    | LLM call audit logging and token usage tracking   |
 
 ---
 
@@ -469,25 +469,25 @@ All inter-service communication uses Cloud Pub/Sub:
 
 Each service owns its collections (enforced by CI):
 
-| Collection               | Owner               | Version |
-| ------------------------ | ------------------- | ------- |
-| `researches`             | research-agent      |         |
-| `actions`                | actions-agent       |         |
-| `commands`               | commands-agent      |         |
-| `todos`                  | todos-agent         |         |
-| `bookmarks`              | bookmarks-agent     |         |
-| `notes`                  | notes-agent         |         |
-| `custom_data_sources`    | data-insights-agent |         |
-| `user_settings`          | user-service        |         |
-| `calendar_previews`      | calendar-agent      | v2.0.0  |
-| `whatsapp_outbound_messages` | whatsapp-service | v2.0.0  |
-| `code_tasks`             | code-agent          | v3.0.0  |
-| `user_usage`             | code-agent          | v3.0.0  |
-| `code_worker_settings`   | code-agent          | v3.0.0  |
-| `github-pr-events`       | code-agent          | v3.0.0  |
-| `pr_task_locks`          | code-agent          | v3.0.0  |
-| `doc_embeddings`         | chat-agent          | v3.0.0  |
-| `predev-state`           | predev-lifecycle    | v3.0.0  |
+| Collection                   | Owner               | Version |
+| ---------------------------- | ------------------- | ------- |
+| `researches`                 | research-agent      |         |
+| `actions`                    | actions-agent       |         |
+| `commands`                   | commands-agent      |         |
+| `todos`                      | todos-agent         |         |
+| `bookmarks`                  | bookmarks-agent     |         |
+| `notes`                      | notes-agent         |         |
+| `custom_data_sources`        | data-insights-agent |         |
+| `user_settings`              | user-service        |         |
+| `calendar_previews`          | calendar-agent      | v2.0.0  |
+| `whatsapp_outbound_messages` | whatsapp-service    | v2.0.0  |
+| `code_tasks`                 | code-agent          | v3.0.0  |
+| `user_usage`                 | code-agent          | v3.0.0  |
+| `code_worker_settings`       | code-agent          | v3.0.0  |
+| `github-pr-events`           | code-agent          | v3.0.0  |
+| `pr_task_locks`              | code-agent          | v3.0.0  |
+| `doc_embeddings`             | chat-agent          | v3.0.0  |
+| `predev-state`               | predev-lifecycle    | v3.0.0  |
 
 ---
 
@@ -623,21 +623,21 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ## Technology Stack
 
-| Layer          | Technology                                          |
-| -------------- | --------------------------------------------------- |
-| Runtime        | Node.js 22 on Cloud Run                             |
-| Framework      | Fastify with OpenAPI                                |
-| Workers        | Cloud Functions, Docker, PM2 (v3.0.0)               |
-| Database       | Firestore (NoSQL)                                   |
-| Storage        | Google Cloud Storage                                |
-| Messaging      | Cloud Pub/Sub                                       |
-| AI Providers   | Google, OpenAI, Anthropic, Perplexity, Zai          |
-| AI Tooling     | Claude Code (autonomous worker), OpenAI Embeddings  |
-| Transcription  | Speechmatics                                        |
-| Authentication | Auth0, Google OAuth, Cloudflare Access              |
-| Infrastructure | Terraform, GCE Spot VMs, Cloudflare Tunnels         |
-| Monorepo       | pnpm workspaces (21 packages)                       |
-| Language       | TypeScript 5.7 (strict mode)                        |
+| Layer          | Technology                                         |
+| -------------- | -------------------------------------------------- |
+| Runtime        | Node.js 22 on Cloud Run                            |
+| Framework      | Fastify with OpenAPI                               |
+| Workers        | Cloud Functions, Docker, PM2 (v3.0.0)              |
+| Database       | Firestore (NoSQL)                                  |
+| Storage        | Google Cloud Storage                               |
+| Messaging      | Cloud Pub/Sub                                      |
+| AI Providers   | Google, OpenAI, Anthropic, Perplexity, Zai         |
+| AI Tooling     | Claude Code (autonomous worker), OpenAI Embeddings |
+| Transcription  | Speechmatics                                       |
+| Authentication | Auth0, Google OAuth, Cloudflare Access             |
+| Infrastructure | Terraform, GCE Spot VMs, Cloudflare Tunnels        |
+| Monorepo       | pnpm workspaces (21 packages)                      |
+| Language       | TypeScript 5.7 (strict mode)                       |
 
 ---
 
@@ -709,14 +709,14 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ## Documentation Index
 
-| Document                                              | Purpose                                      |
-| ----------------------------------------------------- | -------------------------------------------- |
-| [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration               |
-| [Services Catalog](services/index.md)                 | All 20 apps + 5 workers documented           |
-| [Architecture Patterns](architecture/)                | System design decisions                      |
-| [Setup Guide](setup/01-gcp-project.md)                | Getting started                              |
-| [API Contracts](architecture/api-contracts.md)        | HTTP API standards                           |
-| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns                     |
+| Document                                              | Purpose                            |
+| ----------------------------------------------------- | ---------------------------------- |
+| [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration     |
+| [Services Catalog](services/index.md)                 | All 20 apps + 5 workers documented |
+| [Architecture Patterns](architecture/)                | System design decisions            |
+| [Setup Guide](setup/01-gcp-project.md)                | Getting started                    |
+| [API Contracts](architecture/api-contracts.md)        | HTTP API standards                 |
+| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns           |
 
 ---
 

@@ -58,6 +58,7 @@ The `extractSuggestedAction` function uses a regex (`/\[ACTION:\s*(create_comman
 ### Duplicate Firestore Data Extraction
 
 **Files:**
+
 - `apps/chat-agent/src/infra/firestore/embeddingRepository.ts` (lines 80-100 in `findNearest`, lines 142-162 in `findById`)
 
 The field extraction logic (reading `content`, `filePath`, `section`, `docType`, `createdAt` from Firestore data with type guards and defaults) is duplicated between `findNearest` and `findById`. A shared `toDocChunk(data, id)` helper would reduce duplication.
@@ -87,13 +88,13 @@ No TODO or FIXME comments found in the codebase.
 
 ## v8 Ignore Exemptions
 
-| File                                  | Lines   | Category   | Reason                                                        |
-| ------------------------------------- | ------- | ---------- | ------------------------------------------------------------- |
-| `routes/chatRoutes.ts`                | 179-189 | upstream   | Fallback for unknown error codes from domain layer            |
-| `infra/llm/chatClient.ts`             | 44-91   | upstream   | LLM client error paths tested in fakes, not real LLM          |
-| `infra/llm/chatClient.ts`             | 101-121 | upstream   | Branches depend on LLM output format                          |
-| `infra/llm/chatClient.ts`             | 128-133 | upstream   | String.replace branch depends on action being present         |
-| `domain/usecases/generateResponse.ts` | 226-228 | test-infra | Fallback impossible to trigger (split always returns array)   |
+| File                                  | Lines   | Category   | Reason                                                      |
+| ------------------------------------- | ------- | ---------- | ----------------------------------------------------------- |
+| `routes/chatRoutes.ts`                | 179-189 | upstream   | Fallback for unknown error codes from domain layer          |
+| `infra/llm/chatClient.ts`             | 44-91   | upstream   | LLM client error paths tested in fakes, not real LLM        |
+| `infra/llm/chatClient.ts`             | 101-121 | upstream   | Branches depend on LLM output format                        |
+| `infra/llm/chatClient.ts`             | 128-133 | upstream   | String.replace branch depends on action being present       |
+| `domain/usecases/generateResponse.ts` | 226-228 | test-infra | Fallback impossible to trigger (split always returns array) |
 
 ## SRP Violations (Files > 300 Lines)
 
@@ -104,8 +105,8 @@ No TODO or FIXME comments found in the codebase.
 
 ## Resolved Issues
 
-| Issue       | Description                                        | Resolution                                         |
-| ----------- | -------------------------------------------------- | -------------------------------------------------- |
-| `e6782f64`  | INTEXURAOS_LLM_MODEL env var no longer needed      | Removed; model selection via user-service          |
-| `332fd990`  | EmbeddingClient had tight OpenAI coupling          | Refactored to function injection pattern           |
-| `0f37ed41`  | Shared LLM client across all users                 | Refactored to per-request client from user-service |
+| Issue      | Description                                   | Resolution                                         |
+| ---------- | --------------------------------------------- | -------------------------------------------------- |
+| `e6782f64` | INTEXURAOS_LLM_MODEL env var no longer needed | Removed; model selection via user-service          |
+| `332fd990` | EmbeddingClient had tight OpenAI coupling     | Refactored to function injection pattern           |
+| `0f37ed41` | Shared LLM client across all users            | Refactored to per-request client from user-service |

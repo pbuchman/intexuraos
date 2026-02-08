@@ -40,12 +40,21 @@ const labelPrompt: PromptBuilder<LabelPromptInput, LabelPromptDeps>;
 const feedNamePrompt: PromptBuilder<FeedNamePromptInput, FeedNamePromptDeps>;
 
 // classification/
-const commandClassifierPrompt: PromptBuilder<CommandClassifierPromptInput, CommandClassifierPromptDeps>;
-const intelligentClassifierPrompt: PromptBuilder<IntelligentClassifierPromptInput, IntelligentClassifierPromptDeps>;
+const commandClassifierPrompt: PromptBuilder<
+  CommandClassifierPromptInput,
+  CommandClassifierPromptDeps
+>;
+const intelligentClassifierPrompt: PromptBuilder<
+  IntelligentClassifierPromptInput,
+  IntelligentClassifierPromptDeps
+>;
 
 // validation/
 const inputQualityPrompt: PromptBuilder<InputQualityPromptInput, InputQualityPromptDeps>;
-const inputImprovementPrompt: PromptBuilder<InputImprovementPromptInput, InputImprovementPromptDeps>;
+const inputImprovementPrompt: PromptBuilder<
+  InputImprovementPromptInput,
+  InputImprovementPromptDeps
+>;
 
 // todos/
 const itemExtractionPrompt: PromptBuilder<ItemExtractionPromptInput, ItemExtractionPromptDeps>;
@@ -62,12 +71,24 @@ const dataTransformPrompt: PromptBuilder<DataTransformPromptInput, DataTransform
 const approvalIntentPrompt: PromptBuilder<ApprovalIntentPromptInput, ApprovalIntentPromptDeps>;
 
 // calendar/
-const calendarActionExtractionPrompt: PromptBuilder<CalendarEventExtractionPromptInput, CalendarEventExtractionPromptDeps>;
-const calendarExtractionRepairPrompt: PromptBuilder<CalendarExtractionRepairPromptInput, CalendarExtractionRepairPromptDeps>;
+const calendarActionExtractionPrompt: PromptBuilder<
+  CalendarEventExtractionPromptInput,
+  CalendarEventExtractionPromptDeps
+>;
+const calendarExtractionRepairPrompt: PromptBuilder<
+  CalendarExtractionRepairPromptInput,
+  CalendarExtractionRepairPromptDeps
+>;
 
 // linear/
-const linearActionExtractionPrompt: PromptBuilder<LinearIssueExtractionPromptInput, LinearIssueExtractionPromptDeps>;
-const linearIssueTitlePrompt: PromptBuilder<LinearIssueTitlePromptInput, LinearIssueTitlePromptDeps>;
+const linearActionExtractionPrompt: PromptBuilder<
+  LinearIssueExtractionPromptInput,
+  LinearIssueExtractionPromptDeps
+>;
+const linearIssueTitlePrompt: PromptBuilder<
+  LinearIssueTitlePromptInput,
+  LinearIssueTitlePromptDeps
+>;
 ```
 
 ## Exported Functions
@@ -153,7 +174,11 @@ const CalendarEventSchema: ZodSchema<CalendarEvent>;
 const LinearIssueDataSchema, LinearIssueTitleSchema, LinearIssueTypeSchema: ZodSchema;
 
 // shared/
-const DomainSchema, ModeSchema, DefaultAppliedSchema, SafetyInfoSchema, InputQualitySchema: ZodSchema;
+const DomainSchema,
+  ModeSchema,
+  DefaultAppliedSchema,
+  SafetyInfoSchema,
+  InputQualitySchema: ZodSchema;
 ```
 
 ## Dependency Graph
@@ -177,7 +202,9 @@ const prompt = titlePrompt.build({ content: 'My article text...' }, { maxLength:
 // Validate LLM response with Zod schema
 import { CommandClassificationSchema } from '@intexuraos/llm-prompts';
 const result = CommandClassificationSchema.safeParse(JSON.parse(llmResponse));
-if (!result.success) { /* handle validation error */ }
+if (!result.success) {
+  /* handle validation error */
+}
 
 // Use type guards
 import { isResearchContext, type ResearchContext } from '@intexuraos/llm-prompts';
