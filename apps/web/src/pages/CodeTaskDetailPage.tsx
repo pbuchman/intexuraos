@@ -129,7 +129,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   const StatusIcon = status.icon;
   const isRunning = task.status === 'running' || task.status === 'dispatched';
   const canCancel = isRunning;
-  const canRetry = task.status === 'failed' || task.status === 'cancelled';
+  const canRetry = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
 
   // Build links array - Linear and PR
   const links: { label: string; url: string | undefined; text: string; type?: string }[] = [];
