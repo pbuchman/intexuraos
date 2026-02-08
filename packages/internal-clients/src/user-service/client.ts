@@ -198,6 +198,29 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         const apiKey = keysBody.data[keyField];
 
         if (apiKey === null || apiKey === undefined) {
+          if (config.platformZaiApiKey !== undefined) {
+            logger.warn(
+              { userId, provider, requestedModel: defaultModel },
+              'No API key for provider, falling back to platform Glm47Flash'
+            );
+            const fallbackModel = LlmModels.Glm47Flash;
+            const fallbackPricing = config.pricingContext.getPricing(fallbackModel);
+            const fallbackClient = createLlmClient({
+              apiKey: config.platformZaiApiKey,
+              model: fallbackModel,
+              userId,
+              pricing: fallbackPricing,
+              logger: config.logger,
+            });
+
+            logger.info(
+              { userId, model: fallbackModel, provider: LlmProviders.Zai },
+              'LLM client created successfully'
+            );
+
+            return ok(fallbackClient);
+          }
+
           logger.info({ userId, provider }, 'No API key configured for provider');
           return err({
             code: 'NO_API_KEY',
