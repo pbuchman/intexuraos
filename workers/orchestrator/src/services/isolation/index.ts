@@ -16,11 +16,13 @@ import type { IsolationProvider } from './types.js';
  * @param logger - Logger instance
  * @returns An IsolationProvider instance
  */
-export function createIsolationProvider(
+export async function createIsolationProvider(
   config: Partial<DockerProviderConfig>,
   logger: Logger
-): IsolationProvider {
-  return new DockerProvider(config, logger);
+): Promise<IsolationProvider> {
+  const provider = new DockerProvider(config, logger);
+  await provider.cleanupOrphanedContainers();
+  return provider;
 }
 
 // Re-export types

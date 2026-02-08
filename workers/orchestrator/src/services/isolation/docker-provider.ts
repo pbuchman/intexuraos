@@ -150,6 +150,7 @@ export class DockerProvider implements IsolationProvider {
       `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
       'CLAUDE_PROJECT_DIR=/repo',
+      'CLAUDE_WORKER_MODE=1',
       // Exit 10s after idle - Claude exits automatically when no input arrives
       'CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=10000',
     ];
@@ -269,20 +270,18 @@ export class DockerProvider implements IsolationProvider {
     attachStream: NodeJS.ReadWriteStream,
     taskId: string
   ): Promise<void> {
-    const TOTAL_TIMEOUT_MS = 30_000;
+    const TOTAL_TIMEOUT_MS = 60_000;
     const INITIAL_WAIT_MS = 8_000;
-    const SETTLE_MS = 2_000;
+    const READY_MARKER = 'bypass permissions on';
 
     await new Promise<void>((resolve) => {
-      let settled = false;
-      let settleTimer: ReturnType<typeof setTimeout> | null = null;
+      let done = false;
       let approvalSent = false;
 
       const finish = (): void => {
-        if (settled) return;
-        settled = true;
+        if (done) return;
+        done = true;
         clearTimeout(hardTimeout);
-        if (settleTimer) clearTimeout(settleTimer);
         attachStream.removeListener('data', onData);
         resolve();
       };
@@ -292,22 +291,25 @@ export class DockerProvider implements IsolationProvider {
         finish();
       }, TOTAL_TIMEOUT_MS);
 
-      const onData = (): void => {
-        if (approvalSent && !settled) {
-          if (settleTimer) clearTimeout(settleTimer);
-          settleTimer = setTimeout(finish, SETTLE_MS);
+      const onData = (chunk: Buffer): void => {
+        if (approvalSent && !done) {
+          const text = chunk.toString('utf-8');
+          if (text.includes(READY_MARKER)) {
+            this.logger.info({ taskId }, 'TUI ready marker detected');
+            finish();
+          }
         }
       };
 
       attachStream.on('data', onData);
 
       setTimeout(() => {
-        if (settled) return;
+        if (done) return;
         approvalSent = true;
         this.logger.debug({ taskId }, 'Sending API key approval');
         attachStream.write('\x1b[A');
         setTimeout(() => {
-          if (!settled) attachStream.write('\r');
+          if (!done) attachStream.write('\r');
         }, 500);
       }, INITIAL_WAIT_MS);
     });

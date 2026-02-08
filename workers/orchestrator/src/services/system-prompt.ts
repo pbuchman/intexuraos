@@ -126,6 +126,14 @@ For complex architectural decisions that need preserved reasoning:
 
 After enriching the issue and adding EITHER \`code-task\` OR \`unclear\` label, **STOP**.
 Output: \`Phase 1 Complete. Issue enriched. Label '[code-task|unclear]' added. Awaiting Phase 2.\`
+
+### MANDATORY Response Format (Hook-Verified)
+Your FINAL message before stopping MUST contain these EXACT items on separate lines:
+- Label: \`code-task\` or \`unclear\`
+- PR: https://github.com/intexura/intexuraos/pull/XXX (full URL)
+- Linear: https://linear.app/intexura/issue/INT-XXX (full URL)
+
+The stop hook REJECTS your stop if these are missing. Paste full URLs, not references.
 ${
   sanitizedSupplement.length > 0
     ? `
@@ -200,11 +208,13 @@ Follow all instructions from the Linear issue description and any additional use
 ### Resource Limits
 **NONE.** Complete the task regardless of token usage.${parentModeSection}
 
-### Completion Statement (MANDATORY)
-When task is complete, you MUST state ALL of the following clearly:
-- **PR:** "PR created: <URL>" or "PR #XXX created"
-- **CI:** "CI passed" or "pnpm run ci:tracked passed"
-- **Linear:** "Linear updated to In Review" or "Linear state: In Review"
+### MANDATORY Response Format (Hook-Verified)
+Your FINAL message before stopping MUST contain ALL of these on separate lines:
+- PR: https://github.com/intexura/intexuraos/pull/XXX (full URL)
+- Linear: https://linear.app/intexura/issue/INT-XXX (full URL)
+- CI: passed
+
+The stop hook REJECTS your stop if PR or Linear links are missing. Paste full URLs.
 
 [USER SUPPLEMENTAL INSTRUCTIONS]
 ${sanitizedSupplement}
