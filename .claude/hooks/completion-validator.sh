@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Completion Validator Hook (INT-522)
-# Validates worker task completion artifacts based on execution phase.
+# Validates worker task completion artifacts.
 #
-# Phase 1: Validates that code-task OR unclear label was added
-# Phase 2: Validates PR, CI passed, and Linear update were mentioned
+# Universal: PR link is ALWAYS required (regardless of phase)
+# Phase 1: Additionally validates that code-task OR unclear label was added
 #
 # Only runs in worker mode (detected via [WORKER-MODE] marker in transcript)
 
@@ -54,8 +54,7 @@ elif echo "$TRANSCRIPT" | grep -q '\[PHASE:2\]'; then
 fi
 
 if [[ -z "$PHASE" ]]; then
-  # No phase marker found, skip validation
-  exit 0
+  PHASE="unknown"
 fi
 
 # Get recent assistant messages for validation
@@ -99,33 +98,16 @@ EOF
   return 0
 }
 
-validate_phase2() {
-  local missing=()
-
-  # Check for PR mention
-  if ! echo "$RECENT_RESPONSES" | grep -iqE "PR (created|#[0-9]+|https://github)|(pull request|PR).*created"; then
-    missing+=("PR")
-  fi
-
-  # Check for CI passed mention
-  if ! echo "$RECENT_RESPONSES" | grep -iqE "CI passed|ci:tracked passed|all.*tests.*pass|tests.*passing"; then
-    missing+=("CI passed")
-  fi
-
-  # Check for Linear update mention
-  if ! echo "$RECENT_RESPONSES" | grep -iqE "Linear.*(In Review|updated)|updated.*Linear|(In Review|state).*Linear"; then
-    missing+=("Linear updated")
-  fi
-
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    log_blocked "$HOOK_NAME" "phase2-incomplete" \
-        "Missing: ${missing[*]}" \
-        "Phase 2 requires PR, CI passed, and Linear update"
+validate_pr_link() {
+  if ! echo "$RECENT_RESPONSES" | grep -qE "https://github\.com/[^/]+/[^/]+/pull/[0-9]+"; then
+    log_blocked "$HOOK_NAME" "no-pr-link" \
+        "No GitHub PR link found in response (phase=${PHASE})" \
+        "A PR link (https://github.com/.../pull/NNN) is ALWAYS required"
 
     cat << EOF
 {
   "decision": "block",
-  "reason": "⚠️ PHASE 2 INCOMPLETE: You must clearly state all completion artifacts before stopping. Missing: ${missing[*]}. Required format: PR: '<URL or #number>', CI: 'passed', Linear: 'updated to In Review'"
+  "reason": "⚠️ PR REQUIRED — A pull request is ALWAYS required before you can stop. No exceptions.\n\nYou MUST:\n1. Stage and commit your changes: git add -A && git commit -m 'description'\n2. Push your branch: git push -u origin HEAD\n3. Create a PR: gh pr create --base development --title 'title' --body 'description'\n4. Include the FULL PR URL (e.g. https://github.com/owner/repo/pull/123) in your final response\n\nThen try stopping again. The hook will verify the PR link exists in your response."
 }
 EOF
     return 1
@@ -134,21 +116,18 @@ EOF
   return 0
 }
 
-# Execute phase-specific validation
+# Universal: PR link is ALWAYS required regardless of phase
 VALIDATION_RESULT=0
-if [[ "$PHASE" == "1" ]]; then
+validate_pr_link || VALIDATION_RESULT=1
+
+# Phase-specific checks (run in addition to PR requirement)
+if [[ "$PHASE" == "1" ]] && [[ $VALIDATION_RESULT -eq 0 ]]; then
   validate_phase1 || VALIDATION_RESULT=1
-elif [[ "$PHASE" == "2" ]]; then
-  validate_phase2 || VALIDATION_RESULT=1
 fi
 
-# Log timing
-END_TIME=$(date +%s%N 2>/dev/null || date +%s)
-if [[ "$START_TIME" =~ ^[0-9]+$ ]] && [[ "$END_TIME" =~ ^[0-9]+$ ]] && [[ ${#START_TIME} -gt 10 ]]; then
-  DURATION_MS=$(( (END_TIME - START_TIME) / 1000000 ))
-  if [[ $VALIDATION_RESULT -eq 0 ]]; then
-    log_info "$HOOK_NAME" "timing" "Hook completed in ${DURATION_MS}ms (phase $PHASE allowed)"
-  fi
+# Always log completion (sentinel for container lifecycle management)
+if [[ $VALIDATION_RESULT -eq 0 ]]; then
+  log_info "$HOOK_NAME" "completed" "Hook completed (phase ${PHASE:-none} allowed)"
 fi
 
 exit 0
