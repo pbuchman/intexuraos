@@ -11,9 +11,73 @@
 | Code Duplicates     | 0     | -        |
 | Deprecations        | 0     | -        |
 
-Last updated: 2026-01-24
+Last updated: 2026-02-08
 
-## Recent Changes (v2.0.0)
+## Recent Changes
+
+### Standardized Response Contract and Sentry Logger Migration
+
+**Problem:** Internal endpoints used ad-hoc response formats (`{ error: 'Unauthorized' }`, `{ error: message, code: errorCode }`) with manual `reply.status()` calls instead of the standardized response contract.
+
+**Fix:** All internal endpoints migrated to use `reply.ok(data)` and `reply.fail(code, message)`. Error codes standardized: `CONFIGURATION_ERROR` -> `MISCONFIGURED`, `CONNECTION_NOT_FOUND` -> `NOT_FOUND`, `TOKEN_REFRESH_FAILED` -> `DOWNSTREAM_ERROR`. HTTP status codes corrected: misconfiguration errors return 503 instead of 500, downstream failures return 502 instead of 500. Delete endpoints return `reply.ok({})` instead of `reply.ok(undefined)`.
+
+**Files changed:**
+
+- `apps/user-service/src/routes/internalRoutes.ts`
+- `apps/user-service/src/routes/llmKeysRoutes.ts`
+- `apps/user-service/src/routes/oauthConnectionRoutes.ts`
+- `apps/user-service/src/routes/oauthRoutes.ts`
+- `apps/user-service/src/__tests__/internalRoutes.test.ts`
+- `apps/user-service/src/__tests__/oauthConnectionRoutes.test.ts`
+
+**Impact:** All internal endpoints now return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }` consistently.
+
+### Auth0 Namespaced JWT Claims
+
+**Problem:** Auth0 Actions add user profile claims under a custom namespace (`https://intexuraos.cloud/email`) for API audience tokens. The `/auth/me` endpoint only read bare claims, causing missing profile data.
+
+**Fix:** `frontendRoutes.ts` now tries namespaced claims first, then falls back to bare claims for ID tokens.
+
+**Files changed:**
+
+- `apps/user-service/src/routes/frontendRoutes.ts`
+
+### Sentry-Enabled Logger Migration
+
+**Problem:** Direct `pino()` logger usage bypassed Sentry error tracking integration.
+
+**Fix:** Replaced `pino()` with `createAppLogger()` from `@intexuraos/infra-sentry` in `services.ts`.
+
+**Files changed:**
+
+- `apps/user-service/src/services.ts`
+
+### Mandatory Env Var Registration
+
+**Problem:** `INTEXURAOS_WEB_APP_URL`, `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`, and `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` were used but not declared in `REQUIRED_ENV`.
+
+**Fix:** Added all three to the `REQUIRED_ENV` array in `index.ts`.
+
+**Files changed:**
+
+- `apps/user-service/src/index.ts`
+
+### 100% Coverage Enforcement (Phase 3)
+
+**Problem:** Strict 100% branch coverage enforcement required coverage annotations for unreachable branches.
+
+**Fix:** Added categorized `v8 ignore` annotations for TypeScript type narrowing, schema validation, test infrastructure, and source map alignment issues across route files and domain logic.
+
+**Files changed:**
+
+- `apps/user-service/src/routes/deviceRoutes.ts`
+- `apps/user-service/src/routes/frontendRoutes.ts`
+- `apps/user-service/src/routes/oauthConnectionRoutes.ts`
+- `apps/user-service/src/routes/tokenRoutes.ts`
+- `apps/user-service/src/domain/settings/formatLlmError.ts`
+- `apps/user-service/src/infra/firestore/encryption.ts`
+
+### v2.0.0
 
 ### INT-199: Fixed Misleading API Key Error for 429 Rate Limit Responses
 
@@ -137,6 +201,16 @@ Not considered technical debt as the pattern is explicit and maintainable.
 No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
+
+### 2026-02-08
+
+| Issue   | Description                                         | Resolution                                                       |
+| ------- | --------------------------------------------------- | ---------------------------------------------------------------- |
+| -       | Internal endpoints used ad-hoc response formats     | Migrated all to `reply.ok()` / `reply.fail()` response contract  |
+| -       | Missing profile data from Auth0 namespaced claims   | Added namespace-aware JWT claims reading with bare fallback      |
+| -       | Logger bypassed Sentry error tracking               | Migrated from `pino()` to `createAppLogger()`                    |
+| INT-408 | Undeclared env vars used without REQUIRED_ENV entry | Added 3 missing env vars to REQUIRED_ENV                         |
+| INT-427 | 100% coverage enforcement required v8 ignore annots | Added categorized v8 ignore annotations across route/domain code |
 
 ### v2.0.0 - 2026-01-24
 

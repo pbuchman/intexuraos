@@ -1,7 +1,7 @@
 # Research Agent - Technical Debt
 
-**Last Updated:** 2026-01-25
-**Analysis Run:** v2.1.0 documentation update
+**Last Updated:** 2026-02-08
+**Analysis Run:** v2.2.0 documentation update
 
 ---
 
@@ -9,13 +9,13 @@
 
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
-| TODO/FIXME Comments | 0     | -        |
+| TODO/FIXME Comments | 1     | Low      |
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 0     | -        |
 | SRP Violations      | 1     | Low      |
 | Code Duplicates     | 0     | -        |
-| Deprecations        | 0     | -        |
-| **Total**           | **1** | Low      |
+| Deprecations        | 2     | Low      |
+| **Total**           | **4** | Low      |
 
 ---
 
@@ -55,10 +55,10 @@ Currently, research results are returned in bulk when all LLMs complete. Future 
 
 | File                           | Issue      | Impact                                           |
 | ------------------------------ | ---------- | ------------------------------------------------ |
-| `src/routes/researchRoutes.ts` | 1344 lines | Large file but logically cohesive                |
-| `src/routes/internalRoutes.ts` | 934 lines  | Large file but contains related Pub/Sub handlers |
+| `src/routes/researchRoutes.ts` | 1662 lines | Large file but logically cohesive                |
+| `src/routes/internalRoutes.ts` | 1035 lines | Large file but contains related Pub/Sub handlers |
 
-**Note:** Both route files are large but contain logically related endpoints. The size is justified by the complexity of the research orchestration flow. No immediate refactoring needed.
+**Note:** Both route files grew with the addition of the `POST /research/:id/export-notion` endpoint and v8 ignore coverage annotations. The new `researchExportRoutes.ts` (160 lines) was correctly extracted as a separate route file for Notion export settings. No immediate refactoring needed.
 
 ---
 
@@ -66,18 +66,31 @@ Currently, research results are returned in bulk when all LLMs complete. Future 
 
 ### Current Status
 
-Comprehensive test coverage across all layers with 95% threshold enforced:
+Comprehensive test coverage across all layers with 100% branch coverage enforced (INT-427). Uncovered branches require inline v8 ignore exemptions with validated categories.
 
 - Domain layer: Research models, use cases fully tested
-- Infrastructure: LLM adapters, repositories, publishers tested
-- Routes: Internal and public endpoints tested
+- Infrastructure: LLM adapters, repositories, Notion exporter, markdown converter tested
+- Routes: Internal, public, and export settings endpoints tested
 
 ### Coverage Areas
 
-- **Models**: Research entity creation, enhancement, factories
-- **Use Cases**: Process research, synthesis, retry, enhance, unshare, extractModelPreferences (v2.0.0)
-- **Infrastructure**: All LLM adapters with nock mocks, ContextInferenceAdapter with repair scenarios, InputValidationAdapter with Zod schemas (v2.1.0)
-- **Routes**: PubSub endpoints with proper auth validation
+- **Models**: Research entity creation, enhancement, factories, NotionExportInfo
+- **Use Cases**: Process research, synthesis, retry, enhance, unshare, extractModelPreferences, toggleResearchFavourite
+- **Infrastructure**: All LLM adapters with nock mocks, ContextInferenceAdapter with repair scenarios, InputValidationAdapter with Zod schemas, NotionResearchExporter, markdownToNotionBlocks, researchExportSettingsRepository, notionServiceClient
+- **Routes**: PubSub endpoints, research CRUD, export-notion, export settings with auth validation
+
+### v2.2.0 Test Additions
+
+| File                                           | Coverage | Notes                                          |
+| ---------------------------------------------- | -------- | ---------------------------------------------- |
+| `notionResearchExporter.test.ts`               | 100%     | Full Notion page creation with batch append    |
+| `markdownToNotionBlocks.test.ts`               | 100%     | All markdown elements and inline formatting    |
+| `researchExportSettingsRepository.test.ts`     | 100%     | Firestore CRUD for export settings             |
+| `notionServiceClient.test.ts`                  | 100%     | Token fetch and error handling                 |
+| `notionServiceClient.pagePreview.test.ts`      | 100%     | Page preview with error scenarios              |
+| `exportResearchToNotionUseCase.test.ts`        | 100%     | Fire-and-forget use case with all skip paths   |
+| `researchExportRoutes.test.ts`                 | 100%     | Settings GET/POST and validate endpoints       |
+| `toggleResearchFavourite.test.ts`              | 100%     | Favourite toggle with error branches           |
 
 ### v2.0.0 Test Additions
 
@@ -110,9 +123,9 @@ The Zod schema migration (INT-86, INT-218) improved type safety by deriving type
 
 | File                           | Lines | Issue                                           | Suggestion                       |
 | ------------------------------ | ----- | ----------------------------------------------- | -------------------------------- |
-| `src/routes/researchRoutes.ts` | 1344  | Handles many endpoints but all research-related | Acceptable given domain cohesion |
+| `src/routes/researchRoutes.ts` | 1662  | Handles many endpoints but all research-related | Acceptable given domain cohesion |
 
-**Analysis:** The file is large but follows single responsibility at the domain level (all research-related endpoints). Splitting would fragment related logic.
+**Analysis:** The file grew with the addition of `POST /research/:id/export-notion` and v8 ignore annotations. It follows single responsibility at the domain level (all research-related endpoints). The Notion export settings endpoints were correctly split into `researchExportRoutes.ts`.
 
 ---
 
@@ -126,13 +139,56 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 
 ## Deprecations
 
-### None Detected
+### Low Priority
 
-No deprecated APIs or dependencies in use.
+| File                                                      | Function               | Replacement              | Impact                               |
+| --------------------------------------------------------- | ---------------------- | ------------------------ | ------------------------------------ |
+| `src/infra/firestore/researchExportSettingsRepository.ts` | `getResearchPageId()`  | `getResearchSettings()`  | Returns full settings with title/URL |
+| `src/infra/firestore/researchExportSettingsRepository.ts` | `saveResearchPageId()` | `saveResearchSettings()` | Accepts title and URL parameters     |
+
+**Note:** The deprecated functions are still used by the fire-and-forget export use case (`getResearchPageId`). Migration to `getResearchSettings` can be done in a follow-up.
+
+---
+
+## TODO/FIXME Comments
+
+### Low Priority
+
+| File                                           | Comment                                                  | Impact                                    |
+| ---------------------------------------------- | -------------------------------------------------------- | ----------------------------------------- |
+| `src/domain/research/usecases/runSynthesis.ts` | `// TODO: define port interface for NotionServiceClient` | NotionServiceClient typed as `never` cast |
+
+**Note:** The `notionServiceClient` dependency in `runSynthesis` uses a `never` cast because importing the infra-layer `NotionServiceClient` type into the domain layer violates import rules. A port interface should be defined in `domain/research/ports/`.
 
 ---
 
 ## Resolved Issues
+
+### 2026-02-08 - Notion Export Integration
+
+| Date       | Issue                              | Resolution                                          |
+| ---------- | ---------------------------------- | --------------------------------------------------- |
+| 2026-02-08 | No Notion export capability        | Added automatic + manual export with page hierarchy |
+| 2026-02-08 | No export settings management      | Added Firestore-backed settings with validation     |
+| 2026-02-08 | Cover image missing in Notion      | Fixed export ordering (after DB save)               |
+
+### 2026-02-08 - Auth0 Claims Namespace
+
+| Date       | Issue                              | Resolution                                       |
+| ---------- | ---------------------------------- | ------------------------------------------------ |
+| 2026-02-08 | Missing name/email in API tokens   | Added namespace prefix lookup with bare fallback |
+
+### 2026-02-08 - Response Contract Standardization
+
+| Date       | Issue                               | Resolution                                       |
+| ---------- | ----------------------------------- | ------------------------------------------------ |
+| 2026-02-08 | Raw reply.send() in internal routes | Migrated to reply.ok()/reply.fail()              |
+
+### 2026-02-08 - Coverage Enforcement (INT-427)
+
+| Date       | Issue                              | Resolution                                       |
+| ---------- | ---------------------------------- | ------------------------------------------------ |
+| 2026-02-08 | 95% threshold too lenient          | Enforced 100% with v8 ignore exemptions          |
 
 ### 2026-01-25 - INT-218 Input Validation Zod Migration
 
@@ -162,7 +218,7 @@ No previously resolved issues tracked prior to v2.0.0.
 
 ---
 
-## v2.1.0 Architecture Quality
+## v2.2.0 Architecture Quality
 
 ### Strengths
 
@@ -170,12 +226,17 @@ No previously resolved issues tracked prior to v2.0.0.
 2. **Self-healing** - Parser + repair pattern handles malformed LLM responses gracefully
 3. **Standardized clients** - `@intexuraos/internal-clients` provides consistent service-to-service communication
 4. **One model per provider** - Clear constraint prevents duplicate costs
+5. **Notion integration** - Clean separation between export use case, exporter, markdown converter, and service client
+6. **100% branch coverage** - Strict enforcement with categorized v8 ignore exemptions
+7. **Sentry integration** - All loggers use `createAppLogger()` for error forwarding
 
 ### Areas for Future Improvement
 
 1. **Schema versioning** - No mechanism to handle schema changes over time
 2. **Repair telemetry** - Repair attempts are logged but not aggregated for analysis
 3. **Model keyword maintenance** - Keywords in `extractModelPreferences` need manual updates when models change
+4. **NotionServiceClient port** - Domain layer uses `never` cast for infra type; needs proper port interface
+5. **Notion re-export** - No way to re-export after initial export (requires manual deletion of `notionExportInfo`)
 
 ---
 

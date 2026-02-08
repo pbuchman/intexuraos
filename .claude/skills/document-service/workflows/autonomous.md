@@ -2,6 +2,8 @@
 
 Run when Task tool is invoked with `subagent_type: service-scribe`.
 
+For **parallel multi-agent** documentation of the full monorepo, see [team.md](team.md) instead.
+
 ## Purpose
 
 Generate comprehensive documentation for one or more services without human intervention, inferring all insights from code analysis and git history.

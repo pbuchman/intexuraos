@@ -154,11 +154,11 @@ sequenceDiagram
 
 ### LlmTestResult
 
-| Field | Type | Description |
-| ---------- | ------------ | --------------------- | |
-| `status` | 'success' \ | 'failure' | Test outcome |
-| `message` | string | LLM response or error |
-| `testedAt` | string | ISO 8601 timestamp |
+| Field      | Type         | Description           |
+| ---------- | ------------ | --------------------- |  |
+| `status`   | 'success' \  | 'failure'             | Test outcome |
+| `message`  | string       | LLM response or error |
+| `testedAt` | string       | ISO 8601 timestamp    |
 
 ### OAuthConnection
 
@@ -283,12 +283,12 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_AUTH0_AUDIENCE`             | Yes      | Auth0 API identifier                  |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Shared secret for internal endpoints  |
 | `INTEXURAOS_ENCRYPTION_KEY`             | Yes      | AES-256 encryption key (32 bytes hex) |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | No       | Google OAuth client ID                |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | No       | Google OAuth client secret            |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes      | Google OAuth client ID                |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes      | Google OAuth client secret            |
 | `INTEXURAOS_FIREBASE_PROJECT_ID`        | Yes      | Firebase project ID                   |
 | `INTEXURAOS_FIREBASE_CLIENT_EMAIL`      | Yes      | Firebase service account email        |
 | `INTEXURAOS_FIREBASE_PRIVATE_KEY`       | Yes      | Firebase service account private key  |
-| `INTEXURAOS_WEB_APP_URL`                | No       | Web app URL for OAuth redirects       |
+| `INTEXURAOS_WEB_APP_URL`                | Yes      | Web app URL for OAuth redirects       |
 
 ## Gotchas
 
@@ -309,6 +309,14 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 **Rate limit vs API key errors**: Error parser checks rate limits before API key patterns to avoid misdiagnosis (v2.0.0 fix).
 
 **Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`, `zai`) differ from display names.
+
+**Internal endpoints use response contract**: All internal endpoints now return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`. Callers must read from `response.data` instead of the top level.
+
+**OAuth2 routes use raw send**: OAuth2 spec routes (`/auth/oauth/token`, `/auth/oauth/authorize`) intentionally bypass the response contract via `@allow-raw-send` annotations because the OAuth2 spec requires flat `{ error, error_description }` responses.
+
+**Auth0 namespaced claims**: The `/auth/me` endpoint reads claims from `https://intexuraos.cloud/` namespace first, falling back to bare claims. Auth0 Actions must use this namespace when adding claims for API audiences.
+
+**Error code mapping**: Internal endpoint error codes follow the standard response contract codes: `UNAUTHORIZED` (401), `NOT_FOUND` (404), `MISCONFIGURED` (503), `DOWNSTREAM_ERROR` (502).
 
 ## File Structure
 

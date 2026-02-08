@@ -114,6 +114,34 @@ interface ResearchAgentTools {
 
   // Force-improve input prompt
   improveInput(params: { prompt: string }): Promise<{ improvedPrompt: string }>;
+
+  // Manually export completed research to Notion (v2.2.0)
+  exportToNotion(id: string): Promise<Research>;
+
+  // Get Notion export settings (v2.2.0)
+  getNotionSettings(): Promise<{
+    researchPageId: string | null;
+    researchPageTitle: string | null;
+    researchPageUrl: string | null;
+  }>;
+
+  // Save Notion export settings (v2.2.0)
+  saveNotionSettings(params: {
+    researchPageId: string;
+    researchPageTitle: string;
+    researchPageUrl: string;
+  }): Promise<{
+    researchPageId: string;
+    researchPageTitle: string;
+    researchPageUrl: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+
+  // Validate a Notion page ID and get preview (v2.2.0)
+  validateNotionPage(params: {
+    researchPageId: string;
+  }): Promise<{ title: string; url: string }>;
 }
 ```
 
@@ -157,8 +185,17 @@ interface Research {
   inputContexts?: InputContext[];
   shareInfo?: ShareInfo;
   favourite?: boolean;
+  notionExportInfo?: NotionExportInfo; // v2.2.0
   startedAt: string;
   completedAt?: string;
+}
+
+// v2.2.0: Notion export tracking
+interface NotionExportInfo {
+  mainPageId: string;
+  mainPageUrl: string;
+  llmReportPageIds: { model: string; pageId: string }[];
+  exportedAt: string;
 }
 
 interface LlmResult {
@@ -343,6 +380,15 @@ if (research.status === 'awaiting_confirmation') {
 
 ---
 
+## Public Endpoints (v2.2.0 additions)
+
+| Method | Path                                 | Purpose                                   |
+| ------ | ------------------------------------ | ----------------------------------------- |
+| POST   | `/research/:id/export-notion`        | Manually export to Notion (v2.2.0)        |
+| GET    | `/research/settings/notion`          | Get Notion export settings (v2.2.0)       |
+| POST   | `/research/settings/notion`          | Save Notion export settings (v2.2.0)      |
+| POST   | `/research/settings/notion/validate` | Validate Notion page ID (v2.2.0)          |
+
 ## Internal Endpoints
 
 | Method | Path                                    | Purpose                                     |
@@ -391,19 +437,21 @@ draft ──approve──> pending ──process──> processing ──all_com
 
 ---
 
-## Dependencies (v2.1.0)
+## Dependencies (v2.2.0)
 
-| Package                        | Purpose                             |
-| ------------------------------ | ----------------------------------- |
-| `@intexuraos/internal-clients` | User service client (NEW in v2.1.0) |
-| `@intexuraos/llm-contract`     | Model types, provider mapping       |
-| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders        |
-| `@intexuraos/llm-pricing`      | Pricing context interface           |
-| `@intexuraos/llm-utils`        | Parse error formatting              |
-| `@intexuraos/infra-gemini`     | Gemini client wrapper               |
-| `@intexuraos/common-http`      | HTTP utilities, auth                |
-| `@intexuraos/common-core`      | Result types, logging               |
+| Package                        | Purpose                                          |
+| ------------------------------ | ------------------------------------------------ |
+| `@intexuraos/internal-clients` | User service client (v2.1.0)                     |
+| `@intexuraos/infra-notion`     | Notion client and error mapping (NEW in v2.2.0)  |
+| `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                    |
+| `@intexuraos/llm-contract`     | Model types, provider mapping                    |
+| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                     |
+| `@intexuraos/llm-pricing`      | Pricing context interface                        |
+| `@intexuraos/llm-utils`        | Parse error formatting                           |
+| `@intexuraos/infra-gemini`     | Gemini client wrapper                            |
+| `@intexuraos/common-http`      | HTTP utilities, auth                             |
+| `@intexuraos/common-core`      | Result types, logging                            |
 
 ---
 
-**Last updated:** 2026-01-25 (v2.1.0)
+**Last updated:** 2026-02-08 (v2.2.0)

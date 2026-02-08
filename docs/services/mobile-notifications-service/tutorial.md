@@ -45,6 +45,29 @@ curl -X PATCH https://mobile-notifications.intexuraos.com/mobile-notifications/f
   }'
 ```
 
+## Part 3: Delete a Notification
+
+```bash
+curl -X DELETE https://mobile-notifications.intexuraos.com/mobile-notifications/notifications/notif_123 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+## Response Format
+
+All endpoints return a standardized response contract:
+
+- **Success:** `{ "success": true, "data": { ... } }`
+- **Error:** `{ "success": false, "error": { "code": "...", "message": "..." } }`
+
 ## Troubleshooting
 
 | Issue          | Solution                                   |

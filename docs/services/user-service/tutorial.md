@@ -370,11 +370,14 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
 
 ```json
 {
-  "google": "AIzaSyD1XXXXXXXXXXXXXXXXXXXXXXXXXX",
-  "openai": "sk-proj-XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-  "anthropic": null,
-  "perplexity": null,
-  "zai": null
+  "success": true,
+  "data": {
+    "google": "AIzaSyD1XXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "openai": "sk-proj-XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "anthropic": null,
+    "perplexity": null,
+    "zai": null
+  }
 }
 ```
 
@@ -398,8 +401,11 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/googl
 
 ```json
 {
-  "accessToken": "ya29.a0AfH6...",
-  "email": "user@gmail.com"
+  "success": true,
+  "data": {
+    "accessToken": "ya29.a0AfH6...",
+    "email": "user@gmail.com"
+  }
 }
 ```
 
@@ -416,8 +422,11 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 
 ```json
 {
-  "llmPreferences": {
-    "defaultModel": "gpt-4o"
+  "success": true,
+  "data": {
+    "llmPreferences": {
+      "defaultModel": "gpt-4o"
+    }
   }
 }
 ```

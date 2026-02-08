@@ -227,12 +227,12 @@ For initial implementation, use Option A. The flow:
 3. Use that state's ID
 
 **State name mapping:**
-| Request state | Linear state name (typical) |
-|---------------|---------------------------|
-| `backlog` | "Backlog" |
-| `in_progress` | "In Progress" |
-| `in_review` | "In Review" |
-| `qa` | "QA" or "In QA" |
+| Request state   | Linear state name (typical) |
+| --------------- | --------------------------- |
+| `backlog`       | "Backlog"                   |
+| `in_progress`   | "In Progress"               |
+| `in_review`     | "In Review"                 |
+| `qa`            | "QA" or "In QA"             |
 
 ### Task 2.4: Add helper for state lookup
 

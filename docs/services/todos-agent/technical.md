@@ -69,12 +69,18 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit    | Description                               | Date       |
-| --------- | ----------------------------------------- | ---------- |
-| `35f4c6`  | INT-218: Migrate to Zod schema validation | 2026-01-24 |
-| `b1c7a4b` | INT-269: Use @intexuraos/internal-clients | 2026-01-24 |
-| `6fa3bc5` | INT-155: Improve test coverage            | 2026-01-20 |
-| `9f1f8dc` | INT-126: Standardize ServiceFeedback      | 2026-01-18 |
+| Commit     | Description                                          | Date       |
+| ---------- | ---------------------------------------------------- | ---------- |
+| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)        | 2026-01-30 |
+| `c3198407` | Fix response contract violations (reply.ok/fail)     | 2026-01-30 |
+| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement     | 2026-01-31 |
+| `1faa1d3b` | INT-301: Consolidate user service client imports     | 2026-01-26 |
+| `6210f965` | INT-402: Add cancelled/processing status coverage    | 2026-01-27 |
+| `3a693666` | INT-401: Add processTodoCreated update failure tests | 2026-01-27 |
+| `714451ce` | INT-400: Add config.ts fallback value tests          | 2026-01-27 |
+| `35f4c6`   | INT-218: Migrate to Zod schema validation            | 2026-01-24 |
+| `b1c7a4b`  | INT-269: Use @intexuraos/internal-clients            | 2026-01-24 |
+| `9f1f8dc`  | INT-126: Standardize ServiceFeedback                 | 2026-01-18 |
 
 ## API Endpoints
 
@@ -107,32 +113,32 @@ sequenceDiagram
 ### Todo
 
 | Field         | Type           | Description                            |
-| ------------- | -------------- | -------------------------------------- | ---------------------------------------- | ------- | ------ |
+| ------------- | -------------- | -------------------------------------- |  |  |  |
 | `id`          | `string`       | Unique todo identifier                 |
 | `userId`      | `string`       | Owner user ID                          |
 | `title`       | `string`       | Todo title                             |
 | `description` | `string \      | null`                                  | Optional description (for AI extraction) |
 | `tags`        | `string[]`     | User-defined tags                      |
-| `priority`    | `TodoPriority` | low \                                  | medium \                                 | high \  | urgent |
-| `dueDate`     | `Date \        | null`                                  | Deadline                                 |
+| `priority`    | `TodoPriority` | low \                                  | medium \ | high \ | urgent |
+| `dueDate`     | `Date \        | null`                                  | Deadline |
 | `source`      | `string`       | Source system (whatsapp, manual, etc.) |
 | `sourceId`    | `string`       | ID in source system                    |
 | `status`      | `TodoStatus`   | Current state                          |
 | `archived`    | `boolean`      | Soft delete flag                       |
 | `items`       | `TodoItem[]`   | Sub-items                              |
-| `completedAt` | `Date \        | null`                                  | When marked completed                    |
+| `completedAt` | `Date \        | null`                                  | When marked completed |
 | `createdAt`   | `Date`         | Creation timestamp                     |
 | `updatedAt`   | `Date`         | Last update timestamp                  |
 
 ### TodoItem
 
 | Field         | Type             | Description            |
-| ------------- | ---------------- | ---------------------- | --------------- |
+| ------------- | ---------------- | ---------------------- |  |
 | `id`          | `string`         | Unique item identifier |
 | `title`       | `string`         | Item title             |
-| `status`      | `TodoItemStatus` | pending \              | completed       |
-| `priority`    | `TodoPriority \  | null`                  | Item priority   |
-| `dueDate`     | `Date \          | null`                  | Item deadline   |
+| `status`      | `TodoItemStatus` | pending \              | completed |
+| `priority`    | `TodoPriority \  | null`                  | Item priority |
+| `dueDate`     | `Date \          | null`                  | Item deadline |
 | `position`    | `number`         | Display order          |
 | `completedAt` | `Date \          | null`                  | Completion time |
 | `createdAt`   | `Date`           | Creation timestamp     |
@@ -273,8 +279,6 @@ apps/todos-agent/src/
       firestoreTodoRepository.ts
     gemini/
       todoItemExtractionService.ts  # LLM extraction implementation
-    user/
-      index.ts                    # Re-exports from internal-clients
   routes/
     todoRoutes.ts                # Public endpoints
     internalRoutes.ts            # Internal create endpoint

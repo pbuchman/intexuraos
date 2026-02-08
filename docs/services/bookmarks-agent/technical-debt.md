@@ -11,9 +11,34 @@
 | Code Duplicates     | 0     | -        |
 | Deprecations        | 0     | -        |
 
-Last updated: 2026-01-24
+Last updated: 2026-02-08
 
 ## Recent Improvements
+
+### INT-198: Pub/Sub Retry for Transient Errors
+
+Added transient error classification to the summarization pipeline:
+
+- **Pattern:** `SummaryError` now includes `transient?: boolean` flag; summarize Pub/Sub route returns HTTP 503 for transient errors
+- **Benefit:** Rate limits (HTTP 429), timeouts, and network failures automatically retry via Pub/Sub exponential backoff instead of silently failing
+- **Transient errors:** HTTP 429/503/504, network failures, TIMEOUT, FETCH_FAILED, RATE_LIMITED error codes
+- **Permanent errors:** HTTP 400/500, NO_CONTENT, invalid responses (graceful degradation, no retry)
+
+### Sentry-Enabled Logging
+
+Migrated all logger instances in `services.ts` from `pino()` to `createAppLogger()` from `@intexuraos/infra-sentry`, ensuring errors are automatically reported to Sentry.
+
+### Response Contract Compliance
+
+Migrated internal routes and Pub/Sub routes from raw `reply.send()`/`return { ... }` to standardized `reply.ok()`/`reply.fail()`. Image proxy routes annotated with `@allow-raw-send` (binary response endpoint).
+
+### Env Var Registration
+
+Added `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH` and `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` to `REQUIRED_ENV` in `index.ts`, ensuring startup validation catches missing Pub/Sub topic configuration.
+
+### 100% Branch Coverage Enforcement
+
+Added v8 ignore comments with valid categories for untestable branches (defensive TypeScript type guards, test infrastructure limitations, upstream contract dependencies).
 
 ### INT-210: WhatsApp Delivery (v2.0.0)
 
@@ -99,24 +124,28 @@ Previous code smells (resolved):
 
 ### Current Status
 
-All endpoints and use cases have test coverage. The 95% coverage threshold is met.
+All endpoints and use cases have test coverage. The 100% branch coverage threshold is met (with valid v8 ignore exemptions for untestable branches).
 
 ### Coverage Areas
 
-| Area               | Status | Notes                                |
-| ------------------ | ------ | ------------------------------------ |
-| Routes (public)    | Tested | Integration tests via app.inject()   |
-| Routes (internal)  | Tested | Integration tests via app.inject()   |
-| Routes (Pub/Sub)   | Tested | Unit tests with mocked publishers    |
-| Use cases          | Tested | Unit tests with dependency injection |
-| WhatsApp publisher | Tested | Mocked in summarizeBookmark tests    |
-| Infrastructure     | Tested | Tested via route integration tests   |
+| Area               | Status | Notes                                                       |
+| ------------------ | ------ | ----------------------------------------------------------- |
+| Routes (public)    | Tested | Integration tests via app.inject()                          |
+| Routes (internal)  | Tested | Integration tests via app.inject()                          |
+| Routes (Pub/Sub)   | Tested | Unit tests with mocked publishers, transient retry tests    |
+| Use cases          | Tested | Unit tests with dependency injection, transient error paths |
+| WhatsApp publisher | Tested | Mocked in summarizeBookmark tests                           |
+| Infrastructure     | Tested | Tested via route integration tests                          |
 
-### Recent Coverage Improvements (INT-172)
+### Recent Coverage Improvements (INT-172, INT-198, INT-427)
 
 - Added tests for Pub/Sub authentication bypass (Google's OIDC)
 - Added tests for malformed Pub/Sub message handling
 - Added tests for WhatsApp publish failure path
+- Added tests for transient error classification in `webAgentSummaryClient` (13 cases)
+- Added tests for transient vs permanent error handling in `summarizeBookmark` use case
+- Added tests for HTTP 503 retry response in Pub/Sub summarize route
+- Added test for legacy bookmark status defaulting in Firestore repository
 
 ## TypeScript Issues
 
@@ -132,9 +161,10 @@ All files are within reasonable size limits:
 
 | File                           | Lines | Status |
 | ------------------------------ | ----- | ------ |
-| internalRoutes.ts              | 449   | OK     |
-| firestoreBookmarkRepository.ts | 272   | OK     |
-| bookmarkRoutes.ts              | 346   | OK     |
+| internalRoutes.ts              | ~440  | OK     |
+| firestoreBookmarkRepository.ts | ~271  | OK     |
+| bookmarkRoutes.ts              | ~350  | OK     |
+| pubsubRoutes.ts                | ~267  | OK     |
 
 ## Code Duplicates
 
@@ -152,8 +182,13 @@ No deprecated APIs or dependencies in use.
 
 ### Historical Issues
 
-| Issue   | Description                                 | Resolution                          | Date       |
-| ------- | ------------------------------------------- | ----------------------------------- | ---------- |
-| INT-210 | WhatsApp delivery tightly coupled           | Decoupled via WhatsAppSendPublisher | 2026-01-24 |
-| INT-172 | Enrichment pipeline test coverage gaps      | Added comprehensive tests           | 2026-01-20 |
-| -       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline   | 2026-01-15 |
+| Issue   | Description                                 | Resolution                                                  | Date       |
+| ------- | ------------------------------------------- | ----------------------------------------------------------- | ---------- |
+| INT-198 | Transient summary errors silently dropped   | Pub/Sub retry via HTTP 503 + transient error classification | 2026-01-28 |
+| INT-427 | Branch coverage below 100%                  | Added v8 ignore exemptions with valid categories            | 2026-01-31 |
+| -       | Direct pino() loggers missed Sentry         | Migrated to createAppLogger() from @intexuraos/infra-sentry | 2026-01-30 |
+| -       | Raw reply.send() in internal/pubsub routes  | Migrated to reply.ok()/reply.fail() response contract       | 2026-01-30 |
+| -       | Pub/Sub topic env vars not in REQUIRED_ENV  | Added INTEXURAOS_PUBSUB_BOOKMARK_ENRICH/SUMMARIZE           | 2026-01-28 |
+| INT-210 | WhatsApp delivery tightly coupled           | Decoupled via WhatsAppSendPublisher                         | 2026-01-24 |
+| INT-172 | Enrichment pipeline test coverage gaps      | Added comprehensive tests                                   | 2026-01-20 |
+| -       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline                           | 2026-01-15 |

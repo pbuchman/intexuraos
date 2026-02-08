@@ -1,6 +1,6 @@
 # Todos Agent — Technical Debt
 
-**Last Updated:** 2026-01-25
+**Last Updated:** 2026-02-08
 **Analysis Run:** Autonomous documentation generation
 
 ---
@@ -55,16 +55,17 @@ No active code smells found in current codebase. Recent improvements include:
 
 ### Current Status
 
-All endpoints and use cases have test coverage meeting the 95% threshold.
+All endpoints and use cases have test coverage meeting the 100% branch coverage threshold (strict enforcement enabled via INT-427).
 
 ### Coverage Areas
 
-| Area            | Coverage | Notes                          |
-| --------------- | -------- | ------------------------------ |
-| Routes          | 100%     | All public and internal tested |
-| Use Cases       | 98%      | All domain logic covered       |
-| Infrastructure  | 95%      | Tested via route integration   |
-| PubSub Handlers | 100%     | Full event flow tested         |
+| Area            | Coverage | Notes                                    |
+| --------------- | -------- | ---------------------------------------- |
+| Routes          | 100%     | All public and internal tested           |
+| Use Cases       | 100%     | All domain logic covered                 |
+| Infrastructure  | 100%     | Tested via route integration             |
+| PubSub Handlers | 100%     | Full event flow tested                   |
+| Config          | 100%     | Fallback values for service URLs covered |
 
 ---
 
@@ -86,10 +87,10 @@ All files are within reasonable size limits:
 
 | File                           | Lines | Status                         |
 | ------------------------------ | ----- | ------------------------------ |
-| `todoRoutes.ts`                | 890   | Acceptable (route definitions) |
+| `todoRoutes.ts`                | ~920  | Acceptable (route definitions) |
 | `processTodoCreated.ts`        | 209   | Acceptable (single use case)   |
 | `todoItemExtractionService.ts` | 184   | Acceptable (single service)    |
-| `firestoreTodoRepository.ts`   | 256   | Acceptable (CRUD operations)   |
+| `firestoreTodoRepository.ts`   | ~260  | Acceptable (CRUD operations)   |
 
 ---
 
@@ -119,60 +120,60 @@ No deprecated APIs or dependencies in use. All dependencies are current:
 
 ## Recent Improvements
 
-### INT-269: Internal Clients Migration (2026-01-24)
+### Sentry Logger Migration (2026-01-30)
 
-Migrated from direct `userServiceClient` implementation to `@intexuraos/internal-clients` package:
+Migrated from direct `pino()` to `createAppLogger()` from `@intexuraos/infra-sentry`:
 
 **Before:**
 
 ```typescript
-import { UserServiceClient } from './infra/user/userServiceClient.js';
+import pino from 'pino';
+const logger = pino({ name: 'userServiceClient' });
 ```
 
 **After:**
 
 ```typescript
-import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
+import { createAppLogger } from '@intexuraos/infra-sentry';
+const logger = createAppLogger({ name: 'userServiceClient' });
 ```
 
 **Benefits:**
 
-- Consistent client implementation across services
-- Centralized LLM client management
-- Shared pricing context logic
+- Errors automatically forwarded to Sentry
+- Consistent logging across all services
+
+### Response Contract Compliance (2026-01-30)
+
+Migrated all internal and Pub/Sub routes to use standardized `reply.ok()`/`reply.fail()` instead of raw `reply.send()`:
+
+- Internal routes: `reply.fail('UNAUTHORIZED', ...)` instead of `reply.status(401); return { error: 'Unauthorized' }`
+- Pub/Sub routes: `reply.ok({})` instead of `{ success: true }`
+
+### INT-301: User Service Client Consolidation (2026-01-26)
+
+Removed local `infra/user/index.ts` re-export barrel and imported `createUserServiceClient` directly from `@intexuraos/internal-clients`.
+
+### 100% Branch Coverage Enforcement (2026-01-31)
+
+Achieved 100% branch coverage with proper v8 ignore annotations:
+
+- Added tests for cancelled/processing status preservation during item updates (INT-402)
+- Added tests for `processTodoCreated` update failure branches (INT-401)
+- Added tests for config.ts service URL fallback values (INT-400)
+- Added `getOAuthToken` mock to FakeUserServiceClient
+
+### INT-269: Internal Clients Migration (2026-01-24)
+
+Migrated from direct `userServiceClient` implementation to `@intexuraos/internal-clients` package.
 
 ### INT-218: Zod Schema Migration (2026-01-24)
 
-Migrated `todoItemExtractionService` from manual validation to Zod schemas:
-
-**Before:**
-
-```typescript
-// Manual type checking and parsing
-const parsed = JSON.parse(response);
-if (!isValid(parsed)) { ... }
-```
-
-**After:**
-
-```typescript
-import { TodoExtractionResponseSchema } from '@intexuraos/llm-prompts';
-const result = TodoExtractionResponseSchema.safeParse(parsed);
-```
-
-**Benefits:**
-
-- Type-safe extraction results
-- Better error messages with `formatZodErrors`
-- Consistent validation across LLM responses
+Migrated `todoItemExtractionService` from manual validation to Zod schemas with `TodoExtractionResponseSchema` from `@intexuraos/llm-prompts`.
 
 ### INT-155: Test Coverage Improvement (2026-01-20)
 
-Improved test coverage across all use cases and routes:
-
-- Added edge case tests for archive/cancel restrictions
-- Expanded PubSub handler tests
-- Increased item reorder validation tests
+Improved test coverage across all use cases and routes.
 
 ---
 
@@ -180,12 +181,16 @@ Improved test coverage across all use cases and routes:
 
 ### Historical Issues
 
-| Date       | Issue                               | Resolution                             |
-| ---------- | ----------------------------------- | -------------------------------------- |
-| 2026-01-24 | Manual LLM validation               | Migrated to Zod schemas (INT-218)      |
-| 2026-01-24 | Inconsistent user-service clients   | Unified via internal-clients (INT-269) |
-| 2026-01-20 | Gaps in test coverage               | Additional test cases (INT-155)        |
-| 2026-01-18 | Non-standard ServiceFeedback format | Standardized contract (INT-126)        |
+| Date       | Issue                               | Resolution                                     |
+| ---------- | ----------------------------------- | ---------------------------------------------- |
+| 2026-01-31 | Branch coverage below 100%          | v8 ignore annotations + new tests (INT-427)    |
+| 2026-01-30 | Direct pino() usage (no Sentry)     | Migrated to createAppLogger                    |
+| 2026-01-30 | Raw reply.send() in routes          | Migrated to reply.ok()/reply.fail()            |
+| 2026-01-26 | Local user client re-export barrel  | Removed infra/user/index.ts (INT-301)          |
+| 2026-01-24 | Manual LLM validation               | Migrated to Zod schemas (INT-218)              |
+| 2026-01-24 | Inconsistent user-service clients   | Unified via internal-clients (INT-269)         |
+| 2026-01-20 | Gaps in test coverage               | Additional test cases (INT-155)                |
+| 2026-01-18 | Non-standard ServiceFeedback format | Standardized contract (INT-126)                |
 
 ---
 

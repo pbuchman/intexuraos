@@ -52,9 +52,9 @@ graph TB
     ProcessUC -->|action.created| ActionsQueue
 ```
 
-## Classification Prompt Structure (v2.0.0)
+## Classification Prompt Structure (v2.0.0+)
 
-The classification prompt in `packages/llm-prompts/src/classification/commandClassifierPrompt.ts` uses a 5-step decision tree executed in strict order:
+The classification prompt in `packages/llm-prompts/src/classification/commandClassifierPrompt.ts` uses a multi-step decision tree executed in strict order:
 
 ### Step 1: Explicit Prefix Override
 
@@ -115,6 +115,7 @@ Traditional signal matching when no URL and no explicit intent:
 | reminder | remind me, przypomnij, don't forget                 |
 | research | how does, what is, why, find out, learn about, ?    |
 | note     | notes, idea, remember that, jot down                |
+| code     | fix bug, refactor, implement, deploy, debug         |
 | todo     | (default for actionable requests)                   |
 
 ## Data Flow
@@ -192,12 +193,12 @@ sequenceDiagram
 
 ### CommandClassification
 
-| Field          | Type        | Description                                            |
-| -------------- | ----------- | ------------------------------------------------------ |
-| `type`         | CommandType | todo, research, note, link, calendar, linear, reminder |
-| `confidence`   | number      | 0-1 confidence score                                   |
-| `reasoning`    | string      | LLM explanation for classification                     |
-| `classifiedAt` | string      | ISO 8601 classification timestamp                      |
+| Field          | Type        | Description                                                  |
+| -------------- | ----------- | ------------------------------------------------------------ |
+| `type`         | CommandType | todo, research, note, link, calendar, linear, reminder, code |
+| `confidence`   | number      | 0-1 confidence score                                         |
+| `reasoning`    | string      | LLM explanation for classification                           |
+| `classifiedAt` | string      | ISO 8601 classification timestamp                            |
 
 ### Confidence Semantics
 
@@ -243,10 +244,12 @@ sequenceDiagram
 
 ### Packages
 
-| Package       | Purpose                       |
-| ------------- | ----------------------------- |
-| `llm-prompts` | Classification prompt builder |
-| `llm-factory` | LLM client abstraction        |
+| Package              | Purpose                          |
+| -------------------- | -------------------------------- |
+| `llm-prompts`        | Classification prompt builder    |
+| `llm-factory`        | LLM client abstraction           |
+| `internal-clients`   | Shared user-service HTTP client  |
+| `infra-sentry`       | Sentry-enabled logger factory    |
 
 ### Infrastructure
 
@@ -265,12 +268,14 @@ sequenceDiagram
 
 ## Configuration
 
-| Environment Variable             | Required | Description                     |
-| -------------------------------- | -------- | ------------------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`    | Yes      | user-service base URL           |
-| `INTEXURAOS_ACTIONS_AGENT_URL`   | Yes      | actions-agent base URL          |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth |
-| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | Google Cloud project ID         |
+| Environment Variable                  | Required | Description                              |
+| ------------------------------------- | -------- | ---------------------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                    |
+| `INTEXURAOS_ACTIONS_AGENT_URL`        | Yes      | actions-agent base URL                   |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL            |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth          |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                  |
+| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events |
 
 ## Gotchas
 
@@ -288,6 +293,10 @@ sequenceDiagram
 
 **Archive vs delete** - Classified commands can only be archived, not deleted. Only received/pending/failed can be deleted.
 
+**Response contract** - All endpoints use `reply.ok(data)` and `reply.fail(code, message)`. Responses wrap data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
+
+**Logging** - All loggers use `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`), which sends errors to Sentry automatically.
+
 ## File Structure
 
 ```
@@ -300,7 +309,6 @@ apps/commands-agent/src/
       classifier.ts        # Classifier interface
       commandRepository.ts # Repository interface
       eventPublisher.ts    # PubSub publisher interface
-      userServiceClient.ts
       actionsAgentClient.ts
     usecases/
       processCommand.ts    # Main command processing logic
@@ -317,8 +325,6 @@ apps/commands-agent/src/
       config.ts
     actionsAgent/
       client.ts            # actions-agent HTTP client
-    user/
-      userServiceClient.ts # user-service HTTP client
   routes/
     commandsRoutes.ts      # Public endpoints
     internalRoutes.ts      # Pub/Sub and internal endpoints
@@ -328,10 +334,16 @@ apps/commands-agent/src/
 
 packages/llm-prompts/src/
   classification/
-    commandClassifierPrompt.ts  # 5-step classification prompt
+    commandClassifierPrompt.ts  # Multi-step classification prompt
     index.ts
 ```
 
+**Removed files:** `domain/ports/userServiceClient.ts` and `infra/user/` directory. The user service client now imports directly from `@intexuraos/internal-clients`.
+
 ---
 
-**Last updated:** 2026-01-24
+## Recent Changes
+
+- **2026-02-08:** Add `code` command/action type for programming-related commands. Adopt standardized response contract (`reply.ok()`/`reply.fail()`). Migrate to Sentry-enabled logging via `createAppLogger()`. Remove local user service client adapter; import `UserServiceClient` directly from `@intexuraos/internal-clients`. Add `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` and `INTEXURAOS_APP_SETTINGS_SERVICE_URL` to required env vars. Delete `infra/user/` directory and `domain/ports/userServiceClient.ts`.
+
+**Last updated:** 2026-02-08

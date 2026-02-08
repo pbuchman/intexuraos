@@ -122,4 +122,4 @@ const meetingNotes = await listNotes({
 
 ---
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-02-08
