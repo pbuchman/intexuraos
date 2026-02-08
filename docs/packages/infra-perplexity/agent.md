@@ -16,7 +16,11 @@
 export function createPerplexityClient(config: PerplexityConfig): PerplexityClient;
 
 // Cost calculation
-export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing, providerCost: number | undefined): number;
+export function calculateTextCost(
+  usage: TokenUsage,
+  pricing: ModelPricing,
+  providerCost: number | undefined
+): number;
 export function normalizeUsage(
   inputTokens: number,
   outputTokens: number,
@@ -37,7 +41,7 @@ interface PerplexityConfig {
   model: string;
   userId: string;
   pricing: ModelPricing;
-  timeoutMs?: number;  // Default: 840000 (14 minutes)
+  timeoutMs?: number; // Default: 840000 (14 minutes)
   logger: Logger;
 }
 
@@ -56,7 +60,7 @@ const client = createPerplexityClient({
   apiKey: env.INTEXURAOS_PERPLEXITY_API_KEY,
   model: 'sonar-pro',
   userId,
-  pricing: { inputPricePerMillion: 1.00, outputPricePerMillion: 1.00 },
+  pricing: { inputPricePerMillion: 1.0, outputPricePerMillion: 1.0 },
   timeoutMs: 840000,
   logger,
 });
@@ -82,11 +86,11 @@ if (result.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED':  // 429
-    case 'INVALID_KEY':   // 401
-    case 'OVERLOADED':    // 503
-    case 'TIMEOUT':       // AbortError or timeout-like messages
-    case 'API_ERROR':     // general error
+    case 'RATE_LIMITED': // 429
+    case 'INVALID_KEY': // 401
+    case 'OVERLOADED': // 503
+    case 'TIMEOUT': // AbortError or timeout-like messages
+    case 'API_ERROR': // general error
   }
 }
 ```

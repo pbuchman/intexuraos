@@ -118,7 +118,13 @@ interface SummarizePageResponse {
       estimatedReadingMinutes: number;
     };
     error?: {
-      code: 'FETCH_FAILED' | 'TIMEOUT' | 'INVALID_URL' | 'NO_CONTENT' | 'API_ERROR' | 'RATE_LIMITED';
+      code:
+        | 'FETCH_FAILED'
+        | 'TIMEOUT'
+        | 'INVALID_URL'
+        | 'NO_CONTENT'
+        | 'API_ERROR'
+        | 'RATE_LIMITED';
       message: string;
     };
   };
@@ -203,16 +209,16 @@ interface SummarizePageResponse {
 
 ## Error Handling
 
-| Error Code    | Meaning                         | Recovery Action              |
-| ------------- | ------------------------------- | ---------------------------- |
-| INVALID_URL   | Not HTTP/HTTPS or malformed     | Validate URL format          |
-| ACCESS_DENIED | Site returned 403               | Accept no preview available  |
-| FETCH_FAILED  | Network or HTTP error           | Retry with backoff           |
-| TIMEOUT       | Request exceeded time limit     | Retry or increase timeout    |
-| TOO_LARGE     | Response over 2MB               | Cannot process large pages   |
-| NO_CONTENT    | No text extracted from page     | Page may be JS-only or empty |
-| API_ERROR     | LLM or user-service error       | Check user has API key       |
-| RATE_LIMITED  | Crawl4AI returned HTTP 429      | Wait and retry with backoff  |
+| Error Code    | Meaning                     | Recovery Action              |
+| ------------- | --------------------------- | ---------------------------- |
+| INVALID_URL   | Not HTTP/HTTPS or malformed | Validate URL format          |
+| ACCESS_DENIED | Site returned 403           | Accept no preview available  |
+| FETCH_FAILED  | Network or HTTP error       | Retry with backoff           |
+| TIMEOUT       | Request exceeded time limit | Retry or increase timeout    |
+| TOO_LARGE     | Response over 2MB           | Cannot process large pages   |
+| NO_CONTENT    | No text extracted from page | Page may be JS-only or empty |
+| API_ERROR     | LLM or user-service error   | Check user has API key       |
+| RATE_LIMITED  | Crawl4AI returned HTTP 429  | Wait and retry with backoff  |
 
 ## Rate Limits
 

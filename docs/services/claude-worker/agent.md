@@ -69,12 +69,14 @@ interface ClaudeWorkerLifecycle {
     detach: () => void;
   }>;
 
-  listWorkers(): Promise<Array<{
-    taskId: string;
-    containerId: string;
-    status: 'starting' | 'running' | 'completed' | 'failed' | 'timeout';
-    startedAt: Date;
-  }>>;
+  listWorkers(): Promise<
+    Array<{
+      taskId: string;
+      containerId: string;
+      status: 'starting' | 'running' | 'completed' | 'failed' | 'timeout';
+      startedAt: Date;
+    }>
+  >;
 }
 ```
 
@@ -83,11 +85,14 @@ interface ClaudeWorkerLifecycle {
 ```typescript
 type WorkerType = 'opus' | 'auto' | 'glm';
 
-const WORKER_TYPES: Record<WorkerType, {
-  apiBaseUrl: string;
-  apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'ZAI_API_KEY';
-  model?: string;
-}> = {
+const WORKER_TYPES: Record<
+  WorkerType,
+  {
+    apiBaseUrl: string;
+    apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'ZAI_API_KEY';
+    model?: string;
+  }
+> = {
   opus: {
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
@@ -124,18 +129,18 @@ const WORKER_TYPES: Record<WorkerType, {
 ```typescript
 interface ContainerMounts {
   '/repo': {
-    source: string;     // Host worktree path
-    mode: 'rw';         // Read-write for git operations
-    required: true;     // Container fails without it
+    source: string; // Host worktree path
+    mode: 'rw'; // Read-write for git operations
+    required: true; // Container fails without it
     content: 'git-repo'; // Must contain .git dir or file
   };
   '/secrets': {
-    source: string;     // Host per-task secrets path
-    mode: 'ro';         // Read-only (enforced)
+    source: string; // Host per-task secrets path
+    mode: 'ro'; // Read-only (enforced)
     required: true;
     files: {
-      'gcp-sa.json': 'optional';    // GCP service account key
-      'github-token': 'optional';   // Refreshed GitHub token
+      'gcp-sa.json': 'optional'; // GCP service account key
+      'github-token': 'optional'; // Refreshed GitHub token
     };
   };
   '/tmp': {
@@ -162,7 +167,8 @@ const handle = await provider.createWorker({
   taskId: 'INT-500-implement-feature',
   worktreePath: '/home/user/.claude-orchestrator/worktrees/INT-500',
   prompt: 'Implement the user profile page',
-  systemPrompt: 'You are a senior developer. Implement the following task:\n\nImplement the user profile page',
+  systemPrompt:
+    'You are a senior developer. Implement the following task:\n\nImplement the user profile page',
   workerType: 'auto',
   secrets: {
     ANTHROPIC_API_KEY: 'sk-ant-...',

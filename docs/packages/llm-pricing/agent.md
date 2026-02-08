@@ -39,7 +39,12 @@ interface LlmPricing {
 type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
 
 // usageLogger.ts
-type CallType = 'research' | 'generate' | 'image_generation' | 'visualization_insights' | 'visualization_vegalite';
+type CallType =
+  | 'research'
+  | 'generate'
+  | 'image_generation'
+  | 'visualization_insights'
+  | 'visualization_vegalite';
 
 interface UsageLogParams {
   userId: string;
@@ -53,8 +58,17 @@ interface UsageLogParams {
 }
 
 // pricingClient.ts
-interface AllPricingResponse { google: ProviderPricing; openai: ProviderPricing; anthropic: ProviderPricing; perplexity: ProviderPricing; zai: ProviderPricing; }
-interface PricingClientError { code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR'; message: string; }
+interface AllPricingResponse {
+  google: ProviderPricing;
+  openai: ProviderPricing;
+  anthropic: ProviderPricing;
+  perplexity: ProviderPricing;
+  zai: ProviderPricing;
+}
+interface PricingClientError {
+  code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR';
+  message: string;
+}
 interface IPricingContext {
   getPricing(model: LLMModel): ModelPricing;
   hasPricing(model: LLMModel): boolean;
@@ -67,8 +81,14 @@ interface IPricingContext {
 ## Exported Functions
 
 ```typescript
-function fetchAllPricing(baseUrl: string, authToken: string): Promise<Result<AllPricingResponse, PricingClientError>>;
-function createPricingContext(allPricing: AllPricingResponse, requiredModels?: LLMModel[]): PricingContext;
+function fetchAllPricing(
+  baseUrl: string,
+  authToken: string
+): Promise<Result<AllPricingResponse, PricingClientError>>;
+function createPricingContext(
+  allPricing: AllPricingResponse,
+  requiredModels?: LLMModel[]
+): PricingContext;
 function createUsageLogger(deps: { logger: Logger }): UsageLogger;
 function isUsageLoggingEnabled(): boolean;
 /** @deprecated */ function logUsage(params: UsageLogParams): Promise<void>;
@@ -97,11 +117,16 @@ class UsageLogger {
 ## Exported Test Fixtures
 
 ```typescript
-const TEST_PRICING: ModelPricing;      // { inputPricePerMillion: 1.0, outputPricePerMillion: 2.0 }
+const TEST_PRICING: ModelPricing; // { inputPricePerMillion: 1.0, outputPricePerMillion: 2.0 }
 const TEST_IMAGE_PRICING: ModelPricing; // { imagePricing: { '1024x1024': 0.04, ... } }
 
-class FakePricingContext implements IPricingContext { /* always returns test pricing */ }
-function createFakePricingContext(pricing?: ModelPricing, imagePricing?: ModelPricing): FakePricingContext;
+class FakePricingContext implements IPricingContext {
+  /* always returns test pricing */
+}
+function createFakePricingContext(
+  pricing?: ModelPricing,
+  imagePricing?: ModelPricing
+): FakePricingContext;
 ```
 
 ## Dependency Graph
@@ -130,7 +155,14 @@ const pricing = pricingContext.getPricing('gemini-2.5-flash');
 // Log usage after LLM call
 import { createUsageLogger } from '@intexuraos/llm-pricing';
 const usageLogger = createUsageLogger({ logger });
-await usageLogger.log({ userId, provider: 'google', model: 'gemini-2.5-flash', callType: 'generate', usage, success: true });
+await usageLogger.log({
+  userId,
+  provider: 'google',
+  model: 'gemini-2.5-flash',
+  callType: 'generate',
+  usage,
+  success: true,
+});
 
 // In tests
 import { createFakePricingContext } from '@intexuraos/llm-pricing';

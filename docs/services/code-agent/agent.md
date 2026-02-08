@@ -41,9 +41,9 @@ interface ProcessCodeActionRequest {
 
 // Public (from web UI)
 interface SubmitCodeTaskRequest {
-  prompt: string;            // 1-100000 chars
-  workerType?: 'opus' | 'auto' | 'glm';  // default: 'auto'
-  workerLocation?: string;   // 1-32 chars
+  prompt: string; // 1-100000 chars
+  workerType?: 'opus' | 'auto' | 'glm'; // default: 'auto'
+  workerLocation?: string; // 1-32 chars
   linearIssueId?: string;
   linearIssueTitle?: string;
 }
@@ -92,8 +92,8 @@ const LIMITS = {
   maxConcurrentTasks: 3,
   maxTasksPerHour: 10,
   maxPromptLength: 10000,
-  dailyCostCap: 20,      // dollars
-  monthlyCostCap: 200,   // dollars
+  dailyCostCap: 20, // dollars
+  monthlyCostCap: 200, // dollars
   estimatedCostPerTask: 1.17,
 };
 ```
@@ -133,8 +133,8 @@ interface SubmitTaskFeedbackRequest {
 
 ```typescript
 interface WorkerConfigInput {
-  name: string;                  // 3-32 chars, /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/
-  url: string;                   // URI format
+  name: string; // 3-32 chars, /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/
+  url: string; // URI format
   cfAccessClientId: string;
   cfAccessClientSecret: string;
   dispatchSigningSecret: string;
@@ -152,7 +152,7 @@ interface WorkerConfigInput {
 ```typescript
 interface CancelTaskWithNonceRequest {
   taskId: string;
-  nonce: string;   // 4 hex chars
+  nonce: string; // 4 hex chars
   userId: string;
 }
 
@@ -187,11 +187,11 @@ Layer 3: linearIssueId active check (one active task per issue)
 
 ```typescript
 type RateLimitErrorCode =
-  | 'concurrent_limit'    // 429 - max 3 concurrent
-  | 'hourly_limit'        // 429 - max 10/hour
-  | 'daily_cost_limit'    // 429 - $20/day cap
-  | 'monthly_cost_limit'  // 429 - $200/month cap
-  | 'prompt_too_long'     // 429 - >10000 chars
+  | 'concurrent_limit' // 429 - max 3 concurrent
+  | 'hourly_limit' // 429 - max 10/hour
+  | 'daily_cost_limit' // 429 - $20/day cap
+  | 'monthly_cost_limit' // 429 - $200/month cap
+  | 'prompt_too_long' // 429 - >10000 chars
   | 'service_unavailable'; // 503 - usage DB unreachable
 ```
 
@@ -308,38 +308,38 @@ All errors follow the IntexuraOS contract:
 
 ### Error Code Mapping
 
-| HTTP | Code                   | When                                        |
-| ---- | ---------------------- | ------------------------------------------- |
-| 401  | `UNAUTHORIZED`         | Missing or invalid auth                     |
-| 400  | `INVALID_REQUEST`      | Bad request body or params                  |
-| 400  | `INVALID_WORKER`       | Worker name doesn't match configured worker |
-| 404  | `NOT_FOUND`            | Task or worker not found                    |
-| 409  | `CONFLICT`             | Deduplication triggered                     |
-| 429  | `RATE_LIMITED`         | Rate limit exceeded (see code for type)     |
-| 503  | `MISCONFIGURED`        | Worker unavailable or no workers configured |
-| 500  | `INTERNAL_ERROR`       | Unexpected server error                     |
+| HTTP | Code              | When                                        |
+| ---- | ----------------- | ------------------------------------------- |
+| 401  | `UNAUTHORIZED`    | Missing or invalid auth                     |
+| 400  | `INVALID_REQUEST` | Bad request body or params                  |
+| 400  | `INVALID_WORKER`  | Worker name doesn't match configured worker |
+| 404  | `NOT_FOUND`       | Task or worker not found                    |
+| 409  | `CONFLICT`        | Deduplication triggered                     |
+| 429  | `RATE_LIMITED`    | Rate limit exceeded (see code for type)     |
+| 503  | `MISCONFIGURED`   | Worker unavailable or no workers configured |
+| 500  | `INTERNAL_ERROR`  | Unexpected server error                     |
 
 ## Events
 
 ### Outgoing HTTP Calls
 
-| Target          | Endpoint                                          | When                              |
-| --------------- | ------------------------------------------------- | --------------------------------- |
-| Worker          | `POST {workerUrl}/tasks`                          | Task dispatch                     |
-| Worker          | `DELETE {workerUrl}/tasks/{taskId}`               | Task cancellation                 |
-| Worker          | `GET {workerUrl}/health`                          | Connectivity test                 |
-| linear-agent    | `POST /internal/linear/issues`                    | Issue creation                    |
-| linear-agent    | `PATCH /internal/linear/issues/{id}/state`        | State transition                  |
-| linear-agent    | `POST /internal/linear/issues/validate`           | Issue validation                  |
-| linear-agent    | `POST /internal/linear/issues/generate-title`     | LLM title generation              |
-| linear-agent    | `POST /internal/linear/issues/{id}/comments`      | Comment addition                  |
-| actions-agent   | `PATCH /internal/actions/{id}/status`             | Action status update              |
+| Target        | Endpoint                                      | When                 |
+| ------------- | --------------------------------------------- | -------------------- |
+| Worker        | `POST {workerUrl}/tasks`                      | Task dispatch        |
+| Worker        | `DELETE {workerUrl}/tasks/{taskId}`           | Task cancellation    |
+| Worker        | `GET {workerUrl}/health`                      | Connectivity test    |
+| linear-agent  | `POST /internal/linear/issues`                | Issue creation       |
+| linear-agent  | `PATCH /internal/linear/issues/{id}/state`    | State transition     |
+| linear-agent  | `POST /internal/linear/issues/validate`       | Issue validation     |
+| linear-agent  | `POST /internal/linear/issues/generate-title` | LLM title generation |
+| linear-agent  | `POST /internal/linear/issues/{id}/comments`  | Comment addition     |
+| actions-agent | `PATCH /internal/actions/{id}/status`         | Action status update |
 
 ### Outgoing Pub/Sub
 
-| Topic                         | When                                 | Payload                            |
-| ----------------------------- | ------------------------------------ | ---------------------------------- |
-| `intexuraos-whatsapp-send-*`  | Task started, completed, or failed   | WhatsApp message with task details |
+| Topic                        | When                               | Payload                            |
+| ---------------------------- | ---------------------------------- | ---------------------------------- |
+| `intexuraos-whatsapp-send-*` | Task started, completed, or failed | WhatsApp message with task details |
 
 ### Incoming Webhooks
 
@@ -351,10 +351,10 @@ All errors follow the IntexuraOS contract:
 
 ### Metrics (Cloud Monitoring)
 
-| Metric                        | Type      | Labels                      |
-| ----------------------------- | --------- | --------------------------- |
-| `tasks_submitted`             | Counter   | `workerType`, `source`      |
-| `tasks_completed`             | Counter   | `workerType`, `status`      |
-| `task_duration_seconds`       | Histogram | `workerType`                |
-| `active_tasks`                | Gauge     | `workerLocation`            |
-| `task_cost_dollars`           | Counter   | `workerType`, `userId`      |
+| Metric                  | Type      | Labels                 |
+| ----------------------- | --------- | ---------------------- |
+| `tasks_submitted`       | Counter   | `workerType`, `source` |
+| `tasks_completed`       | Counter   | `workerType`, `status` |
+| `task_duration_seconds` | Histogram | `workerType`           |
+| `active_tasks`          | Gauge     | `workerLocation`       |
+| `task_cost_dollars`     | Counter   | `workerType`, `userId` |

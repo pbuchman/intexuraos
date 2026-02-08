@@ -51,21 +51,21 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                  | Date       |
-| ---------- | ------------------------------------------------------------ | ---------- |
-| `44017d5c` | INT-473 Fix ESLint OOM with batched parallel lint runner     | 2026-02-01 |
-| `d713d754` | INT-156 Fix ActionDoc missing approvalNonce fields           | 2026-01-31 |
-| `96258560` | INT-427 100% branch coverage enforcement                     | 2026-01-31 |
-| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement (Phase 3)    | 2026-01-31 |
-| `46c026cc` | Fix apps HTTP clients to unwrap response contract            | 2026-01-31 |
-| `9723dc24` | Standardize DELETE endpoints to return consistent contract   | 2026-01-30 |
-| `c3198407` | Fix all 132 response contract violations across codebase     | 2026-01-30 |
-| `f08f890e` | Improve handleApprovalReply branch coverage to 98.23%        | 2026-01-30 |
-| `39b6be5b` | Fix duplicate Pub/Sub events on action creation              | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps       | 2026-01-30 |
-| `3a83941d` | INT-424 Fix code review issues from PR #616                  | 2026-01-30 |
-| `95468bd9` | INT-422 Fix Polish date parsing in calendar actions          | 2026-01-29 |
-| `19f9a081` | Fix action payload serialization in API responses            | 2026-01-29 |
+| Commit     | Description                                                | Date       |
+| ---------- | ---------------------------------------------------------- | ---------- |
+| `44017d5c` | INT-473 Fix ESLint OOM with batched parallel lint runner   | 2026-02-01 |
+| `d713d754` | INT-156 Fix ActionDoc missing approvalNonce fields         | 2026-01-31 |
+| `96258560` | INT-427 100% branch coverage enforcement                   | 2026-01-31 |
+| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement (Phase 3)  | 2026-01-31 |
+| `46c026cc` | Fix apps HTTP clients to unwrap response contract          | 2026-01-31 |
+| `9723dc24` | Standardize DELETE endpoints to return consistent contract | 2026-01-30 |
+| `c3198407` | Fix all 132 response contract violations across codebase   | 2026-01-30 |
+| `f08f890e` | Improve handleApprovalReply branch coverage to 98.23%      | 2026-01-30 |
+| `39b6be5b` | Fix duplicate Pub/Sub events on action creation            | 2026-01-30 |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps     | 2026-01-30 |
+| `3a83941d` | INT-424 Fix code review issues from PR #616                | 2026-01-30 |
+| `95468bd9` | INT-422 Fix Polish date parsing in calendar actions        | 2026-01-29 |
+| `19f9a081` | Fix action payload serialization in API responses          | 2026-01-29 |
 
 ## Data Flow
 

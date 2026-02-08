@@ -39,7 +39,7 @@ const audit = createAuditContext({
   prompt: 'Explain TypeScript generics',
   startedAt: new Date(),
   userId: 'user-123',
-  researchId: 'research-456',  // optional
+  researchId: 'research-456', // optional
 });
 ```
 
@@ -63,23 +63,23 @@ await audit.success({
 
 Full success parameters:
 
-| Parameter            | Type     | Required | Description                          |
-| -------------------- | -------- | -------- | ------------------------------------ |
-| `response`           | string   | Yes      | LLM response content                |
-| `inputTokens`        | number   | No       | Input token count                    |
-| `outputTokens`       | number   | No       | Output token count                   |
-| `cacheCreationTokens`| number   | No       | Anthropic cache write tokens         |
-| `cacheReadTokens`    | number   | No       | Anthropic cache read tokens          |
-| `cachedTokens`       | number   | No       | OpenAI cached tokens                 |
-| `reasoningTokens`    | number   | No       | OpenAI reasoning tokens              |
-| `webSearchCalls`     | number   | No       | Number of web search calls           |
-| `groundingEnabled`   | boolean  | No       | Whether Google grounding was used    |
-| `providerCost`       | number   | No       | Cost reported by provider            |
-| `costUsd`            | number   | No       | Calculated cost in USD               |
-| `imageCount`         | number   | No       | Number of images generated           |
-| `imageModel`         | string   | No       | Image model used                     |
-| `imageSize`          | string   | No       | Image dimensions                     |
-| `imageCostUsd`       | number   | No       | Image generation cost                |
+| Parameter             | Type    | Required | Description                       |
+| --------------------- | ------- | -------- | --------------------------------- |
+| `response`            | string  | Yes      | LLM response content              |
+| `inputTokens`         | number  | No       | Input token count                 |
+| `outputTokens`        | number  | No       | Output token count                |
+| `cacheCreationTokens` | number  | No       | Anthropic cache write tokens      |
+| `cacheReadTokens`     | number  | No       | Anthropic cache read tokens       |
+| `cachedTokens`        | number  | No       | OpenAI cached tokens              |
+| `reasoningTokens`     | number  | No       | OpenAI reasoning tokens           |
+| `webSearchCalls`      | number  | No       | Number of web search calls        |
+| `groundingEnabled`    | boolean | No       | Whether Google grounding was used |
+| `providerCost`        | number  | No       | Cost reported by provider         |
+| `costUsd`             | number  | No       | Calculated cost in USD            |
+| `imageCount`          | number  | No       | Number of images generated        |
+| `imageModel`          | string  | No       | Image model used                  |
+| `imageSize`           | string  | No       | Image dimensions                  |
+| `imageCostUsd`        | number  | No       | Image generation cost             |
 
 #### `.error(result: CompleteAuditLogErrorParams): Promise<void>`
 
@@ -169,8 +169,12 @@ interface CreateAuditLogParams {
   researchId?: string;
 }
 
-interface CompleteAuditLogSuccessParams { /* see table above */ }
-interface CompleteAuditLogErrorParams { error: string; }
+interface CompleteAuditLogSuccessParams {
+  /* see table above */
+}
+interface CompleteAuditLogErrorParams {
+  error: string;
+}
 ```
 
 ## Used By
@@ -181,18 +185,18 @@ interface CompleteAuditLogErrorParams { error: string; }
 
 ## Recent Changes
 
-| Commit   | Description                                          | Age     |
-| -------- | ---------------------------------------------------- | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner     | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions       | 12 days |
-| 4fa0fed3 | Release v2.0.0                                       | 2 weeks |
-| 911d9548 | Fix TypeScript errors in test file                   | 4 weeks |
-| de709d33 | Add comprehensive JSDoc documentation                | 4 weeks |
+| Commit   | Description                                      | Age     |
+| -------- | ------------------------------------------------ | ------- |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
+| 21c1528a | Fix release skill to bump all package versions   | 12 days |
+| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
+| 911d9548 | Fix TypeScript errors in test file               | 4 weeks |
+| de709d33 | Add comprehensive JSDoc documentation            | 4 weeks |
 
 ## Source Files
 
-| File              | Purpose                                              |
-| ----------------- | ---------------------------------------------------- |
-| `src/index.ts`    | Re-exports all types, AuditContext, and isAuditEnabled |
-| `src/types.ts`    | LlmAuditLog, CreateAuditLogParams, completion params |
-| `src/audit.ts`    | AuditContext class, createAuditContext, saveAuditLog  |
+| File           | Purpose                                                |
+| -------------- | ------------------------------------------------------ |
+| `src/index.ts` | Re-exports all types, AuditContext, and isAuditEnabled |
+| `src/types.ts` | LlmAuditLog, CreateAuditLogParams, completion params   |
+| `src/audit.ts` | AuditContext class, createAuditContext, saveAuditLog   |

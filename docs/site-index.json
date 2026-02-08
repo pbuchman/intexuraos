@@ -697,7 +697,13 @@
     "ai-research": {
       "name": "AI & Research",
       "description": "Services that use LLMs for analysis, classification, and autonomous coding",
-      "services": ["research-agent", "commands-agent", "data-insights-agent", "chat-agent", "code-agent"]
+      "services": [
+        "research-agent",
+        "commands-agent",
+        "data-insights-agent",
+        "chat-agent",
+        "code-agent"
+      ]
     },
     "content": {
       "name": "Content Management",
@@ -707,7 +713,13 @@
     "integrations": {
       "name": "External Integrations",
       "description": "Services that connect to external platforms",
-      "services": ["user-service", "whatsapp-service", "calendar-agent", "notion-service", "linear-agent"]
+      "services": [
+        "user-service",
+        "whatsapp-service",
+        "calendar-agent",
+        "notion-service",
+        "linear-agent"
+      ]
     },
     "infrastructure": {
       "name": "Infrastructure",
@@ -729,7 +741,13 @@
     "workers": {
       "name": "Workers",
       "description": "Cloud Functions and local worker processes for background tasks and infrastructure management",
-      "services": ["orchestrator", "claude-worker", "log-cleanup", "predev-lifecycle", "vm-lifecycle"]
+      "services": [
+        "orchestrator",
+        "claude-worker",
+        "log-cleanup",
+        "predev-lifecycle",
+        "vm-lifecycle"
+      ]
     },
     "packages": {
       "name": "Packages",

@@ -17,15 +17,44 @@ entry_points:
 ## Exported Constants (OpenAPI Schemas)
 
 ```typescript
-const ERROR_CODES: readonly ['INVALID_REQUEST', 'UNAUTHORIZED', 'FORBIDDEN', 'NOT_FOUND', 'CONFLICT', 'DOWNSTREAM_ERROR', 'INTERNAL_ERROR', 'MISCONFIGURED'];
+const ERROR_CODES: readonly [
+  'INVALID_REQUEST',
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'CONFLICT',
+  'DOWNSTREAM_ERROR',
+  'INTERNAL_ERROR',
+  'MISCONFIGURED',
+];
 
 const ErrorCodeSchema: { type: 'string'; enum: string[] };
 const DiagnosticsSchema: { type: 'object'; properties: Record<string, { type: string }> };
-const ErrorBodySchema: { type: 'object'; required: ['code', 'message']; properties: Record<string, unknown> };
-const ApiOkSchema: { type: 'object'; required: ['success', 'data']; properties: Record<string, unknown> };
-const ApiErrorSchema: { type: 'object'; required: ['success', 'error']; properties: Record<string, unknown> };
-const HealthCheckSchema: { type: 'object'; required: ['name', 'status', 'latencyMs']; properties: Record<string, unknown> };
-const HealthResponseSchema: { type: 'object'; required: ['status', 'serviceName', 'version', 'timestamp', 'checks']; properties: Record<string, unknown> };
+const ErrorBodySchema: {
+  type: 'object';
+  required: ['code', 'message'];
+  properties: Record<string, unknown>;
+};
+const ApiOkSchema: {
+  type: 'object';
+  required: ['success', 'data'];
+  properties: Record<string, unknown>;
+};
+const ApiErrorSchema: {
+  type: 'object';
+  required: ['success', 'error'];
+  properties: Record<string, unknown>;
+};
+const HealthCheckSchema: {
+  type: 'object';
+  required: ['name', 'status', 'latencyMs'];
+  properties: Record<string, unknown>;
+};
+const HealthResponseSchema: {
+  type: 'object';
+  required: ['status', 'serviceName', 'version', 'timestamp', 'checks'];
+  properties: Record<string, unknown>;
+};
 
 const coreComponentSchemas: {
   ErrorCode: typeof ErrorCodeSchema;
@@ -48,9 +77,18 @@ const bearerAuthSecurityScheme: {
 ## Exported Constants (Fastify Schemas)
 
 ```typescript
-const fastifyDiagnosticsSchema: { $id: 'Diagnostics'; type: 'object'; properties: Record<string, { type: string }> };
+const fastifyDiagnosticsSchema: {
+  $id: 'Diagnostics';
+  type: 'object';
+  properties: Record<string, { type: string }>;
+};
 const fastifyErrorCodeSchema: { $id: 'ErrorCode'; type: 'string'; enum: string[] };
-const fastifyErrorBodySchema: { $id: 'ErrorBody'; type: 'object'; required: string[]; properties: Record<string, unknown> };
+const fastifyErrorBodySchema: {
+  $id: 'ErrorBody';
+  type: 'object';
+  required: string[];
+  properties: Record<string, unknown>;
+};
 ```
 
 ## Exported Functions
@@ -77,7 +115,11 @@ http-contracts (leaf)
 
 ```typescript
 // In server.ts
-import { registerCoreSchemas, coreComponentSchemas, bearerAuthSecurityScheme } from '@intexuraos/http-contracts';
+import {
+  registerCoreSchemas,
+  coreComponentSchemas,
+  bearerAuthSecurityScheme,
+} from '@intexuraos/http-contracts';
 
 // 1. Register Fastify schemas for runtime validation
 registerCoreSchemas(app);

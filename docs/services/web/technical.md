@@ -61,18 +61,18 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                              | Date       |
-| ---------- | ------------------------------------------------------------------------ | ---------- |
-| `340971a8` | INT-491: Replace text log viewer with xterm.js terminal                  | 2026-02-08 |
-| `f86bdbf3` | Add webhook secret configuration UI to Linear settings                   | 2026-02-08 |
-| `670cceb3` | INT-465: Fix PR event bugs and add issue_comment support                 | 2026-02-06 |
-| `ea6652f7` | Add guest chat sessions with rate limiting                               | 2026-02-06 |
-| `76b25770` | Enhance DevBar with tabs, persistence, and improve Chat UI               | 2026-02-06 |
-| `d6174779` | Add GitHub PR events aggregation and webhook handling                    | 2026-02-05 |
-| `a29e301b` | INT-498: Handle 409 CONFLICT response in code-agent UI                   | 2026-02-04 |
-| `819e6249` | INT-452: Complete code-agent integration and frontend UI                 | 2026-02-01 |
-| `40d83a23` | INT-431: Implement Intex Chat MVP with command creation flow             | 2026-02-01 |
-| `9d4cbd25` | Add dark mode support to web application                                 | 2026-01-31 |
+| Commit     | Description                                                  | Date       |
+| ---------- | ------------------------------------------------------------ | ---------- |
+| `340971a8` | INT-491: Replace text log viewer with xterm.js terminal      | 2026-02-08 |
+| `f86bdbf3` | Add webhook secret configuration UI to Linear settings       | 2026-02-08 |
+| `670cceb3` | INT-465: Fix PR event bugs and add issue_comment support     | 2026-02-06 |
+| `ea6652f7` | Add guest chat sessions with rate limiting                   | 2026-02-06 |
+| `76b25770` | Enhance DevBar with tabs, persistence, and improve Chat UI   | 2026-02-06 |
+| `d6174779` | Add GitHub PR events aggregation and webhook handling        | 2026-02-05 |
+| `a29e301b` | INT-498: Handle 409 CONFLICT response in code-agent UI       | 2026-02-04 |
+| `819e6249` | INT-452: Complete code-agent integration and frontend UI     | 2026-02-01 |
+| `40d83a23` | INT-431: Implement Intex Chat MVP with command creation flow | 2026-02-01 |
+| `9d4cbd25` | Add dark mode support to web application                     | 2026-01-31 |
 
 ## Application Structure
 

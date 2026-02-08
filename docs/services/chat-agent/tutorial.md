@@ -224,15 +224,15 @@ The assistant uses conversation history to understand "one" refers to a bookmark
 
 ## Troubleshooting
 
-| Symptom                                      | Cause                                   | Fix                                                    |
-| -------------------------------------------- | --------------------------------------- | ------------------------------------------------------ |
-| 401 on every request                         | Missing both JWT and `x-guest-session`  | Add `Authorization` header or `x-guest-session` header |
-| 502 DOWNSTREAM_ERROR                         | user-service unreachable or LLM failure | Check user-service is running; verify LLM API keys     |
-| Empty sources array                          | No indexed docs match the query         | Ensure `doc_embeddings` collection has data            |
-| Service fails to start                       | `app-settings-service` unreachable      | Start app-settings-service first                       |
-| `INTEXURAOS_OPENAI_API_KEY` missing          | `.envrc` not sourced                    | Run `direnv allow` or source `.envrc` manually         |
-| suggestedAction always null                  | LLM not outputting action annotations   | Check system prompt is correctly loaded                |
-| Rate limit hit immediately                   | Instance restarted (in-memory limiter)  | Expected behavior; limiter resets on restart           |
+| Symptom                             | Cause                                   | Fix                                                    |
+| ----------------------------------- | --------------------------------------- | ------------------------------------------------------ |
+| 401 on every request                | Missing both JWT and `x-guest-session`  | Add `Authorization` header or `x-guest-session` header |
+| 502 DOWNSTREAM_ERROR                | user-service unreachable or LLM failure | Check user-service is running; verify LLM API keys     |
+| Empty sources array                 | No indexed docs match the query         | Ensure `doc_embeddings` collection has data            |
+| Service fails to start              | `app-settings-service` unreachable      | Start app-settings-service first                       |
+| `INTEXURAOS_OPENAI_API_KEY` missing | `.envrc` not sourced                    | Run `direnv allow` or source `.envrc` manually         |
+| suggestedAction always null         | LLM not outputting action annotations   | Check system prompt is correctly loaded                |
+| Rate limit hit immediately          | Instance restarted (in-memory limiter)  | Expected behavior; limiter resets on restart           |
 
 ---
 
@@ -250,6 +250,7 @@ curl -s http://localhost:8129/health | jq
 ```
 
 Expected: `status` is `ok` with checks array containing `firestore` and `secrets` entries.
+
 </details>
 
 ### Medium: Multi-turn conversation
@@ -299,6 +300,7 @@ curl -s http://localhost:8129/chat \
     ]
   }' | jq
 ```
+
 </details>
 
 ### Hard: Explore the OpenAPI spec and test every error path
@@ -341,4 +343,5 @@ curl -s http://localhost:8129/chat \
   -H "x-guest-session: error-test" \
   -d '{"message": "test", "conversationHistory": [{"role": "invalid", "content": "x"}]}' | jq
 ```
+
 </details>

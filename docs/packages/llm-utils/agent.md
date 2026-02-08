@@ -31,7 +31,10 @@ interface LlmParseErrorDetails {
 ```typescript
 // redaction.ts
 function redactToken(token: string | undefined | null): string;
-function redactObject(obj: Record<string, unknown>, sensitiveFields: string[]): Record<string, unknown>;
+function redactObject(
+  obj: Record<string, unknown>,
+  sensitiveFields: string[]
+): Record<string, unknown>;
 
 // parseError.ts
 function createLlmParseError(options: {
@@ -66,9 +69,20 @@ function formatZodErrors(error: ZodError): string;
 
 ```typescript
 const SENSITIVE_FIELDS: readonly [
-  'password', 'token', 'access_token', 'refresh_token', 'id_token',
-  'device_code', 'authorization', 'secret', 'api_key', 'apiKey',
-  'client_secret', 'clientSecret', 'x-internal-auth', 'x-goog-iap-jwt-assertion',
+  'password',
+  'token',
+  'access_token',
+  'refresh_token',
+  'id_token',
+  'device_code',
+  'authorization',
+  'secret',
+  'api_key',
+  'apiKey',
+  'client_secret',
+  'clientSecret',
+  'x-internal-auth',
+  'x-goog-iap-jwt-assertion',
 ];
 ```
 

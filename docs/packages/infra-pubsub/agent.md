@@ -140,8 +140,12 @@ abstract class BasePubSubPublisher {
 
 ```typescript
 function createWhatsAppSendPublisher(config: WhatsAppSendPublisherConfig): WhatsAppSendPublisher;
-function createTodosProcessingPublisher(config: TodosProcessingPublisherConfig): TodosProcessingPublisher;
-function createCalendarPreviewPublisher(config: CalendarPreviewPublisherConfig): CalendarPreviewPublisher;
+function createTodosProcessingPublisher(
+  config: TodosProcessingPublisherConfig
+): TodosProcessingPublisher;
+function createCalendarPreviewPublisher(
+  config: CalendarPreviewPublisherConfig
+): CalendarPreviewPublisher;
 ```
 
 ## Event Type Registry
@@ -181,9 +185,9 @@ const fakePublisher: WhatsAppSendPublisher = {
 };
 
 const fakePublisherWithError: WhatsAppSendPublisher = {
-  publishSendMessage: vi.fn().mockResolvedValue(
-    err({ code: 'PUBLISH_FAILED', message: 'test error' })
-  ),
+  publishSendMessage: vi
+    .fn()
+    .mockResolvedValue(err({ code: 'PUBLISH_FAILED', message: 'test error' })),
 };
 ```
 

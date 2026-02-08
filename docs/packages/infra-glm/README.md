@@ -33,10 +33,10 @@ const client = createGlmClient({
 
 **Methods on the returned client:**
 
-| Method             | Signature                                                          | Description                              |
-| ------------------ | ------------------------------------------------------------------ | ---------------------------------------- |
-| `research(prompt)` | `(prompt: string) => Promise<Result<ResearchResult, GlmError>>`    | Web search research via GLM search tool  |
-| `generate(prompt)` | `(prompt: string) => Promise<Result<GenerateResult, GlmError>>`    | Text generation without web search       |
+| Method             | Signature                                                       | Description                             |
+| ------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| `research(prompt)` | `(prompt: string) => Promise<Result<ResearchResult, GlmError>>` | Web search research via GLM search tool |
+| `generate(prompt)` | `(prompt: string) => Promise<Result<GenerateResult, GlmError>>` | Text generation without web search      |
 
 ### `calculateTextCost(usage: TokenUsage, pricing: ModelPricing): number`
 
@@ -48,24 +48,24 @@ Converts raw GLM usage data into `NormalizedUsage`. Optionally includes `cacheTo
 
 ## Exported Types
 
-| Type             | Description                                     |
-| ---------------- | ----------------------------------------------- |
-| `GlmClient`      | Type alias for `LLMClient`                      |
-| `GlmConfig`      | Configuration interface for `createGlmClient`   |
-| `GlmError`       | Re-export of `LLMError` from `llm-contract`     |
-| `ResearchResult` | Re-export from `llm-contract`                   |
-| `GenerateResult` | Re-export from `llm-contract`                   |
-| `SynthesisInput` | Re-export from `llm-contract`                   |
+| Type             | Description                                   |
+| ---------------- | --------------------------------------------- |
+| `GlmClient`      | Type alias for `LLMClient`                    |
+| `GlmConfig`      | Configuration interface for `createGlmClient` |
+| `GlmError`       | Re-export of `LLMError` from `llm-contract`   |
+| `ResearchResult` | Re-export from `llm-contract`                 |
+| `GenerateResult` | Re-export from `llm-contract`                 |
+| `SynthesisInput` | Re-export from `llm-contract`                 |
 
 ### GlmConfig
 
 ```ts
 interface GlmConfig {
-  apiKey: string;        // Zai GLM API key from open.bigmodel.cn
-  model: string;         // e.g., 'glm-4.7'
-  userId: string;        // User ID for usage tracking
+  apiKey: string; // Zai GLM API key from open.bigmodel.cn
+  model: string; // e.g., 'glm-4.7'
+  userId: string; // User ID for usage tracking
   pricing: ModelPricing; // Cost configuration per million tokens
-  logger: Logger;        // Pino logger for structured logging
+  logger: Logger; // Pino logger for structured logging
 }
 ```
 
@@ -73,9 +73,9 @@ interface GlmConfig {
 
 ### Environment Variables
 
-| Variable                  | Description     | Required |
-| ------------------------- | --------------- | -------- |
-| `INTEXURAOS_GLM_API_KEY`  | Zai GLM API key | Yes      |
+| Variable                 | Description     | Required |
+| ------------------------ | --------------- | -------- |
+| `INTEXURAOS_GLM_API_KEY` | Zai GLM API key | Yes      |
 
 ### Pricing Fields
 
@@ -116,19 +116,19 @@ All methods return `Result<T, GlmError>`. Error mapping:
 
 ## Used By
 
-| App / Package    | Purpose                               |
-| ---------------- | ------------------------------------- |
-| `research-agent` | Research and text generation          |
-| `user-service`   | API key validation and usage          |
-| `todos-agent`    | Task processing                       |
-| `chat-agent`     | Chat completions                      |
-| `llm-factory`    | Dynamic client creation               |
+| App / Package    | Purpose                      |
+| ---------------- | ---------------------------- |
+| `research-agent` | Research and text generation |
+| `user-service`   | API key validation and usage |
+| `todos-agent`    | Task processing              |
+| `chat-agent`     | Chat completions             |
+| `llm-factory`    | Dynamic client creation      |
 
 ## Recent Changes
 
-| Commit     | Description                                        | When        |
-| ---------- | -------------------------------------------------- | ----------- |
-| `51b4a325` | Migrate LLM clients to UsageLogger class           | 2 weeks ago |
-| `8aad9098` | Migrate imports and delete llm-common              | 2 weeks ago |
-| `816afa55` | Add ESLint rule to ban optional logger parameters  | 3 weeks ago |
-| `6ec4205e` | Make logger mandatory in all LLM configs           | 3 weeks ago |
+| Commit     | Description                                       | When        |
+| ---------- | ------------------------------------------------- | ----------- |
+| `51b4a325` | Migrate LLM clients to UsageLogger class          | 2 weeks ago |
+| `8aad9098` | Migrate imports and delete llm-common             | 2 weeks ago |
+| `816afa55` | Add ESLint rule to ban optional logger parameters | 3 weeks ago |
+| `6ec4205e` | Make logger mandatory in all LLM configs          | 3 weeks ago |

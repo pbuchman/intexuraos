@@ -42,6 +42,7 @@ Log-cleanup runs as a scheduled Cloud Function that triggers the code-agent's in
 **User Goal:** Keep log storage under control without manual intervention.
 
 **Steps:**
+
 1. Cloud Scheduler publishes a message to the `intexuraos-log-cleanup` Pub/Sub topic at 3 AM UTC
 2. The Cloud Function receives the event and calls `cleanupOldLogs()`
 3. The function sends a POST request to `code-agent/internal/tasks/cleanup-logs` with retention parameters
@@ -53,6 +54,7 @@ Log-cleanup runs as a scheduled Cloud Function that triggers the code-agent's in
 **User Goal:** Verify cleanup behavior before relying on the schedule.
 
 **Steps:**
+
 1. Publish a message to the `intexuraos-log-cleanup` Pub/Sub topic manually via GCP Console or `gcloud`
 2. The function executes the same cleanup flow
 3. Check Cloud Logging for the result metrics

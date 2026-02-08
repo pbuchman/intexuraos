@@ -168,10 +168,10 @@ function checkLlmCompletion(researchId): CompletionAction {
 
 | Completed | Failed | Pending | Action                                       |
 | :-------: | :----: | :-----: | -------------------------------------------- |
-| 0         | > 0    | 0       | Mark `failed`, error: "All LLM calls failed" |
-| > 0       | 0      | 0       | Run synthesis (or skip)                      |
-| > 0       | > 0    | 0       | Set `awaiting_confirmation`                  |
-| any       | any    | > 0     | Wait (no action)                             |
+|     0     |  > 0   |    0    | Mark `failed`, error: "All LLM calls failed" |
+|    > 0    |   0    |    0    | Run synthesis (or skip)                      |
+|    > 0    |  > 0   |    0    | Set `awaiting_confirmation`                  |
+|    any    |  any   |   > 0   | Wait (no action)                             |
 
 ---
 
@@ -188,11 +188,11 @@ const shouldSkipSynthesis = successfulResults.length <= 1 && externalReportsCoun
 
 | Successful LLMs | External Reports | Action                             |
 | :-------------: | :--------------: | ---------------------------------- |
-| 0               | 0                | Error: "No successful LLM results" |
-| 0               | > 0              | Run synthesis (external only)      |
-| 1               | 0                | Skip synthesis, mark completed     |
-| 1               | > 0              | Run synthesis                      |
-| > 1             | any              | Run synthesis                      |
+|        0        |        0         | Error: "No successful LLM results" |
+|        0        |       > 0        | Run synthesis (external only)      |
+|        1        |        0         | Skip synthesis, mark completed     |
+|        1        |       > 0        | Run synthesis                      |
+|       > 1       |       any        | Run synthesis                      |
 
 ### 4.2 Synthesis Flow
 

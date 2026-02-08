@@ -11,10 +11,10 @@ Pure utilities with zero infrastructure dependencies. This is a leaf package tha
 
 The package provides two entry points:
 
-| Entry Point | Path             | Contents                                     |
-| ----------- | ---------------- | -------------------------------------------- |
-| Main        | `.` (index)      | Result types, Logger, nullability, tracing   |
-| Errors      | `./errors`       | ErrorCode, IntexuraOSError, serializeError   |
+| Entry Point | Path        | Contents                                   |
+| ----------- | ----------- | ------------------------------------------ |
+| Main        | `.` (index) | Result types, Logger, nullability, tracing |
+| Errors      | `./errors`  | ErrorCode, IntexuraOSError, serializeError |
 
 ## API Reference
 
@@ -155,8 +155,12 @@ interface ServiceFeedback {
   errorCode?: string;
 }
 
-function isSuccessFeedback(feedback: ServiceFeedback): feedback is ServiceFeedback & { status: 'completed' };
-function isFailureFeedback(feedback: ServiceFeedback): feedback is ServiceFeedback & { status: 'failed'; errorCode: string };
+function isSuccessFeedback(
+  feedback: ServiceFeedback
+): feedback is ServiceFeedback & { status: 'completed' };
+function isFailureFeedback(
+  feedback: ServiceFeedback
+): feedback is ServiceFeedback & { status: 'failed'; errorCode: string };
 function successFeedback(message: string, resourceUrl?: string): ServiceFeedback;
 function failureFeedback(message: string, errorCode: string): ServiceFeedback;
 ```
@@ -189,9 +193,7 @@ End-to-end request tracing across service boundaries via the `X-Trace-Id` header
 ```typescript
 const TRACE_ID_HEADER = 'X-Trace-Id';
 
-function extractOrGenerateTraceId(
-  headers: Record<string, string | string[] | undefined>
-): string;
+function extractOrGenerateTraceId(headers: Record<string, string | string[] | undefined>): string;
 
 function traceIdHeaders(traceId: string): Record<string, string>;
 ```
@@ -208,15 +210,15 @@ Nearly every package and app in the monorepo depends on `common-core`:
 
 ## Recent Changes
 
-| Commit   | Description                                          | Age     |
-| -------- | ---------------------------------------------------- | ------- |
-| 474ea6d1 | Validate workerLocation exists and is healthy        | 5 days  |
-| f10ebdbf | Fix empty error objects in log output                | 7 days  |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner     | 7 days  |
-| af5442c2 | Implement per-user worker configuration              | 8 days  |
-| 186f7ad8 | Enforce standardized HTTP response contract          | 9 days  |
-| b4aaafdf | Add distributed tracing with X-Trace-Id header       | 13 days |
-| 4fa0fed3 | Release v2.0.0                                       | 2 weeks |
+| Commit   | Description                                      | Age     |
+| -------- | ------------------------------------------------ | ------- |
+| 474ea6d1 | Validate workerLocation exists and is healthy    | 5 days  |
+| f10ebdbf | Fix empty error objects in log output            | 7 days  |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
+| af5442c2 | Implement per-user worker configuration          | 8 days  |
+| 186f7ad8 | Enforce standardized HTTP response contract      | 9 days  |
+| b4aaafdf | Add distributed tracing with X-Trace-Id header   | 13 days |
+| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
 
 ## Source Files
 

@@ -34,9 +34,9 @@ graph TB
 
 The worker sends a single HTTP request to code-agent:
 
-| Method | Path                             | Auth                     |
-| ------ | -------------------------------- | ------------------------ |
-| POST   | `/internal/tasks/cleanup-logs`   | `X-Internal-Auth` header |
+| Method | Path                           | Auth                     |
+| ------ | ------------------------------ | ------------------------ |
+| POST   | `/internal/tasks/cleanup-logs` | `X-Internal-Auth` header |
 
 ### Request Body
 
@@ -72,13 +72,13 @@ All fields are optional. When omitted, code-agent uses its own defaults.
 
 ### CleanupConfig
 
-| Field               | Type   | Required | Description                     |
-| ------------------- | ------ | -------- | ------------------------------- |
-| `codeAgentUrl`      | string | Yes      | Base URL of code-agent          |
-| `internalAuthToken` | string | Yes      | Internal auth token             |
-| `retentionDays`     | number | No       | Days to keep logs               |
-| `batchSize`         | number | No       | Logs deleted per batch          |
-| `tasksPerRun`       | number | No       | Max tasks processed per run     |
+| Field               | Type   | Required | Description                 |
+| ------------------- | ------ | -------- | --------------------------- |
+| `codeAgentUrl`      | string | Yes      | Base URL of code-agent      |
+| `internalAuthToken` | string | Yes      | Internal auth token         |
+| `retentionDays`     | number | No       | Days to keep logs           |
+| `batchSize`         | number | No       | Logs deleted per batch      |
+| `tasksPerRun`       | number | No       | Max tasks processed per run |
 
 ### CleanupResult
 
@@ -109,28 +109,28 @@ All fields are optional. When omitted, code-agent uses its own defaults.
 
 ## Configuration
 
-| Environment Variable             | Required | Default      | Description                    |
-| -------------------------------- | -------- | ------------ | ------------------------------ |
-| `INTEXURAOS_CODE_AGENT_URL`      | Yes      | -            | Base URL of code-agent service |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | -            | Shared internal auth token     |
-| `INTEXURAOS_LOG_RETENTION_DAYS`  | No       | Server-side  | Days to retain logs            |
-| `INTEXURAOS_LOG_BATCH_SIZE`      | No       | Server-side  | Logs per deletion batch        |
-| `INTEXURAOS_LOG_TASKS_PER_RUN`   | No       | Server-side  | Max tasks per execution        |
-| `LOG_LEVEL`                      | No       | `info`       | Pino log level                 |
+| Environment Variable             | Required | Default     | Description                    |
+| -------------------------------- | -------- | ----------- | ------------------------------ |
+| `INTEXURAOS_CODE_AGENT_URL`      | Yes      | -           | Base URL of code-agent service |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | -           | Shared internal auth token     |
+| `INTEXURAOS_LOG_RETENTION_DAYS`  | No       | Server-side | Days to retain logs            |
+| `INTEXURAOS_LOG_BATCH_SIZE`      | No       | Server-side | Logs per deletion batch        |
+| `INTEXURAOS_LOG_TASKS_PER_RUN`   | No       | Server-side | Max tasks per execution        |
+| `LOG_LEVEL`                      | No       | `info`      | Pino log level                 |
 
 ## Infrastructure
 
-| Resource                 | Type               | Value                                          |
-| ------------------------ | ------------------ | ---------------------------------------------- |
-| Cloud Function           | Gen2               | `intexuraos-log-cleanup-{env}`                 |
-| Entry point              | -                  | `cleanupLogs`                                  |
-| Runtime                  | -                  | Node.js 22                                     |
-| Memory                   | -                  | 512 MB                                         |
-| Timeout                  | -                  | 540 seconds (9 minutes)                        |
-| Pub/Sub topic            | -                  | `intexuraos-log-cleanup-{env}`                 |
-| Scheduler job            | -                  | `intexuraos-log-cleanup-{env}`                 |
-| Service account          | -                  | `intexuraos-functions-{env}`                   |
-| Source bucket object     | -                  | `log-cleanup/function.zip`                     |
+| Resource             | Type | Value                          |
+| -------------------- | ---- | ------------------------------ |
+| Cloud Function       | Gen2 | `intexuraos-log-cleanup-{env}` |
+| Entry point          | -    | `cleanupLogs`                  |
+| Runtime              | -    | Node.js 22                     |
+| Memory               | -    | 512 MB                         |
+| Timeout              | -    | 540 seconds (9 minutes)        |
+| Pub/Sub topic        | -    | `intexuraos-log-cleanup-{env}` |
+| Scheduler job        | -    | `intexuraos-log-cleanup-{env}` |
+| Service account      | -    | `intexuraos-functions-{env}`   |
+| Source bucket object | -    | `log-cleanup/function.zip`     |
 
 ## Gotchas
 

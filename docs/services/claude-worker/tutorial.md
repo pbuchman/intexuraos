@@ -150,37 +150,37 @@ WORKER_IMAGE=claude-worker:test WORKER_NETWORK=claude-worker-net pnpm --filter o
 
 **Expected test suites:**
 
-| Suite                | Tests                                     |
-| -------------------- | ----------------------------------------- |
-| Container Lifecycle  | Start, destroy, verify logs               |
-| Mount Verification   | /repo writable, /secrets read-only, git   |
-| Input/Output         | sendInput, exit command, error command    |
-| Resource Limits      | Usage reporting, memory limit enforcement |
-| Timeout Handling     | Force kill after timeout                  |
-| Concurrency          | Max concurrent worker enforcement         |
+| Suite               | Tests                                     |
+| ------------------- | ----------------------------------------- |
+| Container Lifecycle | Start, destroy, verify logs               |
+| Mount Verification  | /repo writable, /secrets read-only, git   |
+| Input/Output        | sendInput, exit command, error command    |
+| Resource Limits     | Usage reporting, memory limit enforcement |
+| Timeout Handling    | Force kill after timeout                  |
+| Concurrency         | Max concurrent worker enforcement         |
 
 ## Part 6: Using the Claude Stub
 
 The test stub at `test-fixtures/claude-stub.sh` supports these commands for E2E verification:
 
-| Command          | Behavior                                                  |
-| ---------------- | --------------------------------------------------------- |
-| `exit`           | Clean shutdown (exit code 0)                              |
-| `error`          | Simulated failure (exit code 1)                           |
-| `timeout`        | Sleep 3600s (triggers timeout handling)                   |
-| `network-test`   | Checks public internet, metadata server, localhost access |
-| `resource-test`  | Reports cgroup memory and CPU limits                      |
-| `file-test`      | Tests write access to /repo, /secrets, /tmp               |
-| Any other text   | Echoes "Acknowledged" + "Task completed successfully"     |
+| Command         | Behavior                                                  |
+| --------------- | --------------------------------------------------------- |
+| `exit`          | Clean shutdown (exit code 0)                              |
+| `error`         | Simulated failure (exit code 1)                           |
+| `timeout`       | Sleep 3600s (triggers timeout handling)                   |
+| `network-test`  | Checks public internet, metadata server, localhost access |
+| `resource-test` | Reports cgroup memory and CPU limits                      |
+| `file-test`     | Tests write access to /repo, /secrets, /tmp               |
+| Any other text  | Echoes "Acknowledged" + "Task completed successfully"     |
 
 ## Troubleshooting
 
-| Issue                          | Symptom                                               | Solution                                                      |
-| ------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------- |
-| Container exits immediately    | `[entrypoint] ERROR: Running as root is forbidden`    | Run with `--user 1001:1001`                                   |
-| GCP auth fails                 | `[entrypoint] GCP auth failed (non-fatal)`            | Verify `/secrets/gcp-sa.json` contains a valid SA key         |
-| No git repo detected           | `[entrypoint] WARNING: /repo is not a git repository` | Ensure the mounted directory has a `.git` dir or file         |
-| Claude onboarding prompt       | Interactive setup screens on startup                  | Check that config defaults are at `/opt/claude-defaults/`     |
-| Network not found              | Docker network error on container start               | Run `./scripts/setup-worker-network.sh` first                 |
-| UID permission denied          | Permission errors writing to /home/claude             | Verify tmpfs mount has `uid=1001,gid=1001`                    |
-| Token not refreshing           | Stale GitHub token after 1 hour                       | Orchestrator's TokenRefresher must be running                 |
+| Issue                       | Symptom                                               | Solution                                                  |
+| --------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| Container exits immediately | `[entrypoint] ERROR: Running as root is forbidden`    | Run with `--user 1001:1001`                               |
+| GCP auth fails              | `[entrypoint] GCP auth failed (non-fatal)`            | Verify `/secrets/gcp-sa.json` contains a valid SA key     |
+| No git repo detected        | `[entrypoint] WARNING: /repo is not a git repository` | Ensure the mounted directory has a `.git` dir or file     |
+| Claude onboarding prompt    | Interactive setup screens on startup                  | Check that config defaults are at `/opt/claude-defaults/` |
+| Network not found           | Docker network error on container start               | Run `./scripts/setup-worker-network.sh` first             |
+| UID permission denied       | Permission errors writing to /home/claude             | Verify tmpfs mount has `uid=1001,gid=1001`                |
+| Token not refreshing        | Stale GitHub token after 1 hour                       | Orchestrator's TokenRefresher must be running             |

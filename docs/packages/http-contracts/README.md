@@ -17,8 +17,14 @@ JSON Schema definitions for `@fastify/swagger` configuration. These define the s
 
 ```typescript
 const ERROR_CODES: readonly [
-  'INVALID_REQUEST', 'UNAUTHORIZED', 'FORBIDDEN', 'NOT_FOUND',
-  'CONFLICT', 'DOWNSTREAM_ERROR', 'INTERNAL_ERROR', 'MISCONFIGURED'
+  'INVALID_REQUEST',
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'CONFLICT',
+  'DOWNSTREAM_ERROR',
+  'INTERNAL_ERROR',
+  'MISCONFIGURED',
 ];
 
 const ErrorCodeSchema: { type: 'string'; enum: string[] };
@@ -142,9 +148,22 @@ const swaggerConfig = {
 Fastify JSON Schemas use `$id` for local reference (distinct from OpenAPI `$ref` syntax).
 
 ```typescript
-const fastifyDiagnosticsSchema: { $id: 'Diagnostics'; type: 'object'; properties: { /* ... */ } };
+const fastifyDiagnosticsSchema: {
+  $id: 'Diagnostics';
+  type: 'object';
+  properties: {
+    /* ... */
+  };
+};
 const fastifyErrorCodeSchema: { $id: 'ErrorCode'; type: 'string'; enum: string[] };
-const fastifyErrorBodySchema: { $id: 'ErrorBody'; type: 'object'; required: ['code', 'message']; properties: { /* ... */ } };
+const fastifyErrorBodySchema: {
+  $id: 'ErrorBody';
+  type: 'object';
+  required: ['code', 'message'];
+  properties: {
+    /* ... */
+  };
+};
 
 function registerCoreSchemas(app: { addSchema: (schema: { $id: string }) => void }): void;
 ```
@@ -158,13 +177,17 @@ const app = Fastify();
 registerCoreSchemas(app);
 
 // Now reference schemas in routes:
-app.get('/items', {
-  schema: {
-    response: {
-      400: { $ref: 'ErrorBody#' },
+app.get(
+  '/items',
+  {
+    schema: {
+      response: {
+        400: { $ref: 'ErrorBody#' },
+      },
     },
   },
-}, handler);
+  handler
+);
 ```
 
 ## Used By
@@ -173,12 +196,12 @@ app.get('/items', {
 
 ## Recent Changes
 
-| Commit   | Description                                           | Age     |
-| -------- | ----------------------------------------------------- | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner      | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions        | 12 days |
-| 4fa0fed3 | Release v2.0.0                                        | 2 weeks |
-| 4f5a3f96 | Release v1.0.0                                        | 3 weeks |
+| Commit   | Description                                      | Age     |
+| -------- | ------------------------------------------------ | ------- |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
+| 21c1528a | Fix release skill to bump all package versions   | 12 days |
+| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
+| 4f5a3f96 | Release v1.0.0                                   | 3 weeks |
 
 ## Source Files
 

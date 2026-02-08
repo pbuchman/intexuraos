@@ -106,11 +106,11 @@ PACKAGES:
 
 ### Agent Model Selection
 
-| Component Status     | Agent Model | Rationale                                             |
-| -------------------- | ----------- | ----------------------------------------------------- |
-| NEW (no docs exist)  | Opus        | Greenfield needs deep code analysis and inference     |
-| UPDATED (docs exist) | Sonnet      | Incremental updates; preserves user insights          |
-| REMOVED              | None        | Clean up with `rm -rf docs/services/<name>/`          |
+| Component Status     | Agent Model | Rationale                                         |
+| -------------------- | ----------- | ------------------------------------------------- |
+| NEW (no docs exist)  | Opus        | Greenfield needs deep code analysis and inference |
+| UPDATED (docs exist) | Sonnet      | Incremental updates; preserves user insights      |
+| REMOVED              | None        | Clean up with `rm -rf docs/services/<name>/`      |
 
 ### Agent Grouping Strategy
 

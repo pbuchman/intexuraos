@@ -232,15 +232,15 @@ WhatsApp message delivered to user
 
 ## Error Codes
 
-| Code              | HTTP | Meaning                                              |
-| ----------------- | ---- | ---------------------------------------------------- |
-| `INVALID_REQUEST` | 400  | Malformed request body or URL                        |
-| `UNAUTHORIZED`    | 401  | Missing or invalid auth token                        |
-| `FORBIDDEN`       | 403  | User cannot access this bookmark                     |
-| `NOT_FOUND`       | 404  | Bookmark ID does not exist                           |
-| `CONFLICT`        | 409  | URL already bookmarked by this user                  |
-| `INTERNAL_ERROR`  | 500  | Unexpected server error                              |
-| `TRANSIENT_ERROR` | 503  | Temporary failure (rate limit, timeout) - retryable  |
+| Code              | HTTP | Meaning                                             |
+| ----------------- | ---- | --------------------------------------------------- |
+| `INVALID_REQUEST` | 400  | Malformed request body or URL                       |
+| `UNAUTHORIZED`    | 401  | Missing or invalid auth token                       |
+| `FORBIDDEN`       | 403  | User cannot access this bookmark                    |
+| `NOT_FOUND`       | 404  | Bookmark ID does not exist                          |
+| `CONFLICT`        | 409  | URL already bookmarked by this user                 |
+| `INTERNAL_ERROR`  | 500  | Unexpected server error                             |
+| `TRANSIENT_ERROR` | 503  | Temporary failure (rate limit, timeout) - retryable |
 
 ---
 

@@ -7,10 +7,10 @@ Machine-readable export and interface reference for `@intexuraos/internal-client
 ## Package Metadata
 
 ```yaml
-name: "@intexuraos/internal-clients"
-version: "2.1.0"
-entry: "./src/index.ts"
-type: "module"
+name: '@intexuraos/internal-clients'
+version: '2.1.0'
+entry: './src/index.ts'
+type: 'module'
 private: true
 ```
 
@@ -44,7 +44,10 @@ interface UserServiceClient {
   getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>>;
   getLlmClient(userId: string): Promise<Result<LlmGenerateClient, UserServiceError>>;
   reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
-  getOAuthToken(userId: string, provider: OAuthProvider): Promise<Result<OAuthTokenResult, UserServiceError>>;
+  getOAuthToken(
+    userId: string,
+    provider: OAuthProvider
+  ): Promise<Result<OAuthTokenResult, UserServiceError>>;
 }
 
 interface DecryptedApiKeys {
@@ -61,8 +64,14 @@ interface OAuthTokenResult {
 }
 
 interface UserServiceError {
-  code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'INVALID_MODEL'
-      | 'CONNECTION_NOT_FOUND' | 'TOKEN_REFRESH_FAILED' | 'OAUTH_NOT_CONFIGURED';
+  code:
+    | 'NETWORK_ERROR'
+    | 'API_ERROR'
+    | 'NO_API_KEY'
+    | 'INVALID_MODEL'
+    | 'CONNECTION_NOT_FOUND'
+    | 'TOKEN_REFRESH_FAILED'
+    | 'OAUTH_NOT_CONFIGURED';
   message: string;
 }
 

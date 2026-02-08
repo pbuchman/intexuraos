@@ -42,50 +42,50 @@ Generate comprehensive documentation for IntexuraOS services (apps, workers, and
 
 ### Per Package -- 3 files
 
-| File                | Purpose                                | Audience              |
-| ------------------- | -------------------------------------- | --------------------- |
-| `README.md`         | Overview, API, dependencies, usage     | Developers            |
-| `technical-debt.md` | Known issues, debt items, future plans | Maintainers           |
-| `agent.md`          | Machine-readable interface             | AI agents             |
+| File                | Purpose                                | Audience    |
+| ------------------- | -------------------------------------- | ----------- |
+| `README.md`         | Overview, API, dependencies, usage     | Developers  |
+| `technical-debt.md` | Known issues, debt items, future plans | Maintainers |
+| `agent.md`          | Machine-readable interface             | AI agents   |
 
 ### Aggregation files
 
-| File                       | Purpose                |
-| -------------------------- | ---------------------- |
-| `services/index.md`       | Service catalog        |
-| `site-index.json`         | Structured metadata    |
-| `overview.md`             | Project narrative      |
-| `documentation-runs.md`   | Run history log        |
+| File                    | Purpose             |
+| ----------------------- | ------------------- |
+| `services/index.md`     | Service catalog     |
+| `site-index.json`       | Structured metadata |
+| `overview.md`           | Project narrative   |
+| `documentation-runs.md` | Run history log     |
 
 ### Cross-Validation reports
 
-| File                                   | Purpose                                |
-| -------------------------------------- | -------------------------------------- |
-| `validation/http-contracts-*.md`       | HTTP endpoint consistency              |
-| `validation/pubsub-contracts-*.md`     | Pub/Sub topic/IAM consistency          |
-| `validation/ai-models-*.md`           | AI model registry consistency          |
-| `validation/firestore-*.md`           | Collection ownership consistency       |
-| `validation/package-deps-*.md`        | Package dependency consistency         |
-| `validation/env-vars-*.md`            | Environment variable consistency       |
-| `validation/v*-run-report.md`         | Comprehensive run report               |
+| File                               | Purpose                          |
+| ---------------------------------- | -------------------------------- |
+| `validation/http-contracts-*.md`   | HTTP endpoint consistency        |
+| `validation/pubsub-contracts-*.md` | Pub/Sub topic/IAM consistency    |
+| `validation/ai-models-*.md`        | AI model registry consistency    |
+| `validation/firestore-*.md`        | Collection ownership consistency |
+| `validation/package-deps-*.md`     | Package dependency consistency   |
+| `validation/env-vars-*.md`         | Environment variable consistency |
+| `validation/v*-run-report.md`      | Comprehensive run report         |
 
 ## Mode Selection
 
-| Mode           | When to Use                              | Invocation                                |
-| -------------- | ---------------------------------------- | ----------------------------------------- |
-| Discovery      | List services, check doc status          | `/document-service` (no args)             |
-| Interactive    | Document one service with user input     | `/document-service <service-name>`        |
-| Autonomous     | Batch document one/few services          | Task tool -> `service-scribe`             |
-| Team           | Full monorepo docs + cross-validation    | Orchestrate parallel agents (see team.md) |
+| Mode        | When to Use                           | Invocation                                |
+| ----------- | ------------------------------------- | ----------------------------------------- |
+| Discovery   | List services, check doc status       | `/document-service` (no args)             |
+| Interactive | Document one service with user input  | `/document-service <service-name>`        |
+| Autonomous  | Batch document one/few services       | Task tool -> `service-scribe`             |
+| Team        | Full monorepo docs + cross-validation | Orchestrate parallel agents (see team.md) |
 
 ## Invocation Detection
 
-| Input Pattern                       | Workflow                                           |
-| ----------------------------------- | -------------------------------------------------- |
-| `/document-service`                 | [discovery.md](workflows/discovery.md)             |
-| `/document-service <service>`       | [interactive.md](workflows/interactive.md)         |
-| Task tool `service-scribe` subagent | [autonomous.md](workflows/autonomous.md)           |
-| "Document all services" / team mode | [team.md](workflows/team.md)                       |
+| Input Pattern                       | Workflow                                             |
+| ----------------------------------- | ---------------------------------------------------- |
+| `/document-service`                 | [discovery.md](workflows/discovery.md)               |
+| `/document-service <service>`       | [interactive.md](workflows/interactive.md)           |
+| Task tool `service-scribe` subagent | [autonomous.md](workflows/autonomous.md)             |
+| "Document all services" / team mode | [team.md](workflows/team.md)                         |
 | "Validate docs" / "cross-validate"  | [cross-validation.md](workflows/cross-validation.md) |
 
 ## References

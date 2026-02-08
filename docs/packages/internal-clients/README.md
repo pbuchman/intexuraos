@@ -52,7 +52,10 @@ interface UserServiceClient {
   getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>>;
   getLlmClient(userId: string): Promise<Result<LlmGenerateClient, UserServiceError>>;
   reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
-  getOAuthToken(userId: string, provider: OAuthProvider): Promise<Result<OAuthTokenResult, UserServiceError>>;
+  getOAuthToken(
+    userId: string,
+    provider: OAuthProvider
+  ): Promise<Result<OAuthTokenResult, UserServiceError>>;
 }
 ```
 
@@ -86,12 +89,12 @@ Falls back to `Gemini25Flash` when the user has no model preference.
 
 Returns `Result<LlmGenerateClient, UserServiceError>` with error codes:
 
-| Code               | Meaning                                       |
-| ------------------ | --------------------------------------------- |
-| `NETWORK_ERROR`    | Connection failure or timeout                 |
-| `API_ERROR`        | Non-2xx HTTP response from user-service       |
-| `NO_API_KEY`       | User has no API key for the required provider |
-| `INVALID_MODEL`    | User preference references an unknown model   |
+| Code            | Meaning                                       |
+| --------------- | --------------------------------------------- |
+| `NETWORK_ERROR` | Connection failure or timeout                 |
+| `API_ERROR`     | Non-2xx HTTP response from user-service       |
+| `NO_API_KEY`    | User has no API key for the required provider |
+| `INVALID_MODEL` | User preference references an unknown model   |
 
 #### `reportLlmSuccess(userId: string, provider: LlmProvider)`
 
@@ -114,11 +117,11 @@ type OAuthProvider = 'google';
 
 Error codes specific to OAuth:
 
-| Code                    | Meaning                          |
-| ----------------------- | -------------------------------- |
-| `CONNECTION_NOT_FOUND`  | User has not connected OAuth     |
-| `TOKEN_REFRESH_FAILED`  | Token refresh failed server-side |
-| `OAUTH_NOT_CONFIGURED`  | OAuth not configured on server   |
+| Code                   | Meaning                          |
+| ---------------------- | -------------------------------- |
+| `CONNECTION_NOT_FOUND` | User has not connected OAuth     |
+| `TOKEN_REFRESH_FAILED` | Token refresh failed server-side |
+| `OAUTH_NOT_CONFIGURED` | OAuth not configured on server   |
 
 ---
 
@@ -185,33 +188,33 @@ Dev dependencies: `nock` (HTTP mocking), `vitest`, `typescript`.
 
 11 apps import this package:
 
-| App                  | Primary Use                           |
-| -------------------- | ------------------------------------- |
-| actions-agent        | LLM client + OAuth tokens             |
-| calendar-agent       | LLM client + OAuth tokens             |
-| chat-agent           | LLM client creation                   |
-| code-agent           | fetchWithAuth for cross-service calls |
-| commands-agent       | LLM client for command processing     |
-| data-insights-agent  | LLM client for data analysis          |
-| image-service        | LLM client for image generation       |
-| linear-agent         | LLM client for issue management       |
-| research-agent       | LLM client for research tasks         |
-| todos-agent          | LLM client for todo extraction        |
-| web-agent            | LLM client for web browsing           |
+| App                 | Primary Use                           |
+| ------------------- | ------------------------------------- |
+| actions-agent       | LLM client + OAuth tokens             |
+| calendar-agent      | LLM client + OAuth tokens             |
+| chat-agent          | LLM client creation                   |
+| code-agent          | fetchWithAuth for cross-service calls |
+| commands-agent      | LLM client for command processing     |
+| data-insights-agent | LLM client for data analysis          |
+| image-service       | LLM client for image generation       |
+| linear-agent        | LLM client for issue management       |
+| research-agent      | LLM client for research tasks         |
+| todos-agent         | LLM client for todo extraction        |
+| web-agent           | LLM client for web browsing           |
 
 ---
 
 ## Recent Changes
 
-| Commit     | Description                                                   | When     |
-| ---------- | ------------------------------------------------------------- | -------- |
-| `44017d5c` | Fix ESLint OOM with batched parallel lint runner              | 7 days   |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)             | 8 days   |
-| `7872eabb` | Phase 2: Fix v8-ignore script and begin coverage work         | 8 days   |
-| `1c054cba` | Fix internal-clients to unwrap user-service response contract | 8 days   |
-| `7a90db67` | Fix vitest v4 migration and improve branch coverage           | 10 days  |
-| `e9f2ada4` | Improve internal-clients branch coverage to 98%               | 12 days  |
-| `6acb3fc0` | Add tests for 95% branch coverage                             | 13 days  |
+| Commit     | Description                                                   | When    |
+| ---------- | ------------------------------------------------------------- | ------- |
+| `44017d5c` | Fix ESLint OOM with batched parallel lint runner              | 7 days  |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)             | 8 days  |
+| `7872eabb` | Phase 2: Fix v8-ignore script and begin coverage work         | 8 days  |
+| `1c054cba` | Fix internal-clients to unwrap user-service response contract | 8 days  |
+| `7a90db67` | Fix vitest v4 migration and improve branch coverage           | 10 days |
+| `e9f2ada4` | Improve internal-clients branch coverage to 98%               | 12 days |
+| `6acb3fc0` | Add tests for 95% branch coverage                             | 13 days |
 
 ---
 

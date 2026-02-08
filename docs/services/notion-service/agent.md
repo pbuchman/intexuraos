@@ -114,10 +114,10 @@ await disconnectNotion();
 
 ## Internal Endpoints
 
-| Method | Path                                                           | Purpose                                        |
-| ------ | -------------------------------------------------------------- | ---------------------------------------------- |
-| GET    | `/internal/notion/users/:userId/context`                       | Get connection context and token               |
-| GET    | `/internal/notion/users/:userId/pages/:pageId/preview`         | Get page preview (title and URL)               |
+| Method | Path                                                   | Purpose                          |
+| ------ | ------------------------------------------------------ | -------------------------------- |
+| GET    | `/internal/notion/users/:userId/context`               | Get connection context and token |
+| GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | Get page preview (title and URL) |
 
 ---
 

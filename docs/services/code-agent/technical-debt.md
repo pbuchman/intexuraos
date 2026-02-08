@@ -2,13 +2,13 @@
 
 ## Summary
 
-| Category         | Count | Severity |
-| ---------------- | ----- | -------- |
-| TODO comments    | 5     | Medium   |
-| Code smells      | 4     | Low-Med  |
-| Future plans     | 3     | Medium   |
-| TS strictness    | 1     | Low      |
-| SRP violations   | 1     | High     |
+| Category       | Count | Severity |
+| -------------- | ----- | -------- |
+| TODO comments  | 5     | Medium   |
+| Code smells    | 4     | Low-Med  |
+| Future plans   | 3     | Medium   |
+| TS strictness  | 1     | Low      |
+| SRP violations | 1     | High     |
 
 ## TODO Comments
 
@@ -71,6 +71,7 @@ This single file contains all internal code task routes AND all public code task
 **Impact:** Difficult to navigate, review, and test. Changes to one route risk unintended effects on others.
 
 **Remediation:** Split into separate route files by domain concern:
+
 - `routes/code/submit.ts` (public submit)
 - `routes/code/tasks.ts` (public list/get/cancel)
 - `routes/code/retry.ts` (public retry)
@@ -137,6 +138,7 @@ Replace static hash placeholders with computed hashes from the real system promp
 ### 3. Prompt sanitization pipeline
 
 Implement the sanitization described in the design doc (lines 1130-1165):
+
 - Strip embedded secrets (API keys, tokens)
 - Remove PII patterns
 - Validate against prompt injection patterns
@@ -159,18 +161,19 @@ This pattern appears in `codeRoutes.ts` and could benefit from a typed wrapper t
 The service has 45 test files covering domain models, use cases, infra adapters, and routes. Coverage exemptions use the `/* v8 ignore <CATEGORY> -- reason @preserve */` pattern with valid categories.
 
 Common exemption categories in this service:
+
 - `ts-type`: TypeScript type narrowing branches (nullish coalescing, optional chaining)
 - `test-infra`: Paths requiring complex test infrastructure setup
 - `upstream`: Error handling for external service failures
 
 ## Resolved Issues
 
-| Issue    | Description                                     | Resolution                               |
-| -------- | ----------------------------------------------- | ---------------------------------------- |
-| INT-372  | Zombie task detection                           | Heartbeat + 30-min threshold implemented |
-| INT-379  | WhatsApp cancel button                          | Cancel nonce with 15-min TTL             |
-| INT-465  | PR comment auto-response (Phases 0-3)           | Event parsing + locking + context build  |
-| INT-486  | Unified Linear issue templates                  | Two-phase execution model                |
-| INT-519  | Block agents from QA/Done transitions           | Validate-linear-state hook               |
-| INT-520  | Retry mechanism for failed tasks                | retryTask use case with cool-off         |
-| INT-524  | PR review feedback                              | Addressed in code review                 |
+| Issue   | Description                           | Resolution                               |
+| ------- | ------------------------------------- | ---------------------------------------- |
+| INT-372 | Zombie task detection                 | Heartbeat + 30-min threshold implemented |
+| INT-379 | WhatsApp cancel button                | Cancel nonce with 15-min TTL             |
+| INT-465 | PR comment auto-response (Phases 0-3) | Event parsing + locking + context build  |
+| INT-486 | Unified Linear issue templates        | Two-phase execution model                |
+| INT-519 | Block agents from QA/Done transitions | Validate-linear-state hook               |
+| INT-520 | Retry mechanism for failed tasks      | retryTask use case with cool-off         |
+| INT-524 | PR review feedback                    | Addressed in code review                 |

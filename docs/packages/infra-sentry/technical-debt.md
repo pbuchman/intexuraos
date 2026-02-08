@@ -56,13 +56,13 @@ The stream-based `sendLogToSentry` function calls `scope.setExtras()` for struct
 
 ## Future Plans
 
-| Area                    | Description                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| Remove deprecated API   | Delete `createSentryTransport()` and `transport-types.d.ts`                         |
-| Add Sentry flush hook   | Integrate `Sentry.close()` into Fastify `onClose` hook                              |
-| Structured tags         | Extract common fields (`userId`, `traceId`, `service`) as Sentry tags in the stream |
-| Source maps             | Upload source maps during CI/CD for readable stack traces                           |
-| Performance monitoring  | Enable `tracesSampleRate > 0` for selected services                                 |
+| Area                   | Description                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| Remove deprecated API  | Delete `createSentryTransport()` and `transport-types.d.ts`                         |
+| Add Sentry flush hook  | Integrate `Sentry.close()` into Fastify `onClose` hook                              |
+| Structured tags        | Extract common fields (`userId`, `traceId`, `service`) as Sentry tags in the stream |
+| Source maps            | Upload source maps during CI/CD for readable stack traces                           |
+| Performance monitoring | Enable `tracesSampleRate > 0` for selected services                                 |
 
 ---
 

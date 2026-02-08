@@ -300,14 +300,14 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 
 ## Troubleshooting
 
-| Symptom                             | Cause                                           | Fix                                                               |
-| ----------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------- |
-| `INTEXURAOS_REPOSITORY_URL not set` | Missing env var                                 | Add to `.envrc.local`, run `direnv allow`                         |
-| `Secret Manager fetch failed`       | Wrong credentials path                          | Verify `GOOGLE_APPLICATION_CREDENTIALS` file exists               |
-| `502 from tunnel`                   | Orchestrator not running                        | Start with `pnpm --filter orchestrator dev`                       |
-| `401 Invalid signature`             | HMAC secret mismatch                            | Match `INTEXURAOS_ORCHESTRATOR_SECRET` with UI setting            |
-| Docker `name already in use`        | Orphaned container from previous run            | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`      |
-| `Network not found`                 | Missing Docker network                          | `./scripts/setup-worker-network.sh`                               |
-| `Image not found`                   | Claude worker image not pulled/built            | `docker pull gcr.io/intexuraos-dev-pbuchman/claude-worker:latest` |
-| Tests skipped (E2E)                 | Docker network or test image missing            | See Part 3 prerequisites                                          |
-| `Cannot find module '@intexuraos'`  | Packages not built                              | Run `pnpm build` at repository root                               |
+| Symptom                             | Cause                                | Fix                                                               |
+| ----------------------------------- | ------------------------------------ | ----------------------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL not set` | Missing env var                      | Add to `.envrc.local`, run `direnv allow`                         |
+| `Secret Manager fetch failed`       | Wrong credentials path               | Verify `GOOGLE_APPLICATION_CREDENTIALS` file exists               |
+| `502 from tunnel`                   | Orchestrator not running             | Start with `pnpm --filter orchestrator dev`                       |
+| `401 Invalid signature`             | HMAC secret mismatch                 | Match `INTEXURAOS_ORCHESTRATOR_SECRET` with UI setting            |
+| Docker `name already in use`        | Orphaned container from previous run | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`      |
+| `Network not found`                 | Missing Docker network               | `./scripts/setup-worker-network.sh`                               |
+| `Image not found`                   | Claude worker image not pulled/built | `docker pull gcr.io/intexuraos-dev-pbuchman/claude-worker:latest` |
+| Tests skipped (E2E)                 | Docker network or test image missing | See Part 3 prerequisites                                          |
+| `Cannot find module '@intexuraos'`  | Packages not built                   | Run `pnpm build` at repository root                               |

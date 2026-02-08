@@ -98,67 +98,67 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit      | Description                                                   | Date         |
-| ----------- | ------------------------------------------------------------- | ------------ |
-| `7e4e6188`  | Fix code-agent 500 errors and hook test failures              | 6 hours ago  |
-| `6e068bdd`  | INT-520: Support retrying cancelled tasks                     | 12 hours ago |
-| `dec3e131`  | Fix local orchestrator setup and failed task UI               | 14 hours ago |
-| `8dce7420`  | INT-465 Phase 3/4: Task context and feedback endpoint         | 31 hours ago |
-| `38b22d63`  | Fix flaky test timeout in codeProcess tests                   | 31 hours ago |
-| `0564c42a`  | INT-465: Integrate GLM delegation into Linear + PR comments   | 33 hours ago |
-| `670cceb3`  | INT-465 Phase 0: Fix PR event bugs, add issue_comment support | 35 hours ago |
-| `ad92b9c8`  | INT-519: Block agents from moving Linear issues to QA/Done    | 2 days ago   |
-| `7b2d8d0c`  | INT-486: Unified Linear templates and two-phase execution     | 2 days ago   |
-| `a0f86b66`  | INT-524: Implement retry mechanism for failed tasks           | 3 days ago   |
+| Commit     | Description                                                   | Date         |
+| ---------- | ------------------------------------------------------------- | ------------ |
+| `7e4e6188` | Fix code-agent 500 errors and hook test failures              | 6 hours ago  |
+| `6e068bdd` | INT-520: Support retrying cancelled tasks                     | 12 hours ago |
+| `dec3e131` | Fix local orchestrator setup and failed task UI               | 14 hours ago |
+| `8dce7420` | INT-465 Phase 3/4: Task context and feedback endpoint         | 31 hours ago |
+| `38b22d63` | Fix flaky test timeout in codeProcess tests                   | 31 hours ago |
+| `0564c42a` | INT-465: Integrate GLM delegation into Linear + PR comments   | 33 hours ago |
+| `670cceb3` | INT-465 Phase 0: Fix PR event bugs, add issue_comment support | 35 hours ago |
+| `ad92b9c8` | INT-519: Block agents from moving Linear issues to QA/Done    | 2 days ago   |
+| `7b2d8d0c` | INT-486: Unified Linear templates and two-phase execution     | 2 days ago   |
+| `a0f86b66` | INT-524: Implement retry mechanism for failed tasks           | 3 days ago   |
 
 ## API Endpoints
 
 ### Public Routes (Auth0 JWT)
 
-| Method | Path                                         | Description                        | Auth     |
-| ------ | -------------------------------------------- | ---------------------------------- | -------- |
-| POST   | `/code/submit`                               | Submit code task from web UI       | Auth0    |
-| GET    | `/code/tasks`                                | List user's tasks (paginated)      | Auth0    |
-| GET    | `/code/tasks/:taskId`                        | Get task details                   | Auth0    |
-| POST   | `/code/tasks/:taskId/cancel`                 | Cancel a running task              | Auth0    |
-| POST   | `/code/tasks/:taskId/retry`                  | Retry a failed/cancelled task      | Auth0    |
-| POST   | `/code/tasks/:taskId/feedback`               | Submit feedback on completed task  | Auth0    |
-| GET    | `/code/github-pr-events`                     | Query GitHub PR events             | Auth0    |
-| GET    | `/code/worker-settings`                      | Get worker settings (masked)       | Auth0    |
-| POST   | `/code/worker-settings/workers`              | Add new worker                     | Auth0    |
-| PATCH  | `/code/worker-settings/workers/:name`        | Update worker config               | Auth0    |
-| DELETE | `/code/worker-settings/workers/:name`        | Delete worker                      | Auth0    |
-| POST   | `/code/worker-settings/workers/:name/test`   | Test worker connectivity           | Auth0    |
-| PUT    | `/code/worker-settings/priority`             | Reorder workers by priority        | Auth0    |
+| Method | Path                                       | Description                       | Auth  |
+| ------ | ------------------------------------------ | --------------------------------- | ----- |
+| POST   | `/code/submit`                             | Submit code task from web UI      | Auth0 |
+| GET    | `/code/tasks`                              | List user's tasks (paginated)     | Auth0 |
+| GET    | `/code/tasks/:taskId`                      | Get task details                  | Auth0 |
+| POST   | `/code/tasks/:taskId/cancel`               | Cancel a running task             | Auth0 |
+| POST   | `/code/tasks/:taskId/retry`                | Retry a failed/cancelled task     | Auth0 |
+| POST   | `/code/tasks/:taskId/feedback`             | Submit feedback on completed task | Auth0 |
+| GET    | `/code/github-pr-events`                   | Query GitHub PR events            | Auth0 |
+| GET    | `/code/worker-settings`                    | Get worker settings (masked)      | Auth0 |
+| POST   | `/code/worker-settings/workers`            | Add new worker                    | Auth0 |
+| PATCH  | `/code/worker-settings/workers/:name`      | Update worker config              | Auth0 |
+| DELETE | `/code/worker-settings/workers/:name`      | Delete worker                     | Auth0 |
+| POST   | `/code/worker-settings/workers/:name/test` | Test worker connectivity          | Auth0 |
+| PUT    | `/code/worker-settings/priority`           | Reorder workers by priority       | Auth0 |
 
 ### Internal Routes (X-Internal-Auth)
 
-| Method | Path                                                  | Description                            | Auth          |
-| ------ | ----------------------------------------------------- | -------------------------------------- | ------------- |
-| POST   | `/internal/code/process`                              | Process code action from actions-agent | Internal      |
-| PATCH  | `/internal/code-tasks/:taskId`                        | Update task status (worker callback)   | Internal      |
-| GET    | `/internal/code-tasks/linear/:linearIssueId/active`   | Check active task for Linear issue     | Internal      |
-| GET    | `/internal/code-tasks/zombies`                        | Find zombie tasks                      | Internal      |
-| POST   | `/internal/code/cancel`                               | Cancel task via nonce (WhatsApp)       | Internal      |
-| POST   | `/internal/code/heartbeat`                            | Process heartbeat from orchestrator    | Internal+HMAC |
-| POST   | `/internal/code/detect-zombies`                       | Trigger zombie detection               | Internal      |
-| POST   | `/internal/code/cleanup-logs`                         | Trigger log cleanup                    | Internal      |
+| Method | Path                                                | Description                            | Auth          |
+| ------ | --------------------------------------------------- | -------------------------------------- | ------------- |
+| POST   | `/internal/code/process`                            | Process code action from actions-agent | Internal      |
+| PATCH  | `/internal/code-tasks/:taskId`                      | Update task status (worker callback)   | Internal      |
+| GET    | `/internal/code-tasks/linear/:linearIssueId/active` | Check active task for Linear issue     | Internal      |
+| GET    | `/internal/code-tasks/zombies`                      | Find zombie tasks                      | Internal      |
+| POST   | `/internal/code/cancel`                             | Cancel task via nonce (WhatsApp)       | Internal      |
+| POST   | `/internal/code/heartbeat`                          | Process heartbeat from orchestrator    | Internal+HMAC |
+| POST   | `/internal/code/detect-zombies`                     | Trigger zombie detection               | Internal      |
+| POST   | `/internal/code/cleanup-logs`                       | Trigger log cleanup                    | Internal      |
 
 ### Webhook Routes (HMAC Signature)
 
-| Method | Path                                | Description                         | Auth          |
-| ------ | ----------------------------------- | ----------------------------------- | ------------- |
-| POST   | `/internal/webhooks/task-complete`  | Task completion callback            | Internal+HMAC |
-| POST   | `/internal/logs`                    | Log chunk upload from orchestrator  | Internal+HMAC |
-| POST   | `/webhooks/github`                  | GitHub webhook events               | GitHub HMAC   |
+| Method | Path                               | Description                        | Auth          |
+| ------ | ---------------------------------- | ---------------------------------- | ------------- |
+| POST   | `/internal/webhooks/task-complete` | Task completion callback           | Internal+HMAC |
+| POST   | `/internal/logs`                   | Log chunk upload from orchestrator | Internal+HMAC |
+| POST   | `/webhooks/github`                 | GitHub webhook events              | GitHub HMAC   |
 
 ### Utility Routes
 
-| Method | Path             | Description          |
-| ------ | ---------------- | -------------------- |
-| GET    | `/health`        | Health check         |
-| GET    | `/openapi.json`  | OpenAPI spec         |
-| GET    | `/docs`          | Swagger UI           |
+| Method | Path            | Description  |
+| ------ | --------------- | ------------ |
+| GET    | `/health`       | Health check |
+| GET    | `/openapi.json` | OpenAPI spec |
+| GET    | `/docs`         | Swagger UI   |
 
 ## Domain Model
 
@@ -217,9 +217,9 @@ Streaming log data from the worker, ordered by sequence number.
 interface LogChunk {
   id: string;
   sequence: number;
-  content: string;       // May contain ANSI codes
+  content: string; // May contain ANSI codes
   timestamp: Timestamp;
-  size: number;          // Byte size
+  size: number; // Byte size
 }
 ```
 
@@ -248,7 +248,7 @@ Per-user encrypted worker credentials and configuration.
 ```typescript
 interface UserWorkerSettings {
   userId: string;
-  workers: WorkerConfig[];   // Max 2, ordered by priority
+  workers: WorkerConfig[]; // Max 2, ordered by priority
   createdAt: string;
   updatedAt: string;
   workerHealthStatuses?: Record<string, WorkerHealthStatus>;
@@ -265,27 +265,27 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 
 ## Firestore Collections Owned
 
-| Collection              | Description                                           |
-| ----------------------- | ----------------------------------------------------- |
-| `code_tasks`            | Code execution tasks (subcollection: `logs`)          |
-| `user_spend`            | User cost tracking for rate limiting                  |
-| `user_usage`            | Rate limiting counters (concurrent, hourly, cost)     |
-| `code_worker_settings`  | Per-user worker configs with encrypted credentials    |
-| `github-pr-events`      | GitHub PR webhook events for timeline display         |
-| `pr_task_locks`         | Per-PR task locks preventing concurrent modifications |
+| Collection             | Description                                           |
+| ---------------------- | ----------------------------------------------------- |
+| `code_tasks`           | Code execution tasks (subcollection: `logs`)          |
+| `user_spend`           | User cost tracking for rate limiting                  |
+| `user_usage`           | Rate limiting counters (concurrent, hourly, cost)     |
+| `code_worker_settings` | Per-user worker configs with encrypted credentials    |
+| `github-pr-events`     | GitHub PR webhook events for timeline display         |
+| `pr_task_locks`        | Per-PR task locks preventing concurrent modifications |
 
 ## Use Cases
 
-| Use Case              | File                                     | Description                                         |
-| --------------------- | ---------------------------------------- | --------------------------------------------------- |
-| processCodeAction     | `domain/usecases/processCodeAction.ts`   | Create task with dedup, dispatch to worker          |
-| cancelTaskWithNonce   | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation                |
-| handlePRComment       | `domain/usecases/handlePRComment.ts`     | Detect actionable PR comments, prepare task         |
-| processHeartbeat      | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection    |
-| detectZombieTasks     | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)             |
-| cleanupTaskLogs       | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                     |
-| retryTask             | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context    |
-| submitTaskFeedback    | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback          |
+| Use Case            | File                                     | Description                                      |
+| ------------------- | ---------------------------------------- | ------------------------------------------------ |
+| processCodeAction   | `domain/usecases/processCodeAction.ts`   | Create task with dedup, dispatch to worker       |
+| cancelTaskWithNonce | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation             |
+| handlePRComment     | `domain/usecases/handlePRComment.ts`     | Detect actionable PR comments, prepare task      |
+| processHeartbeat    | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection |
+| detectZombieTasks   | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)          |
+| cleanupTaskLogs     | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                  |
+| retryTask           | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context |
+| submitTaskFeedback  | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback       |
 
 ## Domain Services
 
@@ -311,42 +311,42 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 
 ### Required Environment Variables
 
-| Variable                               | Description                                    |
-| -------------------------------------- | ---------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`            | GCP project ID                                 |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`       | Internal service auth token                    |
-| `INTEXURAOS_WEBHOOK_VERIFY_SECRET`     | HMAC secret for webhook validation             |
-| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`      | AES key for encrypting worker credentials      |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`       | HMAC secret for orchestrator dispatch signing  |
-| `INTEXURAOS_GITHUB_WEBHOOK_SECRET`     | GitHub webhook HMAC-SHA256 secret              |
+| Variable                           | Description                                   |
+| ---------------------------------- | --------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`        | GCP project ID                                |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`   | Internal service auth token                   |
+| `INTEXURAOS_WEBHOOK_VERIFY_SECRET` | HMAC secret for webhook validation            |
+| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`  | AES key for encrypting worker credentials     |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`   | HMAC secret for orchestrator dispatch signing |
+| `INTEXURAOS_GITHUB_WEBHOOK_SECRET` | GitHub webhook HMAC-SHA256 secret             |
 
 ### Production-Only Environment Variables
 
-| Variable                                | Description                                    |
-| --------------------------------------- | ---------------------------------------------- |
-| `INTEXURAOS_WHATSAPP_SERVICE_URL`       | WhatsApp service URL                           |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Pub/Sub topic for WhatsApp messages            |
-| `INTEXURAOS_LINEAR_AGENT_URL`           | linear-agent service URL                       |
-| `INTEXURAOS_ACTIONS_AGENT_URL`          | actions-agent service URL                      |
-| `INTEXURAOS_SERVICE_URL`                | This service's public URL (for webhook URLs)   |
-| `INTEXURAOS_AUTH_AUDIENCE`              | Auth0 audience                                 |
-| `INTEXURAOS_AUTH_ISSUER`                | Auth0 issuer                                   |
-| `INTEXURAOS_AUTH_JWKS_URL`              | Auth0 JWKS endpoint                            |
+| Variable                                | Description                                  |
+| --------------------------------------- | -------------------------------------------- |
+| `INTEXURAOS_WHATSAPP_SERVICE_URL`       | WhatsApp service URL                         |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Pub/Sub topic for WhatsApp messages          |
+| `INTEXURAOS_LINEAR_AGENT_URL`           | linear-agent service URL                     |
+| `INTEXURAOS_ACTIONS_AGENT_URL`          | actions-agent service URL                    |
+| `INTEXURAOS_SERVICE_URL`                | This service's public URL (for webhook URLs) |
+| `INTEXURAOS_AUTH_AUDIENCE`              | Auth0 audience                               |
+| `INTEXURAOS_AUTH_ISSUER`                | Auth0 issuer                                 |
+| `INTEXURAOS_AUTH_JWKS_URL`              | Auth0 JWKS endpoint                          |
 
 ### Rate Limit Defaults
 
-| Limit                  | Value     |
-| ---------------------- | --------- |
-| Max concurrent tasks   | 3         |
-| Max tasks per hour     | 10        |
-| Max prompt length      | 10,000    |
-| Daily cost cap         | $20       |
-| Monthly cost cap       | $200      |
-| Estimated cost/task    | $1.17     |
-| Zombie threshold       | 30 min    |
-| Log retention          | 90 days   |
-| Cancel nonce TTL       | 15 min    |
-| Retry cool-off         | 5 min     |
+| Limit                | Value   |
+| -------------------- | ------- |
+| Max concurrent tasks | 3       |
+| Max tasks per hour   | 10      |
+| Max prompt length    | 10,000  |
+| Daily cost cap       | $20     |
+| Monthly cost cap     | $200    |
+| Estimated cost/task  | $1.17   |
+| Zombie threshold     | 30 min  |
+| Log retention        | 90 days |
+| Cancel nonce TTL     | 15 min  |
+| Retry cool-off       | 5 min   |
 
 ## Gotchas
 

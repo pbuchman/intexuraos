@@ -102,19 +102,19 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit      | Description                                              | Date       |
-| ----------- | -------------------------------------------------------- | ---------- |
-| (INT-198)   | Pub/Sub retry logic for transient Crawl4AI errors        | 2026-01-28 |
-| (INT-408)   | Enforce mandatory env var registration                   | 2026-01-28 |
-| `d105688f`  | Add RATE_LIMITED error code for Crawl4AI 429 responses   | 2026-01-30 |
-| `dfd702f1`  | Migrate to Sentry-enabled logger factory                 | 2026-01-30 |
-| `186f7ad8`  | Enforce standardized HTTP response contract              | 2026-01-30 |
-| `c3198407`  | Fix response contract violations (reply.ok/reply.fail)   | 2026-01-30 |
-| (INT-425)   | Implement inline v8 ignore coverage exemptions           | 2026-01-30 |
-| (INT-427)   | Enable strict 100% branch coverage enforcement           | 2026-01-31 |
-| `eb345c7`   | Release v2.0.0                                           | 2026-01-24 |
-| (INT-210)   | WhatsApp delivery for bookmark AI summaries              | 2026-01-24 |
-| (INT-172)   | Improved test coverage for enrichment pipeline           | 2026-01-20 |
+| Commit     | Description                                            | Date       |
+| ---------- | ------------------------------------------------------ | ---------- |
+| (INT-198)  | Pub/Sub retry logic for transient Crawl4AI errors      | 2026-01-28 |
+| (INT-408)  | Enforce mandatory env var registration                 | 2026-01-28 |
+| `d105688f` | Add RATE_LIMITED error code for Crawl4AI 429 responses | 2026-01-30 |
+| `dfd702f1` | Migrate to Sentry-enabled logger factory               | 2026-01-30 |
+| `186f7ad8` | Enforce standardized HTTP response contract            | 2026-01-30 |
+| `c3198407` | Fix response contract violations (reply.ok/reply.fail) | 2026-01-30 |
+| (INT-425)  | Implement inline v8 ignore coverage exemptions         | 2026-01-30 |
+| (INT-427)  | Enable strict 100% branch coverage enforcement         | 2026-01-31 |
+| `eb345c7`  | Release v2.0.0                                         | 2026-01-24 |
+| (INT-210)  | WhatsApp delivery for bookmark AI summaries            | 2026-01-24 |
+| (INT-172)  | Improved test coverage for enrichment pipeline         | 2026-01-20 |
 
 ## API Endpoints
 
@@ -146,36 +146,36 @@ sequenceDiagram
 
 ### Bookmark
 
-| Field            | Type                 | Description                      |
-| ---------------- | -------------------- | -------------------------------- |  |  |
-| `id`             | `string`             | Unique bookmark identifier       |
-| `userId`         | `string`             | Owner user ID                    |
-| `status`         | `'draft' \           | 'active'`                        | Draft or active status |
-| `url`            | `string`             | Bookmark URL                     |
-| `title`          | `string \            | null`                            | Page title |
-| `description`    | `string \            | null`                            | Page description |
-| `tags`           | `string[]`           | User-defined tags                |
-| `ogPreview`      | `OpenGraphPreview \  | null`                            | Fetched metadata |
-| `ogFetchedAt`    | `Date \              | null`                            | When metadata was fetched |
-| `ogFetchStatus`  | `'pending' \         | 'processed' \                    | 'failed'` | Metadata fetch status |
-| `aiSummary`      | `string \            | null`                            | AI-generated summary |
-| `aiSummarizedAt` | `Date \              | null`                            | When summary was generated |
-| `source`         | `string`             | Source system (e.g., 'whatsapp') |
-| `sourceId`       | `string`             | ID in source system              |
-| `archived`       | `boolean`            | Soft delete flag                 |
-| `createdAt`      | `Date`               | Creation timestamp               |
-| `updatedAt`      | `Date`               | Last update timestamp            |
+| Field | Type | Description |
+| ---------------- | -------------------- | -------------------------------- | | |
+| `id` | `string` | Unique bookmark identifier |
+| `userId` | `string` | Owner user ID |
+| `status` | `'draft' \           | 'active'` | Draft or active status |
+| `url` | `string` | Bookmark URL |
+| `title` | `string \            | null` | Page title |
+| `description` | `string \            | null` | Page description |
+| `tags` | `string[]` | User-defined tags |
+| `ogPreview` | `OpenGraphPreview \  | null` | Fetched metadata |
+| `ogFetchedAt` | `Date \              | null` | When metadata was fetched |
+| `ogFetchStatus` | `'pending' \         | 'processed' \                    | 'failed'` | Metadata fetch status |
+| `aiSummary` | `string \            | null` | AI-generated summary |
+| `aiSummarizedAt` | `Date \              | null` | When summary was generated |
+| `source` | `string` | Source system (e.g., 'whatsapp') |
+| `sourceId` | `string` | ID in source system |
+| `archived` | `boolean` | Soft delete flag |
+| `createdAt` | `Date` | Creation timestamp |
+| `updatedAt` | `Date` | Last update timestamp |
 
 ### OpenGraphPreview
 
-| Field         | Type       | Description |
-| ------------- | ---------- | ----------- |  |
-| `title`       | `string \  | null`       | OG title |
-| `description` | `string \  | null`       | OG description |
-| `image`       | `string \  | null`       | OG image URL |
-| `siteName`    | `string \  | null`       | OG site name |
-| `type`        | `string \  | null`       | OG type |
-| `favicon`     | `string \  | null`       | Favicon URL |
+| Field | Type | Description |
+| ------------- | ---------- | ----------- | |
+| `title` | `string \  | null` | OG title |
+| `description` | `string \  | null` | OG description |
+| `image` | `string \  | null` | OG image URL |
+| `siteName` | `string \  | null` | OG site name |
+| `type` | `string \  | null` | OG type |
+| `favicon` | `string \  | null` | Favicon URL |
 
 ### Status Values
 
@@ -206,13 +206,14 @@ sequenceDiagram
 
 The summarization pipeline classifies errors as transient or permanent to enable Pub/Sub retry:
 
-| Error Source          | Transient                                 | Permanent                          |
-| --------------------- | ----------------------------------------- | ---------------------------------- |
-| HTTP status           | 429 (rate limit), 503, 504                | 400, 500                           |
-| Network               | Connection failures                       | -                                  |
-| web-agent error codes | TIMEOUT, FETCH_FAILED, RATE_LIMITED       | NO_CONTENT, invalid response       |
+| Error Source          | Transient                           | Permanent                    |
+| --------------------- | ----------------------------------- | ---------------------------- |
+| HTTP status           | 429 (rate limit), 503, 504          | 400, 500                     |
+| Network               | Connection failures                 | -                            |
+| web-agent error codes | TIMEOUT, FETCH_FAILED, RATE_LIMITED | NO_CONTENT, invalid response |
 
 **Behavior:**
+
 - Transient errors: `summarizeBookmark` returns `TRANSIENT_ERROR`; Pub/Sub route responds HTTP 503 with `{ error, retryable: true }`, triggering Pub/Sub exponential backoff retry
 - Permanent errors: `summarizeBookmark` returns success (graceful degradation); Pub/Sub route responds HTTP 200, acknowledging the message to prevent infinite retries
 
@@ -266,14 +267,14 @@ The Pub/Sub route checks for this error code and responds with HTTP 503 to trigg
 
 All required env vars are validated at startup via `validateRequiredEnv()` in `index.ts`.
 
-| Environment Variable                     | Required | Description                |
-| ---------------------------------------- | -------- | -------------------------- |
-| `INTEXURAOS_WEB_AGENT_URL`               | Yes      | Web-agent base URL         |
-| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`      | Yes      | Enrichment topic name      |
-| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`   | Yes      | Summarization topic name   |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`  | Yes      | WhatsApp send topic name   |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`         | Yes      | Internal auth header value |
-| `INTEXURAOS_GCP_PROJECT_ID`              | Yes      | GCP project for Pub/Sub    |
+| Environment Variable                    | Required | Description                |
+| --------------------------------------- | -------- | -------------------------- |
+| `INTEXURAOS_WEB_AGENT_URL`              | Yes      | Web-agent base URL         |
+| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | Yes      | Enrichment topic name      |
+| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | Yes      | Summarization topic name   |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Yes      | WhatsApp send topic name   |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Internal auth header value |
+| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project for Pub/Sub    |
 
 ## Gotchas
 

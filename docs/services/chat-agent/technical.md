@@ -100,17 +100,17 @@ sequenceDiagram
 
 ### Public Endpoints
 
-| Method | Path    | Auth              | Description                         |
-| ------ | ------- | ----------------- | ----------------------------------- |
-| POST   | `/chat` | JWT or Guest      | Send a message and get a response   |
-| GET    | `/docs` | None              | Swagger UI documentation            |
+| Method | Path    | Auth         | Description                       |
+| ------ | ------- | ------------ | --------------------------------- |
+| POST   | `/chat` | JWT or Guest | Send a message and get a response |
+| GET    | `/docs` | None         | Swagger UI documentation          |
 
 ### System Endpoints
 
-| Method | Path             | Auth | Description               |
-| ------ | ---------------- | ---- | ------------------------- |
-| GET    | `/health`        | None | Health check              |
-| GET    | `/openapi.json`  | None | OpenAPI 3.1.1 spec (JSON) |
+| Method | Path            | Auth | Description               |
+| ------ | --------------- | ---- | ------------------------- |
+| GET    | `/health`       | None | Health check              |
+| GET    | `/openapi.json` | None | OpenAPI 3.1.1 spec (JSON) |
 
 ### POST /chat
 
@@ -131,11 +131,11 @@ sequenceDiagram
 }
 ```
 
-| Field                 | Type                         | Required | Description                                  |
-| --------------------- | ---------------------------- | -------- | -------------------------------------------- |
-| `message`             | `string`                     | Yes      | User message (min 1 char)                    |
-| `conversationHistory` | `ConversationHistory[]`      | No       | Previous messages (max 20 used)              |
-| `pendingAction`       | `SuggestedAction` or `null`  | No       | Action from previous response to confirm     |
+| Field                 | Type                        | Required | Description                              |
+| --------------------- | --------------------------- | -------- | ---------------------------------------- |
+| `message`             | `string`                    | Yes      | User message (min 1 char)                |
+| `conversationHistory` | `ConversationHistory[]`     | No       | Previous messages (max 20 used)          |
+| `pendingAction`       | `SuggestedAction` or `null` | No       | Action from previous response to confirm |
 
 **Response (200):**
 
@@ -144,9 +144,7 @@ sequenceDiagram
   "success": true,
   "data": {
     "response": "To create a todo, use POST /todos...",
-    "sources": [
-      { "filePath": "docs/services/todos-agent/API.md", "section": "POST /todos" }
-    ],
+    "sources": [{ "filePath": "docs/services/todos-agent/API.md", "section": "POST /todos" }],
     "suggestedAction": {
       "type": "create_command",
       "payload": { "text": "buy groceries", "source": "pwa-shared" },
@@ -164,52 +162,52 @@ sequenceDiagram
 
 **Error codes:**
 
-| HTTP | Code               | When                                    |
-| ---- | ------------------ | --------------------------------------- |
-| 400  | `INVALID_REQUEST`  | Empty message or invalid body           |
-| 401  | `UNAUTHORIZED`     | No JWT and no guest session header      |
-| 429  | `RATE_LIMITED`     | Guest session exceeded hourly limit     |
-| 502  | `DOWNSTREAM_ERROR` | LLM generation or user-service failure  |
+| HTTP | Code               | When                                   |
+| ---- | ------------------ | -------------------------------------- |
+| 400  | `INVALID_REQUEST`  | Empty message or invalid body          |
+| 401  | `UNAUTHORIZED`     | No JWT and no guest session header     |
+| 429  | `RATE_LIMITED`     | Guest session exceeded hourly limit    |
+| 502  | `DOWNSTREAM_ERROR` | LLM generation or user-service failure |
 
 ## Domain Model
 
 ### ChatMessage
 
-| Field             | Type                                     | Description                              |
-| ----------------- | ---------------------------------------- | ---------------------------------------- |
-| `id`              | `string`                                 | Unique message ID                        |
-| `role`            | `'user' \                                | 'assistant' \                            | 'system'` | Message sender role |
-| `content`         | `string`                                 | Message text content                     |
-| `timestamp`       | `number`                                 | Unix timestamp                           |
-| `sources`         | `DocSource[]` (optional)                 | Documentation citations                  |
-| `suggestedAction` | `SuggestedAction` (optional)             | Proposed command action                  |
+| Field             | Type                         | Description             |
+| ----------------- | ---------------------------- | ----------------------- | --------- | ------------------- |
+| `id`              | `string`                     | Unique message ID       |
+| `role`            | `'user' \                    | 'assistant' \           | 'system'` | Message sender role |
+| `content`         | `string`                     | Message text content    |
+| `timestamp`       | `number`                     | Unix timestamp          |
+| `sources`         | `DocSource[]` (optional)     | Documentation citations |
+| `suggestedAction` | `SuggestedAction` (optional) | Proposed command action |
 
 ### DocChunk (Firestore: `doc_embeddings`)
 
-| Field       | Type                             | Description                                     |
-| ----------- | -------------------------------- | ----------------------------------------------- |
-| `id`        | `string`                         | Firestore document ID                           |
-| `content`   | `string`                         | Chunk text content                              |
-| `embedding` | `number[]`                       | 1536-dimension OpenAI embedding vector          |
-| `filePath`  | `string`                         | Source file path                                |
-| `section`   | `string`                         | Section heading within the source file          |
-| `docType`   | `'markdown' \                    | 'openapi'`                                      | Document type |
-| `createdAt` | `Firestore.Timestamp`            | Creation timestamp                              |
+| Field       | Type                  | Description                            |
+| ----------- | --------------------- | -------------------------------------- | ------------- |
+| `id`        | `string`              | Firestore document ID                  |
+| `content`   | `string`              | Chunk text content                     |
+| `embedding` | `number[]`            | 1536-dimension OpenAI embedding vector |
+| `filePath`  | `string`              | Source file path                       |
+| `section`   | `string`              | Section heading within the source file |
+| `docType`   | `'markdown' \         | 'openapi'`                             | Document type |
+| `createdAt` | `Firestore.Timestamp` | Creation timestamp                     |
 
 ### SuggestedAction
 
-| Field                  | Type                      | Description                             |
-| ---------------------- | ------------------------- | --------------------------------------- |
-| `type`                 | `'create_command'`        | Action type (only command creation)     |
-| `payload`              | `Record<string, unknown>` | Action data (`text`, `source` fields)   |
-| `awaitingConfirmation` | `boolean`                 | `true` until user confirms              |
+| Field                  | Type                      | Description                           |
+| ---------------------- | ------------------------- | ------------------------------------- |
+| `type`                 | `'create_command'`        | Action type (only command creation)   |
+| `payload`              | `Record<string, unknown>` | Action data (`text`, `source` fields) |
+| `awaitingConfirmation` | `boolean`                 | `true` until user confirms            |
 
 ### ConversationHistory
 
-| Field     | Type                         | Description       |
-| --------- | ---------------------------- | ----------------- |
-| `role`    | `'user' \                    | 'assistant'`      | Message sender |
-| `content` | `string`                     | Message text      |
+| Field     | Type       | Description  |
+| --------- | ---------- | ------------ | -------------- |
+| `role`    | `'user' \  | 'assistant'` | Message sender |
+| `content` | `string`   | Message text |
 
 ## Pub/Sub Events
 
@@ -219,55 +217,55 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 
 ### External Services
 
-| Service              | Purpose                                              |
-| -------------------- | ---------------------------------------------------- |
-| OpenAI Embeddings    | Generate 1536-dim vectors (text-embedding-3-small)   |
-| LLM (Gemini/GLM)     | Generate chat responses                              |
-| Firestore            | Store and search document embeddings (vector search) |
+| Service           | Purpose                                              |
+| ----------------- | ---------------------------------------------------- |
+| OpenAI Embeddings | Generate 1536-dim vectors (text-embedding-3-small)   |
+| LLM (Gemini/GLM)  | Generate chat responses                              |
+| Firestore         | Store and search document embeddings (vector search) |
 
 ### Internal Services
 
-| Service              | Purpose                                        |
-| -------------------- | ---------------------------------------------- |
-| user-service         | Fetch per-user LLM client and API keys         |
-| app-settings-service | Fetch LLM pricing data at startup              |
+| Service              | Purpose                                |
+| -------------------- | -------------------------------------- |
+| user-service         | Fetch per-user LLM client and API keys |
+| app-settings-service | Fetch LLM pricing data at startup      |
 
 ### Packages
 
-| Package                        | Purpose                               |
-| ------------------------------ | ------------------------------------- |
-| `@intexuraos/common-core`      | Result types, error helpers           |
-| `@intexuraos/common-http`      | Auth plugins, request logging         |
-| `@intexuraos/http-server`      | Health checks, env validation         |
-| `@intexuraos/http-contracts`   | Core API schema definitions           |
-| `@intexuraos/infra-firestore`  | Firestore singleton + vector search   |
-| `@intexuraos/infra-glm`        | GLM LLM provider integration          |
-| `@intexuraos/infra-sentry`     | Sentry logging, error handler         |
-| `@intexuraos/internal-clients` | user-service client                   |
-| `@intexuraos/llm-contract`     | LLM model enums, error types          |
-| `@intexuraos/llm-factory`      | LLM client factory                    |
-| `@intexuraos/llm-pricing`      | Pricing context for LLM models        |
+| Package                        | Purpose                             |
+| ------------------------------ | ----------------------------------- |
+| `@intexuraos/common-core`      | Result types, error helpers         |
+| `@intexuraos/common-http`      | Auth plugins, request logging       |
+| `@intexuraos/http-server`      | Health checks, env validation       |
+| `@intexuraos/http-contracts`   | Core API schema definitions         |
+| `@intexuraos/infra-firestore`  | Firestore singleton + vector search |
+| `@intexuraos/infra-glm`        | GLM LLM provider integration        |
+| `@intexuraos/infra-sentry`     | Sentry logging, error handler       |
+| `@intexuraos/internal-clients` | user-service client                 |
+| `@intexuraos/llm-contract`     | LLM model enums, error types        |
+| `@intexuraos/llm-factory`      | LLM client factory                  |
+| `@intexuraos/llm-pricing`      | Pricing context for LLM models      |
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable                               | Required | Description                                            |
-| -------------------------------------- | -------- | ------------------------------------------------------ |
-| `INTEXURAOS_GCP_PROJECT_ID`            | Yes      | GCP project ID for Firestore                           |
-| `INTEXURAOS_AUTH_JWKS_URL`             | Yes      | JWKS URL for JWT validation                            |
-| `INTEXURAOS_AUTH_ISSUER`               | Yes      | JWT issuer for token validation                        |
-| `INTEXURAOS_AUTH_AUDIENCE`             | Yes      | JWT audience for token validation                      |
-| `INTEXURAOS_OPENAI_API_KEY`            | Yes      | OpenAI API key for embeddings                          |
-| `INTEXURAOS_USER_SERVICE_URL`          | Yes      | URL for user-service                                   |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`       | Yes      | Token for internal service-to-service calls            |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`  | Yes      | URL for app-settings-service (pricing data)            |
-| `INTEXURAOS_GUEST_ZAI_API_KEY`         | Yes      | ZAI API key for guest chat sessions (GLM-4.7-Flash)    |
-| `INTEXURAOS_SENTRY_DSN`                | No       | Sentry DSN for error tracking                          |
-| `INTEXURAOS_ENVIRONMENT`               | No       | Environment name (defaults to `development`)           |
-| `PORT`                                 | No       | Server port (defaults to `8080`)                       |
-| `HOST`                                 | No       | Server host (defaults to `0.0.0.0`)                    |
-| `LOG_LEVEL`                            | No       | Pino log level (defaults to `info`)                    |
+| Variable                              | Required | Description                                         |
+| ------------------------------------- | -------- | --------------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project ID for Firestore                        |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS URL for JWT validation                         |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer for token validation                     |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for token validation                   |
+| `INTEXURAOS_OPENAI_API_KEY`           | Yes      | OpenAI API key for embeddings                       |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | URL for user-service                                |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Token for internal service-to-service calls         |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | URL for app-settings-service (pricing data)         |
+| `INTEXURAOS_GUEST_ZAI_API_KEY`        | Yes      | ZAI API key for guest chat sessions (GLM-4.7-Flash) |
+| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                       |
+| `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (defaults to `development`)        |
+| `PORT`                                | No       | Server port (defaults to `8080`)                    |
+| `HOST`                                | No       | Server host (defaults to `0.0.0.0`)                 |
+| `LOG_LEVEL`                           | No       | Pino log level (defaults to `info`)                 |
 
 ### Terraform
 

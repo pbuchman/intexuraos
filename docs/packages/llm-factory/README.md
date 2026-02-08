@@ -43,6 +43,7 @@ if (result.ok) {
 | Zai      | `glm-4.7`, `glm-4.7-flash`                                                         | `@intexuraos/infra-glm`    |
 
 **Unsupported providers** (not routed through this factory):
+
 - Anthropic (Claude) -- handled via separate client setup
 - OpenAI (GPT) -- handled via separate client setup
 - Perplexity (Sonar) -- handled via separate client setup
@@ -61,7 +62,7 @@ if (isSupportedProvider('google')) {
 }
 
 isSupportedProvider('anthropic'); // false
-isSupportedProvider('openai');    // false
+isSupportedProvider('openai'); // false
 ```
 
 ### Types
@@ -100,19 +101,19 @@ The factory also re-exports `LLMError` from `@intexuraos/llm-contract` for conve
 
 ## Recent Changes
 
-| Commit   | Description                                          | Age     |
-| -------- | ---------------------------------------------------- | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner     | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions       | 12 days |
-| 4fa0fed3 | Release v2.0.0                                       | 2 weeks |
-| 8aad9098 | Migrate imports and delete llm-common                | 2 weeks |
-| 6ec4205e | Make logger mandatory in all LLM configs             | 3 weeks |
-| 7d2b5a9f | Add getLlmClient implementation for commands-agent   | 4 weeks |
-| 0d1f115e | Fix pricing endpoint to include zai provider         | 4 weeks |
+| Commit   | Description                                        | Age     |
+| -------- | -------------------------------------------------- | ------- |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner   | 7 days  |
+| 21c1528a | Fix release skill to bump all package versions     | 12 days |
+| 4fa0fed3 | Release v2.0.0                                     | 2 weeks |
+| 8aad9098 | Migrate imports and delete llm-common              | 2 weeks |
+| 6ec4205e | Make logger mandatory in all LLM configs           | 3 weeks |
+| 7d2b5a9f | Add getLlmClient implementation for commands-agent | 4 weeks |
+| 0d1f115e | Fix pricing endpoint to include zai provider       | 4 weeks |
 
 ## Source Files
 
-| File                         | Purpose                                           |
-| ---------------------------- | ------------------------------------------------- |
-| `src/index.ts`               | Re-exports factory function, types, and guard     |
-| `src/llmClientFactory.ts`    | Factory implementation with exhaustive switch     |
+| File                      | Purpose                                       |
+| ------------------------- | --------------------------------------------- |
+| `src/index.ts`            | Re-exports factory function, types, and guard |
+| `src/llmClientFactory.ts` | Factory implementation with exhaustive switch |

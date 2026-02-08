@@ -64,6 +64,7 @@ Predev-lifecycle provides four Cloud Functions that coordinate a single GCP Spot
 **User Goal:** See the running application on the current branch.
 
 **Steps:**
+
 1. User navigates to the pre-dev URL
 2. Gateway checks Firestore state
 3. If VM is running, gateway proxies the request to the VM
@@ -77,6 +78,7 @@ Predev-lifecycle provides four Cloud Functions that coordinate a single GCP Spot
 **User Goal:** See the latest code reflected in the pre-dev environment.
 
 **Steps:**
+
 1. Developer pushes to a branch on GitHub
 2. GitHub sends a push webhook to the webhook function
 3. Webhook verifies the HMAC signature
@@ -90,6 +92,7 @@ Predev-lifecycle provides four Cloud Functions that coordinate a single GCP Spot
 **User Goal:** Prevent the environment from switching branches during a demo.
 
 **Steps:**
+
 1. Send `POST /internal/branch-lock` with `{ "locked": true }`
 2. Gateway updates Firestore with the lock state
 3. All subsequent pushes to different branches are silently ignored

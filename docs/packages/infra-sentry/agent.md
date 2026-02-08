@@ -7,13 +7,13 @@ Machine-readable export and interface reference for `@intexuraos/infra-sentry`.
 ## Package Metadata
 
 ```yaml
-name: "@intexuraos/infra-sentry"
-version: "2.1.0"
-entry: "./src/index.ts"
-type: "module"
+name: '@intexuraos/infra-sentry'
+version: '2.1.0'
+entry: './src/index.ts'
+type: 'module'
 private: true
 engines:
-  node: ">=22.0.0"
+  node: '>=22.0.0'
 ```
 
 ---
@@ -90,21 +90,21 @@ interface IntexuraFastifyReply extends FastifyReply {
 
 ## Environment Variables Read
 
-| Variable                 | Read By                                  | Required |
-| ------------------------ | ---------------------------------------- | -------- |
-| `INTEXURAOS_SENTRY_DSN`  | `isSentryConfigured()`, `sendToSentry()` | No       |
-| `NODE_ENV`               | `createAppLogger()`                      | No       |
-| `LOG_LEVEL`              | Via `getLogLevel()` from common-core     | No       |
+| Variable                | Read By                                  | Required |
+| ----------------------- | ---------------------------------------- | -------- |
+| `INTEXURAOS_SENTRY_DSN` | `isSentryConfigured()`, `sendToSentry()` | No       |
+| `NODE_ENV`              | `createAppLogger()`                      | No       |
+| `LOG_LEVEL`             | Via `getLogLevel()` from common-core     | No       |
 
 ---
 
 ## Pino Log Levels Forwarded to Sentry
 
-| Pino Level | Numeric | Sentry Level | Sentry Method        |
-| ---------- | ------- | ------------ | -------------------- |
-| warn       | 40      | warning      | `captureMessage`     |
-| error      | 50      | error        | `captureException`   |
-| fatal      | 60      | fatal        | `captureException`   |
+| Pino Level | Numeric | Sentry Level | Sentry Method      |
+| ---------- | ------- | ------------ | ------------------ |
+| warn       | 40      | warning      | `captureMessage`   |
+| error      | 50      | error        | `captureException` |
+| fatal      | 60      | fatal        | `captureException` |
 
 ---
 
