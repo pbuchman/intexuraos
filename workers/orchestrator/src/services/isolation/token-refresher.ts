@@ -109,6 +109,7 @@ export class TokenRefresher {
     const tokenPath = path.join(taskSecretsPath, 'github-token');
 
     try {
+      await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
       const token = await this.mintGitHubToken();
       await fs.promises.writeFile(tokenPath, token, { mode: 0o600 });
       this.logger.info({ taskId }, 'GitHub token refreshed');
