@@ -80,7 +80,9 @@ fi
 setup_github_token() {
     if [ -f "/secrets/github-token" ]; then
         export GITHUB_TOKEN=$(cat /secrets/github-token)
-        echo "[entrypoint] GitHub token loaded"
+        # Configure git to use the token for HTTPS pushes
+        git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
+        echo "[entrypoint] GitHub token loaded and git credential configured"
     else
         echo "[entrypoint] WARNING: GitHub token not found at /secrets/github-token"
     fi
