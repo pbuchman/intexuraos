@@ -374,7 +374,7 @@ export class DockerProvider implements IsolationProvider {
       try {
         const container = this.docker.getContainer(containerId);
         const exec = await container.exec({
-          Cmd: ['sh', '-c', `[ -s ${SENTINEL_PATH} ] && echo DONE || echo WAIT`],
+          Cmd: ['sh', '-c', `tail -1 ${SENTINEL_PATH} 2>/dev/null | grep -q "completed" && echo DONE || echo WAIT`],
           AttachStdout: true,
           Tty: true,
         });
