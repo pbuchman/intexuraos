@@ -261,13 +261,13 @@ describe('DockerProvider', () => {
       expect(tmpfs['/repo/node_modules']).toContain('uid=1001');
     });
 
-    it('sets PNPM_STORE_DIR env var', async () => {
+    it('sets CLAUDE_WORKER_MODE env var', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContainEqual('PNPM_STORE_DIR=/home/claude/pnpm-store');
+      expect(envArr).toContainEqual('CLAUDE_WORKER_MODE=1');
     });
 
     it('sends system prompt to container stdin', async () => {

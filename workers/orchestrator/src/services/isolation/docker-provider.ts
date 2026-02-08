@@ -183,7 +183,6 @@ export class DockerProvider implements IsolationProvider {
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
       'CLAUDE_PROJECT_DIR=/repo',
       'CLAUDE_WORKER_MODE=1',
-      'PNPM_STORE_DIR=/home/claude/pnpm-store',
       // Exit 10s after idle - Claude exits automatically when no input arrives
       'CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=10000',
     ];
@@ -334,12 +333,10 @@ export class DockerProvider implements IsolationProvider {
     taskId: string
   ): Promise<void> {
     const TOTAL_TIMEOUT_MS = 180_000;
-    const ENTRYPOINT_READY = 'Starting Claude in interactive mode';
     const TUI_READY_MARKER = 'bypass permissions on';
 
     await new Promise<void>((resolve) => {
       let done = false;
-      let entrypointReady = false;
 
       const finish = (): void => {
         if (done) return;
@@ -350,7 +347,7 @@ export class DockerProvider implements IsolationProvider {
       };
 
       const hardTimeout = setTimeout(() => {
-        this.logger.warn({ taskId, entrypointReady }, 'Container ready timeout — proceeding anyway');
+        this.logger.warn({ taskId }, 'Container ready timeout — proceeding anyway');
         finish();
       }, TOTAL_TIMEOUT_MS);
 
@@ -358,23 +355,8 @@ export class DockerProvider implements IsolationProvider {
         if (done) return;
         const text = chunk.toString('utf-8');
 
-        // Phase 1: Wait for entrypoint to finish (pnpm install done, Claude about to start)
-        if (!entrypointReady && text.includes(ENTRYPOINT_READY)) {
-          entrypointReady = true;
-          this.logger.info({ taskId }, 'Entrypoint ready — sending API key approval');
-          // Wait for Claude TUI to initialize before sending approval
-          setTimeout(() => {
-            if (done) return;
-            attachStream.write('\x1b[A');
-            setTimeout(() => {
-              if (!done) attachStream.write('\r');
-            }, 500);
-          }, 5_000);
-        }
-
-        // Phase 2: Detect TUI ready after approval sent
-        if (entrypointReady && text.includes(TUI_READY_MARKER)) {
-          this.logger.info({ taskId }, 'TUI ready marker detected');
+        if (text.includes(TUI_READY_MARKER)) {
+          this.logger.info({ taskId }, 'TUI ready — Claude is accepting input');
           finish();
         }
       };
