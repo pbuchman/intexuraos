@@ -225,8 +225,8 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
-    // Write system prompt to worker via stdin
-    // In interactive mode, Claude reads this as the first user message
+    await this.waitForContainerReady(attachStream as unknown as NodeJS.ReadWriteStream, taskId);
+    this.logger.debug({ taskId }, 'Container ready — sending system prompt');
     attachStream.write(systemPrompt + '\n');
 
     const handle: WorkerHandle = {
@@ -261,6 +261,56 @@ export class DockerProvider implements IsolationProvider {
 
     return handle;
   }
+
+  /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, real handshake requires running container with TTY @preserve */
+  protected async waitForContainerReady(
+    attachStream: NodeJS.ReadWriteStream,
+    taskId: string
+  ): Promise<void> {
+    const TOTAL_TIMEOUT_MS = 30_000;
+    const INITIAL_WAIT_MS = 8_000;
+    const SETTLE_MS = 2_000;
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      let settleTimer: ReturnType<typeof setTimeout> | null = null;
+      let approvalSent = false;
+
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(hardTimeout);
+        if (settleTimer) clearTimeout(settleTimer);
+        attachStream.removeListener('data', onData);
+        resolve();
+      };
+
+      const hardTimeout = setTimeout(() => {
+        this.logger.warn({ taskId }, 'Container ready timeout — proceeding anyway');
+        finish();
+      }, TOTAL_TIMEOUT_MS);
+
+      const onData = (): void => {
+        if (approvalSent && !settled) {
+          if (settleTimer) clearTimeout(settleTimer);
+          settleTimer = setTimeout(finish, SETTLE_MS);
+        }
+      };
+
+      attachStream.on('data', onData);
+
+      setTimeout(() => {
+        if (settled) return;
+        approvalSent = true;
+        this.logger.debug({ taskId }, 'Sending API key approval');
+        attachStream.write('\x1b[A');
+        setTimeout(() => {
+          if (!settled) attachStream.write('\r');
+        }, 500);
+      }, INITIAL_WAIT_MS);
+    });
+  }
+  /* v8 ignore stop @preserve */
 
   async destroyWorker(taskId: string, forceKill = false): Promise<void> {
     const worker = this.workers.get(taskId);
