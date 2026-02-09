@@ -4,7 +4,7 @@ interface StreamJsonMessage {
   type: string;
   subtype?: string;
   message?: {
-    content?: { type: string; text?: string; name?: string }[];
+    content?: { type: string; text?: string; name?: string; input?: Record<string, unknown> }[];
   };
   tool_name?: string;
   tool_input?: Record<string, unknown>;
@@ -92,7 +92,7 @@ function formatAssistant(obj: StreamJsonMessage): string | null {
       texts.push(block.text);
     }
     if (block.type === 'tool_use' && typeof block.name === 'string') {
-      texts.push(`[tool] ${block.name}`);
+      texts.push(`[tool] ${block.name}${extractToolContext(block.input)}`);
     }
   }
 
@@ -121,26 +121,29 @@ function formatResult(obj: StreamJsonMessage): string | null {
   return `[error] Task failed: ${errorMsg}`;
 }
 
+function extractToolContext(input: Record<string, unknown> | undefined): string {
+  if (input === undefined) return '';
+
+  if (typeof input['file_path'] === 'string') {
+    return `: ${input['file_path']}`;
+  }
+  if (typeof input['command'] === 'string') {
+    const cmd = input['command'];
+    return `: ${cmd.length > 80 ? cmd.slice(0, 77) + '...' : cmd}`;
+  }
+  if (typeof input['pattern'] === 'string') {
+    return `: ${input['pattern']}`;
+  }
+  if (typeof input['query'] === 'string') {
+    const q = input['query'];
+    return `: ${q.length > 60 ? q.slice(0, 57) + '...' : q}`;
+  }
+  return '';
+}
+
 function formatToolUse(obj: StreamJsonMessage): string | null {
   const toolName = obj.tool_name ?? 'unknown';
-  const input = obj.tool_input;
-
-  let context = '';
-  if (input !== undefined) {
-    if (typeof input['file_path'] === 'string') {
-      context = `: ${input['file_path']}`;
-    } else if (typeof input['command'] === 'string') {
-      const cmd = input['command'];
-      context = `: ${cmd.length > 80 ? cmd.slice(0, 77) + '...' : cmd}`;
-    } else if (typeof input['pattern'] === 'string') {
-      context = `: ${input['pattern']}`;
-    } else if (typeof input['query'] === 'string') {
-      const q = input['query'];
-      context = `: ${q.length > 60 ? q.slice(0, 57) + '...' : q}`;
-    }
-  }
-
-  return `[tool] ${toolName}${context}`;
+  return `[tool] ${toolName}${extractToolContext(obj.tool_input)}`;
 }
 
 function formatToolResult(obj: StreamJsonMessage): string | null {

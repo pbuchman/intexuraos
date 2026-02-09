@@ -104,7 +104,27 @@ describe('formatLogChunk', () => {
       expect(formatLogChunk(json + '\n')).toBe('Line 1\nLine 2\n');
     });
 
-    it('extracts tool_use blocks from assistant', () => {
+    it('extracts tool_use blocks from assistant with input params', () => {
+      const json = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls -la apps/' } }],
+        },
+      });
+      expect(formatLogChunk(json + '\n')).toBe('[tool] Bash: ls -la apps/\n');
+    });
+
+    it('extracts tool_use with pattern input from assistant', () => {
+      const json = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', name: 'Glob', input: { pattern: 'apps/*/src/index.ts' } }],
+        },
+      });
+      expect(formatLogChunk(json + '\n')).toBe('[tool] Glob: apps/*/src/index.ts\n');
+    });
+
+    it('extracts tool_use without input from assistant', () => {
       const json = JSON.stringify({
         type: 'assistant',
         message: { content: [{ type: 'tool_use', name: 'Read' }] },
