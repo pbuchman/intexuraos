@@ -524,8 +524,8 @@ export interface ButtonResponseInfo {
 /**
  * Extract interactive button response from webhook payload.
  *
- * When a user clicks an interactive button, WhatsApp sends a message with type="button".
- * The button response is in the interactive field.
+ * When a user clicks an interactive button, WhatsApp sends a message with type="interactive"
+ * and interactive.type="button_reply". Legacy format with type="button" is also accepted.
  *
  * Path: entry[0].changes[0].value.messages[0].interactive
  *
@@ -543,7 +543,7 @@ export function extractButtonResponse(payload: unknown): ButtonResponseInfo | nu
   if (interactive === undefined) return null;
 
   // Check if this is a button response
-  if (interactive.type !== 'button' || typeof interactive.button_reply !== 'object') {
+  if ((interactive.type !== 'button' && interactive.type !== 'button_reply') || typeof interactive.button_reply !== 'object') {
     return null;
   }
 
