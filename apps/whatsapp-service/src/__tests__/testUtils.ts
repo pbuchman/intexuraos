@@ -332,9 +332,9 @@ export function createButtonWebhookPayload(options: {
                   from: '15551234567',
                   id: messageId,
                   timestamp: '1234567890',
-                  type: 'button',
+                  type: 'interactive',
                   interactive: {
-                    type: 'button',
+                    type: 'button_reply',
                     button_reply: {
                       id: options.buttonId,
                       title: buttonTitle,
