@@ -209,7 +209,10 @@ async function bootstrap(): Promise<void> {
   if (keepContainersAlive) {
     logger.info('Debug mode: containers will be kept alive after task completion');
   }
-  const isolationProvider = await createIsolationProvider({ secretsBasePath, gcpSaKeyPath, keepContainersAlive }, logger);
+  const isolationProvider = await createIsolationProvider(
+    { secretsBasePath, gcpSaKeyPath, keepContainersAlive },
+    logger
+  );
   const tokenRefresher = new TokenRefresher(
     {
       secretsBasePath,

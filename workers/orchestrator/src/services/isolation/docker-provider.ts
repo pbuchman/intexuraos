@@ -2,13 +2,7 @@ import Docker from 'dockerode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Logger } from '@intexuraos/common-core';
-import type {
-  IsolationProvider,
-  WorkerConfig,
-  WorkerHandle,
-  ResourceUsage,
-  TTYStreams,
-} from './types.js';
+import type { IsolationProvider, WorkerConfig, WorkerHandle, ResourceUsage } from './types.js';
 
 export interface DockerProviderConfig {
   imageName: string;
@@ -37,7 +31,6 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
 interface WorkerEntry {
   containerId: string;
   handle: WorkerHandle;
-  attachStream?: NodeJS.ReadWriteStream;
 }
 
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
@@ -83,7 +76,11 @@ export class DockerProvider implements IsolationProvider {
 
         const container = this.docker.getContainer(containerInfo.Id);
         this.logger.info(
-          { containerId: containerInfo.Id, name: containerInfo.Names[0], ageHours: Math.round(ageMs / 3_600_000) },
+          {
+            containerId: containerInfo.Id,
+            name: containerInfo.Names[0],
+            ageHours: Math.round(ageMs / 3_600_000),
+          },
           'Cleaning up old container'
         );
 
@@ -109,7 +106,7 @@ export class DockerProvider implements IsolationProvider {
   }
 
   async createWorker(config: WorkerConfig): Promise<WorkerHandle> {
-    const { taskId, worktreePath, systemPrompt, secrets, workerType } = config;
+    const { taskId, worktreePath, systemPrompt, prompt, secrets, workerType } = config;
 
     if (this.workers.size >= this.config.maxConcurrent) {
       throw new Error(`Max concurrent workers (${String(this.config.maxConcurrent)}) reached`);
@@ -129,8 +126,6 @@ export class DockerProvider implements IsolationProvider {
       const gitFileContent = fs.readFileSync(gitPath, 'utf-8').trim();
       const gitdirMatch = /^gitdir:\s*(.+)$/.exec(gitFileContent);
       if (gitdirMatch?.[1] !== undefined) {
-        // Extract the main .git directory from the worktree gitdir path
-        // Format: /path/to/repo/.git/worktrees/worktree-name
         const worktreeGitDir = gitdirMatch[1];
         const worktreesIndex = worktreeGitDir.lastIndexOf('/.git/worktrees/');
         if (worktreesIndex !== -1) {
@@ -143,6 +138,14 @@ export class DockerProvider implements IsolationProvider {
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
     await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
 
+    // Write prompt files for --print mode (entrypoint reads these)
+    await fs.promises.writeFile(
+      path.join(taskSecretsPath, 'system-prompt.txt'),
+      systemPrompt,
+      'utf-8'
+    );
+    await fs.promises.writeFile(path.join(taskSecretsPath, 'user-prompt.txt'), prompt, 'utf-8');
+
     /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
     if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
       await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));
@@ -153,7 +156,6 @@ export class DockerProvider implements IsolationProvider {
     const apiKey = secrets[workerTypeConfig.apiKeyEnvVar];
 
     /* v8 ignore start -- test-infra: tests always provide mock API keys @preserve */
-    // Fail early if the required API key for this worker type is not configured
     if (apiKey === '') {
       throw new Error(
         `Worker type '${workerType}' requires ${workerTypeConfig.apiKeyEnvVar} but it is not configured`
@@ -171,8 +173,6 @@ export class DockerProvider implements IsolationProvider {
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
       'CLAUDE_PROJECT_DIR=/repo',
       'CLAUDE_WORKER_MODE=1',
-      // Exit 10s after idle - Claude exits automatically when no input arrives
-      'CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=10000',
     ];
 
     if (workerTypeConfig.model !== undefined) {
@@ -199,13 +199,10 @@ export class DockerProvider implements IsolationProvider {
       }
       const pullStream = await this.docker.pull(this.config.imageName, pullOpts);
       await new Promise<void>((resolve, reject) => {
-        this.docker.modem.followProgress(
-          pullStream,
-          (err: Error | null) => {
-            if (err !== null) reject(err);
-            else resolve();
-          }
-        );
+        this.docker.modem.followProgress(pullStream, (err: Error | null) => {
+          if (err !== null) reject(err);
+          else resolve();
+        });
       });
       this.logger.debug({ taskId, image: this.config.imageName }, 'Image pulled');
     } catch (err: unknown) {
@@ -219,11 +216,7 @@ export class DockerProvider implements IsolationProvider {
       Env: env,
       WorkingDir: '/repo',
       User: '1001:1001',
-      OpenStdin: true,
-      Tty: true,
-      AttachStdin: true,
-      AttachStdout: true,
-      AttachStderr: true,
+      Tty: false,
       HostConfig: {
         Binds: [
           `${worktreePath}:/repo:rw`,
@@ -253,30 +246,21 @@ export class DockerProvider implements IsolationProvider {
       },
     });
 
-    // CRITICAL: attach() MUST be called before start() to capture all container output.
-    // If attach is called after start, the stream misses output emitted during startup.
-    const attachStream = (await container.attach({
-      stream: true,
-      stdin: true,
-      stdout: true,
-      stderr: true,
-      hijack: true,
-    })) as unknown as NodeJS.ReadWriteStream;
-
     await container.start();
 
-    // Set up log listener BEFORE writing prompt to avoid race condition
-    /* v8 ignore start -- test-infra: optional onLog callback tested via test mock @preserve */
+    // Capture logs via container.logs() (replaces attach stream)
+    /* v8 ignore start -- test-infra: log stream setup tested via mock, requires running container @preserve */
     if (config.onLog !== undefined) {
-      attachStream.on('data', (chunk: Buffer) => {
+      const logStream = await container.logs({
+        follow: true,
+        stdout: true,
+        stderr: true,
+      });
+      logStream.on('data', (chunk: Buffer) => {
         config.onLog?.(chunk.toString('utf-8'));
       });
     }
     /* v8 ignore stop @preserve */
-
-    await this.waitForContainerReady(attachStream as unknown as NodeJS.ReadWriteStream, taskId);
-    this.logger.debug({ taskId }, 'Container ready — sending system prompt');
-    await this.writePromptToTTY(attachStream, systemPrompt, taskId);
 
     const handle: WorkerHandle = {
       taskId,
@@ -288,9 +272,9 @@ export class DockerProvider implements IsolationProvider {
     this.workers.set(taskId, {
       containerId: container.id,
       handle,
-      attachStream,
     });
 
+    // In --print mode, Claude exits naturally when done. container.wait() detects completion.
     /* v8 ignore start -- test-infra: promise handlers run after test completes @preserve */
     container
       .wait()
@@ -306,152 +290,10 @@ export class DockerProvider implements IsolationProvider {
       });
     /* v8 ignore stop @preserve */
 
-    this.monitorForResponseCompletion(attachStream, taskId, container.id);
-
     this.logger.info({ taskId, containerId: container.id }, 'Worker container started');
 
     return handle;
   }
-
-  /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, real handshake requires running container with TTY @preserve */
-  protected async waitForContainerReady(
-    attachStream: NodeJS.ReadWriteStream,
-    taskId: string
-  ): Promise<void> {
-    const TOTAL_TIMEOUT_MS = 180_000;
-    const TUI_READY_MARKER = 'bypass permissions on';
-
-    await new Promise<void>((resolve) => {
-      let done = false;
-
-      const finish = (): void => {
-        if (done) return;
-        done = true;
-        clearTimeout(hardTimeout);
-        attachStream.removeListener('data', onData);
-        resolve();
-      };
-
-      const hardTimeout = setTimeout(() => {
-        this.logger.warn({ taskId }, 'Container ready timeout — proceeding anyway');
-        finish();
-      }, TOTAL_TIMEOUT_MS);
-
-      const onData = (chunk: Buffer): void => {
-        if (done) return;
-        const text = chunk.toString('utf-8');
-
-        if (text.includes(TUI_READY_MARKER)) {
-          this.logger.info({ taskId }, 'TUI ready — Claude is accepting input');
-          finish();
-        }
-      };
-
-      attachStream.on('data', onData);
-    });
-  }
-  /* v8 ignore stop @preserve */
-
-  /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, TTY paste-then-submit requires real terminal @preserve */
-  protected async writePromptToTTY(
-    attachStream: NodeJS.ReadWriteStream,
-    prompt: string,
-    taskId: string
-  ): Promise<void> {
-    const SETTLE_MS = 1_000;
-    const TIMEOUT_MS = 10_000;
-
-    attachStream.write(prompt + '\n');
-    this.logger.info(
-      { taskId, promptLength: prompt.length },
-      'Prompt written — waiting for TUI to settle before submit'
-    );
-
-    await new Promise<void>((resolve) => {
-      let settleTimer: ReturnType<typeof setTimeout> | null = null;
-
-      const finish = (): void => {
-        clearTimeout(hardTimeout);
-        if (settleTimer) clearTimeout(settleTimer);
-        attachStream.removeListener('data', onData);
-        attachStream.write('\r');
-        resolve();
-      };
-
-      const hardTimeout = setTimeout(() => {
-        this.logger.warn({ taskId }, 'Prompt settle timeout — submitting anyway');
-        finish();
-      }, TIMEOUT_MS);
-
-      const resetSettle = (): void => {
-        if (settleTimer) clearTimeout(settleTimer);
-        settleTimer = setTimeout(finish, SETTLE_MS);
-      };
-
-      const onData = (): void => {
-        resetSettle();
-      };
-
-      attachStream.on('data', onData);
-      resetSettle();
-    });
-  }
-  /* v8 ignore stop @preserve */
-
-  /* v8 ignore start -- test-infra: overridden in TestableDockerProvider, requires real container lifecycle @preserve */
-  protected monitorForResponseCompletion(
-    _attachStream: NodeJS.ReadWriteStream,
-    taskId: string,
-    containerId: string
-  ): void {
-    const POLL_INTERVAL_MS = 5_000;
-    const INITIAL_DELAY_MS = 30_000;
-    const SENTINEL_PATH = '/repo/.claude/hooks/validation-passed';
-
-    const poll = async (interval: ReturnType<typeof setInterval>): Promise<void> => {
-      try {
-        const container = this.docker.getContainer(containerId);
-        const exec = await container.exec({
-          Cmd: ['sh', '-c', `[ -f ${SENTINEL_PATH} ] && echo DONE || echo WAIT`],
-          AttachStdout: true,
-          Tty: true,
-        });
-        const stream = await exec.start({ Tty: true });
-        const chunks: Buffer[] = [];
-        stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-        await new Promise<void>((resolve) => stream.on('end', resolve));
-        const output = Buffer.concat(chunks).toString('utf-8');
-
-        if (output.includes('DONE')) {
-          clearInterval(interval);
-          if (this.config.keepContainersAlive) {
-            this.logger.info({ taskId }, 'Stop hooks completed — keeping container alive (debug mode)');
-          } else {
-            this.logger.info({ taskId }, 'Stop hooks completed — stopping container');
-            await container.stop({ t: 5 }).catch((_err: unknown) => {
-              // Container may already be stopped
-            });
-          }
-        }
-      } catch (error) {
-        this.logger.warn(
-          { taskId, error },
-          'Poll error in monitorForResponseCompletion — stopping monitoring'
-        );
-        clearInterval(interval);
-      }
-    };
-
-    // Delay polling to avoid detecting sentinel before response completes.
-    // Simple tasks complete in ~15s; 30s delay ensures we don't stop during prompt processing.
-    setTimeout(() => {
-      const interval = setInterval(() => {
-        void poll(interval);
-      }, POLL_INTERVAL_MS);
-      void poll(interval);
-    }, INITIAL_DELAY_MS);
-  }
-  /* v8 ignore stop @preserve */
 
   async destroyWorker(taskId: string, forceKill = false): Promise<void> {
     const worker = this.workers.get(taskId);
@@ -476,8 +318,7 @@ export class DockerProvider implements IsolationProvider {
           err instanceof Error &&
           (err.message.includes('No such container') ||
             err.message.includes('is not running') ||
-            err.message.includes('already stopped') ||
-            err.message.includes('is not running'));
+            err.message.includes('already stopped'));
 
         if (isAlreadyStopped) {
           this.logger.debug({ taskId }, 'Container already stopped');
@@ -495,7 +336,6 @@ export class DockerProvider implements IsolationProvider {
           'Failed to remove task secrets directory'
         );
       }
-
     } finally {
       this.workers.delete(taskId);
     }
@@ -573,7 +413,6 @@ export class DockerProvider implements IsolationProvider {
         this.logger.warn({ taskId }, 'Worker timeout, force killing');
         worker.handle.status = 'timeout';
 
-        // Resolve immediately, then cleanup asynchronously
         resolve(-1);
         void this.destroyWorker(taskId, true).catch((err: unknown) => {
           this.logger.error({ taskId, error: err }, 'Failed to destroy timed-out worker');
@@ -584,14 +423,12 @@ export class DockerProvider implements IsolationProvider {
         .wait()
         .then((data) => {
           clearTimeout(timeout);
-          // Don't resolve if timeout already fired (race condition)
           if (!timeoutFired) {
             resolve(data.StatusCode);
           }
         })
         .catch((err: unknown) => {
           clearTimeout(timeout);
-          // Don't resolve if timeout already fired (race condition)
           if (!timeoutFired) {
             this.logger.error({ taskId, error: err }, 'Wait error');
             resolve(-1);
@@ -599,54 +436,6 @@ export class DockerProvider implements IsolationProvider {
         });
     });
     /* v8 ignore stop @preserve */
-  }
-
-  async sendInput(taskId: string, input: string): Promise<void> {
-    const worker = this.workers.get(taskId);
-    if (worker === undefined) {
-      throw new Error(`Worker ${taskId} not found`);
-    }
-
-    /* v8 ignore start -- test-infra: defensive check - attachStream always set when worker created @preserve */
-    if (worker.attachStream === undefined) {
-      throw new Error(`Worker ${taskId} has no attached stream`);
-    }
-    /* v8 ignore stop @preserve */
-
-    this.logger.debug({ taskId, inputLength: input.length }, 'Sending input to worker');
-    await this.writePromptToTTY(worker.attachStream, input, taskId);
-  }
-
-  async attachTTY(taskId: string): Promise<TTYStreams> {
-    const worker = this.workers.get(taskId);
-    if (worker === undefined) {
-      throw new Error(`Worker ${taskId} not found`);
-    }
-
-    const container = this.docker.getContainer(worker.containerId);
-
-    const exec = await container.exec({
-      Cmd: ['/bin/bash'],
-      AttachStdin: true,
-      AttachStdout: true,
-      AttachStderr: true,
-      Tty: true,
-    });
-
-    const stream = (await exec.start({
-      hijack: true,
-      stdin: true,
-      Tty: true,
-    })) as unknown as NodeJS.ReadWriteStream;
-
-    return {
-      stdin: stream,
-      stdout: stream,
-      stderr: stream,
-      /* v8 ignore start -- test-infra: callback for detaching TTY, not invoked in unit tests @preserve */
-      detach: () => stream.end(),
-      /* v8 ignore stop @preserve */
-    };
   }
 
   async getResourceUsage(taskId: string): Promise<ResourceUsage> {

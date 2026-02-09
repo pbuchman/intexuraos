@@ -115,7 +115,6 @@ export class TaskDispatcher {
           ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
           linearIssueLabels: request.linearIssueLabels,
           hasChildren: request.hasChildren,
-          prompt: request.prompt,
         }),
         /* v8 ignore stop @preserve */
         workerType: request.workerType,
