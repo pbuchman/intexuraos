@@ -17,6 +17,7 @@ import {
   isFirebaseAuthenticated,
   initializeFirebase,
 } from '@/services/firebase';
+import { LogFormatter } from './logFormatter'; // @allow-missing-js -- Vite bundler resolves without .js
 
 const MIN_TERMINAL_ROWS = 10;
 
@@ -42,6 +43,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const firebaseAuthenticatedRef = useRef(false);
   const isMountedRef = useRef(true);
   const lastSequenceRef = useRef(-1);
+  const formatterRef = useRef(new LogFormatter());
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -135,7 +137,10 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
               if (sequence > lastSequenceRef.current) {
                 const content = data['content'] as string;
-                terminal.write(content);
+                const formatted = formatterRef.current.processChunk(content);
+                if (formatted.length > 0) {
+                  terminal.write(formatted);
+                }
                 lastSequenceRef.current = sequence;
                 newChunks++;
               }
