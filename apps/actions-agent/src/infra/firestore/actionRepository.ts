@@ -41,8 +41,6 @@ function toAction(id: string, doc: ActionDoc): Action {
     payload: doc.payload,
     ...(doc.resource_status !== undefined && { resource_status: doc.resource_status }),
     ...(doc.resource_error !== undefined && { resource_error: doc.resource_error }),
-    ...(doc.approvalNonce !== undefined && { approvalNonce: doc.approvalNonce }),
-    ...(doc.approvalNonceExpiresAt !== undefined && { approvalNonceExpiresAt: doc.approvalNonceExpiresAt }),
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -59,8 +57,6 @@ function toDoc(action: Action): ActionDoc {
     payload: action.payload,
     ...(action.resource_status !== undefined && { resource_status: action.resource_status }),
     ...(action.resource_error !== undefined && { resource_error: action.resource_error }),
-    ...(action.approvalNonce !== undefined && { approvalNonce: action.approvalNonce }),
-    ...(action.approvalNonceExpiresAt !== undefined && { approvalNonceExpiresAt: action.approvalNonceExpiresAt }),
     createdAt: action.createdAt,
     updatedAt: action.updatedAt,
   };
