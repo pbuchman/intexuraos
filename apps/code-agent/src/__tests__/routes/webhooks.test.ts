@@ -519,6 +519,51 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.callbackReceived).toBe(true);
     });
 
+    it('updates task status correctly for completed task without result', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Investigate the issue',
+        sanitizedPrompt: 'Investigate the issue',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('completed');
+      expect(getResult.value.callbackReceived).toBe(true);
+    });
+
     it('stores error for failed tasks', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
@@ -2153,6 +2198,60 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
 
     return { timestamp, signature };
   }
+
+  it('sends WhatsApp notification when task completes without result', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Investigate the deployment issue',
+      sanitizedPrompt: 'Investigate the deployment issue',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Verify task was updated to completed
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed to get task');
+    expect(getResult.value.status).toBe('completed');
+    expect(getResult.value.callbackReceived).toBe(true);
+
+    // Verify WhatsApp notification was sent
+    expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledTimes(1);
+    const publishCall = mockWhatsAppPublisher.publishSendMessage.mock.calls[0];
+    expect(publishCall).toBeDefined();
+    const params = publishCall?.[0] as { userId: string; message: string } | undefined;
+    expect(params?.userId).toBe('user-123');
+    expect(params?.message).toContain('completed');
+  });
 
   it('sends WhatsApp notification on task completion', async () => {
     const createResult = await codeTaskRepo.create({

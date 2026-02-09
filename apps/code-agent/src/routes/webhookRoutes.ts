@@ -169,10 +169,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const task = taskResult.value;
 
       // Step 3: Update task based on status
-      if (status === 'completed' && result) {
+      if (status === 'completed') {
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'completed',
-          result,
+          ...(result !== undefined && { result }),
           callbackReceived: true,
         });
 
@@ -183,21 +183,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         // Notify actions-agent if task has actionId
         if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'completed', result.prUrl ? {
+          /* v8 ignore start -- ts-type: optional chaining on result?.prUrl creates type narrowing branch @preserve */
+          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'completed', result?.prUrl ? {
             prUrl: result.prUrl,
           } : undefined, traceId);
+          /* v8 ignore stop @preserve */
 
           if (!actionsResult.ok) {
             request.log.warn(
               { taskId, actionId: task.actionId, error: actionsResult.error },
               'Failed to notify actions-agent - action status may be stale'
             );
-            // Don't fail the webhook - task update succeeded
           }
         }
 
         // Send WhatsApp notification (use updated task with result populated)
-        const completedTask = { ...task, status: 'completed' as const, result };
+        const completedTask = { ...task, status: 'completed' as const, ...(result !== undefined && { result }) };
         await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
 
         // Record task completion for rate limiting (fire and forget)
@@ -232,7 +233,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             /* v8 ignore stop @preserve */
           },
         /* v8 ignore stop @preserve */
-          'Task marked as completed with result'
+          'Task marked as completed'
         );
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
         return await reply.send({ received: true });
