@@ -15,36 +15,20 @@ interface MockContainer {
   stop: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
   wait: ReturnType<typeof vi.fn>;
-  attach: ReturnType<typeof vi.fn>;
   logs: ReturnType<typeof vi.fn>;
   inspect: ReturnType<typeof vi.fn>;
   stats: ReturnType<typeof vi.fn>;
   exec: ReturnType<typeof vi.fn>;
-}
-
-interface MockAttachStream {
-  write: ReturnType<typeof vi.fn>;
-  on: ReturnType<typeof vi.fn>;
-  end: ReturnType<typeof vi.fn>;
+  kill: ReturnType<typeof vi.fn>;
 }
 
 interface MockDockerResult {
   mockDocker: MockDocker;
   mockContainer: MockContainer;
-  mockAttachStream: MockAttachStream;
-  mockVolume: MockVolume;
   resolveContainerWait: (value: { StatusCode: number }) => void;
 }
 
-// Create mock Docker instance factory
 function createMockDocker(): MockDockerResult {
-  const mockAttachStream = {
-    write: vi.fn(),
-    on: vi.fn(),
-    end: vi.fn(),
-  };
-
-  // Create a deferred promise for container.wait() that won't resolve until explicitly triggered
   let resolveContainerWait: (value: { StatusCode: number }) => void;
   const containerWaitPromise = new Promise<{ StatusCode: number }>((resolve) => {
     resolveContainerWait = resolve;
@@ -56,7 +40,6 @@ function createMockDocker(): MockDockerResult {
     stop: vi.fn().mockResolvedValue(undefined),
     remove: vi.fn().mockResolvedValue(undefined),
     wait: vi.fn().mockReturnValue(containerWaitPromise),
-    attach: vi.fn().mockResolvedValue(mockAttachStream),
     logs: vi.fn().mockResolvedValue(Buffer.from('test logs')),
     inspect: vi.fn().mockResolvedValue({ State: { Running: true } }),
     stats: vi.fn().mockResolvedValue({
@@ -75,28 +58,20 @@ function createMockDocker(): MockDockerResult {
       },
     }),
     exec: vi.fn().mockResolvedValue({
-      start: vi.fn().mockResolvedValue(mockAttachStream),
+      start: vi.fn().mockResolvedValue({ on: vi.fn(), end: vi.fn() }),
     }),
-  };
-
-  const mockVolume: MockVolume = {
-    inspect: vi.fn().mockResolvedValue({}),
-    remove: vi.fn().mockResolvedValue(undefined),
+    kill: vi.fn().mockResolvedValue(undefined),
   };
 
   const mockDocker = {
     createContainer: vi.fn().mockResolvedValue(mockContainer),
     getContainer: vi.fn().mockReturnValue(mockContainer),
     listContainers: vi.fn().mockResolvedValue([]),
-    getVolume: vi.fn().mockReturnValue(mockVolume),
-    createVolume: vi.fn().mockResolvedValue(mockVolume),
   };
 
   return {
     mockDocker,
     mockContainer,
-    mockAttachStream,
-    mockVolume,
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- resolveContainerWait is set in Promise constructor
     resolveContainerWait: resolveContainerWait!,
   };
@@ -110,6 +85,7 @@ vi.mock('node:fs', async (importOriginal) => {
     existsSync: vi.fn().mockReturnValue(true),
     statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
     readFileSync: vi.fn().mockReturnValue(''),
+    mkdirSync: vi.fn(),
     promises: {
       ...actual.promises,
       mkdir: vi.fn().mockResolvedValue(undefined),
@@ -146,7 +122,6 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
   ...overrides,
 });
 
-// Extended DockerProvider for testing with mock injection
 class TestableDockerProvider extends DockerProvider {
   constructor(
     config: Partial<DockerProviderConfig>,
@@ -156,27 +131,6 @@ class TestableDockerProvider extends DockerProvider {
     super(config, logger);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any).docker = mockDocker;
-  }
-
-  protected override async waitForContainerReady(): Promise<void> {
-    return Promise.resolve();
-  }
-
-  protected override async writePromptToTTY(
-    attachStream: NodeJS.ReadWriteStream,
-    prompt: string,
-    _taskId: string
-  ): Promise<void> {
-    attachStream.write(prompt + '\n');
-    attachStream.write('\r');
-  }
-
-  protected override monitorForResponseCompletion(
-    _attachStream: NodeJS.ReadWriteStream,
-    _taskId: string,
-    _containerId: string
-  ): void {
-    // No-op in tests
   }
 }
 
@@ -205,6 +159,16 @@ describe('DockerProvider', () => {
       expect(mocks.mockContainer.start).toHaveBeenCalled();
     });
 
+    it('creates container with Tty: false (non-interactive --print mode)', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall?.Tty).toBe(false);
+      expect(createCall?.OpenStdin).toBeUndefined();
+      expect(createCall?.AttachStdin).toBeUndefined();
+    });
+
     it('enforces concurrency limit', async () => {
       const providerWithLimit = new TestableDockerProvider(
         { maxConcurrent: 1 },
@@ -226,21 +190,24 @@ describe('DockerProvider', () => {
       await expect(provider.createWorker(createTestConfig())).rejects.toThrow('Invalid worktree');
     });
 
-    it('calls onLog callback when provided', async () => {
-      const onLog = vi.fn();
-      const config = createTestConfig({ onLog });
-
+    it('writes system prompt and user prompt files to secrets dir', async () => {
+      const fs = await import('node:fs');
+      const config = createTestConfig({
+        systemPrompt: 'You are a helpful assistant',
+        prompt: 'Fix the login bug',
+      });
       await provider.createWorker(config);
 
-      const dataCallback = (mocks.mockAttachStream.on as Mock).mock.calls.find(
-        (call: unknown[]) => call[0] === 'data'
-      )?.[1] as ((chunk: Buffer) => void) | undefined;
-
-      expect(dataCallback).toBeDefined();
-      if (dataCallback !== undefined) {
-        dataCallback(Buffer.from('test output'));
-        expect(onLog).toHaveBeenCalledWith('test output');
-      }
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('system-prompt.txt'),
+        'You are a helpful assistant',
+        'utf-8'
+      );
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('user-prompt.txt'),
+        'Fix the login bug',
+        'utf-8'
+      );
     });
 
     it('mounts pnpm store volume and node_modules tmpfs', async () => {
@@ -249,7 +216,9 @@ describe('DockerProvider', () => {
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const binds = createCall?.HostConfig?.Binds as string[];
-      expect(binds).toContainEqual(expect.stringContaining('pnpm-store:/home/claude/pnpm-store:rw'));
+      expect(binds).toContainEqual(
+        expect.stringContaining('pnpm-store:/home/claude/pnpm-store:rw')
+      );
       const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
       expect(tmpfs['/repo/node_modules']).toContain('uid=1001');
     });
@@ -263,15 +232,16 @@ describe('DockerProvider', () => {
       expect(envArr).toContainEqual('CLAUDE_WORKER_MODE=1');
     });
 
-    it('sends system prompt to container stdin', async () => {
-      const config = createTestConfig({
-        prompt: 'Hello Claude', // User prompt is now embedded in systemPrompt by buildSystemPrompt
-        systemPrompt: 'You are a helpful assistant',
-      });
+    it('does not set CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env var', async () => {
+      const config = createTestConfig();
       await provider.createWorker(config);
 
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('You are a helpful assistant\n');
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('\r');
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const hasExitDelay = envArr.some((e: string) =>
+        e.startsWith('CLAUDE_CODE_EXIT_AFTER_STOP_DELAY')
+      );
+      expect(hasExitDelay).toBe(false);
     });
   });
 
@@ -293,6 +263,19 @@ describe('DockerProvider', () => {
       mocks.mockContainer.stop.mockRejectedValueOnce(new Error('already stopped'));
 
       await expect(provider.destroyWorker('test-task-123')).resolves.not.toThrow();
+    });
+
+    it('logs unexpected stop errors without throwing', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(config);
+
+      mocks.mockContainer.stop.mockRejectedValueOnce(new Error('Docker daemon crashed'));
+
+      await expect(provider.destroyWorker('test-task-123')).resolves.not.toThrow();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'test-task-123' }),
+        'Failed to stop/kill container'
+      );
     });
 
     it('cleans up secrets directory', async () => {
@@ -343,32 +326,10 @@ describe('DockerProvider', () => {
     });
   });
 
-  describe('sendInput', () => {
-    it('writes prompt then submits with carriage return', async () => {
-      await provider.createWorker(createTestConfig());
-
-      await provider.sendInput('test-task-123', 'test input');
-
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('test input\n');
-      expect(mocks.mockAttachStream.write).toHaveBeenCalledWith('\r');
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        { taskId: 'test-task-123', inputLength: 10 },
-        'Sending input to worker'
-      );
-    });
-
-    it('throws if worker not found', async () => {
-      await expect(provider.sendInput('non-existent', 'test')).rejects.toThrow(
-        'Worker non-existent not found'
-      );
-    });
-  });
-
   describe('waitForCompletion', () => {
     it('returns exit code on completion', async () => {
       await provider.createWorker(createTestConfig());
 
-      // Schedule container completion after a short delay
       setTimeout(() => {
         mocks.resolveContainerWait({ StatusCode: 0 });
       }, 10);
@@ -466,25 +427,6 @@ describe('DockerProvider', () => {
 
     it('throws for non-existent worker', async () => {
       await expect(provider.streamLogs('non-existent', vi.fn())).rejects.toThrow(
-        'Worker non-existent not found'
-      );
-    });
-  });
-
-  describe('attachTTY', () => {
-    it('returns streams for interactive use', async () => {
-      await provider.createWorker(createTestConfig());
-
-      const tty = await provider.attachTTY('test-task-123');
-
-      expect(tty.stdin).toBeDefined();
-      expect(tty.stdout).toBeDefined();
-      expect(tty.stderr).toBeDefined();
-      expect(typeof tty.detach).toBe('function');
-    });
-
-    it('throws for non-existent worker', async () => {
-      await expect(provider.attachTTY('non-existent')).rejects.toThrow(
         'Worker non-existent not found'
       );
     });

@@ -1,29 +1,14 @@
 /**
  * System prompt template for Claude Code workers.
  *
- * This template is injected into worker containers to provide
- * context and instructions for code task execution.
+ * This template is injected into worker containers via the --system-prompt flag
+ * to provide context and instructions for code task execution.
+ * The user prompt is passed separately via stdin (--print mode).
  *
  * Two-Phase Execution Model (INT-486):
  * - Phase 1: DESIGN & VALIDATION (when issue lacks 'code-task' label)
  * - Phase 2: STRICT EXECUTION (when issue has 'code-task' label)
  */
-
-/**
- * Forbidden keywords that are stripped from user prompts.
- * These are typical prompt injection attempts.
- */
-const FORBIDDEN_KEYWORDS = [
-  'ignore',
-  'disregard',
-  'forget',
-  'override',
-  'system',
-  'instruction',
-  'instructions',
-  'instead',
-  'rather',
-] as const;
 
 /**
  * Parameters for building the system prompt.
@@ -39,28 +24,6 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   /** Whether the issue has child issues */
   hasChildren: boolean;
-  /** Raw user prompt (will be sanitized and included as supplemental instructions) */
-  prompt: string;
-}
-
-/**
- * Sanitize user prompt by removing XML tags and forbidden keywords.
- *
- * This is a basic defense against prompt injection attempts.
- * More sophisticated sanitization may be needed as attack vectors evolve.
- *
- * @param rawPrompt - The raw user prompt
- * @returns Sanitized prompt safe for inclusion in system prompt
- */
-function sanitizePrompt(rawPrompt: string): string {
-  let sanitized = rawPrompt.replace(/<[^>]*>/g, '');
-
-  for (const keyword of FORBIDDEN_KEYWORDS) {
-    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-    sanitized = sanitized.replace(regex, '');
-  }
-
-  return sanitized.replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -70,10 +33,8 @@ function sanitizePrompt(rawPrompt: string): string {
  * The agent should analyze and enrich the issue IN-PLACE, NOT execute code.
  */
 function buildPhase1Prompt(params: SystemPromptParams): string {
-  const { taskId, worktreePath, linearIssueId, prompt: supplementalInstructions } = params;
-  const sanitizedSupplement = sanitizePrompt(supplementalInstructions);
+  const { taskId, worktreePath, linearIssueId } = params;
 
-  // Use the provided issue ID or 'UNKNOWN' placeholder
   const issueId = linearIssueId ?? 'INT-UNKNOWN';
 
   return `[SYSTEM CONTEXT]
@@ -133,16 +94,7 @@ Your FINAL message before stopping MUST contain these EXACT items on separate li
 - PR: https://github.com/intexura/intexuraos/pull/XXX (full URL)
 - Linear: https://linear.app/intexura/issue/INT-XXX (full URL)
 
-The stop hook REJECTS your stop if these are missing. Paste full URLs, not references.
-${
-  sanitizedSupplement.length > 0
-    ? `
-
-[USER SUPPLEMENTAL INSTRUCTIONS]
-${sanitizedSupplement}
-`
-    : ''
-}`;
+The stop hook REJECTS your stop if these are missing. Paste full URLs, not references.`;
 }
 
 /**
@@ -152,14 +104,7 @@ ${sanitizedSupplement}
  * The agent should execute autonomously without confirmation prompts.
  */
 function buildPhase2Prompt(params: SystemPromptParams): string {
-  const {
-    taskId,
-    worktreePath,
-    linearIssueId,
-    hasChildren,
-    prompt: supplementalInstructions,
-  } = params;
-  const sanitizedSupplement = sanitizePrompt(supplementalInstructions);
+  const { taskId, worktreePath, linearIssueId, hasChildren } = params;
 
   const parentModeSection = hasChildren
     ? `
@@ -190,7 +135,7 @@ You are in **NON-INTERACTIVE MODE**. Execute the task autonomously.
 /linear ${linearIssueId ?? 'your-issue-id'}
 
 ### Post-Skill Execution
-Follow all instructions from the Linear issue description and any additional user instructions provided below.
+Follow all instructions from the Linear issue description and the user prompt.
 
 ### Execution Rules
 
@@ -214,11 +159,7 @@ Your FINAL message before stopping MUST contain ALL of these on separate lines:
 - Linear: https://linear.app/intexura/issue/INT-XXX (full URL)
 - CI: passed
 
-The stop hook REJECTS your stop if PR or Linear links are missing. Paste full URLs.
-
-[USER SUPPLEMENTAL INSTRUCTIONS]
-${sanitizedSupplement}
-`;
+The stop hook REJECTS your stop if PR or Linear links are missing. Paste full URLs.`;
   /* v8 ignore stop @preserve */
 }
 
@@ -229,20 +170,20 @@ ${sanitizedSupplement}
  * - Phase 1 (no 'code-task' label): Design & Validation mode
  * - Phase 2 (has 'code-task' label): Strict Execution mode
  *
+ * Note: The user prompt is NOT included here. It's passed separately via stdin
+ * in --print mode (written to /secrets/user-prompt.txt).
+ *
  * @param params - Parameters for system prompt construction
  * @returns Complete system prompt for worker execution
  */
 export function buildSystemPrompt(params: SystemPromptParams): string {
   const { linearIssueLabels } = params;
 
-  // Determine phase based on 'code-task' label
   const hasCodeTaskLabel = linearIssueLabels.includes('code-task');
 
   if (!hasCodeTaskLabel) {
-    // Phase 1: Design & Validation
     return buildPhase1Prompt(params);
   }
 
-  // Phase 2: Strict Execution
   return buildPhase2Prompt(params);
 }

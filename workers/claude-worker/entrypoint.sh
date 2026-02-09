@@ -119,7 +119,7 @@ if [ -f "/repo/pnpm-lock.yaml" ]; then
 fi
 
 # ------------------------------------------------------------------------------
-# Start Claude in interactive mode
+# Start Claude in --print mode (non-interactive, structured JSON output)
 # ------------------------------------------------------------------------------
 echo "[entrypoint] Starting Claude..."
 echo "[entrypoint] Working directory: $(pwd)"
@@ -127,17 +127,22 @@ if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
     echo "[entrypoint] Git branch: $(git -C /repo branch --show-current 2>/dev/null || echo 'unknown')"
 fi
 
-# ------------------------------------------------------------------------------
-# Pre-approve API key so Claude skips the interactive TUI prompt
-# ------------------------------------------------------------------------------
-if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-    CLAUDE_JSON="/home/claude/.claude.json"
-    if [ -f "$CLAUDE_JSON" ]; then
-        UPDATED=$(jq --arg key "$ANTHROPIC_API_KEY" '.customApiKeyResponses[$key] = true' "$CLAUDE_JSON")
-        echo "$UPDATED" > "$CLAUDE_JSON"
-        echo "[entrypoint] API key pre-approved in claude.json"
-    fi
+if [ ! -f "/secrets/system-prompt.txt" ]; then
+    echo "[entrypoint] ERROR: /secrets/system-prompt.txt not found" >&2
+    exit 1
 fi
 
-echo "[entrypoint] Starting Claude in interactive mode..."
-exec claude -d --dangerously-skip-permissions --verbose
+if [ ! -f "/secrets/user-prompt.txt" ]; then
+    echo "[entrypoint] ERROR: /secrets/user-prompt.txt not found" >&2
+    exit 1
+fi
+
+SYSTEM_PROMPT=$(cat /secrets/system-prompt.txt)
+echo "[entrypoint] System prompt loaded (${#SYSTEM_PROMPT} chars)"
+echo "[entrypoint] User prompt loaded ($(wc -c < /secrets/user-prompt.txt | tr -d ' ') bytes)"
+
+echo "[entrypoint] Starting Claude in --print mode..."
+exec claude --print --verbose --output-format stream-json \
+    --dangerously-skip-permissions \
+    --system-prompt "$SYSTEM_PROMPT" \
+    < /secrets/user-prompt.txt
