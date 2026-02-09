@@ -1097,6 +1097,29 @@ describe('shared utilities', () => {
       });
     });
 
+    it('returns null when legacy button type has missing button_reply', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      interactive: {
+                        type: 'button',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractButtonResponse(payload)).toBeNull();
+    });
+
     it('returns null when interactive field is missing', () => {
       const payload = {
         entry: [
