@@ -48,8 +48,8 @@ const client = createWhatsAppClient({
 
 ```ts
 interface WhatsAppConfig {
-  accessToken: string;    // WhatsApp Business API access token
-  phoneNumberId: string;  // WhatsApp phone number ID
+  accessToken: string; // WhatsApp Business API access token
+  phoneNumberId: string; // WhatsApp phone number ID
 }
 ```
 
@@ -57,8 +57,8 @@ interface WhatsAppConfig {
 
 ```ts
 interface SendMessageParams {
-  to: string;               // Recipient phone number (E.164 format)
-  message: string;          // Message text body
+  to: string; // Recipient phone number (E.164 format)
+  message: string; // Message text body
   replyToMessageId?: string; // Optional message ID to reply to
 }
 ```
@@ -75,10 +75,10 @@ interface SendMessageResult {
 
 ```ts
 interface MediaUrlInfo {
-  url: string;      // Temporary download URL
+  url: string; // Temporary download URL
   mimeType: string; // e.g., 'audio/ogg', 'image/jpeg'
-  sha256: string;   // SHA-256 hash of the media
-  fileSize: number;  // File size in bytes
+  sha256: string; // SHA-256 hash of the media
+  fileSize: number; // File size in bytes
 }
 ```
 
@@ -96,10 +96,10 @@ interface WhatsAppError {
 
 ### Environment Variables
 
-| Variable                               | Description                      | Required |
-| -------------------------------------- | -------------------------------- | -------- |
-| `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`     | WhatsApp Business API token      | Yes      |
-| `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`  | WhatsApp phone number ID         | Yes      |
+| Variable                              | Description                 | Required |
+| ------------------------------------- | --------------------------- | -------- |
+| `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`    | WhatsApp Business API token | Yes      |
+| `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID` | WhatsApp phone number ID    | Yes      |
 
 ## Error Handling
 
@@ -122,9 +122,9 @@ All methods return `Result<T, WhatsAppError>`. Error codes:
 
 ## Used By
 
-| App / Package       | Purpose                                        |
-| ------------------- | ---------------------------------------------- |
-| `whatsapp-service`  | Message sending, media handling, read receipts |
+| App / Package      | Purpose                                        |
+| ------------------ | ---------------------------------------------- |
+| `whatsapp-service` | Message sending, media handling, read receipts |
 
 ## Recent Changes
 

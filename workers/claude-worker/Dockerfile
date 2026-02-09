@@ -69,6 +69,7 @@ RUN rm -f /usr/bin/wget /usr/bin/nc 2>/dev/null || true
 ENV HOME=/home/claude
 ENV NODE_ENV=production
 ENV GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 # Switch to non-root user
 USER claude

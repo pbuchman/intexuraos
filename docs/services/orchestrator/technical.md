@@ -106,24 +106,24 @@ Split system prompt into Phase 1 (Design & Validation) and Phase 2 (Strict Execu
 
 ## API Endpoints
 
-| Method | Path                   | Auth        | Request Body                        | Response                                        |
-| ------ | ---------------------- | ----------- | ----------------------------------- | ----------------------------------------------- |
-| POST   | `/tasks`               | HMAC signed | `CreateTaskRequest` (Zod-validated) | `202 { taskId, status: "accepted" }`            |
-| GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                             |
-| DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404`  |
-| GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available }`  |
-| POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`               |
-| POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`   |
+| Method | Path                   | Auth        | Request Body                        | Response                                       |
+| ------ | ---------------------- | ----------- | ----------------------------------- | ---------------------------------------------- |
+| POST   | `/tasks`               | HMAC signed | `CreateTaskRequest` (Zod-validated) | `202 { taskId, status: "accepted" }`           |
+| GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                            |
+| DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404` |
+| GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available }` |
+| POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`              |
+| POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`  |
 
 ### HMAC Authentication
 
 Dispatch requests require three headers:
 
-| Header                  | Content                                        |
-| ----------------------- | ---------------------------------------------- |
-| `X-Dispatch-Timestamp`  | Unix timestamp (ms)                            |
-| `X-Dispatch-Nonce`      | Unique nonce per request                       |
-| `X-Dispatch-Signature`  | HMAC-SHA256 of `{timestamp}.{nonce}.{body}`    |
+| Header                 | Content                                     |
+| ---------------------- | ------------------------------------------- |
+| `X-Dispatch-Timestamp` | Unix timestamp (ms)                         |
+| `X-Dispatch-Nonce`     | Unique nonce per request                    |
+| `X-Dispatch-Signature` | HMAC-SHA256 of `{timestamp}.{nonce}.{body}` |
 
 Verification rejects requests with timestamps older than 5 minutes and replayed nonces (10-minute TTL cache).
 
@@ -168,8 +168,9 @@ stateDiagram-v2
 
 ```typescript
 interface OrchestratorState {
-  tasks: Record<string, Task>;       // All tasks indexed by taskId
-  githubToken: {                     // Cached GitHub installation token
+  tasks: Record<string, Task>; // All tasks indexed by taskId
+  githubToken: {
+    // Cached GitHub installation token
     token: string;
     expiresAt: string;
   } | null;
@@ -183,12 +184,13 @@ After a task completes, the orchestrator inspects the worktree for results:
 
 ```typescript
 interface TaskResult {
-  prUrl?: string;        // Pull request URL (if created)
-  branch: string;        // Git branch name
-  commits: number;       // Number of commits
-  summary?: string;      // PR title
-  ciFailed?: boolean;    // Whether CI checks failed
-  rebaseResult?: {       // Rebase attempt outcome
+  prUrl?: string; // Pull request URL (if created)
+  branch: string; // Git branch name
+  commits: number; // Number of commits
+  summary?: string; // PR title
+  ciFailed?: boolean; // Whether CI checks failed
+  rebaseResult?: {
+    // Rebase attempt outcome
     attempted: boolean;
     success: boolean;
     conflictFiles?: string[];
@@ -321,19 +323,19 @@ Ensures the orchestrator has a valid local repository clone:
 
 ## Dependencies
 
-| Package                   | Version    | Purpose                                    |
-| ------------------------- | ---------- | ------------------------------------------ |
-| `fastify`                 | ^5.6.2     | HTTP server                                |
-| `@fastify/cors`           | ^10.1.0    | CORS support                               |
-| `dockerode`               | ^4.0.9     | Docker Engine API client                   |
-| `async-mutex`             | ^0.5.0     | Atomic capacity checking                   |
-| `jose`                    | ^5.9.6     | JWT signing for TokenRefresher             |
-| `jsonwebtoken`            | ^9.0.2     | JWT signing for GitHubTokenService         |
-| `minimatch`               | ^10.1.1    | Glob pattern matching (SensitiveFileGuard) |
-| `pino`                    | ^9.6.0     | Structured logging                         |
-| `pino-pretty`             | ^13.0.0    | Human-readable log output                  |
-| `zod`                     | ^3.24.1    | Request schema validation                  |
-| `@intexuraos/common-core` | workspace  | Result types, Logger, error serialization  |
+| Package                   | Version   | Purpose                                    |
+| ------------------------- | --------- | ------------------------------------------ |
+| `fastify`                 | ^5.6.2    | HTTP server                                |
+| `@fastify/cors`           | ^10.1.0   | CORS support                               |
+| `dockerode`               | ^4.0.9    | Docker Engine API client                   |
+| `async-mutex`             | ^0.5.0    | Atomic capacity checking                   |
+| `jose`                    | ^5.9.6    | JWT signing for TokenRefresher             |
+| `jsonwebtoken`            | ^9.0.2    | JWT signing for GitHubTokenService         |
+| `minimatch`               | ^10.1.1   | Glob pattern matching (SensitiveFileGuard) |
+| `pino`                    | ^9.6.0    | Structured logging                         |
+| `pino-pretty`             | ^13.0.0   | Human-readable log output                  |
+| `zod`                     | ^3.24.1   | Request schema validation                  |
+| `@intexuraos/common-core` | workspace | Result types, Logger, error serialization  |
 
 ## Configuration
 
@@ -356,40 +358,40 @@ Ensures the orchestrator has a valid local repository clone:
 
 #### Optional
 
-| Variable                       | Default                           | Description                |
-| ------------------------------ | --------------------------------- | -------------------------- |
-| `INTEXURAOS_REPOSITORY_PATH`   | `~/.claude-orchestrator/repo`     | Local repo clone path      |
-| `INTEXURAOS_ANTHROPIC_API_KEY` | `""`                              | Claude API key for workers |
-| `INTEXURAOS_ZAI_API_KEY`       | `""`                              | ZAI API key for workers    |
-| `INTEXURAOS_WORKER_CAPACITY`   | `2`                               | Max concurrent tasks       |
-| `PORT`                         | `8199`                            | HTTP server port           |
-| `LOG_LEVEL`                    | `info`                            | Pino log level             |
+| Variable                       | Default                       | Description                |
+| ------------------------------ | ----------------------------- | -------------------------- |
+| `INTEXURAOS_REPOSITORY_PATH`   | `~/.claude-orchestrator/repo` | Local repo clone path      |
+| `INTEXURAOS_ANTHROPIC_API_KEY` | `""`                          | Claude API key for workers |
+| `INTEXURAOS_ZAI_API_KEY`       | `""`                          | ZAI API key for workers    |
+| `INTEXURAOS_WORKER_CAPACITY`   | `2`                           | Max concurrent tasks       |
+| `PORT`                         | `8199`                        | HTTP server port           |
+| `LOG_LEVEL`                    | `info`                        | Pino log level             |
 
 ### Docker Container Defaults
 
-| Setting          | Value                                                  |
-| ---------------- | ------------------------------------------------------ |
-| Image            | `gcr.io/intexuraos-dev-pbuchman/claude-worker:latest`  |
-| Network          | `claude-worker-net`                                    |
-| Max concurrent   | 4                                                      |
-| Memory limit     | 8 GB                                                   |
-| CPU count        | 4                                                      |
-| Timeout          | 2 hours                                                |
-| User             | 1001:1001                                              |
+| Setting        | Value                                                 |
+| -------------- | ----------------------------------------------------- |
+| Image          | `gcr.io/intexuraos-dev-pbuchman/claude-worker:latest` |
+| Network        | `claude-worker-net`                                   |
+| Max concurrent | 4                                                     |
+| Memory limit   | 8 GB                                                  |
+| CPU count      | 4                                                     |
+| Timeout        | 2 hours                                               |
+| User           | 1001:1001                                             |
 
 ### Timer Intervals
 
-| Timer              | Interval     | Purpose                                |
-| ------------------ | ------------ | -------------------------------------- |
-| Token refresh      | 5 minutes    | GitHub App token (service-level)       |
-| Webhook retry      | 5 minutes    | Retry failed webhook deliveries        |
-| Task polling       | 30 seconds   | Debug logging only                     |
-| Heartbeat          | 10 minutes   | Running task IDs to code-agent         |
-| Container token    | 30 minutes   | Per-container GitHub token refresh     |
-| Completion check   | 30 seconds   | Container exit polling                 |
-| Timeout warning    | 1h 55m       | Log warning before hard kill           |
-| Timeout kill       | 2h           | Force-kill container                   |
-| Log flush          | 3 seconds    | Send buffered log chunks               |
+| Timer            | Interval   | Purpose                            |
+| ---------------- | ---------- | ---------------------------------- |
+| Token refresh    | 5 minutes  | GitHub App token (service-level)   |
+| Webhook retry    | 5 minutes  | Retry failed webhook deliveries    |
+| Task polling     | 30 seconds | Debug logging only                 |
+| Heartbeat        | 10 minutes | Running task IDs to code-agent     |
+| Container token  | 30 minutes | Per-container GitHub token refresh |
+| Completion check | 30 seconds | Container exit polling             |
+| Timeout warning  | 1h 55m     | Log warning before hard kill       |
+| Timeout kill     | 2h         | Force-kill container               |
+| Log flush        | 3 seconds  | Send buffered log chunks           |
 
 ## Gotchas
 

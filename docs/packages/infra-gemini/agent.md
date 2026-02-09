@@ -64,7 +64,11 @@ const client = createGeminiClient({
   apiKey: env.INTEXURAOS_GOOGLE_API_KEY,
   model: 'gemini-2.5-flash',
   userId,
-  pricing: { inputPricePerMillion: 0.075, outputPricePerMillion: 0.30, groundingCostPerRequest: 0.002 },
+  pricing: {
+    inputPricePerMillion: 0.075,
+    outputPricePerMillion: 0.3,
+    groundingCostPerRequest: 0.002,
+  },
   logger,
 });
 
@@ -89,11 +93,11 @@ if (result?.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED':      // quota exceeded
-    case 'CONTENT_FILTERED':  // safety filter
-    case 'INVALID_KEY':       // bad API key
-    case 'TIMEOUT':           // request timeout
-    case 'API_ERROR':         // general error
+    case 'RATE_LIMITED': // quota exceeded
+    case 'CONTENT_FILTERED': // safety filter
+    case 'INVALID_KEY': // bad API key
+    case 'TIMEOUT': // request timeout
+    case 'API_ERROR': // general error
   }
 }
 ```

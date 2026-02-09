@@ -27,10 +27,10 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 ### Internal Endpoints
 
-| Method | Path                                                           | Description                   | Auth         |
-| ------ | -------------------------------------------------------------- | ----------------------------- | ------------ |
-| GET    | `/internal/notion/users/:userId/context`                       | Get connection context/token  | Internal key |
-| GET    | `/internal/notion/users/:userId/pages/:pageId/preview`         | Get Notion page preview       | Internal key |
+| Method | Path                                                   | Description                  | Auth         |
+| ------ | ------------------------------------------------------ | ---------------------------- | ------------ |
+| GET    | `/internal/notion/users/:userId/context`               | Get connection context/token | Internal key |
+| GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | Get Notion page preview      | Internal key |
 
 ### Connect Request
 

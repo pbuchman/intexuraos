@@ -52,7 +52,7 @@ export const mockWorkerHealthProbe: WorkerHealthProbe = {
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
-  const logger = pino({ name: 'test' });
+  const logger = pino({ name: 'test', level: 'silent' });
 
   const rateLimitService: RateLimitService = {
     async checkLimits() {

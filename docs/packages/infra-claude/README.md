@@ -34,10 +34,10 @@ const client = createClaudeClient({
 
 **Methods on the returned client:**
 
-| Method                  | Signature                                                          | Description                                      |
-| ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
-| `research(prompt)`      | `(prompt: string) => Promise<Result<ResearchResult, ClaudeError>>` | Web search research using Claude's built-in tool |
-| `generate(prompt)`      | `(prompt: string) => Promise<Result<GenerateResult, ClaudeError>>` | Text generation without web search               |
+| Method             | Signature                                                          | Description                                      |
+| ------------------ | ------------------------------------------------------------------ | ------------------------------------------------ |
+| `research(prompt)` | `(prompt: string) => Promise<Result<ResearchResult, ClaudeError>>` | Web search research using Claude's built-in tool |
+| `generate(prompt)` | `(prompt: string) => Promise<Result<GenerateResult, ClaudeError>>` | Text generation without web search               |
 
 ### `calculateTextCost(usage: TokenUsage, pricing: ModelPricing): number`
 
@@ -62,11 +62,11 @@ Converts raw Anthropic usage data into the standardized `NormalizedUsage` format
 
 ```ts
 interface ClaudeConfig {
-  apiKey: string;     // Anthropic API key
-  model: string;      // e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5'
-  userId: string;     // User ID for usage tracking
+  apiKey: string; // Anthropic API key
+  model: string; // e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5'
+  userId: string; // User ID for usage tracking
   pricing: ModelPricing; // Cost configuration per million tokens
-  logger: Logger;     // Pino logger for structured logging
+  logger: Logger; // Pino logger for structured logging
 }
 ```
 
@@ -74,9 +74,9 @@ interface ClaudeConfig {
 
 ### Environment Variables
 
-| Variable                       | Description                  | Required |
-| ------------------------------ | ---------------------------- | -------- |
-| `INTEXURAOS_ANTHROPIC_API_KEY` | Anthropic API key            | Yes      |
+| Variable                       | Description       | Required |
+| ------------------------------ | ----------------- | -------- |
+| `INTEXURAOS_ANTHROPIC_API_KEY` | Anthropic API key | Yes      |
 
 ### Pricing Fields
 
@@ -92,13 +92,13 @@ interface ClaudeConfig {
 
 All methods return `Result<T, ClaudeError>`. Error mapping:
 
-| HTTP Status / Condition    | Error Code         | Description              |
-| -------------------------- | ------------------ | ------------------------ |
-| 401                        | `INVALID_KEY`      | Invalid API key          |
-| 429                        | `RATE_LIMITED`     | Rate limit exceeded      |
-| 529                        | `OVERLOADED`       | Anthropic API overloaded |
-| Message contains "timeout" | `TIMEOUT`          | Request timed out        |
-| Other `APIError`           | `API_ERROR`        | General API error        |
+| HTTP Status / Condition    | Error Code     | Description              |
+| -------------------------- | -------------- | ------------------------ |
+| 401                        | `INVALID_KEY`  | Invalid API key          |
+| 429                        | `RATE_LIMITED` | Rate limit exceeded      |
+| 529                        | `OVERLOADED`   | Anthropic API overloaded |
+| Message contains "timeout" | `TIMEOUT`      | Request timed out        |
+| Other `APIError`           | `API_ERROR`    | General API error        |
 
 ## Cross-Cutting Concerns
 
@@ -115,9 +115,9 @@ All methods return `Result<T, ClaudeError>`. Error mapping:
 
 ## Recent Changes
 
-| Commit     | Description                                        | When        |
-| ---------- | -------------------------------------------------- | ----------- |
-| `51b4a325` | Migrate LLM clients to UsageLogger class           | 2 weeks ago |
-| `8aad9098` | Migrate imports and delete llm-common              | 2 weeks ago |
-| `816afa55` | Add ESLint rule to ban optional logger parameters  | 3 weeks ago |
-| `6ec4205e` | Make logger mandatory in all LLM configs           | 3 weeks ago |
+| Commit     | Description                                       | When        |
+| ---------- | ------------------------------------------------- | ----------- |
+| `51b4a325` | Migrate LLM clients to UsageLogger class          | 2 weeks ago |
+| `8aad9098` | Migrate imports and delete llm-common             | 2 weeks ago |
+| `816afa55` | Add ESLint rule to ban optional logger parameters | 3 weeks ago |
+| `6ec4205e` | Make logger mandatory in all LLM configs          | 3 weeks ago |

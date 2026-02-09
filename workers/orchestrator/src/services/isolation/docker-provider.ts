@@ -18,6 +18,8 @@ export interface DockerProviderConfig {
   cpuCount: number;
   timeoutMs: number;
   secretsBasePath: string;
+  gcpSaKeyPath: string;
+  keepContainersAlive: boolean;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -28,6 +30,8 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   cpuCount: 4,
   timeoutMs: 2 * 60 * 60 * 1000,
   secretsBasePath: '/tmp/claude-secrets',
+  gcpSaKeyPath: '',
+  keepContainersAlive: false,
 };
 
 interface WorkerEntry {
@@ -35,6 +39,8 @@ interface WorkerEntry {
   handle: WorkerHandle;
   attachStream?: NodeJS.ReadWriteStream;
 }
+
+export const PNPM_STORE_DIR_NAME = 'pnpm-store';
 
 export class DockerProvider implements IsolationProvider {
   private readonly docker: Docker;
@@ -54,6 +60,9 @@ export class DockerProvider implements IsolationProvider {
    * Should be called on startup to prevent name collisions.
    */
   async cleanupOrphanedContainers(): Promise<void> {
+    const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
     try {
       const containers = await this.docker.listContainers({
         all: true,
@@ -61,10 +70,21 @@ export class DockerProvider implements IsolationProvider {
       });
 
       for (const containerInfo of containers) {
+        const createdAt = containerInfo.Created * 1000;
+        const ageMs = now - createdAt;
+
+        if (ageMs < MAX_AGE_MS) {
+          this.logger.debug(
+            { name: containerInfo.Names[0], ageHours: Math.round(ageMs / 3_600_000) },
+            'Skipping recent container'
+          );
+          continue;
+        }
+
         const container = this.docker.getContainer(containerInfo.Id);
         this.logger.info(
-          { containerId: containerInfo.Id, name: containerInfo.Names[0] },
-          'Cleaning up orphaned container'
+          { containerId: containerInfo.Id, name: containerInfo.Names[0], ageHours: Math.round(ageMs / 3_600_000) },
+          'Cleaning up old container'
         );
 
         try {
@@ -79,7 +99,7 @@ export class DockerProvider implements IsolationProvider {
               name: containerInfo.Names[0],
               error: err,
             },
-            'Failed to remove orphaned container'
+            'Failed to remove old container'
           );
         }
       }
@@ -150,6 +170,7 @@ export class DockerProvider implements IsolationProvider {
       `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
       'CLAUDE_PROJECT_DIR=/repo',
+      'CLAUDE_WORKER_MODE=1',
       // Exit 10s after idle - Claude exits automatically when no input arrives
       'CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=10000',
     ];
@@ -160,6 +181,37 @@ export class DockerProvider implements IsolationProvider {
     /* v8 ignore stop @preserve */
 
     this.logger.info({ taskId, worktreePath, workerType }, 'Creating worker container');
+
+    const pnpmStorePath = path.join(path.dirname(this.config.secretsBasePath), PNPM_STORE_DIR_NAME);
+    fs.mkdirSync(pnpmStorePath, { recursive: true });
+
+    /* v8 ignore start -- test-infra: image pull requires Docker daemon with registry access @preserve */
+    try {
+      const pullOpts: Record<string, unknown> = { platform: 'linux/amd64' };
+      if (this.config.gcpSaKeyPath !== '' && fs.existsSync(this.config.gcpSaKeyPath)) {
+        const saKey = fs.readFileSync(this.config.gcpSaKeyPath, 'utf-8');
+        const registry = this.config.imageName.split('/')[0] ?? '';
+        pullOpts['authconfig'] = {
+          username: '_json_key',
+          password: saKey,
+          serveraddress: `https://${registry}`,
+        };
+      }
+      const pullStream = await this.docker.pull(this.config.imageName, pullOpts);
+      await new Promise<void>((resolve, reject) => {
+        this.docker.modem.followProgress(
+          pullStream,
+          (err: Error | null) => {
+            if (err !== null) reject(err);
+            else resolve();
+          }
+        );
+      });
+      this.logger.debug({ taskId, image: this.config.imageName }, 'Image pulled');
+    } catch (err: unknown) {
+      this.logger.warn({ taskId, error: err }, 'Image pull failed — using cached image');
+    }
+    /* v8 ignore stop @preserve */
 
     const container = await this.docker.createContainer({
       Image: this.config.imageName,
@@ -176,24 +228,21 @@ export class DockerProvider implements IsolationProvider {
         Binds: [
           `${worktreePath}:/repo:rw`,
           `${taskSecretsPath}:/secrets:ro`,
+          `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
           /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
-          // Mount main git dir for worktree support (worktrees reference parent .git)
-          // Must be read-write for git operations (commit, push) to work
           ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
           /* v8 ignore stop @preserve */
         ],
         Memory: this.config.memoryLimitBytes,
         NanoCpus: this.config.cpuCount * 1e9,
         NetworkMode: this.config.networkName,
-        // ReadonlyRootfs: false - Claude Code writes to /home/claude/.claude/ for
-        // settings, session cache, and MCP server state. With /home/claude as tmpfs,
-        // this would work, but the Alpine base image also needs writes to /etc/passwd
-        // for user creation at runtime. Keeping rootfs writable is a pragmatic choice.
         ReadonlyRootfs: false,
         Tmpfs: {
           '/tmp': 'rw,noexec,nosuid,size=2g',
-          // uid=1001,gid=1001 ensures claude user (1001) can write to tmpfs
           '/home/claude': 'rw,noexec,nosuid,size=500m,uid=1001,gid=1001',
+          // Shadows the Mac host's node_modules (bind-mounted via /repo), giving the
+          // container an empty writable dir for Linux-native pnpm install.
+          '/repo/node_modules': 'rw,exec,nosuid,size=4g,uid=1001,gid=1001',
         },
         CapDrop: ['ALL'],
         // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude
@@ -269,20 +318,16 @@ export class DockerProvider implements IsolationProvider {
     attachStream: NodeJS.ReadWriteStream,
     taskId: string
   ): Promise<void> {
-    const TOTAL_TIMEOUT_MS = 30_000;
-    const INITIAL_WAIT_MS = 8_000;
-    const SETTLE_MS = 2_000;
+    const TOTAL_TIMEOUT_MS = 180_000;
+    const TUI_READY_MARKER = 'bypass permissions on';
 
     await new Promise<void>((resolve) => {
-      let settled = false;
-      let settleTimer: ReturnType<typeof setTimeout> | null = null;
-      let approvalSent = false;
+      let done = false;
 
       const finish = (): void => {
-        if (settled) return;
-        settled = true;
+        if (done) return;
+        done = true;
         clearTimeout(hardTimeout);
-        if (settleTimer) clearTimeout(settleTimer);
         attachStream.removeListener('data', onData);
         resolve();
       };
@@ -292,24 +337,17 @@ export class DockerProvider implements IsolationProvider {
         finish();
       }, TOTAL_TIMEOUT_MS);
 
-      const onData = (): void => {
-        if (approvalSent && !settled) {
-          if (settleTimer) clearTimeout(settleTimer);
-          settleTimer = setTimeout(finish, SETTLE_MS);
+      const onData = (chunk: Buffer): void => {
+        if (done) return;
+        const text = chunk.toString('utf-8');
+
+        if (text.includes(TUI_READY_MARKER)) {
+          this.logger.info({ taskId }, 'TUI ready — Claude is accepting input');
+          finish();
         }
       };
 
       attachStream.on('data', onData);
-
-      setTimeout(() => {
-        if (settled) return;
-        approvalSent = true;
-        this.logger.debug({ taskId }, 'Sending API key approval');
-        attachStream.write('\x1b[A');
-        setTimeout(() => {
-          if (!settled) attachStream.write('\r');
-        }, 500);
-      }, INITIAL_WAIT_MS);
     });
   }
   /* v8 ignore stop @preserve */
@@ -386,10 +424,14 @@ export class DockerProvider implements IsolationProvider {
 
         if (output.includes('DONE')) {
           clearInterval(interval);
-          this.logger.info({ taskId }, 'Stop hooks completed — stopping container');
-          await container.stop({ t: 5 }).catch((_err: unknown) => {
-            // Container may already be stopped
-          });
+          if (this.config.keepContainersAlive) {
+            this.logger.info({ taskId }, 'Stop hooks completed — keeping container alive (debug mode)');
+          } else {
+            this.logger.info({ taskId }, 'Stop hooks completed — stopping container');
+            await container.stop({ t: 5 }).catch((_err: unknown) => {
+              // Container may already be stopped
+            });
+          }
         }
       } catch (error) {
         this.logger.warn(
@@ -418,20 +460,18 @@ export class DockerProvider implements IsolationProvider {
       return;
     }
 
-    this.logger.info({ taskId, forceKill }, 'Destroying worker container');
+    this.logger.info({ taskId, forceKill }, 'Stopping worker container');
 
     try {
       const container = this.docker.getContainer(worker.containerId);
 
       try {
-        // Force kill (SIGKILL) for timeout scenarios, graceful stop otherwise
         if (forceKill) {
           await container.kill({ signal: 'SIGKILL' });
         } else {
           await container.stop({ t: 10 });
         }
       } catch (err: unknown) {
-        // Docker returns specific error when container is already stopped/not found
         const isAlreadyStopped =
           err instanceof Error &&
           (err.message.includes('No such container') ||
@@ -446,12 +486,6 @@ export class DockerProvider implements IsolationProvider {
         }
       }
 
-      try {
-        await container.remove({ force: true });
-      } catch {
-        this.logger.debug({ taskId }, 'Remove failed');
-      }
-
       const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
       try {
         await fs.promises.rm(taskSecretsPath, { recursive: true, force: true });
@@ -461,11 +495,12 @@ export class DockerProvider implements IsolationProvider {
           'Failed to remove task secrets directory'
         );
       }
+
     } finally {
       this.workers.delete(taskId);
     }
 
-    this.logger.info({ taskId }, 'Worker container destroyed');
+    this.logger.info({ taskId }, 'Worker container stopped');
   }
 
   async isWorkerRunning(taskId: string): Promise<boolean> {

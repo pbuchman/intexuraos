@@ -61,10 +61,10 @@ app.post('/admin/shutdown', { preHandler: [verifyDispatchSignature] }, async (re
 
 Two separate libraries produce GitHub App JWTs:
 
-| Component          | Library        | File                                             |
-| ------------------ | -------------- | ------------------------------------------------ |
-| GitHubTokenService | `jsonwebtoken` | `src/github/token-service.ts`                    |
-| TokenRefresher     | `jose`         | `src/services/isolation/token-refresher.ts`      |
+| Component          | Library        | File                                        |
+| ------------------ | -------------- | ------------------------------------------- |
+| GitHubTokenService | `jsonwebtoken` | `src/github/token-service.ts`               |
+| TokenRefresher     | `jose`         | `src/services/isolation/token-refresher.ts` |
 
 Both sign RS256 JWTs with the same private key for the same purpose (GitHub installation token minting).
 
@@ -79,6 +79,7 @@ Both sign RS256 JWTs with the same private key for the same purpose (GitHub inst
 The orchestrator runs on a single machine. State is stored in a local JSON file, worktrees exist on the local filesystem, and Docker containers run on the local daemon. There is no mechanism to distribute tasks across multiple machines.
 
 **Recommended fix:** For scaling beyond one machine, consider:
+
 - Replace `StatePersistence` with Firestore
 - Replace local worktrees with ephemeral volume mounts
 - Use a queue (Pub/Sub) instead of direct HTTP dispatch
@@ -93,6 +94,7 @@ The orchestrator runs on a single machine. State is stored in a local JSON file,
 `cancelTask()` calls `destroyWorker()` which sends SIGTERM and then force-removes the container. Claude Code does not receive a chance to save progress, push partial work, or clean up.
 
 **Recommended fix:** Implement a two-phase cancellation:
+
 1. Send a "please stop" message via container stdin
 2. Wait a configurable grace period (e.g., 60 seconds)
 3. Fall back to SIGTERM/SIGKILL
@@ -180,14 +182,14 @@ Expose operational metrics:
 
 ## Debt Resolution Tracking
 
-| ID  | Description                         | Created    | Resolved | Ticket |
-| --- | ----------------------------------- | ---------- | -------- | ------ |
-| 1   | Default repository hardcoded        | 2026-02-08 | -        | -      |
-| 2   | Admin shutdown not wired            | 2026-02-08 | -        | -      |
-| 3   | Duplicate JWT libraries             | 2026-02-08 | -        | -      |
-| 4   | No horizontal scaling               | 2026-02-08 | -        | -      |
-| 5   | No graceful container cancel        | 2026-02-08 | -        | -      |
-| 6   | No orchestrator-side retry          | 2026-02-08 | -        | -      |
-| 7   | No worktree cleanup on completion   | 2026-02-08 | -        | -      |
-| 8   | No resource usage monitoring        | 2026-02-08 | -        | -      |
-| 9   | No local log persistence fallback   | 2026-02-08 | -        | -      |
+| ID  | Description                       | Created    | Resolved | Ticket |
+| --- | --------------------------------- | ---------- | -------- | ------ |
+| 1   | Default repository hardcoded      | 2026-02-08 | -        | -      |
+| 2   | Admin shutdown not wired          | 2026-02-08 | -        | -      |
+| 3   | Duplicate JWT libraries           | 2026-02-08 | -        | -      |
+| 4   | No horizontal scaling             | 2026-02-08 | -        | -      |
+| 5   | No graceful container cancel      | 2026-02-08 | -        | -      |
+| 6   | No orchestrator-side retry        | 2026-02-08 | -        | -      |
+| 7   | No worktree cleanup on completion | 2026-02-08 | -        | -      |
+| 8   | No resource usage monitoring      | 2026-02-08 | -        | -      |
+| 9   | No local log persistence fallback | 2026-02-08 | -        | -      |

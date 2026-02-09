@@ -114,9 +114,9 @@ await client.markAsReadWithTyping(incomingMessageId);
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'API_ERROR':      // non-OK HTTP response, check statusCode
-    case 'NETWORK_ERROR':  // fetch threw
-    case 'TIMEOUT':        // AbortController timeout (30s)
+    case 'API_ERROR': // non-OK HTTP response, check statusCode
+    case 'NETWORK_ERROR': // fetch threw
+    case 'TIMEOUT': // AbortController timeout (30s)
     case 'INVALID_CONFIG': // reserved
   }
 }

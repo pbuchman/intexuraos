@@ -68,6 +68,7 @@ interface SentryConfig {
 ```
 
 Configuration details:
+
 - `sendDefaultPii` is always `false`
 - `serverName` maps to `serviceName` for Sentry dashboard filtering
 - Omitting `dsn` disables Sentry entirely (safe for local development)
@@ -87,11 +88,11 @@ interface AppLoggerConfig {
 
 Behavior varies by environment:
 
-| Condition                   | Logger Output                    |
-| --------------------------- | -------------------------------- |
-| `NODE_ENV=test`             | Silent logger (no output)        |
-| No `INTEXURAOS_SENTRY_DSN`  | Plain Pino to stdout             |
-| `INTEXURAOS_SENTRY_DSN` set | Pino to stdout + Sentry stream   |
+| Condition                   | Logger Output                  |
+| --------------------------- | ------------------------------ |
+| `NODE_ENV=test`             | Silent logger (no output)      |
+| No `INTEXURAOS_SENTRY_DSN`  | Plain Pino to stdout           |
+| `INTEXURAOS_SENTRY_DSN` set | Pino to stdout + Sentry stream |
 
 The logger uses `getLogLevel()` from `@intexuraos/common-core` by default, which respects `LOG_LEVEL` and `NODE_ENV` environment variables. An explicit `level` override takes precedence.
 
@@ -115,6 +116,7 @@ const stream = createSentryStream(
 ```
 
 The Sentry stream intercepts log entries at level 40+ (warn, error, fatal):
+
 - **Warn (40):** sent as `Sentry.captureMessage` with level `warning`
 - **Error (50):** sent as `Sentry.captureException` with level `error`
 - **Fatal (60):** sent as `Sentry.captureException` with level `fatal`
@@ -134,6 +136,7 @@ Replace the default Fastify error handler with one that:
 3. Returns a standardized error response using `reply.fail()`
 
 Handles these special cases:
+
 - `FST_ERR_CTP_INVALID_JSON_BODY` returns 400 with `INVALID_REQUEST`
 - Validation errors (with `.validation` array) return 400 with field-level error details
 - All other errors return 500 with `INTERNAL_ERROR`
@@ -187,52 +190,52 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 
 19 apps import this package (all Fastify-based services):
 
-| App                           | Usage                                            |
-| ----------------------------- | ------------------------------------------------ |
-| actions-agent                 | `initSentry` + `createAppLogger` + error handler |
-| api-docs-hub                  | `initSentry` + `createAppLogger`                 |
-| app-settings-service          | `initSentry` + `createAppLogger` + error handler |
-| bookmarks-agent               | `initSentry` + `createAppLogger` + error handler |
-| calendar-agent                | `initSentry` + `createAppLogger` + error handler |
-| chat-agent                    | `initSentry` + `createAppLogger` + error handler |
-| code-agent                    | `initSentry` + `createAppLogger` + error handler |
-| commands-agent                | `initSentry` + `createAppLogger` + error handler |
-| data-insights-agent           | `initSentry` + `createAppLogger` + error handler |
-| image-service                 | `initSentry` + `createAppLogger` + error handler |
-| linear-agent                  | `initSentry` + `createAppLogger` + error handler |
-| mobile-notifications-service  | `initSentry` + `createAppLogger` + error handler |
-| notes-agent                   | `initSentry` + `createAppLogger` + error handler |
-| notion-service                | `initSentry` + `createAppLogger` + error handler |
-| research-agent                | `initSentry` + `createAppLogger` + error handler |
-| todos-agent                   | `initSentry` + `createAppLogger` + error handler |
-| user-service                  | `initSentry` + `createAppLogger` + error handler |
-| web-agent                     | `initSentry` + `createAppLogger` + error handler |
-| whatsapp-service              | `initSentry` + `createAppLogger` + error handler |
+| App                          | Usage                                            |
+| ---------------------------- | ------------------------------------------------ |
+| actions-agent                | `initSentry` + `createAppLogger` + error handler |
+| api-docs-hub                 | `initSentry` + `createAppLogger`                 |
+| app-settings-service         | `initSentry` + `createAppLogger` + error handler |
+| bookmarks-agent              | `initSentry` + `createAppLogger` + error handler |
+| calendar-agent               | `initSentry` + `createAppLogger` + error handler |
+| chat-agent                   | `initSentry` + `createAppLogger` + error handler |
+| code-agent                   | `initSentry` + `createAppLogger` + error handler |
+| commands-agent               | `initSentry` + `createAppLogger` + error handler |
+| data-insights-agent          | `initSentry` + `createAppLogger` + error handler |
+| image-service                | `initSentry` + `createAppLogger` + error handler |
+| linear-agent                 | `initSentry` + `createAppLogger` + error handler |
+| mobile-notifications-service | `initSentry` + `createAppLogger` + error handler |
+| notes-agent                  | `initSentry` + `createAppLogger` + error handler |
+| notion-service               | `initSentry` + `createAppLogger` + error handler |
+| research-agent               | `initSentry` + `createAppLogger` + error handler |
+| todos-agent                  | `initSentry` + `createAppLogger` + error handler |
+| user-service                 | `initSentry` + `createAppLogger` + error handler |
+| web-agent                    | `initSentry` + `createAppLogger` + error handler |
+| whatsapp-service             | `initSentry` + `createAppLogger` + error handler |
 
 ---
 
 ## Recent Changes
 
-| Commit     | Description                                            | When     |
-| ---------- | ------------------------------------------------------ | -------- |
-| `f10ebdbf` | Fix empty error objects in log output                  | 7 days   |
-| `44017d5c` | Fix ESLint OOM with batched parallel lint runner       | 7 days   |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)      | 8 days   |
-| `7872eabb` | Phase 2: Fix v8-ignore script and begin coverage work  | 8 days   |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps | 9 days   |
-| `766ae429` | Add tests for branch coverage gaps in packages         | 13 days  |
-| `4fa0fed3` | Release v2.0.0                                         | 2 weeks  |
+| Commit     | Description                                            | When    |
+| ---------- | ------------------------------------------------------ | ------- |
+| `f10ebdbf` | Fix empty error objects in log output                  | 7 days  |
+| `44017d5c` | Fix ESLint OOM with batched parallel lint runner       | 7 days  |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)      | 8 days  |
+| `7872eabb` | Phase 2: Fix v8-ignore script and begin coverage work  | 8 days  |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps | 9 days  |
+| `766ae429` | Add tests for branch coverage gaps in packages         | 13 days |
+| `4fa0fed3` | Release v2.0.0                                         | 2 weeks |
 
 ---
 
 ## Environment Variables
 
-| Variable                  | Required | Description                                    |
-| ------------------------- | -------- | ---------------------------------------------- |
-| `INTEXURAOS_SENTRY_DSN`   | No       | Sentry DSN. Omit to disable Sentry entirely    |
-| `INTEXURAOS_ENVIRONMENT`  | No       | Environment tag in Sentry (e.g., `production`) |
-| `NODE_ENV`                | No       | `test` produces silent loggers                 |
-| `LOG_LEVEL`               | No       | Override default log level                     |
+| Variable                 | Required | Description                                    |
+| ------------------------ | -------- | ---------------------------------------------- |
+| `INTEXURAOS_SENTRY_DSN`  | No       | Sentry DSN. Omit to disable Sentry entirely    |
+| `INTEXURAOS_ENVIRONMENT` | No       | Environment tag in Sentry (e.g., `production`) |
+| `NODE_ENV`               | No       | `test` produces silent loggers                 |
+| `LOG_LEVEL`              | No       | Override default log level                     |
 
 ---
 

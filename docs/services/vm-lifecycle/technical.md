@@ -30,23 +30,23 @@ graph TB
 
 ### startVm
 
-| Property      | Value                                  |
-| ------------- | -------------------------------------- |
-| Type          | HTTP (`functions.http`)                |
-| Name          | `intexuraos-vm-start-{env}`            |
-| Memory        | 256 MB                                 |
-| Timeout       | 120 seconds                            |
-| Auth          | Cloud Scheduler service account (OIDC) |
+| Property | Value                                  |
+| -------- | -------------------------------------- |
+| Type     | HTTP (`functions.http`)                |
+| Name     | `intexuraos-vm-start-{env}`            |
+| Memory   | 256 MB                                 |
+| Timeout  | 120 seconds                            |
+| Auth     | Cloud Scheduler service account (OIDC) |
 
 ### stopVm
 
-| Property      | Value                                  |
-| ------------- | -------------------------------------- |
-| Type          | HTTP (`functions.http`)                |
-| Name          | `intexuraos-vm-stop-{env}`             |
-| Memory        | 256 MB                                 |
-| Timeout       | 120 seconds                            |
-| Auth          | Cloud Scheduler service account (OIDC) |
+| Property | Value                                  |
+| -------- | -------------------------------------- |
+| Type     | HTTP (`functions.http`)                |
+| Name     | `intexuraos-vm-stop-{env}`             |
+| Memory   | 256 MB                                 |
+| Timeout  | 120 seconds                            |
+| Auth     | Cloud Scheduler service account (OIDC) |
 
 ## API Endpoints
 
@@ -54,16 +54,16 @@ Both functions validate the `X-Internal-Auth` header before proceeding.
 
 ### startVm
 
-| Method | Path | Description                              | Auth                     |
-| ------ | ---- | ---------------------------------------- | ------------------------ |
-| POST   | `/`  | Start VM and wait for health check       | `X-Internal-Auth` Bearer |
+| Method | Path | Description                        | Auth                     |
+| ------ | ---- | ---------------------------------- | ------------------------ |
+| POST   | `/`  | Start VM and wait for health check | `X-Internal-Auth` Bearer |
 
 **Response (200):**
 
 ```typescript
 {
   success: true;
-  message: string;          // "VM started and healthy" or "VM already running and healthy"
+  message: string; // "VM started and healthy" or "VM already running and healthy"
   startupDurationMs: number; // Total time from invocation to healthy
 }
 ```
@@ -80,9 +80,9 @@ Both functions validate the `X-Internal-Auth` header before proceeding.
 
 ### stopVm
 
-| Method | Path | Description                              | Auth                     |
-| ------ | ---- | ---------------------------------------- | ------------------------ |
-| POST   | `/`  | Gracefully stop VM after tasks complete  | `X-Internal-Auth` Bearer |
+| Method | Path | Description                             | Auth                     |
+| ------ | ---- | --------------------------------------- | ------------------------ |
+| POST   | `/`  | Gracefully stop VM after tasks complete | `X-Internal-Auth` Bearer |
 
 **Response (200):**
 
@@ -122,14 +122,14 @@ flowchart TD
 
 **Health polling details:**
 
-| Parameter              | Value        |
-| ---------------------- | ------------ |
-| Health endpoint        | Configurable via `INTEXURAOS_VM_HEALTH_URL` |
-| Default URL            | `https://cc-vm.intexuraos.cloud/health` |
-| Expected response      | `{ "status": "ready" }` |
-| Poll interval          | 10 seconds   |
-| Poll timeout           | 3 minutes    |
-| Request timeout        | 5 seconds per attempt |
+| Parameter         | Value                                       |
+| ----------------- | ------------------------------------------- |
+| Health endpoint   | Configurable via `INTEXURAOS_VM_HEALTH_URL` |
+| Default URL       | `https://cc-vm.intexuraos.cloud/health`     |
+| Expected response | `{ "status": "ready" }`                     |
+| Poll interval     | 10 seconds                                  |
+| Poll timeout      | 3 minutes                                   |
+| Request timeout   | 5 seconds per attempt                       |
 
 ## Shutdown Flow
 
@@ -148,13 +148,13 @@ flowchart TD
 
 **Shutdown timing details:**
 
-| Parameter                        | Value       |
-| -------------------------------- | ----------- |
-| Shutdown endpoint                | Configurable via `INTEXURAOS_VM_SHUTDOWN_URL` |
-| Default URL                      | `https://cc-vm.intexuraos.cloud/admin/shutdown` |
-| Orchestrator unresponsive timeout | 2 minutes  |
-| Grace period for running tasks   | 10 minutes  |
-| Grace period poll interval       | 30 seconds  |
+| Parameter                         | Value                                           |
+| --------------------------------- | ----------------------------------------------- |
+| Shutdown endpoint                 | Configurable via `INTEXURAOS_VM_SHUTDOWN_URL`   |
+| Default URL                       | `https://cc-vm.intexuraos.cloud/admin/shutdown` |
+| Orchestrator unresponsive timeout | 2 minutes                                       |
+| Grace period for running tasks    | 10 minutes                                      |
+| Grace period poll interval        | 30 seconds                                      |
 
 **Task completion polling:**
 
@@ -169,69 +169,69 @@ The function polls the health endpoint during the grace period. It stops waiting
 
 ### StartVmResult
 
-| Field              | Type    | Description                        |
-| ------------------ | ------- | ---------------------------------- |
-| `success`          | boolean | Whether startup completed          |
-| `message`          | string  | Human-readable result or error     |
-| `startupDurationMs`| number  | Time from invocation to completion |
+| Field               | Type    | Description                        |
+| ------------------- | ------- | ---------------------------------- |
+| `success`           | boolean | Whether startup completed          |
+| `message`           | string  | Human-readable result or error     |
+| `startupDurationMs` | number  | Time from invocation to completion |
 
 ### StopVmResult
 
-| Field                   | Type    | Description                         |
-| ----------------------- | ------- | ----------------------------------- |
-| `success`               | boolean | Whether shutdown initiated          |
-| `message`               | string  | Human-readable result or error      |
-| `runningTasksAtShutdown`| number  | Tasks running when shutdown started |
+| Field                    | Type    | Description                         |
+| ------------------------ | ------- | ----------------------------------- |
+| `success`                | boolean | Whether shutdown initiated          |
+| `message`                | string  | Human-readable result or error      |
+| `runningTasksAtShutdown` | number  | Tasks running when shutdown started |
 
 ### VM_CONFIG
 
-| Field                               | Type   | Default                                       |
-| ----------------------------------- | ------ | --------------------------------------------- |
-| `PROJECT_ID`                        | string | `intexuraos`                                  |
-| `ZONE`                              | string | `europe-central2-a`                           |
-| `INSTANCE_NAME`                     | string | `cc-vm`                                       |
-| `HEALTH_ENDPOINT`                   | string | `https://cc-vm.intexuraos.cloud/health`       |
-| `SHUTDOWN_ENDPOINT`                 | string | `https://cc-vm.intexuraos.cloud/admin/shutdown` |
-| `HEALTH_POLL_INTERVAL_MS`           | number | `10000` (10 seconds)                          |
-| `HEALTH_POLL_TIMEOUT_MS`            | number | `180000` (3 minutes)                          |
-| `SHUTDOWN_GRACE_PERIOD_MS`          | number | `600000` (10 minutes)                         |
-| `SHUTDOWN_POLL_INTERVAL_MS`         | number | `30000` (30 seconds)                          |
-| `ORCHESTRATOR_UNRESPONSIVE_TIMEOUT_MS` | number | `120000` (2 minutes)                       |
+| Field                                  | Type   | Default                                         |
+| -------------------------------------- | ------ | ----------------------------------------------- |
+| `PROJECT_ID`                           | string | `intexuraos`                                    |
+| `ZONE`                                 | string | `europe-central2-a`                             |
+| `INSTANCE_NAME`                        | string | `cc-vm`                                         |
+| `HEALTH_ENDPOINT`                      | string | `https://cc-vm.intexuraos.cloud/health`         |
+| `SHUTDOWN_ENDPOINT`                    | string | `https://cc-vm.intexuraos.cloud/admin/shutdown` |
+| `HEALTH_POLL_INTERVAL_MS`              | number | `10000` (10 seconds)                            |
+| `HEALTH_POLL_TIMEOUT_MS`               | number | `180000` (3 minutes)                            |
+| `SHUTDOWN_GRACE_PERIOD_MS`             | number | `600000` (10 minutes)                           |
+| `SHUTDOWN_POLL_INTERVAL_MS`            | number | `30000` (30 seconds)                            |
+| `ORCHESTRATOR_UNRESPONSIVE_TIMEOUT_MS` | number | `120000` (2 minutes)                            |
 
 ## Dependencies
 
-| Service              | Purpose                                |
-| -------------------- | -------------------------------------- |
-| GCP Compute API      | VM instance get, start, stop           |
-| Orchestrator (on VM) | Shutdown notification and task status  |
-| Health endpoint (VM) | Application readiness verification     |
+| Service              | Purpose                               |
+| -------------------- | ------------------------------------- |
+| GCP Compute API      | VM instance get, start, stop          |
+| Orchestrator (on VM) | Shutdown notification and task status |
+| Health endpoint (VM) | Application readiness verification    |
 
 ## Configuration
 
-| Environment Variable            | Required | Default                                    | Description                 |
-| ------------------------------- | -------- | ------------------------------------------ | --------------------------- |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`| Yes      | -                                          | Internal auth Bearer token  |
-| `INTEXURAOS_GCP_PROJECT_ID`    | No       | `intexuraos`                               | GCP project ID              |
-| `INTEXURAOS_VM_ZONE`           | No       | `europe-central2-a`                        | GCE zone                    |
-| `INTEXURAOS_VM_INSTANCE_NAME`  | No       | `cc-vm`                                    | VM instance name            |
-| `INTEXURAOS_VM_HEALTH_URL`     | No       | `https://cc-vm.intexuraos.cloud/health`    | Health check URL            |
-| `INTEXURAOS_VM_SHUTDOWN_URL`   | No       | `https://cc-vm.intexuraos.cloud/admin/shutdown` | Shutdown endpoint URL  |
-| `LOG_LEVEL`                    | No       | `info`                                     | Pino log level              |
+| Environment Variable             | Required | Default                                         | Description                |
+| -------------------------------- | -------- | ----------------------------------------------- | -------------------------- |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | -                                               | Internal auth Bearer token |
+| `INTEXURAOS_GCP_PROJECT_ID`      | No       | `intexuraos`                                    | GCP project ID             |
+| `INTEXURAOS_VM_ZONE`             | No       | `europe-central2-a`                             | GCE zone                   |
+| `INTEXURAOS_VM_INSTANCE_NAME`    | No       | `cc-vm`                                         | VM instance name           |
+| `INTEXURAOS_VM_HEALTH_URL`       | No       | `https://cc-vm.intexuraos.cloud/health`         | Health check URL           |
+| `INTEXURAOS_VM_SHUTDOWN_URL`     | No       | `https://cc-vm.intexuraos.cloud/admin/shutdown` | Shutdown endpoint URL      |
+| `LOG_LEVEL`                      | No       | `info`                                          | Pino log level             |
 
 ## Infrastructure
 
-| Resource               | Type             | Value                                  |
-| ---------------------- | ---------------- | -------------------------------------- |
-| Cloud Function (start) | Gen2 HTTP        | `intexuraos-vm-start-{env}`            |
-| Cloud Function (stop)  | Gen2 HTTP        | `intexuraos-vm-stop-{env}`             |
-| Entry points           | -                | `startVm`, `stopVm`                   |
-| Runtime                | -                | Node.js 22                             |
-| Memory (each)          | -                | 256 MB                                 |
-| Timeout (each)         | -                | 120 seconds                            |
-| Scheduler (start)      | Cloud Scheduler  | `0 7 * * 1-5` (Europe/Warsaw)          |
-| Scheduler (stop)       | Cloud Scheduler  | `0 23 * * *` (Europe/Warsaw)           |
-| Service account        | -                | `intexuraos-functions-{env}`           |
-| Source bucket object   | -                | `vm-lifecycle/function.zip`            |
+| Resource               | Type            | Value                         |
+| ---------------------- | --------------- | ----------------------------- |
+| Cloud Function (start) | Gen2 HTTP       | `intexuraos-vm-start-{env}`   |
+| Cloud Function (stop)  | Gen2 HTTP       | `intexuraos-vm-stop-{env}`    |
+| Entry points           | -               | `startVm`, `stopVm`           |
+| Runtime                | -               | Node.js 22                    |
+| Memory (each)          | -               | 256 MB                        |
+| Timeout (each)         | -               | 120 seconds                   |
+| Scheduler (start)      | Cloud Scheduler | `0 7 * * 1-5` (Europe/Warsaw) |
+| Scheduler (stop)       | Cloud Scheduler | `0 23 * * *` (Europe/Warsaw)  |
+| Service account        | -               | `intexuraos-functions-{env}`  |
+| Source bucket object   | -               | `vm-lifecycle/function.zip`   |
 
 ## Gotchas
 

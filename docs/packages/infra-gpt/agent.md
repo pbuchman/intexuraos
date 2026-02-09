@@ -66,7 +66,7 @@ const client = createGptClient({
   apiKey: env.INTEXURAOS_OPENAI_API_KEY,
   model: 'gpt-4.1',
   userId,
-  pricing: { inputPricePerMillion: 2.50, outputPricePerMillion: 10.00 },
+  pricing: { inputPricePerMillion: 2.5, outputPricePerMillion: 10.0 },
   logger,
 });
 
@@ -90,11 +90,11 @@ if (result?.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED':    // 429
-    case 'INVALID_KEY':     // 401
-    case 'CONTEXT_LENGTH':  // context_length_exceeded
-    case 'TIMEOUT':         // timeout
-    case 'API_ERROR':       // general error
+    case 'RATE_LIMITED': // 429
+    case 'INVALID_KEY': // 401
+    case 'CONTEXT_LENGTH': // context_length_exceeded
+    case 'TIMEOUT': // timeout
+    case 'API_ERROR': // general error
   }
 }
 ```

@@ -81,7 +81,7 @@ describe('POST /internal/webhooks/task-complete', () => {
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
-    logger = pino({ name: 'test' }) as unknown as Logger;
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
     codeTaskRepo = createFirestoreCodeTaskRepository({
       firestore: fakeFirestore as unknown as Firestore,
@@ -1267,7 +1267,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
-    logger = pino({ name: 'test' }) as unknown as Logger;
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
     const actionsAgentClient = createActionsAgentClient({
       baseUrl: 'http://actions-agent',
@@ -1592,7 +1592,7 @@ describe('POST /internal/logs', () => {
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
-    logger = pino({ name: 'test' }) as unknown as Logger;
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
     codeTaskRepo = createFirestoreCodeTaskRepository({
       firestore: fakeFirestore as unknown as Firestore,
@@ -2024,7 +2024,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
-    logger = pino({ name: 'test' }) as unknown as Logger;
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
     codeTaskRepo = createFirestoreCodeTaskRepository({
       firestore: fakeFirestore as unknown as Firestore,

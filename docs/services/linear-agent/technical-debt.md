@@ -21,9 +21,9 @@
 
 ### Hardcoded Team ID in Retry Endpoint
 
-| File                             | Line | Issue                                                                |
-| -------------------------------- | ---- | -------------------------------------------------------------------- |
-| `src/routes/linearRoutes.ts`     | 313  | `teamId: 'TODO'` placeholder when retrying failed issue creation     |
+| File                         | Line | Issue                                                            |
+| ---------------------------- | ---- | ---------------------------------------------------------------- |
+| `src/routes/linearRoutes.ts` | 313  | `teamId: 'TODO'` placeholder when retrying failed issue creation |
 
 **Impact:** The `POST /linear/failed-issues/:id/retry` endpoint creates issues with a hardcoded team ID instead of reading from the user's connection. This means retried issues may fail or be created in the wrong team.
 
@@ -103,18 +103,18 @@ None identified. Service uses strict TypeScript with proper type definitions for
 
 None identified. Files are appropriately sized:
 
-| File                              | Lines | Status                             |
-| --------------------------------- | ----- | ---------------------------------- |
-| `linearRoutes.ts`                 | 673   | Borderline (12 endpoints)          |
-| `linearApiClient.ts`              | ~360  | OK (includes optimizations)        |
-| `internalIssuesRoutes.ts`         | 398   | OK                                 |
-| `linearWebhookRoutes.ts`          | 298   | OK                                 |
-| `processLinearAction.ts`          | 233   | OK                                 |
-| `generateIssueTitle.ts`           | 129   | OK                                 |
-| `fullSyncUseCase.ts`              | 158   | OK                                 |
-| `validateIssue.ts`                | 108   | OK                                 |
-| `syncSingleIssueUseCase.ts`       | 78    | OK                                 |
-| `linearConnectionRepository.ts`   | ~200  | OK (includes webhook secret ops)   |
+| File                            | Lines | Status                           |
+| ------------------------------- | ----- | -------------------------------- |
+| `linearRoutes.ts`               | 673   | Borderline (12 endpoints)        |
+| `linearApiClient.ts`            | ~360  | OK (includes optimizations)      |
+| `internalIssuesRoutes.ts`       | 398   | OK                               |
+| `linearWebhookRoutes.ts`        | 298   | OK                               |
+| `processLinearAction.ts`        | 233   | OK                               |
+| `generateIssueTitle.ts`         | 129   | OK                               |
+| `fullSyncUseCase.ts`            | 158   | OK                               |
+| `validateIssue.ts`              | 108   | OK                               |
+| `syncSingleIssueUseCase.ts`     | 78    | OK                               |
+| `linearConnectionRepository.ts` | ~200  | OK (includes webhook secret ops) |
 
 **Note:** `linearRoutes.ts` at 673 lines is the largest file due to 12 endpoints (connection CRUD, issues, failed issues CRUD + retry, sync, webhook config CRUD). Consider splitting into focused route modules if further endpoints are added.
 
@@ -124,13 +124,13 @@ None identified. Files are appropriately sized:
 
 ### Handled via Shared Code
 
-| Pattern              | Locations                                                         | Status                           |
-| -------------------- | ----------------------------------------------------------------- | -------------------------------- |
-| Error handling       | `linearRoutes.ts`, `internalRoutes.ts`, `internalIssuesRoutes.ts` | Shared `handleLinearError`       |
-| Request logging      | All routes                                                        | Uses `logIncomingRequest`        |
-| Auth validation      | Public routes                                                     | Uses `requireAuth`               |
-| Internal auth        | Internal routes                                                   | Uses `validateInternalAuth`      |
-| Issue mapping        | `syncSingleIssue`, `fullSync`                                     | Shared `issueMapper` module      |
+| Pattern         | Locations                                                         | Status                      |
+| --------------- | ----------------------------------------------------------------- | --------------------------- |
+| Error handling  | `linearRoutes.ts`, `internalRoutes.ts`, `internalIssuesRoutes.ts` | Shared `handleLinearError`  |
+| Request logging | All routes                                                        | Uses `logIncomingRequest`   |
+| Auth validation | Public routes                                                     | Uses `requireAuth`          |
+| Internal auth   | Internal routes                                                   | Uses `validateInternalAuth` |
+| Issue mapping   | `syncSingleIssue`, `fullSync`                                     | Shared `issueMapper` module |
 
 ---
 

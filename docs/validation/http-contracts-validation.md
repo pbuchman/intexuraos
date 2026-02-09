@@ -24,19 +24,19 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 
 ### user-service (Callee)
 
-| Caller                  | Documented Path (Caller Docs)              | Callee Docs Path                            | Actual Code Path                            | Match |
-| ----------------------- | ------------------------------------------ | ------------------------------------------- | ------------------------------------------- | ----- |
-| research-agent          | `/internal/users/{id}/llm-keys`            | `/internal/users/:uid/llm-keys`             | `/internal/users/:uid/llm-keys`             | OK    |
-| research-agent          | `/internal/users/{id}/settings`            | `/internal/users/:uid/settings`             | `/internal/users/:uid/settings`             | OK    |
-| web-agent               | `/internal/users/{id}/settings`            | `/internal/users/:uid/settings`             | `/internal/users/:uid/settings`             | OK    |
-| web-agent               | `/internal/users/{id}/llm-keys`            | `/internal/users/:uid/llm-keys`             | `/internal/users/:uid/llm-keys`             | OK    |
-| calendar-agent          | `/internal/users/:id/oauth/google/token`   | `/internal/users/:uid/oauth/google/token`   | `/internal/users/:uid/oauth/google/token`   | OK    |
-| calendar-agent          | `/internal/users/:id/llm-client`           | N/A (does not exist)                        | N/A (does not exist)                        | FAIL  |
-| todos-agent             | `/internal/users/:userId/llm-client`       | N/A (does not exist)                        | N/A (does not exist)                        | FAIL  |
-| image-service           | `/internal/users/:userId/api-keys`         | `/internal/users/:uid/llm-keys`             | `/internal/users/:uid/llm-keys`             | FAIL  |
-| linear-agent            | `/internal/user/llm-client`                | N/A (does not exist)                        | N/A (does not exist)                        | FAIL  |
-| chat-agent              | (via `@intexuraos/internal-clients`)       | `/internal/users/:uid/llm-keys`             | `/internal/users/:uid/llm-keys`             | OK    |
-| commands-agent          | (via `@intexuraos/internal-clients`)       | `/internal/users/:uid/llm-keys`             | `/internal/users/:uid/llm-keys`             | OK    |
+| Caller         | Documented Path (Caller Docs)            | Callee Docs Path                          | Actual Code Path                          | Match |
+| -------------- | ---------------------------------------- | ----------------------------------------- | ----------------------------------------- | ----- |
+| research-agent | `/internal/users/{id}/llm-keys`          | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | OK    |
+| research-agent | `/internal/users/{id}/settings`          | `/internal/users/:uid/settings`           | `/internal/users/:uid/settings`           | OK    |
+| web-agent      | `/internal/users/{id}/settings`          | `/internal/users/:uid/settings`           | `/internal/users/:uid/settings`           | OK    |
+| web-agent      | `/internal/users/{id}/llm-keys`          | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | OK    |
+| calendar-agent | `/internal/users/:id/oauth/google/token` | `/internal/users/:uid/oauth/google/token` | `/internal/users/:uid/oauth/google/token` | OK    |
+| calendar-agent | `/internal/users/:id/llm-client`         | N/A (does not exist)                      | N/A (does not exist)                      | FAIL  |
+| todos-agent    | `/internal/users/:userId/llm-client`     | N/A (does not exist)                      | N/A (does not exist)                      | FAIL  |
+| image-service  | `/internal/users/:userId/api-keys`       | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | FAIL  |
+| linear-agent   | `/internal/user/llm-client`              | N/A (does not exist)                      | N/A (does not exist)                      | FAIL  |
+| chat-agent     | (via `@intexuraos/internal-clients`)     | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | OK    |
+| commands-agent | (via `@intexuraos/internal-clients`)     | `/internal/users/:uid/llm-keys`           | `/internal/users/:uid/llm-keys`           | OK    |
 
 **Details on FAIL cases:**
 
@@ -50,59 +50,59 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 
 ### actions-agent (Callee)
 
-| Caller         | Documented Path (Caller Docs)          | Callee Docs Path                   | Actual Code Path                   | Match |
-| -------------- | -------------------------------------- | ---------------------------------- | ---------------------------------- | ----- |
-| commands-agent | `POST /internal/actions`               | `POST /internal/actions`           | `POST /internal/actions`           | OK    |
-| code-agent     | `PATCH /internal/actions/:actionId/status` | N/A (not in docs table)        | `PATCH /internal/actions/:actionId/status` | WARN  |
+| Caller         | Documented Path (Caller Docs)              | Callee Docs Path         | Actual Code Path                           | Match |
+| -------------- | ------------------------------------------ | ------------------------ | ------------------------------------------ | ----- |
+| commands-agent | `POST /internal/actions`                   | `POST /internal/actions` | `POST /internal/actions`                   | OK    |
+| code-agent     | `PATCH /internal/actions/:actionId/status` | N/A (not in docs table)  | `PATCH /internal/actions/:actionId/status` | WARN  |
 
 **Detail:** The `PATCH /internal/actions/:actionId/status` endpoint exists in code but is NOT listed in the actions-agent technical.md Internal Endpoints table.
 
 ### web-agent (Callee)
 
-| Caller          | Documented Path (Caller Docs)      | Callee Docs Path                 | Actual Code Path                 | Match |
-| --------------- | ---------------------------------- | -------------------------------- | -------------------------------- | ----- |
-| bookmarks-agent | `POST /internal/link-previews`     | `POST /internal/link-previews`   | `POST /internal/link-previews`   | OK    |
-| bookmarks-agent | `POST /internal/page-summaries`    | `POST /internal/page-summaries`  | `POST /internal/page-summaries`  | OK    |
-| research-agent  | (architecture diagram reference)   | `POST /internal/page-summaries`  | `POST /internal/page-summaries`  | OK    |
+| Caller          | Documented Path (Caller Docs)    | Callee Docs Path                | Actual Code Path                | Match |
+| --------------- | -------------------------------- | ------------------------------- | ------------------------------- | ----- |
+| bookmarks-agent | `POST /internal/link-previews`   | `POST /internal/link-previews`  | `POST /internal/link-previews`  | OK    |
+| bookmarks-agent | `POST /internal/page-summaries`  | `POST /internal/page-summaries` | `POST /internal/page-summaries` | OK    |
+| research-agent  | (architecture diagram reference) | `POST /internal/page-summaries` | `POST /internal/page-summaries` | OK    |
 
 ### linear-agent (Callee)
 
-| Caller     | Documented Path (Caller Docs)                     | Callee Docs Path                          | Actual Code Path                              | Match |
-| ---------- | ------------------------------------------------- | ----------------------------------------- | --------------------------------------------- | ----- |
-| actions-agent | `POST /internal/linear/process-action`         | `POST /internal/linear/process-action`    | `POST /internal/linear/process-action`        | OK    |
-| code-agent | `POST /internal/issues`                            | `POST /internal/issues`                   | `POST /internal/issues`                       | OK    |
-| code-agent | `PATCH /internal/issues/:issueId/state`            | `PATCH /internal/issues/:issueId/state`   | `PATCH /internal/issues/:issueId/state`       | OK    |
+| Caller        | Documented Path (Caller Docs)           | Callee Docs Path                        | Actual Code Path                        | Match |
+| ------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- | ----- |
+| actions-agent | `POST /internal/linear/process-action`  | `POST /internal/linear/process-action`  | `POST /internal/linear/process-action`  | OK    |
+| code-agent    | `POST /internal/issues`                 | `POST /internal/issues`                 | `POST /internal/issues`                 | OK    |
+| code-agent    | `PATCH /internal/issues/:issueId/state` | `PATCH /internal/issues/:issueId/state` | `PATCH /internal/issues/:issueId/state` | OK    |
 
 ### research-agent (Callee)
 
-| Caller        | Documented Path (Caller Docs)           | Callee Docs Path                    | Actual Code Path                    | Match |
-| ------------- | --------------------------------------- | ----------------------------------- | ----------------------------------- | ----- |
-| actions-agent | `POST /internal/research/draft`         | `POST /internal/research/draft`     | `POST /internal/research/draft`     | OK    |
+| Caller        | Documented Path (Caller Docs)   | Callee Docs Path                | Actual Code Path                | Match |
+| ------------- | ------------------------------- | ------------------------------- | ------------------------------- | ----- |
+| actions-agent | `POST /internal/research/draft` | `POST /internal/research/draft` | `POST /internal/research/draft` | OK    |
 
 ### image-service (Callee)
 
-| Caller         | Documented Path (Caller Docs)               | Callee Docs Path                          | Actual Code Path                          | Match |
-| -------------- | ------------------------------------------- | ----------------------------------------- | ----------------------------------------- | ----- |
-| research-agent | `POST /internal/images/generate`            | `POST /internal/images/generate`          | `POST /internal/images/generate`          | OK    |
-| research-agent | `POST /internal/images/prompts/generate`    | `POST /internal/images/prompts/generate`  | `POST /internal/images/prompts/generate`  | OK    |
-| research-agent | `DELETE /internal/images/:id`               | `DELETE /internal/images/:id`             | `DELETE /internal/images/:id`             | OK    |
+| Caller         | Documented Path (Caller Docs)            | Callee Docs Path                         | Actual Code Path                         | Match |
+| -------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------- | ----- |
+| research-agent | `POST /internal/images/generate`         | `POST /internal/images/generate`         | `POST /internal/images/generate`         | OK    |
+| research-agent | `POST /internal/images/prompts/generate` | `POST /internal/images/prompts/generate` | `POST /internal/images/prompts/generate` | OK    |
+| research-agent | `DELETE /internal/images/:id`            | `DELETE /internal/images/:id`            | `DELETE /internal/images/:id`            | OK    |
 
 ### app-settings-service (Callee)
 
-| Caller       | Documented Path (Caller Docs) | Callee Docs Path                      | Actual Code Path                  | Match |
-| ------------ | ----------------------------- | ------------------------------------- | --------------------------------- | ----- |
-| linear-agent | `/internal/pricing`           | `/internal/pricing/:provider` (agent.md) | `/internal/settings/pricing`   | FAIL  |
+| Caller       | Documented Path (Caller Docs) | Callee Docs Path                         | Actual Code Path             | Match |
+| ------------ | ----------------------------- | ---------------------------------------- | ---------------------------- | ----- |
+| linear-agent | `/internal/pricing`           | `/internal/pricing/:provider` (agent.md) | `/internal/settings/pricing` | FAIL  |
 
 **Detail:** The linear-agent docs say the app-settings-service endpoint is `/internal/pricing`, but the actual code has `/internal/settings/pricing`. The path prefix `/internal/settings/` is part of the actual route.
 
 ### code-agent (Callee)
 
-| Caller      | Documented Path (Caller Docs)                      | Callee Docs Path                                   | Actual Code Path                                   | Match |
-| ----------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | ----- |
-| actions-agent | `POST /internal/code/process` (from deps table)  | `POST /internal/code/process`                      | `POST /internal/code/process`                      | OK    |
-| orchestrator | `POST /internal/logs`                             | `POST /internal/logs`                              | `POST /internal/logs`                              | OK    |
-| orchestrator | `POST /internal/webhooks/task-complete`           | `POST /internal/webhooks/task-complete`             | `POST /internal/webhooks/task-complete`             | OK    |
-| orchestrator | `POST /internal/code/heartbeat`                   | `POST /internal/code/heartbeat`                    | `POST /internal/code/heartbeat`                    | OK    |
+| Caller        | Documented Path (Caller Docs)                   | Callee Docs Path                        | Actual Code Path                        | Match |
+| ------------- | ----------------------------------------------- | --------------------------------------- | --------------------------------------- | ----- |
+| actions-agent | `POST /internal/code/process` (from deps table) | `POST /internal/code/process`           | `POST /internal/code/process`           | OK    |
+| orchestrator  | `POST /internal/logs`                           | `POST /internal/logs`                   | `POST /internal/logs`                   | OK    |
+| orchestrator  | `POST /internal/webhooks/task-complete`         | `POST /internal/webhooks/task-complete` | `POST /internal/webhooks/task-complete` | OK    |
+| orchestrator  | `POST /internal/code/heartbeat`                 | `POST /internal/code/heartbeat`         | `POST /internal/code/heartbeat`         | OK    |
 
 ---
 
@@ -110,23 +110,23 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 
 ### 2.1 Endpoints in Code but NOT in Docs
 
-| Service       | Method | Actual Code Path                          | Description                              |
-| ------------- | ------ | ----------------------------------------- | ---------------------------------------- |
-| actions-agent | PATCH  | `/internal/actions/:actionId/status`      | Update action resource status (code-agent callback) |
-| linear-agent  | GET    | `/internal/linear/issues/:identifier`     | Validate a Linear issue exists           |
-| linear-agent  | POST   | `/internal/linear/issues/generate-title`  | LLM-powered title generation             |
-| linear-agent  | POST   | `/internal/linear/sync`                   | Full sync of Linear issues for a user    |
-| code-agent    | POST   | `/internal/code/cancel-with-nonce`        | Cancel task via WhatsApp nonce           |
-| code-agent    | POST   | `/internal/tasks/cleanup-logs`            | Cleanup old task logs                    |
+| Service       | Method | Actual Code Path                         | Description                                         |
+| ------------- | ------ | ---------------------------------------- | --------------------------------------------------- |
+| actions-agent | PATCH  | `/internal/actions/:actionId/status`     | Update action resource status (code-agent callback) |
+| linear-agent  | GET    | `/internal/linear/issues/:identifier`    | Validate a Linear issue exists                      |
+| linear-agent  | POST   | `/internal/linear/issues/generate-title` | LLM-powered title generation                        |
+| linear-agent  | POST   | `/internal/linear/sync`                  | Full sync of Linear issues for a user               |
+| code-agent    | POST   | `/internal/code/cancel-with-nonce`       | Cancel task via WhatsApp nonce                      |
+| code-agent    | POST   | `/internal/tasks/cleanup-logs`           | Cleanup old task logs                               |
 
 **Note on linear-agent:** The `internalRoutes.ts` contains 4 endpoints (`/internal/linear/process-action`, `/internal/linear/issues/:identifier`, `/internal/linear/issues/generate-title`, `/internal/linear/sync`) but the docs table only lists `POST /internal/linear/process-action`. The other three are described in use case sections but omitted from the Internal Endpoints table.
 
 ### 2.2 Endpoints in Docs but Path Differs in Code
 
-| Service    | Docs Path                       | Actual Code Path                    | Issue                                          |
-| ---------- | ------------------------------- | ----------------------------------- | ---------------------------------------------- |
-| code-agent | `POST /internal/code/cancel`    | `POST /internal/code/cancel-with-nonce` | Path name differs (nonce suffix in code)   |
-| code-agent | `POST /internal/code/cleanup-logs` | `POST /internal/tasks/cleanup-logs` | Path prefix differs (`code` vs `tasks`)    |
+| Service    | Docs Path                          | Actual Code Path                        | Issue                                    |
+| ---------- | ---------------------------------- | --------------------------------------- | ---------------------------------------- |
+| code-agent | `POST /internal/code/cancel`       | `POST /internal/code/cancel-with-nonce` | Path name differs (nonce suffix in code) |
+| code-agent | `POST /internal/code/cleanup-logs` | `POST /internal/tasks/cleanup-logs`     | Path prefix differs (`code` vs `tasks`)  |
 
 ---
 
@@ -134,14 +134,14 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 
 ### actions-agent
 
-| Method | Path                               | Docs | Code |
-| ------ | ---------------------------------- | ---- | ---- |
-| POST   | `/internal/actions`                | Yes  | Yes  |
-| POST   | `/internal/actions/:actionType`    | Yes  | Yes  |
-| POST   | `/internal/actions/process`        | Yes  | Yes  |
-| POST   | `/internal/actions/retry-pending`  | Yes  | Yes  |
-| POST   | `/internal/actions/approval-reply` | Yes  | Yes  |
-| PATCH  | `/internal/actions/:actionId/status` | No | Yes  |
+| Method | Path                                 | Docs | Code |
+| ------ | ------------------------------------ | ---- | ---- |
+| POST   | `/internal/actions`                  | Yes  | Yes  |
+| POST   | `/internal/actions/:actionType`      | Yes  | Yes  |
+| POST   | `/internal/actions/process`          | Yes  | Yes  |
+| POST   | `/internal/actions/retry-pending`    | Yes  | Yes  |
+| POST   | `/internal/actions/approval-reply`   | Yes  | Yes  |
+| PATCH  | `/internal/actions/:actionId/status` | No   | Yes  |
 
 ### research-agent
 
@@ -221,14 +221,14 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 
 ### linear-agent
 
-| Method | Path                                        | Docs Table | Code |
-| ------ | ------------------------------------------- | ---------- | ---- |
-| POST   | `/internal/linear/process-action`           | Yes        | Yes  |
-| POST   | `/internal/issues`                          | Yes        | Yes  |
-| PATCH  | `/internal/issues/:issueId/state`           | Yes        | Yes  |
-| GET    | `/internal/linear/issues/:identifier`       | No         | Yes  |
-| POST   | `/internal/linear/issues/generate-title`    | No         | Yes  |
-| POST   | `/internal/linear/sync`                     | No         | Yes  |
+| Method | Path                                     | Docs Table | Code |
+| ------ | ---------------------------------------- | ---------- | ---- |
+| POST   | `/internal/linear/process-action`        | Yes        | Yes  |
+| POST   | `/internal/issues`                       | Yes        | Yes  |
+| PATCH  | `/internal/issues/:issueId/state`        | Yes        | Yes  |
+| GET    | `/internal/linear/issues/:identifier`    | No         | Yes  |
+| POST   | `/internal/linear/issues/generate-title` | No         | Yes  |
+| POST   | `/internal/linear/sync`                  | No         | Yes  |
 
 ### notes-agent
 
@@ -244,10 +244,10 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 | PATCH  | `/internal/code-tasks/:taskId`                      | Yes  | Yes  |
 | GET    | `/internal/code-tasks/linear/:linearIssueId/active` | Yes  | Yes  |
 | GET    | `/internal/code-tasks/zombies`                      | Yes  | Yes  |
-| POST   | `/internal/code/cancel-with-nonce`                  | No*  | Yes  |
+| POST   | `/internal/code/cancel-with-nonce`                  | No\* | Yes  |
 | POST   | `/internal/code/heartbeat`                          | Yes  | Yes  |
 | POST   | `/internal/code/detect-zombies`                     | Yes  | Yes  |
-| POST   | `/internal/tasks/cleanup-logs`                      | No*  | Yes  |
+| POST   | `/internal/tasks/cleanup-logs`                      | No\* | Yes  |
 | POST   | `/internal/webhooks/task-complete`                  | Yes  | Yes  |
 | POST   | `/internal/logs`                                    | Yes  | Yes  |
 | POST   | `/webhooks/github`                                  | Yes  | Yes  |
@@ -256,16 +256,16 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 
 ### notion-service (not in original scope but referenced)
 
-| Method | Path                                                | Docs | Code |
-| ------ | --------------------------------------------------- | ---- | ---- |
-| GET    | `/internal/notion/users/:userId/context`            | N/A  | Yes  |
-| GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | N/A | Yes  |
+| Method | Path                                                   | Docs | Code |
+| ------ | ------------------------------------------------------ | ---- | ---- |
+| GET    | `/internal/notion/users/:userId/context`               | N/A  | Yes  |
+| GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | N/A  | Yes  |
 
 ### app-settings-service (not in original scope but referenced)
 
-| Method | Path                       | Docs | Code |
-| ------ | -------------------------- | ---- | ---- |
-| GET    | `/internal/settings/pricing` | N/A | Yes  |
+| Method | Path                         | Docs | Code |
+| ------ | ---------------------------- | ---- | ---- |
+| GET    | `/internal/settings/pricing` | N/A  | Yes  |
 
 ---
 
@@ -276,6 +276,7 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 **Affected docs:** `calendar-agent/technical.md`, `todos-agent/technical.md`, `linear-agent/technical.md`
 
 **Problem:** These docs list a dependency endpoint `/internal/users/:id/llm-client` (or variants) on user-service. This endpoint does not exist. The actual mechanism is the `@intexuraos/internal-clients` package, which composes an LLM client by calling:
+
 1. `GET /internal/users/:uid/settings` (to get default model preference)
 2. `GET /internal/users/:uid/llm-keys` (to get decrypted API keys)
 
@@ -318,6 +319,7 @@ This table tracks every documented cross-service HTTP call, verifying the caller
 **File:** `docs/services/linear-agent/technical.md`
 
 **Problem:** The Internal Endpoints table lists only `POST /internal/linear/process-action`, `POST /internal/issues`, and `PATCH /internal/issues/:issueId/state`. The following endpoints exist in code but are not in the table:
+
 - `GET /internal/linear/issues/:identifier` (validate issue)
 - `POST /internal/linear/issues/generate-title` (generate title)
 - `POST /internal/linear/sync` (full sync)
@@ -369,12 +371,12 @@ The following services from the analyzed set have no cross-service HTTP discrepa
 
 ## 6. Priority Fix List
 
-| Priority | Discrepancy | Files to Update                          |
-| -------- | ----------- | ---------------------------------------- |
-| HIGH     | D6          | `docs/services/code-agent/technical.md`  |
-| HIGH     | D7          | `docs/services/code-agent/technical.md`  |
-| MEDIUM   | D4          | `docs/services/actions-agent/technical.md` |
-| MEDIUM   | D5          | `docs/services/linear-agent/technical.md` |
+| Priority | Discrepancy | Files to Update                                              |
+| -------- | ----------- | ------------------------------------------------------------ |
+| HIGH     | D6          | `docs/services/code-agent/technical.md`                      |
+| HIGH     | D7          | `docs/services/code-agent/technical.md`                      |
+| MEDIUM   | D4          | `docs/services/actions-agent/technical.md`                   |
+| MEDIUM   | D5          | `docs/services/linear-agent/technical.md`                    |
 | LOW      | D1          | `calendar-agent`, `todos-agent`, `linear-agent` technical.md |
-| LOW      | D2          | `docs/services/image-service/technical.md` |
-| LOW      | D3          | `docs/services/linear-agent/technical.md` |
+| LOW      | D2          | `docs/services/image-service/technical.md`                   |
+| LOW      | D3          | `docs/services/linear-agent/technical.md`                    |

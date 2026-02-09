@@ -32,6 +32,7 @@ interface MockDockerResult {
   mockDocker: MockDocker;
   mockContainer: MockContainer;
   mockAttachStream: MockAttachStream;
+  mockVolume: MockVolume;
   resolveContainerWait: (value: { StatusCode: number }) => void;
 }
 
@@ -78,16 +79,24 @@ function createMockDocker(): MockDockerResult {
     }),
   };
 
+  const mockVolume: MockVolume = {
+    inspect: vi.fn().mockResolvedValue({}),
+    remove: vi.fn().mockResolvedValue(undefined),
+  };
+
   const mockDocker = {
     createContainer: vi.fn().mockResolvedValue(mockContainer),
     getContainer: vi.fn().mockReturnValue(mockContainer),
     listContainers: vi.fn().mockResolvedValue([]),
+    getVolume: vi.fn().mockReturnValue(mockVolume),
+    createVolume: vi.fn().mockResolvedValue(mockVolume),
   };
 
   return {
     mockDocker,
     mockContainer,
     mockAttachStream,
+    mockVolume,
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- resolveContainerWait is set in Promise constructor
     resolveContainerWait: resolveContainerWait!,
   };
@@ -234,6 +243,26 @@ describe('DockerProvider', () => {
       }
     });
 
+    it('mounts pnpm store volume and node_modules tmpfs', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(expect.stringContaining('pnpm-store:/home/claude/pnpm-store:rw'));
+      const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
+      expect(tmpfs['/repo/node_modules']).toContain('uid=1001');
+    });
+
+    it('sets CLAUDE_WORKER_MODE env var', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContainEqual('CLAUDE_WORKER_MODE=1');
+    });
+
     it('sends system prompt to container stdin', async () => {
       const config = createTestConfig({
         prompt: 'Hello Claude', // User prompt is now embedded in systemPrompt by buildSystemPrompt
@@ -247,14 +276,14 @@ describe('DockerProvider', () => {
   });
 
   describe('destroyWorker', () => {
-    it('stops and removes container', async () => {
+    it('stops container without removing it', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
 
       await provider.destroyWorker('test-task-123');
 
       expect(mocks.mockContainer.stop).toHaveBeenCalledWith({ t: 10 });
-      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+      expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
     });
 
     it('handles already stopped container', async () => {
@@ -462,11 +491,13 @@ describe('DockerProvider', () => {
   });
 
   describe('cleanupOrphanedContainers', () => {
-    it('removes orphaned containers on startup', async () => {
+    it('removes containers older than 24 hours', async () => {
+      const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
       const orphanContainer = {
         Id: 'orphan-container-id',
         Names: ['/claude-worker-orphan-task'],
         State: 'running',
+        Created: twoDaysAgo,
       };
 
       mocks.mockDocker.listContainers.mockResolvedValueOnce([orphanContainer]);
@@ -482,11 +513,13 @@ describe('DockerProvider', () => {
       expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
     });
 
-    it('handles stopped orphan containers', async () => {
+    it('handles stopped old containers', async () => {
+      const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
       const orphanContainer = {
         Id: 'orphan-container-id',
         Names: ['/claude-worker-orphan-task'],
         State: 'exited',
+        Created: twoDaysAgo,
       };
 
       mocks.mockDocker.listContainers.mockResolvedValueOnce([orphanContainer]);
@@ -495,6 +528,24 @@ describe('DockerProvider', () => {
 
       expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
       expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+    });
+
+    it('skips containers younger than 24 hours', async () => {
+      const oneHourAgo = Math.floor(Date.now() / 1000) - 60 * 60;
+      const recentContainer = {
+        Id: 'recent-container-id',
+        Names: ['/claude-worker-recent-task'],
+        State: 'exited',
+        Created: oneHourAgo,
+      };
+
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([recentContainer]);
+
+      await provider.cleanupOrphanedContainers();
+
+      expect(mocks.mockDocker.getContainer).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
     });
 
     it('handles empty container list gracefully', async () => {

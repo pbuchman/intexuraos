@@ -129,7 +129,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   const StatusIcon = status.icon;
   const isRunning = task.status === 'running' || task.status === 'dispatched';
   const canCancel = isRunning;
-  const canRetry = task.status === 'failed' || task.status === 'cancelled';
+  const canRetry = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
 
   // Build links array - Linear and PR
   const links: { label: string; url: string | undefined; text: string; type?: string }[] = [];
@@ -239,6 +239,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
                 }}
                 disabled={retrying}
                 isLoading={retrying}
+                loadingText="Retrying..."
               >
                 <RotateCcw className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Retry Task</span>

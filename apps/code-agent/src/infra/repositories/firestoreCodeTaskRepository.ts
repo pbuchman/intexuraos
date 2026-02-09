@@ -87,19 +87,22 @@ export const createFirestoreCodeTaskRepository = (deps: {
           }
 
           // Layer 2: Check dedupKey within 5-minute window (design lines 1543-1554)
-          const dedupQuery = collection
-            .where('dedupKey', '==', dedupKey)
-            .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
-            .limit(1);
-          const dedupSnapshot = await transaction.get(dedupQuery);
+          // Skip dedup for retried tasks — same prompt is intentional
+          if (input.retriedFrom === undefined) {
+            const dedupQuery = collection
+              .where('dedupKey', '==', dedupKey)
+              .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
+              .limit(1);
+            const dedupSnapshot = await transaction.get(dedupQuery);
 
-          if (!dedupSnapshot.empty) {
-            const existingTask = dedupSnapshot.docs[0]!;
-            return err({
-              code: 'DUPLICATE_PROMPT',
-              message: 'Duplicate prompt within 5 minutes',
-              existingTaskId: existingTask.id,
-            } as const);
+            if (!dedupSnapshot.empty) {
+              const existingTask = dedupSnapshot.docs[0]!;
+              return err({
+                code: 'DUPLICATE_PROMPT',
+                message: 'Duplicate prompt within 5 minutes',
+                existingTaskId: existingTask.id,
+              } as const);
+            }
           }
 
           // Layer 3: Check active task for Linear issue (design lines 448-458)

@@ -27,7 +27,7 @@ interface LlmClientConfig {
 
 interface GenerateResult {
   content: string;
-  usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number; };
+  usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number };
 }
 
 interface LlmGenerateClient {
@@ -35,7 +35,10 @@ interface LlmGenerateClient {
 }
 
 // Re-exported from @intexuraos/llm-contract
-interface LLMError { code: LLMErrorCode; message: string; }
+interface LLMError {
+  code: LLMErrorCode;
+  message: string;
+}
 ```
 
 ## Exported Functions
@@ -90,9 +93,11 @@ if (isSupportedProvider(userSelectedProvider)) {
 
 ```typescript
 const mockClient: LlmGenerateClient = {
-  generate: vi.fn().mockResolvedValue(ok({
-    content: 'mock response',
-    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
-  })),
+  generate: vi.fn().mockResolvedValue(
+    ok({
+      content: 'mock response',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+    })
+  ),
 };
 ```

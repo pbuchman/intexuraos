@@ -20,28 +20,39 @@ Defines 16 models across 5 providers as branded string literal types.
 ```typescript
 type LLMModel =
   // Google (4)
-  | 'gemini-2.5-pro' | 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'gemini-2.5-flash-image'
+  | 'gemini-2.5-pro'
+  | 'gemini-2.5-flash'
+  | 'gemini-2.0-flash'
+  | 'gemini-2.5-flash-image'
   // OpenAI (4)
-  | 'o4-mini-deep-research' | 'gpt-5.2' | 'gpt-4o-mini' | 'gpt-image-1'
+  | 'o4-mini-deep-research'
+  | 'gpt-5.2'
+  | 'gpt-4o-mini'
+  | 'gpt-image-1'
   // Anthropic (3)
-  | 'claude-opus-4-5-20251101' | 'claude-sonnet-4-5-20250929' | 'claude-3-5-haiku-20241022'
+  | 'claude-opus-4-5-20251101'
+  | 'claude-sonnet-4-5-20250929'
+  | 'claude-3-5-haiku-20241022'
   // Perplexity (3)
-  | 'sonar' | 'sonar-pro' | 'sonar-deep-research'
+  | 'sonar'
+  | 'sonar-pro'
+  | 'sonar-deep-research'
   // Zai (2)
-  | 'glm-4.7' | 'glm-4.7-flash';
+  | 'glm-4.7'
+  | 'glm-4.7-flash';
 
 type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
 ```
 
 **Category types** narrow `LLMModel` for specific use cases:
 
-| Type              | Purpose                           | Models                                                                |
-| ----------------- | --------------------------------- | --------------------------------------------------------------------- |
-| `ImageModel`      | Image generation                  | `gpt-image-1`, `gemini-2.5-flash-image`                               |
-| `ResearchModel`   | Web search enhanced generation    | All models except image-only and validation-only                      |
-| `ValidationModel` | API key validation (cheap, fast)  | `claude-3-5-haiku`, `gemini-2.0-flash`, `gpt-4o-mini`, `sonar`, GLM   |
-| `FastModel`       | Quick tasks (classification, etc) | `gemini-2.5-flash`, `gemini-2.0-flash`, `glm-4.7-flash`               |
-| `GenericModel`    | General-purpose                   | `gemini-2.5-pro`, `gpt-5.2`                                           |
+| Type              | Purpose                           | Models                                                              |
+| ----------------- | --------------------------------- | ------------------------------------------------------------------- |
+| `ImageModel`      | Image generation                  | `gpt-image-1`, `gemini-2.5-flash-image`                             |
+| `ResearchModel`   | Web search enhanced generation    | All models except image-only and validation-only                    |
+| `ValidationModel` | API key validation (cheap, fast)  | `claude-3-5-haiku`, `gemini-2.0-flash`, `gpt-4o-mini`, `sonar`, GLM |
+| `FastModel`       | Quick tasks (classification, etc) | `gemini-2.5-flash`, `gemini-2.0-flash`, `glm-4.7-flash`             |
+| `GenericModel`    | General-purpose                   | `gemini-2.5-pro`, `gpt-5.2`                                         |
 
 ### Constants
 
@@ -92,17 +103,20 @@ All provider implementations conform to this interface:
 interface LLMClient {
   research(prompt: string): Promise<Result<ResearchResult, LLMError>>;
   generate(prompt: string): Promise<Result<GenerateResult, LLMError>>;
-  generateImage?(prompt: string, options?: ImageGenerateOptions): Promise<Result<ImageGenerationResult, LLMError>>;
+  generateImage?(
+    prompt: string,
+    options?: ImageGenerateOptions
+  ): Promise<Result<ImageGenerationResult, LLMError>>;
 }
 ```
 
 ### Result Types
 
-| Type                    | Fields                                                     |
-| ----------------------- | ---------------------------------------------------------- |
-| `GenerateResult`        | `content`, `usage: NormalizedUsage`                        |
-| `ResearchResult`        | `content`, `sources: string[]`, `usage: NormalizedUsage`   |
-| `ImageGenerationResult` | `imageData: Buffer`, `model`, `usage: NormalizedUsage`     |
+| Type                    | Fields                                                   |
+| ----------------------- | -------------------------------------------------------- |
+| `GenerateResult`        | `content`, `usage: NormalizedUsage`                      |
+| `ResearchResult`        | `content`, `sources: string[]`, `usage: NormalizedUsage` |
+| `ImageGenerationResult` | `imageData: Buffer`, `model`, `usage: NormalizedUsage`   |
 
 ### Usage Types
 
@@ -110,12 +124,12 @@ interface LLMClient {
 interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
-  cacheCreationTokens?: number;   // Anthropic
-  cacheReadTokens?: number;       // Anthropic
-  cachedTokens?: number;          // OpenAI
-  reasoningTokens?: number;       // OpenAI o1
+  cacheCreationTokens?: number; // Anthropic
+  cacheReadTokens?: number; // Anthropic
+  cachedTokens?: number; // OpenAI
+  reasoningTokens?: number; // OpenAI o1
   webSearchCalls?: number;
-  groundingEnabled?: boolean;     // Google
+  groundingEnabled?: boolean; // Google
   providerCost?: number;
 }
 
@@ -135,9 +149,13 @@ interface NormalizedUsage {
 
 ```typescript
 type LLMErrorCode =
-  | 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY'
-  | 'RATE_LIMITED' | 'OVERLOADED'
-  | 'CONTEXT_LENGTH' | 'CONTENT_FILTERED';
+  | 'API_ERROR'
+  | 'TIMEOUT'
+  | 'INVALID_KEY'
+  | 'RATE_LIMITED'
+  | 'OVERLOADED'
+  | 'CONTEXT_LENGTH'
+  | 'CONTENT_FILTERED';
 
 interface LLMError {
   code: LLMErrorCode;
@@ -181,14 +199,14 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 ## Recent Changes
 
-| Commit   | Description                                       | Age     |
-| -------- | ------------------------------------------------- | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner  | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions    | 12 days |
-| 4fa0fed3 | Release v2.0.0                                    | 2 weeks |
-| 68ab051c | Break llm-contract -> llm-common dependency       | 2 weeks |
-| f5ea3d76 | Fix type errors for Glm47Flash model addition     | 3 weeks |
-| 2c3a98ce | Add GLM-4.7-Flash support as free Zai AI model    | 3 weeks |
+| Commit   | Description                                      | Age     |
+| -------- | ------------------------------------------------ | ------- |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
+| 21c1528a | Fix release skill to bump all package versions   | 12 days |
+| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
+| 68ab051c | Break llm-contract -> llm-common dependency      | 2 weeks |
+| f5ea3d76 | Fix type errors for Glm47Flash model addition    | 3 weeks |
+| 2c3a98ce | Add GLM-4.7-Flash support as free Zai AI model   | 3 weeks |
 
 ## Source Files
 

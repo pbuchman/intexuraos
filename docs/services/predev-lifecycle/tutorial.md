@@ -97,13 +97,13 @@ gcloud functions logs read intexuraos-predev-idle-check-dev \
 
 Key log messages:
 
-| Message                               | Meaning                                      |
-| ------------------------------------- | -------------------------------------------- |
-| "VM not running, skipping idle check" | VM is already stopped                        |
-| "Checking idle status"                | Comparing lastActivity against timeout       |
-| "VM still active"                     | Under 30 minutes idle, VM stays up           |
-| "VM idle, stopping..."                | Exceeded 30 minutes, shutting down           |
-| "VM stopped successfully"             | MIG resized to 0                             |
+| Message                               | Meaning                                |
+| ------------------------------------- | -------------------------------------- |
+| "VM not running, skipping idle check" | VM is already stopped                  |
+| "Checking idle status"                | Comparing lastActivity against timeout |
+| "VM still active"                     | Under 30 minutes idle, VM stays up     |
+| "VM idle, stopping..."                | Exceeded 30 minutes, shutting down     |
+| "VM stopped successfully"             | MIG resized to 0                       |
 
 ## Part 6: Local Development
 
@@ -125,12 +125,12 @@ pnpm dev
 
 ## Troubleshooting
 
-| Issue                                   | Cause                                          | Solution                                                 |
-| --------------------------------------- | ---------------------------------------------- | -------------------------------------------------------- |
-| "Starting..." page never redirects      | VM failed to boot or report-ready did not fire | Check VM serial console logs in GCP                      |
-| "Failed to start VM" on gateway         | MIG resize failed                              | Check Compute Engine quotas and permissions              |
-| Webhook returns 401                     | Signature mismatch                             | Verify webhook secret matches Secret Manager value       |
-| Webhook returns 500                     | Missing `INTEXURAOS_GITHUB_WEBHOOK_SECRET`     | Check secret is deployed to the function                 |
-| Branch does not switch despite push     | Branch is locked                               | Unlock via POST `/internal/branch-lock`                  |
-| VM shuts down during active use         | `lastActivity` not updating                    | Verify gateway is receiving requests (not cached by CDN) |
-| SSE streams drop after a few seconds    | Network proxy timeout                          | Check Cloud Run request timeout (should be 3600s)        |
+| Issue                                | Cause                                          | Solution                                                 |
+| ------------------------------------ | ---------------------------------------------- | -------------------------------------------------------- |
+| "Starting..." page never redirects   | VM failed to boot or report-ready did not fire | Check VM serial console logs in GCP                      |
+| "Failed to start VM" on gateway      | MIG resize failed                              | Check Compute Engine quotas and permissions              |
+| Webhook returns 401                  | Signature mismatch                             | Verify webhook secret matches Secret Manager value       |
+| Webhook returns 500                  | Missing `INTEXURAOS_GITHUB_WEBHOOK_SECRET`     | Check secret is deployed to the function                 |
+| Branch does not switch despite push  | Branch is locked                               | Unlock via POST `/internal/branch-lock`                  |
+| VM shuts down during active use      | `lastActivity` not updating                    | Verify gateway is receiving requests (not cached by CDN) |
+| SSE streams drop after a few seconds | Network proxy timeout                          | Check Cloud Run request timeout (should be 3600s)        |

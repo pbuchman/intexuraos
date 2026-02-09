@@ -40,22 +40,24 @@ interface OrchestratorTools {
   // Errors: 400 (validation), 401 (auth), 503 (at capacity)
 
   // Get current task status
-  getTask(params: {
-    taskId: string;
-  }): Promise<Task | null>;
+  getTask(params: { taskId: string }): Promise<Task | null>;
   // Auth: None
   // Errors: 404 (not found)
 
   // Cancel a running task
-  cancelTask(params: {
-    taskId: string;
-  }): Promise<{ taskId: string; status: 'cancelled' }>;
+  cancelTask(params: { taskId: string }): Promise<{ taskId: string; status: 'cancelled' }>;
   // Auth: None
   // Errors: 404 (not found), 409 (already completed)
 
   // Check service health and capacity
   getHealth(): Promise<{
-    status: 'ready' | 'initializing' | 'recovering' | 'degraded' | 'auth_degraded' | 'shutting_down';
+    status:
+      | 'ready'
+      | 'initializing'
+      | 'recovering'
+      | 'degraded'
+      | 'auth_degraded'
+      | 'shutting_down';
     capacity: number;
     running: number;
     available: number;
@@ -113,9 +115,9 @@ interface Task {
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
   containerId: string;
-  startedAt: string;       // ISO 8601
-  completedAt?: string;    // ISO 8601
-  retriedFrom?: string;    // Original task ID for retries
+  startedAt: string; // ISO 8601
+  completedAt?: string; // ISO 8601
+  retriedFrom?: string; // Original task ID for retries
 }
 ```
 
@@ -159,7 +161,7 @@ interface WebhookPayload {
   status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
   result?: TaskResult;
   error?: TaskError;
-  duration: number;  // milliseconds
+  duration: number; // milliseconds
 }
 ```
 
@@ -169,26 +171,27 @@ interface WebhookPayload {
 
 ### Inbound (code-agent -> orchestrator)
 
-| Method | Path                   | Auth        | Purpose                |
-| ------ | ---------------------- | ----------- | ---------------------- |
-| POST   | `/tasks`               | HMAC signed | Submit task            |
-| GET    | `/tasks/:id`           | None        | Query task status      |
-| DELETE | `/tasks/:id`           | None        | Cancel task            |
-| GET    | `/health`              | None        | Health check           |
-| POST   | `/admin/refresh-token` | HMAC signed | Force token refresh    |
-| POST   | `/admin/shutdown`      | HMAC signed | Request shutdown       |
+| Method | Path                   | Auth        | Purpose             |
+| ------ | ---------------------- | ----------- | ------------------- |
+| POST   | `/tasks`               | HMAC signed | Submit task         |
+| GET    | `/tasks/:id`           | None        | Query task status   |
+| DELETE | `/tasks/:id`           | None        | Cancel task         |
+| GET    | `/health`              | None        | Health check        |
+| POST   | `/admin/refresh-token` | HMAC signed | Force token refresh |
+| POST   | `/admin/shutdown`      | HMAC signed | Request shutdown    |
 
 ### Outbound (orchestrator -> code-agent)
 
-| Method | Path                          | Auth                         | Purpose                    |
-| ------ | ----------------------------- | ---------------------------- | -------------------------- |
-| POST   | `{webhookUrl}`                | HMAC (X-Request-Signature)   | Task completion callback   |
-| POST   | `/internal/logs`              | HMAC + X-Internal-Auth       | Log chunk upload           |
-| POST   | `/internal/code/heartbeat`    | HMAC (X-Request-Signature)   | Running task keepalive     |
+| Method | Path                       | Auth                       | Purpose                  |
+| ------ | -------------------------- | -------------------------- | ------------------------ |
+| POST   | `{webhookUrl}`             | HMAC (X-Request-Signature) | Task completion callback |
+| POST   | `/internal/logs`           | HMAC + X-Internal-Auth     | Log chunk upload         |
+| POST   | `/internal/code/heartbeat` | HMAC (X-Request-Signature) | Running task keepalive   |
 
 ### HMAC Signature Format
 
 **Inbound (dispatch):**
+
 ```
 message = "{timestamp}.{nonce}.{json_body}"
 signature = HMAC-SHA256(orchestratorSecret, message)
@@ -196,6 +199,7 @@ Headers: X-Dispatch-Timestamp, X-Dispatch-Nonce, X-Dispatch-Signature
 ```
 
 **Outbound (webhook):**
+
 ```
 message = "{timestamp}.{json_body}"
 signature = HMAC-SHA256(webhookSecret, message)
@@ -203,6 +207,7 @@ Headers: X-Request-Timestamp, X-Request-Signature
 ```
 
 **Outbound (logs):**
+
 ```
 message = "{timestamp}.{json_body}"
 signature = HMAC-SHA256(webhookSecret, message)

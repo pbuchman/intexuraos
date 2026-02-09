@@ -50,10 +50,10 @@ Achieved strict 100% branch coverage with proper v8 ignore annotations for TypeS
 
 ### Historical Issues
 
-| Date       | Issue                              | Resolution                                 |
-| ---------- | ---------------------------------- | ------------------------------------------ |
-| 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests          |
-| 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger                |
-| 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()        |
-| 2026-01-29 | No page access validation          | Added page preview internal endpoint       |
-| 2026-01-26 | Unused promptVaultPageId parameter | Removed from connect schema (INT-319)      |
+| Date       | Issue                              | Resolution                            |
+| ---------- | ---------------------------------- | ------------------------------------- |
+| 2026-01-31 | Branch coverage below 100%         | v8 ignore annotations + new tests     |
+| 2026-01-30 | Direct pino() usage (no Sentry)    | Migrated to createAppLogger           |
+| 2026-01-30 | Raw reply.send() in routes         | Migrated to reply.ok()/reply.fail()   |
+| 2026-01-29 | No page access validation          | Added page preview internal endpoint  |
+| 2026-01-26 | Unused promptVaultPageId parameter | Removed from connect schema (INT-319) |

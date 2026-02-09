@@ -166,21 +166,21 @@ Blocking arbitrary internet would cripple Claude's core functionality.
 - OR uses Docker-in-Docker (DinD)
 
 **Pros:**
-| Advantage              | Explanation                 |
+| Advantage | Explanation |
 | ---------------------- | --------------------------- |
-| Complete isolation     | Orchestrator also sandboxed |
-| Consistent environment | Same on Mac, Linux, VM      |
-| Easy deployment        | Single docker-compose up    |
-| No host dependencies   | Everything in container     |
+| Complete isolation | Orchestrator also sandboxed |
+| Consistent environment | Same on Mac, Linux, VM |
+| Easy deployment | Single docker-compose up |
+| No host dependencies | Everything in container |
 
 **Cons:**
-| Disadvantage            | Explanation                                    |
+| Disadvantage | Explanation |
 | ----------------------- | ---------------------------------------------- |
-| Docker socket security  | Mounting `/var/run/docker.sock` = root on host |
-| DinD complexity         | Nested Docker is fragile, slow                 |
-| Tmux challenges         | PTY allocation in containers is problematic    |
-| Debugging difficulty    | Cannot easily attach to worker                 |
-| Volume mount complexity | Worktrees need careful path mapping            |
+| Docker socket security | Mounting `/var/run/docker.sock` = root on host |
+| DinD complexity | Nested Docker is fragile, slow |
+| Tmux challenges | PTY allocation in containers is problematic |
+| Debugging difficulty | Cannot easily attach to worker |
+| Volume mount complexity | Worktrees need careful path mapping |
 
 **Security Rating:** ⚠️ MEDIUM - Docker socket mount undermines isolation
 
@@ -215,21 +215,21 @@ Blocking arbitrary internet would cripple Claude's core functionality.
 - No Docker socket in worker containers
 
 **Pros:**
-| Advantage           | Explanation                     |
+| Advantage | Explanation |
 | ------------------- | ------------------------------- |
-| Strong isolation    | Workers cannot escape container |
-| Simple orchestrator | No tmux-in-docker issues        |
-| Easy debugging      | Can attach to containers        |
-| Mature tooling      | Docker SDK well-documented      |
-| VM compatible       | Same pattern works in VMs       |
+| Strong isolation | Workers cannot escape container |
+| Simple orchestrator | No tmux-in-docker issues |
+| Easy debugging | Can attach to containers |
+| Mature tooling | Docker SDK well-documented |
+| VM compatible | Same pattern works in VMs |
 
 **Cons:**
-| Disadvantage      | Explanation                     |
+| Disadvantage | Explanation |
 | ----------------- | ------------------------------- |
-| Host exposure     | Orchestrator runs on host       |
+| Host exposure | Orchestrator runs on host |
 | Docker dependency | Host must have Docker installed |
-| Image management  | Need to build/push worker image |
-| Resource overhead | Each container has overhead     |
+| Image management | Need to build/push worker image |
+| Resource overhead | Each container has overhead |
 
 **Security Rating:** ✅ HIGH - Strong isolation boundary
 
@@ -264,21 +264,21 @@ Blocking arbitrary internet would cripple Claude's core functionality.
 - SSH-based communication
 
 **Pros:**
-| Advantage            | Explanation                  |
+| Advantage | Explanation |
 | -------------------- | ---------------------------- |
-| Maximum isolation    | Full hardware virtualization |
-| No container escapes | VM boundary is strong        |
-| Cloud-native         | Works with GCP, AWS          |
-| Snapshot capability  | Can restore VM state         |
+| Maximum isolation | Full hardware virtualization |
+| No container escapes | VM boundary is strong |
+| Cloud-native | Works with GCP, AWS |
+| Snapshot capability | Can restore VM state |
 
 **Cons:**
-| Disadvantage       | Explanation           |
+| Disadvantage | Explanation |
 | ------------------ | --------------------- |
-| Slow startup       | 30-60 seconds VM boot |
-| Higher cost        | Per-minute billing    |
-| Complex networking | VPC, firewall rules   |
-| Resource waste     | Full OS per task      |
-| Cold start latency | No container caching  |
+| Slow startup | 30-60 seconds VM boot |
+| Higher cost | Per-minute billing |
+| Complex networking | VPC, firewall rules |
+| Resource waste | Full OS per task |
+| Cold start latency | No container caching |
 
 **Security Rating:** ✅✅ HIGHEST - Hardware-level isolation
 
@@ -308,19 +308,19 @@ Production:
 - Same API, different backends
 
 **Pros:**
-| Advantage       | Explanation             |
+| Advantage | Explanation |
 | --------------- | ----------------------- |
-| Best of both    | Fast local, secure prod |
-| Cost efficiency | Docker free locally     |
-| Flexibility     | Choose per environment  |
-| Easy testing    | Local iteration fast    |
+| Best of both | Fast local, secure prod |
+| Cost efficiency | Docker free locally |
+| Flexibility | Choose per environment |
+| Easy testing | Local iteration fast |
 
 **Cons:**
-| Disadvantage         | Explanation                |
+| Disadvantage | Explanation |
 | -------------------- | -------------------------- |
-| Two implementations  | More code to maintain      |
-| Behavior differences | Container ≠ VM             |
-| Testing gap          | Local tests miss VM issues |
+| Two implementations | More code to maintain |
+| Behavior differences | Container ≠ VM |
+| Testing gap | Local tests miss VM issues |
 
 **Security Rating:** ✅ HIGH (varies by environment)
 
@@ -330,12 +330,12 @@ Production:
 
 | Criterion        | Option A (Orchestrator in Docker) | Option B (Workers in Docker) | Option C (VMs) | Option D (Hybrid) |
 | ---------------- | --------------------------------- | ---------------------------- | -------------- | ----------------- |
-| Security         | ⚠️ Medium                         | ✅ High                       | ✅✅ Highest     | ✅ High            |
-| Local dev speed  | ⚠️ Slow                           | ✅ Fast                       | ❌ Very slow    | ✅ Fast            |
-| Production ready | ⚠️ Complex                        | ✅ Yes                        | ✅ Yes          | ✅ Yes             |
-| VM compatibility | ❌ No                              | ✅ Yes                        | ✅ Native       | ✅ Native          |
-| Complexity       | ⚠️ High                           | ✅ Low                        | ⚠️ Medium      | ⚠️ Medium         |
-| Cost             | ✅ Low                             | ✅ Low                        | ⚠️ High        | ✅ Medium          |
+| Security         | ⚠️ Medium                         | ✅ High                      | ✅✅ Highest   | ✅ High           |
+| Local dev speed  | ⚠️ Slow                           | ✅ Fast                      | ❌ Very slow   | ✅ Fast           |
+| Production ready | ⚠️ Complex                        | ✅ Yes                       | ✅ Yes         | ✅ Yes            |
+| VM compatibility | ❌ No                             | ✅ Yes                       | ✅ Native      | ✅ Native         |
+| Complexity       | ⚠️ High                           | ✅ Low                       | ⚠️ Medium      | ⚠️ Medium         |
+| Cost             | ✅ Low                            | ✅ Low                       | ⚠️ High        | ✅ Medium         |
 
 **RECOMMENDED: Option D (Hybrid) with Option B for local, Option C for production**
 
@@ -1939,9 +1939,9 @@ These tests MUST be performed manually before production deployment.
 #### 6.3.1 Security Penetration Tests
 
 | Test ID | Test Name              | Steps                                                                                                               | Expected Result                          | Pass/Fail                      |
-| ------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------ |
+| ------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------ | --- |
 | SEC-001 | Host file read         | 1. Start worker container<br>2. Run: `cat /etc/shadow`<br>3. Observe output                                         | Permission denied or file not found      |                                |
-| SEC-002 | Host process list      | 1. Start worker container<br>2. Run: `ps aux \                                                                      | wc -l`<br>3. Observe count               | Less than 10 processes visible |  |
+| SEC-002 | Host process list      | 1. Start worker container<br>2. Run: `ps aux \                                                                      | wc -l`<br>3. Observe count               | Less than 10 processes visible |     |
 | SEC-003 | Docker socket access   | 1. Start worker container<br>2. Run: `ls -la /var/run/docker.sock`<br>3. Observe output                             | File not found                           |                                |
 | SEC-004 | Sudo escalation        | 1. Start worker container<br>2. Run: `sudo whoami`<br>3. Observe output                                             | sudo not found or permission denied      |                                |
 | SEC-005 | Capability check       | 1. Start worker container<br>2. Run: `capsh --print`<br>3. Observe output                                           | Current: = (empty)                       |                                |

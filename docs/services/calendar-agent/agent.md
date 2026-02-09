@@ -232,11 +232,11 @@ interface ServiceFeedback {
 
 ## Public Endpoints (Failed Events Management)
 
-| Method | Path                                | Purpose                        | Auth         |
-| ------ | ----------------------------------- | ------------------------------ | ------------ |
-| GET    | `/calendar/failed-events`           | List failed extractions        | Bearer token |
-| DELETE | `/calendar/failed-events/:id`       | Delete a failed event          | Bearer token |
-| POST   | `/calendar/failed-events/:id/retry` | Retry creating from failed     | Bearer token |
+| Method | Path                                | Purpose                    | Auth         |
+| ------ | ----------------------------------- | -------------------------- | ------------ |
+| GET    | `/calendar/failed-events`           | List failed extractions    | Bearer token |
+| DELETE | `/calendar/failed-events/:id`       | Delete a failed event      | Bearer token |
+| POST   | `/calendar/failed-events/:id/retry` | Retry creating from failed | Bearer token |
 
 ## Internal Endpoints
 

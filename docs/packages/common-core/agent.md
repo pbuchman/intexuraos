@@ -25,12 +25,27 @@ type Result<T, E = Error> =
 
 // errors.ts
 type ErrorCode =
-  | 'INVALID_REQUEST' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND'
-  | 'CONFLICT' | 'GONE' | 'PRECONDITION_FAILED' | 'UNPROCESSABLE_ENTITY'
-  | 'RATE_LIMITED' | 'LOCKED' | 'DOWNSTREAM_ERROR' | 'INTERNAL_ERROR'
-  | 'MISCONFIGURED' | 'WORKER_NOT_CONFIGURED' | 'INVALID_WORKER'
-  | 'WORKER_UNHEALTHY' | 'NOTION_NOT_CONNECTED' | 'PAGE_NOT_CONFIGURED'
-  | 'RESEARCH_NOT_COMPLETED' | 'NO_SYNTHESIS' | 'ALREADY_EXPORTED'
+  | 'INVALID_REQUEST'
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'CONFLICT'
+  | 'GONE'
+  | 'PRECONDITION_FAILED'
+  | 'UNPROCESSABLE_ENTITY'
+  | 'RATE_LIMITED'
+  | 'LOCKED'
+  | 'DOWNSTREAM_ERROR'
+  | 'INTERNAL_ERROR'
+  | 'MISCONFIGURED'
+  | 'WORKER_NOT_CONFIGURED'
+  | 'INVALID_WORKER'
+  | 'WORKER_UNHEALTHY'
+  | 'NOTION_NOT_CONNECTED'
+  | 'PAGE_NOT_CONFIGURED'
+  | 'RESEARCH_NOT_COMPLETED'
+  | 'NO_SYNTHESIS'
+  | 'ALREADY_EXPORTED'
   | 'NOTION_UNAUTHORIZED';
 
 interface SerializedError {
@@ -60,9 +75,16 @@ interface ServiceFeedback {
 
 // serviceErrorCodes.ts
 type ServiceErrorCode =
-  | 'TIMEOUT' | 'SERVICE_UNAVAILABLE' | 'AUTH_FAILED' | 'UNAUTHORIZED'
-  | 'VALIDATION_ERROR' | 'INVALID_INPUT' | 'DUPLICATE' | 'NOT_FOUND'
-  | 'EXTRACTION_FAILED' | 'EXTERNAL_API_ERROR';
+  | 'TIMEOUT'
+  | 'SERVICE_UNAVAILABLE'
+  | 'AUTH_FAILED'
+  | 'UNAUTHORIZED'
+  | 'VALIDATION_ERROR'
+  | 'INVALID_INPUT'
+  | 'DUPLICATE'
+  | 'NOT_FOUND'
+  | 'EXTRACTION_FAILED'
+  | 'EXTERNAL_API_ERROR';
 ```
 
 ## Exported Functions
@@ -82,7 +104,10 @@ function serializeError(error: unknown): SerializedError;
 function getLogLevel(): 'silent' | 'debug' | 'info' | 'warn' | 'error';
 
 // nullability.ts
-function ensureAllDefined<T>(values: readonly (T | null | undefined)[], fieldNames: readonly string[]): T[];
+function ensureAllDefined<T>(
+  values: readonly (T | null | undefined)[],
+  fieldNames: readonly string[]
+): T[];
 function getFirstOrNull<T>(arr: readonly T[]): T | null;
 function toDateOrNull(isoString: string | null | undefined): Date | null;
 function toISOStringOrNull(date: Date | null | undefined): string | null;
@@ -102,7 +127,10 @@ function traceIdHeaders(traceId: string): Record<string, string>;
 
 ```typescript
 const ERROR_HTTP_STATUS: Record<ErrorCode, number>;
-const ServiceErrorCodes: { TIMEOUT: 'TIMEOUT'; SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE'; /* ... */ };
+const ServiceErrorCodes: {
+  TIMEOUT: 'TIMEOUT';
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE'; /* ... */
+};
 const TRACE_ID_HEADER: 'X-Trace-Id';
 ```
 

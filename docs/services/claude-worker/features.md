@@ -30,6 +30,7 @@ Claude Worker wraps each Claude Code session in a purpose-built Docker container
 **User Goal:** Run an AI agent to implement a Linear ticket on a dedicated git branch
 
 **How it works:**
+
 1. The orchestrator receives a task assignment from the code-agent service
 2. It creates a git worktree for the task's branch and prepares a per-task secrets directory
 3. A claude-worker container starts with the worktree mounted at `/repo` and secrets at `/secrets`

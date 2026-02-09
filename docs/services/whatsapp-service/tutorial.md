@@ -201,12 +201,12 @@ function classifyIntent(text: string): 'approve' | 'reject' | 'ambiguous' {
 
 All three response types (buttons, text replies, reactions) produce the same `ApprovalReplyEvent`:
 
-| Response Type    | `replyText` | `buttonId`               | `actionId`         |
-| ---------------- | ----------- | ------------------------ | ------------------ |
-| Button tap       | "yes"/"no"  | `approve:act-123:a3f2`   | `act-123`          |
-| Text reply "yes" | "yes"       | undefined                | from correlationId |
-| Reaction `👍`    | "yes"       | undefined                | from correlationId |
-| Reaction `👎`    | "no"        | undefined                | from correlationId |
+| Response Type    | `replyText` | `buttonId`             | `actionId`         |
+| ---------------- | ----------- | ---------------------- | ------------------ |
+| Button tap       | "yes"/"no"  | `approve:act-123:a3f2` | `act-123`          |
+| Text reply "yes" | "yes"       | undefined              | from correlationId |
+| Reaction `👍`    | "yes"       | undefined              | from correlationId |
+| Reaction `👎`    | "no"        | undefined              | from correlationId |
 
 Other emojis are ignored (not published as approval events).
 

@@ -188,7 +188,6 @@ async function bootstrap(): Promise<void> {
       repositoryPath: repoPath,
       worktreeBasePath: config.worktreeBasePath,
       mcpConfigTemplatePath: join(repoPath, '.mcp.json'),
-      claudeSettings: { outputStyle: 'Explanatory' },
     },
     logger
   );
@@ -205,7 +204,12 @@ async function bootstrap(): Promise<void> {
 
   // Create Docker isolation provider
   const secretsBasePath = join(orchestratorDir, 'secrets');
-  const isolationProvider = createIsolationProvider({ secretsBasePath }, logger);
+  const gcpSaKeyPath = getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS');
+  const keepContainersAlive = process.env['KEEP_CONTAINERS_ALIVE'] === '1';
+  if (keepContainersAlive) {
+    logger.info('Debug mode: containers will be kept alive after task completion');
+  }
+  const isolationProvider = await createIsolationProvider({ secretsBasePath, gcpSaKeyPath, keepContainersAlive }, logger);
   const tokenRefresher = new TokenRefresher(
     {
       secretsBasePath,
@@ -229,7 +233,7 @@ async function bootstrap(): Promise<void> {
       SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
       ZAI_API_KEY: getOptionalEnv('INTEXURAOS_ZAI_API_KEY', ''),
     },
-    gcpSaKeyPath: getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS'),
+    gcpSaKeyPath,
     githubAppKeyPath: config.githubAppPrivateKeyPath,
   };
 

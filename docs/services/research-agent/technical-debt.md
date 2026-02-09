@@ -81,16 +81,16 @@ Comprehensive test coverage across all layers with 100% branch coverage enforced
 
 ### v2.2.0 Test Additions
 
-| File                                           | Coverage | Notes                                          |
-| ---------------------------------------------- | -------- | ---------------------------------------------- |
-| `notionResearchExporter.test.ts`               | 100%     | Full Notion page creation with batch append    |
-| `markdownToNotionBlocks.test.ts`               | 100%     | All markdown elements and inline formatting    |
-| `researchExportSettingsRepository.test.ts`     | 100%     | Firestore CRUD for export settings             |
-| `notionServiceClient.test.ts`                  | 100%     | Token fetch and error handling                 |
-| `notionServiceClient.pagePreview.test.ts`      | 100%     | Page preview with error scenarios              |
-| `exportResearchToNotionUseCase.test.ts`        | 100%     | Fire-and-forget use case with all skip paths   |
-| `researchExportRoutes.test.ts`                 | 100%     | Settings GET/POST and validate endpoints       |
-| `toggleResearchFavourite.test.ts`              | 100%     | Favourite toggle with error branches           |
+| File                                       | Coverage | Notes                                        |
+| ------------------------------------------ | -------- | -------------------------------------------- |
+| `notionResearchExporter.test.ts`           | 100%     | Full Notion page creation with batch append  |
+| `markdownToNotionBlocks.test.ts`           | 100%     | All markdown elements and inline formatting  |
+| `researchExportSettingsRepository.test.ts` | 100%     | Firestore CRUD for export settings           |
+| `notionServiceClient.test.ts`              | 100%     | Token fetch and error handling               |
+| `notionServiceClient.pagePreview.test.ts`  | 100%     | Page preview with error scenarios            |
+| `exportResearchToNotionUseCase.test.ts`    | 100%     | Fire-and-forget use case with all skip paths |
+| `researchExportRoutes.test.ts`             | 100%     | Settings GET/POST and validate endpoints     |
+| `toggleResearchFavourite.test.ts`          | 100%     | Favourite toggle with error branches         |
 
 ### v2.0.0 Test Additions
 
@@ -166,29 +166,29 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 
 ### 2026-02-08 - Notion Export Integration
 
-| Date       | Issue                              | Resolution                                          |
-| ---------- | ---------------------------------- | --------------------------------------------------- |
-| 2026-02-08 | No Notion export capability        | Added automatic + manual export with page hierarchy |
-| 2026-02-08 | No export settings management      | Added Firestore-backed settings with validation     |
-| 2026-02-08 | Cover image missing in Notion      | Fixed export ordering (after DB save)               |
+| Date       | Issue                         | Resolution                                          |
+| ---------- | ----------------------------- | --------------------------------------------------- |
+| 2026-02-08 | No Notion export capability   | Added automatic + manual export with page hierarchy |
+| 2026-02-08 | No export settings management | Added Firestore-backed settings with validation     |
+| 2026-02-08 | Cover image missing in Notion | Fixed export ordering (after DB save)               |
 
 ### 2026-02-08 - Auth0 Claims Namespace
 
-| Date       | Issue                              | Resolution                                       |
-| ---------- | ---------------------------------- | ------------------------------------------------ |
-| 2026-02-08 | Missing name/email in API tokens   | Added namespace prefix lookup with bare fallback |
+| Date       | Issue                            | Resolution                                       |
+| ---------- | -------------------------------- | ------------------------------------------------ |
+| 2026-02-08 | Missing name/email in API tokens | Added namespace prefix lookup with bare fallback |
 
 ### 2026-02-08 - Response Contract Standardization
 
-| Date       | Issue                               | Resolution                                       |
-| ---------- | ----------------------------------- | ------------------------------------------------ |
-| 2026-02-08 | Raw reply.send() in internal routes | Migrated to reply.ok()/reply.fail()              |
+| Date       | Issue                               | Resolution                          |
+| ---------- | ----------------------------------- | ----------------------------------- |
+| 2026-02-08 | Raw reply.send() in internal routes | Migrated to reply.ok()/reply.fail() |
 
 ### 2026-02-08 - Coverage Enforcement (INT-427)
 
-| Date       | Issue                              | Resolution                                       |
-| ---------- | ---------------------------------- | ------------------------------------------------ |
-| 2026-02-08 | 95% threshold too lenient          | Enforced 100% with v8 ignore exemptions          |
+| Date       | Issue                     | Resolution                              |
+| ---------- | ------------------------- | --------------------------------------- |
+| 2026-02-08 | 95% threshold too lenient | Enforced 100% with v8 ignore exemptions |
 
 ### 2026-01-25 - INT-218 Input Validation Zod Migration
 

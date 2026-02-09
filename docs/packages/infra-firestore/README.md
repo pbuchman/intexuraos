@@ -82,16 +82,17 @@ interface FakeFirestoreConfig {
 
 ### Environment Variables
 
-| Variable                        | Description                                | Required     |
-| ------------------------------- | ------------------------------------------ | ------------ |
-| `INTEXURAOS_GCP_PROJECT_ID`     | Google Cloud project ID                    | Yes          |
-| `FIRESTORE_EMULATOR_HOST`       | Firestore emulator host (local dev only)   | No           |
+| Variable                    | Description                              | Required |
+| --------------------------- | ---------------------------------------- | -------- |
+| `INTEXURAOS_GCP_PROJECT_ID` | Google Cloud project ID                  | Yes      |
+| `FIRESTORE_EMULATOR_HOST`   | Firestore emulator host (local dev only) | No       |
 
 ## Error Handling
 
 `getFirestore()` throws a synchronous `Error` if `INTEXURAOS_GCP_PROJECT_ID` is undefined. All Firestore operations propagate standard `@google-cloud/firestore` errors.
 
 The fake implementation throws `Error` when:
+
 - `update()` or transaction `update()` targets a nonexistent document
 - `configure({ errorToThrow })` injects a specific error
 

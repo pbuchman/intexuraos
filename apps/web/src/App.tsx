@@ -121,6 +121,11 @@ function BookmarkDetailRedirect(): React.JSX.Element {
   return <Navigate to={`/my-bookmarks?id=${id ?? ''}`} replace />;
 }
 
+function CodeTaskDetailPageKeyed(): React.JSX.Element {
+  const { id } = useParams<{ id: string }>();
+  return <CodeTaskDetailPage key={id} />;
+}
+
 function AppRoutes(): React.JSX.Element {
   return (
     <Routes>
@@ -235,7 +240,7 @@ function AppRoutes(): React.JSX.Element {
         path="/code-tasks/:id"
         element={
           <ProtectedRoute>
-            <CodeTaskDetailPage />
+            <CodeTaskDetailPageKeyed />
           </ProtectedRoute>
         }
       />

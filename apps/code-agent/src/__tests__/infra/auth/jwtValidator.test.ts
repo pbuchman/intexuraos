@@ -31,7 +31,7 @@ describe('createJwtValidator', () => {
   };
 
   beforeEach(() => {
-    logger = pino({ name: 'test' }) as unknown as Logger;
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
     vi.clearAllMocks();
     // Reset to default mock (rejects)
     mockedJwtVerify.mockRejectedValue(new Error('JWT verification failed'));
@@ -193,7 +193,7 @@ describe('createE2eJwtValidator', () => {
   let logger: Logger;
 
   beforeEach(() => {
-    logger = pino({ name: 'test' }) as unknown as Logger;
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
     vi.clearAllMocks();
   });
 

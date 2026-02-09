@@ -46,7 +46,10 @@ import { createPricingContext } from '@intexuraos/llm-pricing';
 const context = createPricingContext(allPricing);
 
 // Validate only models this service uses
-const context = createPricingContext(allPricing, ['gemini-2.5-flash', 'claude-sonnet-4-5-20250929']);
+const context = createPricingContext(allPricing, [
+  'gemini-2.5-flash',
+  'claude-sonnet-4-5-20250929',
+]);
 ```
 
 #### `PricingContext` class
@@ -55,10 +58,10 @@ Runtime pricing lookup with O(1) access via internal `Map<LLMModel, ModelPricing
 
 ```typescript
 interface IPricingContext {
-  getPricing(model: LLMModel): ModelPricing;         // throws if not found
+  getPricing(model: LLMModel): ModelPricing; // throws if not found
   hasPricing(model: LLMModel): boolean;
-  validateModels(models: LLMModel[]): void;           // throws listing missing
-  validateAllModels(): void;                           // validates all 16 models
+  validateModels(models: LLMModel[]): void; // throws listing missing
+  validateAllModels(): void; // validates all 16 models
   getModelsWithPricing(): LLMModel[];
 }
 ```
@@ -116,8 +119,12 @@ Legacy standalone function. Uses a silent logger internally. Migrate to `createU
 ### Types
 
 ```typescript
-type CallType = 'research' | 'generate' | 'image_generation'
-  | 'visualization_insights' | 'visualization_vegalite';
+type CallType =
+  | 'research'
+  | 'generate'
+  | 'image_generation'
+  | 'visualization_insights'
+  | 'visualization_vegalite';
 
 interface UsageLogParams {
   userId: string;
@@ -160,7 +167,11 @@ interface LlmPricing {
 ### Test Fixtures (`testFixtures.ts`)
 
 ```typescript
-import { TEST_PRICING, TEST_IMAGE_PRICING, createFakePricingContext } from '@intexuraos/llm-pricing';
+import {
+  TEST_PRICING,
+  TEST_IMAGE_PRICING,
+  createFakePricingContext,
+} from '@intexuraos/llm-pricing';
 
 const fakePricing = createFakePricingContext();
 fakePricing.getPricing('gemini-2.5-flash');
@@ -177,22 +188,22 @@ fakePricing.getPricing('gemini-2.5-flash');
 
 ## Recent Changes
 
-| Commit   | Description                                          | Age     |
-| -------- | ---------------------------------------------------- | ------- |
-| 641eee12 | Fix duplicate Content-Type header in predev proxy    | 5 days  |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner     | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions       | 12 days |
-| 6acb3fc0 | Add tests for 95% branch coverage                    | 13 days |
-| 4fa0fed3 | Release v2.0.0                                       | 2 weeks |
-| 2c3a98ce | Add GLM-4.7-Flash support as free Zai AI model       | 3 weeks |
-| a87cf2b5 | Make logger mandatory in llm-pricing package          | 3 weeks |
+| Commit   | Description                                       | Age     |
+| -------- | ------------------------------------------------- | ------- |
+| 641eee12 | Fix duplicate Content-Type header in predev proxy | 5 days  |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner  | 7 days  |
+| 21c1528a | Fix release skill to bump all package versions    | 12 days |
+| 6acb3fc0 | Add tests for 95% branch coverage                 | 13 days |
+| 4fa0fed3 | Release v2.0.0                                    | 2 weeks |
+| 2c3a98ce | Add GLM-4.7-Flash support as free Zai AI model    | 3 weeks |
+| a87cf2b5 | Make logger mandatory in llm-pricing package      | 3 weeks |
 
 ## Source Files
 
-| File                   | Purpose                                              |
-| ---------------------- | ---------------------------------------------------- |
-| `src/index.ts`         | Re-exports all public APIs                           |
-| `src/types.ts`         | LlmPricing and LlmProvider types                     |
+| File                   | Purpose                                               |
+| ---------------------- | ----------------------------------------------------- |
+| `src/index.ts`         | Re-exports all public APIs                            |
+| `src/types.ts`         | LlmPricing and LlmProvider types                      |
 | `src/pricingClient.ts` | fetchAllPricing, PricingContext, createPricingContext |
-| `src/usageLogger.ts`   | UsageLogger class, logUsage, isUsageLoggingEnabled   |
+| `src/usageLogger.ts`   | UsageLogger class, logUsage, isUsageLoggingEnabled    |
 | `src/testFixtures.ts`  | TEST_PRICING, FakePricingContext for tests            |

@@ -78,11 +78,11 @@ The orchestrator supports configurable capacity (default: 2 concurrent tasks):
 
 ## Worker Types
 
-| Type   | Provider  | Model                       | Use Case                |
-| ------ | --------- | --------------------------- | ----------------------- |
-| `opus` | Anthropic | `claude-opus-4-5-20251101`  | Complex code tasks      |
-| `auto` | Anthropic | (default, API-selected)     | General-purpose tasks   |
-| `glm`  | ZAI       | (API-selected GLM variant)  | Cost-efficient tasks    |
+| Type   | Provider  | Model                      | Use Case              |
+| ------ | --------- | -------------------------- | --------------------- |
+| `opus` | Anthropic | `claude-opus-4-5-20251101` | Complex code tasks    |
+| `auto` | Anthropic | (default, API-selected)    | General-purpose tasks |
+| `glm`  | ZAI       | (API-selected GLM variant) | Cost-efficient tasks  |
 
 ## Benefits
 

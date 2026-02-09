@@ -14,8 +14,15 @@
 export function createNotionClient(token: string, logger: NotionLogger): Client;
 
 // Utilities
-export function validateNotionToken(token: string, logger: NotionLogger): Promise<Result<boolean, NotionError>>;
-export function getPageWithPreview(token: string, pageId: string, logger: NotionLogger): Promise<Result<NotionPagePreview, NotionError>>;
+export function validateNotionToken(
+  token: string,
+  logger: NotionLogger
+): Promise<Result<boolean, NotionError>>;
+export function getPageWithPreview(
+  token: string,
+  pageId: string,
+  logger: NotionLogger
+): Promise<Result<NotionPagePreview, NotionError>>;
 export function extractPageTitle(properties: Record<string, unknown>): string;
 export function mapNotionError(error: unknown): NotionError;
 
@@ -35,7 +42,12 @@ interface NotionLogger {
   debug: (msg: string, data?: Record<string, unknown>) => void;
 }
 
-type NotionErrorCode = 'NOT_FOUND' | 'UNAUTHORIZED' | 'RATE_LIMITED' | 'VALIDATION_ERROR' | 'INTERNAL_ERROR';
+type NotionErrorCode =
+  | 'NOT_FOUND'
+  | 'UNAUTHORIZED'
+  | 'RATE_LIMITED'
+  | 'VALIDATION_ERROR'
+  | 'INTERNAL_ERROR';
 
 interface NotionError {
   code: NotionErrorCode;
@@ -94,11 +106,11 @@ const response = await notion.databases.query({ database_id: dbId });
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'UNAUTHORIZED':      // invalid token
-    case 'NOT_FOUND':         // page/block not found
-    case 'RATE_LIMITED':      // API rate limit
-    case 'VALIDATION_ERROR':  // bad request
-    case 'INTERNAL_ERROR':    // unexpected
+    case 'UNAUTHORIZED': // invalid token
+    case 'NOT_FOUND': // page/block not found
+    case 'RATE_LIMITED': // API rate limit
+    case 'VALIDATION_ERROR': // bad request
+    case 'INTERNAL_ERROR': // unexpected
   }
 }
 ```

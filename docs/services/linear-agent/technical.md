@@ -185,23 +185,27 @@ sequenceDiagram
 Major expansion adding programmatic issue management for code agents:
 
 **New Use Cases:**
+
 - `generateIssueTitle` - LLM-powered title generation with Zod schema validation and fallback pipeline
 - `validateIssue` - Validates issue identifier format, existence, and team ownership
 - `fullSync` / `fullSyncAllUsers` - Full reconciliation of Linear issues to local Firestore
 - `syncSingleIssue` - Process individual webhook events (create/update/remove)
 
 **New Domain Models:**
+
 - `SyncedLinearIssue` - Locally synced issue with assignee, labels, and sync timestamp
 - `LinearIssueWithTeam` - API issue enriched with team ID, labels, and child count
 - `WorkflowState` - Linear workflow state for state transitions
 - `LinearWebhookEvent` / `LinearWebhookPayload` - Typed webhook event structures
 
 **New Infrastructure:**
+
 - `linearIssueRepository` (Firestore) - CRUD for synced issues
 - `linearWebhookValidation` - HMAC-SHA256 signature verification
 - `issueMapper` - Maps webhook/API payloads to `SyncedLinearIssue`
 
 **New Routes:**
+
 - `linearWebhookRoutes.ts` - Webhook endpoint with multi-tenant routing
 - `internalIssuesRoutes.ts` - Service-to-service issue creation and state updates
 
@@ -220,47 +224,47 @@ Added bidirectional sync through Linear webhooks:
 
 ### Public Endpoints
 
-| Method | Path                              | Purpose                            | Auth   |
-| ------ | --------------------------------- | ---------------------------------- | ------ |
-| GET    | `/linear/connection`              | Get user's connection status       | Bearer |
-| POST   | `/linear/connection/validate`     | Validate API key, get teams        | None   |
-| POST   | `/linear/connection`              | Save connection configuration      | Bearer |
-| DELETE | `/linear/connection`              | Disconnect from Linear             | Bearer |
-| GET    | `/linear/issues`                  | List issues grouped by column      | Bearer |
-| GET    | `/linear/failed-issues`           | List failed extractions            | Bearer |
-| DELETE | `/linear/failed-issues/:id`       | Delete a failed extraction         | Bearer |
-| POST   | `/linear/failed-issues/:id/retry` | Retry a failed extraction          | Bearer |
-| POST   | `/linear/sync`                    | Trigger full issue sync            | Bearer |
-| GET    | `/linear/webhook-config`          | Get webhook URL and secret status  | Bearer |
-| POST   | `/linear/webhook-config`          | Set webhook signing secret         | Bearer |
-| DELETE | `/linear/webhook-config`          | Remove webhook signing secret      | Bearer |
+| Method | Path                              | Purpose                           | Auth   |
+| ------ | --------------------------------- | --------------------------------- | ------ |
+| GET    | `/linear/connection`              | Get user's connection status      | Bearer |
+| POST   | `/linear/connection/validate`     | Validate API key, get teams       | None   |
+| POST   | `/linear/connection`              | Save connection configuration     | Bearer |
+| DELETE | `/linear/connection`              | Disconnect from Linear            | Bearer |
+| GET    | `/linear/issues`                  | List issues grouped by column     | Bearer |
+| GET    | `/linear/failed-issues`           | List failed extractions           | Bearer |
+| DELETE | `/linear/failed-issues/:id`       | Delete a failed extraction        | Bearer |
+| POST   | `/linear/failed-issues/:id/retry` | Retry a failed extraction         | Bearer |
+| POST   | `/linear/sync`                    | Trigger full issue sync           | Bearer |
+| GET    | `/linear/webhook-config`          | Get webhook URL and secret status | Bearer |
+| POST   | `/linear/webhook-config`          | Set webhook signing secret        | Bearer |
+| DELETE | `/linear/webhook-config`          | Remove webhook signing secret     | Bearer |
 
 ### Webhook Endpoints
 
-| Method | Path               | Purpose                           | Auth                    |
-| ------ | ------------------ | --------------------------------- | ----------------------- |
-| POST   | `/linear/webhook`  | Receive Linear webhook events     | HMAC-SHA256 (per-team)  |
+| Method | Path              | Purpose                       | Auth                   |
+| ------ | ----------------- | ----------------------------- | ---------------------- |
+| POST   | `/linear/webhook` | Receive Linear webhook events | HMAC-SHA256 (per-team) |
 
 ### Internal Endpoints
 
-| Method | Path                                  | Purpose                            | Auth       |
-| ------ | ------------------------------------- | ---------------------------------- | ---------- |
-| POST   | `/internal/linear/process-action`     | Process action via AI extraction   | X-Internal |
-| POST   | `/internal/issues`                    | Create a Linear issue              | X-Internal |
-| PATCH  | `/internal/issues/:issueId/state`     | Update issue workflow state        | X-Internal |
+| Method | Path                              | Purpose                          | Auth       |
+| ------ | --------------------------------- | -------------------------------- | ---------- |
+| POST   | `/internal/linear/process-action` | Process action via AI extraction | X-Internal |
+| POST   | `/internal/issues`                | Create a Linear issue            | X-Internal |
+| PATCH  | `/internal/issues/:issueId/state` | Update issue workflow state      | X-Internal |
 
 ### GET /linear/issues Response
 
 ```typescript
 interface ListIssuesResponse {
   issues: {
-    todo: LinearIssue[];       // Issues in "Todo" state
-    backlog: LinearIssue[];    // Issues in "Backlog" state
+    todo: LinearIssue[]; // Issues in "Todo" state
+    backlog: LinearIssue[]; // Issues in "Backlog" state
     in_progress: LinearIssue[]; // Issues being worked on
-    in_review: LinearIssue[];  // Issues in code review
-    to_test: LinearIssue[];    // Issues awaiting QA
-    done: LinearIssue[];       // Completed in last 7 days
-    archive: LinearIssue[];    // Older completed issues
+    in_review: LinearIssue[]; // Issues in code review
+    to_test: LinearIssue[]; // Issues awaiting QA
+    done: LinearIssue[]; // Completed in last 7 days
+    archive: LinearIssue[]; // Older completed issues
   };
   teamName: string;
 }
@@ -273,13 +277,13 @@ interface ListIssuesResponse {
 interface CreateIssueBody {
   title: string;
   description: string;
-  labels?: string[];  // Accepted for future use
+  labels?: string[]; // Accepted for future use
 }
 
 // Response
 interface IssueResponse {
   id: string;
-  identifier: string;  // e.g., "INT-123"
+  identifier: string; // e.g., "INT-123"
   title: string;
   url: string;
 }
@@ -302,10 +306,10 @@ State names are mapped to Linear workflow state names: `backlog` -> "Backlog", `
 ```typescript
 interface LinearIssue {
   id: string;
-  identifier: string;  // e.g., "INT-123"
+  identifier: string; // e.g., "INT-123"
   title: string;
   description: string | null;
-  priority: 0 | 1 | 2 | 3 | 4;  // 0=none, 1=urgent, 4=low
+  priority: 0 | 1 | 2 | 3 | 4; // 0=none, 1=urgent, 4=low
   state: {
     id: string;
     name: string;
@@ -323,8 +327,8 @@ interface LinearIssue {
 ```typescript
 interface LinearIssueWithTeam extends LinearIssue {
   teamId: string;
-  labels: string[];     // Label names (e.g., ['bug', 'code-task'])
-  childCount: number;   // Number of child issues (subtasks)
+  labels: string[]; // Label names (e.g., ['bug', 'code-task'])
+  childCount: number; // Number of child issues (subtasks)
 }
 ```
 
@@ -334,21 +338,21 @@ Used by `validateIssue` and `getIssueByIdentifier` for team ownership verificati
 
 ```typescript
 interface SyncedLinearIssue {
-  id: string;             // Linear UUID (document ID)
-  identifier: string;     // e.g., "INT-444"
+  id: string; // Linear UUID (document ID)
+  identifier: string; // e.g., "INT-444"
   title: string;
   description: string | null;
-  state: string;          // State name e.g., "In Progress"
+  state: string; // State name e.g., "In Progress"
   stateType: IssueStateCategory;
   priority: LinearPriority;
   assigneeId: string | null;
   assigneeName: string | null;
   labels: string[];
   url: string;
-  userId: string;         // Owner user ID (for multi-tenant)
-  createdAt: string;      // ISO timestamp from Linear
-  updatedAt: string;      // ISO timestamp from Linear
-  syncedAt: string;       // When we last synced this issue
+  userId: string; // Owner user ID (for multi-tenant)
+  createdAt: string; // ISO timestamp from Linear
+  updatedAt: string; // ISO timestamp from Linear
+  syncedAt: string; // When we last synced this issue
 }
 ```
 
@@ -399,7 +403,7 @@ interface LinearConnection {
   apiKey: string;
   teamId: string;
   teamName: string;
-  webhookSecret: string | null;  // Per-connection webhook signing secret
+  webhookSecret: string | null; // Per-connection webhook signing secret
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -433,7 +437,7 @@ interface FailedLinearIssue {
   error: string;
   reasoning: string | null;
   createdAt: string;
-  lastRetryAt?: string;  // Tracks retry attempts
+  lastRetryAt?: string; // Tracks retry attempts
 }
 ```
 
@@ -444,7 +448,7 @@ interface ProcessedAction {
   actionId: string;
   userId: string;
   issueId: string;
-  issueIdentifier: string;  // e.g., "INT-123"
+  issueIdentifier: string; // e.g., "INT-123"
   resourceUrl: string;
   createdAt: string;
 }
@@ -509,12 +513,12 @@ Processes a single webhook event. Maps the webhook payload to `SyncedLinearIssue
 
 ## Firestore Collections
 
-| Collection               | Owner        | Purpose                          |
-| ------------------------ | ------------ | -------------------------------- |
-| `linearConnections`      | linear-agent | User Linear API credentials      |
-| `failedLinearIssues`     | linear-agent | Failed extraction records        |
-| `processedLinearActions` | linear-agent | Idempotency tracking             |
-| `syncedLinearIssues`     | linear-agent | Locally synced issue data        |
+| Collection               | Owner        | Purpose                     |
+| ------------------------ | ------------ | --------------------------- |
+| `linearConnections`      | linear-agent | User Linear API credentials |
+| `failedLinearIssues`     | linear-agent | Failed extraction records   |
+| `processedLinearActions` | linear-agent | Idempotency tracking        |
+| `syncedLinearIssues`     | linear-agent | Locally synced issue data   |
 
 ## AI Integration
 
@@ -606,11 +610,11 @@ The Linear API client includes performance optimizations (INT-95):
 
 ### New API Methods
 
-| Method                 | Purpose                                        |
-| ---------------------- | ---------------------------------------------- |
-| `getIssueByIdentifier` | Fetch issue by identifier with team ID         |
-| `updateIssueState`     | Transition issue to a new workflow state       |
-| `getWorkflowStates`    | List available workflow states for a team      |
+| Method                 | Purpose                                   |
+| ---------------------- | ----------------------------------------- |
+| `getIssueByIdentifier` | Fetch issue by identifier with team ID    |
+| `updateIssueState`     | Transition issue to a new workflow state  |
+| `getWorkflowStates`    | List available workflow states for a team |
 
 ## Configuration
 
@@ -628,21 +632,21 @@ The Linear API client includes performance optimizations (INT-95):
 
 ### Internal Services
 
-| Service              | Endpoint                    | Purpose                  |
-| -------------------- | --------------------------- | ------------------------ |
-| user-service         | `/internal/user/llm-client` | LLM API key retrieval    |
-| app-settings-service | `/internal/pricing`         | LLM pricing data         |
-| actions-agent        | (caller)                    | Upstream orchestrator    |
-| code-agent           | (caller)                    | Programmatic issue mgmt  |
+| Service              | Endpoint                    | Purpose                 |
+| -------------------- | --------------------------- | ----------------------- |
+| user-service         | `/internal/user/llm-client` | LLM API key retrieval   |
+| app-settings-service | `/internal/pricing`         | LLM pricing data        |
+| actions-agent        | (caller)                    | Upstream orchestrator   |
+| code-agent           | (caller)                    | Programmatic issue mgmt |
 
 ### External Services
 
-| Service         | Purpose                         | Failure Mode              |
-| --------------- | ------------------------------- | ------------------------- |
-| Linear API      | Issue CRUD, team/state queries  | Return error to client    |
-| Linear Webhooks | Real-time issue change events   | Retry by Linear           |
-| Gemini API      | Issue data extraction           | Return extraction error   |
-| GLM API         | Alternative extraction provider | Fallback available        |
+| Service         | Purpose                         | Failure Mode            |
+| --------------- | ------------------------------- | ----------------------- |
+| Linear API      | Issue CRUD, team/state queries  | Return error to client  |
+| Linear Webhooks | Real-time issue change events   | Retry by Linear         |
+| Gemini API      | Issue data extraction           | Return extraction error |
+| GLM API         | Alternative extraction provider | Fallback available      |
 
 ## Error Handling
 

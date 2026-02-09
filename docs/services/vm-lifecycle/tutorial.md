@@ -12,9 +12,9 @@ Managing VM start/stop schedules and manual operations.
 
 The VM follows an automated schedule managed by Cloud Scheduler:
 
-| Event | Schedule                      | Timezone       |
-| ----- | ----------------------------- | -------------- |
-| Start | 7 AM Monday-Friday            | Europe/Warsaw  |
+| Event | Schedule                         | Timezone      |
+| ----- | -------------------------------- | ------------- |
+| Start | 7 AM Monday-Friday               | Europe/Warsaw |
 | Stop  | 11 PM daily (including weekends) | Europe/Warsaw |
 
 On weekends, the VM remains stopped because only the stop scheduler runs daily. The start scheduler runs only on weekdays.
@@ -97,27 +97,27 @@ gcloud functions logs read intexuraos-vm-stop-dev \
 
 **Key log messages for startVm:**
 
-| Message                                | Meaning                                   |
-| -------------------------------------- | ----------------------------------------- |
-| "Starting VM instance"                 | Function invoked                          |
-| "Current VM status"                    | Fetched VM state from Compute API         |
+| Message                                | Meaning                                    |
+| -------------------------------------- | ------------------------------------------ |
+| "Starting VM instance"                 | Function invoked                           |
+| "Current VM status"                    | Fetched VM state from Compute API          |
 | "VM running but unhealthy, restarting" | Running VM failed health check, restarting |
-| "Start operation initiated"            | GCE start command sent                    |
-| "VM reached RUNNING state"             | VM is in RUNNING state                    |
-| "VM health check passed"              | Application is ready                      |
-| "Health check timed out"              | 3-minute timeout reached without ready    |
+| "Start operation initiated"            | GCE start command sent                     |
+| "VM reached RUNNING state"             | VM is in RUNNING state                     |
+| "VM health check passed"               | Application is ready                       |
+| "Health check timed out"               | 3-minute timeout reached without ready     |
 
 **Key log messages for stopVm:**
 
-| Message                                      | Meaning                                  |
-| -------------------------------------------- | ---------------------------------------- |
-| "Initiating VM shutdown"                     | Function invoked                         |
-| "Orchestrator acknowledged shutdown"         | Orchestrator received shutdown notice    |
-| "Waiting for running tasks to complete"      | Tasks still running, waiting             |
-| "All tasks completed or orchestrator shutting down" | Safe to stop                      |
-| "Orchestrator unresponsive, proceeding"      | 2-minute timeout, forced shutdown        |
-| "Grace period expired"                       | 10-minute wait ended, forcing stop       |
-| "Stop operation initiated"                   | GCE stop command sent                    |
+| Message                                             | Meaning                               |
+| --------------------------------------------------- | ------------------------------------- |
+| "Initiating VM shutdown"                            | Function invoked                      |
+| "Orchestrator acknowledged shutdown"                | Orchestrator received shutdown notice |
+| "Waiting for running tasks to complete"             | Tasks still running, waiting          |
+| "All tasks completed or orchestrator shutting down" | Safe to stop                          |
+| "Orchestrator unresponsive, proceeding"             | 2-minute timeout, forced shutdown     |
+| "Grace period expired"                              | 10-minute wait ended, forcing stop    |
+| "Stop operation initiated"                          | GCE stop command sent                 |
 
 ## Part 5: Check VM Status Directly
 
@@ -153,12 +153,12 @@ gcloud scheduler jobs run intexuraos-vm-start-dev \
 
 ## Troubleshooting
 
-| Issue                                    | Cause                              | Solution                                    |
-| ---------------------------------------- | ---------------------------------- | ------------------------------------------- |
-| 401 Unauthorized                         | Missing or wrong auth token        | Verify `X-Internal-Auth` header value       |
-| 405 Method not allowed                   | Used GET instead of POST           | Send a POST request                         |
-| "VM started but health check timed out"  | Application did not report ready   | SSH into VM and check application logs      |
-| "Failed to start VM"                     | Compute API error                  | Check IAM permissions and quotas            |
-| VM does not start on schedule            | Scheduler job paused               | Resume the scheduler job in GCP Console     |
-| Shutdown takes > 10 minutes              | Tasks exceeded grace period        | Check orchestrator for stuck tasks          |
-| "Orchestrator unresponsive"              | Application crashed before stop    | Forced shutdown proceeds; investigate later |
+| Issue                                   | Cause                            | Solution                                    |
+| --------------------------------------- | -------------------------------- | ------------------------------------------- |
+| 401 Unauthorized                        | Missing or wrong auth token      | Verify `X-Internal-Auth` header value       |
+| 405 Method not allowed                  | Used GET instead of POST         | Send a POST request                         |
+| "VM started but health check timed out" | Application did not report ready | SSH into VM and check application logs      |
+| "Failed to start VM"                    | Compute API error                | Check IAM permissions and quotas            |
+| VM does not start on schedule           | Scheduler job paused             | Resume the scheduler job in GCP Console     |
+| Shutdown takes > 10 minutes             | Tasks exceeded grace period      | Check orchestrator for stuck tasks          |
+| "Orchestrator unresponsive"             | Application crashed before stop  | Forced shutdown proceeds; investigate later |

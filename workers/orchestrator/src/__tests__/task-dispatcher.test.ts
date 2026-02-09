@@ -13,6 +13,12 @@ import type { OrchestratorState } from '../types/state.js';
 import type { IsolationProvider, WorkerHandle } from '../services/isolation/types.js';
 import type { TokenRefresher } from '../services/isolation/token-refresher.js';
 
+const flushAsync = async (): Promise<void> => {
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+};
+
 const createMockChildProcess = (): ChildProcess =>
   ({
     pid: 12345,
@@ -208,6 +214,7 @@ describe('TaskDispatcher', () => {
       };
 
       const result = await dispatcher.submitTask(request);
+      await flushAsync();
 
       expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(1);
@@ -229,6 +236,7 @@ describe('TaskDispatcher', () => {
           hasChildren: false,
         };
         await dispatcher.submitTask(request);
+        await flushAsync();
       }
 
       // Try to submit one more
@@ -251,7 +259,7 @@ describe('TaskDispatcher', () => {
       expect(dispatcher.getRunningCount()).toBe(5);
     });
 
-    it('should handle worktree creation failure', async () => {
+    it('should handle worktree creation failure via webhook', async () => {
       vi.mocked(mockWorktreeManager.createWorktree).mockRejectedValueOnce(
         new Error('Failed to create worktree')
       );
@@ -267,12 +275,19 @@ describe('TaskDispatcher', () => {
       };
 
       const result = await dispatcher.submitTask(request);
+      await flushAsync();
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.type).toBe('service_error');
-      }
+      expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(0);
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'test-task',
+            status: 'failed',
+            error: { code: 'SETUP_FAILED', message: 'Failed to create worktree' },
+          }),
+        })
+      );
     });
 
     it('should use provided repository and baseBranch when given', async () => {
@@ -289,6 +304,7 @@ describe('TaskDispatcher', () => {
       };
 
       const result = await dispatcher.submitTask(request);
+      await flushAsync();
 
       expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(1);
@@ -311,6 +327,7 @@ describe('TaskDispatcher', () => {
         hasChildren: false,
       };
       await dispatcher.submitTask(request);
+      await flushAsync();
 
       const result = await dispatcher.cancelTask('test-task');
 
@@ -346,6 +363,7 @@ describe('TaskDispatcher', () => {
         hasChildren: false,
       };
       await dispatcher.submitTask(request);
+      await flushAsync();
 
       // Manually mark as completed
       const state = await statePersistence.load();
@@ -376,6 +394,7 @@ describe('TaskDispatcher', () => {
         hasChildren: false,
       };
       await dispatcher.submitTask(request);
+      await flushAsync();
 
       const task = await dispatcher.getTask('test-task');
 
@@ -404,6 +423,7 @@ describe('TaskDispatcher', () => {
         hasChildren: false,
       };
       await dispatcher.submitTask(request);
+      await flushAsync();
 
       expect(dispatcher.getRunningCount()).toBe(1);
     });
@@ -451,6 +471,7 @@ describe('TaskDispatcher', () => {
       };
 
       await timeoutDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Advance to 1h 55m (115 minutes)
       await vi.advanceTimersByTimeAsync(115 * 60 * 1000);
@@ -470,6 +491,7 @@ describe('TaskDispatcher', () => {
       };
 
       await timeoutDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
       // Advance to 2h (120 minutes)
@@ -491,6 +513,7 @@ describe('TaskDispatcher', () => {
       };
 
       await timeoutDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Advance to 1h 55m (115 minutes) - warning timeout
       await vi.advanceTimersByTimeAsync(115 * 60 * 1000);
@@ -513,13 +536,13 @@ describe('TaskDispatcher', () => {
       };
 
       await timeoutDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
       // Advance past 2h timeout
       await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('kill-webhook-test');
-      // Note: stopForwarding is not called in Docker model - container termination handles log cleanup
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({ status: 'interrupted' }),
@@ -540,6 +563,7 @@ describe('TaskDispatcher', () => {
       };
 
       await timeoutDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Advance past 2h timeout
       await vi.advanceTimersByTimeAsync(120 * 60 * 1000 + 1000);
@@ -561,6 +585,7 @@ describe('TaskDispatcher', () => {
       };
 
       await timeoutDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Manually mark task as completed to simulate container finishing
       const state = await timeoutStatePersistence.load();
@@ -623,6 +648,7 @@ describe('TaskDispatcher', () => {
       };
 
       await monitorDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Initially container is running
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
@@ -650,6 +676,7 @@ describe('TaskDispatcher', () => {
       };
 
       await monitorDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Manually mark as completed
       const state = await monitorStatePersistence.load();
@@ -678,6 +705,7 @@ describe('TaskDispatcher', () => {
       };
 
       await monitorDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Make getTask throw error
       vi.spyOn(monitorDispatcher, 'getTask').mockRejectedValueOnce(new Error('Database error'));
@@ -728,6 +756,7 @@ describe('TaskDispatcher', () => {
       };
 
       await resultDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Initially container is running
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
@@ -756,6 +785,7 @@ describe('TaskDispatcher', () => {
       };
 
       await resultDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Stop the container to trigger completion
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
@@ -787,6 +817,7 @@ describe('TaskDispatcher', () => {
       };
 
       const result = await dispatcher.submitTask(request);
+      await flushAsync();
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -811,6 +842,7 @@ describe('TaskDispatcher', () => {
       };
 
       const result = await dispatcher.submitTask(request);
+      await flushAsync();
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -825,7 +857,7 @@ describe('TaskDispatcher', () => {
   });
 
   describe('Error handling edge cases', () => {
-    it('should handle generic error during submitTask', async () => {
+    it('should handle generic error during async setup via webhook', async () => {
       const request: CreateTaskRequest = {
         taskId: 'generic-error-test',
         workerType: 'auto',
@@ -836,10 +868,6 @@ describe('TaskDispatcher', () => {
         hasChildren: false,
       };
 
-      // Mock getTask to throw unexpected error during submit
-      vi.spyOn(dispatcher, 'getTask').mockRejectedValueOnce(new Error('Unexpected error'));
-
-      // Use a fresh dispatcher to avoid state pollution
       const errorDispatcher = new TaskDispatcher(
         mockConfig,
         statePersistence,
@@ -851,18 +879,22 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig
       );
 
-      // Override getTask to throw during submitTask's saveTask call
       vi.spyOn(statePersistence, 'save').mockRejectedValueOnce(new Error('DB error'));
 
       const result = await errorDispatcher.submitTask(request);
+      await flushAsync();
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.type).toBe('service_error');
-        expect(result.error.message).toBe('Failed to start task');
-      }
-      // Running count should be decremented even after error
+      expect(result.ok).toBe(true);
       expect(errorDispatcher.getRunningCount()).toBe(0);
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'generic-error-test',
+            status: 'failed',
+            error: { code: 'SETUP_FAILED', message: 'Failed to start task' },
+          }),
+        })
+      );
     });
 
     it('should cleanup worktree when container creation fails', async () => {
@@ -871,7 +903,6 @@ describe('TaskDispatcher', () => {
         removeWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
       } as unknown as WorktreeManager;
 
-      // Create isolation config with failing provider
       const failingIsolationProvider: IsolationProvider = {
         ...mockIsolationProvider,
         createWorker: vi.fn().mockRejectedValueOnce(new Error('Failed to create container')),
@@ -903,14 +934,46 @@ describe('TaskDispatcher', () => {
       };
 
       const result = await errorDispatcher.submitTask(request);
+      await flushAsync();
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.type).toBe('service_error');
-        expect(result.error.message).toBe('Failed to start worker container');
-      }
-      // Worktree should be cleaned up
+      expect(result.ok).toBe(true);
       expect(cleanupWorktreeManager.removeWorktree).toHaveBeenCalledWith('cleanup-test');
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'cleanup-test',
+            status: 'failed',
+            error: { code: 'SETUP_FAILED', message: 'Failed to start worker container' },
+          }),
+        })
+      );
+    });
+
+    it('should handle webhook failure during setup error gracefully', async () => {
+      vi.mocked(mockWorktreeManager.createWorktree).mockRejectedValueOnce(
+        new Error('Failed to create worktree')
+      );
+      vi.mocked(mockWebhookClient.send).mockRejectedValueOnce(new Error('Webhook failed'));
+      const errorSpy = vi.spyOn(mockLogger, 'error');
+
+      const request: CreateTaskRequest = {
+        taskId: 'webhook-fail-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(dispatcher.getRunningCount()).toBe(0);
+      expect(errorSpy).toHaveBeenCalledWith(
+        { taskId: 'webhook-fail-test', webhookError: expect.any(Error) },
+        'Failed to send setup failure webhook'
+      );
     });
 
     it('should return early from timeout kill if task no longer running', async () => {
@@ -927,6 +990,7 @@ describe('TaskDispatcher', () => {
       };
 
       await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Manually mark task as completed (not running)
       const state = await statePersistence.load();
@@ -967,7 +1031,6 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig
       );
 
-      // Submit a task
       const request: CreateTaskRequest = {
         taskId: 'no-pr-test',
         workerType: 'auto',
@@ -981,6 +1044,7 @@ describe('TaskDispatcher', () => {
       };
 
       await resultDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Manually mark task as completed
       const state = await statePersistence.load();
@@ -1026,7 +1090,6 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig
       );
 
-      // Submit a task
       const request: CreateTaskRequest = {
         taskId: 'json-error-test',
         workerType: 'auto',
@@ -1040,6 +1103,7 @@ describe('TaskDispatcher', () => {
       };
 
       await resultDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Manually mark task as completed
       const state = await statePersistence.load();
@@ -1096,6 +1160,7 @@ describe('TaskDispatcher', () => {
       };
 
       await timeoutDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
 
       // Manually mark task as completed before kill timeout
       const state = await statePersistence.load();
@@ -1152,7 +1217,9 @@ describe('TaskDispatcher', () => {
       };
 
       await dispatcher.submitTask(request1);
+      await flushAsync();
       await dispatcher.submitTask(request2);
+      await flushAsync();
 
       const ids = dispatcher.getRunningTaskIds();
       expect(ids).toHaveLength(2);
@@ -1172,6 +1239,7 @@ describe('TaskDispatcher', () => {
       };
 
       await dispatcher.submitTask(request);
+      await flushAsync();
 
       const ids = dispatcher.getRunningTaskIds();
       // activeTasks contains keys like 'test-task-monitor', 'test-task-warning', 'test-task-kill'
@@ -1194,6 +1262,7 @@ describe('TaskDispatcher', () => {
       };
 
       const result = await dispatcher.submitTask(request);
+      await flushAsync();
 
       expect(result.ok).toBe(true);
       const task = await dispatcher.getTask('retry-task-1');
@@ -1213,6 +1282,7 @@ describe('TaskDispatcher', () => {
       };
 
       const result = await dispatcher.submitTask(request);
+      await flushAsync();
 
       expect(result.ok).toBe(true);
       const task = await dispatcher.getTask('normal-task-1');

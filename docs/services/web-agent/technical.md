@@ -172,14 +172,14 @@ interface PageSummary {
 
 ### LinkPreview
 
-| Field         | Type       | Description  |
-| ------------- | ---------- | ------------ |  |
-| `url`         | `string`   | Original URL |
-| `title`       | `string \  | undefined`   | og:title or HTML title |
-| `description` | `string \  | undefined`   | og:description or meta desc |
-| `image`       | `string \  | undefined`   | Resolved absolute og:image |
-| `favicon`     | `string \  | undefined`   | Favicon URL |
-| `siteName`    | `string \  | undefined`   | og:site_name |
+| Field | Type | Description |
+| ------------- | ---------- | ------------ | |
+| `url` | `string` | Original URL |
+| `title` | `string \  | undefined` | og:title or HTML title |
+| `description` | `string \  | undefined` | og:description or meta desc |
+| `image` | `string \  | undefined` | Resolved absolute og:image |
+| `favicon` | `string \  | undefined` | Favicon URL |
+| `siteName` | `string \  | undefined` | og:site_name |
 
 ### LinkPreviewError
 
@@ -193,15 +193,15 @@ interface PageSummary {
 
 ### PageSummaryError
 
-| Code           | Meaning                                |
-| -------------- | -------------------------------------- |
-| `FETCH_FAILED` | Crawl4AI failed to fetch page          |
-| `TIMEOUT`      | Crawl exceeded 60s timeout             |
-| `NO_CONTENT`   | No markdown extracted from page        |
-| `API_ERROR`    | LLM API error or user service error    |
-| `INVALID_URL`  | Malformed URL or unsupported protocol  |
-| `TOO_LARGE`    | Response exceeds size limit            |
-| `RATE_LIMITED` | Crawl4AI returned HTTP 429 rate limit  |
+| Code           | Meaning                               |
+| -------------- | ------------------------------------- |
+| `FETCH_FAILED` | Crawl4AI failed to fetch page         |
+| `TIMEOUT`      | Crawl exceeded 60s timeout            |
+| `NO_CONTENT`   | No markdown extracted from page       |
+| `API_ERROR`    | LLM API error or user service error   |
+| `INVALID_URL`  | Malformed URL or unsupported protocol |
+| `TOO_LARGE`    | Response exceeds size limit           |
+| `RATE_LIMITED` | Crawl4AI returned HTTP 429 rate limit |
 
 ## Key Components
 
@@ -232,6 +232,7 @@ Generates prose summaries with automatic repair on parse failures.
 5. Return `PageSummary` or error
 
 **Key features:**
+
 - Prompt includes "Write in SAME LANGUAGE as original content" instruction
 - Content focus section guides LLM to summarize actual page content, not platform descriptions (INT-533)
 

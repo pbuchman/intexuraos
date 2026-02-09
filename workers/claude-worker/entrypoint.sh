@@ -39,7 +39,7 @@ mkdir -p /home/claude/.config/gcloud /home/claude/.claude
 # Restore Claude config defaults (skips onboarding on fresh tmpfs)
 # ------------------------------------------------------------------------------
 if [ -d "/opt/claude-defaults" ]; then
-    cp -a /opt/claude-defaults/. /home/claude/
+    cp -r /opt/claude-defaults/. /home/claude/
     echo "[entrypoint] Claude config defaults restored"
 fi
 
@@ -80,7 +80,9 @@ fi
 setup_github_token() {
     if [ -f "/secrets/github-token" ]; then
         export GITHUB_TOKEN=$(cat /secrets/github-token)
-        echo "[entrypoint] GitHub token loaded"
+        # Configure git to use the token for HTTPS pushes
+        git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
+        echo "[entrypoint] GitHub token loaded and git credential configured"
     else
         echo "[entrypoint] WARNING: GitHub token not found at /secrets/github-token"
     fi
@@ -102,6 +104,21 @@ setup_github_token
 ) &
 
 # ------------------------------------------------------------------------------
+# Configure pnpm to use persistent store (shared volume across containers)
+# ------------------------------------------------------------------------------
+pnpm config set store-dir /home/claude/pnpm-store --global
+
+# ------------------------------------------------------------------------------
+# Install dependencies (Linux-native node_modules via shared pnpm store)
+# ------------------------------------------------------------------------------
+if [ -f "/repo/pnpm-lock.yaml" ]; then
+    echo "[entrypoint] Installing dependencies..."
+    cd /repo
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile --store-dir /home/claude/pnpm-store 2>&1
+    echo "[entrypoint] Dependencies installed"
+fi
+
+# ------------------------------------------------------------------------------
 # Start Claude in interactive mode
 # ------------------------------------------------------------------------------
 echo "[entrypoint] Starting Claude..."
@@ -110,5 +127,17 @@ if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
     echo "[entrypoint] Git branch: $(git -C /repo branch --show-current 2>/dev/null || echo 'unknown')"
 fi
 
+# ------------------------------------------------------------------------------
+# Pre-approve API key so Claude skips the interactive TUI prompt
+# ------------------------------------------------------------------------------
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    CLAUDE_JSON="/home/claude/.claude.json"
+    if [ -f "$CLAUDE_JSON" ]; then
+        UPDATED=$(jq --arg key "$ANTHROPIC_API_KEY" '.customApiKeyResponses[$key] = true' "$CLAUDE_JSON")
+        echo "$UPDATED" > "$CLAUDE_JSON"
+        echo "[entrypoint] API key pre-approved in claude.json"
+    fi
+fi
+
 echo "[entrypoint] Starting Claude in interactive mode..."
-exec claude --dangerously-skip-permissions --verbose
+exec claude -d --dangerously-skip-permissions --verbose

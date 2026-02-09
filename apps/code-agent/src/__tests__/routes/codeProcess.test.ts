@@ -83,7 +83,7 @@ describe('POST /internal/code/process', () => {
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
-    logger = pino({ name: 'test' }) as unknown as Logger;
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
     codeTaskRepo = createFirestoreCodeTaskRepository({
       firestore: fakeFirestore as unknown as Firestore,

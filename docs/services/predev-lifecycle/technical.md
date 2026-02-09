@@ -44,26 +44,26 @@ graph TB
 
 ### gateway
 
-| Property      | Value                                        |
-| ------------- | -------------------------------------------- |
-| Type          | HTTP (`functions.http`)                      |
-| Name          | `intexuraos-predev-gateway-{env}`            |
-| Memory        | 512 MB                                       |
-| CPU           | 1                                            |
-| Timeout       | 3600 seconds (1 hour, for long SSE streams)  |
-| Concurrency   | 200 requests per instance                    |
-| Max instances | 1                                            |
-| Auth          | Public (allUsers)                            |
+| Property      | Value                                       |
+| ------------- | ------------------------------------------- |
+| Type          | HTTP (`functions.http`)                     |
+| Name          | `intexuraos-predev-gateway-{env}`           |
+| Memory        | 512 MB                                      |
+| CPU           | 1                                           |
+| Timeout       | 3600 seconds (1 hour, for long SSE streams) |
+| Concurrency   | 200 requests per instance                   |
+| Max instances | 1                                           |
+| Auth          | Public (allUsers)                           |
 
 **Routes handled internally:**
 
-| Method | Path                    | Description                                      |
-| ------ | ----------------------- | ------------------------------------------------ |
-| GET    | `/devbar/logs`          | SSE proxy to VM port 8106 `/logs`                |
-| GET    | `/devbar/events`        | SSE proxy to VM port 8105 `/events`              |
-| GET    | `/internal/branch-lock` | Return current branch, commit, and lock status   |
-| POST   | `/internal/branch-lock` | Set branch lock on or off                        |
-| *      | `/*`                    | Proxy all other requests to the VM               |
+| Method | Path                    | Description                                    |
+| ------ | ----------------------- | ---------------------------------------------- |
+| GET    | `/devbar/logs`          | SSE proxy to VM port 8106 `/logs`              |
+| GET    | `/devbar/events`        | SSE proxy to VM port 8105 `/events`            |
+| GET    | `/internal/branch-lock` | Return current branch, commit, and lock status |
+| POST   | `/internal/branch-lock` | Set branch lock on or off                      |
+| \*     | `/*`                    | Proxy all other requests to the VM             |
 
 **State machine behavior:**
 
@@ -76,14 +76,14 @@ graph TB
 
 ### webhook
 
-| Property      | Value                                   |
-| ------------- | --------------------------------------- |
-| Type          | HTTP (`functions.http`)                 |
-| Name          | `intexuraos-predev-webhook-{env}`       |
-| Memory        | 512 MB                                  |
-| Timeout       | 120 seconds                             |
-| Max instances | 1                                       |
-| Auth          | Public (allUsers, GitHub needs access)  |
+| Property      | Value                                  |
+| ------------- | -------------------------------------- |
+| Type          | HTTP (`functions.http`)                |
+| Name          | `intexuraos-predev-webhook-{env}`      |
+| Memory        | 512 MB                                 |
+| Timeout       | 120 seconds                            |
+| Max instances | 1                                      |
+| Auth          | Public (allUsers, GitHub needs access) |
 
 **Request validation:**
 
@@ -96,23 +96,23 @@ graph TB
 
 **Branch logic:**
 
-| Condition                             | Action                                             |
-| ------------------------------------- | -------------------------------------------------- |
-| Branch locked, push from other branch | Ignore (200, "Branch locked")                      |
-| VM running                            | Publish code-update Pub/Sub message                |
-| Any push                              | Update Firestore state with branch, SHA, message   |
+| Condition                             | Action                                           |
+| ------------------------------------- | ------------------------------------------------ |
+| Branch locked, push from other branch | Ignore (200, "Branch locked")                    |
+| VM running                            | Publish code-update Pub/Sub message              |
+| Any push                              | Update Firestore state with branch, SHA, message |
 
 ### idle-check
 
-| Property      | Value                                        |
-| ------------- | -------------------------------------------- |
-| Type          | CloudEvent (`functions.cloudEvent`)          |
-| Name          | `intexuraos-predev-idle-check-{env}`         |
-| Memory        | 512 MB                                       |
-| Timeout       | 120 seconds                                  |
-| Max instances | 1                                            |
-| Trigger       | Pub/Sub topic `predev-idle-check-{env}`      |
-| Schedule      | Every 5 minutes via Cloud Scheduler          |
+| Property      | Value                                   |
+| ------------- | --------------------------------------- |
+| Type          | CloudEvent (`functions.cloudEvent`)     |
+| Name          | `intexuraos-predev-idle-check-{env}`    |
+| Memory        | 512 MB                                  |
+| Timeout       | 120 seconds                             |
+| Max instances | 1                                       |
+| Trigger       | Pub/Sub topic `predev-idle-check-{env}` |
+| Schedule      | Every 5 minutes via Cloud Scheduler     |
 
 **Logic:**
 
@@ -124,13 +124,13 @@ graph TB
 
 ### report-ready
 
-| Property      | Value                                          |
-| ------------- | ---------------------------------------------- |
-| Type          | HTTP (`functions.http`)                        |
-| Name          | `intexuraos-predev-report-ready-{env}`         |
-| Memory        | 512 MB                                         |
-| Timeout       | 30 seconds                                     |
-| Max instances | 1                                              |
+| Property      | Value                                  |
+| ------------- | -------------------------------------- |
+| Type          | HTTP (`functions.http`)                |
+| Name          | `intexuraos-predev-report-ready-{env}` |
+| Memory        | 512 MB                                 |
+| Timeout       | 30 seconds                             |
+| Max instances | 1                                      |
 
 **Request:**
 
@@ -144,16 +144,16 @@ graph TB
 
 ### PredevState (Firestore: `predev-state/current`)
 
-| Field           | Type                                       | Description                        |
-| --------------- | ------------------------------------------ | ---------------------------------- |
-| `status`        | `'stopped' \                               | 'starting' \                       | 'running' \ | 'stopping'` | Current VM lifecycle state |
-| `vmIp`          | `string \                                  | null`                              | VM's internal IP when running |
-| `branch`        | `string`                                   | Active git branch                  |
-| `commitSha`     | `string \                                  | null`                              | Latest commit SHA |
-| `commitMessage` | `string \                                  | null`                              | First line of latest commit |
-| `branchLocked`  | `boolean`                                  | Whether branch switching is locked |
-| `lastActivity`  | `Date`                                     | Timestamp of last gateway request  |
-| `startedAt`     | `Date \                                    | null`                              | When the VM was last started |
+| Field           | Type          | Description                        |
+| --------------- | ------------- | ---------------------------------- | ----------------------------- | ----------- | -------------------------- |
+| `status`        | `'stopped' \  | 'starting' \                       | 'running' \                   | 'stopping'` | Current VM lifecycle state |
+| `vmIp`          | `string \     | null`                              | VM's internal IP when running |
+| `branch`        | `string`      | Active git branch                  |
+| `commitSha`     | `string \     | null`                              | Latest commit SHA             |
+| `commitMessage` | `string \     | null`                              | First line of latest commit   |
+| `branchLocked`  | `boolean`     | Whether branch switching is locked |
+| `lastActivity`  | `Date`        | Timestamp of last gateway request  |
+| `startedAt`     | `Date \       | null`                              | When the VM was last started  |
 
 ### State Transitions
 
@@ -171,44 +171,44 @@ stateDiagram-v2
 
 Controls the MIG (Managed Instance Group) via the GCP Compute API:
 
-| Method         | Action                         |
-| -------------- | ------------------------------ |
-| `startVm()`    | Resize MIG to 1 instance       |
-| `stopVm()`     | Resize MIG to 0 instances      |
-| `getVmCount()` | Read current MIG target size   |
+| Method         | Action                       |
+| -------------- | ---------------------------- |
+| `startVm()`    | Resize MIG to 1 instance     |
+| `stopVm()`     | Resize MIG to 0 instances    |
+| `getVmCount()` | Read current MIG target size |
 
 ### CodeUpdateMessage (Pub/Sub)
 
-| Field        | Type   | Description                    |
-| ------------ | ------ | ------------------------------ |
-| `branch`     | string | Branch that was pushed to      |
-| `commitSha`  | string | Commit SHA of the push         |
-| `timestamp`  | string | ISO 8601 timestamp             |
+| Field       | Type   | Description               |
+| ----------- | ------ | ------------------------- |
+| `branch`    | string | Branch that was pushed to |
+| `commitSha` | string | Commit SHA of the push    |
+| `timestamp` | string | ISO 8601 timestamp        |
 
 ## Dependencies
 
-| Service/Resource           | Purpose                                    |
-| -------------------------- | ------------------------------------------ |
-| Firestore                  | State persistence (`predev-state/current`) |
-| GCP Compute API            | MIG resize (start/stop VM)                 |
-| GCP Pub/Sub                | Idle-check trigger, code-update messages   |
-| GitHub Webhooks            | Push event notifications                   |
-| Cloud Scheduler            | Periodic idle-check trigger                |
+| Service/Resource | Purpose                                    |
+| ---------------- | ------------------------------------------ |
+| Firestore        | State persistence (`predev-state/current`) |
+| GCP Compute API  | MIG resize (start/stop VM)                 |
+| GCP Pub/Sub      | Idle-check trigger, code-update messages   |
+| GitHub Webhooks  | Push event notifications                   |
+| Cloud Scheduler  | Periodic idle-check trigger                |
 
 ## Configuration
 
-| Environment Variable                   | Required | Default         | Used By      |
-| -------------------------------------- | -------- | --------------- | ------------ |
-| `INTEXURAOS_GCP_PROJECT_ID`            | Yes      | -               | All          |
-| `INTEXURAOS_GCP_REGION`                | No       | `''`            | VmControl    |
-| `INTEXURAOS_GCP_ZONE`                  | Yes      | -               | VmControl    |
-| `INTEXURAOS_MIG_NAME`                  | Yes      | -               | VmControl    |
-| `INTEXURAOS_ENVIRONMENT`               | No       | `'dev'`         | Config       |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`       | Yes      | -               | Gateway      |
-| `INTEXURAOS_GITHUB_WEBHOOK_SECRET`     | Yes      | -               | Webhook      |
-| `INTEXURAOS_PREDEV_CODE_UPDATE_TOPIC`  | Yes      | -               | Webhook      |
-| `IDLE_TIMEOUT_MINUTES`                 | No       | `30`            | Idle-check   |
-| `LOG_LEVEL`                            | No       | `info`          | All          |
+| Environment Variable                  | Required | Default | Used By    |
+| ------------------------------------- | -------- | ------- | ---------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | -       | All        |
+| `INTEXURAOS_GCP_REGION`               | No       | `''`    | VmControl  |
+| `INTEXURAOS_GCP_ZONE`                 | Yes      | -       | VmControl  |
+| `INTEXURAOS_MIG_NAME`                 | Yes      | -       | VmControl  |
+| `INTEXURAOS_ENVIRONMENT`              | No       | `'dev'` | Config     |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | -       | Gateway    |
+| `INTEXURAOS_GITHUB_WEBHOOK_SECRET`    | Yes      | -       | Webhook    |
+| `INTEXURAOS_PREDEV_CODE_UPDATE_TOPIC` | Yes      | -       | Webhook    |
+| `IDLE_TIMEOUT_MINUTES`                | No       | `30`    | Idle-check |
+| `LOG_LEVEL`                           | No       | `info`  | All        |
 
 ## Security
 

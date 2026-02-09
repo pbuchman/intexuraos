@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                                     |
-| -------- | ------------------------------------------------------------------------- |
-| **Name** | chat-agent                                                                |
-| **Role** | In-App AI Assistant                                                       |
-| **Goal** | Answer documentation questions and create commands via natural language   |
+| Field    | Value                                                                   |
+| -------- | ----------------------------------------------------------------------- |
+| **Name** | chat-agent                                                              |
+| **Role** | In-App AI Assistant                                                     |
+| **Goal** | Answer documentation questions and create commands via natural language |
 
 ---
 
@@ -213,12 +213,12 @@ Body: { "message": "What can IntexuraOS do?" }
 
 ## Error Handling
 
-| HTTP | Code               | Meaning                                          | Recovery                                |
-| ---- | ------------------ | ------------------------------------------------ | --------------------------------------- |
-| 400  | `INVALID_REQUEST`  | Empty message or malformed body                  | Validate input before sending           |
-| 401  | `UNAUTHORIZED`     | No JWT and no guest session header               | Add authentication                      |
-| 429  | `RATE_LIMITED`     | Guest session exceeded 100 messages/hour         | Wait for the time specified in message  |
-| 502  | `DOWNSTREAM_ERROR` | LLM provider or user-service failure             | Retry after delay; check service health |
+| HTTP | Code               | Meaning                                  | Recovery                                |
+| ---- | ------------------ | ---------------------------------------- | --------------------------------------- |
+| 400  | `INVALID_REQUEST`  | Empty message or malformed body          | Validate input before sending           |
+| 401  | `UNAUTHORIZED`     | No JWT and no guest session header       | Add authentication                      |
+| 429  | `RATE_LIMITED`     | Guest session exceeded 100 messages/hour | Wait for the time specified in message  |
+| 502  | `DOWNSTREAM_ERROR` | LLM provider or user-service failure     | Retry after delay; check service health |
 
 ---
 

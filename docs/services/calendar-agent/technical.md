@@ -113,17 +113,17 @@ sequenceDiagram
 
 ### Public Endpoints
 
-| Method | Path                                | Description                       | Auth         |
-| ------ | ----------------------------------- | --------------------------------- | ------------ |
-| GET    | `/calendar/events`                  | List events with filters          | Bearer token |
-| GET    | `/calendar/events/:eventId`         | Get specific event                | Bearer token |
-| POST   | `/calendar/events`                  | Create event                      | Bearer token |
-| PATCH  | `/calendar/events/:eventId`         | Update event                      | Bearer token |
-| DELETE | `/calendar/events/:eventId`         | Delete event                      | Bearer token |
-| POST   | `/calendar/freebusy`                | Get free/busy info                | Bearer token |
-| GET    | `/calendar/failed-events`           | List failed extractions           | Bearer token |
-| DELETE | `/calendar/failed-events/:id`       | Delete a failed event             | Bearer token |
-| POST   | `/calendar/failed-events/:id/retry` | Retry creating from failed event  | Bearer token |
+| Method | Path                                | Description                      | Auth         |
+| ------ | ----------------------------------- | -------------------------------- | ------------ |
+| GET    | `/calendar/events`                  | List events with filters         | Bearer token |
+| GET    | `/calendar/events/:eventId`         | Get specific event               | Bearer token |
+| POST   | `/calendar/events`                  | Create event                     | Bearer token |
+| PATCH  | `/calendar/events/:eventId`         | Update event                     | Bearer token |
+| DELETE | `/calendar/events/:eventId`         | Delete event                     | Bearer token |
+| POST   | `/calendar/freebusy`                | Get free/busy info               | Bearer token |
+| GET    | `/calendar/failed-events`           | List failed extractions          | Bearer token |
+| DELETE | `/calendar/failed-events/:id`       | Delete a failed event            | Bearer token |
+| POST   | `/calendar/failed-events/:id/retry` | Retry creating from failed event | Bearer token |
 
 ### Internal Endpoints
 
@@ -260,10 +260,10 @@ interface GeneratePreviewMessage {
 
 ### Internal Services
 
-| Service        | Endpoint                                      | Purpose                             |
-| -------------- | --------------------------------------------- | ----------------------------------- |
-| `user-service` | `/internal/users/:id/oauth/google/token`      | Fetch Google OAuth access token     |
-| `user-service` | `/internal/users/:id/llm-client`              | Get LLM client for event extraction |
+| Service        | Endpoint                                 | Purpose                             |
+| -------------- | ---------------------------------------- | ----------------------------------- |
+| `user-service` | `/internal/users/:id/oauth/google/token` | Fetch Google OAuth access token     |
+| `user-service` | `/internal/users/:id/llm-client`         | Get LLM client for event extraction |
 
 ### External APIs
 

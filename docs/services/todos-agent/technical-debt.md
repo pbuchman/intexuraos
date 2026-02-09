@@ -181,16 +181,16 @@ Improved test coverage across all use cases and routes.
 
 ### Historical Issues
 
-| Date       | Issue                               | Resolution                                     |
-| ---------- | ----------------------------------- | ---------------------------------------------- |
-| 2026-01-31 | Branch coverage below 100%          | v8 ignore annotations + new tests (INT-427)    |
-| 2026-01-30 | Direct pino() usage (no Sentry)     | Migrated to createAppLogger                    |
-| 2026-01-30 | Raw reply.send() in routes          | Migrated to reply.ok()/reply.fail()            |
-| 2026-01-26 | Local user client re-export barrel  | Removed infra/user/index.ts (INT-301)          |
-| 2026-01-24 | Manual LLM validation               | Migrated to Zod schemas (INT-218)              |
-| 2026-01-24 | Inconsistent user-service clients   | Unified via internal-clients (INT-269)         |
-| 2026-01-20 | Gaps in test coverage               | Additional test cases (INT-155)                |
-| 2026-01-18 | Non-standard ServiceFeedback format | Standardized contract (INT-126)                |
+| Date       | Issue                               | Resolution                                  |
+| ---------- | ----------------------------------- | ------------------------------------------- |
+| 2026-01-31 | Branch coverage below 100%          | v8 ignore annotations + new tests (INT-427) |
+| 2026-01-30 | Direct pino() usage (no Sentry)     | Migrated to createAppLogger                 |
+| 2026-01-30 | Raw reply.send() in routes          | Migrated to reply.ok()/reply.fail()         |
+| 2026-01-26 | Local user client re-export barrel  | Removed infra/user/index.ts (INT-301)       |
+| 2026-01-24 | Manual LLM validation               | Migrated to Zod schemas (INT-218)           |
+| 2026-01-24 | Inconsistent user-service clients   | Unified via internal-clients (INT-269)      |
+| 2026-01-20 | Gaps in test coverage               | Additional test cases (INT-155)             |
+| 2026-01-18 | Non-standard ServiceFeedback format | Standardized contract (INT-126)             |
 
 ---
 

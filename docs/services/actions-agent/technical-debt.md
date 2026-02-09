@@ -139,13 +139,13 @@ All endpoints and use cases have test coverage. The `handleApprovalReply` use ca
 
 ### Coverage Areas
 
-| Area               | Coverage | Notes                                                 |
-| ------------------ | -------- | ----------------------------------------------------- |
-| Public routes      | 100%     | All endpoints tested (100% branch enforcement)        |
-| Internal routes    | 100%     | Including approval-reply and code action handlers     |
-| Use cases          | 100%     | All use cases including code actions and nonce utils  |
-| Infrastructure     | 100%     | Firestore repos, HTTP clients, and code-agent client  |
-| Pub/Sub publishers | 100%     | Event publishing tested                               |
+| Area               | Coverage | Notes                                                |
+| ------------------ | -------- | ---------------------------------------------------- |
+| Public routes      | 100%     | All endpoints tested (100% branch enforcement)       |
+| Internal routes    | 100%     | Including approval-reply and code action handlers    |
+| Use cases          | 100%     | All use cases including code actions and nonce utils |
+| Infrastructure     | 100%     | Firestore repos, HTTP clients, and code-agent client |
+| Pub/Sub publishers | 100%     | Event publishing tested                              |
 
 ## Deprecations
 

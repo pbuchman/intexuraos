@@ -65,8 +65,14 @@ function isValidModel(model: string): model is LLMModel;
 ## Exported Constants
 
 ```typescript
-const LlmProviders: { Google: 'google'; OpenAI: 'openai'; Anthropic: 'anthropic'; Perplexity: 'perplexity'; Zai: 'zai'; };
-const LlmModels: { Gemini25Pro: 'gemini-2.5-pro'; /* ...15 more */ };
+const LlmProviders: {
+  Google: 'google';
+  OpenAI: 'openai';
+  Anthropic: 'anthropic';
+  Perplexity: 'perplexity';
+  Zai: 'zai';
+};
+const LlmModels: { Gemini25Pro: 'gemini-2.5-pro' /* ...15 more */ };
 const ALL_LLM_MODELS: LLMModel[]; // 16 entries
 const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider>;
 ```
@@ -99,7 +105,11 @@ const provider = LlmProviders.Google;
 // Implement the LLMClient interface
 import type { LLMClient, GenerateResult, LLMError } from '@intexuraos/llm-contract';
 class MyClient implements LLMClient {
-  async generate(prompt: string): Promise<Result<GenerateResult, LLMError>> { /* ... */ }
-  async research(prompt: string): Promise<Result<ResearchResult, LLMError>> { /* ... */ }
+  async generate(prompt: string): Promise<Result<GenerateResult, LLMError>> {
+    /* ... */
+  }
+  async research(prompt: string): Promise<Result<ResearchResult, LLMError>> {
+    /* ... */
+  }
 }
 ```

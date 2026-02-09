@@ -86,9 +86,9 @@ New Firestore-backed settings for per-user Notion export configuration:
 ```typescript
 // Collection: research_export_settings (keyed by userId)
 interface ResearchExportSettings {
-  researchPageId: string;    // Target Notion page ID
+  researchPageId: string; // Target Notion page ID
   researchPageTitle: string; // Cached page title
-  researchPageUrl: string;   // Cached page URL
+  researchPageUrl: string; // Cached page URL
   createdAt: string;
   updatedAt: string;
 }
@@ -244,26 +244,26 @@ sequenceDiagram
 
 ### Public Endpoints
 
-| Method | Path                                     | Description                             | Auth         |
-| ------ | ---------------------------------------- | --------------------------------------- | ------------ |
-| POST   | `/research`                              | Create new research (starts processing) | Bearer token |
-| POST   | `/research/draft`                        | Save as draft (v2.0.0)                  | Bearer token |
-| GET    | `/research`                              | List researches for user                | Bearer token |
-| GET    | `/research/:id`                          | Get research by ID                      | Bearer token |
-| DELETE | `/research/:id`                          | Delete research and unshare             | Bearer token |
-| POST   | `/research/:id/approve`                  | Approve draft research                  | Bearer token |
-| POST   | `/research/:id/enhance`                  | Enhance with more models/context        | Bearer token |
-| POST   | `/research/:id/retry`                    | Retry failed LLM calls                  | Bearer token |
-| POST   | `/research/:id/confirm`                  | Confirm partial failure decision        | Bearer token |
-| POST   | `/research/:id/export-notion`            | Manually export to Notion (v2.2.0)      | Bearer token |
-| DELETE | `/research/:id/share`                    | Remove public sharing                   | Bearer token |
-| PATCH  | `/research/:id/favourite`                | Toggle favourite status                 | Bearer token |
-| POST   | `/research/validate-input`               | Validate input quality                  | Bearer token |
-| POST   | `/research/improve-input`                | Improve research prompt                 | Bearer token |
-| PATCH  | `/research/:id`                          | Update draft research                   | Bearer token |
-| GET    | `/research/settings/notion`              | Get Notion export settings (v2.2.0)     | Bearer token |
-| POST   | `/research/settings/notion`              | Save Notion export settings (v2.2.0)    | Bearer token |
-| POST   | `/research/settings/notion/validate`     | Validate Notion page ID (v2.2.0)        | Bearer token |
+| Method | Path                                 | Description                             | Auth         |
+| ------ | ------------------------------------ | --------------------------------------- | ------------ |
+| POST   | `/research`                          | Create new research (starts processing) | Bearer token |
+| POST   | `/research/draft`                    | Save as draft (v2.0.0)                  | Bearer token |
+| GET    | `/research`                          | List researches for user                | Bearer token |
+| GET    | `/research/:id`                      | Get research by ID                      | Bearer token |
+| DELETE | `/research/:id`                      | Delete research and unshare             | Bearer token |
+| POST   | `/research/:id/approve`              | Approve draft research                  | Bearer token |
+| POST   | `/research/:id/enhance`              | Enhance with more models/context        | Bearer token |
+| POST   | `/research/:id/retry`                | Retry failed LLM calls                  | Bearer token |
+| POST   | `/research/:id/confirm`              | Confirm partial failure decision        | Bearer token |
+| POST   | `/research/:id/export-notion`        | Manually export to Notion (v2.2.0)      | Bearer token |
+| DELETE | `/research/:id/share`                | Remove public sharing                   | Bearer token |
+| PATCH  | `/research/:id/favourite`            | Toggle favourite status                 | Bearer token |
+| POST   | `/research/validate-input`           | Validate input quality                  | Bearer token |
+| POST   | `/research/improve-input`            | Improve research prompt                 | Bearer token |
+| PATCH  | `/research/:id`                      | Update draft research                   | Bearer token |
+| GET    | `/research/settings/notion`          | Get Notion export settings (v2.2.0)     | Bearer token |
+| POST   | `/research/settings/notion`          | Save Notion export settings (v2.2.0)    | Bearer token |
+| POST   | `/research/settings/notion/validate` | Validate Notion page ID (v2.2.0)        | Bearer token |
 
 ### Internal Endpoints
 
@@ -345,34 +345,34 @@ sequenceDiagram
 
 ### ShareInfo (updated v2.2.0)
 
-| Field           | Type   | Description                      |
-| --------------- | ------ | -------------------------------- |
-| `shareToken`    | string | HMAC-based share token           |
-| `slug`          | string | URL-friendly slug                |
-| `shareUrl`      | string | Full shareable URL               |
-| `sharedAt`      | string | Share timestamp                  |
-| `gcsPath`       | string | GCS storage path                 |
-| `coverImageId`  | string | Cover image identifier           |
-| `coverImageUrl` | string | Full-size cover image URL (NEW)  |
+| Field           | Type   | Description                     |
+| --------------- | ------ | ------------------------------- |
+| `shareToken`    | string | HMAC-based share token          |
+| `slug`          | string | URL-friendly slug               |
+| `shareUrl`      | string | Full shareable URL              |
+| `sharedAt`      | string | Share timestamp                 |
+| `gcsPath`       | string | GCS storage path                |
+| `coverImageId`  | string | Cover image identifier          |
+| `coverImageUrl` | string | Full-size cover image URL (NEW) |
 
 ### NotionExportInfo (v2.2.0)
 
-| Field              | Type                                    | Description                   |
-| ------------------ | --------------------------------------- | ----------------------------- |
-| `mainPageId`       | string                                  | Notion main research page ID  |
-| `mainPageUrl`      | string                                  | Notion main page URL          |
-| `llmReportPageIds` | `{ model: string; pageId: string }[]`   | LLM report child page IDs     |
-| `exportedAt`       | string (ISO 8601)                       | Export timestamp              |
+| Field              | Type                                  | Description                  |
+| ------------------ | ------------------------------------- | ---------------------------- |
+| `mainPageId`       | string                                | Notion main research page ID |
+| `mainPageUrl`      | string                                | Notion main page URL         |
+| `llmReportPageIds` | `{ model: string; pageId: string }[]` | LLM report child page IDs    |
+| `exportedAt`       | string (ISO 8601)                     | Export timestamp             |
 
 ### ResearchExportSettings (v2.2.0)
 
-| Field                | Type              | Description                 |
-| -------------------- | ----------------- | --------------------------- |
-| `researchPageId`     | string            | Target Notion page ID       |
-| `researchPageTitle`  | string            | Cached page title           |
-| `researchPageUrl`    | string            | Cached page URL             |
-| `createdAt`          | string (ISO 8601) | Creation timestamp          |
-| `updatedAt`          | string (ISO 8601) | Last update timestamp       |
+| Field               | Type              | Description           |
+| ------------------- | ----------------- | --------------------- |
+| `researchPageId`    | string            | Target Notion page ID |
+| `researchPageTitle` | string            | Cached page title     |
+| `researchPageUrl`   | string            | Cached page URL       |
+| `createdAt`         | string (ISO 8601) | Creation timestamp    |
+| `updatedAt`         | string (ISO 8601) | Last update timestamp |
 
 ## Model Filtering Logic (v2.0.0)
 
@@ -429,16 +429,16 @@ const RESEARCH_MODELS: ResearchModel[] = [
 
 ### Infrastructure
 
-| Component                                         | Purpose                               |
-| ------------------------------------------------- | ------------------------------------- |
-| Firestore (`researches` collection)               | Research persistence                  |
-| Firestore (`app_settings` collection)             | LLM pricing configuration             |
-| Firestore (`llm_api_logs` collection)             | API call audit                        |
-| Firestore (`research_export_settings` collection) | Notion export configuration (v2.2.0)  |
-| Pub/Sub (`llm-call-queue`)                        | LLM call distribution                 |
-| Pub/Sub (`llm-process-queue`)                     | Research processing trigger           |
-| Pub/Sub (`whatsapp-send`)                         | Notification delivery                 |
-| GCS                                               | Shared research HTML storage          |
+| Component                                         | Purpose                              |
+| ------------------------------------------------- | ------------------------------------ |
+| Firestore (`researches` collection)               | Research persistence                 |
+| Firestore (`app_settings` collection)             | LLM pricing configuration            |
+| Firestore (`llm_api_logs` collection)             | API call audit                       |
+| Firestore (`research_export_settings` collection) | Notion export configuration (v2.2.0) |
+| Pub/Sub (`llm-call-queue`)                        | LLM call distribution                |
+| Pub/Sub (`llm-process-queue`)                     | Research processing trigger          |
+| Pub/Sub (`whatsapp-send`)                         | Notification delivery                |
+| GCS                                               | Shared research HTML storage         |
 
 ### LLM Providers
 
