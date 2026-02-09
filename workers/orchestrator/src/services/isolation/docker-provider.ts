@@ -31,6 +31,7 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
 interface WorkerEntry {
   containerId: string;
   handle: WorkerHandle;
+  logStream?: NodeJS.ReadableStream;
 }
 
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
@@ -250,8 +251,9 @@ export class DockerProvider implements IsolationProvider {
 
     // Capture logs via container.logs() (replaces attach stream)
     /* v8 ignore start -- test-infra: log stream setup tested via mock, requires running container @preserve */
+    let logStream: NodeJS.ReadableStream | undefined;
     if (config.onLog !== undefined) {
-      const logStream = await container.logs({
+      logStream = await container.logs({
         follow: true,
         stdout: true,
         stderr: true,
@@ -272,6 +274,7 @@ export class DockerProvider implements IsolationProvider {
     this.workers.set(taskId, {
       containerId: container.id,
       handle,
+      logStream,
     });
 
     // In --print mode, Claude exits naturally when done. container.wait() detects completion.
@@ -303,6 +306,12 @@ export class DockerProvider implements IsolationProvider {
     }
 
     this.logger.info({ taskId, forceKill }, 'Stopping worker container');
+
+    /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in production @preserve */
+    if (worker.logStream !== undefined && 'destroy' in worker.logStream) {
+      (worker.logStream as NodeJS.ReadableStream & { destroy(): void }).destroy();
+    }
+    /* v8 ignore stop @preserve */
 
     try {
       const container = this.docker.getContainer(worker.containerId);
