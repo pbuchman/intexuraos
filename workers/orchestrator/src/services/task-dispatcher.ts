@@ -171,6 +171,7 @@ export class TaskDispatcher {
         ...(request.linearIssueTitle !== undefined && {
           linearIssueTitle: request.linearIssueTitle,
         }),
+        linearIssueLabels: request.linearIssueLabels,
         ...(request.slug !== undefined && { slug: request.slug }),
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
@@ -411,22 +412,25 @@ export class TaskDispatcher {
     // Check for PR
     const result = await this.checkForResult(task);
 
-    // Determine final status
-    // Note: result.ciFailed is informational only (sent in webhook payload)
-    // PR created = completed, regardless of CI status
+    // Determine final status based on phase
+    // Phase 2 (code-task label): PR is required
+    // Phase 1 / informational: PR is optional, task completes without one
+    const isPhase2 = task.linearIssueLabels.includes('code-task');
     let finalStatus: TaskStatus;
     let error: TaskError | undefined;
 
     /* v8 ignore start -- ts-type: optional chaining on result?.prUrl creates type narrowing branch @preserve */
     if (result?.prUrl !== undefined) {
       finalStatus = 'completed';
-    } else {
+    } else if (isPhase2) {
       finalStatus = 'failed';
       error = {
         code: 'NO_PR_CREATED',
         message: 'Task completed but no PR was created',
         remediation: { action: 'retry' },
       };
+    } else {
+      finalStatus = 'completed';
     }
     /* v8 ignore stop @preserve */
 
