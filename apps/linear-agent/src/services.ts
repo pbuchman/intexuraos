@@ -51,6 +51,7 @@ export function initServices(config: ServiceConfig): void {
     internalAuthToken: config.internalAuthToken,
     pricingContext: config.pricingContext,
     logger: logger,
+    platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
   });
 
   const extractionService = createLinearActionExtractionService(userServiceClient, logger);

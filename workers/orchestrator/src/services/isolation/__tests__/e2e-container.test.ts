@@ -253,25 +253,6 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
   });
 
   describe.skipIf(skipIfNoImage)('Input/Output', () => {
-    // Interactive mode enables sendInput - Claude reads from stdin continuously
-    it(
-      'sendInput delivers message to container stdin',
-      async () => {
-        const taskId = `e2e-input-${Date.now()}`;
-        const config = createTestConfig(taskId, 'Initial prompt');
-
-        await provider.createWorker(config);
-        await new Promise((r) => setTimeout(r, 2000));
-
-        await provider.sendInput(taskId, 'Additional input from test');
-        await new Promise((r) => setTimeout(r, 1000));
-
-        const logs = await provider.getWorkerLogs(taskId);
-        expect(logs).toContain('Additional input from test');
-      },
-      TEST_TIMEOUT
-    );
-
     it(
       'exit command terminates container cleanly',
       async () => {

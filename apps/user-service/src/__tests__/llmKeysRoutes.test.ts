@@ -4,7 +4,7 @@
  * - PATCH /users/:uid/settings/llm-keys
  * - DELETE /users/:uid/settings/llm-keys/:provider
  */
-import { LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
@@ -163,12 +163,43 @@ describe('LLM Keys Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { google: string | null; openai: string | null; anthropic: string | null };
+        data: { google: string | null; openai: string | null; anthropic: string | null; defaultModel: string | null };
       };
       expect(body.success).toBe(true);
       expect(body.data.google).toBeNull();
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBeNull();
+      expect(body.data.defaultModel).toBeNull();
+    });
+
+    it('returns defaultModel when user has preference', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-with-pref';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { defaultModel: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.defaultModel).toBe(LlmModels.Gemini25Flash);
     });
 
     it('returns masked keys for configured providers', { timeout: 20000 }, async () => {

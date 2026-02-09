@@ -35,7 +35,6 @@ export type {
   WorkerType,
   WorkerTypeConfig,
   ResourceUsage,
-  TTYStreams,
 } from './types.js';
 
 export { WORKER_TYPES } from './types.js';

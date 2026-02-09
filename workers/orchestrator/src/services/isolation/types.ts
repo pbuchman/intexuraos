@@ -64,20 +64,13 @@ export interface ResourceUsage {
   memoryLimitMB: number;
 }
 
-export interface TTYStreams {
-  stdin: NodeJS.WritableStream;
-  stdout: NodeJS.ReadableStream;
-  stderr: NodeJS.ReadableStream;
-  detach: () => void;
-}
-
 export interface IsolationProvider {
   /**
    * Create and start an isolated worker container.
    * - Creates container with security controls
    * - Mounts worktree at /repo
-   * - Mounts secrets at /secrets
-   * - Starts Claude in interactive mode
+   * - Mounts secrets at /secrets (including prompt files)
+   * - Starts Claude in --print mode (non-interactive)
    */
   createWorker(config: WorkerConfig): Promise<WorkerHandle>;
 
@@ -109,18 +102,6 @@ export interface IsolationProvider {
    * @returns Exit code (0 = success, -1 = timeout, other = failure)
    */
   waitForCompletion(taskId: string, timeoutMs: number): Promise<number>;
-
-  /**
-   * Send input to running Claude session.
-   * Uses Docker attach to write to container stdin.
-   */
-  sendInput(taskId: string, input: string): Promise<void>;
-
-  /**
-   * Attach to container TTY for interactive debugging.
-   * Returns streams for stdin/stdout/stderr.
-   */
-  attachTTY(taskId: string): Promise<TTYStreams>;
 
   /**
    * Get current resource usage of worker container.

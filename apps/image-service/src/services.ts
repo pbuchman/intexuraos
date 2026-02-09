@@ -68,6 +68,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     pricingContext,
     logger: createAppLogger({ name: 'user-service-client' }),
+    platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
   });
 
   // Get pricing for prompt generation models
