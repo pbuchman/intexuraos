@@ -274,7 +274,9 @@ export class DockerProvider implements IsolationProvider {
     this.workers.set(taskId, {
       containerId: container.id,
       handle,
-      logStream,
+      /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in running container @preserve */
+      ...(logStream !== undefined ? { logStream } : {}),
+      /* v8 ignore stop @preserve */
     });
 
     // In --print mode, Claude exits naturally when done. container.wait() detects completion.
