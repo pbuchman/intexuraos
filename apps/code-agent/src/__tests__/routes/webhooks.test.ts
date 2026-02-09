@@ -2204,6 +2204,9 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const params = publishCall?.[0] as { userId: string; message: string } | undefined;
     expect(params?.userId).toBe('user-123');
     expect(params?.message).toContain('completed');
+    expect(params?.message).toContain('fix/login-bug');
+    expect(params?.message).toContain('https://github.com/pbuchman/intexuraos/pull/123');
+    expect(params?.message).toContain('Fixed login redirect handling');
   });
 
   it('sends WhatsApp notification on task failure', async () => {
@@ -2256,7 +2259,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     expect(params?.message).toContain('failed');
   });
 
-  it('does not send notification on interrupted status', async () => {
+  it('sends WhatsApp notification on interrupted status', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
       prompt: 'Fix the login bug',
@@ -2294,7 +2297,13 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
 
     expect(response.statusCode).toBe(200);
 
-    expect(mockWhatsAppPublisher.publishSendMessage).not.toHaveBeenCalled();
+    expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledTimes(1);
+    const publishCall = mockWhatsAppPublisher.publishSendMessage.mock.calls[0];
+    expect(publishCall).toBeDefined();
+    const params = publishCall?.[0] as { userId: string; message: string } | undefined;
+    expect(params?.userId).toBe('user-123');
+    expect(params?.message).toContain('failed');
+    expect(params?.message).toContain('interrupted');
   });
 
   it('continues even if WhatsApp notification fails', async () => {
