@@ -1119,9 +1119,9 @@ describe('TaskDispatcher', () => {
 
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
-      // Verify task was marked as failed (no PR created)
+      // Verify task completed (no code-task label = Phase 1, PR not required)
       const finalTask = await resultDispatcher.getTask('json-error-test');
-      expect(finalTask?.status).toBe('failed');
+      expect(finalTask?.status).toBe('completed');
 
       execSpy.mockRestore();
 
@@ -1179,6 +1179,97 @@ describe('TaskDispatcher', () => {
       );
 
       vi.useRealTimers();
+    });
+  });
+
+  describe('phase-aware completion', () => {
+    let phaseDispatcher: TaskDispatcher;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      phaseDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig
+      );
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should mark Phase 1 task as completed without PR', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'phase1-no-pr',
+        workerType: 'auto',
+        prompt: 'Design task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await phaseDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await phaseDispatcher.getTask('phase1-no-pr');
+      expect(task?.status).toBe('completed');
+    });
+
+    it('should mark Phase 2 task as failed without PR', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'phase2-no-pr',
+        workerType: 'auto',
+        prompt: 'Code task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+
+      await phaseDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await phaseDispatcher.getTask('phase2-no-pr');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({ code: 'NO_PR_CREATED' }),
+          }),
+        })
+      );
+    });
+
+    it('should store linearIssueLabels on the task', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'labels-stored',
+        workerType: 'auto',
+        prompt: 'Test labels',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['bug', 'code-task', 'high-priority'],
+        hasChildren: false,
+      };
+
+      await phaseDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const task = await phaseDispatcher.getTask('labels-stored');
+      expect(task?.linearIssueLabels).toEqual(['bug', 'code-task', 'high-priority']);
     });
   });
 

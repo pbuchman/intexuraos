@@ -14,6 +14,7 @@ export interface Task {
   baseBranch: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueLabels: string[];
   slug?: string;
   webhookUrl: string;
   webhookSecret: string;
