@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import type { Logger } from '@intexuraos/common-core';
+import { formatLogChunk } from './log-formatter.js';
 
 export interface LogForwarderConfig {
   logBasePath: string;
@@ -218,7 +219,7 @@ export class LogForwarder {
       }, CHUNK_INTERVAL_MS);
     }
 
-    state.buffer += content;
+    state.buffer += formatLogChunk(content);
 
     // Flush if buffer exceeds max chunk size
     if (state.buffer.length >= MAX_CHUNK_SIZE) {
