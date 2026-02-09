@@ -118,13 +118,6 @@ describe('TaskDispatcher', () => {
     getWorkerLogs: vi.fn(async () => ''),
     streamLogs: vi.fn(async () => undefined),
     waitForCompletion: vi.fn(async () => 0),
-    sendInput: vi.fn(async () => undefined),
-    attachTTY: vi.fn(async () => ({
-      stdin: {} as NodeJS.WritableStream,
-      stdout: {} as NodeJS.ReadableStream,
-      stderr: {} as NodeJS.ReadableStream,
-      detach: vi.fn(),
-    })),
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
     listWorkers: vi.fn(async () => []),
   };
