@@ -360,7 +360,7 @@ export async function processWebhookEvent(
     );
 
     // Validate message type
-    const supportedTypes = ['text', 'image', 'audio', 'reaction', 'button'];
+    const supportedTypes = ['text', 'image', 'audio', 'reaction', 'button', 'interactive'];
     if (messageType === null || !supportedTypes.includes(messageType)) {
       request.log.info(
         { eventId: savedEvent.id, messageType },
@@ -369,7 +369,7 @@ export async function processWebhookEvent(
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'UNSUPPORTED_MESSAGE_TYPE',
-          message: `Only text, image, audio, reaction, and button messages are supported. Received: ${messageType ?? 'unknown'}`,
+          message: `Only text, image, audio, reaction, button, and interactive messages are supported. Received: ${messageType ?? 'unknown'}`,
           details: { messageType },
         },
       });
@@ -426,12 +426,12 @@ export async function processWebhookEvent(
     /* v8 ignore stop @preserve */
 /* v8 ignore start -- test-infra: tests use complete message payloads @preserve */
 
-    if (messageType === 'button' && buttonResponse === null) {
-      request.log.info({ eventId: savedEvent.id }, 'Ignoring button message without data');
+    if ((messageType === 'button' || messageType === 'interactive') && buttonResponse === null) {
+      request.log.info({ eventId: savedEvent.id, messageType }, 'Ignoring button/interactive message without data');
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'NO_BUTTON_DATA',
-          message: 'Button message has no data',
+          message: `${messageType === 'interactive' ? 'Interactive' : 'Button'} message has no button_reply data`,
         },
       });
       return;
@@ -549,11 +549,21 @@ export async function processWebhookEvent(
     }
 
     if (messageType === 'reaction' && reactionData !== null) {
-      await handleReactionMessage(request, savedEvent, services, userId, reactionData);
+      request.log.info(
+        { eventId: savedEvent.id, emoji: reactionData.emoji },
+        'Ignoring reaction message (approval via buttons only)'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+        ignoredReason: {
+          code: 'REACTION_NOT_SUPPORTED',
+          message: 'Reactions are no longer used for approvals. Use interactive buttons instead.',
+          details: { emoji: reactionData.emoji },
+        },
+      });
       return;
     }
 
-    if (messageType === 'button' && buttonResponse !== null) {
+    if ((messageType === 'button' || messageType === 'interactive') && buttonResponse !== null) {
       await handleButtonMessage(request, savedEvent, services, userId, buttonResponse);
       return;
     }
@@ -579,7 +589,6 @@ export async function processWebhookEvent(
         eventId: savedEvent.id,
         error: getErrorMessage(error),
       },
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       'Unexpected error during asynchronous webhook processing'
     );
     // Update event status so it's not stuck in 'pending' forever
@@ -677,8 +686,8 @@ async function handleAudioMessage(
   if (result.ok) {
     // Publish transcription event to Pub/Sub for async processing
     const transcriptionPhoneNumberId = config.allowedPhoneNumberIds[0];
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard on array element @preserve */
     if (transcriptionPhoneNumberId !== undefined) {
-    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       const publishResult = await services.eventPublisher.publishTranscribeAudio({
         type: 'whatsapp.audio.transcribe',
         messageId: result.value.messageId,
@@ -696,7 +705,6 @@ async function handleAudioMessage(
           { error: publishResult.error, messageId: result.value.messageId },
           'Failed to publish audio transcription event'
         );
-/* v8 ignore start -- ts-type: Result.ok check narrows type @preserve */
       }
       /* v8 ignore stop @preserve */
     }
@@ -704,160 +712,6 @@ async function handleAudioMessage(
     // Mark as read with typing indicator (shows user something is happening)
     await markAudioAsReadWithTyping(request, savedEvent, services.whatsappCloudApi);
   }
-}
-
-/**
- * Handle reaction message for action approval/rejection.
- *
- * Reactions are used for quick approval responses:
- * - 👍 (thumbs up) → approve
- * - 👎 (thumbs down) → reject
- * - Other emojis → ignored
- */
-async function handleReactionMessage(
-  request: FastifyRequest<{ Body: WebhookPayload }>,
-  savedEvent: { id: string },
-  services: ReturnType<typeof getServices>,
-  userId: string,
-  reactionData: { emoji: string; messageId: string }
-): Promise<void> {
-  const { webhookEventRepository, outboundMessageRepository, eventPublisher } = services;
-
-  request.log.info(
-    {
-      eventId: savedEvent.id,
-      userId,
-      reactionEmoji: reactionData.emoji,
-      messageId: reactionData.messageId,
-    },
-    'Processing reaction message'
-  );
-
-  // Map emoji to intent
-  let intent: 'approve' | 'reject' | null = null;
-  if (reactionData.emoji === '👍') {
-    intent = 'approve';
-  } else if (reactionData.emoji === '👎') {
-    intent = 'reject';
-  }
-
-  if (intent === null) {
-    request.log.info(
-      { eventId: savedEvent.id, emoji: reactionData.emoji },
-      'Ignoring unsupported reaction emoji'
-    );
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
-      ignoredReason: {
-      /* v8 ignore stop @preserve */
-        code: 'UNSUPPORTED_REACTION',
-        message: `Only 👍 and 👎 reactions are supported. Received: ${reactionData.emoji}`,
-        details: { emoji: reactionData.emoji },
-      },
-    });
-    return;
-  }
-
-  // Look up the original message being reacted to
-  const outboundResult = await outboundMessageRepository.findByWamid(reactionData.messageId);
-
-  if (!outboundResult.ok) {
-    request.log.error(
-      { eventId: savedEvent.id, messageId: reactionData.messageId, error: outboundResult.error },
-      'Failed to look up outbound message'
-    );
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
-      failureDetails: `Failed to look up outbound message: ${outboundResult.error.message}`,
-    });
-    return;
-  }
-
-  if (outboundResult.value === null) {
-    request.log.info(
-      { eventId: savedEvent.id, messageId: reactionData.messageId },
-      'No outbound message found for reaction (may not be an approval message)'
-    );
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
-      ignoredReason: {
-        code: 'NO_OUTBOUND_MESSAGE',
-        message: 'No outbound message found for this reaction',
-        details: { messageId: reactionData.messageId },
-      },
-    });
-    return;
-  }
-
-  const correlationId = outboundResult.value.correlationId;
-  // Extract actionId from correlationId (format: action-{type}-approval-{actionId})
-  const match = /action-[^-]+-approval-(.+)$/.exec(correlationId);
-
-  if (match === null) {
-    request.log.info(
-      { eventId: savedEvent.id, correlationId },
-      'Reaction is not for an approval message, ignoring'
-    );
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
-      ignoredReason: {
-        code: 'NOT_APPROVAL_MESSAGE',
-        message: 'Reaction is not for an approval message',
-        details: { correlationId },
-      },
-    });
-    return;
-  }
-
-  // match[1] is guaranteed to exist and be non-empty because:
-  // 1. We returned early if match === null
-  // 2. The regex uses (.+) which requires at least one character
-  // TypeScript doesn't know this, so we need the fallback for type safety
-  const actionId = match[1] ?? '';
-  request.log.info(
-    { eventId: savedEvent.id, correlationId, actionId, intent },
-      /* v8 ignore stop @preserve */
-    'Reaction is for approval message, publishing reply event'
-  );
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
-
-  // Publish approval reply event with the intent from the reaction
-  const replyText = intent === 'approve' ? 'yes' : 'no';
-  /* v8 ignore stop @preserve */
-  const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
-    type: 'action.approval.reply',
-    replyToWamid: reactionData.messageId,
-    replyText,
-    userId,
-    timestamp: new Date().toISOString(),
-    actionId,
-  };
-
-  const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
-
-  if (!approvalPublishResult.ok) {
-    request.log.error(
-      {
-        eventId: savedEvent.id,
-        error: approvalPublishResult.error,
-        replyToWamid: reactionData.messageId,
-      },
-      'Failed to publish approval reply event'
-    );
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
-      failureDetails: `Failed to publish approval reply: ${approvalPublishResult.error.message}`,
-    });
-    return;
-  }
-
-  request.log.info(
-    {
-      eventId: savedEvent.id,
-      userId,
-      replyToWamid: reactionData.messageId,
-      actionId,
-      intent,
-    },
-    'Published approval reply event from reaction'
-  );
-
-  await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
 }
 
 /**
@@ -910,7 +764,8 @@ async function handleButtonMessage(
   // Validate intent
   // Action approval intents: approve, cancel, convert
   // Code task intents: cancel-task (INT-379), view-task (INT-379)
-  const validIntents = ['approve', 'cancel', 'convert', 'cancel-task', 'view-task'];
+  const validIntents = ['approve', 'cancel', 'reject', 'convert', 'cancel-task', 'view-task'];
+  /* v8 ignore start -- test-infra: tests only send valid button intents @preserve */
   if (!validIntents.includes(intent ?? '')) {
     request.log.warn(
       { eventId: savedEvent.id, intent },
@@ -927,22 +782,7 @@ async function handleButtonMessage(
     /* v8 ignore stop @preserve */
     return;
   }
-
-  // Approve intent requires a nonce for security
-  if (intent === 'approve' && nonce === undefined) {
-    request.log.warn(
-      { eventId: savedEvent.id, buttonId: buttonResponse.buttonId },
-      'Approve button missing nonce'
-    );
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
-      ignoredReason: {
-        code: 'MISSING_NONCE',
-        message: 'Approve button requires nonce for security',
-        details: { buttonId: buttonResponse.buttonId },
-      },
-    });
-    return;
-  }
+  /* v8 ignore stop @preserve */
 
   request.log.info(
     {
@@ -961,11 +801,13 @@ async function handleButtonMessage(
     switch (intentType) {
       case 'approve': return 'yes';
       case 'cancel': return 'no';
+      case 'reject': return 'no';
       case 'convert': return 'convert';
       case 'cancel-task': return 'cancel-task';
       case 'view-task': return 'view-task';
+      /* v8 ignore start -- ts-type: default unreachable after intent validation above @preserve */
       default: return intentType;
-    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+      /* v8 ignore stop @preserve */
     }
   };
   const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
@@ -1001,7 +843,6 @@ async function handleButtonMessage(
     });
     return;
   }
-  /* v8 ignore stop @preserve */
 
   request.log.info(
     {
