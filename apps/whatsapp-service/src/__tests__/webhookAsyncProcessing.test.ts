@@ -1883,6 +1883,116 @@ describe('Webhook async processing', () => {
       expect(latestEvent?.buttonId).toBe('approve:action-abc123');
       expect(latestEvent?.buttonTitle).toBe('Approve');
       expect(latestEvent?.replyText).toBe('yes');
+
+      const markedWithTyping = ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages();
+      expect(markedWithTyping.length).toBeGreaterThan(0);
+    });
+
+    it('processes button even when markAsReadWithTyping fails', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+      ctx.whatsappCloudApi.setFailMarkAsRead(true);
+
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.approve.failread',
+        buttonId: 'approve:action-readfail',
+        buttonTitle: 'Approve',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.actionId).toBe('action-readfail');
+      expect(latestEvent?.replyText).toBe('yes');
+
+      ctx.whatsappCloudApi.setFailMarkAsRead(false);
+    });
+
+    it('skips markAsReadWithTyping when message id is missing from button payload', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: senderPhone,
+                      profile: { name: 'Test User' },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: senderPhone,
+                      timestamp: '1234567890',
+                      type: 'interactive' as const,
+                      interactive: {
+                        type: 'button_reply',
+                        button_reply: {
+                          id: 'approve:action-noid',
+                          title: 'Approve',
+                        },
+                      },
+                      context: {
+                        from: '15550987654',
+                        id: 'wamid.context.noid',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const countBefore = ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages().length;
+      await triggerWebhookProcessing();
+
+      const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.actionId).toBe('action-noid');
+
+      const countAfter = ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages().length;
+      expect(countAfter).toBe(countBefore);
     });
 
     it('processes cancel button', async () => {

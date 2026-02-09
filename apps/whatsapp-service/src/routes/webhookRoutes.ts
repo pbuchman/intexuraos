@@ -727,7 +727,26 @@ async function handleButtonMessage(
   userId: string,
   buttonResponse: { buttonId: string; buttonTitle: string; replyToWamid: string }
 ): Promise<void> {
-  const { webhookEventRepository, eventPublisher } = services;
+  const { webhookEventRepository, eventPublisher, whatsappCloudApi } = services;
+
+  // Fire-and-forget: mark as read + show typing indicator
+  const originalMessageId = extractMessageId(request.body);
+  const phoneNumberId = extractPhoneNumberId(request.body);
+  if (phoneNumberId !== null && originalMessageId !== null) {
+    whatsappCloudApi.markAsReadWithTyping(phoneNumberId, originalMessageId).then(
+      (result) => {
+        if (!result.ok) {
+          request.log.warn(
+            { eventId: savedEvent.id, error: result.error, messageId: originalMessageId },
+            'Failed to mark button message as read with typing'
+          );
+        }
+      },
+      /* v8 ignore start -- upstream: WhatsApp API promise rejection is non-reproducible in fakes @preserve */
+      (error: unknown) => { request.log.error({ error }, 'markAsReadWithTyping threw unexpectedly'); }
+      /* v8 ignore stop @preserve */
+    );
+  }
 
   request.log.info(
     {
