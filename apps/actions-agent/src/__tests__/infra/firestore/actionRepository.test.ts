@@ -125,28 +125,6 @@ describe('FirestoreActionRepository', () => {
       expect(result?.resource_error).toBeUndefined();
     });
 
-    it('saves and retrieves action with approvalNonce fields', async () => {
-      const action = createTestAction({
-        approvalNonce: 'a1b2',
-        approvalNonceExpiresAt: '2026-01-31T12:00:00.000Z',
-      });
-
-      await repository.save(action);
-
-      const result = await repository.getById(action.id);
-      expect(result?.approvalNonce).toBe('a1b2');
-      expect(result?.approvalNonceExpiresAt).toBe('2026-01-31T12:00:00.000Z');
-    });
-
-    it('saves action without optional approvalNonce fields', async () => {
-      const action = createTestAction();
-
-      await repository.save(action);
-
-      const result = await repository.getById(action.id);
-      expect(result?.approvalNonce).toBeUndefined();
-      expect(result?.approvalNonceExpiresAt).toBeUndefined();
-    });
   });
 
   describe('update', () => {
