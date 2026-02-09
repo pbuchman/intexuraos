@@ -196,8 +196,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        // Send WhatsApp notification
-        await whatsappNotifier.notifyTaskComplete(task.userId, task);
+        // Send WhatsApp notification (use updated task with result populated)
+        const completedTask = { ...task, status: 'completed' as const, result };
+        await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
 
         // Record task completion for rate limiting (fire and forget)
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
@@ -338,6 +339,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
         /* v8 ignore stop @preserve */
+
+        // Send WhatsApp notification for interrupted task
+        await whatsappNotifier.notifyTaskFailed(
+          task.userId,
+          task,
+          {
+            code: 'worker_interrupted',
+            message: 'Worker was interrupted during task execution',
+          }
+        );
 
         // Record task completion for rate limiting (fire and forget)
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
