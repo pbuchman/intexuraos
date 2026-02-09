@@ -438,6 +438,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     executeLinearAction: executeLinearActionUseCase,
     executeCodeAction: executeCodeActionUseCase,
     codeAgentClient,
+    webAppUrl: config.webAppUrl,
   });
 
   container = {
