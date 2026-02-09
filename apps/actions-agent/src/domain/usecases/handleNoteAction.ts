@@ -5,6 +5,7 @@ import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import type { ExecuteNoteActionUseCase } from './executeNoteAction.js';
 import { shouldAutoExecute } from './shouldAutoExecute.js';
+import { buildApprovalButtons } from '../utils/approvalButtons.js';
 
 export interface HandleNoteActionDeps {
   actionRepository: ActionRepository;
@@ -53,7 +54,8 @@ export function createHandleNoteActionUseCase(deps: HandleNoteActionDeps): Handl
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New note ready for approval: "${event.title}". Review here: ${actionLink} or reply to approve/reject.`;
+      const message = `New note ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
+      const buttons = buildApprovalButtons({ actionId: event.actionId });
 
       logger.info(
         { actionId: event.actionId, userId: event.userId },
@@ -63,6 +65,7 @@ export function createHandleNoteActionUseCase(deps: HandleNoteActionDeps): Handl
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: event.userId,
         message,
+        buttons,
         correlationId: `action-note-approval-${event.actionId}`,
       });
 

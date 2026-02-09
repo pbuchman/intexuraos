@@ -5,6 +5,7 @@ import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import type { ExecuteLinkActionUseCase } from './executeLinkAction.js';
 import { shouldAutoExecute } from './shouldAutoExecute.js';
+import { buildApprovalButtons } from '../utils/approvalButtons.js';
 
 export interface HandleLinkActionDeps {
   actionRepository: ActionRepository;
@@ -53,7 +54,8 @@ export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): Handl
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New link ready to save: "${event.title}". Review here: ${actionLink} or reply to approve/reject.`;
+      const message = `New link ready to save: "${event.title}"\n\nReview: ${actionLink}`;
+      const buttons = buildApprovalButtons({ actionId: event.actionId });
 
       logger.info(
         { actionId: event.actionId, userId: event.userId },
@@ -63,6 +65,7 @@ export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): Handl
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: event.userId,
         message,
+        buttons,
         correlationId: `action-link-approval-${event.actionId}`,
       });
 
