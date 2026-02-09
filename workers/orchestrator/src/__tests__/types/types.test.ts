@@ -141,6 +141,7 @@ describe('Orchestrator Types', () => {
         containerId: 'session-123',
         worktreePath: '/tmp/worktrees/task-123',
         startedAt: '2025-01-01T00:00:00.000Z',
+        linearIssueLabels: [],
       };
 
       expect(task.taskId).toBe('task-123');
@@ -165,6 +166,7 @@ describe('Orchestrator Types', () => {
         linearIssueTitle: 'Test issue',
         slug: 'test-slug',
         completedAt: '2025-01-01T00:30:00.000Z',
+        linearIssueLabels: ['code-task'],
       };
 
       expect(task.linearIssueId).toBe('INT-456');
