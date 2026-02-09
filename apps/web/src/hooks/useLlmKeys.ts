@@ -129,6 +129,8 @@ export function useLlmKeys(): UseLlmKeysResult {
       const userId = user?.sub;
       if (userId === undefined) return;
 
+      const previousModel = keys?.defaultModel ?? null;
+
       setSavingDefaultModel(true);
       setError(null);
 
@@ -145,14 +147,14 @@ export function useLlmKeys(): UseLlmKeysResult {
         // Revert on failure
         setKeys((prev) => {
           if (prev === null) return prev;
-          return { ...prev, defaultModel: prev.defaultModel };
+          return { ...prev, defaultModel: previousModel };
         });
         setError(getErrorMessage(err, 'Failed to save default model'));
       } finally {
         setSavingDefaultModel(false);
       }
     },
-    [user?.sub, getAccessToken]
+    [user?.sub, getAccessToken, keys?.defaultModel]
   );
 
   const defaultModel = keys?.defaultModel ?? null;
