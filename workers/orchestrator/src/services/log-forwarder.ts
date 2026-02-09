@@ -22,6 +22,7 @@ export interface ForwardingState {
   logFilePath: string;
   position: number;
   buffer: string;
+  partialLine: string;
   sequence: number;
   chunksSent: number;
   totalBytes: number;
@@ -74,6 +75,12 @@ export class LogForwarder {
     }
     /* v8 ignore stop @preserve */
 
+    // Flush any remaining partial line through formatter
+    if (state.partialLine !== '') {
+      state.buffer += formatLogChunk(state.partialLine + '\n');
+      state.partialLine = '';
+    }
+
     // Flush any remaining buffer content
     await this.flushBuffer(taskId);
 
@@ -109,6 +116,7 @@ export class LogForwarder {
       logFilePath,
       position: 0,
       buffer: '',
+      partialLine: '',
       sequence: 0,
       chunksSent: 0,
       totalBytes: 0,
@@ -167,6 +175,13 @@ export class LogForwarder {
     }
     /* v8 ignore stop @preserve */
 
+    /* v8 ignore start -- test-infra: partialLine only set via appendChunk (Docker mode), stopForwarding tests use file-based mode @preserve */
+    if (state.partialLine !== '') {
+      state.buffer += formatLogChunk(state.partialLine + '\n');
+      state.partialLine = '';
+    }
+    /* v8 ignore stop @preserve */
+
     // Flush remaining buffer
     await this.flushBuffer(taskId);
 
@@ -203,6 +218,7 @@ export class LogForwarder {
         logFilePath: '', // Not used in Docker mode
         position: 0,
         buffer: '',
+        partialLine: '',
         sequence: 0,
         chunksSent: 0,
         totalBytes: 0,
@@ -219,7 +235,21 @@ export class LogForwarder {
       }, CHUNK_INTERVAL_MS);
     }
 
-    state.buffer += formatLogChunk(content);
+    // Reassemble partial lines across chunk boundaries
+    const combined = state.partialLine + content;
+    state.partialLine = '';
+
+    const lastNewline = combined.lastIndexOf('\n');
+    if (lastNewline === -1) {
+      // No complete line yet — buffer everything
+      state.partialLine = combined;
+      return;
+    }
+
+    const complete = combined.slice(0, lastNewline + 1);
+    state.partialLine = combined.slice(lastNewline + 1);
+
+    state.buffer += formatLogChunk(complete);
 
     // Flush if buffer exceeds max chunk size
     if (state.buffer.length >= MAX_CHUNK_SIZE) {

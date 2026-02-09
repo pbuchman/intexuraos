@@ -616,6 +616,106 @@ describe('LogForwarder', () => {
     });
   });
 
+  describe('appendChunk partial-line reassembly', () => {
+    it('should buffer content without trailing newline until next chunk completes it', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+      forwarder.registerTask('task-partial', webhookSecret);
+
+      const jsonPart1 = '{"type":"assistant","message":{"content":[{"type":"text","text":"hel';
+      const jsonPart2 = 'lo world"}]}}\n';
+
+      forwarder.appendChunk('task-partial', jsonPart1);
+      forwarder.appendChunk('task-partial', jsonPart2);
+
+      await forwarder.flushAndStop('task-partial');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-partial');
+      expect(taskUploads.length).toBeGreaterThan(0);
+
+      const allContent = taskUploads
+        .flatMap((u) => u.chunks)
+        .map((c) => c.content)
+        .join('');
+      expect(allContent).toContain('hello world');
+      expect(allContent).not.toContain('"type"');
+    });
+
+    it('should filter split hook_response JSON when reassembled', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+      forwarder.registerTask('task-hook', webhookSecret);
+
+      const hookJson = JSON.stringify({
+        type: 'system',
+        subtype: 'hook_response',
+        hook_id: 'abc',
+        output: 'x'.repeat(200),
+      });
+      const midpoint = Math.floor(hookJson.length / 2);
+      const part1 = hookJson.slice(0, midpoint);
+      const part2 = hookJson.slice(midpoint) + '\n';
+
+      forwarder.appendChunk('task-hook', part1);
+      forwarder.appendChunk('task-hook', part2);
+
+      await forwarder.flushAndStop('task-hook');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-hook');
+      const allContent = taskUploads
+        .flatMap((u) => u.chunks)
+        .map((c) => c.content)
+        .join('');
+      expect(allContent).toBe('');
+    });
+
+    it('should flush partial line on flushAndStop', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+      forwarder.registerTask('task-flush-partial', webhookSecret);
+
+      forwarder.appendChunk('task-flush-partial', '[entrypoint] Starting');
+
+      await forwarder.flushAndStop('task-flush-partial');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-flush-partial');
+      expect(taskUploads.length).toBeGreaterThan(0);
+
+      const allContent = taskUploads
+        .flatMap((u) => u.chunks)
+        .map((c) => c.content)
+        .join('');
+      expect(allContent).toContain('[entrypoint] Starting');
+    });
+
+    it('should handle multiple complete lines in one chunk', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+      forwarder.registerTask('task-multi', webhookSecret);
+
+      const line1 = JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'Line 1' }] },
+      });
+      const line2 = JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'Line 2' }] },
+      });
+
+      forwarder.appendChunk('task-multi', line1 + '\n' + line2 + '\n');
+
+      await forwarder.flushAndStop('task-multi');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-multi');
+      const allContent = taskUploads
+        .flatMap((u) => u.chunks)
+        .map((c) => c.content)
+        .join('');
+      expect(allContent).toContain('Line 1');
+      expect(allContent).toContain('Line 2');
+    });
+  });
+
   describe('splitIntoChunks', () => {
     it('should prefer splitting at newline when within 80% of max size', async () => {
       const forwarder = createMockForwarder();

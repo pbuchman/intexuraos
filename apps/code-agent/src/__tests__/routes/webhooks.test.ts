@@ -522,8 +522,8 @@ describe('POST /internal/webhooks/task-complete', () => {
     it('updates task status correctly for completed task without result', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
-        prompt: 'Investigate the issue',
-        sanitizedPrompt: 'Investigate the issue',
+        prompt: 'List all services',
+        sanitizedPrompt: 'List all services',
         systemPromptHash: 'default',
         workerType: 'auto',
         workerLocation: 'mac',
@@ -561,6 +561,53 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.status).toBe('completed');
+      expect(getResult.value.result).toBeUndefined();
+      expect(getResult.value.callbackReceived).toBe(true);
+    });
+
+    it('stores default error for failed tasks without error details', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'failed' as const,
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.code).toBe('UNKNOWN_FAILURE');
       expect(getResult.value.callbackReceived).toBe(true);
     });
 

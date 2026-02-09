@@ -67,6 +67,7 @@ describe('HandleApprovalReplyUseCase', () => {
       whatsappPublisher,
       actionEventPublisher,
       logger: createMockLogger(),
+      webAppUrl: 'https://test.intexuraos.cloud',
     });
   });
 
@@ -821,6 +822,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeNoteAction: mockExecuteNoteAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -900,6 +902,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeNoteAction: mockExecuteNoteAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -951,6 +954,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeTodoAction: mockExecuteTodoAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -1031,6 +1035,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeTodoAction: mockExecuteTodoAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -1082,6 +1087,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeResearchAction: mockExecuteResearchAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -1162,6 +1168,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeResearchAction: mockExecuteResearchAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -1213,6 +1220,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeLinkAction: mockExecuteLinkAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -1263,6 +1271,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: errorLogger,
         executeLinkAction: mockExecuteLinkAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithError({
@@ -1348,6 +1357,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeCalendarAction: mockExecuteCalendarAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -1428,6 +1438,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: errorLogger,
         executeCalendarAction: mockExecuteCalendarAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithError({
@@ -1483,6 +1494,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeLinearAction: mockExecuteLinearAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -1563,6 +1575,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: errorLogger,
         executeLinearAction: mockExecuteLinearAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithError({
@@ -1618,6 +1631,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeCodeAction: mockExecuteCodeAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -1698,6 +1712,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         logger: createMockLogger(),
         executeCodeAction: mockExecuteCodeAction,
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithExecute({
@@ -2097,6 +2112,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2127,6 +2143,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2167,6 +2184,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2199,6 +2217,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2227,6 +2246,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2255,6 +2275,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2283,6 +2304,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2311,6 +2333,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2344,7 +2367,7 @@ describe('HandleApprovalReplyUseCase', () => {
 
       const messages = whatsappPublisher.getSentMessages();
       expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://app.intexuraos.cloud/#/tasks/task-abc');
+      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/tasks/task-abc');
     });
   });
 
@@ -2364,7 +2387,7 @@ describe('HandleApprovalReplyUseCase', () => {
 
       const messages = whatsappPublisher.getSentMessages();
       expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://app.intexuraos.cloud/#/tasks/');
+      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/tasks/');
     });
   });
 
@@ -2380,6 +2403,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2408,6 +2432,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2431,6 +2456,7 @@ describe('HandleApprovalReplyUseCase', () => {
         actionEventPublisher,
         codeAgentClient,
         logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
       });
 
       const result = await useCaseWithClient({
@@ -2461,7 +2487,7 @@ describe('HandleApprovalReplyUseCase', () => {
 
       const messages = whatsappPublisher.getSentMessages();
       expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://app.intexuraos.cloud/#/tasks/');
+      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/tasks/');
     });
   });
 
