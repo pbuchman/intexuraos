@@ -239,50 +239,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.send({ received: true });
       }
 
-      if (status === 'completed' && !result) {
-        const updateResult = await codeTaskRepo.update(taskId, {
-          status: 'completed',
-          callbackReceived: true,
-        });
-
-        if (!updateResult.ok) {
-          request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed (no result)');
-          return reply.fail('INTERNAL_ERROR', updateResult.error.message);
-        }
-
-        if (task.actionId) {
-          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'completed', undefined, traceId);
-
-          if (!actionsResult.ok) {
-            request.log.warn(
-              { taskId, actionId: task.actionId, error: actionsResult.error },
-              'Failed to notify actions-agent - action status may be stale'
-            );
-          }
-        }
-
-        await whatsappNotifier.notifyTaskComplete(task.userId, { ...task, status: 'completed' as const });
-
-        rateLimitService.recordTaskComplete(task.userId).catch((err) => {
-          request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
-        });
-
-        metricsClient.incrementTasksCompleted(task.workerType, 'completed').catch((err) => {
-          request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
-        });
-        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
-        if (request.body.duration) {
-          metricsClient.recordTaskDuration(task.workerType, request.body.duration).catch((err) => {
-            request.log.warn({ taskId, error: err }, 'Failed to record task duration metric');
-          });
-        }
-        /* v8 ignore stop @preserve */
-
-        request.log.info({ taskId }, 'Task marked as completed (no PR result)');
-        // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
-        return await reply.send({ received: true });
-      }
-
       /* v8 ignore start -- test-infra: status === 'failed' conditional requires specific webhook payload @preserve */
       if (status === 'failed') {
         const taskError = error ?? { code: 'UNKNOWN_FAILURE', message: 'Task failed without error details' };

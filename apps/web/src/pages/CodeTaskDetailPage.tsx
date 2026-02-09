@@ -134,11 +134,13 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   // Build links array - Linear and PR
   const links: { label: string; url: string | undefined; text: string; type?: string }[] = [];
   if (task.linearIssueId !== undefined) {
+    const identifier = task.linearIssue?.identifier ?? task.linearIssueId;
+    const title = task.linearIssue?.title ?? task.linearIssueTitle ?? '';
     const typeLabel = task.linearIssueType ? ` [${task.linearIssueType}]` : '';
-    const linkItem: { label: string; url: string; text: string; type?: string } = {
+    const linkItem: { label: string; url: string | undefined; text: string; type?: string } = {
       label: 'Linear',
-      url: `https://linear.app/intexuraos/issue/${task.linearIssueId}`,
-      text: `${task.linearIssueId}${typeLabel} ${task.linearIssueTitle ?? ''}`,
+      url: task.linearIssue?.url,
+      text: `${identifier}${typeLabel} ${title}`,
     };
     if (task.linearIssueType !== undefined) {
       linkItem.type = task.linearIssueType;
@@ -158,10 +160,10 @@ export function CodeTaskDetailPage(): React.JSX.Element {
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-3">
           {task.linearIssueId !== undefined ? (
-            <span className="text-lg font-medium text-blue-600 dark:text-blue-400">{task.linearIssueId}</span>
+            <span className="text-lg font-medium text-blue-600 dark:text-blue-400">{task.linearIssue?.identifier ?? task.linearIssueId}</span>
           ) : null}
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {task.linearIssueTitle ?? 'Code Task'}
+            {task.linearIssue?.title ?? task.linearIssueTitle ?? 'Code Task'}
           </h2>
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}
