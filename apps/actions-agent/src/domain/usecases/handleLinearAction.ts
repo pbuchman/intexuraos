@@ -10,6 +10,7 @@ import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
+import { buildApprovalButtons } from '../utils/approvalButtons.js';
 
 export interface HandleLinearActionDeps {
   actionRepository: ActionRepository;
@@ -42,7 +43,8 @@ export function createHandleLinearActionUseCase(
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New Linear issue ready for approval: "${event.title}". Review here: ${actionLink} or reply to approve/reject.`;
+      const message = `New Linear issue ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
+      const buttons = buildApprovalButtons({ actionId: event.actionId });
 
       logger.info(
         { actionId: event.actionId, userId: event.userId },
@@ -52,6 +54,7 @@ export function createHandleLinearActionUseCase(
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: event.userId,
         message,
+        buttons,
         correlationId: `action-linear-approval-${event.actionId}`,
       });
 

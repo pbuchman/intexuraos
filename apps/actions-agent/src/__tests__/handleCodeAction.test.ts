@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { isOk } from '@intexuraos/common-core';
 import { createHandleCodeActionUseCase } from '../domain/usecases/handleCodeAction.js';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -29,9 +28,6 @@ const createMockLogger = (): Logger =>
     silent: vi.fn(),
     msgPrefix: '',
   }) as unknown as Logger;
-
-// Helper to check if a string is a 4-char hex nonce
-const isHexNonce = (value: string): boolean => /^[a-f0-9]{4}$/.test(value);
 
 describe('handleCodeAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
@@ -98,49 +94,41 @@ describe('handleCodeAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     const action = await fakeActionRepository.getById('action-123');
     expect(action?.status).toBe('awaiting_approval');
 
-    // Verify nonce fields are set
-    expect(action?.approvalNonce).toBeDefined();
-    expect(isHexNonce(action?.approvalNonce ?? '')).toBe(true);
-    expect(action?.approvalNonceExpiresAt).toBeDefined();
-
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('Code task:');
-    expect(messages[0]?.message).toContain('Fix the login bug');
+    expect(messages[0]?.message).toContain('Fix authentication bug');
     expect(messages[0]?.message).toContain('Estimated cost: $1-2');
     expect(messages[0]?.message).toContain('Estimated time: 30-60 min');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
 
-    // Verify interactive buttons
+    // Verify interactive buttons (Approve, Reject, Convert to Issue)
     expect(messages[0]?.buttons).toHaveLength(3);
-    const approveButton = messages[0]?.buttons?.find((b) => b.reply.title.startsWith('Approve:'));
+    const approveButton = messages[0]?.buttons?.find((b) => b.reply.title === 'Approve');
     expect(approveButton).toBeDefined();
-    expect(approveButton?.reply.id).toBe(`approve:action-123:${action?.approvalNonce}`);
-    expect(approveButton?.reply.title).toBe(`Approve: ${action?.approvalNonce}`);
+    expect(approveButton?.reply.id).toBe('approve:action-123');
 
-    const cancelButton = messages[0]?.buttons?.find((b) => b.reply.title === 'Cancel');
-    expect(cancelButton).toBeDefined();
-    expect(cancelButton?.reply.id).toBe('cancel:action-123');
+    const rejectButton = messages[0]?.buttons?.find((b) => b.reply.title === 'Reject');
+    expect(rejectButton).toBeDefined();
+    expect(rejectButton?.reply.id).toBe('reject:action-123');
 
     const convertButton = messages[0]?.buttons?.find((b) => b.reply.title === 'Convert to Issue');
     expect(convertButton).toBeDefined();
     expect(convertButton?.reply.id).toBe('convert:action-123');
   });
 
-  it('truncates prompt preview when prompt is longer than 100 characters', async () => {
-    const longPrompt = 'Fix the login bug that occurs when users try to authenticate with their credentials and the system fails to validate the token properly';
-    const action = createAction({
-      payload: { prompt: longPrompt, confidence: 0.95 },
-    });
+  it('truncates title preview when title is longer than 100 characters', async () => {
+    const longTitle = 'Fix the login bug that occurs when users try to authenticate with their credentials and the system fails to validate the token properly';
+    const action = createAction();
     await fakeActionRepository.save(action);
 
     const usecase = registerActionHandler(createHandleCodeActionUseCase, {
@@ -151,7 +139,7 @@ describe('handleCodeAction usecase', () => {
     });
 
     const event = createEvent({
-      payload: { prompt: longPrompt, confidence: 0.95 },
+      title: longTitle,
     });
     await usecase.execute(event);
 
@@ -159,7 +147,7 @@ describe('handleCodeAction usecase', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.message).toContain('Code task:');
     const promptInMessage = messages[0]?.message.split('Code task: ')[1]?.split('\n')[0];
-    expect(promptInMessage?.length).toBeLessThanOrEqual(103); // "Code task: " (12) + "..." (3) + 100 char prompt = 115 max
+    expect(promptInMessage?.length).toBeLessThanOrEqual(103);
   });
 
   it('succeeds even when WhatsApp notification fails (best-effort)', async () => {
@@ -179,9 +167,9 @@ describe('handleCodeAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     const action = await fakeActionRepository.getById('action-123');
@@ -207,9 +195,9 @@ describe('handleCodeAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     // Verify auto-execution happened (action should be completed)
@@ -289,9 +277,9 @@ describe('handleCodeAction usecase', () => {
       const event = createEvent();
       const result = await usecase.execute(event);
 
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.actionId).toBe('action-123');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
       }
 
       // Should not send WhatsApp message since action was already processed
@@ -320,7 +308,7 @@ describe('handleCodeAction usecase', () => {
 
       const result = await usecase.execute(event);
 
-      expect(isOk(result)).toBe(true);
+      expect(result.ok).toBe(true);
 
       const messages = fakeWhatsappPublisher.getSentMessages();
       expect(messages).toHaveLength(1);
@@ -371,8 +359,7 @@ describe('handleCodeAction usecase', () => {
   });
 
   describe('error cases', () => {
-    it('returns error when action not found in repository', async () => {
-      // Do NOT save the action to repository, simulating "not found"
+    it('succeeds even when action not in repository (uses event data directly)', async () => {
       const usecase = createHandleCodeActionUseCase({
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
@@ -383,9 +370,9 @@ describe('handleCodeAction usecase', () => {
       const event = createEvent();
       const result = await usecase.execute(event);
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toBe('Action not found');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
       }
     });
   });

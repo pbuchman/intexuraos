@@ -1,17 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ok, err } from '@intexuraos/common-core';
-import { createHandleResearchActionUseCase } from '../domain/usecases/handleResearchAction.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createHandleLinearActionUseCase } from '../domain/usecases/handleLinearAction.js';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import { FakeActionRepository, FakeWhatsAppSendPublisher, createMockLogger } from './fakes.js';
 
-vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
-  shouldAutoExecute: vi.fn(() => false),
-}));
-
-import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
-
-describe('handleResearchAction usecase', () => {
+describe('handleLinearAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
@@ -20,11 +13,11 @@ describe('handleResearchAction usecase', () => {
     actionId: 'action-123',
     userId: 'user-456',
     commandId: 'cmd-789',
-    actionType: 'research',
-    title: 'Test Research',
+    actionType: 'linear',
+    title: 'Create Linear issue for bug fix',
     payload: {
-      prompt: 'What is quantum computing?',
-      confidence: 0.95,
+      prompt: 'Fix the login page timeout issue',
+      confidence: 0.9,
     },
     timestamp: '2025-01-01T12:00:00.000Z',
     ...overrides,
@@ -34,7 +27,7 @@ describe('handleResearchAction usecase', () => {
     id: 'action-123';
     userId: 'user-456';
     commandId: 'cmd-789';
-    type: 'research';
+    type: 'linear';
     confidence: number;
     title: string;
     status: 'pending';
@@ -45,9 +38,9 @@ describe('handleResearchAction usecase', () => {
     id: 'action-123',
     userId: 'user-456',
     commandId: 'cmd-789',
-    type: 'research' as const,
-    confidence: 0.95,
-    title: 'Test Research',
+    type: 'linear' as const,
+    confidence: 0.9,
+    title: 'Create Linear issue for bug fix',
     status: 'pending' as const,
     payload: {},
     createdAt: '2025-01-01T12:00:00.000Z',
@@ -62,7 +55,7 @@ describe('handleResearchAction usecase', () => {
   it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
+    const usecase = registerActionHandler(createHandleLinearActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -83,7 +76,7 @@ describe('handleResearchAction usecase', () => {
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
-    expect(messages[0]?.message).toContain('ready for approval');
+    expect(messages[0]?.message).toContain('New Linear issue ready for approval');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
 
     // Verify interactive approval buttons
@@ -97,7 +90,7 @@ describe('handleResearchAction usecase', () => {
   it('fails when marking action as awaiting_approval fails', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
+    const usecase = registerActionHandler(createHandleLinearActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -118,7 +111,7 @@ describe('handleResearchAction usecase', () => {
   it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
+    const usecase = registerActionHandler(createHandleLinearActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -143,7 +136,7 @@ describe('handleResearchAction usecase', () => {
   });
 
   it('returns success when action does not exist (deleted between creation and handling)', async () => {
-    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
+    const usecase = registerActionHandler(createHandleLinearActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -166,7 +159,7 @@ describe('handleResearchAction usecase', () => {
     const action = createAction();
     await fakeActionRepository.save({ ...action, status: 'awaiting_approval' });
 
-    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
+    const usecase = registerActionHandler(createHandleLinearActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -183,85 +176,5 @@ describe('handleResearchAction usecase', () => {
 
     // Should not send WhatsApp message since action was already processed
     expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);
-  });
-
-  describe('auto-execute flow', () => {
-    beforeEach(() => {
-      vi.mocked(shouldAutoExecute).mockReturnValue(true);
-    });
-
-    afterEach(() => {
-      vi.mocked(shouldAutoExecute).mockReturnValue(false);
-    });
-
-    it('auto-executes when shouldAutoExecute returns true and executeResearchAction is provided', async () => {
-      await fakeActionRepository.save(createAction());
-
-      const fakeExecuteResearchAction = vi.fn().mockResolvedValue(
-        ok({ status: 'completed' as const, resourceUrl: '/#/research/research-123' })
-      );
-
-      const usecase = registerActionHandler(createHandleResearchActionUseCase, {
-        actionRepository: fakeActionRepository,
-        whatsappPublisher: fakeWhatsappPublisher,
-        webAppUrl: 'https://app.intexuraos.com',
-        logger: createMockLogger(),
-        executeResearchAction: fakeExecuteResearchAction,
-      });
-
-      const event = createEvent();
-      const result = await usecase.execute(event);
-
-      expect(result.ok).toBe(true);
-      expect(fakeExecuteResearchAction).toHaveBeenCalledWith('action-123');
-
-      // Decorator updated status to awaiting_approval; real executeResearchAction would update to processing/completed
-      const action = await fakeActionRepository.getById('action-123');
-      expect(action?.status).toBe('awaiting_approval');
-    });
-
-    it('returns error when auto-execute fails', async () => {
-      await fakeActionRepository.save(createAction());
-
-      const fakeExecuteResearchAction = vi.fn().mockResolvedValue(
-        err(new Error('Execution failed'))
-      );
-
-      const usecase = registerActionHandler(createHandleResearchActionUseCase, {
-        actionRepository: fakeActionRepository,
-        whatsappPublisher: fakeWhatsappPublisher,
-        webAppUrl: 'https://app.intexuraos.com',
-        logger: createMockLogger(),
-        executeResearchAction: fakeExecuteResearchAction,
-      });
-
-      const event = createEvent();
-      const result = await usecase.execute(event);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toBe('Execution failed');
-      }
-    });
-
-    it('falls back to approval flow when executeResearchAction is not provided', async () => {
-      await fakeActionRepository.save(createAction());
-
-      const usecase = registerActionHandler(createHandleResearchActionUseCase, {
-        actionRepository: fakeActionRepository,
-        whatsappPublisher: fakeWhatsappPublisher,
-        webAppUrl: 'https://app.intexuraos.com',
-        logger: createMockLogger(),
-      });
-
-      const event = createEvent();
-      const result = await usecase.execute(event);
-
-      expect(result.ok).toBe(true);
-
-      // Action should be updated to awaiting_approval
-      const action = await fakeActionRepository.getById('action-123');
-      expect(action?.status).toBe('awaiting_approval');
-    });
   });
 });
