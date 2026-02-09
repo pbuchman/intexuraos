@@ -6,12 +6,14 @@
 
 | Comment | Author | Action |
 | ------- | ------ | ------ |
+
 ${FIXED_ROWS}
 
 ### ⏭️ Skipped (${SKIPPED_COUNT})
 
 | Comment | Author | Reason |
 | ------- | ------ | ------ |
+
 ${SKIPPED_ROWS}
 
 ---
