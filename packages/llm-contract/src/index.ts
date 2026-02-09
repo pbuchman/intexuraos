@@ -20,8 +20,11 @@ export type {
 
 export {
   ALL_LLM_MODELS,
+  ALL_FAST_MODELS,
+  FAST_MODEL_DISPLAY_NAMES,
   MODEL_PROVIDER_MAP,
   getProviderForModel,
+  isFastModel,
   isValidModel,
   LlmModels,
   LlmProviders,
@@ -55,6 +58,10 @@ export type {
   OpenAI,
   Anthropic,
   Perplexity,
+  Zai,
+  // Individual model types - Zai
+  Glm47,
+  Glm47Flash,
 } from './supportedModels.js';
 
 export type { ImageSize, ModelPricing, ProviderPricing, CostCalculator } from './pricing.js';

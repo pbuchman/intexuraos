@@ -20,6 +20,7 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN ?? 'local-dev-token',
   INTEXURAOS_GCP_PROJECT_ID: process.env.INTEXURAOS_GCP_PROJECT_ID ?? 'intexuraos-dev',
   INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
+  INTEXURAOS_GUEST_ZAI_API_KEY: process.env.INTEXURAOS_GUEST_ZAI_API_KEY ?? '',
   FIREBASE_AUTH_EMULATOR_HOST: 'localhost:8104',
 };
 
@@ -136,8 +137,6 @@ const SERVICE_ENV_MAPPINGS = {
   'chat-agent': {
     // OpenAI API key for embeddings (from .envrc)
     INTEXURAOS_OPENAI_API_KEY: process.env.INTEXURAOS_OPENAI_API_KEY ?? '',
-    // ZAI API key for guest chat sessions (GLM-4.7-Flash at $0 cost)
-    INTEXURAOS_GUEST_ZAI_API_KEY: process.env.INTEXURAOS_GUEST_ZAI_API_KEY ?? '',
   },
 };
 

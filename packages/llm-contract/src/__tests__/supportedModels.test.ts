@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALL_LLM_MODELS,
+  ALL_FAST_MODELS,
+  FAST_MODEL_DISPLAY_NAMES,
   MODEL_PROVIDER_MAP,
   getProviderForModel,
+  isFastModel,
   isValidModel,
   LlmModels,
   LlmProviders,
@@ -143,6 +146,54 @@ describe('supportedModels', () => {
     });
   });
 
+  describe('ALL_FAST_MODELS', () => {
+    it('contains all 5 fast models', () => {
+      expect(ALL_FAST_MODELS).toHaveLength(5);
+    });
+
+    it('contains expected models', () => {
+      expect(ALL_FAST_MODELS).toContain('gemini-2.5-flash');
+      expect(ALL_FAST_MODELS).toContain('gemini-2.0-flash');
+      expect(ALL_FAST_MODELS).toContain('glm-4.7-flash');
+      expect(ALL_FAST_MODELS).toContain('claude-3-5-haiku-20241022');
+      expect(ALL_FAST_MODELS).toContain('gpt-4o-mini');
+    });
+  });
+
+  describe('FAST_MODEL_DISPLAY_NAMES', () => {
+    it('has a display name for each fast model', () => {
+      for (const model of ALL_FAST_MODELS) {
+        expect(FAST_MODEL_DISPLAY_NAMES[model]).toBeDefined();
+        expect(typeof FAST_MODEL_DISPLAY_NAMES[model]).toBe('string');
+      }
+    });
+
+    it('returns expected display names', () => {
+      expect(FAST_MODEL_DISPLAY_NAMES[LlmModels.Gemini25Flash]).toBe('Gemini 2.5 Flash');
+      expect(FAST_MODEL_DISPLAY_NAMES[LlmModels.ClaudeHaiku35]).toBe('Claude 3.5 Haiku');
+      expect(FAST_MODEL_DISPLAY_NAMES[LlmModels.GPT4oMini]).toBe('GPT-4o Mini');
+    });
+  });
+
+  describe('isFastModel', () => {
+    it('returns true for fast models', () => {
+      expect(isFastModel('gemini-2.5-flash')).toBe(true);
+      expect(isFastModel('gemini-2.0-flash')).toBe(true);
+      expect(isFastModel('glm-4.7-flash')).toBe(true);
+      expect(isFastModel('claude-3-5-haiku-20241022')).toBe(true);
+      expect(isFastModel('gpt-4o-mini')).toBe(true);
+    });
+
+    it('returns false for non-fast models', () => {
+      expect(isFastModel('gemini-2.5-pro')).toBe(false);
+      expect(isFastModel('gpt-5.2')).toBe(false);
+      expect(isFastModel('claude-opus-4-5-20251101')).toBe(false);
+      expect(isFastModel('sonar')).toBe(false);
+      expect(isFastModel('invalid-model')).toBe(false);
+      expect(isFastModel('')).toBe(false);
+    });
+  });
+
   describe('type compatibility', () => {
     it('allows ResearchModel where LLMModel is expected', () => {
       const researchModel: ResearchModel = 'gemini-2.5-pro';
@@ -172,6 +223,18 @@ describe('supportedModels', () => {
       const fastModel: FastModel = 'glm-4.7-flash';
       const llmModel: LLMModel = fastModel;
       expect(llmModel).toBe('glm-4.7-flash');
+    });
+
+    it('allows ClaudeHaiku35 as FastModel', () => {
+      const fastModel: FastModel = 'claude-3-5-haiku-20241022';
+      const llmModel: LLMModel = fastModel;
+      expect(llmModel).toBe('claude-3-5-haiku-20241022');
+    });
+
+    it('allows GPT4oMini as FastModel', () => {
+      const fastModel: FastModel = 'gpt-4o-mini';
+      const llmModel: LLMModel = fastModel;
+      expect(llmModel).toBe('gpt-4o-mini');
     });
   });
 });
