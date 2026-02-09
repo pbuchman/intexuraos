@@ -1035,7 +1035,7 @@ describe('shared utilities', () => {
                 messages: [
                   {
                     interactive: {
-                      type: 'button',
+                      type: 'button_reply',
                       button_reply: {
                         id: 'approve-action',
                         title: 'Approve',
@@ -1062,6 +1062,64 @@ describe('shared utilities', () => {
       });
     });
 
+    it('extracts button response with legacy button type', () => {
+      const legacyPayload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      interactive: {
+                        type: 'button',
+                        button_reply: {
+                          id: 'approve-action',
+                          title: 'Approve',
+                        },
+                      },
+                      context: {
+                        id: 'wamid.123',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const result = extractButtonResponse(legacyPayload);
+      expect(result).toEqual({
+        buttonId: 'approve-action',
+        buttonTitle: 'Approve',
+        replyToWamid: 'wamid.123',
+      });
+    });
+
+    it('returns null when legacy button type has missing button_reply', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      interactive: {
+                        type: 'button',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractButtonResponse(payload)).toBeNull();
+    });
+
     it('returns null when interactive field is missing', () => {
       const payload = {
         entry: [
@@ -1079,7 +1137,7 @@ describe('shared utilities', () => {
       expect(extractButtonResponse(payload)).toBeNull();
     });
 
-    it('returns null when interactive type is not button', () => {
+    it('returns null when interactive type is not button or button_reply', () => {
       const payload = {
         entry: [
           {
@@ -1116,7 +1174,7 @@ describe('shared utilities', () => {
                   messages: [
                     {
                       interactive: {
-                        type: 'button',
+                        type: 'button_reply',
                       },
                       context: {
                         id: 'wamid.123',
@@ -1142,7 +1200,7 @@ describe('shared utilities', () => {
                   messages: [
                     {
                       interactive: {
-                        type: 'button',
+                        type: 'button_reply',
                         button_reply: {
                           title: 'Approve',
                         },
@@ -1171,7 +1229,7 @@ describe('shared utilities', () => {
                   messages: [
                     {
                       interactive: {
-                        type: 'button',
+                        type: 'button_reply',
                         button_reply: {
                           id: 'approve-action',
                         },
@@ -1200,7 +1258,7 @@ describe('shared utilities', () => {
                   messages: [
                     {
                       interactive: {
-                        type: 'button',
+                        type: 'button_reply',
                         button_reply: {
                           id: 'approve-action',
                           title: 'Approve',
@@ -1227,7 +1285,7 @@ describe('shared utilities', () => {
                   messages: [
                     {
                       interactive: {
-                        type: 'button',
+                        type: 'button_reply',
                         button_reply: {
                           id: 'approve-action',
                           title: 'Approve',
