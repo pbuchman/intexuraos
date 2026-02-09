@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
-import { deleteLlmKey, getLlmKeys, setLlmKey, testLlmKey } from '@/services/llmKeysApi';
+import { deleteLlmKey, getLlmKeys, setLlmKey, testLlmKey, updateDefaultModel } from '@/services/llmKeysApi';
 import type { LlmKeysResponse, LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
 
 interface UseLlmKeysResult {
   keys: LlmKeysResponse | null;
+  defaultModel: string | null;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
+  savingDefaultModel: boolean;
   setKey: (provider: LlmProvider, apiKey: string) => Promise<void>;
   deleteKey: (provider: LlmProvider) => Promise<void>;
   testKey: (provider: LlmProvider) => Promise<LlmTestResult>;
+  setDefaultModel: (model: string) => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
 }
 
@@ -21,6 +24,7 @@ export function useLlmKeys(): UseLlmKeysResult {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savingDefaultModel, setSavingDefaultModel] = useState(false);
 
   const refresh = useCallback(
     async (showLoading?: boolean): Promise<void> => {
@@ -120,5 +124,40 @@ export function useLlmKeys(): UseLlmKeysResult {
     [user?.sub, getAccessToken]
   );
 
-  return { keys, loading, refreshing, error, setKey, deleteKey, testKey, refresh };
+  const setDefaultModel = useCallback(
+    async (model: string): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      const previousModel = keys?.defaultModel ?? null;
+
+      setSavingDefaultModel(true);
+      setError(null);
+
+      // Optimistic update
+      setKeys((prev) => {
+        if (prev === null) return prev;
+        return { ...prev, defaultModel: model };
+      });
+
+      try {
+        const token = await getAccessToken();
+        await updateDefaultModel(token, userId, model);
+      } catch (err) {
+        // Revert on failure
+        setKeys((prev) => {
+          if (prev === null) return prev;
+          return { ...prev, defaultModel: previousModel };
+        });
+        setError(getErrorMessage(err, 'Failed to save default model'));
+      } finally {
+        setSavingDefaultModel(false);
+      }
+    },
+    [user?.sub, getAccessToken, keys?.defaultModel]
+  );
+
+  const defaultModel = keys?.defaultModel ?? null;
+
+  return { keys, defaultModel, loading, refreshing, error, savingDefaultModel, setKey, deleteKey, testKey, setDefaultModel, refresh };
 }

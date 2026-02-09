@@ -556,6 +556,7 @@ locals {
     INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
     INTEXURAOS_SENTRY_DSN          = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+    INTEXURAOS_GUEST_ZAI_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_GUEST_ZAI_API_KEY"]
   }
 }
 
@@ -1536,8 +1537,7 @@ module "chat_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/chat-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_OPENAI_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_API_KEY"]
-    INTEXURAOS_GUEST_ZAI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_GUEST_ZAI_API_KEY"]
+    INTEXURAOS_OPENAI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_API_KEY"]
   })
   env_vars = local.common_service_env_vars
 

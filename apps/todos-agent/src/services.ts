@@ -49,6 +49,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthKey,
     pricingContext,
     logger: createAppLogger({ name: 'userServiceClient' }),
+    platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
   });
 
   container = {

@@ -143,6 +143,7 @@ export async function initializeServices(): Promise<void> {
       internalAuthToken,
       pricingContext,
       logger,
+      platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
     }),
     logger,
     guestRateLimiter: createGuestRateLimiter(),

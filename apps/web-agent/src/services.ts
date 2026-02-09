@@ -44,6 +44,7 @@ export function initServices(dependencies: ServiceDependencies): void {
       internalAuthToken: dependencies.internalAuthToken,
       pricingContext: dependencies.pricingContext,
       logger: createAppLogger({ name: 'userServiceClient' }),
+      platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
     }),
   };
 }

@@ -18,6 +18,7 @@ export interface LlmTestResult {
  * Contains masked API key values (e.g., "sk-...4f2a") or null if not configured.
  */
 export interface LlmKeysResponse {
+  defaultModel: string | null;
   google: string | null;
   openai: string | null;
   anthropic: string | null;
