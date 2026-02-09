@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { isOk, isErr, ok, err } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import { createHandleLinkActionUseCase } from '../domain/usecases/handleLinkAction.js';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -67,9 +67,9 @@ describe('handleLinkAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     const action = await fakeActionRepository.getById('action-123');
@@ -80,6 +80,13 @@ describe('handleLinkAction usecase', () => {
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('New link ready to save');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
+
+    // Verify interactive approval buttons
+    expect(messages[0]?.buttons).toHaveLength(2);
+    expect(messages[0]?.buttons?.[0]?.reply.id).toBe('approve:action-123');
+    expect(messages[0]?.buttons?.[0]?.reply.title).toBe('Approve');
+    expect(messages[0]?.buttons?.[1]?.reply.id).toBe('reject:action-123');
+    expect(messages[0]?.buttons?.[1]?.reply.title).toBe('Reject');
   });
 
   it('fails when marking action as awaiting_approval fails', async () => {
@@ -97,8 +104,8 @@ describe('handleLinkAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isErr(result)).toBe(true);
-    if (isErr(result)) {
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.error.message).toContain('Failed to update action status');
     }
   });
@@ -121,9 +128,9 @@ describe('handleLinkAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     const action = await fakeActionRepository.getById('action-123');
@@ -141,9 +148,9 @@ describe('handleLinkAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     // Should not send WhatsApp message since action doesn't exist
@@ -164,9 +171,9 @@ describe('handleLinkAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     // Should not send WhatsApp message since action was already processed
@@ -193,7 +200,7 @@ describe('handleLinkAction usecase', () => {
       const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 1 } });
       const result = await usecase.execute(event);
 
-      expect(isOk(result)).toBe(true);
+      expect(result.ok).toBe(true);
       expect(fakeExecuteLinkAction).toHaveBeenCalledWith('action-123');
 
       // Decorator updated status to awaiting_approval; real executeLinkAction would update to processing/completed
@@ -223,8 +230,8 @@ describe('handleLinkAction usecase', () => {
       const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 1 } });
       const result = await usecase.execute(event);
 
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
         expect(result.error.message).toBe('Execution failed');
       }
     });
@@ -242,7 +249,7 @@ describe('handleLinkAction usecase', () => {
       const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 1 } });
       const result = await usecase.execute(event);
 
-      expect(isOk(result)).toBe(true);
+      expect(result.ok).toBe(true);
 
       // Action should be updated to awaiting_approval when executeLinkAction is not available
       const action = await fakeActionRepository.getById('action-123');
@@ -268,7 +275,7 @@ describe('handleLinkAction usecase', () => {
       const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 0.85 } });
       const result = await usecase.execute(event);
 
-      expect(isOk(result)).toBe(true);
+      expect(result.ok).toBe(true);
       expect(fakeExecuteLinkAction).not.toHaveBeenCalled();
 
       // Action should be updated to awaiting_approval

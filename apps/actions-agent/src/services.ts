@@ -102,7 +102,6 @@ import {
   type CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
-import { createApprovalIntentClassifierFactory } from './infra/llm/approvalIntentClassifierFactory.js';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 
@@ -205,10 +204,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger: createAppLogger({ name: 'userServiceClient' }),
-  });
-
-  const approvalIntentClassifierFactory = createApprovalIntentClassifierFactory({
-    userServiceClient,
   });
 
   const commandsAgentClient = createCommandsAgentHttpClient({
@@ -431,7 +426,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const handleApprovalReplyUseCase = createHandleApprovalReplyUseCase({
     actionRepository,
     approvalMessageRepository,
-    approvalIntentClassifierFactory,
     whatsappPublisher,
     actionEventPublisher,
     logger: createAppLogger({ name: 'handleApprovalReply' }),

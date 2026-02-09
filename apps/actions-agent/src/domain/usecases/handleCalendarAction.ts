@@ -3,6 +3,7 @@ import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher, CalendarPreviewPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
+import { buildApprovalButtons } from '../utils/approvalButtons.js';
 
 export interface HandleCalendarActionDeps {
   actionRepository: ActionRepository;
@@ -71,7 +72,8 @@ export function createHandleCalendarActionUseCase(
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New calendar event ready for approval: "${event.title}". Review here: ${actionLink} or reply to approve/reject.`;
+      const message = `New calendar event ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
+      const buttons = buildApprovalButtons({ actionId: event.actionId });
 
       logger.info(
         { actionId: event.actionId, userId: event.userId },
@@ -81,6 +83,7 @@ export function createHandleCalendarActionUseCase(
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: event.userId,
         message,
+        buttons,
         correlationId: `action-calendar-approval-${event.actionId}`,
       });
 
