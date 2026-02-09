@@ -54,6 +54,7 @@ describe('StatePersistence', () => {
         containerId: 'session-1',
         worktreePath: '/path/to/worktree',
         startedAt: new Date().toISOString(),
+        linearIssueLabels: [],
       },
     },
     githubToken: {
@@ -131,6 +132,7 @@ describe('StatePersistence', () => {
             containerId: 'session2',
             worktreePath: '/tmp/session2',
             startedAt: new Date().toISOString(),
+            linearIssueLabels: [],
           },
         },
       };
@@ -280,6 +282,7 @@ describe('StatePersistence', () => {
             containerId: 'session-2',
             worktreePath: '/active/two',
             startedAt: new Date().toISOString(),
+            linearIssueLabels: [],
           },
         },
       });

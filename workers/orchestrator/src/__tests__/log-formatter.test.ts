@@ -352,6 +352,34 @@ describe('formatLogChunk', () => {
     });
   });
 
+  describe('JSON fragment handling', () => {
+    it('returns raw text for incomplete JSON (no closing brace)', () => {
+      const fragment = '{"type":"assistant","message":{"content":[{"type":"text","text":"hel';
+      expect(formatLogChunk(fragment + '\n')).toBe(fragment + '\n');
+    });
+
+    it('formats complete JSON when fragments are concatenated before calling', () => {
+      const part1 = '{"type":"assistant","message":{"content":[{"type":"text","text":"hel';
+      const part2 = 'lo world"}]}}';
+      const full = part1 + part2 + '\n';
+      expect(formatLogChunk(full)).toBe('hello world\n');
+    });
+
+    it('returns empty for complete hook_response JSON (filtered type)', () => {
+      const hookJson = JSON.stringify({
+        type: 'system',
+        subtype: 'hook_response',
+        hook_id: 'abc',
+        output: 'x'.repeat(16000),
+      });
+      expect(formatLogChunk(hookJson + '\n')).toBe('');
+    });
+
+    it('passes through plain text without trailing newline as-is', () => {
+      expect(formatLogChunk('[entrypoint] Starting\n')).toBe('[entrypoint] Starting\n');
+    });
+  });
+
   describe('mixed content', () => {
     it('handles Docker headers + JSON in same chunk', () => {
       const entryLine = dockerFrame(1, '[entrypoint] Start');

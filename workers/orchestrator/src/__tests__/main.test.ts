@@ -195,6 +195,7 @@ describe('main.ts', () => {
         containerId: 'session-1',
         worktreePath: '/path/to/worktree',
         startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
       };
 
       vi.mocked(mockStatePersistence.load).mockResolvedValue({
@@ -252,6 +253,7 @@ describe('main.ts', () => {
         containerId: 'session-1',
         worktreePath: '/path/to/worktree',
         startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
       };
 
       vi.mocked(mockStatePersistence.load).mockResolvedValue({
@@ -306,6 +308,7 @@ describe('main.ts', () => {
         containerId: 'session-1',
         worktreePath: '/path/to/worktree',
         startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
       };
 
       const completedTask = {
@@ -321,6 +324,7 @@ describe('main.ts', () => {
         worktreePath: '/path/to/worktree2',
         startedAt: '2025-01-26T00:00:00.000Z',
         completedAt: '2025-01-26T01:00:00.000Z',
+        linearIssueLabels: [],
       };
 
       vi.mocked(mockStatePersistence.load).mockResolvedValue({
@@ -376,6 +380,7 @@ describe('main.ts', () => {
         containerId: 'session-1',
         worktreePath: '/path/to/worktree1',
         startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
       };
 
       const task2 = {
@@ -390,6 +395,7 @@ describe('main.ts', () => {
         containerId: 'session-2',
         worktreePath: '/path/to/worktree2',
         startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
       };
 
       vi.mocked(mockStatePersistence.load).mockResolvedValue({
