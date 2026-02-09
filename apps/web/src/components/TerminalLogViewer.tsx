@@ -9,7 +9,7 @@ import {
   query,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { Loader2, Terminal } from 'lucide-react';
+import { CheckCircle2, Copy, Loader2, Terminal } from 'lucide-react';
 import { useAuth } from '@/context';
 import {
   getFirestoreClient,
@@ -19,6 +19,101 @@ import {
 } from '@/services/firebase';
 
 const MIN_TERMINAL_ROWS = 10;
+const DOCKER_HEADER_SIZE = 8;
+
+function isDockerHeaderAt(str: string, pos: number): boolean {
+  const streamType = str.charCodeAt(pos);
+  if (streamType > 2) return false;
+  return str.charCodeAt(pos + 1) === 0 && str.charCodeAt(pos + 2) === 0 && str.charCodeAt(pos + 3) === 0;
+}
+
+function stripDockerHeaders(raw: string): string {
+  let result = '';
+  let i = 0;
+  while (i < raw.length) {
+    if (i + DOCKER_HEADER_SIZE <= raw.length && isDockerHeaderAt(raw, i)) {
+      i += DOCKER_HEADER_SIZE;
+    } else {
+      result += raw.charAt(i);
+      i++;
+    }
+  }
+  return result;
+}
+
+interface StreamJsonMsg {
+  type: string;
+  subtype?: string;
+  message?: { content?: { type: string; text?: string; name?: string }[] };
+  tool_name?: string;
+  tool_input?: Record<string, unknown>;
+  content?: string;
+  result?: string;
+  duration_ms?: number;
+  duration_api_ms?: number;
+  num_turns?: number;
+  is_error?: boolean;
+}
+
+function formatLine(line: string): string | null {
+  const trimmed = line.trim();
+  if (trimmed === '') return null;
+
+  let obj: StreamJsonMsg;
+  try { obj = JSON.parse(trimmed) as StreamJsonMsg; } catch { return line; }
+
+  switch (obj.type) {
+    case 'system': {
+      const sub = obj.subtype ?? '';
+      if (sub === 'hook_started' || sub === 'hook_response' || sub === 'init') return null;
+      return `[system] ${sub}`;
+    }
+    case 'assistant': {
+      const blocks = obj.message?.content;
+      if (!Array.isArray(blocks)) return null;
+      const parts: string[] = [];
+      for (const b of blocks) {
+        if (b.type === 'text' && typeof b.text === 'string' && b.text.trim() !== '') parts.push(b.text);
+        if (b.type === 'tool_use' && typeof b.name === 'string') parts.push(`[tool] ${b.name}`);
+      }
+      return parts.length > 0 ? parts.join('\n') : null;
+    }
+    case 'result': {
+      if (obj.is_error === true) return `[error] Task failed: ${obj.result ?? 'Unknown error'}`;
+      const dur = typeof obj.duration_ms === 'number' ? `${(obj.duration_ms / 1000).toFixed(1)}s`
+        : typeof obj.duration_api_ms === 'number' ? `${(obj.duration_api_ms / 1000).toFixed(1)}s` : '?';
+      const turns = typeof obj.num_turns === 'number' ? `${String(obj.num_turns)} turn${obj.num_turns !== 1 ? 's' : ''}` : '';
+      return `[done] Completed in ${[dur, turns].filter(Boolean).join(', ')}`;
+    }
+    case 'tool_use': {
+      const name = obj.tool_name ?? 'unknown';
+      const inp = obj.tool_input;
+      let ctx = '';
+      if (inp !== undefined) {
+        if (typeof inp['file_path'] === 'string') ctx = `: ${inp['file_path']}`;
+        else if (typeof inp['command'] === 'string') { const c = inp['command']; ctx = `: ${c.length > 80 ? c.slice(0, 77) + '...' : c}`; }
+        else if (typeof inp['pattern'] === 'string') ctx = `: ${inp['pattern']}`;
+        else if (typeof inp['query'] === 'string') { const q = inp['query']; ctx = `: ${q.length > 60 ? q.slice(0, 57) + '...' : q}`; }
+      }
+      return `[tool] ${name}${ctx}`;
+    }
+    case 'tool_result': {
+      const c = obj.content ?? '';
+      if (c.trim() === '') return null;
+      const abbr = c.length > 200 ? c.slice(0, 200) + '...' : c;
+      return `  \u2192 ${abbr.replace(/\n/g, ' ').trim()}`;
+    }
+    default: return null;
+  }
+}
+
+function formatLogContent(raw: string): string {
+  const stripped = stripDockerHeaders(raw);
+  const lines = stripped.split('\n');
+  const formatted = lines.map((l) => formatLine(l)).filter((l): l is string => l !== null);
+  if (formatted.length === 0) return '';
+  return formatted.join('\n') + '\n';
+}
 
 interface TerminalLogViewerProps {
   taskId: string;
@@ -33,6 +128,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const [logsLoading, setLogsLoading] = useState(true);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [chunkCount, setChunkCount] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
@@ -134,7 +230,10 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
               if (sequence > lastSequenceRef.current) {
                 const content = data['content'] as string;
-                terminal.write(content);
+                const display = formatLogContent(content);
+                if (display.length > 0) {
+                  terminal.write(display);
+                }
                 lastSequenceRef.current = sequence;
                 newChunks++;
               }
@@ -178,6 +277,27 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     };
   }, [taskId, getAccessToken]);
 
+  const copyLogs = (): void => {
+    const terminal = terminalRef.current;
+    if (terminal === null) return;
+
+    const buffer = terminal.buffer.active;
+    const lines: string[] = [];
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i);
+      if (line !== undefined) {
+        lines.push(line.translateToString(true));
+      }
+    }
+    const text = lines.join('\n').trimEnd();
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    });
+  };
+
   return (
     <div className="mt-6 mb-6">
       <div className="flex items-center justify-between rounded-t-lg bg-slate-800 px-4 py-2 border-b border-slate-700">
@@ -198,9 +318,25 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
             </span>
           ) : null}
         </div>
-        <span className="text-xs text-slate-500">
-          {chunkCount} chunk{chunkCount !== 1 ? 's' : ''}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500">
+            {chunkCount} chunk{chunkCount !== 1 ? 's' : ''}
+          </span>
+          {chunkCount > 0 ? (
+            <button
+              type="button"
+              onClick={copyLogs}
+              className="rounded p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
+              title={copied ? 'Copied!' : 'Copy all logs'}
+            >
+              {copied ? (
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="terminal-flow relative rounded-b-lg bg-slate-900 min-h-[200px]">

@@ -89,12 +89,21 @@ After enriching the issue and adding EITHER \`code-task\` OR \`unclear\` label, 
 Output: \`Phase 1 Complete. Issue enriched. Label '[code-task|unclear]' added. Awaiting Phase 2.\`
 
 ### MANDATORY Response Format (Hook-Verified)
-Your FINAL message before stopping MUST contain these EXACT items on separate lines:
-- Label: \`code-task\` or \`unclear\`
-- PR: https://github.com/intexura/intexuraos/pull/XXX (full URL)
-- Linear: https://linear.app/intexura/issue/INT-XXX (full URL)
+Your FINAL message before stopping MUST contain this exact block:
 
-The stop hook REJECTS your stop if these are missing. Paste full URLs, not references.`;
+\`\`\`
+---COMPLETION---
+Phase: 1
+Linear: https://linear.app/intexura/issue/INT-XXX
+Label: code-task
+---END---
+\`\`\`
+
+Rules:
+- Linear: the FULL URL of the issue you enriched (paste actual URL, not placeholder)
+- Label: must be exactly \`code-task\` or \`unclear\` (the label you added)
+- PR line is OPTIONAL (only if you created a design document PR)
+- The stop hook REJECTS your stop if Linear or Label are missing`;
 }
 
 /**
@@ -154,12 +163,22 @@ Follow all instructions from the Linear issue description and the user prompt.
 **NONE.** Complete the task regardless of token usage.${parentModeSection}
 
 ### MANDATORY Response Format (Hook-Verified)
-Your FINAL message before stopping MUST contain ALL of these on separate lines:
-- PR: https://github.com/intexura/intexuraos/pull/XXX (full URL)
-- Linear: https://linear.app/intexura/issue/INT-XXX (full URL)
-- CI: passed
+Your FINAL message before stopping MUST contain this exact block:
 
-The stop hook REJECTS your stop if PR or Linear links are missing. Paste full URLs.`;
+\`\`\`
+---COMPLETION---
+Phase: 2
+PR: https://github.com/intexura/intexuraos/pull/XXX
+Linear: https://linear.app/intexura/issue/INT-XXX
+CI: passed
+---END---
+\`\`\`
+
+Rules:
+- PR: full GitHub PR URL (paste actual URL, not placeholder)
+- Linear: full Linear issue URL (paste actual URL, not placeholder)
+- CI: must be exactly \`passed\`
+- The stop hook REJECTS your stop if any field is missing`;
   /* v8 ignore stop @preserve */
 }
 

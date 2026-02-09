@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # Completion Validator Hook (INT-522)
-# Validates worker task completion artifacts.
+# Validates worker task completion artifacts via structured ---COMPLETION--- block.
 #
 # Detection: Uses CLAUDE_WORKER_MODE env var (set by orchestrator docker-provider)
-# Phase 1: PR link + Linear link + label (code-task or unclear)
-# Phase 2: PR link + Linear link
+# No phase marker: skip validation (informational/utility tasks)
+# Phase 1: Linear URL + Label (code-task or unclear). PR optional.
+# Phase 2: PR URL + Linear URL + CI: passed
 
 set -euo pipefail
 
@@ -56,23 +57,38 @@ if [[ -z "$RECENT_RESPONSES" ]]; then
   exit 0
 fi
 
-# Validation: check for explicit URLs and labels in recent responses
+# No phase marker = informational task, allow stop without validation
+if [[ "$PHASE" == "unknown" ]]; then
+  log_info "$HOOK_NAME" "skipped" "No phase marker found, allowing stop"
+  exit 0
+fi
+
+# Extract the ---COMPLETION--- block from recent responses
+COMPLETION_BLOCK=$(echo "$RECENT_RESPONSES" | sed -n '/---COMPLETION---/,/---END---/p')
+
 MISSING=()
 
-# PR link is always required
-if ! echo "$RECENT_RESPONSES" | grep -qE 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+'; then
-  MISSING+=("PR link (https://github.com/.../pull/NNN)")
-fi
+if [[ -z "$COMPLETION_BLOCK" ]]; then
+  MISSING+=("---COMPLETION--- block")
+else
+  # Linear URL is required in both phases
+  if ! echo "$COMPLETION_BLOCK" | grep -qE '^Linear: https://linear\.app/'; then
+    MISSING+=("Linear URL")
+  fi
 
-# Linear link is always required
-if ! echo "$RECENT_RESPONSES" | grep -qE 'https://linear\.app/[^/]+/issue/INT-[0-9]+'; then
-  MISSING+=("Linear link (https://linear.app/.../issue/INT-NNN)")
-fi
-
-# Phase 1 additionally requires a label mention
-if [[ "$PHASE" == "1" ]]; then
-  if ! echo "$RECENT_RESPONSES" | grep -qE '\bcode-task\b|\bunclear\b'; then
-    MISSING+=("Label (code-task or unclear)")
+  if [[ "$PHASE" == "1" ]]; then
+    # Phase 1: Label required
+    if ! echo "$COMPLETION_BLOCK" | grep -qE '^Label: (code-task|unclear)$'; then
+      MISSING+=("Label (code-task or unclear)")
+    fi
+  elif [[ "$PHASE" == "2" ]]; then
+    # Phase 2: PR + CI required
+    if ! echo "$COMPLETION_BLOCK" | grep -qE '^PR: https://github\.com/.+/pull/[0-9]+'; then
+      MISSING+=("PR URL")
+    fi
+    if ! echo "$COMPLETION_BLOCK" | grep -qE '^CI: passed$'; then
+      MISSING+=("CI: passed")
+    fi
   fi
 fi
 
@@ -82,17 +98,18 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
 
   log_blocked "$HOOK_NAME" "incomplete" \
       "Missing: ${MISSING_STR}" \
-      "Phase ${PHASE} requires all completion artifacts"
+      "Phase ${PHASE} requires structured completion block"
 
-  LABEL_HINT=""
   if [[ "$PHASE" == "1" ]]; then
-    LABEL_HINT="- Label: code-task or unclear\n"
+    EXAMPLE="---COMPLETION---\nPhase: 1\nLinear: https://linear.app/intexura/issue/INT-XXX\nLabel: code-task\n---END---"
+  else
+    EXAMPLE="---COMPLETION---\nPhase: 2\nPR: https://github.com/intexura/intexuraos/pull/XXX\nLinear: https://linear.app/intexura/issue/INT-XXX\nCI: passed\n---END---"
   fi
 
   cat << EOF
 {
   "decision": "block",
-  "reason": "⚠️ COMPLETION INCOMPLETE (Phase ${PHASE}): Missing: ${MISSING_STR}.\n\nYour final message MUST contain:\n- PR: full GitHub PR URL\n- Linear: full Linear issue URL\n${LABEL_HINT}Paste the actual URLs, then try stopping again."
+  "reason": "⚠️ COMPLETION INCOMPLETE (Phase ${PHASE}): Missing: ${MISSING_STR}.\n\nYour final message MUST contain this block:\n\n${EXAMPLE}\n\nPaste actual URLs, then try stopping again."
 }
 EOF
   exit 0
