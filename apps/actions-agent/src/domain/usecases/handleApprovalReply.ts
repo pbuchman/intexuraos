@@ -31,6 +31,7 @@ export interface HandleApprovalReplyDeps {
   executeLinearAction?: ExecuteLinearActionUseCase;
   executeCodeAction?: ExecuteCodeActionUseCase;
   codeAgentClient?: CodeAgentClient;
+  webAppUrl: string;
 }
 
 export interface ApprovalReplyInput {
@@ -70,6 +71,7 @@ export function createHandleApprovalReplyUseCase(
     executeLinearAction,
     executeCodeAction,
     codeAgentClient,
+    webAppUrl,
   } = deps;
 
   return async (input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {
@@ -111,7 +113,7 @@ export function createHandleApprovalReplyUseCase(
       if (intent === 'view-task') {
         /* v8 ignore start -- ts-type: button ID format guarantees taskId exists @preserve */
         const [, taskId] = parts;
-        return await handleViewTaskButton(taskId ?? '', userId, whatsappPublisher, logger);
+        return await handleViewTaskButton(taskId ?? '', userId, whatsappPublisher, webAppUrl, logger);
         /* v8 ignore stop @preserve */
       }
     }
@@ -722,13 +724,14 @@ async function handleViewTaskButton(
   taskId: string,
   userId: string,
   whatsappPublisher: HandleApprovalReplyDeps['whatsappPublisher'],
+  webAppUrl: string,
   logger: Logger
 ): Promise<Result<ApprovalReplyResult>> {
   logger.info({ taskId, userId }, 'Handling view-task button');
 
   await whatsappPublisher.publishSendMessage({
     userId,
-    message: `View task details at: https://app.intexuraos.cloud/#/tasks/${taskId}`,
+    message: `View task details at: ${webAppUrl}/#/tasks/${taskId}`,
     correlationId: `view-task-${taskId}`,
   });
 
