@@ -158,25 +158,45 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          {task.linearIssueId !== undefined ? (
-            <span className="text-lg font-medium text-blue-600 dark:text-blue-400">{task.linearIssue?.identifier ?? task.linearIssueId}</span>
-          ) : null}
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {task.linearIssue?.title ?? task.linearIssueTitle ?? 'Code Task'}
-          </h2>
+        <div className="flex flex-wrap items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}
           >
             <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
             {status.label}
           </span>
+          {task.linearIssue !== undefined && (
+            <>
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                task.linearIssue.state.type === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' :
+                task.linearIssue.state.type === 'started' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' :
+                task.linearIssue.state.type === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' :
+                'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {task.linearIssue.state.name}
+              </span>
+              {task.linearIssue.labels.map(label => (
+                <span key={label.id} className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                  {label.name}
+                </span>
+              ))}
+            </>
+          )}
           {isRunning && elapsedTime > 0 ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
               <Clock className="h-4 w-4" />
               {formatElapsedTime(elapsedTime)}
             </span>
           ) : null}
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          {task.linearIssueId !== undefined ? (
+            <span className="text-lg font-medium text-blue-600 dark:text-blue-400">{task.linearIssue?.identifier ?? task.linearIssueId}</span>
+          ) : null}
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            {task.linearIssue?.title ?? task.linearIssueTitle ?? 'Code Task'}
+          </h2>
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
@@ -190,32 +210,15 @@ export function CodeTaskDetailPage(): React.JSX.Element {
           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
             {task.workerLocation}
           </span>
-          {task.linearIssue !== undefined && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                task.linearIssue.state.type === 'completed' ? 'bg-green-100 text-green-700' :
-                task.linearIssue.state.type === 'started' ? 'bg-blue-100 text-blue-700' :
-                task.linearIssue.state.type === 'cancelled' ? 'bg-red-100 text-red-700' :
-                'bg-gray-100 text-gray-700'
-              }`}>
-                {task.linearIssue.state.name}
-              </span>
-              {task.linearIssue.assignee !== null && (
-                <span className="text-xs text-green-600">
-                  {task.linearIssue.assignee.name}
-                </span>
-              )}
-              {task.linearIssue.commentCount > 0 && (
-                <span className="text-xs text-gray-500">
-                  {String(task.linearIssue.commentCount)} comments
-                </span>
-              )}
-              {task.linearIssue.labels.map(label => (
-                <span key={label.id} className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
-                  {label.name}
-                </span>
-              ))}
-            </div>
+          {task.linearIssue?.assignee !== undefined && task.linearIssue.assignee !== null && (
+            <span className="text-xs text-green-600 dark:text-green-400">
+              {task.linearIssue.assignee.name}
+            </span>
+          )}
+          {task.linearIssue !== undefined && task.linearIssue.commentCount > 0 && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {String(task.linearIssue.commentCount)} comments
+            </span>
           )}
         </div>
 
@@ -322,12 +325,16 @@ export function CodeTaskDetailPage(): React.JSX.Element {
                         <button
                           type="button"
                           onClick={() => {
-                            void navigator.clipboard.writeText(url);
+                            void copyToClipboard(url, `link-${String(idx)}`);
                           }}
                           className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 flex-shrink-0"
-                          title="Copy link"
+                          title={copiedSection === `link-${String(idx)}` ? 'Copied!' : 'Copy link'}
                         >
-                          <Copy className="h-3.5 w-3.5 text-slate-400" />
+                          {copiedSection === `link-${String(idx)}` ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5 text-slate-400" />
+                          )}
                         </button>
                       ) : null}
                     </div>
