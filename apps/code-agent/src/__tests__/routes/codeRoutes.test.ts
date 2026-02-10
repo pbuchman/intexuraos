@@ -1751,7 +1751,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.code).toBe('INVALID_NONCE');
     });
 
     it('returns 400 when nonce is expired', async () => {
@@ -1796,7 +1796,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.code).toBe('NONCE_EXPIRED');
     });
 
     it('returns 400 when user does not own task', async () => {
@@ -1838,10 +1838,10 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.code).toBe('NOT_OWNER');
     });
 
     it('returns 400 when task is not cancellable', async () => {
@@ -1886,7 +1886,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.code).toBe('TASK_NOT_CANCELLABLE');
     });
 
     it('cancels task successfully with valid nonce', async () => {
