@@ -35,6 +35,8 @@ export interface LinearIssue {
   completedAt: string | null;
   /** Number of child issues (subtasks) */
   childCount: number;
+  /** Child issues (populated when includeChildren=true) */
+  children: LinearIssue[];
 }
 
 /** Linear issue with team ID for validation */

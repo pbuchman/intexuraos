@@ -245,6 +245,7 @@ export class FakeLinearApiClient implements LinearApiClient {
       updatedAt: new Date().toISOString(),
       completedAt: null,
       childCount: 0,
+      children: [],
     };
 
     this.issues.push(issue);

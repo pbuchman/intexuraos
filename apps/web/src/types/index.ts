@@ -949,6 +949,8 @@ export interface LinearIssue {
   labels: LinearLabel[];
   /** Number of child issues (subtasks) */
   childCount: number;
+  /** Child issues (populated when parent issue has children) */
+  children: LinearIssue[];
 }
 
 /**

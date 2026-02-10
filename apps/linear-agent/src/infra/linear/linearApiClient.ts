@@ -123,6 +123,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
       updatedAt: issue.updatedAt.toISOString(),
       completedAt: issue.completedAt?.toISOString() ?? null,
       childCount: childCounts[index] ?? 0,
+      children: [],
     };
   });
 }
@@ -148,6 +149,7 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
     updatedAt: issue.updatedAt.toISOString(),
     completedAt: issue.completedAt?.toISOString() ?? null,
     childCount: children.nodes.length,
+    children: [],
   };
 }
 
@@ -182,6 +184,7 @@ async function mapSingleIssueWithTeam(issue: Issue): Promise<LinearIssueWithTeam
     teamId: team?.id ?? '',
     labels,
     childCount,
+    children: [],
   };
 }
 
