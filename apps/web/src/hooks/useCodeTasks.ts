@@ -318,6 +318,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
 export function useWorkersStatus(): {
   status: WorkersStatusResponse | null;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   refresh: () => Promise<void>;
   refreshStatus: () => Promise<void>;
@@ -325,6 +326,7 @@ export function useWorkersStatus(): {
   const { getAccessToken, isAuthenticated } = useAuth();
   const [status, setStatus] = useState<WorkersStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
   const isInitialLoadRef = useRef(true);
@@ -358,6 +360,10 @@ export function useWorkersStatus(): {
       return;
     }
 
+    if (isMountedRef.current) {
+      setRefreshing(true);
+    }
+
     try {
       const token = await getAccessToken();
       const data = await refreshWorkersStatusApi(token);
@@ -367,6 +373,10 @@ export function useWorkersStatus(): {
       }
     } catch {
       // Silently fail - status update is best effort
+    } finally {
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
     }
   }, [getAccessToken, isAuthenticated]);
 
@@ -400,5 +410,5 @@ export function useWorkersStatus(): {
     };
   }, [refresh, isAuthenticated]);
 
-  return { status, loading, error, refresh, refreshStatus };
+  return { status, loading, refreshing, error, refresh, refreshStatus };
 }

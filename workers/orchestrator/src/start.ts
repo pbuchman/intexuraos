@@ -32,12 +32,14 @@ import type { IsolationConfig } from './services/task-dispatcher.js';
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
 const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
+const EXEC_TIMEOUT_MS = 30 * 1000; // 30 seconds for external commands
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
   /* v8 ignore start -- test-infra: process.exit() terminates the process, cannot test in unit tests @preserve */
   if (value === undefined || value === '') {
-    process.stderr.write(`ERROR: Required environment variable ${name} is not set\n`);
+    process.stderr.write(`\n❌ PRECONDITION FAILED: Required environment variable '${name}' is not set\n`);
+    process.stderr.write(`   Add to .envrc: export ${name}=<value>\n\n`);
     process.exit(1);
   }
   /* v8 ignore stop @preserve */
@@ -47,6 +49,61 @@ function getRequiredEnv(name: string): string {
 /* v8 ignore start -- ts-type: nullish coalescing creates type narrowing branch @preserve */
 function getOptionalEnv(name: string, defaultValue: string): string {
   return process.env[name] ?? defaultValue;
+}
+/* v8 ignore stop @preserve */
+
+/**
+ * Validate GCP credentials are properly configured
+ */
+/* v8 ignore start -- test-infra: process.exit() in validation function @preserve */
+function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
+  // Check if credentials file exists
+  if (!existsSync(gcpSaKeyPath)) {
+    process.stderr.write(`\n❌ PRECONDITION FAILED: GCP service account key not found\n`);
+    process.stderr.write(`   Expected path: ${gcpSaKeyPath}\n`);
+    process.stderr.write(`   Add to .envrc: export GOOGLE_APPLICATION_CREDENTIALS=<path-to-key.json>\n\n`);
+    process.exit(1);
+  }
+
+  // Try to authenticate with timeout
+  try {
+    execSync(
+      `gcloud auth activate-service-account --key-file="${gcpSaKeyPath}" --project="${projectId}"`,
+      { timeout: EXEC_TIMEOUT_MS, stdio: 'pipe' }
+    );
+  } catch (_error) {
+    process.stderr.write(`\n❌ PRECONDITION FAILED: GCP authentication failed\n`);
+    process.stderr.write(`   Credentials file: ${gcpSaKeyPath}\n`);
+    process.stderr.write(`   Verify the file exists, is readable, and has correct permissions\n`);
+    process.stderr.write(`   Test with: gcloud auth activate-service-account --key-file="${gcpSaKeyPath}"\n\n`);
+    process.exit(1);
+  }
+}
+/* v8 ignore stop @preserve */
+
+/**
+ * Check if a port is available (synchronous check using lsof)
+ */
+/* v8 ignore start -- test-infra: process.exit() in validation function @preserve */
+function validatePortAvailable(port: number): void {
+  try {
+    // Use lsof to check if port is in use
+    execSync(`lsof -i :${port} -P -n`, { stdio: 'pipe', timeout: 5000 });
+    // If lsof succeeded, port is in use
+    process.stderr.write(`\n❌ PRECONDITION FAILED: Port ${port} is already in use\n`);
+    process.stderr.write(`   Another process is listening on this port\n`);
+    process.stderr.write(`   Find the process: lsof -i :${port}\n`);
+    process.stderr.write(`   Or use a different port: export PORT=${port + 1}\n\n`);
+    process.exit(1);
+  } catch (error) {
+    // lsof failed (exit code 1) means port is available - this is good
+    const err = error as { status: number | null };
+    if (err.status === null || err.status === 1) {
+      // Port is available
+      return;
+    }
+    // Other error (timeout, etc.) - continue and let runtime catch it
+  }
 }
 /* v8 ignore stop @preserve */
 
@@ -61,7 +118,7 @@ function ensureDirectoryExists(path: string): void {
  * The key is multiline (PEM format) so it can't be in .envrc.
  */
 /* v8 ignore start -- test-infra: process.exit() in catch block terminates the process @preserve */
-function getGitHubPrivateKey(projectId: string, cachePath: string): string {
+function getGitHubPrivateKey(projectId: string, cachePath: string, gcpSaKeyPath: string): string {
   // Check env var first (for testing or manual override)
   const envKey = process.env['INTEXURAOS_GITHUB_APP_PRIVATE_KEY'];
   if (envKey) {
@@ -81,19 +138,27 @@ function getGitHubPrivateKey(projectId: string, cachePath: string): string {
     /* v8 ignore stop @preserve */
   }
 
-  // Fetch from Secret Manager
+  // Fetch from Secret Manager with timeout
   process.stderr.write('Fetching GitHub private key from Secret Manager...\n');
   try {
     const key = execSync(
       `gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY --project=${projectId}`,
-      { encoding: 'utf-8' }
+      { encoding: 'utf-8', timeout: EXEC_TIMEOUT_MS }
     ).trim();
     return key;
-  } catch (_error) {
-    process.stderr.write('Failed to fetch GitHub private key from Secret Manager\n');
-    process.stderr.write(
-      'Make sure GOOGLE_APPLICATION_CREDENTIALS is set and has secretAccessor role\n'
-    );
+  } catch (error) {
+    process.stderr.write(`\n❌ PRECONDITION FAILED: Failed to fetch GitHub private key from Secret Manager\n`);
+    process.stderr.write(`   GCP credentials: ${gcpSaKeyPath}\n`);
+    process.stderr.write(`   Project: ${projectId}\n`);
+    process.stderr.write(`   Ensure:\n`);
+    process.stderr.write(`     1. GOOGLE_APPLICATION_CREDENTIALS points to valid service account key\n`);
+    process.stderr.write(`     2. Service account has 'roles/secretmanager.secretAccessor' role\n`);
+    process.stderr.write(`     3. Secret 'INTEXURAOS_GITHUB_APP_PRIVATE_KEY' exists in the project\n`);
+    process.stderr.write(`     4. Network connectivity allows access to secretmanager.googleapis.com\n\n`);
+    process.stderr.write(`   Test manually:\n`);
+    process.stderr.write(`     gcloud secrets versions access latest \\\n`);
+    process.stderr.write(`       --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY \\\n`);
+    process.stderr.write(`       --project=${projectId}\n\n`);
     process.exit(1);
   }
 }
@@ -123,9 +188,13 @@ async function bootstrap(): Promise<void> {
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID');
   const projectId = getRequiredEnv('INTEXURAOS_PROJECT_ID');
 
+  // Validate GCP credentials early (before any gcloud commands)
+  const gcpSaKeyPath = getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS');
+  validateGcpCredentials(gcpSaKeyPath, projectId);
+
   // GitHub private key: fetch from Secret Manager (multiline, not in .envrc)
   const privateKeyPath = join(orchestratorDir, 'github-app.pem');
-  const githubPrivateKey = getGitHubPrivateKey(projectId, privateKeyPath);
+  const githubPrivateKey = getGitHubPrivateKey(projectId, privateKeyPath, gcpSaKeyPath);
   writeFileSync(privateKeyPath, githubPrivateKey, { mode: 0o600 });
 
   // Load optional env vars
@@ -134,6 +203,9 @@ async function bootstrap(): Promise<void> {
     getOptionalEnv('INTEXURAOS_WORKER_CAPACITY', String(DEFAULT_CAPACITY)),
     10
   );
+
+  // Validate port is available before starting
+  validatePortAvailable(port);
 
   // Build config
   const config: OrchestratorConfig = {
@@ -204,7 +276,6 @@ async function bootstrap(): Promise<void> {
 
   // Create Docker isolation provider
   const secretsBasePath = join(orchestratorDir, 'secrets');
-  const gcpSaKeyPath = getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS');
   const keepContainersAlive = process.env['KEEP_CONTAINERS_ALIVE'] === '1';
   if (keepContainersAlive) {
     logger.info('Debug mode: containers will be kept alive after task completion');

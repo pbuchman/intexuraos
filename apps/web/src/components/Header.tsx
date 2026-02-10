@@ -64,7 +64,7 @@ export function Header(): React.JSX.Element {
   const { user, logout, isAuthenticated } = useAuth();
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
   const { isInstalled } = usePWA();
-  const { status: workersStatus, refresh: refreshWorkersStatus } = useWorkersStatus();
+  const { status: workersStatus, refresh: refreshWorkersStatus, refreshing: isWorkersRefreshing } = useWorkersStatus();
   const { resolvedTheme, toggleTheme } = useTheme();
   const {
     isPredevMode,
@@ -195,10 +195,12 @@ export function Header(): React.JSX.Element {
                       onClick={(): void => {
                         void refreshWorkersStatus();
                       }}
-                      className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                      disabled={isWorkersRefreshing}
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed dark:text-blue-400 dark:hover:text-blue-300"
                       title="Refresh status"
                     >
-                      Refresh
+                      <RefreshCw className={`h-3 w-3 ${isWorkersRefreshing ? 'animate-spin' : ''}`} />
+                      {isWorkersRefreshing ? 'Refreshing...' : 'Refresh'}
                     </button>
                   )}
                 </div>
