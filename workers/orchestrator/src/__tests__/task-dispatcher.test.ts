@@ -283,6 +283,31 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('should pass jsonSchema in worker config', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'schema-test',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls[0];
+      expect(createWorkerCall).toBeDefined();
+      const config = createWorkerCall?.[0];
+      expect(config?.jsonSchema).toBeDefined();
+      const parsed = JSON.parse(config?.jsonSchema ?? '{}') as Record<string, unknown>;
+      expect(parsed['type']).toBe('object');
+      const required = parsed['required'] as string[];
+      expect(required).toContain('prUrl');
+      expect(required).toContain('ciPassed');
+    });
+
     it('should use provided repository and baseBranch when given', async () => {
       const request: CreateTaskRequest = {
         taskId: 'test-task-with-repo',

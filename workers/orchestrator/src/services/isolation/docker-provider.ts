@@ -147,6 +147,14 @@ export class DockerProvider implements IsolationProvider {
     );
     await fs.promises.writeFile(path.join(taskSecretsPath, 'user-prompt.txt'), prompt, 'utf-8');
 
+    if (config.jsonSchema !== undefined) {
+      await fs.promises.writeFile(
+        path.join(taskSecretsPath, 'json-schema.json'),
+        config.jsonSchema,
+        'utf-8'
+      );
+    }
+
     /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
     if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
       await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));

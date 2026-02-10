@@ -141,8 +141,15 @@ SYSTEM_PROMPT=$(cat /secrets/system-prompt.txt)
 echo "[entrypoint] System prompt loaded (${#SYSTEM_PROMPT} chars)"
 echo "[entrypoint] User prompt loaded ($(wc -c < /secrets/user-prompt.txt | tr -d ' ') bytes)"
 
+SCHEMA_FLAG=""
+if [ -f "/secrets/json-schema.json" ]; then
+    echo "[entrypoint] JSON schema loaded ($(wc -c < /secrets/json-schema.json | tr -d ' ') bytes)"
+    SCHEMA_FLAG="--json-schema $(cat /secrets/json-schema.json)"
+fi
+
 echo "[entrypoint] Starting Claude in --print mode..."
 exec claude --print --verbose --output-format stream-json \
     --dangerously-skip-permissions \
     --system-prompt "$SYSTEM_PROMPT" \
+    $SCHEMA_FLAG \
     < /secrets/user-prompt.txt

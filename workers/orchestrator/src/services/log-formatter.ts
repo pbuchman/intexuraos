@@ -15,6 +15,7 @@ interface StreamJsonMessage {
   total_cost_usd?: number;
   num_turns?: number;
   is_error?: boolean;
+  structured_output?: Record<string, unknown>;
 }
 
 /**
