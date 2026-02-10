@@ -38,7 +38,9 @@ function getRequiredEnv(name: string): string {
   const value = process.env[name];
   /* v8 ignore start -- test-infra: process.exit() terminates the process, cannot test in unit tests @preserve */
   if (value === undefined || value === '') {
-    process.stderr.write(`\n❌ PRECONDITION FAILED: Required environment variable '${name}' is not set\n`);
+    process.stderr.write(
+      `\n❌ PRECONDITION FAILED: Required environment variable '${name}' is not set\n`
+    );
     process.stderr.write(`   Add to .envrc: export ${name}=<value>\n\n`);
     process.exit(1);
   }
@@ -61,7 +63,9 @@ function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
   if (!existsSync(gcpSaKeyPath)) {
     process.stderr.write(`\n❌ PRECONDITION FAILED: GCP service account key not found\n`);
     process.stderr.write(`   Expected path: ${gcpSaKeyPath}\n`);
-    process.stderr.write(`   Add to .envrc: export GOOGLE_APPLICATION_CREDENTIALS=<path-to-key.json>\n\n`);
+    process.stderr.write(
+      `   Add to .envrc: export GOOGLE_APPLICATION_CREDENTIALS=<path-to-key.json>\n\n`
+    );
     process.exit(1);
   }
 
@@ -75,7 +79,9 @@ function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
     process.stderr.write(`\n❌ PRECONDITION FAILED: GCP authentication failed\n`);
     process.stderr.write(`   Credentials file: ${gcpSaKeyPath}\n`);
     process.stderr.write(`   Verify the file exists, is readable, and has correct permissions\n`);
-    process.stderr.write(`   Test with: gcloud auth activate-service-account --key-file="${gcpSaKeyPath}"\n\n`);
+    process.stderr.write(
+      `   Test with: gcloud auth activate-service-account --key-file="${gcpSaKeyPath}"\n\n`
+    );
     process.exit(1);
   }
 }
@@ -88,12 +94,12 @@ function validateGcpCredentials(gcpSaKeyPath: string, projectId: string): void {
 function validatePortAvailable(port: number): void {
   try {
     // Use lsof to check if port is in use
-    execSync(`lsof -i :${port} -P -n`, { stdio: 'pipe', timeout: 5000 });
+    execSync(`lsof -i :${String(port)} -P -n`, { stdio: 'pipe', timeout: 5000 });
     // If lsof succeeded, port is in use
-    process.stderr.write(`\n❌ PRECONDITION FAILED: Port ${port} is already in use\n`);
+    process.stderr.write(`\n❌ PRECONDITION FAILED: Port ${String(port)} is already in use\n`);
     process.stderr.write(`   Another process is listening on this port\n`);
-    process.stderr.write(`   Find the process: lsof -i :${port}\n`);
-    process.stderr.write(`   Or use a different port: export PORT=${port + 1}\n\n`);
+    process.stderr.write(`   Find the process: lsof -i :${String(port)}\n`);
+    process.stderr.write(`   Or use a different port: export PORT=${String(port + 1)}\n\n`);
     process.exit(1);
   } catch (error) {
     // lsof failed (exit code 1) means port is available - this is good
@@ -146,15 +152,23 @@ function getGitHubPrivateKey(projectId: string, cachePath: string, gcpSaKeyPath:
       { encoding: 'utf-8', timeout: EXEC_TIMEOUT_MS }
     ).trim();
     return key;
-  } catch (error) {
-    process.stderr.write(`\n❌ PRECONDITION FAILED: Failed to fetch GitHub private key from Secret Manager\n`);
+  } catch (_error) {
+    process.stderr.write(
+      `\n❌ PRECONDITION FAILED: Failed to fetch GitHub private key from Secret Manager\n`
+    );
     process.stderr.write(`   GCP credentials: ${gcpSaKeyPath}\n`);
     process.stderr.write(`   Project: ${projectId}\n`);
     process.stderr.write(`   Ensure:\n`);
-    process.stderr.write(`     1. GOOGLE_APPLICATION_CREDENTIALS points to valid service account key\n`);
+    process.stderr.write(
+      `     1. GOOGLE_APPLICATION_CREDENTIALS points to valid service account key\n`
+    );
     process.stderr.write(`     2. Service account has 'roles/secretmanager.secretAccessor' role\n`);
-    process.stderr.write(`     3. Secret 'INTEXURAOS_GITHUB_APP_PRIVATE_KEY' exists in the project\n`);
-    process.stderr.write(`     4. Network connectivity allows access to secretmanager.googleapis.com\n\n`);
+    process.stderr.write(
+      `     3. Secret 'INTEXURAOS_GITHUB_APP_PRIVATE_KEY' exists in the project\n`
+    );
+    process.stderr.write(
+      `     4. Network connectivity allows access to secretmanager.googleapis.com\n\n`
+    );
     process.stderr.write(`   Test manually:\n`);
     process.stderr.write(`     gcloud secrets versions access latest \\\n`);
     process.stderr.write(`       --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY \\\n`);
