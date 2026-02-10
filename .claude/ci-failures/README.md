@@ -177,3 +177,36 @@ pnpm run ci:report -- --json       # JSON output
 3. Cleared all `.jsonl` files (fresh start after documentation update)
 
 **Result:** Shifted from reactive to preventive approach — read types first, write code second
+
+### 2026-02-10 — Fastify & Boolean Expression Analysis
+
+**Data analyzed:** 508 CI runs across 6 directories
+
+**Top errors identified:**
+| Error | Count | Category |
+| ------- | ----- | ---------- |
+| TS2339 (Property does not exist) | 397 | typecheck |
+| TS2345 (Argument not assignable) | 272 | typecheck |
+| no-unsafe-member-access | 136 | lint |
+| no-unsafe-assignment | 122 | lint |
+| strict-boolean-expressions | 78 | lint |
+
+**Root cause analysis:**
+
+- 170 occurrences of `Property 'status' does not exist on type 'FastifyReply'`
+- 45 occurrences of `Property 'log' does not exist on type 'FastifyRequest'`
+- 57 occurrences of `Unexpected any value in conditional`
+- Fastify routes missing generic type parameters for request/response inference
+- Missing explicit boolean comparisons in conditionals
+
+**Actions taken:**
+
+1. Added pattern #9: "Fastify Type Parameters — Specify generics for route handlers"
+   - Examples for schema-based type inference
+   - Examples for explicit generic parameters
+2. Added pattern #10: "Strict Boolean Expressions — Use explicit comparisons"
+   - Truthy/falsy conversion examples
+   - Nullable string handling
+   - Boolean flag comparisons
+
+**Result:** Added 2 new patterns addressing 770+ typecheck + lint failures

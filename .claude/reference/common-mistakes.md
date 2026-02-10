@@ -124,6 +124,74 @@ const mock = { process: vi.fn() };
 
 ---
 
+## 9. Fastify Type Parameters — Specify generics for route handlers
+
+FastifyReply/FastifyRequest need generic type parameters to infer response/request types.
+
+```typescript
+// ❌ Missing generics — TS2339: Property 'status' does not exist
+app.get('/route', async (request, reply) => {
+  reply.status(200); // Property 'status' not found
+  return { data: 'value' };
+});
+
+// ✅ Specify response schema for type inference
+app.get('/route', {
+  schema: {
+    response: { 200: { type: 'object', properties: { data: { type: 'string' } } } }
+  }
+}, async (request, reply) => {
+  reply.status(200); // Now TypeScript knows .status exists
+  return { data: 'value' };
+});
+
+// ✅ Or use explicit type parameter
+import { FastifyInstance } from 'fastify';
+app.get<{ Params: { id: string } }>('/route/:id', async (request, reply) => {
+  const id = request.params.id; // TypeScript knows id is string
+  return { id };
+});
+```
+
+---
+
+## 10. Strict Boolean Expressions — Use explicit comparisons
+
+`strictBooleanExpressions` requires explicit boolean checks, no truthy/falsy shortcuts.
+
+```typescript
+// ❌ Implicit boolean conversion
+const value = getValue();
+if (value) { } // Unexpected any value in conditional
+
+// ✅ Explicit comparison or type guard
+const value = getValue();
+if (value !== null && value !== undefined) { }
+if (Boolean(value)) { }
+if (!!value) { }
+
+// ❌ Nullable string in conditional
+const name: string | null = getName();
+if (name) { } // Unexpected nullable string value
+
+// ✅ Handle nullish explicitly
+const name: string | null = getName();
+if (name !== null && name !== '') { }
+if (name?.length > 0) { }
+
+// ❌ Boolean flag without explicit check
+const isEnabled = getSetting();
+if (isEnabled) { } // Unexpected any value
+
+// ✅ Use explicit === true
+const isEnabled = getSetting();
+if (isEnabled === true) { }
+```
+
+**Rule of thumb:** Any value in an `if` condition must be explicitly compared or type-guarded.
+
+---
+
 ## Code Smells Reference
 
 | Smell                      | ❌ Wrong                       | ✅ Fix                    |
