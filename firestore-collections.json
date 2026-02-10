@@ -157,7 +157,7 @@
     "code_tasks": {
       "owner": "code-agent",
       "description": "Code execution tasks",
-      "subcollections": ["logs"]
+      "subcollections": ["logs", "log_entries"]
     },
     "user_spend": {
       "owner": "code-agent",

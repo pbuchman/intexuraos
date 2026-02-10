@@ -76,7 +76,12 @@ function parseJsonMessage(obj: StreamJsonMessage, timestamp: Timestamp, startSeq
     case 'result':
       return [parseResult(obj, timestamp, startSeq)];
     default:
-      return [];
+      return [{
+        sequence: startSeq,
+        type: 'raw',
+        timestamp,
+        rawText: JSON.stringify(obj),
+      }];
   }
 }
 

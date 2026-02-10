@@ -525,7 +525,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (allEntries.length > 0) {
         const entryResult = await logEntryRepo.storeBatch(taskId, allEntries);
         if (!entryResult.ok) {
-          request.log.warn({ taskId, error: entryResult.error }, 'Failed to store log entries (chunks stored OK)');
+          request.log.error({ taskId, error: entryResult.error }, 'Failed to store log entries (chunks stored OK)');
         }
       }
 
