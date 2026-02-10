@@ -24,7 +24,11 @@ export type ErrorCode =
   | 'RESEARCH_NOT_COMPLETED'
   | 'NO_SYNTHESIS'
   | 'ALREADY_EXPORTED'
-  | 'NOTION_UNAUTHORIZED';
+  | 'NOTION_UNAUTHORIZED'
+  | 'INVALID_NONCE'
+  | 'NONCE_EXPIRED'
+  | 'NOT_OWNER'
+  | 'TASK_NOT_CANCELLABLE';
 
 /**
  * HTTP status codes mapped to error codes.
@@ -52,6 +56,10 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   NO_SYNTHESIS: 400,
   ALREADY_EXPORTED: 409,
   NOTION_UNAUTHORIZED: 401,
+  INVALID_NONCE: 400,
+  NONCE_EXPIRED: 400,
+  NOT_OWNER: 403,
+  TASK_NOT_CANCELLABLE: 400,
 };
 
 /**

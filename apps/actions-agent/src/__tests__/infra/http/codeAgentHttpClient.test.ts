@@ -514,11 +514,11 @@ describe('codeAgentHttpClient', () => {
         }
       });
 
-      it('returns INVALID_NONCE error on 400 with invalid_nonce code', async () => {
+      it('returns INVALID_NONCE error on 400 with INVALID_NONCE code', async () => {
         const scope = nock(baseUrl)
           .post('/internal/code/cancel-with-nonce')
           .matchHeader('X-Internal-Auth', internalAuthToken)
-          .reply(400, { error: { code: 'invalid_nonce', message: 'Nonce does not match' } });
+          .reply(400, { error: { code: 'INVALID_NONCE', message: 'Nonce does not match' } });
 
         const client = createClient();
         const result = await client.cancelTaskWithNonce(cancelInput);
@@ -531,11 +531,11 @@ describe('codeAgentHttpClient', () => {
         }
       });
 
-      it('returns NONCE_EXPIRED error on 400 with nonce_expired code', async () => {
+      it('returns NONCE_EXPIRED error on 400 with NONCE_EXPIRED code', async () => {
         const scope = nock(baseUrl)
           .post('/internal/code/cancel-with-nonce')
           .matchHeader('X-Internal-Auth', internalAuthToken)
-          .reply(400, { error: { code: 'nonce_expired', message: 'Nonce has expired' } });
+          .reply(400, { error: { code: 'NONCE_EXPIRED', message: 'Nonce has expired' } });
 
         const client = createClient();
         const result = await client.cancelTaskWithNonce(cancelInput);
@@ -548,11 +548,11 @@ describe('codeAgentHttpClient', () => {
         }
       });
 
-      it('returns NOT_OWNER error on 400 with not_owner code', async () => {
+      it('returns NOT_OWNER error on 403 with NOT_OWNER code', async () => {
         const scope = nock(baseUrl)
           .post('/internal/code/cancel-with-nonce')
           .matchHeader('X-Internal-Auth', internalAuthToken)
-          .reply(400, { error: { code: 'not_owner', message: 'User does not own task' } });
+          .reply(403, { error: { code: 'NOT_OWNER', message: 'User does not own task' } });
 
         const client = createClient();
         const result = await client.cancelTaskWithNonce(cancelInput);
@@ -565,11 +565,11 @@ describe('codeAgentHttpClient', () => {
         }
       });
 
-      it('returns TASK_NOT_CANCELLABLE error on 400 with task_not_cancellable code', async () => {
+      it('returns TASK_NOT_CANCELLABLE error on 400 with TASK_NOT_CANCELLABLE code', async () => {
         const scope = nock(baseUrl)
           .post('/internal/code/cancel-with-nonce')
           .matchHeader('X-Internal-Auth', internalAuthToken)
-          .reply(400, { error: { code: 'task_not_cancellable', message: 'Task already completed' } });
+          .reply(400, { error: { code: 'TASK_NOT_CANCELLABLE', message: 'Task already completed' } });
 
         const client = createClient();
         const result = await client.cancelTaskWithNonce(cancelInput);
@@ -595,7 +595,9 @@ describe('codeAgentHttpClient', () => {
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
           expect(result.error.code).toBe('UNKNOWN');
-          expect(result.error.message).toBe('Unexpected error');
+          expect(result.error.message).toBe(
+            'Code-agent returned unrecognized error code: some_other_error. Original message: Unexpected error'
+          );
         }
       });
 
@@ -629,7 +631,9 @@ describe('codeAgentHttpClient', () => {
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
           expect(result.error.code).toBe('UNKNOWN');
-          expect(result.error.message).toBe('Unknown error');
+          expect(result.error.message).toBe(
+            'Code-agent returned unrecognized error code: . Original message: Unknown error'
+          );
         }
       });
 

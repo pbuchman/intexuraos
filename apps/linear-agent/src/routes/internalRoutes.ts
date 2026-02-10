@@ -6,7 +6,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import type { Logger } from 'pino';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import { processLinearAction, validateIssue, generateIssueTitle, fullSync } from '../domain/index.js';
+import { processLinearAction, validateIssue, generateIssueTitle, fullSync, fullSyncAllUsers } from '../domain/index.js';
 
 interface ProcessActionBody {
   action: {
@@ -278,11 +278,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       request.log.info(
-        { identifier, issueId: result.value.id },
+        { identifier, issueId: result.value.id }, // @allow-result-access -- guarded by if (!result.ok) at line 265
         'internal/validateIssue: issue validated'
       );
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- guarded by if (!result.ok) at line 265
     }
   );
 
@@ -379,6 +379,90 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request.log.info(
         { title: result.value.title, issueType: result.value.issueType },
         'internal/generateIssueTitle: title generated'
+      );
+
+      return await reply.ok(result.value);
+    }
+  );
+
+  // Full sync all users endpoint for Cloud Scheduler
+  fastify.post(
+    '/internal/linear/sync-all',
+    {
+      schema: {
+        operationId: 'fullSyncAll',
+        summary: 'Trigger full sync of Linear issues for all connected users',
+        description: 'Fetches all issues from Linear for all connected users and syncs them to the database (used by Cloud Scheduler)',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Sync completed successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['userCount', 'totalIssues'],
+                properties: {
+                  userCount: { type: 'number', description: 'Number of users synced' },
+                  totalIssues: { type: 'number', description: 'Total number of issues synced across all users' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const services = getServices();
+
+      request.log.info('internal/fullSyncAll: starting sync for all users');
+
+      const result = await fullSyncAllUsers({
+        issueRepo: services.issueRepository,
+        connectionRepo: services.connectionRepository,
+        linearClient: services.linearApiClient,
+        logger: request.log as unknown as Logger,
+        getAllConnectedUserIds: async () => await services.connectionRepository.getAllConnectedUserIds(),
+      });
+
+      if (!result.ok) {
+        return await handleLinearError(result.error, reply);
+      }
+
+      request.log.info(
+        {
+          userCount: result.value.userCount,
+          totalIssues: result.value.totalIssues,
+        },
+        'internal/fullSyncAll: sync completed'
       );
 
       return await reply.ok(result.value);
@@ -483,7 +567,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request.log.info(
         {
           userId,
-          created: result.value.created,
+          created: result.value.created, // @allow-result-access -- guarded by if (!result.ok) at line 563
           updated: result.value.updated,
           deleted: result.value.deleted,
           total: result.value.total,
@@ -492,7 +576,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'internal/fullSync: sync completed'
       );
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- guarded by if (!result.ok) at line 563
       /* v8 ignore stop @preserve */
     }
   );

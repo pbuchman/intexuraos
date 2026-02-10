@@ -484,4 +484,76 @@ describe('internalRoutes', () => {
       expect(body.data.title).toBe('From code block');
     });
   });
+
+  describe('POST /internal/linear/sync-all', () => {
+    it('returns 401 when no internal auth header provided', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/sync-all',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('syncs all connected users successfully', async () => {
+      // Seed two connected users
+      const conn1: LinearConnection = {
+        userId: 'user-1',
+        apiKey: 'key-1',
+        teamId: 'team-1',
+        teamName: 'Team 1',
+        webhookSecret: null,
+        connected: true,
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+      };
+      const conn2: LinearConnection = {
+        userId: 'user-2',
+        apiKey: 'key-2',
+        teamId: 'team-2',
+        teamName: 'Team 2',
+        webhookSecret: null,
+        connected: true,
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+      };
+      fakeConnectionRepo.seedConnection(conn1);
+      fakeConnectionRepo.seedConnection(conn2);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/sync-all',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.userCount).toBe(2);
+    });
+
+    it('handles sync failure for all users', async () => {
+      fakeConnectionRepo.setGetConnectionFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database connection failed',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/sync-all',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      const body = response.json();
+      expect(body.success).toBe(false);
+    });
+  });
 });
