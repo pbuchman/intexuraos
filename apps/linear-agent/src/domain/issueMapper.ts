@@ -27,6 +27,7 @@ export function mapWebhookToSyncedIssue(
     labels: payload.labels.map((l) => l.name),
     url: payload.url,
     userId,
+    parentId: payload.parent?.id ?? null,
     createdAt: payload.createdAt,
     updatedAt: payload.updatedAt,
     syncedAt: new Date().toISOString(),
@@ -36,6 +37,7 @@ export function mapWebhookToSyncedIssue(
 
 /**
  * Map Linear API issue to SyncedLinearIssue.
+ * parentId is captured from Linear SDK during full sync.
  */
 export function mapApiIssueToSyncedIssue(
   issue: LinearIssue,
@@ -55,6 +57,7 @@ export function mapApiIssueToSyncedIssue(
     labels: [], // API LinearIssue doesn't include labels array
     url: issue.url,
     userId,
+    parentId: issue.parentId ?? null,
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
     syncedAt: new Date().toISOString(),

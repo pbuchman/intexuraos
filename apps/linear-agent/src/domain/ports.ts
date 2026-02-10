@@ -53,6 +53,9 @@ export interface LinearConnectionRepository {
 
   /** Update webhook secret for a user's connection */
   updateWebhookSecret(userId: string, webhookSecret: string | null): Promise<Result<void, LinearError>>;
+
+  /** Get all connected user IDs (for scheduler sync) */
+  getAllConnectedUserIds(): Promise<Result<string[], LinearError>>;
 }
 
 /** Repository for failed issue creations */

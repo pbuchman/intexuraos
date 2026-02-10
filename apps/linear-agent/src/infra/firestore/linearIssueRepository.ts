@@ -25,6 +25,7 @@ interface SyncedLinearIssueDoc {
   labels: string[];
   url: string;
   userId: string;
+  parentId?: string | null;
   createdAt: string;
   updatedAt: string;
   syncedAt: string;
@@ -53,6 +54,7 @@ export async function saveLinearIssue(
       labels: issue.labels,
       url: issue.url,
       userId: issue.userId,
+      parentId: issue.parentId,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
       syncedAt: issue.syncedAt,
@@ -161,6 +163,7 @@ function docToIssue(data: SyncedLinearIssueDoc): SyncedLinearIssue {
     labels: data.labels,
     url: data.url,
     userId: data.userId,
+    parentId: data.parentId ?? null,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
     syncedAt: data.syncedAt,

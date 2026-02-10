@@ -32,6 +32,7 @@ function createTestIssue(overrides: Partial<SyncedLinearIssue> = {}): SyncedLine
     updatedAt: '2025-01-02T00:00:00.000Z',
     syncedAt: '2025-01-03T00:00:00.000Z',
     teamId: 'team-1',
+      parentId: null,
     ...overrides,
   };
 }

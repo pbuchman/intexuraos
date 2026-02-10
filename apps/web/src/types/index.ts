@@ -938,7 +938,11 @@ export interface LinearIssue {
   identifier: string;
   title: string;
   description: string | null;
-  status?: LinearIssueState;
+  state?: {
+    id: string;
+    name: string;
+    type: IssueStateCategory;
+  };
   priority: LinearPriority;
   assignee?: LinearUser;
   creator?: LinearUser;

@@ -3,7 +3,7 @@ import { Timestamp } from '@google-cloud/firestore';
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
-import { extractOrGenerateTraceId } from '@intexuraos/common-core';
+import { extractOrGenerateTraceId, type ErrorCode } from '@intexuraos/common-core';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
@@ -2605,8 +2605,26 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           return await reply.fail('NOT_FOUND', error.message);
         } else if (error.code === 'internal_error') {
           return await reply.fail('INTERNAL_ERROR', error.message);
+        } else if (error.code === 'not_owner') {
+          // NOT_OWNER returns 403 (not 400) as defined in ErrorCode mapping
+          return await reply.fail('NOT_OWNER', error.message);
         } else {
-          return await reply.fail('INVALID_REQUEST', error.message);
+          // Map domain-specific error codes to ErrorCode values
+          const codeMap: Record<string, ErrorCode> = {
+            invalid_nonce: 'INVALID_NONCE',
+            nonce_expired: 'NONCE_EXPIRED',
+            // not_owner NOT mapped here - it returns 403 and is handled above
+            task_not_cancellable: 'TASK_NOT_CANCELLABLE',
+          };
+          const mappedCode = codeMap[error.code];
+          /* v8 ignore start -- upstream: Domain guarantees all error codes are mapped, this is defensive @preserve */
+          if (mappedCode === undefined) {
+            // This should never happen - all domain error codes must be mapped
+            request.log.error({ taskId, errorCode: error.code }, 'Unmapped domain error code in cancel-with-nonce');
+            return await reply.fail('INTERNAL_ERROR', 'Unable to process error code');
+          }
+          /* v8 ignore stop @preserve */
+          return await reply.fail(mappedCode, error.message);
         }
       }
 

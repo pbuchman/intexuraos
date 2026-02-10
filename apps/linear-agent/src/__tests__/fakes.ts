@@ -28,6 +28,33 @@ import type {
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
 import type { LLMError, LLMErrorCode } from '@intexuraos/llm-contract';
+import type { IssueStateCategory, LinearPriority } from '../domain/models.js';
+
+/**
+ * Helper to create SyncedLinearIssue test fixtures with defaults
+ */
+export function createSyncedIssue(
+  overrides: Partial<SyncedLinearIssue> & { id: string; identifier: string; userId: string }
+): SyncedLinearIssue {
+  const now = new Date().toISOString();
+  return {
+    title: 'Test Issue',
+    description: null,
+    state: 'Backlog',
+    stateType: 'backlog' as IssueStateCategory,
+    priority: 0 as LinearPriority,
+    assigneeId: null,
+    assigneeName: null,
+    labels: [],
+    url: 'https://linear.app/test/issue/test',
+    createdAt: now,
+    updatedAt: now,
+    syncedAt: now,
+    teamId: 'team-123',
+    parentId: null,
+    ...overrides,
+  };
+}
 
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
   private connections = new Map<string, LinearConnection>();
@@ -186,6 +213,18 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
       conn.updatedAt = new Date().toISOString();
     }
     return ok(undefined);
+  }
+
+  async getAllConnectedUserIds(): Promise<Result<string[], LinearError>> {
+    if (this.shouldFailGetConnection) return err(this.failError);
+
+    const connectedUserIds: string[] = [];
+    for (const [userId, conn] of this.connections.entries()) {
+      if (conn.connected) {
+        connectedUserIds.push(userId);
+      }
+    }
+    return ok(connectedUserIds);
   }
 
   reset(): void {
