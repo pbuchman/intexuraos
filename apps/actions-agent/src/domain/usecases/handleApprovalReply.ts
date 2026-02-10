@@ -334,7 +334,7 @@ async function handleButtonResponse(
       // Send approval confirmation
       const approvePublishResult = await whatsappPublisher.publishSendMessage({
         userId: action.userId,
-        message: `Approved! Processing your ${action.type}: "${action.title}"`,
+        message: `✅ Approved! Processing your ${action.type}: "${action.title}"`,
         correlationId: `approval-approved-${action.id}`,
       });
 
@@ -607,8 +607,8 @@ async function executeRejection(
   }
 
   const message = isConvert
-    ? `Converting ${action.type} to Linear issue: "${action.title}"`
-    : `Got it. Cancelled the ${action.type}: "${action.title}"`;
+    ? `🔀 Converting ${action.type} to Linear issue: "${action.title}"`
+    : `🛑 Got it. Cancelled the ${action.type}: "${action.title}"`;
 
   const publishResult = await whatsappPublisher.publishSendMessage({
     userId: action.userId,
@@ -706,7 +706,7 @@ async function handleCancelTaskButton(
 
   await whatsappPublisher.publishSendMessage({
     userId,
-    message: 'Task cancellation requested.',
+    message: '🛑 Task cancellation requested.',
     correlationId: `cancel-task-success-${taskId}`,
   });
 

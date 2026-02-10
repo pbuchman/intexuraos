@@ -54,7 +54,7 @@ export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): Handl
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New link ready to save: "${event.title}"\n\nReview: ${actionLink}`;
+      const message = `📑 New link ready to save: "${event.title}"\n\nReview: ${actionLink}`;
       const buttons = buildApprovalButtons({ actionId: event.actionId });
 
       logger.info(

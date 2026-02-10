@@ -36,7 +36,7 @@ export class WhatsAppNotificationSender implements NotificationSender {
     draftUrl: string
   ): Promise<Result<void>> {
     const displayTitle = title !== '' ? title : 'Untitled Research';
-    const message = `Research Complete!\n\n"${displayTitle}"\n${draftUrl}`;
+    const message = `📚 Research Complete!\n\n"${displayTitle}"\n${draftUrl}`;
 
     await this.publisher.publishSendMessage({
       userId,
