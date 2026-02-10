@@ -80,6 +80,7 @@ check_pattern "pre-existing" "deflecting to prior state"
 check_pattern "already broken" "deflecting blame to prior state"
 check_pattern "legacy issue" "deflecting to legacy as excuse"
 check_pattern "CI should now pass" "assuming CI passes without verification"
+check_pattern "unrelated to my changes" "deflecting blame to prior state"
 
 # Output all violations at once
 if [[ -n "$VIOLATIONS" ]]; then
