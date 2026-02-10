@@ -6,7 +6,6 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
-  ChevronRight,
   CloudDownload,
   ExternalLink,
   Eye,
@@ -83,13 +82,13 @@ function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
         )}
 
         <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-          <span>{issue.status?.name ?? 'Unknown'}</span>
+          <span>{issue.state?.name ?? 'Unknown'}</span>
           <ExternalLink className="h-3 w-3" />
         </div>
       </a>
 
       {/* Sub-issues list */}
-      {issue.childCount > 0 && issue.children.length > 0 && <SubIssuesList issues={issue.children} />}
+      {issue.children.length > 0 && <SubIssuesList issues={issue.children} />}
     </div>
   );
 }
@@ -99,18 +98,16 @@ interface SubIssuesListProps {
 }
 
 function SubIssuesList({ issues }: SubIssuesListProps): React.JSX.Element | null {
-  const [expanded, setExpanded] = useState(true);
-
   if (issues.length === 0) {
     return null;
   }
 
   // Status icon mapping
   const getStatusIcon = (issue: LinearIssue): React.ReactNode => {
-    if (!issue.status) {
+    if (!issue.state) {
       return <Circle className="h-3 w-3 text-slate-400" />;
     }
-    const type = issue.status.type;
+    const type = issue.state.type;
     switch (type) {
       case 'backlog':
       case 'unstarted':
@@ -127,35 +124,26 @@ function SubIssuesList({ issues }: SubIssuesListProps): React.JSX.Element | null
 
   return (
     <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-600">
-      <button
-        type="button"
-        onClick={() => {
-          setExpanded(!expanded);
-        }}
-        className="mb-2 flex items-center gap-1 text-xs font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
-      >
-        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+      <div className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-400">
         Sub-issues ({issues.length})
-      </button>
+      </div>
 
-      {expanded && (
-        <div className="space-y-1">
-          {issues.map((child) => (
-            <a
-              key={child.id}
-              href={child.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-center gap-2 rounded px-2 py-1.5 text-xs text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-            >
-              {getStatusIcon(child)}
-              <span className="font-medium text-slate-500 dark:text-slate-500">{child.identifier}</span>
-              <span className="truncate">{child.title}</span>
-              <ExternalLink className="ml-auto h-3 w-3 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-            </a>
-          ))}
-        </div>
-      )}
+      <div className="space-y-1">
+        {issues.map((child) => (
+          <a
+            key={child.id}
+            href={child.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group flex items-center gap-2 rounded px-2 py-1.5 text-xs text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+          >
+            {getStatusIcon(child)}
+            <span className="font-medium text-slate-500 dark:text-slate-500">{child.identifier}</span>
+            <span className="truncate">{child.title}</span>
+            <ExternalLink className="ml-auto h-3 w-3 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+          </a>
+        ))}
+      </div>
     </div>
   );
 }

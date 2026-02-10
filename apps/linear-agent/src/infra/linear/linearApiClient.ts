@@ -105,6 +105,13 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
   });
   const childCounts = await Promise.all(childrenPromises);
 
+  // Batch fetch all parents
+  const parentPromises = issues.map(async (issue) => {
+    const parent = await issue.parent;
+    return parent?.id ?? null;
+  });
+  const parentIds = await Promise.all(parentPromises);
+
   return issues.map((issue, index) => {
     const state = states[index] as IssueState | null | undefined;
     return {
@@ -122,6 +129,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
       createdAt: issue.createdAt.toISOString(),
       updatedAt: issue.updatedAt.toISOString(),
       completedAt: issue.completedAt?.toISOString() ?? null,
+      parentId: parentIds[index] ?? null,
       childCount: childCounts[index] ?? 0,
       children: [],
     };
@@ -132,6 +140,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
 async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
   const state = (await issue.state) as IssueState | null | undefined;
   const children = await issue.children();
+  const parent = await issue.parent;
 
   return {
     id: issue.id,
@@ -148,6 +157,7 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
     createdAt: issue.createdAt.toISOString(),
     updatedAt: issue.updatedAt.toISOString(),
     completedAt: issue.completedAt?.toISOString() ?? null,
+    parentId: parent?.id ?? null,
     childCount: children.nodes.length,
     children: [],
   };
@@ -351,14 +361,28 @@ export function createLinearApiClient(): LinearApiClient {
 
           const client = getOrCreateClient(apiKey);
 
-          const issuesConnection = await client.issues({
-            filter: {
-              team: { id: { eq: teamId } },
-            },
-            first: 100,
-          });
+          // Paginate through all issues
+          const allIssues: Issue[] = [];
+          let hasMore = true;
+          let after: string | undefined;
 
-          const allMappedIssues = await mapIssuesWithBatchedStates(issuesConnection.nodes);
+          while (hasMore) {
+            const issuesConnection = await client.issues({
+              filter: {
+                team: { id: { eq: teamId } },
+              },
+              first: 100,
+              ...(after !== undefined ? { after } : {}),
+            });
+
+            allIssues.push(...issuesConnection.nodes);
+            hasMore = issuesConnection.pageInfo.hasNextPage;
+            after = issuesConnection.pageInfo.endCursor;
+          }
+
+          logger.info({ totalIssues: allIssues.length }, 'Fetched all pages');
+
+          const allMappedIssues = await mapIssuesWithBatchedStates(allIssues);
 
           return filterIssuesByCompletionDate(allMappedIssues, completedSinceDays);
         });

@@ -135,7 +135,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await listIssues(
         { userId: user.userId, includeArchive },
         {
-          linearApiClient: services.linearApiClient,
+          issueRepository: services.issueRepository,
           connectionRepository: services.connectionRepository,
           logger: request.log,
         }
@@ -762,7 +762,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request.log.info(
         {
           userId: user.userId,
-          created: result.value.created,
+          created: result.value.created, // @allow-result-access -- guarded by if (!result.ok) at line 757
           updated: result.value.updated,
           deleted: result.value.deleted,
           total: result.value.total,
@@ -771,7 +771,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'linear/sync: sync completed'
       );
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- guarded by if (!result.ok) at line 757
       /* v8 ignore stop @preserve */
     }
   );

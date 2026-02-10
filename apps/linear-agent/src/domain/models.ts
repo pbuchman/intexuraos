@@ -33,6 +33,8 @@ export interface LinearIssue {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  /** Parent issue UUID (null for top-level issues, populated during full sync) */
+  parentId?: string | null;
   /** Number of child issues (subtasks) */
   childCount: number;
   /** Child issues (populated when includeChildren=true) */
@@ -188,6 +190,7 @@ export interface SyncedLinearIssue {
   labels: string[];
   url: string;
   userId: string; /* Owner user ID (for multi-tenant) */
+  parentId: string | null; /* Parent issue UUID (null for top-level issues) */
   createdAt: string; /* ISO timestamp from Linear */
   updatedAt: string; /* ISO timestamp from Linear */
   syncedAt: string; /* When we last synced this issue */

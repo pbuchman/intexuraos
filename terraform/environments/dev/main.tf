@@ -1498,7 +1498,7 @@ resource "google_cloud_scheduler_job" "linear_sync_hourly" {
 
   http_target {
     http_method = "POST"
-    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/sync"
+    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/sync-all"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
