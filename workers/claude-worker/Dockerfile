@@ -55,11 +55,12 @@ RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gclou
 
 # Bake Claude default config to skip onboarding on fresh tmpfs
 # /home/claude is tmpfs so image contents are wiped — entrypoint.sh copies these at startup
-COPY --chown=claude:claude config-defaults/claude.json /opt/claude-defaults/.claude.json
-COPY --chown=claude:claude config-defaults/settings.json /opt/claude-defaults/.claude/settings.json
+# NOTE: Build context is workspace root (.), so paths are root-relative
+COPY --chown=claude:claude workers/claude-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
+COPY --chown=claude:claude workers/claude-worker/config-defaults/settings.json /opt/claude-defaults/.claude/settings.json
 
 # Copy entrypoint
-COPY --chown=claude:claude entrypoint.sh /entrypoint.sh
+COPY --chown=claude:claude workers/claude-worker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Security: Remove unnecessary tools

@@ -318,6 +318,40 @@ resource "google_storage_bucket_iam_member" "cloud_build_functions_storage" {
 }
 
 # -----------------------------------------------------------------------------
+# claude-worker Docker Image Trigger
+# -----------------------------------------------------------------------------
+# Individual trigger for claude-worker Docker image (build+push only, no deploy).
+# Does not trigger on git push — invoked via GitHub Actions workflow.
+
+resource "google_cloudbuild_trigger" "claude_worker" {
+  name        = "claude-worker"
+  description = "Build and push claude-worker Docker image"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  ignored_files = ["**"]
+  filename      = "workers/claude-worker/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION                = var.region
+    _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
+    _ENVIRONMENT           = var.environment
+  }
+
+  service_account = google_service_account.cloud_build.id
+
+  lifecycle {
+    # GCP API normalizes ignored_files=["**"] to null, causing perpetual drift
+    ignore_changes = [ignored_files]
+  }
+}
+
+# -----------------------------------------------------------------------------
 # Workload Identity Federation (GitHub Actions → GCP)
 # -----------------------------------------------------------------------------
 # Allows GitHub Actions to authenticate to GCP without service account keys.
