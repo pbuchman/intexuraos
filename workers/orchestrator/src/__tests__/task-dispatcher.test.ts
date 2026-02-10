@@ -151,6 +151,7 @@ describe('TaskDispatcher', () => {
     getDroppedChunkCount: vi.fn(() => 0),
     registerTask: vi.fn(),
     unregisterTask: vi.fn(),
+    appendChunk: vi.fn(),
   } as unknown as LogForwarder;
 
   // Mock WebhookClient
@@ -1276,6 +1277,53 @@ describe('TaskDispatcher', () => {
           payload: expect.objectContaining({
             status: 'failed',
             error: expect.objectContaining({ code: 'NO_PR_CREATED' }),
+          }),
+        })
+      );
+    });
+
+    it('should mark task as failed when Claude reports is_error in stream result', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'claude-error-test',
+        workerType: 'auto',
+        prompt: 'Test claude error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await phaseDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Grab onLog callback from createWorker call
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      // Simulate Claude stream with error result
+      onLog?.(
+        '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Working..."}]}}\n'
+      );
+      onLog?.(
+        '{"type":"result","is_error":true,"result":"Task failed: StructuredOutput validation error"}\n'
+      );
+
+      // Trigger completion monitor
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await phaseDispatcher.getTask('claude-error-test');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'CLAUDE_REPORTED_ERROR',
+              message: 'Task failed: StructuredOutput validation error',
+            }),
           }),
         })
       );
