@@ -32,7 +32,7 @@ export interface ForwardingState {
   webhookSecret: string;
 }
 
-const MAX_CHUNK_SIZE = 8 * 1024; // 8KB
+const MAX_CHUNK_SIZE = 64 * 1024; // 64KB — must exceed largest single JSON message (hook_response with build output)
 const MAX_CHUNKS_PER_TASK = 500;
 const MAX_TOTAL_LOG_SIZE = 4 * 1024 * 1024; // 4MB
 const CHUNK_INTERVAL_MS = 3 * 1000; // 3 seconds
@@ -334,17 +334,23 @@ export class LogForwarder {
         break;
       }
 
-      // Find last newline before max chunk size
-      let splitPoint = MAX_CHUNK_SIZE;
       const lastNewline = remaining.lastIndexOf('\n', MAX_CHUNK_SIZE);
 
-      if (lastNewline > MAX_CHUNK_SIZE * 0.8) {
-        // Prefer splitting at newline if it's not too far back
-        splitPoint = lastNewline + 1;
+      if (lastNewline <= 0) {
+        // Single line exceeds MAX_CHUNK_SIZE — keep it intact so the
+        // formatter can JSON.parse it. enforceChunkSize() will truncate
+        // truly excessive lines downstream.
+        const nextNewline = remaining.indexOf('\n', MAX_CHUNK_SIZE);
+        if (nextNewline === -1) {
+          chunks.push(remaining);
+          break;
+        }
+        chunks.push(remaining.slice(0, nextNewline + 1));
+        remaining = remaining.slice(nextNewline + 1);
+      } else {
+        chunks.push(remaining.slice(0, lastNewline + 1));
+        remaining = remaining.slice(lastNewline + 1);
       }
-
-      chunks.push(remaining.slice(0, splitPoint));
-      remaining = remaining.slice(splitPoint);
     }
 
     return chunks;
