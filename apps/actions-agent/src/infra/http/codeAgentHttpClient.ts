@@ -265,7 +265,18 @@ export function createCodeAgentHttpClient(
           'NONCE_EXPIRED': 'NONCE_EXPIRED',
           'TASK_NOT_CANCELLABLE': 'TASK_NOT_CANCELLABLE',
         };
-        const mappedCode = codeMap[errorCode] ?? 'UNKNOWN';
+        const mappedCode = codeMap[errorCode];
+        if (mappedCode === undefined) {
+          // Protocol error: code-agent returned error code we don't recognize
+          logger.error(
+            { taskId: input.taskId, errorCode, errorMessage },
+            'Unknown error code from code-agent - possible protocol version mismatch'
+          );
+          return err({
+            code: 'UNKNOWN',
+            message: `Code-agent returned unrecognized error code: ${errorCode}. Original message: ${errorMessage}`,
+          });
+        }
         logger.warn({ taskId: input.taskId, errorCode, errorMessage }, 'Cancel-with-nonce validation failed');
         return err({ code: mappedCode, message: errorMessage });
       }

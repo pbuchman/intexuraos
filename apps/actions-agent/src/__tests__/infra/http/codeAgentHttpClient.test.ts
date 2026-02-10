@@ -595,7 +595,9 @@ describe('codeAgentHttpClient', () => {
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
           expect(result.error.code).toBe('UNKNOWN');
-          expect(result.error.message).toBe('Unexpected error');
+          expect(result.error.message).toBe(
+            'Code-agent returned unrecognized error code: some_other_error. Original message: Unexpected error'
+          );
         }
       });
 
@@ -629,7 +631,9 @@ describe('codeAgentHttpClient', () => {
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
           expect(result.error.code).toBe('UNKNOWN');
-          expect(result.error.message).toBe('Unknown error');
+          expect(result.error.message).toBe(
+            'Code-agent returned unrecognized error code: . Original message: Unknown error'
+          );
         }
       });
 
