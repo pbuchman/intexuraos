@@ -101,6 +101,7 @@ describe('internalRoutes', () => {
       teamId: 'team-456',
       labels: [],
       childCount: 0,
+      children: [],
       ...overrides,
     };
   }

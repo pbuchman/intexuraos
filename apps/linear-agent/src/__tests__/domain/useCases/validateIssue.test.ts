@@ -65,6 +65,7 @@ describe('validateIssue', () => {
       teamId: 'team-789',
       labels: [],
       childCount: 0,
+      children: [],
       ...overrides,
     };
   }

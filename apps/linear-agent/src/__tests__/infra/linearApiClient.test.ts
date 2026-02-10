@@ -138,6 +138,8 @@ describe('LinearApiClient', () => {
         createdAt: '2025-01-15T10:00:00Z',
         updatedAt: '2025-01-15T10:00:00Z',
         completedAt: null,
+        childCount: 0,
+        children: [],
       });
       fakeClient.seedIssue({
         id: 'issue-2',
@@ -150,6 +152,8 @@ describe('LinearApiClient', () => {
         createdAt: '2025-01-14T10:00:00Z',
         updatedAt: '2025-01-15T10:00:00Z',
         completedAt: '2025-01-15T10:00:00Z',
+        childCount: 0,
+        children: [],
       });
     });
 
@@ -194,6 +198,8 @@ describe('LinearApiClient', () => {
         createdAt: '2025-01-15T10:00:00Z',
         updatedAt: '2025-01-15T10:00:00Z',
         completedAt: null,
+        childCount: 0,
+        children: [],
       });
     });
 

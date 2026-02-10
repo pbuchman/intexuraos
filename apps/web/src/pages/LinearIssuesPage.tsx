@@ -6,6 +6,7 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   CloudDownload,
   ExternalLink,
   Eye,
@@ -57,34 +58,105 @@ interface IssueCardProps {
 
 function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
   return (
-    <a
-      href={issue.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-600 dark:bg-slate-700 dark:hover:border-blue-500"
-    >
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{issue.identifier}</span>
-        <span
-          className={`rounded px-2 py-0.5 text-xs font-medium ${String(PRIORITY_COLORS[issue.priority] ?? PRIORITY_COLORS[0])}`}
-        >
-          {PRIORITY_LABELS[issue.priority] ?? 'No priority'}
-        </span>
-      </div>
+    <div className="rounded-lg border border-slate-200 bg-white transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-600 dark:bg-slate-700 dark:hover:border-blue-500">
+      <a
+        href={issue.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block p-4"
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{issue.identifier}</span>
+          <span
+            className={`rounded px-2 py-0.5 text-xs font-medium ${String(PRIORITY_COLORS[issue.priority] ?? PRIORITY_COLORS[0])}`}
+          >
+            {PRIORITY_LABELS[issue.priority] ?? 'No priority'}
+          </span>
+        </div>
 
-      <h4 className="mb-2 font-medium text-slate-900 line-clamp-2 dark:text-slate-100">{issue.title}</h4>
+        <h4 className="mb-2 font-medium text-slate-900 line-clamp-2 dark:text-slate-100">{issue.title}</h4>
 
-      {issue.description !== null && issue.description !== '' && (
-        <p className="mb-2 text-sm text-slate-500 line-clamp-2 dark:text-slate-400">
-          {stripMarkdown(issue.description)}
-        </p>
+        {issue.description !== null && issue.description !== '' && (
+          <p className="mb-2 text-sm text-slate-500 line-clamp-2 dark:text-slate-400">
+            {stripMarkdown(issue.description)}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+          <span>{issue.status?.name ?? 'Unknown'}</span>
+          <ExternalLink className="h-3 w-3" />
+        </div>
+      </a>
+
+      {/* Sub-issues list */}
+      {issue.childCount > 0 && issue.children.length > 0 && <SubIssuesList issues={issue.children} />}
+    </div>
+  );
+}
+
+interface SubIssuesListProps {
+  issues: LinearIssue[];
+}
+
+function SubIssuesList({ issues }: SubIssuesListProps): React.JSX.Element | null {
+  const [expanded, setExpanded] = useState(true);
+
+  if (issues.length === 0) {
+    return null;
+  }
+
+  // Status icon mapping
+  const getStatusIcon = (issue: LinearIssue): React.ReactNode => {
+    if (!issue.status) {
+      return <Circle className="h-3 w-3 text-slate-400" />;
+    }
+    const type = issue.status.type;
+    switch (type) {
+      case 'backlog':
+      case 'unstarted':
+        return <Circle className="h-3 w-3 text-slate-400" />;
+      case 'started':
+        return <Clock className="h-3 w-3 text-blue-500" />;
+      case 'completed':
+      case 'cancelled':
+        return <CheckCircle2 className="h-3 w-3 text-green-500" />;
+      default:
+        return <Circle className="h-3 w-3 text-slate-400" />;
+    }
+  };
+
+  return (
+    <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-600">
+      <button
+        type="button"
+        onClick={() => {
+          setExpanded(!expanded);
+        }}
+        className="mb-2 flex items-center gap-1 text-xs font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+      >
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        Sub-issues ({issues.length})
+      </button>
+
+      {expanded && (
+        <div className="space-y-1">
+          {issues.map((child) => (
+            <a
+              key={child.id}
+              href={child.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center gap-2 rounded px-2 py-1.5 text-xs text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            >
+              {getStatusIcon(child)}
+              <span className="font-medium text-slate-500 dark:text-slate-500">{child.identifier}</span>
+              <span className="truncate">{child.title}</span>
+              <ExternalLink className="ml-auto h-3 w-3 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+            </a>
+          ))}
+        </div>
       )}
-
-      <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-        <span>{issue.status?.name ?? 'Unknown'}</span>
-        <ExternalLink className="h-3 w-3" />
-      </div>
-    </a>
+    </div>
   );
 }
 
