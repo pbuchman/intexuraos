@@ -165,7 +165,7 @@ describe('createWhatsappNotificationSender', () => {
       );
 
       const expectedMessage =
-        'Research Complete!\n\n"AI Research Report"\nhttps://app.example.com/research/456';
+        '📚 Research Complete!\n\n"AI Research Report"\nhttps://app.example.com/research/456';
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith({
         userId: 'user-123',

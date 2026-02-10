@@ -59,7 +59,7 @@ export function createHandleCodeActionUseCase(
 
       const promptPreview = event.title.length > 100 ? `${event.title.substring(0, 100)}...` : event.title;
 
-      const message = `Code task: ${promptPreview}
+      const message = `👻 Code task: ${promptPreview}
 
 Estimated cost: $1-2
 Estimated time: 30-60 min

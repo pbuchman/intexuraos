@@ -206,7 +206,7 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
       // Send verification code via WhatsApp (outside transaction - idempotent)
       const verificationMessage =
-        `Your IntexuraOS verification code is: ${code}\n\n` +
+        `🔐 Your IntexuraOS verification code is: ${code}\n\n` +
         `This code expires in ${String(VERIFICATION_TTL_SECONDS / 60)} minutes.`;
 
       const sendResult = await messageSender.sendTextMessage(
