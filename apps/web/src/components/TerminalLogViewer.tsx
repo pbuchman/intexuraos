@@ -19,100 +19,116 @@ import {
 } from '@/services/firebase';
 
 const MIN_TERMINAL_ROWS = 10;
-const DOCKER_HEADER_SIZE = 8;
 
-function isDockerHeaderAt(str: string, pos: number): boolean {
-  const streamType = str.charCodeAt(pos);
-  if (streamType > 2) return false;
-  return str.charCodeAt(pos + 1) === 0 && str.charCodeAt(pos + 2) === 0 && str.charCodeAt(pos + 3) === 0;
-}
-
-function stripDockerHeaders(raw: string): string {
-  let result = '';
-  let i = 0;
-  while (i < raw.length) {
-    if (i + DOCKER_HEADER_SIZE <= raw.length && isDockerHeaderAt(raw, i)) {
-      i += DOCKER_HEADER_SIZE;
-    } else {
-      result += raw.charAt(i);
-      i++;
-    }
-  }
-  return result;
-}
-
-interface StreamJsonMsg {
-  type: string;
-  subtype?: string;
-  message?: { content?: { type: string; text?: string; name?: string }[] };
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
+interface LogEntryDoc {
+  sequence: number;
+  type: 'system' | 'assistant_text' | 'tool_call' | 'tool_result' | 'result' | 'raw';
+  systemSubtype?: string;
+  hookName?: string;
+  hookExitCode?: number;
+  hookOutput?: string;
+  model?: string;
+  toolCount?: number;
+  mcpServers?: { name: string; status: string }[];
+  text?: string;
+  toolName?: string;
+  toolContext?: string;
   content?: string;
-  result?: string;
-  duration_ms?: number;
-  duration_api_ms?: number;
-  num_turns?: number;
-  is_error?: boolean;
+  isError?: boolean;
+  resultType?: 'success' | 'error';
+  durationMs?: number;
+  numTurns?: number;
+  totalCostUsd?: number;
+  errorMessage?: string;
+  rawText?: string;
 }
 
-function formatLine(line: string): string | null {
-  const trimmed = line.trim();
-  if (trimmed === '') return null;
-
-  let obj: StreamJsonMsg;
-  try { obj = JSON.parse(trimmed) as StreamJsonMsg; } catch { return line; }
-
-  switch (obj.type) {
-    case 'system': {
-      const sub = obj.subtype ?? '';
-      if (sub === 'hook_started' || sub === 'hook_response' || sub === 'init') return null;
-      return `[system] ${sub}`;
-    }
-    case 'assistant': {
-      const blocks = obj.message?.content;
-      if (!Array.isArray(blocks)) return null;
-      const parts: string[] = [];
-      for (const b of blocks) {
-        if (b.type === 'text' && typeof b.text === 'string' && b.text.trim() !== '') parts.push(b.text);
-        if (b.type === 'tool_use' && typeof b.name === 'string') parts.push(`[tool] ${b.name}`);
-      }
-      return parts.length > 0 ? parts.join('\n') : null;
-    }
-    case 'result': {
-      if (obj.is_error === true) return `[error] Task failed: ${obj.result ?? 'Unknown error'}`;
-      const dur = typeof obj.duration_ms === 'number' ? `${(obj.duration_ms / 1000).toFixed(1)}s`
-        : typeof obj.duration_api_ms === 'number' ? `${(obj.duration_api_ms / 1000).toFixed(1)}s` : '?';
-      const turns = typeof obj.num_turns === 'number' ? `${String(obj.num_turns)} turn${obj.num_turns !== 1 ? 's' : ''}` : '';
-      return `[done] Completed in ${[dur, turns].filter(Boolean).join(', ')}`;
-    }
-    case 'tool_use': {
-      const name = obj.tool_name ?? 'unknown';
-      const inp = obj.tool_input;
-      let ctx = '';
-      if (inp !== undefined) {
-        if (typeof inp['file_path'] === 'string') ctx = `: ${inp['file_path']}`;
-        else if (typeof inp['command'] === 'string') { const c = inp['command']; ctx = `: ${c.length > 80 ? c.slice(0, 77) + '...' : c}`; }
-        else if (typeof inp['pattern'] === 'string') ctx = `: ${inp['pattern']}`;
-        else if (typeof inp['query'] === 'string') { const q = inp['query']; ctx = `: ${q.length > 60 ? q.slice(0, 57) + '...' : q}`; }
-      }
-      return `[tool] ${name}${ctx}`;
-    }
-    case 'tool_result': {
-      const c = obj.content ?? '';
-      if (c.trim() === '') return null;
-      const abbr = c.length > 200 ? c.slice(0, 200) + '...' : c;
-      return `  \u2192 ${abbr.replace(/\n/g, ' ').trim()}`;
-    }
-    default: return null;
+function renderLogEntry(entry: LogEntryDoc): string | null {
+  switch (entry.type) {
+    case 'system':
+      return renderSystem(entry);
+    case 'assistant_text':
+      return entry.text ?? null;
+    case 'tool_call':
+      return `[tool] ${entry.toolName ?? 'unknown'}${entry.toolContext !== undefined ? `: ${entry.toolContext}` : ''}`;
+    case 'tool_result':
+      return renderToolResult(entry);
+    case 'result':
+      return renderResult(entry);
+    case 'raw':
+      return entry.rawText ?? null;
+    default:
+      return null;
   }
 }
 
-function formatLogContent(raw: string): string {
-  const stripped = stripDockerHeaders(raw);
-  const lines = stripped.split('\n');
-  const formatted = lines.map((l) => formatLine(l)).filter((l): l is string => l !== null);
-  if (formatted.length === 0) return '';
-  return formatted.join('\n') + '\n';
+function renderSystem(entry: LogEntryDoc): string | null {
+  const sub = entry.systemSubtype;
+  if (sub === 'hook_started') {
+    return `[hook] ${entry.hookName ?? 'unknown'}`;
+  }
+  if (sub === 'hook_response') {
+    const status = entry.hookExitCode === 0 ? '\u2713' : '\u2717';
+    let line = `[hook] ${entry.hookName ?? 'unknown'} ${status} (exit ${String(entry.hookExitCode ?? '?')})`;
+    if (entry.hookOutput !== undefined && entry.hookOutput.trim() !== '') {
+      const outputLines = entry.hookOutput.split('\n').filter((l) => l.trim() !== '');
+      if (outputLines.length <= 3) {
+        line += '\n' + outputLines.map((l) => `  ${l}`).join('\n');
+      } else {
+        const first2 = outputLines.slice(0, 2).map((l) => `  ${l}`).join('\n');
+        const last = outputLines[outputLines.length - 1];
+        const hidden = outputLines.length - 3;
+        line += `\n${first2}\n  ... ${String(hidden)} more lines ...\n  ${last ?? ''}`;
+      }
+    }
+    return line;
+  }
+  if (sub === 'init') {
+    const parts: string[] = [];
+    if (entry.model !== undefined) parts.push(`Model: ${entry.model}`);
+    if (entry.toolCount !== undefined) parts.push(`Tools: ${String(entry.toolCount)}`);
+    if (entry.mcpServers !== undefined && entry.mcpServers.length > 0) {
+      parts.push(`MCP: ${entry.mcpServers.map((s) => s.name).join(', ')}`);
+    }
+    return `[init] ${parts.join(' | ')}`;
+  }
+  if (sub !== undefined) {
+    return `[system] ${sub}`;
+  }
+  return '[system]';
+}
+
+function renderToolResult(entry: LogEntryDoc): string | null {
+  const c = entry.content ?? '';
+  if (c.trim() === '') return null;
+
+  const lines = c.split('\n');
+  if (lines.length <= 3) {
+    const abbreviated = c.length > 200 ? c.slice(0, 200) + '...' : c;
+    const singleLine = abbreviated.replace(/\n/g, ' ').trim();
+    return `  \u2192 ${singleLine}`;
+  }
+
+  return `  \u2192 ${String(lines.length)} lines`;
+}
+
+function renderResult(entry: LogEntryDoc): string | null {
+  if (entry.resultType === 'error') {
+    return `[error] Task failed: ${entry.errorMessage ?? 'Unknown error'}`;
+  }
+
+  const parts: string[] = [];
+  if (entry.durationMs !== undefined) {
+    parts.push(`${(entry.durationMs / 1000).toFixed(1)}s`);
+  }
+  if (entry.numTurns !== undefined) {
+    parts.push(`${String(entry.numTurns)} turn${entry.numTurns !== 1 ? 's' : ''}`);
+  }
+  if (entry.totalCostUsd !== undefined) {
+    parts.push(`$${entry.totalCostUsd.toFixed(3)}`);
+  }
+  if (parts.length === 0) return '[done] Completed';
+  return `[done] Completed in ${parts.join(', ')}`;
 }
 
 interface TerminalLogViewerProps {
@@ -127,7 +143,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const { getAccessToken } = useAuth();
   const [logsLoading, setLogsLoading] = useState(true);
   const [logsError, setLogsError] = useState<string | null>(null);
-  const [chunkCount, setChunkCount] = useState(0);
+  const [entryCount, setEntryCount] = useState(0);
   const [copied, setCopied] = useState(false);
 
   const terminalContainerRef = useRef<HTMLDivElement>(null);
@@ -154,7 +170,6 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     };
   }, []);
 
-  // Initialize terminal
   useEffect(() => {
     if (terminalContainerRef.current === null) return;
 
@@ -200,7 +215,6 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     };
   }, []);
 
-  // Subscribe to Firestore logs
   useEffect(() => {
     const setupListener = async (): Promise<void> => {
       try {
@@ -212,35 +226,34 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
         }
 
         const db = getFirestoreClient();
-        const logsRef = collection(db, 'code_tasks', taskId, 'logs');
-        const logsQuery = query(logsRef, orderBy('sequence', 'asc'));
+        const entriesRef = collection(db, 'code_tasks', taskId, 'log_entries');
+        const entriesQuery = query(entriesRef, orderBy('sequence', 'asc'));
 
         unsubscribeRef.current = onSnapshot(
-          logsQuery,
+          entriesQuery,
           (snapshot) => {
             if (!isMountedRef.current) return;
 
             const terminal = terminalRef.current;
             if (terminal === null) return;
 
-            let newChunks = 0;
+            let newEntries = 0;
             snapshot.forEach((doc) => {
-              const data = doc.data();
-              const sequence = data['sequence'] as number;
+              const data = doc.data() as LogEntryDoc;
+              const sequence = data.sequence;
 
               if (sequence > lastSequenceRef.current) {
-                const content = data['content'] as string;
-                const display = formatLogContent(content);
-                if (display.length > 0) {
-                  terminal.write(display);
+                const display = renderLogEntry(data);
+                if (display !== null && display.length > 0) {
+                  terminal.write(display + '\n');
                 }
                 lastSequenceRef.current = sequence;
-                newChunks++;
+                newEntries++;
               }
             });
 
-            if (newChunks > 0) {
-              setChunkCount((prev) => prev + newChunks);
+            if (newEntries > 0) {
+              setEntryCount((prev) => prev + newEntries);
               terminal.write('', () => {
                 const t = terminalRef.current;
                 if (t === null) return;
@@ -320,9 +333,9 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500">
-            {chunkCount} chunk{chunkCount !== 1 ? 's' : ''}
+            {entryCount} entr{entryCount !== 1 ? 'ies' : 'y'}
           </span>
-          {chunkCount > 0 ? (
+          {entryCount > 0 ? (
             <button
               type="button"
               onClick={copyLogs}

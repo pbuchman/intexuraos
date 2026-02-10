@@ -23,10 +23,12 @@ import { createFirestoreCodeTaskRepository } from '../../infra/repositories/fire
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
+import { createFirestoreLogEntryRepository } from '../../infra/repositories/firestoreLogEntryRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
+import type { LogEntryRepository } from '../../domain/repositories/logEntryRepository.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
@@ -96,6 +98,11 @@ describe('GET /code/tasks endpoints', () => {
       logger,
     });
 
+    const logEntryRepo = createFirestoreLogEntryRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
     const actionsAgentClient = createActionsAgentClient({
       baseUrl: 'http://actions-agent',
       internalAuthToken: 'test-token',
@@ -133,6 +140,7 @@ describe('GET /code/tasks endpoints', () => {
       workerSettingsRepo,
       whatsappNotifier,
       logChunkRepo,
+      logEntryRepo,
       actionsAgentClient,
       linearAgentClient,
       rateLimitService,
@@ -169,6 +177,7 @@ describe('GET /code/tasks endpoints', () => {
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       logChunkRepo: LogChunkRepository;
+      logEntryRepo: LogEntryRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;

@@ -24,11 +24,13 @@ import type { Logger } from 'pino';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
+import { createFirestoreLogEntryRepository } from '../../infra/repositories/firestoreLogEntryRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
+import type { LogEntryRepository } from '../../domain/repositories/logEntryRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { RateLimitService, RateLimitError } from '../../domain/services/rateLimitService.js';
@@ -128,6 +130,11 @@ describe('codeRoutes', () => {
       logger,
     });
 
+    const logEntryRepo = createFirestoreLogEntryRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
     const actionsAgentClient = createActionsAgentClient({
       baseUrl: 'http://actions-agent',
       internalAuthToken: 'test-token',
@@ -164,6 +171,7 @@ describe('codeRoutes', () => {
       taskDispatcher,
       whatsappNotifier,
       logChunkRepo,
+      logEntryRepo,
       actionsAgentClient,
       linearAgentClient,
       rateLimitService,
@@ -203,6 +211,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       codeTaskRepo: CodeTaskRepository;
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
+      logEntryRepo: LogEntryRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;

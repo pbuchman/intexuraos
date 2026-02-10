@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import type { Logger } from '@intexuraos/common-core';
-import { formatLogChunk } from './log-formatter.js';
+import { stripDockerHeaders } from './log-formatter.js';
 
 export interface LogForwarderConfig {
   logBasePath: string;
@@ -77,7 +77,7 @@ export class LogForwarder {
 
     // Flush any remaining partial line through formatter
     if (state.partialLine !== '') {
-      state.buffer += formatLogChunk(state.partialLine + '\n');
+      state.buffer += stripDockerHeaders(state.partialLine + '\n');
       state.partialLine = '';
     }
 
@@ -177,7 +177,7 @@ export class LogForwarder {
 
     /* v8 ignore start -- test-infra: partialLine only set via appendChunk (Docker mode), stopForwarding tests use file-based mode @preserve */
     if (state.partialLine !== '') {
-      state.buffer += formatLogChunk(state.partialLine + '\n');
+      state.buffer += stripDockerHeaders(state.partialLine + '\n');
       state.partialLine = '';
     }
     /* v8 ignore stop @preserve */
@@ -249,7 +249,7 @@ export class LogForwarder {
     const complete = combined.slice(0, lastNewline + 1);
     state.partialLine = combined.slice(lastNewline + 1);
 
-    state.buffer += formatLogChunk(complete);
+    state.buffer += stripDockerHeaders(complete);
 
     // Flush if buffer exceeds max chunk size
     if (state.buffer.length >= MAX_CHUNK_SIZE) {
