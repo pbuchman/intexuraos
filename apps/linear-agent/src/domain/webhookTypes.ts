@@ -31,6 +31,9 @@ export interface LinearWebhookPayload {
     id: string;
     key: string;
   };
+  parent?: {
+    id: string;
+  };
 }
 
 export interface LinearWebhookEvent {

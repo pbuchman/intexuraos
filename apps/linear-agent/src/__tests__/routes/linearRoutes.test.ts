@@ -170,6 +170,7 @@ describe('linearRoutes', () => {
         payload: {
           apiKey: 'linear-api-key-new',
           teamId: 'team-new',
+      parentId: null,
           teamName: 'New Team',
         },
       });
@@ -189,6 +190,7 @@ describe('linearRoutes', () => {
         payload: {
           apiKey: 'api-key',
           teamId: 'team-id',
+      parentId: null,
           teamName: 'Team',
         },
       });
@@ -213,6 +215,7 @@ describe('linearRoutes', () => {
         payload: {
           apiKey: 'linear-api-key-new',
           teamId: 'team-new',
+      parentId: null,
           teamName: 'New Team',
         },
       });
@@ -274,19 +277,24 @@ describe('linearRoutes', () => {
   describe('GET /linear/issues', () => {
     it('returns grouped issues for authenticated connected user', async () => {
       seedConnection('test-user-123');
-      ctx.linearApiClient.seedIssue({
+      ctx.issueRepository.seedIssue({
         id: 'issue-1',
         identifier: 'ENG-1',
         title: 'Test Issue',
         description: null,
+        state: 'Backlog',
+        stateType: 'backlog',
         priority: 2,
-        state: { id: 'state-1', name: 'Backlog', type: 'backlog' },
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
         url: 'https://linear.app/issue/1',
+        userId: 'test-user-123',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        completedAt: null,
-        childCount: 0,
-        children: [],
+        syncedAt: new Date().toISOString(),
+        teamId: 'team-456',
+        parentId: null,
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -331,19 +339,24 @@ describe('linearRoutes', () => {
       const tenDaysAgo = new Date();
       tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
 
-      ctx.linearApiClient.seedIssue({
+      ctx.issueRepository.seedIssue({
         id: 'issue-old',
         identifier: 'ENG-2',
         title: 'Old Completed',
         description: null,
+        state: 'Done',
+        stateType: 'completed',
         priority: 0,
-        state: { id: 'state-done', name: 'Done', type: 'completed' },
+        assigneeId: null,
+        assigneeName: null,
+        labels: [],
         url: 'https://linear.app/issue/2',
+        userId: 'test-user-123',
         createdAt: tenDaysAgo.toISOString(),
         updatedAt: tenDaysAgo.toISOString(),
-        completedAt: tenDaysAgo.toISOString(),
-        childCount: 0,
-        children: [],
+        syncedAt: new Date().toISOString(),
+        teamId: 'team-456',
+        parentId: null,
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -358,9 +371,12 @@ describe('linearRoutes', () => {
       expect(body.data.issues.archive).toHaveLength(0);
     });
 
-    it('handles rate limit errors from Linear API', async () => {
+    it('handles repository errors when reading issues', async () => {
       seedConnection('test-user-123');
-      ctx.linearApiClient.setFailure(true, { code: 'RATE_LIMIT', message: 'Rate limited' });
+      ctx.issueRepository.setListByUserIdFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database read error',
+      });
 
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
@@ -372,22 +388,7 @@ describe('linearRoutes', () => {
       expect(response.statusCode).toBeGreaterThanOrEqual(400);
       const body = response.json();
       expect(body.success).toBe(false);
-    });
-
-    it('handles API errors from Linear', async () => {
-      seedConnection('test-user-123');
-      ctx.linearApiClient.setFailure(true, { code: 'API_ERROR', message: 'API Error' });
-
-      const token = await createToken({ sub: 'test-user-123' });
-      const response = await ctx.app.inject({
-        method: 'GET',
-        url: '/linear/issues',
-        headers: { authorization: `Bearer ${token}` },
-      });
-
-      expect(response.statusCode).toBeGreaterThanOrEqual(400);
-      const body = response.json();
-      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -1207,6 +1208,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T01:00:00Z',
         syncedAt: '2025-01-15T01:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -1250,6 +1252,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       const response = await ctx.app.inject({
@@ -1292,6 +1295,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -1341,6 +1345,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T01:00:00Z',
         syncedAt: '2025-01-15T01:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -1374,6 +1379,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       await ctx.commentRepository.save({
@@ -1433,6 +1439,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       await ctx.commentRepository.save({
@@ -1495,6 +1502,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       const response = await ctx.app.inject({
@@ -1537,6 +1545,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -1586,6 +1595,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
       ctx.commentRepository.setListByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'List failed' });
 
@@ -1620,6 +1630,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
       ctx.commentRepository.setCountByIssueIdFailure(true, { code: 'INTERNAL_ERROR', message: 'Count failed' });
 
@@ -1654,6 +1665,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       for (let i = 1; i <= 5; i++) {
@@ -1703,6 +1715,7 @@ describe('linearRoutes', () => {
         updatedAt: '2025-01-15T00:00:00Z',
         syncedAt: '2025-01-15T00:00:00Z',
         teamId: 'team-1',
+      parentId: null,
       });
 
       for (let i = 1; i <= 5; i++) {

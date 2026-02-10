@@ -256,6 +256,24 @@ export async function updateWebhookSecret(
   }
 }
 
+export async function getAllConnectedUserIds(): Promise<Result<string[], LinearError>> {
+  try {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION_NAME)
+      .where('connected', '==', true)
+      .get();
+
+    const userIds = snapshot.docs.map((doc) => doc.id);
+    return ok(userIds);
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to get connected user IDs: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
 /** Factory for creating repository with interface */
 export function createLinearConnectionRepository(): LinearConnectionRepository {
   return {
@@ -268,5 +286,6 @@ export function createLinearConnectionRepository(): LinearConnectionRepository {
     findUserIdByTeamId,
     findWebhookSecretByTeamId,
     updateWebhookSecret,
+    getAllConnectedUserIds,
   };
 }

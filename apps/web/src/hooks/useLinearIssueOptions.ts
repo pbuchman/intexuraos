@@ -13,7 +13,7 @@ export interface LinearIssueOption {
   identifier: string;
   title: string;
   url: string;
-  state?: LinearIssue['status'];
+  state?: LinearIssue['state'];
   priority: LinearIssue['priority'];
 }
 
@@ -55,7 +55,7 @@ export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
           identifier: issue.identifier,
           title: issue.title,
           url: issue.url,
-          state: issue.status,
+          state: issue.state,
           priority: issue.priority,
         }))
       );

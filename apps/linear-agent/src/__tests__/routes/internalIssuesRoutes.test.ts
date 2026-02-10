@@ -26,7 +26,7 @@ describe('internalIssuesRoutes', () => {
     userId: testUserId,
     apiKey: testApiKey,
     teamId: 'team-1',
-    teamName: 'Engineering',
+      teamName: 'Engineering',
     webhookSecret: null,
     connected: true,
     createdAt: '2024-01-01T00:00:00.000Z',
@@ -338,6 +338,7 @@ describe('internalIssuesRoutes', () => {
       updatedAt: '2024-01-16T12:30:00.000Z',
       syncedAt: '2024-01-16T12:30:00.000Z',
       teamId: 'team-1',
+      parentId: null,
     };
 
     const testIssueWithoutAssignee: SyncedLinearIssue = {
