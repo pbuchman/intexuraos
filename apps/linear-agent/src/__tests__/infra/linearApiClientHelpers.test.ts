@@ -208,6 +208,8 @@ describe('linearApiClient helper functions', () => {
         createdAt: '2025-01-15T10:00:00.000Z',
         updatedAt: '2025-01-15T10:00:00.000Z',
         completedAt: null,
+        childCount: 0,
+        children: [],
         ...overrides,
       };
     }

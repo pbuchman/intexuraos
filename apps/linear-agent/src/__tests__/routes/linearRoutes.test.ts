@@ -285,6 +285,8 @@ describe('linearRoutes', () => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         completedAt: null,
+        childCount: 0,
+        children: [],
       });
 
       const token = await createToken({ sub: 'test-user-123' });
@@ -340,6 +342,8 @@ describe('linearRoutes', () => {
         createdAt: tenDaysAgo.toISOString(),
         updatedAt: tenDaysAgo.toISOString(),
         completedAt: tenDaysAgo.toISOString(),
+        childCount: 0,
+        children: [],
       });
 
       const token = await createToken({ sub: 'test-user-123' });
