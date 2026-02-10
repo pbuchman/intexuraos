@@ -134,7 +134,9 @@ export class TaskDispatcher {
           this.logForwarder.appendChunk(taskId, chunk);
         },
         onComplete: () => {
-          void this.logForwarder.flushAndStop(taskId);
+          this.logForwarder.flushAndStop(taskId).catch((error: unknown) => {
+            this.logger.error({ taskId, error }, 'Failed to flush logs on completion');
+          });
         },
       };
 
@@ -248,9 +250,17 @@ export class TaskDispatcher {
     try {
       // Kill Docker container - destroyWorker handles graceful + force kill
       await this.isolation.provider.destroyWorker(taskId);
-      // Unregister from token refresher and log forwarder
-      this.isolation.tokenRefresher.unregisterTask(taskId);
+
+      try {
+        await this.logForwarder.flushAndStop(taskId);
+      } catch (flushError: unknown) {
+        this.logger.error(
+          { taskId, error: flushError },
+          'Failed to flush logs during cancellation'
+        );
+      }
       this.logForwarder.unregisterTask(taskId);
+      this.isolation.tokenRefresher.unregisterTask(taskId);
 
       // Update task status
       task.status = 'cancelled';
@@ -348,8 +358,17 @@ export class TaskDispatcher {
 
           // Kill Docker container
           await this.isolation.provider.destroyWorker(taskId);
-          this.isolation.tokenRefresher.unregisterTask(taskId);
+
+          try {
+            await this.logForwarder.flushAndStop(taskId);
+          } catch (flushError: unknown) {
+            this.logger.error(
+              { taskId, error: flushError },
+              'Failed to flush logs during timeout kill'
+            );
+          }
           this.logForwarder.unregisterTask(taskId);
+          this.isolation.tokenRefresher.unregisterTask(taskId);
 
           // Check for PR
           const result = await this.checkForResult(task);
@@ -414,9 +433,16 @@ export class TaskDispatcher {
   private async handleTaskCompletion(task: Task): Promise<void> {
     this.logger.info({ taskId: task.taskId }, 'Task completed naturally');
 
-    // Unregister from token refresher and log forwarder (container cleanup handled separately)
-    this.isolation.tokenRefresher.unregisterTask(task.taskId);
+    try {
+      await this.logForwarder.flushAndStop(task.taskId);
+    } catch (flushError: unknown) {
+      this.logger.error(
+        { taskId: task.taskId, error: flushError },
+        'Failed to flush logs on task completion'
+      );
+    }
     this.logForwarder.unregisterTask(task.taskId);
+    this.isolation.tokenRefresher.unregisterTask(task.taskId);
 
     // Check for PR
     const result = await this.checkForResult(task);

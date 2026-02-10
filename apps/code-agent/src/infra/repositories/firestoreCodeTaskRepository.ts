@@ -555,15 +555,66 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         /* v8 ignore stop @preserve */
 
+        const logLinesRef = taskRef.collection('log_lines');
+        const logLinesSnapshot = await logLinesRef.get();
+
+        /* v8 ignore start -- test-infra: batch delete logic depends on log count in fixture @preserve */
+        if (logLinesSnapshot.docs.length > 0) {
+          let linesBatch = firestore.batch();
+          let linesBatchCount = 0;
+
+          for (const lineDoc of logLinesSnapshot.docs) {
+            linesBatch.delete(lineDoc.ref);
+            linesBatchCount++;
+
+            if (linesBatchCount >= batchSize) {
+              await linesBatch.commit();
+              linesBatch = firestore.batch();
+              linesBatchCount = 0;
+            }
+          }
+
+          if (linesBatchCount > 0) {
+            await linesBatch.commit();
+          }
+        }
+        /* v8 ignore stop @preserve */
+
+        const logEntriesRef = taskRef.collection('log_entries');
+        const logEntriesSnapshot = await logEntriesRef.get();
+
+        /* v8 ignore start -- test-infra: batch delete logic for legacy log_entries subcollection @preserve */
+        if (logEntriesSnapshot.docs.length > 0) {
+          let entriesBatch = firestore.batch();
+          let entriesBatchCount = 0;
+
+          for (const entryDoc of logEntriesSnapshot.docs) {
+            entriesBatch.delete(entryDoc.ref);
+            entriesBatchCount++;
+
+            if (entriesBatchCount >= batchSize) {
+              await entriesBatch.commit();
+              entriesBatch = firestore.batch();
+              entriesBatchCount = 0;
+            }
+          }
+
+          if (entriesBatchCount > 0) {
+            await entriesBatch.commit();
+          }
+        }
+        /* v8 ignore stop @preserve */
+
+        const totalLogCount = logCount + logLinesSnapshot.docs.length + logEntriesSnapshot.docs.length;
         const archivedAt = new Date();
         await taskRef.update({
           logsArchived: true,
-          logCount,
+          logCount: totalLogCount,
           archivedAt: Timestamp.fromDate(archivedAt),
         });
 
-        logger.info({ taskId, logCount }, 'Task logs archived');
-        return ok({ logCount, archivedAt });
+        logger.info({ taskId, logCount: totalLogCount }, 'Task logs archived');
+        return ok({ logCount: totalLogCount, archivedAt });
       } catch (error) {
         logger.error({ error, taskId }, 'Failed to archive task logs');
         return err({

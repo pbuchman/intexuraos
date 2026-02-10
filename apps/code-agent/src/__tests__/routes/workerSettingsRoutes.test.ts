@@ -31,7 +31,7 @@ import { createFirestoreCodeTaskRepository } from '../../infra/repositories/fire
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogEntryRepository } from '../../infra/repositories/firestoreLogEntryRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -118,7 +118,7 @@ describe('Worker Settings Routes', () => {
       taskDispatcher,
       whatsappNotifier,
       logChunkRepo,
-      logEntryRepo: createFirestoreLogEntryRepository({
+      logLineRepo: createFirestoreLogLineRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
