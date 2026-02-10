@@ -17,7 +17,8 @@ export interface DockerProviderConfig {
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
-  imageName: 'gcr.io/intexuraos-dev-pbuchman/claude-worker:latest',
+  imageName:
+    'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest',
   networkName: 'claude-worker-net',
   maxConcurrent: 4,
   memoryLimitBytes: 8 * 1024 * 1024 * 1024,

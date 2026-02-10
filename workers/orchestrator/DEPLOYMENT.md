@@ -72,7 +72,7 @@ Or via macOS LaunchAgent (see `workers/orchestrator/README.md` for plist templat
 ### Image Registry
 
 ```
-gcr.io/intexuraos-dev-pbuchman/claude-worker:latest
+europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
 ```
 
 ### Build
@@ -81,11 +81,11 @@ gcr.io/intexuraos-dev-pbuchman/claude-worker:latest
 # Via helper script
 ./scripts/build-worker-image.sh [tag]
 
-# Or directly (with --no-cache to bust layer cache)
+# Or directly from root context (Dockerfile uses root-relative COPY paths)
 docker build --no-cache --platform linux/amd64 \
-  -t gcr.io/intexuraos-dev-pbuchman/claude-worker:latest \
+  -t europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest \
   -f workers/claude-worker/Dockerfile \
-  workers/claude-worker/
+  .
 ```
 
 ### Push
@@ -95,7 +95,7 @@ docker build --no-cache --platform linux/amd64 \
 PUSH=true ./scripts/build-worker-image.sh latest
 
 # Or directly
-docker push gcr.io/intexuraos-dev-pbuchman/claude-worker:latest
+docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
 ```
 
 ### Cache Busting
@@ -178,7 +178,7 @@ pnpm --filter orchestrator test:e2e
 ### When `entrypoint.sh` Changes
 
 1. Build image: `docker build --no-cache ...`
-2. Push image: `docker push gcr.io/intexuraos-dev-pbuchman/claude-worker:latest`
+2. Push image: `docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`
 3. Running containers use the old image until recreated (no hot reload)
 
 ### When Orchestrator Source Changes
