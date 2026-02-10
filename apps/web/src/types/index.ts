@@ -947,6 +947,8 @@ export interface LinearIssue {
   dueDate: string | null;
   url: string;
   labels: LinearLabel[];
+  /** Number of child issues (subtasks) */
+  childCount: number;
 }
 
 /**

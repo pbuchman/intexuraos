@@ -91,11 +91,19 @@ interface IssueState {
 
 /* istanbul ignore next -- @preserve Maps Linear SDK Issue objects that require real API response */
 async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[]> {
+  // Batch fetch all states
   const statePromises = issues.map(async (issue) => {
     const state = issue.state;
     return state !== undefined ? await state : null;
   });
   const states = await Promise.all(statePromises);
+
+  // Batch fetch all child counts
+  const childrenPromises = issues.map(async (issue) => {
+    const children = await issue.children();
+    return children.nodes.length;
+  });
+  const childCounts = await Promise.all(childrenPromises);
 
   return issues.map((issue, index) => {
     const state = states[index] as IssueState | null | undefined;
@@ -114,6 +122,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
       createdAt: issue.createdAt.toISOString(),
       updatedAt: issue.updatedAt.toISOString(),
       completedAt: issue.completedAt?.toISOString() ?? null,
+      childCount: childCounts[index] ?? 0,
     };
   });
 }
@@ -121,6 +130,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
 /* istanbul ignore next -- @preserve Maps Linear SDK Issue object that requires real API response */
 async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
   const state = (await issue.state) as IssueState | null | undefined;
+  const children = await issue.children();
 
   return {
     id: issue.id,
@@ -137,6 +147,7 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
     createdAt: issue.createdAt.toISOString(),
     updatedAt: issue.updatedAt.toISOString(),
     completedAt: issue.completedAt?.toISOString() ?? null,
+    childCount: children.nodes.length,
   };
 }
 

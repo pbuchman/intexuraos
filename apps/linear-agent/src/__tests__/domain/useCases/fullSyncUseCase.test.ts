@@ -22,6 +22,7 @@ function createTestApiIssue(overrides: Partial<LinearIssue> = {}): LinearIssue {
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-02T00:00:00.000Z',
     completedAt: null,
+    childCount: 0,
     ...overrides,
   };
 }
@@ -308,6 +309,7 @@ describe('fullSyncAllUsers', () => {
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-02T00:00:00.000Z',
       completedAt: null,
+      childCount: 0,
     });
     linearClient.seedIssue({
       id: 'issue-2',
@@ -320,6 +322,7 @@ describe('fullSyncAllUsers', () => {
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-02T00:00:00.000Z',
       completedAt: null,
+      childCount: 0,
     });
 
     const result = await fullSyncAllUsers(deps);
@@ -357,6 +360,7 @@ describe('fullSyncAllUsers', () => {
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-02T00:00:00.000Z',
       completedAt: null,
+      childCount: 0,
     });
     linearClient.seedIssue({
       id: 'issue-2',
@@ -369,6 +373,7 @@ describe('fullSyncAllUsers', () => {
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-02T00:00:00.000Z',
       completedAt: null,
+      childCount: 0,
     });
 
     // Make first user fail by setting failure on getFullConnection

@@ -494,13 +494,13 @@ export function LinearIssuesPage(): React.JSX.Element {
   }
 
   const columnIssues = {
-    todo: data?.issues.todo ?? [],
-    backlog: data?.issues.backlog ?? [],
-    in_progress: data?.issues.in_progress ?? [],
-    in_review: data?.issues.in_review ?? [],
-    to_test: data?.issues.to_test ?? [],
-    done: data?.issues.done ?? [],
-    archive: data?.issues.archive ?? [],
+    todo: (data?.issues.todo ?? []).filter((issue) => issue.childCount === 0),
+    backlog: (data?.issues.backlog ?? []).filter((issue) => issue.childCount === 0),
+    in_progress: (data?.issues.in_progress ?? []).filter((issue) => issue.childCount === 0),
+    in_review: (data?.issues.in_review ?? []).filter((issue) => issue.childCount === 0),
+    to_test: (data?.issues.to_test ?? []).filter((issue) => issue.childCount === 0),
+    done: (data?.issues.done ?? []).filter((issue) => issue.childCount === 0),
+    archive: (data?.issues.archive ?? []).filter((issue) => issue.childCount === 0),
   };
 
   return (

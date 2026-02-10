@@ -61,6 +61,7 @@ describe('listIssues', () => {
       createdAt: now,
       updatedAt: now,
       completedAt: null,
+      childCount: 0,
       ...overrides,
     };
   }

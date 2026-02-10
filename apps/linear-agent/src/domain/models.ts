@@ -33,6 +33,8 @@ export interface LinearIssue {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  /** Number of child issues (subtasks) */
+  childCount: number;
 }
 
 /** Linear issue with team ID for validation */
