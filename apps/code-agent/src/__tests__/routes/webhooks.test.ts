@@ -22,7 +22,7 @@ import type { Logger } from 'pino';
 import { err, ok } from '@intexuraos/common-core';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogEntryRepository } from '../../infra/repositories/firestoreLogEntryRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient, type ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
@@ -32,7 +32,7 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
-import type { LogEntryRepository } from '../../domain/repositories/logEntryRepository.js';
+import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
 import crypto from 'node:crypto';
 import { fetchWithAuth } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
@@ -95,7 +95,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger,
     });
 
-    const logEntryRepo = createFirestoreLogEntryRepository({
+    const logLineRepo = createFirestoreLogLineRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
@@ -149,7 +149,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger,
       codeTaskRepo,
       logChunkRepo,
-      logEntryRepo,
+      logLineRepo,
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
@@ -187,7 +187,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       logChunkRepo: LogChunkRepository;
-      logEntryRepo: LogEntryRepository;
+      logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
@@ -1427,7 +1427,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
-      logEntryRepo: createFirestoreLogEntryRepository({
+      logLineRepo: createFirestoreLogLineRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
@@ -1467,7 +1467,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       logChunkRepo: LogChunkRepository;
-      logEntryRepo: LogEntryRepository;
+      logLineRepo: LogLineRepository;
       actionsAgentClient: ActionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: WhatsAppNotifier;
@@ -1681,7 +1681,7 @@ describe('POST /internal/logs', () => {
   let logger: Logger;
   let codeTaskRepo: CodeTaskRepository;
   let logChunkRepo: LogChunkRepository;
-  let logEntryRepo: LogEntryRepository;
+  let logLineRepo: LogLineRepository;
   let taskDispatcher: TaskDispatcherService;
 
   beforeEach(async () => {
@@ -1711,7 +1711,7 @@ describe('POST /internal/logs', () => {
       logger,
     });
 
-    logEntryRepo = createFirestoreLogEntryRepository({
+    logLineRepo = createFirestoreLogLineRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
@@ -1766,7 +1766,7 @@ describe('POST /internal/logs', () => {
       logger,
       codeTaskRepo,
       logChunkRepo,
-      logEntryRepo,
+      logLineRepo,
       taskDispatcher,
       workerSettingsRepo,
       actionsAgentClient,
@@ -1801,7 +1801,7 @@ describe('POST /internal/logs', () => {
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       logChunkRepo: LogChunkRepository;
-      logEntryRepo: LogEntryRepository;
+      logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
@@ -1892,7 +1892,7 @@ describe('POST /internal/logs', () => {
     expect(body.received).toBe(true);
   });
 
-  it('stores structured log entries alongside raw chunks', async () => {
+  it('stores formatted log lines alongside raw chunks', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
       prompt: 'Fix the bug',
@@ -1911,7 +1911,7 @@ describe('POST /internal/logs', () => {
     const task = createResult.value;
 
     vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
-    const entryStoreSpy = vi.spyOn(logEntryRepo, 'storeBatch');
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
 
     const jsonContent = [
       JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-opus-4-6', tools: ['Read', 'Write'] }),
@@ -1946,8 +1946,8 @@ describe('POST /internal/logs', () => {
     expect(entryStoreSpy).toHaveBeenCalledOnce();
     const storedEntries = entryStoreSpy.mock.calls[0]?.[1];
     expect(storedEntries).toHaveLength(2);
-    expect(storedEntries?.[0]).toMatchObject({ type: 'system', systemSubtype: 'init' });
-    expect(storedEntries?.[1]).toMatchObject({ type: 'assistant_text', text: 'Hello' });
+    expect(storedEntries?.[0]?.text).toBe('[init] Model: claude-opus-4-6 | Tools: 2');
+    expect(storedEntries?.[1]?.text).toBe('Hello');
   });
 
   it('validates HMAC signature', async () => {
@@ -2050,7 +2050,7 @@ describe('POST /internal/logs', () => {
     storeSpy.mockRestore();
   });
 
-  it('handles logEntryRepo storeBatch failure with error-level logging', async () => {
+  it('handles logLineRepo storeBatch failure with error-level logging', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
       prompt: 'Fix the bug',
@@ -2083,8 +2083,8 @@ describe('POST /internal/logs', () => {
 
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
 
-    // Mock logEntryRepo.storeBatch to fail
-    const entryStoreSpy = vi.spyOn(logEntryRepo, 'storeBatch').mockResolvedValueOnce(
+    // Mock logLineRepo.storeBatch to fail
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch').mockResolvedValueOnce(
       err({ code: 'FIRESTORE_ERROR', message: 'Database unavailable' })
     );
 
@@ -2268,7 +2268,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logger,
     });
 
-    const logEntryRepo = createFirestoreLogEntryRepository({
+    const logLineRepo = createFirestoreLogLineRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
@@ -2319,7 +2319,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logger,
       codeTaskRepo,
       logChunkRepo,
-      logEntryRepo,
+      logLineRepo,
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
@@ -2357,7 +2357,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       logChunkRepo: LogChunkRepository;
-      logEntryRepo: LogEntryRepository;
+      logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;

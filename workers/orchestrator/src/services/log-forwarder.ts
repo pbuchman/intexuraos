@@ -271,7 +271,7 @@ export class LogForwarder {
       if (newContent.length === 0) return;
 
       state.position = content.length;
-      state.buffer += newContent;
+      state.buffer += stripDockerHeaders(newContent);
 
       // Flush if buffer exceeds max chunk size
       if (state.buffer.length >= MAX_CHUNK_SIZE) {

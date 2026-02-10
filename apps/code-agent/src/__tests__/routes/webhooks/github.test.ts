@@ -113,7 +113,7 @@ describe('POST /webhooks/github', () => {
       logger,
       codeTaskRepo: mockCodeTaskRepo,
       logChunkRepo: {} as never,
-      logEntryRepo: {} as never,
+      logLineRepo: {} as never,
       taskDispatcher: {} as never,
       whatsappNotifier: {} as never,
       actionsAgentClient: {} as never,

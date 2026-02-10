@@ -147,6 +147,7 @@ describe('TaskDispatcher', () => {
   const mockLogForwarder = {
     startForwarding: vi.fn(),
     stopForwarding: vi.fn(async () => undefined),
+    flushAndStop: vi.fn(async () => undefined),
     getDroppedChunkCount: vi.fn(() => 0),
     registerTask: vi.fn(),
     unregisterTask: vi.fn(),
@@ -351,6 +352,7 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(true);
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('test-task');
+      expect(mockLogForwarder.flushAndStop).toHaveBeenCalledWith('test-task');
       expect(mockTokenRefresher.unregisterTask).toHaveBeenCalledWith('test-task');
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({

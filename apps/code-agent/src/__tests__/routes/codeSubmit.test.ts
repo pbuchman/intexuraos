@@ -23,12 +23,12 @@ import { createFirestoreCodeTaskRepository } from '../../infra/repositories/fire
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogEntryRepository } from '../../infra/repositories/firestoreLogEntryRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
-import type { LogEntryRepository } from '../../domain/repositories/logEntryRepository.js';
+import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
@@ -96,7 +96,7 @@ describe('POST /code/submit', () => {
       logger,
     });
 
-    const logEntryRepo = createFirestoreLogEntryRepository({
+    const logLineRepo = createFirestoreLogLineRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
@@ -137,7 +137,7 @@ describe('POST /code/submit', () => {
       taskDispatcher,
       whatsappNotifier,
       logChunkRepo,
-      logEntryRepo,
+      logLineRepo,
       actionsAgentClient,
       linearAgentClient,
       rateLimitService,
@@ -177,7 +177,7 @@ describe('POST /code/submit', () => {
       codeTaskRepo: CodeTaskRepository;
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
-      logEntryRepo: LogEntryRepository;
+      logLineRepo: LogLineRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;

@@ -25,7 +25,7 @@ import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestor
 import { mockWorkerHealthProbe } from '../../helpers/mockServices.js';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogEntryRepository } from '../../../infra/repositories/firestoreLogEntryRepository.js';
+import { createFirestoreLogLineRepository } from '../../../infra/repositories/firestoreLogLineRepository.js';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../../infra/http/linearAgentHttpClient.js';
@@ -112,7 +112,7 @@ describe('GET /code/github-pr-events', () => {
       logger,
     });
 
-    const logEntryRepo = createFirestoreLogEntryRepository({
+    const logLineRepo = createFirestoreLogLineRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
@@ -158,7 +158,7 @@ describe('GET /code/github-pr-events', () => {
       taskDispatcher,
       whatsappNotifier,
       logChunkRepo,
-      logEntryRepo,
+      logLineRepo,
       actionsAgentClient,
       linearAgentClient,
       rateLimitService,
@@ -196,7 +196,7 @@ describe('GET /code/github-pr-events', () => {
       codeTaskRepo: typeof codeTaskRepo;
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: typeof logChunkRepo;
-      logEntryRepo: typeof logEntryRepo;
+      logLineRepo: typeof logLineRepo;
       actionsAgentClient: typeof actionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: ReturnType<typeof createWhatsAppNotifier>;
