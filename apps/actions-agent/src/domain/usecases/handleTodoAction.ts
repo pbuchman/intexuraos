@@ -54,7 +54,7 @@ export function createHandleTodoActionUseCase(deps: HandleTodoActionDeps): Handl
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New todo ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
+      const message = `👷 New todo ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
       const buttons = buildApprovalButtons({ actionId: event.actionId });
 
       logger.info(

@@ -193,7 +193,7 @@ export function createExecuteLinkActionUseCase(
     logger.info({ actionId, bookmarkId, status: 'completed' }, 'Action marked as completed');
 
     const fullUrl = `${webAppUrl}${resourceUrl}`;
-    const message = `Bookmark saved: "${action.title}". View it here: ${fullUrl}`;
+    const message = `📑 Bookmark saved: "${action.title}". View it here: ${fullUrl}`;
 
     logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 
