@@ -132,15 +132,17 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   const canRetry = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
 
   // Build links array - Linear and PR
-  const links: { label: string; url: string | undefined; text: string; type?: string }[] = [];
+  const links: { label: string; url: string | undefined; text: string; type?: string; status?: string }[] = [];
   if (task.linearIssueId !== undefined) {
     const identifier = task.linearIssue?.identifier ?? task.linearIssueId;
     const title = task.linearIssue?.title ?? task.linearIssueTitle ?? '';
     const typeLabel = task.linearIssueType ? ` [${task.linearIssueType}]` : '';
-    const linkItem: { label: string; url: string | undefined; text: string; type?: string } = {
+    const statusName = task.linearIssue?.state.name ?? '';
+    const linkItem: { label: string; url: string | undefined; text: string; type?: string; status?: string } = {
       label: 'Linear',
       url: task.linearIssue?.url,
       text: `${identifier}${typeLabel} ${title}`,
+      status: statusName,
     };
     if (task.linearIssueType !== undefined) {
       linkItem.type = task.linearIssueType;
@@ -159,29 +161,6 @@ export function CodeTaskDetailPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}
-          >
-            <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
-            {status.label}
-          </span>
-          {task.linearIssue !== undefined && (
-            <>
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                task.linearIssue.state.type === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' :
-                task.linearIssue.state.type === 'started' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' :
-                task.linearIssue.state.type === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' :
-                'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-              }`}>
-                {task.linearIssue.state.name}
-              </span>
-              {task.linearIssue.labels.map(label => (
-                <span key={label.id} className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                  {label.name}
-                </span>
-              ))}
-            </>
-          )}
           {isRunning && elapsedTime > 0 ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
               <Clock className="h-4 w-4" />
@@ -197,6 +176,12 @@ export function CodeTaskDetailPage(): React.JSX.Element {
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
             {task.linearIssue?.title ?? task.linearIssueTitle ?? 'Code Task'}
           </h2>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium ${status.bg} ${status.text}`}
+          >
+            <StatusIcon className={`h-4 w-4 ${task.status === 'running' ? 'animate-spin' : ''}`} />
+            {status.label}
+          </span>
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
@@ -295,6 +280,16 @@ export function CodeTaskDetailPage(): React.JSX.Element {
                       <div className="flex-1 min-w-0">
                         {url !== undefined ? (
                           <div className="flex items-center gap-2 flex-wrap">
+                            {link.status && link.label === 'Linear' ? (
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                task.linearIssue?.state.type === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' :
+                                task.linearIssue?.state.type === 'started' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' :
+                                task.linearIssue?.state.type === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' :
+                                'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                              }`}>
+                                {link.status}
+                              </span>
+                            ) : null}
                             <a
                               href={url}
                               target="_blank"
@@ -327,13 +322,13 @@ export function CodeTaskDetailPage(): React.JSX.Element {
                           onClick={() => {
                             void copyToClipboard(url, `link-${String(idx)}`);
                           }}
-                          className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 flex-shrink-0"
+                          className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
                           title={copiedSection === `link-${String(idx)}` ? 'Copied!' : 'Copy link'}
                         >
                           {copiedSection === `link-${String(idx)}` ? (
-                            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
                           ) : (
-                            <Copy className="h-3.5 w-3.5 text-slate-400" />
+                            <Copy className="h-4 w-4" />
                           )}
                         </button>
                       ) : null}
@@ -408,13 +403,13 @@ const PromptCard = memo(function PromptCard({
           title={copiedSection === 'prompt' ? 'Copied!' : 'Copy'}
         >
           {copiedSection === 'prompt' ? (
-            <CheckCircle2 className="h-5 w-5 text-green-500" />
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
           ) : (
-            <Copy className="h-5 w-5" />
+            <Copy className="h-4 w-4" />
           )}
         </button>
       </div>
-      <blockquote className="border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+      <blockquote className="border-l-4 rounded border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
         <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{prompt}</p>
       </blockquote>
       {sanitizedPrompt !== prompt ? (
