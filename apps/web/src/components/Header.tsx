@@ -64,7 +64,7 @@ export function Header(): React.JSX.Element {
   const { user, logout, isAuthenticated } = useAuth();
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
   const { isInstalled } = usePWA();
-  const { status: workersStatus, refresh: refreshWorkersStatus, refreshing: isWorkersRefreshing } = useWorkersStatus();
+  const { status: workersStatus, refreshStatus: refreshWorkersStatus, refreshing: isWorkersRefreshing } = useWorkersStatus();
   const { resolvedTheme, toggleTheme } = useTheme();
   const {
     isPredevMode,
