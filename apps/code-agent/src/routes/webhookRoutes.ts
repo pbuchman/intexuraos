@@ -5,6 +5,7 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { validateWebhookSignature } from '../infra/webhookValidation.js';
+import { parseLogChunk } from '../domain/services/logParser.js';
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // ============================================================
@@ -476,7 +477,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const { logChunkRepo, codeTaskRepo, statusMirrorService } = getServices();
+      const { logChunkRepo, logEntryRepo, codeTaskRepo, statusMirrorService } = getServices();
       const { taskId, chunks } = request.body;
 
       request.log.debug({ taskId, count: chunks.length }, 'Storing log chunks');
@@ -516,7 +517,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
-      request.log.debug({ taskId, count: chunks.length }, 'Log chunks stored successfully');
+      const allEntries = chunks.flatMap((chunk) => {
+        const chunkTimestamp = Timestamp.fromDate(new Date(chunk.timestamp));
+        return parseLogChunk(chunk.content, chunk.sequence, chunkTimestamp);
+      });
+
+      if (allEntries.length > 0) {
+        const entryResult = await logEntryRepo.storeBatch(taskId, allEntries);
+        if (!entryResult.ok) {
+          request.log.warn({ taskId, error: entryResult.error }, 'Failed to store log entries (chunks stored OK)');
+        }
+      }
+
+      request.log.debug({ taskId, count: chunks.length, entries: allEntries.length }, 'Log chunks stored successfully');
       // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
       return await reply.send({ received: true });
     }

@@ -19,6 +19,7 @@ import pino from 'pino';
 import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../infra/repositories/firestoreLogChunkRepository.js';
+import { createFirestoreLogEntryRepository } from '../infra/repositories/firestoreLogEntryRepository.js';
 import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../domain/services/linearIssueService.js';
@@ -30,6 +31,7 @@ import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { ok } from '@intexuraos/common-core';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
+import type { LogEntryRepository } from '../domain/repositories/logEntryRepository.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../domain/services/rateLimitService.js';
@@ -103,6 +105,10 @@ describe('OpenAPI contract', () => {
         firestore: fakeFirestore,
         logger,
       }),
+      logEntryRepo: createFirestoreLogEntryRepository({
+        firestore: fakeFirestore,
+        logger,
+      }),
       actionsAgentClient,
       linearAgentClient: createLinearAgentHttpClient({
         baseUrl: 'http://linear-agent:8086',
@@ -149,6 +155,7 @@ describe('OpenAPI contract', () => {
       codeTaskRepo: CodeTaskRepository;
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
+      logEntryRepo: LogEntryRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;

@@ -638,10 +638,9 @@ describe('LogForwarder', () => {
         .map((c) => c.content)
         .join('');
       expect(allContent).toContain('hello world');
-      expect(allContent).not.toContain('"type"');
     });
 
-    it('should filter split hook_response JSON when reassembled', async () => {
+    it('should forward split hook_response JSON when reassembled', async () => {
       const forwarder = createMockForwarder();
       captureUploadedChunks();
       forwarder.registerTask('task-hook', webhookSecret);
@@ -666,7 +665,7 @@ describe('LogForwarder', () => {
         .flatMap((u) => u.chunks)
         .map((c) => c.content)
         .join('');
-      expect(allContent).toBe('');
+      expect(allContent).toContain('hook_response');
     });
 
     it('should flush partial line on flushAndStop', async () => {
