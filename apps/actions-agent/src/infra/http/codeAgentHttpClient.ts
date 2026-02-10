@@ -252,13 +252,18 @@ export function createCodeAgentHttpClient(
         return err({ code: 'TASK_NOT_FOUND', message: errorMessage });
       }
 
+      if (response.status === 403) {
+        // NOT_OWNER - user doesn't own the task
+        logger.warn({ taskId: input.taskId, errorCode, errorMessage }, 'Cancel-with-nonce authorization failed');
+        return err({ code: 'NOT_OWNER', message: errorMessage });
+      }
+
       if (response.status === 400) {
-        // Map specific error codes from response
+        // Map specific error codes from response (now uppercase)
         const codeMap: Record<string, CancelTaskError['code']> = {
-          'invalid_nonce': 'INVALID_NONCE',
-          'nonce_expired': 'NONCE_EXPIRED',
-          'not_owner': 'NOT_OWNER',
-          'task_not_cancellable': 'TASK_NOT_CANCELLABLE',
+          'INVALID_NONCE': 'INVALID_NONCE',
+          'NONCE_EXPIRED': 'NONCE_EXPIRED',
+          'TASK_NOT_CANCELLABLE': 'TASK_NOT_CANCELLABLE',
         };
         const mappedCode = codeMap[errorCode] ?? 'UNKNOWN';
         logger.warn({ taskId: input.taskId, errorCode, errorMessage }, 'Cancel-with-nonce validation failed');
