@@ -295,5 +295,40 @@ describe('FirestoreLogEntryRepository', () => {
         'Stored log entries'
       );
     });
+
+    it('splits large entry arrays into batches of 500', async () => {
+      const repo = createFirestoreLogEntryRepository({
+        firestore: mockFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const entries = Array.from({ length: 1000 }, (_, i) =>
+        createEntry({ sequence: i, rawText: `entry-${i}` })
+      );
+
+      const result = await repo.storeBatch('task-123', entries);
+
+      expect(result.ok).toBe(true);
+      expect(mockFirestore.batch).toHaveBeenCalledTimes(2);
+      expect(mockBatch.set).toHaveBeenCalledTimes(1000);
+      expect(mockBatch.commit).toHaveBeenCalledTimes(2);
+    });
+
+    it('handles arrays that exactly equal batch size', async () => {
+      const repo = createFirestoreLogEntryRepository({
+        firestore: mockFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const entries = Array.from({ length: 500 }, (_, i) =>
+        createEntry({ sequence: i, rawText: `entry-${i}` })
+      );
+
+      const result = await repo.storeBatch('task-123', entries);
+
+      expect(result.ok).toBe(true);
+      expect(mockFirestore.batch).toHaveBeenCalledTimes(1);
+      expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+    });
   });
 });

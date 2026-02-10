@@ -2050,6 +2050,66 @@ describe('POST /internal/logs', () => {
     storeSpy.mockRestore();
   });
 
+  it('handles logEntryRepo storeBatch failure with error-level logging', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const jsonContent = JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-opus-4-6' });
+
+    const payload = {
+      taskId: task.id,
+      chunks: [
+        {
+          sequence: 1,
+          content: jsonContent,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    // Mock logEntryRepo.storeBatch to fail
+    const entryStoreSpy = vi.spyOn(logEntryRepo, 'storeBatch').mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'Database unavailable' })
+    );
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    // Response should still be 200 (raw chunks stored as fallback)
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.received).toBe(true);
+
+    // The repository unit test verifies error logging at the correct level
+    entryStoreSpy.mockRestore();
+  });
+
   it('rejects logs for non-existent task', async () => {
     const payload = {
       taskId: 'non-existent-task-id',

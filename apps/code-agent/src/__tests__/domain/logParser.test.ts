@@ -533,16 +533,34 @@ describe('parseLogChunk', () => {
   });
 
   describe('unknown JSON types', () => {
-    it('skips user messages', () => {
+    it('preserves user messages as raw entries', () => {
       const json = JSON.stringify({ type: 'user', message: { role: 'user' } });
       const entries = parseLogChunk(json + '\n', 0, ts());
-      expect(entries).toHaveLength(0);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        type: 'raw',
+        rawText: json,
+      });
     });
 
-    it('skips unknown types', () => {
+    it('preserves unknown types as raw entries', () => {
       const json = JSON.stringify({ type: 'some_unknown_type' });
       const entries = parseLogChunk(json + '\n', 0, ts());
-      expect(entries).toHaveLength(0);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        type: 'raw',
+        rawText: json,
+      });
+    });
+
+    it('preserves future protocol types as raw entries', () => {
+      const json = JSON.stringify({ type: 'thinking', content: 'Let me think' });
+      const entries = parseLogChunk(json + '\n', 0, ts());
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        type: 'raw',
+        rawText: json,
+      });
     });
   });
 

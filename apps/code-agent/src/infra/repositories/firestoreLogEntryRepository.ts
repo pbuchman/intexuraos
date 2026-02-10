@@ -23,45 +23,50 @@ export class FirestoreLogEntryRepository implements LogEntryRepository {
       return ok(undefined);
     }
 
-    const batch = this.firestore.batch();
-
-    for (const entry of entries) {
-      const docRef = this.firestore
-        .collection('code_tasks')
-        .doc(taskId)
-        .collection('log_entries')
-        .doc();
-
-      const doc: Record<string, unknown> = {
-        sequence: entry.sequence,
-        type: entry.type,
-        timestamp: entry.timestamp,
-      };
-
-      if (entry.systemSubtype !== undefined) doc['systemSubtype'] = entry.systemSubtype;
-      if (entry.hookName !== undefined) doc['hookName'] = entry.hookName;
-      if (entry.hookExitCode !== undefined) doc['hookExitCode'] = entry.hookExitCode;
-      if (entry.hookOutput !== undefined) doc['hookOutput'] = entry.hookOutput;
-      if (entry.model !== undefined) doc['model'] = entry.model;
-      if (entry.toolCount !== undefined) doc['toolCount'] = entry.toolCount;
-      if (entry.mcpServers !== undefined) doc['mcpServers'] = entry.mcpServers;
-      if (entry.text !== undefined) doc['text'] = entry.text;
-      if (entry.toolName !== undefined) doc['toolName'] = entry.toolName;
-      if (entry.toolContext !== undefined) doc['toolContext'] = entry.toolContext;
-      if (entry.content !== undefined) doc['content'] = entry.content;
-      if (entry.isError !== undefined) doc['isError'] = entry.isError;
-      if (entry.resultType !== undefined) doc['resultType'] = entry.resultType;
-      if (entry.durationMs !== undefined) doc['durationMs'] = entry.durationMs;
-      if (entry.numTurns !== undefined) doc['numTurns'] = entry.numTurns;
-      if (entry.totalCostUsd !== undefined) doc['totalCostUsd'] = entry.totalCostUsd;
-      if (entry.errorMessage !== undefined) doc['errorMessage'] = entry.errorMessage;
-      if (entry.rawText !== undefined) doc['rawText'] = entry.rawText;
-
-      batch.set(docRef, doc);
-    }
+    const MAX_BATCH_SIZE = 500;
 
     try {
-      await batch.commit();
+      for (let i = 0; i < entries.length; i += MAX_BATCH_SIZE) {
+        const batch = this.firestore.batch();
+        const slice = entries.slice(i, i + MAX_BATCH_SIZE);
+
+        for (const entry of slice) {
+          const docRef = this.firestore
+            .collection('code_tasks')
+            .doc(taskId)
+            .collection('log_entries')
+            .doc();
+
+          const doc: Record<string, unknown> = {
+            sequence: entry.sequence,
+            type: entry.type,
+            timestamp: entry.timestamp,
+          };
+
+          if (entry.systemSubtype !== undefined) doc['systemSubtype'] = entry.systemSubtype;
+          if (entry.hookName !== undefined) doc['hookName'] = entry.hookName;
+          if (entry.hookExitCode !== undefined) doc['hookExitCode'] = entry.hookExitCode;
+          if (entry.hookOutput !== undefined) doc['hookOutput'] = entry.hookOutput;
+          if (entry.model !== undefined) doc['model'] = entry.model;
+          if (entry.toolCount !== undefined) doc['toolCount'] = entry.toolCount;
+          if (entry.mcpServers !== undefined) doc['mcpServers'] = entry.mcpServers;
+          if (entry.text !== undefined) doc['text'] = entry.text;
+          if (entry.toolName !== undefined) doc['toolName'] = entry.toolName;
+          if (entry.toolContext !== undefined) doc['toolContext'] = entry.toolContext;
+          if (entry.content !== undefined) doc['content'] = entry.content;
+          if (entry.isError !== undefined) doc['isError'] = entry.isError;
+          if (entry.resultType !== undefined) doc['resultType'] = entry.resultType;
+          if (entry.durationMs !== undefined) doc['durationMs'] = entry.durationMs;
+          if (entry.numTurns !== undefined) doc['numTurns'] = entry.numTurns;
+          if (entry.totalCostUsd !== undefined) doc['totalCostUsd'] = entry.totalCostUsd;
+          if (entry.errorMessage !== undefined) doc['errorMessage'] = entry.errorMessage;
+          if (entry.rawText !== undefined) doc['rawText'] = entry.rawText;
+
+          batch.set(docRef, doc);
+        }
+
+        await batch.commit();
+      }
       this.logger.debug({ taskId, count: entries.length }, 'Stored log entries');
       return ok(undefined);
     /* v8 ignore start -- test-infra: firestorelogentryrepository batch.commit error path @preserve */
