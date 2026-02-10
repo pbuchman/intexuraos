@@ -45,6 +45,7 @@ export interface WorkerConfig {
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
+  jsonSchema?: string;
   onLog?: (chunk: string) => void;
   onComplete?: (exitCode: number) => void;
 }

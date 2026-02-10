@@ -88,22 +88,12 @@ For complex architectural decisions that need preserved reasoning:
 After enriching the issue and adding EITHER \`code-task\` OR \`unclear\` label, **STOP**.
 Output: \`Phase 1 Complete. Issue enriched. Label '[code-task|unclear]' added. Awaiting Phase 2.\`
 
-### MANDATORY Response Format (Hook-Verified)
-Your FINAL message before stopping MUST contain this exact block:
-
-\`\`\`
----COMPLETION---
-Phase: 1
-Linear: https://linear.app/intexura/issue/INT-XXX
-Label: code-task
----END---
-\`\`\`
-
-Rules:
-- Linear: the FULL URL of the issue you enriched (paste actual URL, not placeholder)
-- Label: must be exactly \`code-task\` or \`unclear\` (the label you added)
-- PR line is OPTIONAL (only if you created a design document PR)
-- The stop hook REJECTS your stop if Linear or Label are missing`;
+### Structured Output
+Your output will be validated via JSON schema. Provide:
+- \`linearUrl\`: Full Linear issue URL you enriched
+- \`label\`: The label you added (\`code-task\` or \`unclear\`)
+- \`prUrl\`: (optional) Design document PR URL if created
+- \`summary\`: Brief description of what was done`;
 }
 
 /**
@@ -162,24 +152,52 @@ Follow all instructions from the Linear issue description and the user prompt.
 ### Resource Limits
 **NONE.** Complete the task regardless of token usage.${parentModeSection}
 
-### MANDATORY Response Format (Hook-Verified)
-Your FINAL message before stopping MUST contain this exact block:
-
-\`\`\`
----COMPLETION---
-Phase: 2
-PR: https://github.com/intexura/intexuraos/pull/XXX
-Linear: https://linear.app/intexura/issue/INT-XXX
-CI: passed
----END---
-\`\`\`
-
-Rules:
-- PR: full GitHub PR URL (paste actual URL, not placeholder)
-- Linear: full Linear issue URL (paste actual URL, not placeholder)
-- CI: must be exactly \`passed\`
-- The stop hook REJECTS your stop if any field is missing`;
+### Structured Output
+Your output will be validated via JSON schema. Provide:
+- \`prUrl\`: Full GitHub PR URL
+- \`linearUrl\`: Full Linear issue URL
+- \`ciPassed\`: Whether CI passed (boolean)
+- \`summary\`: Brief description of what was implemented`;
   /* v8 ignore stop @preserve */
+}
+
+const PHASE_1_SCHEMA = {
+  type: 'object',
+  properties: {
+    phase: { const: 1 },
+    linearUrl: { type: 'string', pattern: '^https://linear\\.app/.+/issue/.+' },
+    label: { type: 'string', enum: ['code-task', 'unclear'] },
+    prUrl: { type: 'string' },
+    summary: { type: 'string' },
+  },
+  required: ['phase', 'linearUrl', 'label', 'summary'],
+};
+
+const PHASE_2_SCHEMA = {
+  type: 'object',
+  properties: {
+    phase: { const: 2 },
+    prUrl: { type: 'string', pattern: '^https://github\\.com/.+/pull/\\d+' },
+    linearUrl: { type: 'string', pattern: '^https://linear\\.app/.+/issue/.+' },
+    ciPassed: { type: 'boolean' },
+    summary: { type: 'string' },
+  },
+  required: ['phase', 'prUrl', 'linearUrl', 'ciPassed', 'summary'],
+};
+
+/**
+ * Build the JSON schema for structured output validation.
+ *
+ * The schema is phase-specific:
+ * - Phase 1 (no 'code-task' label): linearUrl, label, summary required
+ * - Phase 2 (has 'code-task' label): prUrl, linearUrl, ciPassed, summary required
+ *
+ * @param params - Parameters for schema selection
+ * @returns JSON schema object for --json-schema flag
+ */
+export function buildOutputSchema(params: SystemPromptParams): object {
+  const hasCodeTaskLabel = params.linearIssueLabels.includes('code-task');
+  return hasCodeTaskLabel ? PHASE_2_SCHEMA : PHASE_1_SCHEMA;
 }
 
 /**

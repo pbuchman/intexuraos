@@ -12,7 +12,7 @@ import type { WebhookClient } from './webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { IsolationProvider, WorkerConfig } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
-import { buildSystemPrompt } from './system-prompt.js';
+import { buildSystemPrompt, buildOutputSchema } from './system-prompt.js';
 
 const execAsync = promisify(exec);
 
@@ -117,6 +117,15 @@ export class TaskDispatcher {
           hasChildren: request.hasChildren,
         }),
         /* v8 ignore stop @preserve */
+        jsonSchema: JSON.stringify(
+          buildOutputSchema({
+            taskId,
+            worktreePath,
+            ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
+            linearIssueLabels: request.linearIssueLabels,
+            hasChildren: request.hasChildren,
+          })
+        ),
         workerType: request.workerType,
         secrets: this.isolation.secrets,
         gcpSaKeyPath: this.isolation.gcpSaKeyPath,

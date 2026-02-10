@@ -210,6 +210,33 @@ describe('DockerProvider', () => {
       );
     });
 
+    it('writes json-schema.json when jsonSchema is provided', async () => {
+      const fs = await import('node:fs');
+      const config = createTestConfig({
+        jsonSchema: '{"type":"object","properties":{"phase":{"const":2}}}',
+      });
+      await provider.createWorker(config);
+
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('json-schema.json'),
+        '{"type":"object","properties":{"phase":{"const":2}}}',
+        'utf-8'
+      );
+    });
+
+    it('does not write json-schema.json when jsonSchema is not provided', async () => {
+      const fs = await import('node:fs');
+      const config = createTestConfig();
+      await provider.createWorker(config);
+
+      const writeFileCalls = (fs.promises.writeFile as Mock).mock.calls;
+      const jsonSchemaCalls = writeFileCalls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && (call[0] as string).includes('json-schema.json')
+      );
+      expect(jsonSchemaCalls).toHaveLength(0);
+    });
+
     it('mounts pnpm store volume and node_modules tmpfs', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);

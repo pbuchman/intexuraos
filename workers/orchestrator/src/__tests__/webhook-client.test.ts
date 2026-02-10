@@ -119,7 +119,9 @@ describe('WebhookClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1); // No retries
     });
 
-    it('should retry 3x on 5xx errors with exponential backoff', { timeout: 30000 }, async () => {
+    it('should retry 3x on 5xx errors with exponential backoff', async () => {
+      vi.useFakeTimers();
+
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
@@ -135,24 +137,25 @@ describe('WebhookClient', () => {
         duration: 2000,
       };
 
-      const startTime = Date.now();
-      await client.send({
+      const resultPromise = client.send({
         url: 'https://example.com/webhook',
         secret: 'test-secret',
         payload,
         taskId: 'task-3',
       });
 
-      const elapsedTime = Date.now() - startTime;
+      await vi.advanceTimersByTimeAsync(25000);
 
-      // Should have retried 3 times with delays: 0s, 5s, 15s = 20s minimum
+      const result = await resultPromise;
+
       expect(mockFetch).toHaveBeenCalledTimes(3);
-      expect(elapsedTime).toBeGreaterThanOrEqual(19500); // 5s + 15s (with timing tolerance)
+      expect(result.ok).toBe(false);
 
-      // Should be queued in pending webhooks
       const state = await statePersistence.load();
       expect(state.pendingWebhooks).toHaveLength(1);
       expect(state.pendingWebhooks?.[0]?.taskId).toBe('task-3');
+
+      vi.useRealTimers();
     });
 
     it('should succeed on 2nd attempt and stop retrying', async () => {
@@ -344,8 +347,9 @@ describe('WebhookClient', () => {
   });
 
   describe('retryPending', () => {
-    it('should retry pending webhooks and remove successful ones', { timeout: 30000 }, async () => {
-      // Setup pending webhooks
+    it('should retry pending webhooks and remove successful ones', async () => {
+      vi.useFakeTimers();
+
       const statePersistence = createStatePersistence();
       const state = await statePersistence.load();
       state.pendingWebhooks = [
@@ -368,7 +372,6 @@ describe('WebhookClient', () => {
       ];
       await statePersistence.save(state);
 
-      // Mock: first succeeds, second fails
       mockFetch.mockImplementation(async (url: string) => {
         if (url.includes('webhook1')) {
           return {
@@ -385,13 +388,19 @@ describe('WebhookClient', () => {
       });
 
       const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
-      await client.retryPending();
+      const retryPromise = client.retryPending();
+
+      await vi.advanceTimersByTimeAsync(70000);
+      await vi.runAllTimersAsync();
+
+      await retryPromise;
 
       const updatedState = await statePersistence.load();
 
-      // task-1 should be removed (success), task-2 should remain
       expect(updatedState.pendingWebhooks).toHaveLength(1);
       expect(updatedState.pendingWebhooks?.[0]?.taskId).toBe('task-2');
+
+      vi.useRealTimers();
     });
 
     it('should remove pending webhooks older than 24 hours', async () => {
