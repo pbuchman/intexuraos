@@ -313,22 +313,30 @@ describe('system-prompt', () => {
       expect(required).not.toContain('label');
     });
 
-    it('should include phase const value 1 in Phase 1 schema', () => {
+    it('should accept both integer and string phase values in Phase 1 schema', () => {
       const schema = buildOutputSchema({
         ...baseParams,
         linearIssueLabels: [],
-      }) as { properties: Record<string, Record<string, unknown>> };
+      }) as { properties: Record<string, { oneOf?: { const: unknown }[] }> };
 
-      expect(schema.properties['phase']?.['const']).toBe(1);
+      const phaseOneOf = schema.properties['phase']?.oneOf;
+      expect(phaseOneOf).toBeDefined();
+      expect(phaseOneOf).toHaveLength(2);
+      expect(phaseOneOf?.[0]?.const).toBe(1);
+      expect(phaseOneOf?.[1]?.const).toBe('1');
     });
 
-    it('should include phase const value 2 in Phase 2 schema', () => {
+    it('should accept both integer and string phase values in Phase 2 schema', () => {
       const schema = buildOutputSchema({
         ...baseParams,
         linearIssueLabels: ['code-task'],
-      }) as { properties: Record<string, Record<string, unknown>> };
+      }) as { properties: Record<string, { oneOf?: { const: unknown }[] }> };
 
-      expect(schema.properties['phase']?.['const']).toBe(2);
+      const phaseOneOf = schema.properties['phase']?.oneOf;
+      expect(phaseOneOf).toBeDefined();
+      expect(phaseOneOf).toHaveLength(2);
+      expect(phaseOneOf?.[0]?.const).toBe(2);
+      expect(phaseOneOf?.[1]?.const).toBe('2');
     });
 
     it('should include label enum in Phase 1 schema', () => {
@@ -354,9 +362,9 @@ describe('system-prompt', () => {
       const schema = buildOutputSchema({
         ...baseParams,
         linearIssueLabels: ['bug', 'code-task', 'high-priority'],
-      }) as { properties: Record<string, Record<string, unknown>> };
+      }) as { properties: Record<string, { oneOf?: { const: unknown }[] }> };
 
-      expect(schema.properties['phase']?.['const']).toBe(2);
+      expect(schema.properties['phase']?.oneOf?.[0]?.const).toBe(2);
     });
   });
 });

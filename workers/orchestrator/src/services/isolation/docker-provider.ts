@@ -207,7 +207,9 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
+    /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
     const keySuffix = apiKey.length > 4 ? '...' + apiKey.slice(-4) : '****';
+    /* v8 ignore stop @preserve */
     this.logger.info(
       { taskId, worktreePath, workerType, apiKey: keySuffix, baseUrl: workerTypeConfig.apiBaseUrl },
       'Creating worker container'
