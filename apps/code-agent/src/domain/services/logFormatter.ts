@@ -44,7 +44,7 @@ export function formatLogChunk(raw: string, startSequence: number, timestamp: Ti
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed === '') continue;
-    if (trimmed.startsWith('[entrypoint]')) continue;
+    if (trimmed.includes('[entrypoint]')) continue;
 
     let text: string;
     try {

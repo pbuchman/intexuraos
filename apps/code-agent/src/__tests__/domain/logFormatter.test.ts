@@ -42,6 +42,11 @@ describe('formatLogChunk', () => {
       expect(result).toHaveLength(1);
       expect(result[0]?.text).toBe('real output');
     });
+
+    it('timestamp-prefixed entrypoint lines are filtered', () => {
+      const result = formatLogChunk('2026-02-11 00:48:35 [entrypoint] Starting Claude...', 0, ts());
+      expect(result).toEqual([]);
+    });
   });
 
   describe('system events', () => {
