@@ -160,15 +160,6 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <div className="flex flex-wrap items-center gap-2">
-          {isRunning && elapsedTime > 0 ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-              <Clock className="h-4 w-4" />
-              {formatElapsedTime(elapsedTime)}
-            </span>
-          ) : null}
-        </div>
-
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {task.linearIssueId !== undefined ? (
             <span className="text-lg font-medium text-blue-600 dark:text-blue-400">{task.linearIssue?.identifier ?? task.linearIssueId}</span>
