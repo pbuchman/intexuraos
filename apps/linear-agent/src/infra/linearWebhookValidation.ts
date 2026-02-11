@@ -2,7 +2,7 @@
  * Linear webhook signature validation.
  *
  * Validates HMAC-SHA256 signatures from Linear webhooks.
- * Linear signature format: "sha256=<hex-digest>"
+ * Linear signature format: raw 64-character hex digest (no prefix)
  * Signature computed as: HMAC-SHA256(webhookSecret, rawRequestBody)
  *
  * Linear sends the signature in the "Linear-Signature" header.
@@ -28,7 +28,7 @@ export type LinearWebhookError =
 /**
  * Validate Linear webhook signature.
  *
- * Linear webhooks include a Linear-Signature header with format "sha256=<hex-digest>".
+ * Linear webhooks include a Linear-Signature header with a raw 64-character hex digest.
  * The signature is computed as HMAC-SHA256(webhookSecret, rawRequestBody).
  *
  * @param request - Fastify request object
@@ -47,18 +47,19 @@ export function validateLinearWebhookSignature(
   }
 
   /* v8 ignore start -- test-infra: Fastify header edge cases difficult to reproduce @preserve */
-  // Linear signature format: "sha256=<hex-digest>"
+  // Linear sends raw 64-char hex digest (no prefix like "sha256=")
   const signatureStr = Array.isArray(signatureHeader) ? signatureHeader[0] ?? '' : signatureHeader;
   /* v8 ignore stop @preserve */
 
-  if (signatureStr.length === 0 || !signatureStr.startsWith('sha256=')) {
+  if (signatureStr.length === 0) {
     return err({
       code: 'INVALID_SIGNATURE_FORMAT',
-      message: 'Invalid signature format, expected "sha256=<hex-digest>"',
+      message: 'Empty signature header',
     });
   }
 
-  const receivedSignature = signatureStr.slice(7); // Remove "sha256=" prefix
+  // Linear sends raw hex digest, not "sha256=<digest>" format
+  const receivedSignature = signatureStr;
 
   // Compute expected signature
   // Linear uses HMAC-SHA256 of the raw request body
