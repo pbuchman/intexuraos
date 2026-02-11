@@ -163,19 +163,10 @@ function formatToolResult(content: string, isError: boolean): string {
   if (trimmed === '') return '';
 
   const prefix = isError ? '  \u2717 ' : '  \u2192 ';
-  const lines = trimmed.split('\n').filter((l) => l.trim() !== '');
-
-  /* v8 ignore start -- ts-type: trimmed already passed === '' check, split always yields ≥1 non-empty line @preserve */
-  if (lines.length === 0) return '';
-  /* v8 ignore stop @preserve */
-
-  if (lines.length <= 3) {
-    const abbreviated = trimmed.length > 200 ? trimmed.slice(0, 200) + '...' : trimmed;
-    const singleLine = abbreviated.replace(/\n/g, ' ').trim();
-    return `${prefix}${singleLine}`;
-  }
-
-  return `${prefix}${String(lines.length)} lines`;
+  const lines = trimmed.split('\n');
+  return lines
+    .map((line, index) => (index === 0 ? `${prefix}${line}` : `    ${line}`))
+    .join('\n');
 }
 
 function formatResult(obj: StreamJsonMessage): string {
@@ -195,21 +186,7 @@ function formatResult(obj: StreamJsonMessage): string {
 
 function collapseOutput(output: string): string {
   const lines = output.split('\n').filter((l) => l.trim() !== '');
-
-  /* v8 ignore start -- ts-type: caller already checks output.trim() !== '', split always yields ≥1 non-empty line @preserve */
-  if (lines.length === 0) return '';
-  /* v8 ignore stop @preserve */
-
-  if (lines.length <= 5) {
-    return lines.map((l) => `  ${l}`).join('\n');
-  }
-
-  const first = lines.slice(0, 2).map((l) => `  ${l}`).join('\n');
-  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, length > 5 ensures valid index @preserve */
-  const last = lines[lines.length - 1] ?? '';
-  /* v8 ignore stop @preserve */
-  const hidden = lines.length - 3;
-  return `${first}\n  ... ${String(hidden)} more lines ...\n  ${last}`;
+  return lines.map((l) => `  ${l}`).join('\n');
 }
 
 function extractToolContext(input: Record<string, unknown> | undefined): string | undefined {

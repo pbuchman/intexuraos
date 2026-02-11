@@ -251,11 +251,13 @@ async function runVerifyWorkspace(workspace) {
   return new Promise((resolvePromise) => {
     const startTime = Date.now();
     let output = '';
+    const env = { ...process.env, FORCE_COLOR: '1' };
+    delete env.NO_COLOR;
 
     const proc = spawn('./scripts/verify-workspace.sh', [workspace], {
       cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '1' },
+      env,
     });
 
     proc.stdout.on('data', (data) => {

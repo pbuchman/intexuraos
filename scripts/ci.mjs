@@ -148,9 +148,13 @@ async function runCommand(cmd, abortSignal = null) {
       return;
     }
 
+    const env = { ...process.env };
+    delete env.NO_COLOR;
+
     const proc = spawn(command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: repoRoot,
+      env,
     });
 
     let output = '';
