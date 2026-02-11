@@ -29,7 +29,7 @@ describe('validateLinearWebhookSignature', () => {
   describe('signature validation', () => {
     it('accepts valid signature', () => {
       const body = { test: 'data' };
-      const expectedSignature = 'sha256=' + computeSignature(body, webhookSecret);
+      const expectedSignature = computeSignature(body, webhookSecret);
       const request = createMockRequest(body, expectedSignature);
 
       const result = validateLinearWebhookSignature(request, webhookSecret);
@@ -51,8 +51,8 @@ describe('validateLinearWebhookSignature', () => {
       }
     });
 
-    it('rejects invalid signature format', () => {
-      const request = createMockRequest({}, 'invalid-format');
+    it('rejects empty signature header', () => {
+      const request = createMockRequest({}, '');
 
       const result = validateLinearWebhookSignature(request, webhookSecret);
 
@@ -64,7 +64,8 @@ describe('validateLinearWebhookSignature', () => {
 
     it('rejects incorrect signature', () => {
       const body = { test: 'data' };
-      const request = createMockRequest(body, 'sha256=wrongsignature');
+      // 64-char hex digest (wrong but valid format)
+      const request = createMockRequest(body, 'a'.repeat(64));
 
       const result = validateLinearWebhookSignature(request, webhookSecret);
 
@@ -77,7 +78,7 @@ describe('validateLinearWebhookSignature', () => {
     it('rejects missing raw body', () => {
       const request = {
         headers: {
-          'linear-signature': 'sha256=abc123',
+          'linear-signature': 'abc123',
         },
         rawBody: undefined,
       } as unknown as FastifyRequest;

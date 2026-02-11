@@ -87,7 +87,8 @@ describe('Linear Webhook Routes', () => {
   function computeLinearSignature(body: unknown): string {
     const rawBody = JSON.stringify(body);
     const signature = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
-    return `sha256=${signature}`;
+    // Linear sends raw hex digest, not "sha256=<digest>" format
+    return signature;
   }
 
   function createLinearWebhookPayload(overrides: Partial<unknown> = {}): unknown {
