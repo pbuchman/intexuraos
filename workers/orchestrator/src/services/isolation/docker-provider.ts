@@ -171,6 +171,23 @@ export class DockerProvider implements IsolationProvider {
         `Worker type '${workerType}' requires ${workerTypeConfig.apiKeyEnvVar} but it is not configured`
       );
     }
+
+    const KEY_FORMAT: Record<string, string> = {
+      ANTHROPIC_API_KEY: 'sk-ant-',
+      ZAI_API_KEY: 'zai-',
+    };
+    const expectedPrefix = KEY_FORMAT[workerTypeConfig.apiKeyEnvVar];
+    if (expectedPrefix !== undefined && !apiKey.startsWith(expectedPrefix)) {
+      this.logger.error(
+        {
+          taskId,
+          workerType,
+          envVar: workerTypeConfig.apiKeyEnvVar,
+          keyPrefix: apiKey.slice(0, 6) + '...',
+        },
+        `API key does not match expected format (expected ${expectedPrefix}*) — task will likely fail with 401`
+      );
+    }
     /* v8 ignore stop @preserve */
 
     /* v8 ignore start -- test-infra: worker type configuration varies by test @preserve */
@@ -190,7 +207,11 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
-    this.logger.info({ taskId, worktreePath, workerType }, 'Creating worker container');
+    const keySuffix = apiKey.length > 4 ? '...' + apiKey.slice(-4) : '****';
+    this.logger.info(
+      { taskId, worktreePath, workerType, apiKey: keySuffix, baseUrl: workerTypeConfig.apiBaseUrl },
+      'Creating worker container'
+    );
 
     const pnpmStorePath = path.join(path.dirname(this.config.secretsBasePath), PNPM_STORE_DIR_NAME);
     fs.mkdirSync(pnpmStorePath, { recursive: true });

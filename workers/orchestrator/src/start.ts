@@ -113,6 +113,68 @@ function validatePortAvailable(port: number): void {
 }
 /* v8 ignore stop @preserve */
 
+/**
+ * Validate worker API keys by calling the Anthropic /v1/models endpoint.
+ * Warns (does not exit) so GLM tasks can still run with an invalid Anthropic key.
+ */
+/* v8 ignore start -- test-infra: startup validation with network call @preserve */
+async function validateWorkerApiKeys(
+  anthropicKey: string,
+  zaiKey: string,
+  logger: pino.Logger
+): Promise<void> {
+  const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
+
+  if (anthropicKey !== '') {
+    const keySuffix = suffix(anthropicKey);
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/models', {
+        method: 'GET',
+        headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (resp.ok) {
+        logger.info({ apiKey: keySuffix }, 'ANTHROPIC_API_KEY validated successfully');
+      } else {
+        logger.error(
+          { status: resp.status, apiKey: keySuffix },
+          'ANTHROPIC_API_KEY validation failed — opus/auto tasks will fail'
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
+        'ANTHROPIC_API_KEY validation request failed (network issue) — key may still be valid'
+      );
+    }
+  }
+
+  if (zaiKey !== '') {
+    const keySuffix = suffix(zaiKey);
+    try {
+      const resp = await fetch('https://api.z.ai/api/anthropic/v1/models', {
+        method: 'GET',
+        headers: { 'x-api-key': zaiKey, 'anthropic-version': '2023-06-01' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (resp.ok) {
+        logger.info({ apiKey: keySuffix }, 'ZAI_API_KEY validated successfully');
+      } else {
+        logger.error(
+          { status: resp.status, apiKey: keySuffix },
+          'ZAI_API_KEY validation failed — glm tasks will fail'
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
+        'ZAI_API_KEY validation request failed (network issue) — key may still be valid'
+      );
+    }
+  }
+}
+/* v8 ignore stop @preserve */
+
 /* v8 ignore start -- module-init: directory setup function called during bootstrap @preserve */
 function ensureDirectoryExists(path: string): void {
   mkdirSync(path, { recursive: true });
@@ -324,6 +386,13 @@ async function bootstrap(): Promise<void> {
     gcpSaKeyPath,
     githubAppKeyPath: config.githubAppPrivateKeyPath,
   };
+
+  // Validate API keys asynchronously (non-blocking, warns on failure)
+  void validateWorkerApiKeys(
+    isolationConfig.secrets.ANTHROPIC_API_KEY,
+    isolationConfig.secrets.ZAI_API_KEY,
+    logger
+  );
 
   const dispatcher = new TaskDispatcher(
     config,
