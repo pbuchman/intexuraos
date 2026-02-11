@@ -32,20 +32,24 @@ describe('formatLogChunk', () => {
       expect(result).toEqual([]);
     });
 
-    it('entrypoint lines are filtered out', () => {
+    it('entrypoint lines are passed through', () => {
       const result = formatLogChunk('[entrypoint] Restoring default config files...', 0, ts());
-      expect(result).toEqual([]);
-    });
-
-    it('entrypoint lines filtered from multi-line chunk', () => {
-      const result = formatLogChunk('[entrypoint] Starting...\nreal output\n[entrypoint] Done', 0, ts());
       expect(result).toHaveLength(1);
-      expect(result[0]?.text).toBe('real output');
+      expect(result[0]?.text).toBe('[entrypoint] Restoring default config files...');
     });
 
-    it('timestamp-prefixed entrypoint lines are filtered', () => {
+    it('entrypoint lines included in multi-line chunk', () => {
+      const result = formatLogChunk('[entrypoint] Starting...\nreal output\n[entrypoint] Done', 0, ts());
+      expect(result).toHaveLength(3);
+      expect(result[0]?.text).toBe('[entrypoint] Starting...');
+      expect(result[1]?.text).toBe('real output');
+      expect(result[2]?.text).toBe('[entrypoint] Done');
+    });
+
+    it('timestamp-prefixed entrypoint lines are passed through', () => {
       const result = formatLogChunk('2026-02-11 00:48:35 [entrypoint] Starting Claude...', 0, ts());
-      expect(result).toEqual([]);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.text).toBe('2026-02-11 00:48:35 [entrypoint] Starting Claude...');
     });
   });
 

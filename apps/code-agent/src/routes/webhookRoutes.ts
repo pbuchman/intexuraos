@@ -400,7 +400,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 type: 'object',
                 properties: {
                   sequence: { type: 'number' },
-                  content: { type: 'string', maxLength: 8192 },
+                  content: { type: 'string', maxLength: 65536 },
                   timestamp: { type: 'string' },
                 },
                 required: ['sequence', 'content', 'timestamp'],

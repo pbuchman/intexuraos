@@ -174,7 +174,6 @@ export class DockerProvider implements IsolationProvider {
 
     const KEY_FORMAT: Record<string, string> = {
       ANTHROPIC_API_KEY: 'sk-ant-',
-      ZAI_API_KEY: 'zai-',
     };
     const expectedPrefix = KEY_FORMAT[workerTypeConfig.apiKeyEnvVar];
     if (expectedPrefix !== undefined && !apiKey.startsWith(expectedPrefix)) {
