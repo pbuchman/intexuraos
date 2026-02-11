@@ -23,7 +23,7 @@ export function Card({
   className = '',
 }: CardProps): React.JSX.Element {
   return (
-    <div className={`rounded-xl border p-6 shadow-sm ${variantStyles[variant]} ${className}`}>
+    <div className={`rounded-xl border p-3 shadow-sm ${variantStyles[variant]} ${className}`}>
       {title !== null && title !== undefined ? (
         <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
       ) : null}
