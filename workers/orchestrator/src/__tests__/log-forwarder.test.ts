@@ -483,6 +483,38 @@ describe('LogForwarder', () => {
       const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-size');
       expect(taskUploads.length).toBeGreaterThan(0);
     });
+
+    it('flushAndStop sends final buffer even when chunk limit exceeded', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+      forwarder.registerTask('task-force-flush', webhookSecret);
+
+      // Initialize state in Docker mode
+      forwarder.appendChunk('task-force-flush', 'seed line\n');
+
+      const internal = forwarder as unknown as { forwarders: Map<string, { chunksSent: number }> };
+      const state = internal.forwarders.get('task-force-flush');
+      expect(state).toBeDefined();
+      if (state === undefined) return;
+
+      // Simulate chunk limit reached before the final result message arrives
+      state.chunksSent = 500;
+
+      const resultJson = JSON.stringify({ type: 'result', result: 'final summary' });
+      forwarder.appendChunk('task-force-flush', `${resultJson}\n`);
+
+      await forwarder.flushAndStop('task-force-flush');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-force-flush');
+      expect(taskUploads.length).toBeGreaterThan(0);
+
+      const allContent = taskUploads
+        .flatMap((u) => u.chunks)
+        .map((c) => c.content)
+        .join('');
+      expect(allContent).toContain('"type":"result"');
+      expect(allContent).toContain('"result":"final summary"');
+    });
   });
 
   describe('sequence numbering', () => {

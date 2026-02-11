@@ -210,6 +210,8 @@ See [Ownership Mindset > Forbidden Language](#forbidden-language).
 
 ## Verification (MANDATORY)
 
+**RULE:** Run all verification commands from the repository top-level root, not from subdirectories.
+
 ### Step 1: Targeted Verification (per workspace)
 
 ```bash

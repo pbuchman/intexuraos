@@ -81,8 +81,8 @@ export class LogForwarder {
       state.partialLine = '';
     }
 
-    // Flush any remaining buffer content
-    await this.flushBuffer(taskId);
+    // Flush any remaining buffer content (force bypasses limit checks)
+    await this.flushBuffer(taskId, true);
 
     // Stop timer
     /* v8 ignore start -- test-infra: cannot set timer to non-null to test else branch without breaking startForwarding @preserve */
@@ -284,13 +284,13 @@ export class LogForwarder {
     /* v8 ignore stop @preserve */
   }
 
-  private async flushBuffer(taskId: string): Promise<void> {
+  private async flushBuffer(taskId: string, force = false): Promise<void> {
     const state = this.forwarders.get(taskId);
     if (!state || state.buffer.length === 0) return;
 
-    // Check size limits
+    // Check size limits (skipped when force=true, e.g. final flush from flushAndStop)
     /* v8 ignore start -- test-infra: requires sending 500 chunks to trigger, impractical in unit tests @preserve */
-    if (state.chunksSent >= MAX_CHUNKS_PER_TASK) {
+    if (!force && state.chunksSent >= MAX_CHUNKS_PER_TASK) {
       this.logger.warn(
         { taskId, chunksSent: state.chunksSent },
         'Max chunks per task reached, stopping uploads'
@@ -302,7 +302,7 @@ export class LogForwarder {
     /* v8 ignore stop @preserve */
 
     /* v8 ignore start -- test-infra: requires sending 4MB of log data to trigger, impractical in unit tests @preserve */
-    if (state.totalBytes >= MAX_TOTAL_LOG_SIZE) {
+    if (!force && state.totalBytes >= MAX_TOTAL_LOG_SIZE) {
       this.logger.warn(
         { taskId, totalBytes: state.totalBytes },
         'Max total log size reached, stopping uploads'

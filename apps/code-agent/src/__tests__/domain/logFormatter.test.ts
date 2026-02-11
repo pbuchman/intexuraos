@@ -99,7 +99,9 @@ describe('formatLogChunk', () => {
         output: 'line1\nline2\nline3\nline4\nline5\nline6\nline7'
       });
       const result = formatLogChunk(json, 0, ts());
-      expect(result[0]?.text).toBe('[hook] validate-lint \u2713 (exit 0)\n  line1\n  line2\n  ... 4 more lines ...\n  line7');
+      expect(result[0]?.text).toBe(
+        '[hook] validate-lint \u2713 (exit 0)\n  line1\n  line2\n  line3\n  line4\n  line5\n  line6\n  line7'
+      );
     });
 
     it('hook_response with empty/whitespace output', () => {
@@ -468,7 +470,7 @@ describe('formatLogChunk', () => {
         }
       });
       const result = formatLogChunk(json, 0, ts());
-      expect(result[0]?.text).toBe('  \u2192 5 lines');
+      expect(result[0]?.text).toBe('  \u2192 line1\n    line2\n    line3\n    line4\n    line5');
     });
 
     it('content over 200 chars but ≤3 lines', () => {
@@ -484,7 +486,7 @@ describe('formatLogChunk', () => {
         }
       });
       const result = formatLogChunk(json, 0, ts());
-      expect(result[0]?.text).toBe('  \u2192 ' + 'a'.repeat(200) + '...');
+      expect(result[0]?.text).toBe('  \u2192 ' + longContent);
     });
 
     it('empty/whitespace content', () => {
