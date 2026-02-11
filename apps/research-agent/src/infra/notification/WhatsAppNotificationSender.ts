@@ -63,7 +63,7 @@ export class WhatsAppNotificationSender implements NotificationSender {
 
   private formatResearchCompleteMessage(title: string, shareUrl: string): string {
     const displayTitle = title !== '' ? title : 'Untitled Research';
-    return `Research Complete!\n\n"${displayTitle}"\n${shareUrl}`;
+    return `📚 Research Complete!\n\n"${displayTitle}"\n${shareUrl}`;
   }
 
   private formatFailureMessage(model: string, error: string): string {

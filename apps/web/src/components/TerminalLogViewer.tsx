@@ -9,7 +9,7 @@ import {
   query,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { Copy, Loader2, Terminal } from 'lucide-react';
+import { ArrowDownToLine, CheckCircle2, Copy, Loader2, Terminal } from 'lucide-react';
 import { useAuth } from '@/context';
 import {
   getFirestoreClient,
@@ -18,7 +18,7 @@ import {
   initializeFirebase,
 } from '@/services/firebase';
 
-const MIN_TERMINAL_ROWS = 10;
+const MAX_TERMINAL_ROWS = 70;
 
 interface LogLineDoc {
   sequence: number;
@@ -38,6 +38,9 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const [logsLoading, setLogsLoading] = useState(true);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [lineCount, setLineCount] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [followLogs, setFollowLogs] = useState(true);
+  const followLogsRef = useRef(true);
 
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
@@ -73,7 +76,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
     requestAnimationFrame(() => {
       fitAddon.fit();
-      terminal.resize(terminal.cols, MIN_TERMINAL_ROWS);
+      terminal.resize(terminal.cols, MAX_TERMINAL_ROWS);
     });
 
     terminalRef.current = terminal;
@@ -137,15 +140,9 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
             }
 
             setLineCount((prev) => prev + addedLines.length);
-            terminal.write('', () => {
-              const t = terminalRef.current;
-              if (t === null) return;
-              const totalLines = t.buffer.active.length;
-              const maxRows = Math.min(totalLines, 100);
-              if (totalLines > t.rows) {
-                t.resize(t.cols, maxRows);
-              }
-            });
+            if (followLogsRef.current) {
+              terminal.scrollToBottom();
+            }
 
             setLogsLoading(false);
           },
@@ -174,6 +171,15 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     };
   }, [taskId, getAccessToken]);
 
+  const toggleFollow = (): void => {
+    const next = !followLogsRef.current;
+    followLogsRef.current = next;
+    setFollowLogs(next);
+    if (next) {
+      terminalRef.current?.scrollToBottom();
+    }
+  };
+
   const copyLogs = (): void => {
     const terminal = terminalRef.current;
     if (terminal === null) return;
@@ -187,7 +193,10 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
       }
     }
     const text = lines.join('\n').trimEnd();
-    void navigator.clipboard.writeText(text);
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => { setCopied(false); }, 2000);
+    });
   };
 
   return (
@@ -215,20 +224,34 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
             {lineCount} line{lineCount !== 1 ? 's' : ''}
           </span>
           {lineCount > 0 ? (
-            <button
-              type="button"
-              onClick={copyLogs}
-              className="rounded p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
-              title="Copy all logs"
-            >
-              <Copy className="h-4 w-4" />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={toggleFollow}
+                className={`rounded p-1.5 transition-colors ${followLogs ? 'text-blue-400 hover:text-blue-300 bg-blue-900/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'}`}
+                title={followLogs ? 'Following logs (click to stop)' : 'Follow logs'}
+              >
+                <ArrowDownToLine className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={copyLogs}
+                className="rounded p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
+                title={copied ? 'Copied!' : 'Copy all logs'}
+              >
+                {copied ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-400" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </button>
+            </>
           ) : null}
         </div>
       </div>
 
-      <div className="terminal-flow relative rounded-b-lg bg-slate-900 min-h-[200px]">
-        <div ref={terminalContainerRef} className="w-full" />
+      <div className="terminal-flow relative rounded-b-lg bg-slate-900 min-h-[200px] max-h-[1190px] overflow-hidden">
+        <div ref={terminalContainerRef} className="w-full p-2" />
         {logsLoading ? (
           <div className="absolute inset-0 flex items-center gap-2 rounded-b-lg p-4 text-slate-400 font-mono text-sm bg-slate-900">
             <Loader2 className="h-4 w-4 animate-spin" />

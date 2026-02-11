@@ -343,32 +343,56 @@ describe('LogForwarder', () => {
   });
 
   describe('chunking', () => {
-    it('should chunk by size when buffer exceeds 8KB', async () => {
+    it('should split multi-line content at line boundaries when buffer exceeds 64KB', async () => {
       const forwarder = createMockForwarder();
       captureUploadedChunks();
 
       const logFile = join(logBasePath, 'task-chunk.log');
       forwarder.startForwarding('task-chunk', logFile);
 
-      // Write content that exceeds 8KB
-      const largeContent = 'A'.repeat(10 * 1024); // 10KB
-      writeFileSync(logFile, largeContent, 'utf-8');
+      // Write many lines totalling >64KB — must split at newlines
+      const lines = Array.from({ length: 200 }, (_, i) => `line-${String(i)}: ${'X'.repeat(500)}`);
+      writeFileSync(logFile, lines.join('\n') + '\n', 'utf-8');
 
-      // Wait for processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await forwarder.stopForwarding('task-chunk');
 
-      // Should create multiple chunks
       const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-chunk');
       expect(taskUploads.length).toBeGreaterThan(0);
       const allChunks = taskUploads.flatMap((u) => u.chunks);
       expect(allChunks.length).toBeGreaterThan(1);
 
-      // Each chunk should be <= 8KB
+      // Each chunk should end with a newline (split at line boundaries)
       allChunks.forEach((chunk) => {
-        expect(chunk.content.length).toBeLessThanOrEqual(8 * 1024);
+        expect(chunk.content.endsWith('\n')).toBe(true);
       });
+    });
 
-      await forwarder.stopForwarding('task-chunk');
+    it('should keep a single long line intact instead of splitting mid-content', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+
+      const logFile = join(logBasePath, 'task-long-line.log');
+      forwarder.startForwarding('task-long-line', logFile);
+
+      // Two lines: one >64KB (kept intact) + one short line
+      // Total exceeds MAX_CHUNK_SIZE so flush triggers immediately
+      const longLine = 'A'.repeat(70 * 1024);
+      const content = longLine + '\nshort line\n';
+      writeFileSync(logFile, content, 'utf-8');
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await forwarder.stopForwarding('task-long-line');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-long-line');
+      expect(taskUploads.length).toBeGreaterThan(0);
+      const allChunks = taskUploads.flatMap((u) => u.chunks);
+
+      // The long line should be in one chunk (not split mid-content)
+      // even though it exceeds MAX_CHUNK_SIZE
+      expect(allChunks.length).toBe(2);
+      expect(allChunks[0]?.content).toContain('AAAA');
+      expect(allChunks[1]?.content).toContain('short line');
     });
 
     it('should chunk by time every 3 seconds', { timeout: 10000 }, async () => {
@@ -389,15 +413,15 @@ describe('LogForwarder', () => {
       await forwarder.stopForwarding('task-time');
     });
 
-    it('should truncate chunks larger than 8KB and preserve tail', async () => {
+    it('should truncate chunks larger than 64KB and preserve tail', async () => {
       const forwarder = createMockForwarder();
       captureUploadedChunks();
 
       const logFile = join(logBasePath, 'task-truncate.log');
       forwarder.startForwarding('task-truncate', logFile);
 
-      // Write content larger than 8KB without newlines
-      const largeContent = 'B'.repeat(10 * 1024);
+      // Write content larger than 64KB without newlines
+      const largeContent = 'B'.repeat(80 * 1024);
       writeFileSync(logFile, largeContent, 'utf-8');
 
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -408,9 +432,9 @@ describe('LogForwarder', () => {
       expect(taskUploads.length).toBeGreaterThan(0);
       const allChunks = taskUploads.flatMap((u) => u.chunks);
 
-      // All chunks should be <= 8KB
+      // All chunks should be <= 64KB after enforceChunkSize truncation
       allChunks.forEach((chunk) => {
-        expect(chunk.content.length).toBeLessThanOrEqual(8 * 1024);
+        expect(chunk.content.length).toBeLessThanOrEqual(64 * 1024);
       });
     });
   });
@@ -716,20 +740,19 @@ describe('LogForwarder', () => {
   });
 
   describe('splitIntoChunks', () => {
-    it('should prefer splitting at newline when within 80% of max size', async () => {
+    const MAX_CHUNK = 64 * 1024;
+
+    it('should split multi-line content at newline boundaries', async () => {
       const forwarder = createMockForwarder();
       captureUploadedChunks();
 
       const logFile = join(logBasePath, 'task-split.log');
       forwarder.startForwarding('task-split', logFile);
 
-      // Write content that has a newline within the 80% threshold of MAX_CHUNK_SIZE
-      // MAX_CHUNK_SIZE = 8192, 80% = 6553.6
-      const prefix = 'A'.repeat(6500); // Within 80%
-      const newline = '\n';
-      const suffix = 'B'.repeat(2000); // Total ~8700 bytes
-      const content = prefix + newline + suffix;
-      writeFileSync(logFile, content, 'utf-8');
+      // Two lines totalling >64KB — must split at the newline
+      const line1 = 'A'.repeat(60 * 1024) + '\n';
+      const line2 = 'B'.repeat(20 * 1024) + '\n';
+      writeFileSync(logFile, line1 + line2, 'utf-8');
 
       await new Promise((resolve) => setTimeout(resolve, 200));
       await forwarder.stopForwarding('task-split');
@@ -738,25 +761,22 @@ describe('LogForwarder', () => {
       expect(taskUploads.length).toBeGreaterThan(0);
       const allChunks = taskUploads.flatMap((u) => u.chunks);
 
-      // First chunk should be at most MAX_CHUNK_SIZE
-      const firstChunk = allChunks[0];
-      expect(firstChunk).toBeDefined();
-      expect(firstChunk?.content.length).toBeLessThanOrEqual(8192);
+      // Should split into 2 chunks at the newline boundary
+      expect(allChunks.length).toBe(2);
+      expect(allChunks[0]?.content).toContain('AAAA');
+      expect(allChunks[1]?.content).toContain('BBBB');
     });
 
-    it('should not split at newline when too far back', async () => {
+    it('should not split a single line even if it exceeds max chunk size', async () => {
       const forwarder = createMockForwarder();
       captureUploadedChunks();
 
       const logFile = join(logBasePath, 'task-nosplit.log');
       forwarder.startForwarding('task-nosplit', logFile);
 
-      // Write content where newline is far back (< 80% of max)
-      const prefix = 'A'.repeat(7000); // Beyond 80%
-      const newline = '\n';
-      const suffix = 'B'.repeat(2000);
-      const content = prefix + newline + suffix;
-      writeFileSync(logFile, content, 'utf-8');
+      // Single line >64KB with no internal newlines
+      const singleLine = 'C'.repeat(MAX_CHUNK + 5000) + '\n';
+      writeFileSync(logFile, singleLine, 'utf-8');
 
       await new Promise((resolve) => setTimeout(resolve, 200));
       await forwarder.stopForwarding('task-nosplit');
@@ -765,10 +785,8 @@ describe('LogForwarder', () => {
       expect(taskUploads.length).toBeGreaterThan(0);
       const allChunks = taskUploads.flatMap((u) => u.chunks);
 
-      // First chunk should be at max chunk size (not at the newline)
-      const firstChunk = allChunks[0];
-      expect(firstChunk).toBeDefined();
-      expect(firstChunk?.content.length).toBeLessThanOrEqual(8192);
+      // Single line kept intact as one chunk (enforceChunkSize may truncate it)
+      expect(allChunks.length).toBe(1);
     });
   });
 });
