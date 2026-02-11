@@ -86,7 +86,20 @@ For complex architectural decisions that need preserved reasoning:
 ### Completion Criteria
 
 After enriching the issue and adding EITHER \`code-task\` OR \`unclear\` label, **STOP**.
-Output: \`Phase 1 Complete. Issue enriched. Label '[code-task|unclear]' added. Awaiting Phase 2.\`
+
+Your LAST message must include exactly this block:
+
+\`\`\`
+PHASE1_FINAL:
+- Linear label set: <code-task|unclear>
+- Phase 2 ready: <yes|no>
+- Linear issue: <full Linear URL>
+- Summary: <one short sentence>
+\`\`\`
+
+Validation rules:
+- If label is \`code-task\`, Phase 2 ready must be \`yes\`.
+- If label is \`unclear\`, Phase 2 ready must be \`no\`.
 
 ### Structured Output
 Your output will be validated via JSON schema. Provide:
@@ -151,6 +164,18 @@ Follow all instructions from the Linear issue description and the user prompt.
 
 ### Resource Limits
 **NONE.** Complete the task regardless of token usage.${parentModeSection}
+
+### Completion Criteria (MANDATORY LAST MESSAGE)
+
+Your LAST message must include exactly this block:
+
+\`\`\`
+PHASE2_FINAL:
+- PR: <full GitHub PR URL>
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: <full Linear URL>
+- Summary: <one short sentence>
+\`\`\`
 
 ### Structured Output
 Your output will be validated via JSON schema. Provide:

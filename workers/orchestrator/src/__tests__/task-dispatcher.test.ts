@@ -56,6 +56,40 @@ const createMockChildProcess = (): ChildProcess =>
     [Symbol.dispose]: vi.fn(),
   }) as unknown as ChildProcess;
 
+const phase1FinalAssistantLog = (label: 'code-task' | 'unclear', ready: 'yes' | 'no'): string =>
+  JSON.stringify({
+    type: 'assistant',
+    message: {
+      content: [
+        {
+          type: 'text',
+          text: `PHASE1_FINAL:
+- Linear label set: ${label}
+- Phase 2 ready: ${ready}
+- Linear issue: https://linear.app/intexuraos/issue/INT-123
+- Summary: Phase 1 completed`,
+        },
+      ],
+    },
+  });
+
+const phase2FinalAssistantLog = (): string =>
+  JSON.stringify({
+    type: 'assistant',
+    message: {
+      content: [
+        {
+          type: 'text',
+          text: `PHASE2_FINAL:
+- PR: https://github.com/pbuchman/intexuraos/pull/123
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-123
+- Summary: Phase 2 completed`,
+        },
+      ],
+    },
+  });
+
 describe('TaskDispatcher', () => {
   // Mock config
   const mockConfig: OrchestratorConfig = {
@@ -293,6 +327,8 @@ describe('TaskDispatcher', () => {
     });
 
     it('should pass jsonSchema in worker config', async () => {
+      const previous = process.env['INTEXURAOS_WORKER_JSON_SCHEMA_ENABLED'];
+      process.env['INTEXURAOS_WORKER_JSON_SCHEMA_ENABLED'] = '1';
       const request: CreateTaskRequest = {
         taskId: 'schema-test',
         workerType: 'auto',
@@ -315,6 +351,12 @@ describe('TaskDispatcher', () => {
       const required = parsed['required'] as string[];
       expect(required).toContain('prUrl');
       expect(required).toContain('ciPassed');
+
+      if (previous === undefined) {
+        delete process.env['INTEXURAOS_WORKER_JSON_SCHEMA_ENABLED'];
+      } else {
+        process.env['INTEXURAOS_WORKER_JSON_SCHEMA_ENABLED'] = previous;
+      }
     });
 
     it('should use provided repository and baseBranch when given', async () => {
@@ -1106,6 +1148,9 @@ describe('TaskDispatcher', () => {
 
     it('should handle gh command JSON parse failure gracefully', async () => {
       vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        phase1FinalAssistantLog('unclear', 'no')
+      );
 
       const resultDispatcher = new TaskDispatcher(
         mockConfig,
@@ -1239,6 +1284,9 @@ describe('TaskDispatcher', () => {
     });
 
     it('should mark Phase 1 task as completed without PR', async () => {
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        phase1FinalAssistantLog('unclear', 'no')
+      );
       const request: CreateTaskRequest = {
         taskId: 'phase1-no-pr',
         workerType: 'auto',
@@ -1260,6 +1308,7 @@ describe('TaskDispatcher', () => {
     });
 
     it('should mark Phase 2 task as failed without PR', async () => {
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(phase2FinalAssistantLog());
       const request: CreateTaskRequest = {
         taskId: 'phase2-no-pr',
         workerType: 'auto',

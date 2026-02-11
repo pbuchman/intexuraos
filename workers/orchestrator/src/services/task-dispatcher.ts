@@ -54,6 +54,7 @@ export class TaskDispatcher {
   private readonly capacityMutex = new Mutex();
   private readonly activeTasks = new Map<string, NodeJS.Timeout>();
   private readonly claudeErrors = new Map<string, string>();
+  private readonly taskExitCodes = new Map<string, number>();
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -109,6 +110,7 @@ export class TaskDispatcher {
 
       // Start Docker container worker
       let containerId: string;
+      const schemaEnabled = process.env['INTEXURAOS_WORKER_JSON_SCHEMA_ENABLED'] === '1';
       const workerConfig: WorkerConfig = {
         taskId,
         worktreePath,
@@ -122,15 +124,17 @@ export class TaskDispatcher {
           hasChildren: request.hasChildren,
         }),
         /* v8 ignore stop @preserve */
-        jsonSchema: JSON.stringify(
-          buildOutputSchema({
-            taskId,
-            worktreePath,
-            ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
-            linearIssueLabels: request.linearIssueLabels,
-            hasChildren: request.hasChildren,
-          })
-        ),
+        ...(schemaEnabled && {
+          jsonSchema: JSON.stringify(
+            buildOutputSchema({
+              taskId,
+              worktreePath,
+              ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
+              linearIssueLabels: request.linearIssueLabels,
+              hasChildren: request.hasChildren,
+            })
+          ),
+        }),
         workerType: request.workerType,
         secrets: this.isolation.secrets,
         gcpSaKeyPath: this.isolation.gcpSaKeyPath,
@@ -140,7 +144,8 @@ export class TaskDispatcher {
           this.logForwarder.appendChunk(taskId, cleaned);
           this.detectClaudeError(taskId, cleaned);
         },
-        onComplete: () => {
+        onComplete: (exitCode) => {
+          this.taskExitCodes.set(taskId, exitCode);
           this.logForwarder.flushAndStop(taskId).catch((error: unknown) => {
             this.logger.error({ taskId, error }, 'Failed to flush logs on completion');
           });
@@ -284,6 +289,7 @@ export class TaskDispatcher {
       this.logForwarder.unregisterTask(taskId);
       this.isolation.tokenRefresher.unregisterTask(taskId);
       this.claudeErrors.delete(taskId);
+      this.taskExitCodes.delete(taskId);
 
       // Update task status
       task.status = 'cancelled';
@@ -393,6 +399,7 @@ export class TaskDispatcher {
           this.logForwarder.unregisterTask(taskId);
           this.isolation.tokenRefresher.unregisterTask(taskId);
           this.claudeErrors.delete(taskId);
+          this.taskExitCodes.delete(taskId);
 
           // Check for PR
           const result = await this.checkForResult(task);
@@ -471,16 +478,19 @@ export class TaskDispatcher {
     // Check for PR
     const result = await this.checkForResult(task);
 
-    // Determine final status based on phase
-    // Phase 2 (code-task label): PR is required
-    // Phase 1 / informational: PR is optional, task completes without one
-    const isPhase2 = task.linearIssueLabels.includes('code-task');
+    // Determine final status based on phase/final-message contract
+    const isPhase2 = this.hasCodeTaskLabel(task.linearIssueLabels);
     let finalStatus: TaskStatus;
     let error: TaskError | undefined;
 
     // Check if Claude reported an error in its stream result
     const claudeError = this.claudeErrors.get(task.taskId);
     this.claudeErrors.delete(task.taskId);
+    const exitCode = this.taskExitCodes.get(task.taskId);
+    this.taskExitCodes.delete(task.taskId);
+
+    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
+    const verification = this.verifyCompletionContract(rawLogs, isPhase2);
 
     /* v8 ignore start -- ts-type: optional chaining on result?.prUrl creates type narrowing branch @preserve */
     if (claudeError !== undefined) {
@@ -490,15 +500,31 @@ export class TaskDispatcher {
         message: claudeError,
         remediation: { action: 'retry' },
       };
-    } else if (result?.prUrl !== undefined) {
-      finalStatus = 'completed';
-    } else if (isPhase2) {
+    } else if (typeof exitCode === 'number' && exitCode !== 0) {
       finalStatus = 'failed';
       error = {
-        code: 'NO_PR_CREATED',
-        message: 'Task completed but no PR was created',
+        code: 'WORKER_EXIT_NONZERO',
+        message: `Worker exited with non-zero code: ${String(exitCode)}`,
         remediation: { action: 'retry' },
       };
+    } else if (!verification.ok) {
+      finalStatus = 'failed';
+      error = {
+        code: 'TASK_COMPLETION_CONTRACT_NOT_MET',
+        message: verification.reason,
+        remediation: { action: 'retry' },
+      };
+    } else if (isPhase2) {
+      if (result?.prUrl !== undefined) {
+        finalStatus = 'completed';
+      } else {
+        finalStatus = 'failed';
+        error = {
+          code: 'NO_PR_CREATED',
+          message: 'Task completed but no PR was created',
+          remediation: { action: 'retry' },
+        };
+      }
     } else {
       finalStatus = 'completed';
     }
@@ -625,6 +651,119 @@ export class TaskDispatcher {
       this.logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
       return undefined;
     }
+  }
+
+  private hasCodeTaskLabel(labels: string[]): boolean {
+    return labels.some((label) => {
+      const normalized = label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
+      return normalized === 'code-task';
+    });
+  }
+
+  private verifyCompletionContract(
+    rawLogs: string,
+    isPhase2: boolean
+  ): { ok: true } | { ok: false; reason: string } {
+    const lastAssistantMessage = this.extractLastAssistantMessage(rawLogs);
+    if (lastAssistantMessage === null) {
+      return { ok: false, reason: 'Missing assistant final message in worker logs' };
+    }
+
+    if (!isPhase2) {
+      return this.verifyPhase1Final(lastAssistantMessage);
+    }
+    return this.verifyPhase2Final(lastAssistantMessage);
+  }
+
+  private extractLastAssistantMessage(rawLogs: string): string | null {
+    let lastAssistantText: string | null = null;
+
+    for (const rawLine of stripDockerHeaders(rawLogs).split('\n')) {
+      const line = rawLine.trim();
+      if (line === '') continue;
+      const jsonStart = line.indexOf('{');
+      if (jsonStart === -1) continue;
+      const candidate = line.slice(jsonStart);
+
+      try {
+        const parsed = JSON.parse(candidate) as {
+          type?: string;
+          message?: { content?: { type?: string; text?: string }[] };
+        };
+        if (parsed.type !== 'assistant') continue;
+        const text = (parsed.message?.content ?? [])
+          .filter((part) => part.type === 'text' && typeof part.text === 'string')
+          .map((part) => part.text ?? '')
+          .join('\n')
+          .trim();
+        if (text !== '') {
+          lastAssistantText = text;
+        }
+      } catch {
+        // Ignore non-JSON lines
+      }
+    }
+
+    return lastAssistantText;
+  }
+
+  private verifyPhase1Final(message: string): { ok: true } | { ok: false; reason: string } {
+    if (!message.includes('PHASE1_FINAL:')) {
+      return { ok: false, reason: 'Missing PHASE1_FINAL block in final message' };
+    }
+    const labelMatch = /- Linear label set:\s*(code-task|unclear)\s*$/im.exec(message);
+    const readyMatch = /- Phase 2 ready:\s*(yes|no)\s*$/im.exec(message);
+    const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
+    const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
+
+    if (labelMatch?.[1] === undefined) {
+      return { ok: false, reason: 'Missing or invalid Phase 1 label line' };
+    }
+    if (readyMatch?.[1] === undefined) {
+      return { ok: false, reason: 'Missing or invalid Phase 1 readiness line' };
+    }
+    if (linearMatch?.[1] === undefined) {
+      return { ok: false, reason: 'Missing Linear issue URL in Phase 1 final block' };
+    }
+    if ((summaryMatch?.[1] ?? '').trim() === '') {
+      return { ok: false, reason: 'Missing summary in Phase 1 final block' };
+    }
+
+    const label = labelMatch[1].toLowerCase();
+    const ready = readyMatch[1].toLowerCase();
+    if (label === 'code-task' && ready !== 'yes') {
+      return { ok: false, reason: 'Phase 1 contract mismatch: code-task requires Phase 2 ready yes' };
+    }
+    if (label === 'unclear' && ready !== 'no') {
+      return { ok: false, reason: 'Phase 1 contract mismatch: unclear requires Phase 2 ready no' };
+    }
+
+    return { ok: true };
+  }
+
+  private verifyPhase2Final(message: string): { ok: true } | { ok: false; reason: string } {
+    if (!message.includes('PHASE2_FINAL:')) {
+      return { ok: false, reason: 'Missing PHASE2_FINAL block in final message' };
+    }
+    const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
+    const ciMatch = /- CI evidence:\s*pnpm run ci:tracked successful\s*$/im.exec(message);
+    const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
+    const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
+
+    if (prMatch?.[1] === undefined) {
+      return { ok: false, reason: 'Missing PR URL in Phase 2 final block' };
+    }
+    if (ciMatch?.[0] === undefined) {
+      return { ok: false, reason: 'Missing CI evidence line in Phase 2 final block' };
+    }
+    if (linearMatch?.[1] === undefined) {
+      return { ok: false, reason: 'Missing Linear issue URL in Phase 2 final block' };
+    }
+    if ((summaryMatch?.[1] ?? '').trim() === '') {
+      return { ok: false, reason: 'Missing summary in Phase 2 final block' };
+    }
+
+    return { ok: true };
   }
 
   private detectClaudeError(taskId: string, chunk: string): void {
