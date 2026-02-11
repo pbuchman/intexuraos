@@ -1201,7 +1201,7 @@ describe('linearRoutes', () => {
         priority: 2,
         assigneeId: null,
         assigneeName: null,
-        labels: ['bug', 'high-priority'],
+        labels: [{ id: 'bug', name: 'bug', color: '#ff0000' }, { id: 'high-priority', name: 'high-priority', color: '#ff6600' }],
         url: 'https://linear.app/issue/ENG-123',
         userId: 'test-user-123',
         createdAt: '2025-01-15T00:00:00Z',

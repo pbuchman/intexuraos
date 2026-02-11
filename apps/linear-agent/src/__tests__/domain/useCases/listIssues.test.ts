@@ -58,7 +58,7 @@ describe('listIssues', () => {
       priority: issue.priority,
       assigneeId: null,
       assigneeName: null,
-      labels: [],
+      labels: issue.labels,
       url: issue.url,
       userId,
       parentId: issue.parentId ?? null,
@@ -89,6 +89,7 @@ describe('listIssues', () => {
       completedAt: null,
       childCount: 0,
       children: [],
+      labels: [],
       ...overrides,
     };
   }
@@ -307,6 +308,69 @@ describe('listIssues', () => {
       if (result.ok) {
         expect(result.value.issues.done).toHaveLength(1);
         expect(result.value.issues.archive).toHaveLength(0);
+      }
+    });
+  });
+
+  describe('labels', () => {
+    beforeEach(() => {
+      setupConnectedUser();
+    });
+
+    it('includes labels in returned issues', async () => {
+      const today = new Date();
+
+      seedIssue(
+        createIssue({
+          id: 'issue-1',
+          title: 'Issue with labels',
+          state: { id: 's1', name: 'Todo', type: 'unstarted' },
+          updatedAt: today.toISOString(),
+          labels: [
+            { id: 'label-1', name: 'bug', color: '#ff0000' },
+            { id: 'label-2', name: 'frontend', color: '#00ff00' },
+          ],
+        })
+      );
+
+      const result = await listIssues(defaultRequest, {
+        issueRepository: fakeIssueRepo,
+        connectionRepository: fakeConnectionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.issues.todo).toHaveLength(1);
+        const issue = result.value.issues.todo[0];
+        expect(issue?.labels).toEqual([
+          { id: 'label-1', name: 'bug', color: '#ff0000' },
+          { id: 'label-2', name: 'frontend', color: '#00ff00' },
+        ]);
+      }
+    });
+
+    it('handles issues with no labels', async () => {
+      const today = new Date();
+
+      seedIssue(
+        createIssue({
+          id: 'issue-1',
+          title: 'Issue without labels',
+          state: { id: 's1', name: 'Todo', type: 'unstarted' },
+          updatedAt: today.toISOString(),
+          labels: [],
+        })
+      );
+
+      const result = await listIssues(defaultRequest, {
+        issueRepository: fakeIssueRepo,
+        connectionRepository: fakeConnectionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.issues.todo).toHaveLength(1);
+        expect(result.value.issues.todo[0]?.labels).toEqual([]);
       }
     });
   });

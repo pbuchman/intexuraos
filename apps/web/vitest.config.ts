@@ -38,6 +38,9 @@ export default defineConfig({
     include: ['src/**/__tests__/**/*.ts', 'src/**/__tests__/**/*.tsx'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/__tests__/setup.ts'],
     setupFiles: ['./src/__tests__/setup.ts'],
+    typecheck: {
+      enabled: false,
+    },
     testTimeout: 10000,
     hookTimeout: 30000,
     coverage: {

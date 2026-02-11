@@ -25,7 +25,7 @@ function createTestIssue(overrides: Partial<SyncedLinearIssue> = {}): SyncedLine
     priority: 2,
     assigneeId: 'user-1',
     assigneeName: 'Test User',
-    labels: ['bug', 'frontend'],
+    labels: [{ id: 'bug', name: 'bug', color: '#ff0000' }, { id: 'frontend', name: 'frontend', color: '#00ff00' }],
     url: 'https://linear.app/team/issue/INT-123',
     userId: 'user-123',
     createdAt: '2025-01-01T00:00:00.000Z',

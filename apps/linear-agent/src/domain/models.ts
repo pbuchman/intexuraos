@@ -5,6 +5,13 @@
 /** Linear issue priority values */
 export type LinearPriority = 0 | 1 | 2 | 3 | 4;
 
+/** Linear label with id, name, and color */
+export interface LinearLabel {
+  id: string;
+  name: string;
+  color: string;
+}
+
 /** Priority mapping: 0=none, 1=urgent, 2=high, 3=normal, 4=low */
 export const PRIORITY_LABELS: Record<LinearPriority, string> = {
   0: 'No priority',
@@ -39,13 +46,13 @@ export interface LinearIssue {
   childCount: number;
   /** Child issues (populated when includeChildren=true) */
   children: LinearIssue[];
+  /** Labels associated with the issue */
+  labels: LinearLabel[];
 }
 
 /** Linear issue with team ID for validation */
 export interface LinearIssueWithTeam extends LinearIssue {
   teamId: string;
-  /** Label names associated with the issue (e.g., ['bug', 'code-task']) */
-  labels: string[];
   /** Number of child issues (subtasks) */
   childCount: number;
 }
@@ -187,7 +194,7 @@ export interface SyncedLinearIssue {
   priority: LinearPriority;
   assigneeId: string | null;
   assigneeName: string | null;
-  labels: string[];
+  labels: LinearLabel[];
   url: string;
   userId: string; /* Owner user ID (for multi-tenant) */
   parentId: string | null; /* Parent issue UUID (null for top-level issues) */

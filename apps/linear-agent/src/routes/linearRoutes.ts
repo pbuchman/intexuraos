@@ -510,7 +510,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
         assignee: issue.assigneeId !== null ? { id: issue.assigneeId, name: issue.assigneeName ?? '' } : null,
         /* v8 ignore stop @preserve */
-        labels: issue.labels.map((name: string) => ({ id: name, name })),
+        labels: issue.labels.map((label) => ({ id: label.id, name: label.name, color: label.color })),
         url: issue.url,
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt,

@@ -140,6 +140,7 @@ describe('LinearApiClient', () => {
         completedAt: null,
         childCount: 0,
         children: [],
+        labels: [],
       });
       fakeClient.seedIssue({
         id: 'issue-2',
@@ -154,6 +155,7 @@ describe('LinearApiClient', () => {
         completedAt: '2025-01-15T10:00:00Z',
         childCount: 0,
         children: [],
+        labels: [],
       });
     });
 
@@ -200,6 +202,7 @@ describe('LinearApiClient', () => {
         completedAt: null,
         childCount: 0,
         children: [],
+        labels: [],
       });
     });
 

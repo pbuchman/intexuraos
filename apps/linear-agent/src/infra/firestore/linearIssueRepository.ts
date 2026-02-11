@@ -6,6 +6,7 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
   SyncedLinearIssue,
+  LinearLabel,
   LinearIssueRepository,
   LinearError,
   IssueStateCategory,
@@ -22,7 +23,7 @@ interface SyncedLinearIssueDoc {
   priority: LinearPriority;
   assigneeId: string | null;
   assigneeName: string | null;
-  labels: string[];
+  labels: LinearLabel[];
   url: string;
   userId: string;
   parentId?: string | null;

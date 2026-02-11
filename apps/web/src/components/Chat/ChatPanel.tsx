@@ -61,7 +61,7 @@ function shouldShowTimeSeparator(
 function TimeSeparator({ timestamp }: { timestamp: number }): React.JSX.Element {
   return (
     <div className="flex justify-center my-3">
-      <span className="text-xs text-gray-400 dark:text-gray-500">
+      <span className="text-xs text-gray-400 dark:text-gray-500" data-testid="chat-message-timestamp">
         {formatTimeSeparator(timestamp)}
       </span>
     </div>

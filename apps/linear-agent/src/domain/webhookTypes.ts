@@ -26,6 +26,7 @@ export interface LinearWebhookPayload {
   labels: {
     id: string;
     name: string;
+    color?: string; // Not provided by webhooks, only by API
   }[];
   team: {
     id: string;

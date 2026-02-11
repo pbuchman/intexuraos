@@ -57,7 +57,7 @@ interface IssueCardProps {
 
 function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-600 dark:bg-slate-700 dark:hover:border-blue-500">
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-600 dark:bg-slate-700 dark:hover:border-blue-500">
       <a
         href={issue.url}
         target="_blank"
@@ -65,7 +65,23 @@ function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
         className="block p-4"
       >
         <div className="mb-2 flex items-start justify-between gap-2">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{issue.identifier}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{issue.identifier}</span>
+            {issue.labels.length > 0 && (
+              <span className="flex items-center gap-1">
+                {issue.labels.map((label) => (
+                  <span
+                    key={label.id}
+                    className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                    // eslint-disable-next-line no-restricted-syntax -- Dynamic label colors from API require inline styles
+                    style={{ backgroundColor: `${label.color}20`, color: label.color }}
+                  >
+                    {label.name}
+                  </span>
+                ))}
+              </span>
+            )}
+          </div>
           <span
             className={`rounded px-2 py-0.5 text-xs font-medium ${String(PRIORITY_COLORS[issue.priority] ?? PRIORITY_COLORS[0])}`}
           >
@@ -123,23 +139,37 @@ function SubIssuesList({ issues }: SubIssuesListProps): React.JSX.Element | null
   };
 
   return (
-    <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-600">
+    <div className="mt-3 border-t border-slate-200 px-3 pt-3 pb-1 dark:border-slate-600">
       <div className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-400">
         Sub-issues ({issues.length})
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {issues.map((child) => (
           <a
             key={child.id}
             href={child.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="group flex items-center gap-2 rounded px-2 py-1.5 text-xs text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            className="group flex flex-wrap items-center gap-x-2 gap-y-1 rounded px-3 py-2 text-xs text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
           >
             {getStatusIcon(child)}
             <span className="font-medium text-slate-500 dark:text-slate-500">{child.identifier}</span>
             <span className="truncate">{child.title}</span>
+            {child.labels.length > 0 && (
+              <span className="flex items-center gap-1">
+                {child.labels.map((label) => (
+                  <span
+                    key={label.id}
+                    className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                    // eslint-disable-next-line no-restricted-syntax -- Dynamic label colors from API require inline styles
+                    style={{ backgroundColor: `${label.color}20`, color: label.color }}
+                  >
+                    {label.name}
+                  </span>
+                ))}
+              </span>
+            )}
             <ExternalLink className="ml-auto h-3 w-3 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
           </a>
         ))}
@@ -688,6 +718,7 @@ export function LinearIssuesPage(): React.JSX.Element {
         {/* Column 1: Todo + Backlog (stacked) */}
         <StackedColumn
           title="Planning"
+          colorClass="bg-slate-200/50 dark:bg-slate-800"
           sections={[
             {
               title: 'Todo',
@@ -702,7 +733,6 @@ export function LinearIssuesPage(): React.JSX.Element {
               colorClass: 'bg-slate-50 dark:bg-slate-700/50',
             },
           ]}
-          colorClass="bg-slate-50 dark:bg-slate-800"
         />
 
         {/* Column 2: In Progress → In Review → To Test (stacked) */}
@@ -713,7 +743,7 @@ export function LinearIssuesPage(): React.JSX.Element {
               title: 'In Progress',
               icon: <Clock className="h-3 w-3 text-blue-500" />,
               issues: columnIssues.in_progress,
-              colorClass: 'bg-blue-50 dark:bg-blue-900/20',
+              colorClass: 'bg-orange-50 dark:bg-orange-900/20',
             },
             {
               title: 'In Review',

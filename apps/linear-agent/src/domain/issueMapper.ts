@@ -1,11 +1,13 @@
 /**
  * Maps Linear webhook/API payloads to SyncedLinearIssue.
  */
-import type { SyncedLinearIssue, LinearIssue } from './models.js';
+import type { SyncedLinearIssue, LinearIssue, LinearLabel } from './models.js';
 import type { LinearWebhookPayload } from './webhookTypes.js';
 
 /**
  * Map webhook payload to SyncedLinearIssue.
+ * Note: Webhook labels don't include color, so we use empty string as default.
+ * Full sync will populate the color field.
  */
 export function mapWebhookToSyncedIssue(
   payload: LinearWebhookPayload,
@@ -13,6 +15,12 @@ export function mapWebhookToSyncedIssue(
 ): SyncedLinearIssue {
   const stateType = parseStateType(payload.state.type);
   const priority = parsePriority(payload.priority);
+
+  const labels: LinearLabel[] = payload.labels.map((l) => ({
+    id: l.id,
+    name: l.name,
+    color: l.color ?? '', // Webhook doesn't provide color
+  }));
 
   return {
     id: payload.id,
@@ -24,7 +32,7 @@ export function mapWebhookToSyncedIssue(
     priority,
     assigneeId: payload.assignee?.id ?? null,
     assigneeName: payload.assignee?.name ?? null,
-    labels: payload.labels.map((l) => l.name),
+    labels,
     url: payload.url,
     userId,
     parentId: payload.parent?.id ?? null,
@@ -54,7 +62,7 @@ export function mapApiIssueToSyncedIssue(
     priority: issue.priority,
     assigneeId: null, // API LinearIssue doesn't include assignee
     assigneeName: null,
-    labels: [], // API LinearIssue doesn't include labels array
+    labels: issue.labels,
     url: issue.url,
     userId,
     parentId: issue.parentId ?? null,

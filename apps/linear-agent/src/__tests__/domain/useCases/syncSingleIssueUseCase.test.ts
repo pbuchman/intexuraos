@@ -75,7 +75,7 @@ describe('syncSingleIssue', () => {
         expect(saved.value.priority).toBe(2);
         expect(saved.value.assigneeId).toBe('user-1');
         expect(saved.value.assigneeName).toBe('Test User');
-        expect(saved.value.labels).toEqual(['bug']);
+        expect(saved.value.labels).toEqual([{ id: 'label-1', name: 'bug', color: '' }]);
         expect(saved.value.userId).toBe(userId);
       }
     });
