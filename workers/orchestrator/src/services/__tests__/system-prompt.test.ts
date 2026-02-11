@@ -63,8 +63,9 @@ describe('system-prompt', () => {
         });
 
         expect(result).toContain('After enriching the issue and adding EITHER');
-        expect(result).toContain('Phase 1 Complete');
-        expect(result).toContain('Issue enriched');
+        expect(result).toContain('PHASE1_FINAL:');
+        expect(result).toContain('- Linear label set: <code-task|unclear>');
+        expect(result).toContain('- Phase 2 ready: <yes|no>');
       });
 
       it('should include WORKER-MODE marker in Phase 1', () => {

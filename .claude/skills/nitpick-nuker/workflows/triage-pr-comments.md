@@ -170,6 +170,29 @@ echo "$SUMMARY_JSON" > /tmp/nitpick-summary.json
 "$SKILL_DIR/scripts/post-summary.sh" "$PR_NUMBER" /tmp/nitpick-summary.json
 ```
 
+Summary format requirement (mandatory):
+- Use GitHub Markdown tables with exactly one row per line.
+- Keep table header + separator contiguous (no text between them).
+- Keep separator + first data row contiguous (no blank line before `${FIXED_ROWS}`/`${SKIPPED_ROWS}`).
+- Escape any `|` in cell text as `\|` and flatten newlines in cells to spaces.
+- Post using `gh pr comment --body-file` to preserve line breaks exactly.
+
+Canonical shape:
+```md
+## 🚀 Nitpick Nuker Report
+**PR:** #<number> | **Run:** <iso8601> | **Commit:** `<sha>`
+
+### ✅ Fixed (<count>)
+| Comment | Author | Action |
+| ------- | ------ | ------ |
+| [view](...) | @user | Fixed ... |
+
+### ⏭️ Skipped (<count>)
+| Comment | Author | Reason |
+| ------- | ------ | ------ |
+| [view](...) | @user | Historical thread; no branch-specific action required |
+```
+
 ## Data Structures
 
 ### Comment JSON (from fetch script)
