@@ -331,7 +331,7 @@ describe('internalIssuesRoutes', () => {
       priority: 2,
       assigneeId: 'user-456',
       assigneeName: 'John Doe',
-      labels: ['bug', 'high-priority'],
+      labels: [{ id: 'bug', name: 'bug', color: '#ff0000' }, { id: 'high-priority', name: 'high-priority', color: '#ff6600' }],
       url: 'https://linear.app/test/ENG-456',
       userId: testUserId,
       createdAt: '2024-01-15T10:00:00.000Z',

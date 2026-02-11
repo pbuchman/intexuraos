@@ -73,21 +73,41 @@ function validateApiKeyFormat(provider: LlmProvider, key: string): string | null
   return null;
 }
 
+interface TestResults {
+  google: LlmTestResult | null;
+  openai: LlmTestResult | null;
+  anthropic: LlmTestResult | null;
+  perplexity: LlmTestResult | null;
+  zai: LlmTestResult | null;
+}
+
 /**
  * Group fast models by their provider for the dropdown.
+ * Only includes providers that are configured AND have passing test results.
  */
 function groupModelsByProvider(
-  configuredProviders: Set<string>
+  configuredProviders: Set<string>,
+  testResults: TestResults | undefined
 ): { provider: string; label: string; models: { model: FastModel; name: string; disabled: boolean }[] }[] {
   const groups = new Map<string, { model: FastModel; name: string; disabled: boolean }[]>();
 
   for (const model of ALL_FAST_MODELS) {
     const provider = MODEL_PROVIDER_MAP[model] as string;
+
+    // Skip providers that aren't configured or have failed tests
+    const isConfigured = configuredProviders.has(provider);
+    const testResult = testResults?.[provider as keyof TestResults];
+    const hasPassingTest = testResult?.status === 'success';
+
+    if (!isConfigured || !hasPassingTest) {
+      continue;
+    }
+
     const existing = groups.get(provider) ?? [];
     existing.push({
       model,
       name: FAST_MODEL_DISPLAY_NAMES[model],
-      disabled: !configuredProviders.has(provider),
+      disabled: false,
     });
     groups.set(provider, existing);
   }
@@ -124,7 +144,7 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
   if (keys?.perplexity !== null && keys?.perplexity !== undefined) configuredProviders.add(LlmProviders.Perplexity);
   if (keys?.zai !== null && keys?.zai !== undefined) configuredProviders.add(LlmProviders.Zai);
 
-  const modelGroups = groupModelsByProvider(configuredProviders);
+  const modelGroups = groupModelsByProvider(configuredProviders, keys?.testResults);
 
   const currentProvider = defaultModel !== null
     ? (MODEL_PROVIDER_MAP[defaultModel as FastModel] as ContractLlmProvider | undefined) ?? null

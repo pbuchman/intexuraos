@@ -6,7 +6,7 @@
 
 import type { Result, Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import type { LinearApiClient, LinearConnectionRepository } from '../index.js';
+import type { LinearApiClient, LinearConnectionRepository, LinearLabel } from '../index.js';
 
 export interface ValidateIssueDeps {
   linearApiClient: LinearApiClient;
@@ -25,7 +25,7 @@ export interface ValidatedIssue {
   title: string;
   url: string;
   /** Labels from the Linear issue */
-  labels: string[];
+  labels: LinearLabel[];
   /** Number of child issues */
   childCount: number;
 }

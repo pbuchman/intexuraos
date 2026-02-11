@@ -51,7 +51,10 @@ describe('issueMapper', () => {
       expect(result.priority).toBe(2);
       expect(result.assigneeId).toBe('user-1');
       expect(result.assigneeName).toBe('Test User');
-      expect(result.labels).toEqual(['bug', 'frontend']);
+      expect(result.labels).toEqual([
+        { id: 'label-1', name: 'bug', color: '' },
+        { id: 'label-2', name: 'frontend', color: '' },
+      ]);
       expect(result.url).toBe('https://linear.app/team/issue/INT-123');
       expect(result.userId).toBe(userId);
       expect(result.createdAt).toBe('2025-01-01T00:00:00.000Z');
@@ -135,6 +138,7 @@ describe('issueMapper', () => {
         completedAt: null,
         childCount: 0,
         children: [],
+        labels: [],
         ...overrides,
       };
     }
@@ -171,6 +175,22 @@ describe('issueMapper', () => {
       const result = mapApiIssueToSyncedIssue(issue, userId, 'team-1');
 
       expect(result.labels).toEqual([]);
+    });
+
+    it('includes labels from API response', () => {
+      const issue = createApiIssue({
+        labels: [
+          { id: 'label-1', name: 'bug', color: '#ff0000' },
+          { id: 'label-2', name: 'frontend', color: '#00ff00' },
+        ],
+      });
+
+      const result = mapApiIssueToSyncedIssue(issue, userId, 'team-1');
+
+      expect(result.labels).toEqual([
+        { id: 'label-1', name: 'bug', color: '#ff0000' },
+        { id: 'label-2', name: 'frontend', color: '#00ff00' },
+      ]);
     });
   });
 });

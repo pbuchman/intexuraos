@@ -210,6 +210,7 @@ describe('linearApiClient helper functions', () => {
         completedAt: null,
         childCount: 0,
         children: [],
+        labels: [],
         ...overrides,
       };
     }

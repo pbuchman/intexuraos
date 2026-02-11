@@ -285,6 +285,7 @@ export class FakeLinearApiClient implements LinearApiClient {
       completedAt: null,
       childCount: 0,
       children: [],
+      labels: [],
     };
 
     this.issues.push(issue);

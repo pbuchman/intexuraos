@@ -15,6 +15,7 @@ import type {
   LinearApiClient,
   LinearIssue,
   LinearIssueWithTeam,
+  LinearLabel,
   LinearTeam,
   CreateIssueInput,
   LinearError,
@@ -112,6 +113,17 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
   });
   const parentIds = await Promise.all(parentPromises);
 
+  // Batch fetch all labels
+  const labelsPromises = issues.map(async (issue) => {
+    const labelsConnection = await issue.labels();
+    return labelsConnection.nodes.map((l) => ({
+      id: l.id,
+      name: l.name,
+      color: l.color,
+    })) satisfies LinearLabel[];
+  });
+  const allLabels = await Promise.all(labelsPromises);
+
   return issues.map((issue, index) => {
     const state = states[index] as IssueState | null | undefined;
     return {
@@ -132,6 +144,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
       parentId: parentIds[index] ?? null,
       childCount: childCounts[index] ?? 0,
       children: [],
+      labels: allLabels[index] ?? [],
     };
   });
 }
@@ -141,6 +154,14 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
   const state = (await issue.state) as IssueState | null | undefined;
   const children = await issue.children();
   const parent = await issue.parent;
+
+  // Fetch labels for the issue
+  const labelsConnection = await issue.labels();
+  const labels: LinearLabel[] = labelsConnection.nodes.map((l) => ({
+    id: l.id,
+    name: l.name,
+    color: l.color,
+  }));
 
   return {
     id: issue.id,
@@ -160,6 +181,7 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
     parentId: parent?.id ?? null,
     childCount: children.nodes.length,
     children: [],
+    labels,
   };
 }
 
@@ -170,7 +192,11 @@ async function mapSingleIssueWithTeam(issue: Issue): Promise<LinearIssueWithTeam
 
   // Fetch labels for the issue
   const labelsConnection = await issue.labels();
-  const labels = labelsConnection.nodes.map((l) => l.name);
+  const labels: LinearLabel[] = labelsConnection.nodes.map((l) => ({
+    id: l.id,
+    name: l.name,
+    color: l.color,
+  }));
 
   // Fetch child issues to count them
   const childrenConnection = await issue.children();

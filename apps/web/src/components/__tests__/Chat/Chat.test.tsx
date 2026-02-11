@@ -52,6 +52,7 @@ const mockImportMetaEnv = {
 vi.mock('../../../config.js', () => ({
   config: mockImportMetaEnv,
 }));
+// @ts-expect-error -- import.meta.env assignment for test environment
 Object.assign(import.meta.env, mockImportMetaEnv);
 
 // Mock auth context
@@ -162,8 +163,9 @@ describe('ChatPanel', () => {
     render(<ChatPanel {...defaultProps} />);
 
     // Timestamps are displayed in a format like "10:30 AM"
+    // Only one timestamp is shown because messages are 1 second apart (< 5 min gap)
     const timestamps = screen.getAllByTestId(/chat-message-timestamp/);
-    expect(timestamps.length).toBe(2);
+    expect(timestamps.length).toBe(1);
   });
 
   it('Panel input accepts text', () => {

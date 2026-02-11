@@ -66,6 +66,7 @@ function syncedToLinearIssue(synced: SyncedLinearIssue): LinearIssue {
     parentId: synced.parentId,
     childCount: 0, // Will be calculated from children array
     children: [],
+    labels: synced.labels,
   };
 }
 
