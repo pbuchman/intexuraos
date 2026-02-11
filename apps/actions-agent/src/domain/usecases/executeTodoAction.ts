@@ -153,7 +153,7 @@ export function createExecuteTodoActionUseCase(
 
     if (resourceUrl !== undefined) {
       const fullUrl = `${webAppUrl}${resourceUrl}`;
-      const whatsappMessage = `${message} View it here: ${fullUrl}`;
+      const whatsappMessage = `✨ ${message} View it here: ${fullUrl}`;
 
       logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 

@@ -43,7 +43,7 @@ export function createHandleLinearActionUseCase(
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New Linear issue ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
+      const message = `🎯 New Linear issue ready for approval: "${event.title}"\n\nReview: ${actionLink}`;
       const buttons = buildApprovalButtons({ actionId: event.actionId });
 
       logger.info(

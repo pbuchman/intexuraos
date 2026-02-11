@@ -49,6 +49,7 @@ export class TaskDispatcher {
   private runningCount = 0;
   private readonly capacityMutex = new Mutex();
   private readonly activeTasks = new Map<string, NodeJS.Timeout>();
+  private readonly claudeErrors = new Map<string, string>();
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -132,6 +133,7 @@ export class TaskDispatcher {
         githubAppKeyPath: this.isolation.githubAppKeyPath,
         onLog: (chunk) => {
           this.logForwarder.appendChunk(taskId, chunk);
+          this.detectClaudeError(taskId, chunk);
         },
         onComplete: () => {
           this.logForwarder.flushAndStop(taskId).catch((error: unknown) => {
@@ -261,6 +263,7 @@ export class TaskDispatcher {
       }
       this.logForwarder.unregisterTask(taskId);
       this.isolation.tokenRefresher.unregisterTask(taskId);
+      this.claudeErrors.delete(taskId);
 
       // Update task status
       task.status = 'cancelled';
@@ -369,6 +372,7 @@ export class TaskDispatcher {
           }
           this.logForwarder.unregisterTask(taskId);
           this.isolation.tokenRefresher.unregisterTask(taskId);
+          this.claudeErrors.delete(taskId);
 
           // Check for PR
           const result = await this.checkForResult(task);
@@ -454,8 +458,19 @@ export class TaskDispatcher {
     let finalStatus: TaskStatus;
     let error: TaskError | undefined;
 
+    // Check if Claude reported an error in its stream result
+    const claudeError = this.claudeErrors.get(task.taskId);
+    this.claudeErrors.delete(task.taskId);
+
     /* v8 ignore start -- ts-type: optional chaining on result?.prUrl creates type narrowing branch @preserve */
-    if (result?.prUrl !== undefined) {
+    if (claudeError !== undefined) {
+      finalStatus = 'failed';
+      error = {
+        code: 'CLAUDE_REPORTED_ERROR',
+        message: claudeError,
+        remediation: { action: 'retry' },
+      };
+    } else if (result?.prUrl !== undefined) {
       finalStatus = 'completed';
     } else if (isPhase2) {
       finalStatus = 'failed';
@@ -589,6 +604,23 @@ export class TaskDispatcher {
     } catch (error) {
       this.logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
       return undefined;
+    }
+  }
+
+  private detectClaudeError(taskId: string, chunk: string): void {
+    for (const line of chunk.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed === '' || !trimmed.startsWith('{')) continue;
+
+      try {
+        const obj = JSON.parse(trimmed) as { type?: string; is_error?: boolean; result?: string };
+        if (obj.type === 'result' && obj.is_error === true) {
+          this.claudeErrors.set(taskId, obj.result ?? 'Task failed');
+          this.logger.info({ taskId }, 'Detected Claude error in stream result');
+        }
+      } catch {
+        // Not JSON — skip
+      }
     }
   }
 
