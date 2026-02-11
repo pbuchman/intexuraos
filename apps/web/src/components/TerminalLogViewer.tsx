@@ -9,7 +9,7 @@ import {
   query,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { ArrowDownToLine, CheckCircle2, Copy, Loader2, Terminal } from 'lucide-react';
+import { ArrowDownToLine, CheckCircle2, Copy, Loader2, Maximize2, Terminal, X } from 'lucide-react';
 import { useAuth } from '@/context';
 import {
   getFirestoreClient,
@@ -40,6 +40,8 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const [lineCount, setLineCount] = useState(0);
   const [copied, setCopied] = useState(false);
   const [followLogs, setFollowLogs] = useState(true);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const followLogsRef = useRef(true);
 
   const terminalContainerRef = useRef<HTMLDivElement>(null);
@@ -55,6 +57,35 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
       isMountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const updateMobileState = (): void => {
+      setIsMobileViewport(mediaQuery.matches);
+    };
+    updateMobileState();
+    mediaQuery.addEventListener('change', updateMobileState);
+    return (): void => {
+      mediaQuery.removeEventListener('change', updateMobileState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      setIsOverlayOpen(false);
+    }
+  }, [isMobileViewport]);
+
+  const isFullscreen = isMobileViewport && isOverlayOpen;
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return (): void => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreen]);
 
   useEffect(() => {
     if (terminalContainerRef.current === null) return;
@@ -100,6 +131,17 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
       fitAddonRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    requestAnimationFrame(() => {
+      fitAddonRef.current?.fit();
+      const terminal = terminalRef.current;
+      if (terminal !== null) {
+        terminal.resize(terminal.cols, MAX_TERMINAL_ROWS);
+      }
+    });
+  }, [isFullscreen]);
 
   useEffect(() => {
     const setupListener = async (): Promise<void> => {
@@ -180,6 +222,12 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     }
   };
 
+  const disableFollowOnManualScroll = (): void => {
+    if (!followLogsRef.current) return;
+    followLogsRef.current = false;
+    setFollowLogs(false);
+  };
+
   const copyLogs = (): void => {
     const terminal = terminalRef.current;
     if (terminal === null) return;
@@ -199,9 +247,58 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     });
   };
 
+  const handleOpenOverlay = (): void => {
+    if (isMobileViewport && !isFullscreen) {
+      setIsOverlayOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    const container = terminalContainerRef.current;
+    if (container === null) return;
+    const viewport = container.querySelector('.xterm-viewport');
+    if (!(viewport instanceof HTMLElement)) return;
+
+    let isTouchScrolling = false;
+    const handleWheel = (): void => {
+      disableFollowOnManualScroll();
+    };
+    const handleTouchStart = (): void => {
+      isTouchScrolling = false;
+    };
+    const handleTouchMove = (): void => {
+      isTouchScrolling = true;
+      disableFollowOnManualScroll();
+    };
+    const handleTouchEnd = (): void => {
+      isTouchScrolling = false;
+    };
+    const handleScroll = (): void => {
+      if (isTouchScrolling) {
+        disableFollowOnManualScroll();
+      }
+    };
+
+    viewport.addEventListener('wheel', handleWheel, { passive: true });
+    viewport.addEventListener('touchstart', handleTouchStart, { passive: true });
+    viewport.addEventListener('touchmove', handleTouchMove, { passive: true });
+    viewport.addEventListener('touchend', handleTouchEnd, { passive: true });
+    viewport.addEventListener('scroll', handleScroll, { passive: true });
+
+    return (): void => {
+      viewport.removeEventListener('wheel', handleWheel);
+      viewport.removeEventListener('touchstart', handleTouchStart);
+      viewport.removeEventListener('touchmove', handleTouchMove);
+      viewport.removeEventListener('touchend', handleTouchEnd);
+      viewport.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
   return (
-    <div className="mt-6 mb-6">
-      <div className="flex items-center justify-between rounded-t-lg bg-slate-800 px-4 py-2 border-b border-slate-700">
+    <div className={isFullscreen ? 'fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm' : 'mt-6 mb-6'}>
+      <div
+        className={`flex items-center justify-between border-b border-slate-700 bg-slate-800 px-4 ${isFullscreen ? 'safe-area-inset-top py-3' : 'rounded-t-lg py-2'}`}
+      >
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <span className="h-3 w-3 rounded-full bg-red-500/70" />
@@ -223,6 +320,19 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
           <span className="text-xs text-slate-500">
             {lineCount} line{lineCount !== 1 ? 's' : ''}
           </span>
+          {isMobileViewport && !isFullscreen ? (
+            <button
+              type="button"
+              onClick={() => {
+                setIsOverlayOpen(true);
+              }}
+              className="rounded p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
+              title="Open fullscreen terminal"
+              aria-label="Open fullscreen terminal"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
+          ) : null}
           {lineCount > 0 ? (
             <>
               <button
@@ -247,11 +357,30 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
               </button>
             </>
           ) : null}
+          {isFullscreen ? (
+            <button
+              type="button"
+              onClick={() => {
+                setIsOverlayOpen(false);
+              }}
+              className="rounded p-1.5 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+              title="Close fullscreen terminal"
+              aria-label="Close fullscreen terminal"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
       </div>
 
-      <div className="terminal-flow relative rounded-b-lg bg-slate-900 min-h-[200px] max-h-[1190px] overflow-hidden">
-        <div ref={terminalContainerRef} className="w-full p-2" />
+      <div
+        className={`terminal-flow relative bg-slate-900 overflow-hidden ${isFullscreen ? 'flex-1 min-h-0' : 'rounded-b-lg min-h-[200px] max-h-[1190px]'}`}
+        onClick={isMobileViewport && !isFullscreen ? handleOpenOverlay : undefined}
+      >
+        <div
+          ref={terminalContainerRef}
+          className={`w-full p-2 ${isMobileViewport ? '[&_.xterm_.xterm-viewport]:[touch-action:pan-y] [&_.xterm_.xterm-viewport]:[-webkit-overflow-scrolling:touch] [&_.xterm_.xterm-viewport]:[overscroll-behavior:contain]' : ''}`}
+        />
         {logsLoading ? (
           <div className="absolute inset-0 flex items-center gap-2 rounded-b-lg p-4 text-slate-400 font-mono text-sm bg-slate-900">
             <Loader2 className="h-4 w-4 animate-spin" />
