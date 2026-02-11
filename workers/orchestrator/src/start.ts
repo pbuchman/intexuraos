@@ -25,6 +25,7 @@ import { WorktreeManager } from './services/worktree-manager.js';
 import { LogForwarder } from './services/log-forwarder.js';
 import { createHeartbeatManager } from './heartbeat.js';
 import { createIsolationProvider, TokenRefresher } from './services/isolation/index.js';
+import { ApiKeyValidator } from './services/api-key-validator.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
 import type { IsolationConfig } from './services/task-dispatcher.js';
@@ -372,17 +373,22 @@ async function bootstrap(): Promise<void> {
   );
 
   // Get API keys for workers
+  const apiKeySecrets = {
+    // ANTHROPIC_API_KEY is optional - tasks with 'opus' or 'auto' workerType will fail
+    // if not set, but 'glm' (ZAI) tasks can still run
+    ANTHROPIC_API_KEY: getOptionalEnv('INTEXURAOS_ANTHROPIC_API_KEY', ''),
+    LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
+    SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
+    ZAI_API_KEY: getOptionalEnv('INTEXURAOS_ZAI_API_KEY', ''),
+  };
+
+  const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
+
   const isolationConfig: IsolationConfig = {
     provider: isolationProvider,
     tokenRefresher,
-    secrets: {
-      // ANTHROPIC_API_KEY is optional - tasks with 'opus' or 'auto' workerType will fail
-      // if not set, but 'glm' (ZAI) tasks can still run
-      ANTHROPIC_API_KEY: getOptionalEnv('INTEXURAOS_ANTHROPIC_API_KEY', ''),
-      LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
-      SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
-      ZAI_API_KEY: getOptionalEnv('INTEXURAOS_ZAI_API_KEY', ''),
-    },
+    apiKeyValidator,
+    secrets: apiKeySecrets,
     gcpSaKeyPath,
     githubAppKeyPath: config.githubAppPrivateKeyPath,
   };

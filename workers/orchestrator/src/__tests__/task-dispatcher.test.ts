@@ -12,6 +12,7 @@ import type { CreateTaskRequest } from '../types/api.js';
 import type { OrchestratorState } from '../types/state.js';
 import type { IsolationProvider, WorkerHandle } from '../services/isolation/types.js';
 import type { TokenRefresher } from '../services/isolation/token-refresher.js';
+import type { ApiKeyValidator } from '../services/api-key-validator.js';
 
 const flushAsync = async (): Promise<void> => {
   await new Promise((resolve) => {
@@ -129,10 +130,16 @@ describe('TaskDispatcher', () => {
     stop: vi.fn(),
   } as unknown as TokenRefresher;
 
+  // Mock ApiKeyValidator
+  const mockApiKeyValidator = {
+    validate: vi.fn(async () => ({ valid: true })),
+  } as unknown as ApiKeyValidator;
+
   // Create mock isolation config
   const mockIsolationConfig: IsolationConfig = {
     provider: mockIsolationProvider,
     tokenRefresher: mockTokenRefresher,
+    apiKeyValidator: mockApiKeyValidator,
     secrets: {
       ANTHROPIC_API_KEY: 'test-anthropic-key',
       LINEAR_API_KEY: 'test-linear-key',
@@ -1447,6 +1454,208 @@ describe('TaskDispatcher', () => {
       const task = await dispatcher.getTask('normal-task-1');
       expect(task).not.toBeNull();
       expect(task?.retriedFrom).toBeUndefined();
+    });
+  });
+
+  describe('detectClaudeError with Docker headers', () => {
+    let headerDispatcher: TaskDispatcher;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      headerDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig
+      );
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should detect Claude error in chunk with Docker header prefix', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'docker-header-error',
+        workerType: 'auto',
+        prompt: 'Test docker header',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await headerDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      // Simulate Docker multiplexed header (stream type 1 = stdout, followed by 4-byte size)
+      const jsonLine =
+        '{"type":"result","is_error":true,"result":"error_max_structured_output_retries"}\n';
+      const header = String.fromCharCode(1, 0, 0, 0, 0, 0, 0, jsonLine.length);
+      onLog?.(header + jsonLine);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await headerDispatcher.getTask('docker-header-error');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'CLAUDE_REPORTED_ERROR',
+              message: 'error_max_structured_output_retries',
+            }),
+          }),
+        })
+      );
+    });
+  });
+
+  describe('API key validation', () => {
+    it('should fail non-GLM task when Anthropic API key is invalid', async () => {
+      const invalidValidator = {
+        validate: vi.fn(async () => ({ valid: false, errorMessage: 'HTTP 401 Unauthorized' })),
+      } as unknown as ApiKeyValidator;
+
+      const invalidIsolationConfig: IsolationConfig = {
+        ...mockIsolationConfig,
+        apiKeyValidator: invalidValidator,
+      };
+
+      const validationDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        invalidIsolationConfig
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'invalid-key-test',
+        workerType: 'auto',
+        prompt: 'Test invalid key',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await validationDispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(validationDispatcher.getRunningCount()).toBe(0);
+      expect(invalidValidator.validate).toHaveBeenCalledWith('anthropic');
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'invalid-key-test',
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'SETUP_FAILED',
+              message: 'Anthropic API key is invalid: HTTP 401 Unauthorized',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('should use fallback message when errorMessage is undefined', async () => {
+      const noMsgValidator = {
+        validate: vi.fn(async () => ({ valid: false })),
+      } as unknown as ApiKeyValidator;
+
+      const noMsgIsolationConfig: IsolationConfig = {
+        ...mockIsolationConfig,
+        apiKeyValidator: noMsgValidator,
+      };
+
+      const noMsgDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        noMsgIsolationConfig
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'no-msg-key-test',
+        workerType: 'opus',
+        prompt: 'Test no message',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await noMsgDispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              message: 'Anthropic API key is invalid: authentication failed',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('should skip API key validation for GLM tasks', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'glm-skip-validation',
+        workerType: 'glm',
+        prompt: 'Test GLM task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(dispatcher.getRunningCount()).toBe(1);
+      expect(mockApiKeyValidator.validate).not.toHaveBeenCalled();
+    });
+
+    it('should proceed when Anthropic API key is valid', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'valid-key-test',
+        workerType: 'opus',
+        prompt: 'Test valid key',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(dispatcher.getRunningCount()).toBe(1);
+      expect(mockApiKeyValidator.validate).toHaveBeenCalledWith('anthropic');
     });
   });
 });

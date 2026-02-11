@@ -164,7 +164,7 @@ Your output will be validated via JSON schema. Provide:
 const PHASE_1_SCHEMA = {
   type: 'object',
   properties: {
-    phase: { const: 1 },
+    phase: { oneOf: [{ const: 1 }, { const: '1' }] },
     linearUrl: { type: 'string', pattern: '^https://linear\\.app/.+/issue/.+' },
     label: { type: 'string', enum: ['code-task', 'unclear'] },
     prUrl: { type: 'string' },
@@ -176,7 +176,7 @@ const PHASE_1_SCHEMA = {
 const PHASE_2_SCHEMA = {
   type: 'object',
   properties: {
-    phase: { const: 2 },
+    phase: { oneOf: [{ const: 2 }, { const: '2' }] },
     prUrl: { type: 'string', pattern: '^https://github\\.com/.+/pull/\\d+' },
     linearUrl: { type: 'string', pattern: '^https://linear\\.app/.+/issue/.+' },
     ciPassed: { type: 'boolean' },

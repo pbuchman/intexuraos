@@ -10,9 +10,12 @@ import type { WorktreeManager } from './worktree-manager.js';
 import type { LogForwarder } from './log-forwarder.js';
 import type { WebhookClient } from './webhook-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
-import type { IsolationProvider, WorkerConfig } from './isolation/types.js';
+import type { IsolationProvider, WorkerConfig, WorkerType } from './isolation/types.js';
+import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
+import type { ApiKeyValidator } from './api-key-validator.js';
 import { buildSystemPrompt, buildOutputSchema } from './system-prompt.js';
+import { stripDockerHeaders } from './log-formatter.js';
 
 const execAsync = promisify(exec);
 
@@ -35,6 +38,7 @@ export interface CancelError {
 export interface IsolationConfig {
   provider: IsolationProvider;
   tokenRefresher: TokenRefresher;
+  apiKeyValidator: ApiKeyValidator;
   secrets: {
     ANTHROPIC_API_KEY: string;
     LINEAR_API_KEY: string;
@@ -132,8 +136,9 @@ export class TaskDispatcher {
         gcpSaKeyPath: this.isolation.gcpSaKeyPath,
         githubAppKeyPath: this.isolation.githubAppKeyPath,
         onLog: (chunk) => {
-          this.logForwarder.appendChunk(taskId, chunk);
-          this.detectClaudeError(taskId, chunk);
+          const cleaned = stripDockerHeaders(chunk);
+          this.logForwarder.appendChunk(taskId, cleaned);
+          this.detectClaudeError(taskId, cleaned);
         },
         onComplete: () => {
           this.logForwarder.flushAndStop(taskId).catch((error: unknown) => {
@@ -143,6 +148,21 @@ export class TaskDispatcher {
       };
 
       this.logForwarder.registerTask(taskId, request.webhookSecret);
+
+      const workerTypeConfig = WORKER_TYPES[request.workerType as WorkerType];
+      if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
+        const validation = await this.isolation.apiKeyValidator.validate('anthropic');
+        if (!validation.valid) {
+          this.runningCount--;
+          this.logForwarder.unregisterTask(taskId);
+          await this.sendSetupFailureWebhook(
+            request,
+            `Anthropic API key is invalid: ${validation.errorMessage ?? 'authentication failed'}`,
+            new Error('INVALID_API_KEY')
+          );
+          return;
+        }
+      }
 
       try {
         await this.isolation.tokenRefresher.registerTask(taskId);
