@@ -839,12 +839,16 @@ export function ResearchDetailPage(): React.JSX.Element {
                     <button
                       type="button"
                       onClick={(): void => {
-                        void handleCopyShareUrl();
+                        void copyToClipboard(research.shareInfo?.shareUrl ?? '', 'share-link');
                       }}
-                      className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
-                      title="Copy link"
+                      className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
+                      title={copiedSection === 'share-link' ? 'Copied!' : 'Copy link'}
                     >
-                      <Copy className="h-3.5 w-3.5 text-slate-400" />
+                      {copiedSection === 'share-link' ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 ) : null}
@@ -862,18 +866,16 @@ export function ResearchDetailPage(): React.JSX.Element {
                     <button
                       type="button"
                       onClick={(): void => {
-                        void navigator.clipboard.writeText(
-                          research.notionExportInfo?.mainPageUrl ?? ''
-                        );
-                        setShareToast('Notion link copied');
-                        setTimeout(() => {
-                          setShareToast(null);
-                        }, 2000);
+                        void copyToClipboard(research.notionExportInfo?.mainPageUrl ?? '', 'notion-link');
                       }}
-                      className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
-                      title="Copy link"
+                      className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
+                      title={copiedSection === 'notion-link' ? 'Copied!' : 'Copy link'}
                     >
-                      <Copy className="h-3.5 w-3.5 text-slate-400" />
+                      {copiedSection === 'notion-link' ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 ) : null}
@@ -893,17 +895,17 @@ export function ResearchDetailPage(): React.JSX.Element {
             onClick={() => {
               void copyToClipboard(research.prompt, 'research-topic');
             }}
-            className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+            className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
             title={copiedSection === 'research-topic' ? 'Copied!' : 'Copy'}
           >
             {copiedSection === 'research-topic' ? (
-              <CheckCircle className="h-5 w-5 text-green-500" />
+              <CheckCircle className="h-4 w-4 text-green-500" />
             ) : (
-              <Copy className="h-5 w-5" />
+              <Copy className="h-4 w-4" />
             )}
           </button>
         </div>
-        <blockquote className="border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 italic dark:bg-slate-700">
+        <blockquote className="rounded border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 italic dark:bg-slate-700">
           <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">
             {renderPromptWithLinks(research.prompt)}
           </p>
@@ -913,7 +915,7 @@ export function ResearchDetailPage(): React.JSX.Element {
             <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
               Show original topic
             </summary>
-            <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm italic text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
+            <blockquote className="mt-2 rounded border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm italic text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
               <p className="whitespace-pre-wrap">{research.originalPrompt}</p>
             </blockquote>
           </details>
@@ -1025,13 +1027,13 @@ export function ResearchDetailPage(): React.JSX.Element {
                   onClick={(): void => {
                     void copyToClipboard(research.synthesizedResult ?? '', 'synthesis');
                   }}
-                  className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
                   title={copiedSection === 'synthesis' ? 'Copied!' : 'Copy'}
                 >
                   {copiedSection === 'synthesis' ? (
-                    <CheckCircle className="h-5 w-5 text-green-500" />
+                    <CheckCircle className="h-4 w-4 text-green-500" />
                   ) : (
-                    <Copy className="h-5 w-5" />
+                    <Copy className="h-4 w-4" />
                   )}
                 </button>
               </div>
@@ -1078,13 +1080,13 @@ export function ResearchDetailPage(): React.JSX.Element {
                   onClick={(): void => {
                     void copyToClipboard(singleResult.result ?? '', 'main-report');
                   }}
-                  className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
                   title={copiedSection === 'main-report' ? 'Copied!' : 'Copy'}
                 >
                   {copiedSection === 'main-report' ? (
-                    <CheckCircle className="h-5 w-5 text-green-500" />
+                    <CheckCircle className="h-4 w-4 text-green-500" />
                   ) : (
-                    <Copy className="h-5 w-5" />
+                    <Copy className="h-4 w-4" />
                   )}
                 </button>
               </div>
@@ -1600,15 +1602,20 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
             </div>
           ) : null}
           <div className="mb-2 flex justify-end">
-            <Button
-              variant="secondary"
+            <button
+              type="button"
               onClick={(): void => {
                 onCopy(result.result ?? '');
               }}
+              className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
+              title={copied ? 'Copied!' : 'Copy'}
             >
-              <Copy className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
-            </Button>
+              {copied ? (
+                <CheckCircle className="h-4 w-4 text-green-500" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
           </div>
           <div className="rounded-lg bg-slate-50 p-4 text-sm dark:bg-slate-700">
             <MarkdownContent content={result.result} />
