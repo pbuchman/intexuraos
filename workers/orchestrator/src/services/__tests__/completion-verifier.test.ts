@@ -13,11 +13,16 @@ vi.mock('@intexuraos/llm-factory', () => ({
 const { OrchestratorCompletionVerifier, CompletionVerifierTestUtils } =
   await import('../completion-verifier.js');
 
+const loggerInfo = vi.fn();
+const loggerWarn = vi.fn();
+const loggerError = vi.fn();
+const loggerDebug = vi.fn();
+
 const logger: Logger = {
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-  debug: () => undefined,
+  info: loggerInfo as Logger['info'],
+  warn: loggerWarn as Logger['warn'],
+  error: loggerError as Logger['error'],
+  debug: loggerDebug as Logger['debug'],
 };
 
 const defaultConfig = {
@@ -55,6 +60,10 @@ const validPhase2Final = `PHASE2_FINAL:
 describe('completion-verifier', () => {
   beforeEach(() => {
     createLlmClientMock.mockReset();
+    loggerInfo.mockReset();
+    loggerWarn.mockReset();
+    loggerError.mockReset();
+    loggerDebug.mockReset();
     createLlmClientMock.mockReturnValue({
       generate: vi.fn().mockResolvedValue({
         ok: true,
@@ -124,6 +133,18 @@ describe('completion-verifier', () => {
     expect(unclearMismatch.missing).toContain('unclear requires Phase 2 ready: no');
   });
 
+  it('builds phase-specific default resume instructions', () => {
+    const phase1Instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction('phase1', [
+      'missing-criteria',
+    ]);
+    const phase2Instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction('phase2', [
+      'missing-criteria',
+    ]);
+
+    expect(phase1Instruction).toContain('PHASE1_FINAL');
+    expect(phase2Instruction).toContain('PHASE2_FINAL');
+  });
+
   it('always reports enabled gemini verifier', () => {
     const verifier = createVerifier();
     expect(verifier.describe()).toEqual({
@@ -158,14 +179,31 @@ describe('completion-verifier', () => {
     expect(verdict.usedLlm).toBe(true);
     expect(generate).toHaveBeenCalledTimes(1);
     expect(generate.mock.calls[0]?.[0]).toContain('PHASE1_FINAL');
+    expect(loggerInfo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-1',
+        attempt: 1,
+        phase: 'phase1',
+        prompt: expect.stringContaining('TASK task-1 ATTEMPT 1/3 PHASE phase1'),
+      }),
+      'Gemini completion verifier request'
+    );
+    expect(loggerInfo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-1',
+        attempt: 1,
+        response: expect.any(String),
+      }),
+      'Gemini completion verifier response'
+    );
   });
 
-  it('fails deterministic checks before LLM on explicit worker errors', async () => {
+  it('still invokes Gemini when deterministic signals indicate explicit worker errors', async () => {
     const generate = vi.fn().mockResolvedValue({
       ok: true,
       value: {
         content:
-          '{"passed":true,"confidence":0.95,"reasons":["ok"],"missingCriteria":[],"resumeInstruction":"done"}',
+          '{"passed":false,"confidence":0.96,"reasons":["model observed task failure"],"missingCriteria":["Fix runtime errors"],"resumeInstruction":"Resolve errors and continue."}',
       },
     });
     createLlmClientMock.mockReturnValue({ generate });
@@ -184,14 +222,21 @@ describe('completion-verifier', () => {
     });
 
     expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(false);
+    expect(verdict.usedLlm).toBe(true);
     expect(verdict.reasons.join(' ')).toContain('explicit error');
     expect(verdict.reasons.join(' ')).toContain('non-zero');
-    expect(generate).not.toHaveBeenCalled();
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate.mock.calls[0]?.[0]).toContain('hasToolUseError=true');
   });
 
-  it('fails deterministic checks when assistant final message is missing', async () => {
-    const generate = vi.fn();
+  it('still invokes Gemini when assistant final message is missing', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.41,"reasons":["assistant response missing"],"missingCriteria":["Assistant final message"],"resumeInstruction":"Provide a final completion block."}',
+      },
+    });
     createLlmClientMock.mockReturnValue({ generate });
 
     const verifier = createVerifier();
@@ -206,13 +251,19 @@ describe('completion-verifier', () => {
     });
 
     expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(false);
+    expect(verdict.usedLlm).toBe(true);
     expect(verdict.missingCriteria).toContain('Assistant final message');
-    expect(generate).not.toHaveBeenCalled();
+    expect(generate).toHaveBeenCalledTimes(1);
   });
 
-  it('fails deterministic phase1 contract checks before LLM', async () => {
-    const generate = vi.fn();
+  it('still invokes Gemini when phase1 contract checks fail deterministically', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.88,"reasons":["phase contract mismatch"],"missingCriteria":["code-task requires Phase 2 ready: yes"],"resumeInstruction":"Fix PHASE1_FINAL consistency."}',
+      },
+    });
     createLlmClientMock.mockReturnValue({ generate });
 
     const verifier = createVerifier();
@@ -231,12 +282,20 @@ describe('completion-verifier', () => {
     });
 
     expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(false);
+    expect(verdict.usedLlm).toBe(true);
     expect(verdict.missingCriteria).toContain('code-task requires Phase 2 ready: yes');
-    expect(generate).not.toHaveBeenCalled();
+    expect(generate).toHaveBeenCalledTimes(1);
   });
 
   it('fails phase2 when PR URL is missing from task result', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.93,"reasons":["missing PR evidence"],"missingCriteria":["PR URL created from branch"],"resumeInstruction":"Create PR and provide PHASE2_FINAL evidence."}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
     const verifier = createVerifier();
 
     const verdict = await verifier.verify({
@@ -256,10 +315,17 @@ describe('completion-verifier', () => {
 
     expect(verdict.passed).toBe(false);
     expect(verdict.missingCriteria.join(' ')).toContain('PR URL');
+    expect(generate).toHaveBeenCalledTimes(1);
   });
 
-  it('fails deterministic phase2 contract checks before LLM', async () => {
-    const generate = vi.fn();
+  it('still invokes Gemini when phase2 contract checks fail deterministically', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.77,"reasons":["missing CI evidence"],"missingCriteria":["CI evidence line"],"resumeInstruction":"Run ci:tracked and add evidence line."}',
+      },
+    });
     createLlmClientMock.mockReturnValue({ generate });
 
     const verifier = createVerifier();
@@ -283,13 +349,19 @@ describe('completion-verifier', () => {
     });
 
     expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(false);
+    expect(verdict.usedLlm).toBe(true);
     expect(verdict.missingCriteria).toContain('CI evidence line');
-    expect(generate).not.toHaveBeenCalled();
+    expect(generate).toHaveBeenCalledTimes(1);
   });
 
   it('fails phase2 when GitHub checks are failing', async () => {
-    const generate = vi.fn();
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.9,"reasons":["ci checks failing"],"missingCriteria":["Successful GitHub checks for PR branch"],"resumeInstruction":"Fix CI failures and rerun checks."}',
+      },
+    });
     createLlmClientMock.mockReturnValue({ generate });
 
     const verifier = createVerifier();
@@ -310,12 +382,20 @@ describe('completion-verifier', () => {
     });
 
     expect(verdict.passed).toBe(false);
-    expect(verdict.usedLlm).toBe(false);
+    expect(verdict.usedLlm).toBe(true);
     expect(verdict.missingCriteria).toContain('Successful GitHub checks for PR branch');
-    expect(generate).not.toHaveBeenCalled();
+    expect(generate).toHaveBeenCalledTimes(1);
   });
 
   it('fails phase2 when CI status is unknown', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.82,"reasons":["ci state unknown"],"missingCriteria":["Confirmed GitHub checks status"],"resumeInstruction":"Determine CI status and report it explicitly."}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
     const verifier = createVerifier();
 
     const verdict = await verifier.verify({
@@ -335,6 +415,7 @@ describe('completion-verifier', () => {
 
     expect(verdict.passed).toBe(false);
     expect(verdict.missingCriteria.join(' ')).toContain('GitHub checks status');
+    expect(generate).toHaveBeenCalledTimes(1);
   });
 
   it('parses wrapped JSON from LLM output', async () => {
@@ -368,7 +449,7 @@ describe('completion-verifier', () => {
     expect(verdict.usedLlm).toBe(true);
   });
 
-  it('fails with retry guidance when LLM call returns provider error', async () => {
+  it('marks verifier failure when Gemini call returns provider error', async () => {
     const generate = vi.fn().mockResolvedValue({
       ok: false,
       error: { code: 'RATE_LIMITED', message: 'rate limited' },
@@ -387,11 +468,49 @@ describe('completion-verifier', () => {
     });
 
     expect(verdict.passed).toBe(false);
-    expect(verdict.reasons.join(' ')).toContain('LLM verifier failed');
+    expect(verdict.reasons.join(' ')).toContain('Gemini verifier unavailable');
+    expect(verdict.verifierFailure).toBe(true);
     expect(verdict.resumeInstruction).toContain('PHASE1_FINAL');
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-llm-error',
+        attempt: 1,
+        errorCode: 'RATE_LIMITED',
+      }),
+      'Gemini completion verifier returned no response'
+    );
   });
 
-  it('fails with retry guidance when LLM returns invalid JSON', async () => {
+  it('builds phase2-specific retry instruction when Gemini call fails in phase2', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: false,
+      error: { code: 'UNAVAILABLE', message: 'provider unavailable' },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-llm-error-phase2',
+      attempt: 2,
+      maxAttempts: 3,
+      phase: 'phase2',
+      originalPrompt: 'Implement and open PR',
+      rawLogs: assistantLog(validPhase2Final),
+      linearIssueLabels: ['code-task'],
+      taskResult: {
+        branch: 'task',
+        commits: 2,
+        prUrl: 'https://github.com/intexuraos/intexuraos/pull/125',
+        ciFailed: false,
+      },
+    });
+
+    expect(verdict.passed).toBe(false);
+    expect(verdict.verifierFailure).toBe(true);
+    expect(verdict.resumeInstruction).toContain('PHASE2_FINAL');
+  });
+
+  it('marks verifier failure when Gemini returns invalid JSON', async () => {
     const generate = vi.fn().mockResolvedValue({
       ok: true,
       value: { content: 'this is not json' },
@@ -410,7 +529,16 @@ describe('completion-verifier', () => {
     });
 
     expect(verdict.passed).toBe(false);
-    expect(verdict.missingCriteria).toContain('LLM verifier could not confirm completion');
+    expect(verdict.missingCriteria).toContain('Gemini verifier response');
+    expect(verdict.verifierFailure).toBe(true);
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-llm-invalid-json',
+        attempt: 1,
+        response: 'this is not json',
+      }),
+      'Gemini completion verifier response parsing failed'
+    );
   });
 
   it('throws when model is not gemini-2.5-flash', () => {

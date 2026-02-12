@@ -519,9 +519,33 @@ export class TaskDispatcher {
         missingCriteria: verification.missingCriteria,
         resumeInstruction: verification.resumeInstruction,
         usedLlm: verification.usedLlm,
+        ...(verification.verifierFailure === true && { verifierFailure: true }),
         createdAt: new Date().toISOString(),
       },
     ];
+
+    if (verification.verifierFailure === true) {
+      const error: TaskError = {
+        code: 'TASK_COMPLETION_VERIFIER_FAILED',
+        message: verification.reasons.join('; '),
+        remediation: {
+          action: 'contact_support',
+          manualSteps: [
+            'Ensure INTEXURAOS_GEMINI_APP_API_KEY is configured for orchestrator.',
+            'Check Gemini provider connectivity and retry task after verifier is healthy.',
+          ],
+        },
+      };
+
+      const failurePayload: { result?: TaskResult; error: TaskError } = { error };
+      /* v8 ignore start -- source-map: binary-expr branch coverage is misreported on strict undefined guard @preserve */
+      if (result !== undefined) {
+        failurePayload.result = result;
+      }
+      /* v8 ignore stop @preserve */
+      await this.finalizeTask(task, 'failed', failurePayload);
+      return;
+    }
 
     if (!verification.passed && attempt < maxAttempts) {
       await this.teardownAttempt(task.taskId, true);

@@ -223,6 +223,7 @@ describe('TaskDispatcher', () => {
     missingCriteria: string[];
     resumeInstruction: string;
     usedLlm: boolean;
+    verifierFailure?: boolean;
   }
 
   const singleAttemptCompletionControl = {
@@ -1910,6 +1911,89 @@ describe('TaskDispatcher', () => {
       expect(finalTask?.verificationHistory).toHaveLength(2);
       expect(finalTask?.verificationHistory?.[0]?.passed).toBe(false);
       expect(finalTask?.verificationHistory?.[1]?.passed).toBe(true);
+      vi.useRealTimers();
+    });
+
+    it('fails immediately when verifier reports Gemini failure', async () => {
+      vi.useFakeTimers();
+      const verifierFailureState = createStatePersistence();
+      const verify = vi.fn().mockResolvedValue({
+        passed: false,
+        confidence: 0,
+        reasons: ['Gemini verifier unavailable: rate limited'],
+        missingCriteria: ['Gemini verifier response'],
+        resumeInstruction: 'Retry once verifier is healthy.',
+        usedLlm: true,
+        verifierFailure: true,
+      });
+
+      const verifierFailureDispatcher = new TaskDispatcher(
+        mockConfig,
+        verifierFailureState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 3,
+          verifier: {
+            verify,
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+        }
+      );
+
+      const verifierFailureInternal = verifierFailureDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<{
+          branch: string;
+          commits: number;
+          ciFailed: boolean;
+          prUrl: string;
+        }>;
+      };
+      vi.spyOn(verifierFailureInternal, 'checkForResult').mockResolvedValue({
+        branch: 'verifier-failure-branch',
+        commits: 2,
+        ciFailed: false,
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/1234',
+      });
+
+      const request: CreateTaskRequest = {
+        taskId: 'verifier-failure-task',
+        workerType: 'auto',
+        prompt: 'Verifier failure should fail task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await verifierFailureDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await verifierFailureDispatcher.getTask('verifier-failure-task');
+      expect(task?.status).toBe('failed');
+      expect(task?.attemptCount).toBe(1);
+      expect(task?.verificationHistory?.[0]?.verifierFailure).toBe(true);
+      expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(1);
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            result: expect.objectContaining({
+              prUrl: 'https://github.com/pbuchman/intexuraos/pull/1234',
+            }),
+            error: expect.objectContaining({
+              code: 'TASK_COMPLETION_VERIFIER_FAILED',
+              message: expect.stringContaining('Gemini verifier unavailable'),
+            }),
+          }),
+        })
+      );
       vi.useRealTimers();
     });
 
