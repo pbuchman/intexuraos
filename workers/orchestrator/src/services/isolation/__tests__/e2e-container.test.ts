@@ -156,6 +156,19 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
     };
   }
 
+  function waitForAttemptCompletion(config: WorkerConfig, timeoutMs = 10_000): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`Timed out waiting for onComplete callback after ${String(timeoutMs)}ms`));
+      }, timeoutMs);
+
+      config.onComplete = (exitCode: number): void => {
+        clearTimeout(timeout);
+        resolve(exitCode);
+      };
+    });
+  }
+
   describe.skipIf(skipIfNoImage)('Container Lifecycle', () => {
     it(
       'starts container and runs Claude stub',
@@ -254,31 +267,33 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
 
   describe.skipIf(skipIfNoImage)('Input/Output', () => {
     it(
-      'exit command terminates container cleanly',
+      'exit command completes attempt successfully',
       async () => {
         const taskId = `e2e-exit-${Date.now()}`;
         const config = createTestConfig(taskId, 'exit');
+        const completion = waitForAttemptCompletion(config);
 
         await provider.createWorker(config);
 
-        const exitCode = await provider.waitForCompletion(taskId, 10_000);
+        const exitCode = await completion;
         expect(exitCode).toBe(0);
 
         const isRunning = await provider.isWorkerRunning(taskId);
-        expect(isRunning).toBe(false);
+        expect(isRunning).toBe(true);
       },
       TEST_TIMEOUT
     );
 
     it(
-      'error command causes non-zero exit',
+      'error command causes failed attempt exit',
       async () => {
         const taskId = `e2e-error-${Date.now()}`;
         const config = createTestConfig(taskId, 'error');
+        const completion = waitForAttemptCompletion(config);
 
         await provider.createWorker(config);
 
-        const exitCode = await provider.waitForCompletion(taskId, 10_000);
+        const exitCode = await completion;
         expect(exitCode).toBe(1);
       },
       TEST_TIMEOUT
