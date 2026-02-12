@@ -55,6 +55,7 @@ export class TaskDispatcher {
   private readonly activeTasks = new Map<string, NodeJS.Timeout>();
   private readonly claudeErrors = new Map<string, string>();
   private readonly taskExitCodes = new Map<string, number>();
+  private readonly claudeLogBuffers = new Map<string, string>();
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -145,6 +146,7 @@ export class TaskDispatcher {
           this.detectClaudeError(taskId, cleaned);
         },
         onComplete: (exitCode) => {
+          this.flushClaudeErrorBuffer(taskId);
           this.taskExitCodes.set(taskId, exitCode);
           this.logForwarder.flushAndStop(taskId).catch((error: unknown) => {
             this.logger.error({ taskId, error }, 'Failed to flush logs on completion');
@@ -290,6 +292,7 @@ export class TaskDispatcher {
       this.isolation.tokenRefresher.unregisterTask(taskId);
       this.claudeErrors.delete(taskId);
       this.taskExitCodes.delete(taskId);
+      this.claudeLogBuffers.delete(taskId);
 
       // Update task status
       task.status = 'cancelled';
@@ -400,6 +403,7 @@ export class TaskDispatcher {
           this.isolation.tokenRefresher.unregisterTask(taskId);
           this.claudeErrors.delete(taskId);
           this.taskExitCodes.delete(taskId);
+          this.claudeLogBuffers.delete(taskId);
 
           // Check for PR
           const result = await this.checkForResult(task);
@@ -474,6 +478,7 @@ export class TaskDispatcher {
     }
     this.logForwarder.unregisterTask(task.taskId);
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
+    this.claudeLogBuffers.delete(task.taskId);
 
     // Check for PR
     const result = await this.checkForResult(task);
@@ -767,19 +772,51 @@ export class TaskDispatcher {
   }
 
   private detectClaudeError(taskId: string, chunk: string): void {
-    for (const line of chunk.split('\n')) {
-      const trimmed = line.trim();
-      if (trimmed === '' || !trimmed.startsWith('{')) continue;
+    const buffered = `${this.claudeLogBuffers.get(taskId) ?? ''}${chunk}`;
+    const lines = buffered.split('\n');
+    const remainder = lines.pop() ?? '';
+    this.claudeLogBuffers.set(taskId, remainder);
 
-      try {
-        const obj = JSON.parse(trimmed) as { type?: string; is_error?: boolean; result?: string };
-        if (obj.type === 'result' && obj.is_error === true) {
-          this.claudeErrors.set(taskId, obj.result ?? 'Task failed');
-          this.logger.info({ taskId }, 'Detected Claude error in stream result');
-        }
-      } catch {
-        // Not JSON — skip
+    for (const line of lines) {
+      this.parseClaudeLogLine(taskId, line);
+    }
+  }
+
+  private flushClaudeErrorBuffer(taskId: string): void {
+    const remainder = this.claudeLogBuffers.get(taskId);
+    if (remainder !== undefined && remainder.trim() !== '') {
+      this.parseClaudeLogLine(taskId, remainder);
+    }
+    this.claudeLogBuffers.delete(taskId);
+  }
+
+  private parseClaudeLogLine(taskId: string, line: string): void {
+    const trimmed = line.trim();
+    if (trimmed === '') return;
+
+    if (trimmed.includes('<tool_use_error>')) {
+      this.claudeErrors.set(taskId, 'Task failed: tool_use_error in Claude stream');
+      this.logger.info({ taskId }, 'Detected Claude tool_use_error in stream');
+      return;
+    }
+
+    const jsonStart = trimmed.indexOf('{');
+    if (jsonStart === -1) return;
+
+    try {
+      const obj = JSON.parse(trimmed.slice(jsonStart)) as {
+        type?: string;
+        is_error?: boolean;
+        result?: string;
+        error?: { message?: string };
+      };
+      if (obj.type === 'result' && obj.is_error === true) {
+        const message = obj.result ?? obj.error?.message ?? 'Task failed';
+        this.claudeErrors.set(taskId, message);
+        this.logger.info({ taskId }, 'Detected Claude error in stream result');
       }
+    } catch {
+      // Ignore non-JSON stream lines.
     }
   }
 
