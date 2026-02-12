@@ -14,6 +14,7 @@ export interface TaskVerificationRecord {
   missingCriteria: string[];
   resumeInstruction: string;
   usedLlm: boolean;
+  verifierFailure?: boolean;
   createdAt: string;
 }
 
