@@ -49,9 +49,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { getFirestore } from '@intexuraos/infra-firestore';
-import type { Result } from '@intexuraos/common-core';
-import { err, getErrorMessage, ok } from '@intexuraos/common-core';
+import { getErrorMessage } from '@intexuraos/common-core';
+import { FirestoreAuditSink, type AuditSink } from './sink.js';
 import type {
   LlmAuditLog,
   CreateAuditLogParams,
@@ -59,7 +58,15 @@ import type {
   CompleteAuditLogErrorParams,
 } from './types.js';
 
-const COLLECTION_NAME = 'llm_api_logs';
+const DEFAULT_AUDIT_SINK: AuditSink = new FirestoreAuditSink();
+
+/**
+ * Optional parameters for audit context creation.
+ */
+export interface AuditContextOptions {
+  /** Custom sink used for persisting audit events. Defaults to Firestore. */
+  sink?: AuditSink;
+}
 
 /**
  * Check if audit logging is enabled.
@@ -114,8 +121,11 @@ export function isAuditEnabled(): boolean {
  * await audit.success({ response: 'TypeScript is...', inputTokens: 5, outputTokens: 20 });
  * ```
  */
-export function createAuditContext(params: CreateAuditLogParams): AuditContext {
-  return new AuditContext(params);
+export function createAuditContext(
+  params: CreateAuditLogParams,
+  options?: AuditContextOptions
+): AuditContext {
+  return new AuditContext(params, options?.sink ?? DEFAULT_AUDIT_SINK);
 }
 
 /**
@@ -148,11 +158,13 @@ export function createAuditContext(params: CreateAuditLogParams): AuditContext {
 export class AuditContext {
   private readonly id: string;
   private readonly params: CreateAuditLogParams;
+  private readonly sink: AuditSink;
   private completed = false;
 
-  constructor(params: CreateAuditLogParams) {
+  constructor(params: CreateAuditLogParams, sink: AuditSink = DEFAULT_AUDIT_SINK) {
     this.id = randomUUID();
     this.params = params;
+    this.sink = sink;
   }
 
   /**
@@ -253,7 +265,7 @@ export class AuditContext {
       log.imageCostUsd = result.imageCostUsd;
     }
 
-    await saveAuditLog(log);
+    await this.saveAuditLog(log);
   }
 
   /**
@@ -309,38 +321,14 @@ export class AuditContext {
       log.researchId = this.params.researchId;
     }
 
-    await saveAuditLog(log);
+    await this.saveAuditLog(log);
   }
-}
 
-/**
- * Save an audit log entry to Firestore.
- *
- * @remarks
- * Internal function used by {@link AuditContext}. The log object is built
- * with conditional property assignment, so undefined values are never present.
- *
- * @param log - Complete audit log entry to save
- * @returns Result indicating success or failure
- *
- * @example
- * ```ts
- * // Used internally by AuditContext
- * const result = await saveAuditLog(log);
- * if (!result.ok) {
- *   console.error('Failed to save audit log:', result.error);
- * }
- * ```
- */
-async function saveAuditLog(log: LlmAuditLog): Promise<Result<void>> {
-  try {
-    const firestore = getFirestore();
-    await firestore.collection(COLLECTION_NAME).doc(log.id).set(log);
-    return ok(undefined);
-  } catch (error) {
-    const message = getErrorMessage(error);
-    // eslint-disable-next-line no-console
-    console.error(`Failed to save LLM audit log: ${message}`);
-    return err(new Error(message));
+  private async saveAuditLog(log: LlmAuditLog): Promise<void> {
+    const result = await this.sink.save(log);
+    if (!result.ok) {
+      // eslint-disable-next-line no-console
+      console.error(`Failed to save LLM audit log: ${getErrorMessage(result.error)}`);
+    }
   }
 }

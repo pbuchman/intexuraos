@@ -36,6 +36,7 @@ interface WorkerEntry {
 }
 
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
+const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
 
 export class DockerProvider implements IsolationProvider {
   private readonly docker: Docker;
@@ -138,7 +139,12 @@ export class DockerProvider implements IsolationProvider {
     /* v8 ignore stop @preserve */
 
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
+    const taskSessionPath = path.join(
+      this.config.secretsBasePath,
+      `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
+    );
     await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+    await fs.promises.mkdir(taskSessionPath, { recursive: true, mode: 0o700 });
 
     // Write prompt files for --print mode (entrypoint reads these)
     await fs.promises.writeFile(
@@ -147,14 +153,6 @@ export class DockerProvider implements IsolationProvider {
       'utf-8'
     );
     await fs.promises.writeFile(path.join(taskSecretsPath, 'user-prompt.txt'), prompt, 'utf-8');
-
-    if (config.jsonSchema !== undefined) {
-      await fs.promises.writeFile(
-        path.join(taskSecretsPath, 'json-schema.json'),
-        config.jsonSchema,
-        'utf-8'
-      );
-    }
 
     /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
     if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
@@ -199,6 +197,7 @@ export class DockerProvider implements IsolationProvider {
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
       'CLAUDE_PROJECT_DIR=/repo',
       'CLAUDE_WORKER_MODE=1',
+      `CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
     ];
 
     if (workerTypeConfig.model !== undefined) {
@@ -254,6 +253,7 @@ export class DockerProvider implements IsolationProvider {
           `${worktreePath}:/repo:rw`,
           `${taskSecretsPath}:/secrets:ro`,
           `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
+          `${taskSessionPath}:/home/claude/.claude:rw`,
           /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
           ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
           /* v8 ignore stop @preserve */
@@ -366,6 +366,14 @@ export class DockerProvider implements IsolationProvider {
           this.logger.debug({ taskId }, 'Container already stopped');
         } else {
           this.logger.error({ taskId, error: err }, 'Failed to stop/kill container');
+        }
+      }
+
+      if (!this.config.keepContainersAlive) {
+        try {
+          await container.remove({ force: true });
+        } catch (err: unknown) {
+          this.logger.error({ taskId, error: err }, 'Failed to remove container');
         }
       }
 
@@ -506,5 +514,20 @@ export class DockerProvider implements IsolationProvider {
 
   async listWorkers(): Promise<WorkerHandle[]> {
     return Array.from(this.workers.values()).map((w) => w.handle);
+  }
+
+  async cleanupTaskSession(taskId: string): Promise<void> {
+    const taskSessionPath = path.join(
+      this.config.secretsBasePath,
+      `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
+    );
+    try {
+      await fs.promises.rm(taskSessionPath, { recursive: true, force: true });
+    } catch (err: unknown) {
+      this.logger.error(
+        { taskId, error: err, path: taskSessionPath },
+        'Failed to remove task session directory'
+      );
+    }
   }
 }

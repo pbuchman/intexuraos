@@ -101,12 +101,7 @@ Validation rules:
 - If label is \`code-task\`, Phase 2 ready must be \`yes\`.
 - If label is \`unclear\`, Phase 2 ready must be \`no\`.
 
-### Structured Output
-Your output will be validated via JSON schema. Provide:
-- \`linearUrl\`: Full Linear issue URL you enriched
-- \`label\`: The label you added (\`code-task\` or \`unclear\`)
-- \`prUrl\`: (optional) Design document PR URL if created
-- \`summary\`: Brief description of what was done`;
+After this block, stop. Do not append any other checklist or schema payload.`;
 }
 
 /**
@@ -177,52 +172,8 @@ PHASE2_FINAL:
 - Summary: <one short sentence>
 \`\`\`
 
-### Structured Output
-Your output will be validated via JSON schema. Provide:
-- \`prUrl\`: Full GitHub PR URL
-- \`linearUrl\`: Full Linear issue URL
-- \`ciPassed\`: Whether CI passed (boolean)
-- \`summary\`: Brief description of what was implemented`;
+After this block, stop. Do not append any other checklist or schema payload.`;
   /* v8 ignore stop @preserve */
-}
-
-const PHASE_1_SCHEMA = {
-  type: 'object',
-  properties: {
-    phase: { oneOf: [{ const: 1 }, { const: '1' }] },
-    linearUrl: { type: 'string', pattern: '^https://linear\\.app/.+/issue/.+' },
-    label: { type: 'string', enum: ['code-task', 'unclear'] },
-    prUrl: { type: 'string' },
-    summary: { type: 'string' },
-  },
-  required: ['phase', 'linearUrl', 'label', 'summary'],
-};
-
-const PHASE_2_SCHEMA = {
-  type: 'object',
-  properties: {
-    phase: { oneOf: [{ const: 2 }, { const: '2' }] },
-    prUrl: { type: 'string', pattern: '^https://github\\.com/.+/pull/\\d+' },
-    linearUrl: { type: 'string', pattern: '^https://linear\\.app/.+/issue/.+' },
-    ciPassed: { type: 'boolean' },
-    summary: { type: 'string' },
-  },
-  required: ['phase', 'prUrl', 'linearUrl', 'ciPassed', 'summary'],
-};
-
-/**
- * Build the JSON schema for structured output validation.
- *
- * The schema is phase-specific:
- * - Phase 1 (no 'code-task' label): linearUrl, label, summary required
- * - Phase 2 (has 'code-task' label): prUrl, linearUrl, ciPassed, summary required
- *
- * @param params - Parameters for schema selection
- * @returns JSON schema object for --json-schema flag
- */
-export function buildOutputSchema(params: SystemPromptParams): object {
-  const hasCodeTaskLabel = params.linearIssueLabels.includes('code-task');
-  return hasCodeTaskLabel ? PHASE_2_SCHEMA : PHASE_1_SCHEMA;
 }
 
 /**

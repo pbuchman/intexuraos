@@ -37,7 +37,7 @@ import { randomUUID } from 'node:crypto';
 import OpenAI from 'openai';
 import { buildResearchPrompt } from '@intexuraos/llm-prompts';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
+import { type AuditContext, type AuditSink, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmProviders,
   type LLMClient,
@@ -74,23 +74,30 @@ export function createGlmClient(config: GlmConfig): GlmClient {
     apiKey: config.apiKey,
     baseURL: GLM_API_BASE,
   });
-  const { model, userId, pricing, logger } = config;
-  const usageLogger = createUsageLogger({ logger });
+  const { model, userId, pricing, logger, usageSink, auditSink } = config;
+  const usageLogger = createUsageLogger({
+    logger,
+    ...(usageSink !== undefined && { sink: usageSink }),
+  });
 
   function createRequestContext(
     method: string,
     model: string,
-    prompt: string
+    prompt: string,
+    sink?: AuditSink
   ): { requestId: string; startTime: Date; auditContext: AuditContext } {
     const requestId = randomUUID();
     const startTime = new Date();
-    const auditContext = createAuditContext({
-      provider: LlmProviders.Zai,
-      model,
-      method,
-      prompt,
-      startedAt: startTime,
-    });
+    const auditContext = createAuditContext(
+      {
+        provider: LlmProviders.Zai,
+        model,
+        method,
+        prompt,
+        startedAt: startTime,
+      },
+      sink !== undefined ? { sink } : undefined
+    );
     return { requestId, startTime, auditContext };
   }
 
@@ -114,7 +121,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GlmError>> {
       const researchPrompt = buildResearchPrompt(prompt);
-      const { auditContext } = createRequestContext('research', model, researchPrompt);
+      const { auditContext } = createRequestContext('research', model, researchPrompt, auditSink);
 
       try {
         const response = await client.chat.completions.create({
@@ -176,7 +183,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
     },
 
     async generate(prompt: string): Promise<Result<GenerateResult, GlmError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt);
+      const { auditContext } = createRequestContext('generate', model, prompt, auditSink);
 
       try {
         const response = await client.chat.completions.create({

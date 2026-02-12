@@ -51,6 +51,8 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createGlmClient } = await import('../client.js');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
+const { createUsageLogger } = await import('@intexuraos/llm-pricing');
 
 const TEST_MODEL = 'glm-4.7';
 
@@ -64,6 +66,35 @@ const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing 
 describe('createGlmClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('passes audit and usage sinks to shared infra clients', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+    const auditSink = { save: vi.fn().mockResolvedValue({ ok: true, value: undefined }) };
+    const usageSink = { log: vi.fn().mockResolvedValue(undefined) };
+
+    const client = createGlmClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      pricing: createTestPricing(),
+      logger: mockLogger,
+      auditSink,
+      usageSink,
+    });
+
+    await client.generate('hello');
+
+    expect(createUsageLogger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        logger: mockLogger,
+        sink: usageSink,
+      })
+    );
+    expect(createAuditContext).toHaveBeenCalledWith(expect.any(Object), { sink: auditSink });
   });
 
   describe('research', () => {

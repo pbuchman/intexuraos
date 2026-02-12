@@ -1665,6 +1665,9 @@ importers:
       '@intexuraos/infra-glm':
         specifier: workspace:*
         version: link:../infra-glm
+      '@intexuraos/llm-audit':
+        specifier: workspace:*
+        version: link:../llm-audit
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
@@ -1750,9 +1753,27 @@ importers:
       '@fastify/cors':
         specifier: ^10.1.0
         version: 10.1.0
+      '@google-cloud/firestore':
+        specifier: ^7.10.0
+        version: 7.11.6(encoding@0.1.13)
+      '@google/genai':
+        specifier: ^1.0.0
+        version: 1.35.0(@modelcontextprotocol/sdk@1.25.2(hono@4.11.3)(zod@3.25.76))
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
+      '@intexuraos/llm-audit':
+        specifier: workspace:*
+        version: link:../../packages/llm-audit
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../../packages/llm-contract
+      '@intexuraos/llm-factory':
+        specifier: workspace:*
+        version: link:../../packages/llm-factory
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
       async-mutex:
         specifier: ^0.5.0
         version: 0.5.0
@@ -1774,6 +1795,9 @@ importers:
       minimatch:
         specifier: ^10.1.1
         version: 10.1.1
+      openai:
+        specifier: ^6.15.0
+        version: 6.16.0(ws@8.19.0)(zod@3.25.76)
       pino:
         specifier: ^9.6.0
         version: 9.14.0

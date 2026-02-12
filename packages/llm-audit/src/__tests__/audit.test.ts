@@ -16,6 +16,7 @@ vi.mock('@intexuraos/infra-firestore', () => ({
 }));
 
 const { createAuditContext, isAuditEnabled } = await import('../audit.js');
+const { NoopAuditSink, StructuredLogAuditSink } = await import('../sink.js');
 
 describe('isAuditEnabled', () => {
   const originalEnv = process.env['INTEXURAOS_AUDIT_LLMS'];
@@ -91,6 +92,76 @@ describe('createAuditContext', () => {
   });
 
   describe('success', () => {
+    it('uses custom sink when provided and does not require Firestore', async () => {
+      const save = vi.fn().mockResolvedValue({ ok: true, value: undefined });
+      const ctx = createAuditContext(
+        {
+          provider: LlmProviders.OpenAI,
+          model: 'gpt-4',
+          method: 'research',
+          prompt: 'Test prompt',
+          startedAt: new Date('2024-01-01T00:00:00Z'),
+        },
+        { sink: { save } }
+      );
+
+      await ctx.success({ response: 'Test response' });
+
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(mockGetFirestore).not.toHaveBeenCalled();
+    });
+
+    it('structured sink emits audit payload to logger', async () => {
+      const logger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      };
+      const sink = new StructuredLogAuditSink({ logger });
+      const ctx = createAuditContext(
+        {
+          provider: LlmProviders.OpenAI,
+          model: 'gpt-4',
+          method: 'generate',
+          prompt: 'Say hello',
+          startedAt: new Date('2024-01-01T00:00:00Z'),
+        },
+        { sink }
+      );
+
+      await ctx.success({ response: 'hello' });
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          audit: expect.objectContaining({
+            provider: LlmProviders.OpenAI,
+            model: 'gpt-4',
+            status: 'success',
+          }),
+        }),
+        'LLM audit log'
+      );
+      expect(mockGetFirestore).not.toHaveBeenCalled();
+    });
+
+    it('noop sink discards audit writes without Firestore access', async () => {
+      const ctx = createAuditContext(
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Flash,
+          method: 'generate',
+          prompt: 'Test',
+          startedAt: new Date('2024-01-01T00:00:00Z'),
+        },
+        { sink: new NoopAuditSink() }
+      );
+
+      await ctx.success({ response: 'ok' });
+
+      expect(mockGetFirestore).not.toHaveBeenCalled();
+    });
+
     it('saves audit log to Firestore on success', async () => {
       const startedAt = new Date('2024-01-01T00:00:00Z');
       const ctx = createAuditContext({

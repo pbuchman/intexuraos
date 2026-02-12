@@ -35,6 +35,8 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createGeminiClient } = await import('../client.js');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
+const { createUsageLogger } = await import('@intexuraos/llm-pricing');
 
 const TEST_MODEL = LlmModels.Gemini25Flash;
 
@@ -53,6 +55,36 @@ const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing 
 describe('createGeminiClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('passes audit and usage sinks to shared infra clients', async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: 'ok',
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      candidates: [{}],
+    });
+    const auditSink = { save: vi.fn().mockResolvedValue({ ok: true, value: undefined }) };
+    const usageSink = { log: vi.fn().mockResolvedValue(undefined) };
+
+    const client = createGeminiClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      pricing: createTestPricing(),
+      logger: mockLogger,
+      auditSink,
+      usageSink,
+    });
+
+    await client.generate('hello');
+
+    expect(createUsageLogger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        logger: mockLogger,
+        sink: usageSink,
+      })
+    );
+    expect(createAuditContext).toHaveBeenCalledWith(expect.any(Object), { sink: auditSink });
   });
 
   describe('research', () => {

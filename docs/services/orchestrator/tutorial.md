@@ -27,9 +27,12 @@ pnpm build
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
 PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh
+
+# Optional: prompt for missing Terraform-defined secret values
+PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh --add-new
 ```
 
-This creates `.envrc` with secrets from Secret Manager.
+This creates `.envrc` with secrets from Secret Manager and reports any missing/unreadable secrets.
 
 ### Step 3: Configure local overrides
 

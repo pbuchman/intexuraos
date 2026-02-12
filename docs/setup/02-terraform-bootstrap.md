@@ -97,24 +97,24 @@ Terraform creates empty secrets. You must populate them with actual values.
 
 ### Option A: Interactive Script (Recommended)
 
-Use the interactive script to populate all secrets:
+Use the single secrets script in `--add-new` mode to sync and populate missing secrets:
 
 ```bash
 # From repository root
-./scripts/populate-secrets.sh
+./scripts/sync-secrets.sh --add-new
 
 # Or specify environment
-./scripts/populate-secrets.sh dev
+./scripts/sync-secrets.sh dev --add-new
 ```
 
 The script will:
 
-1. Extract all secret names from Terraform configuration
-2. Prompt for each secret value (sensitive values are hidden)
-3. Skip secrets that already have values (with option to overwrite)
-4. Output a complete list of populated secrets at the end
+1. Sync readable/exportable Terraform-defined secrets into `.envrc`
+2. Print missing/unreadable secrets
+3. Prompt only for missing secret values (sensitive values are hidden)
+4. Re-sync `.envrc` after successful additions
 
-> **Important**: Save the final output - secret values won't be shown again!
+> **Note**: Existing secret values are not overwritten in `--add-new` mode.
 
 ### Option B: Manual Population
 

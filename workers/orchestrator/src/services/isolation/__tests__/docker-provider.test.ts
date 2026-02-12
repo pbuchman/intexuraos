@@ -210,21 +210,7 @@ describe('DockerProvider', () => {
       );
     });
 
-    it('writes json-schema.json when jsonSchema is provided', async () => {
-      const fs = await import('node:fs');
-      const config = createTestConfig({
-        jsonSchema: '{"type":"object","properties":{"phase":{"const":2}}}',
-      });
-      await provider.createWorker(config);
-
-      expect(fs.promises.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('json-schema.json'),
-        '{"type":"object","properties":{"phase":{"const":2}}}',
-        'utf-8'
-      );
-    });
-
-    it('does not write json-schema.json when jsonSchema is not provided', async () => {
+    it('does not write json-schema.json', async () => {
       const fs = await import('node:fs');
       const config = createTestConfig();
       await provider.createWorker(config);
@@ -235,6 +221,17 @@ describe('DockerProvider', () => {
           typeof call[0] === 'string' && (call[0] as string).includes('json-schema.json')
       );
       expect(jsonSchemaCalls).toHaveLength(0);
+    });
+
+    it('mounts persistent Claude session directory', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
     });
 
     it('mounts pnpm store volume and node_modules tmpfs', async () => {
@@ -259,6 +256,15 @@ describe('DockerProvider', () => {
       expect(envArr).toContainEqual('CLAUDE_WORKER_MODE=1');
     });
 
+    it('sets CLAUDE_CONTINUE for resumed attempts', async () => {
+      const config = createTestConfig({ continueSession: true });
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContainEqual('CLAUDE_CONTINUE=1');
+    });
+
     it('does not set CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env var', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
@@ -273,11 +279,26 @@ describe('DockerProvider', () => {
   });
 
   describe('destroyWorker', () => {
-    it('stops container without removing it', async () => {
+    it('stops and removes container', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
 
       await provider.destroyWorker('test-task-123');
+
+      expect(mocks.mockContainer.stop).toHaveBeenCalledWith({ t: 10 });
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+    });
+
+    it('does not remove container when keepContainersAlive is enabled', async () => {
+      const keepProvider = new TestableDockerProvider(
+        { keepContainersAlive: true },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const config = createTestConfig();
+      await keepProvider.createWorker(config);
+      await keepProvider.destroyWorker('test-task-123');
 
       expect(mocks.mockContainer.stop).toHaveBeenCalledWith({ t: 10 });
       expect(mocks.mockContainer.remove).not.toHaveBeenCalled();

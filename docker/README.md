@@ -112,6 +112,9 @@ pnpm run services:restart
 # Sync secrets from GCP Secret Manager (creates .envrc)
 ./scripts/sync-secrets.sh
 
+# Optional: prompt for missing Terraform-defined secret values
+./scripts/sync-secrets.sh --add-new
+
 # Copy local overrides template
 cp .envrc.local.example .envrc.local
 
