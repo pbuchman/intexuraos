@@ -122,6 +122,16 @@ describe('retryTask use case', () => {
       createIssue: vi.fn(),
       addComment: vi.fn(),
     };
+    mockLinearAgentClient.validateIssue.mockResolvedValue(
+      ok({
+        id: linearIssueId,
+        identifier: linearIssueId,
+        title: 'Retry mechanism test',
+        url: 'https://linear.app/intexuraos/issue/INT-520',
+        labels: ['unclear'],
+        childCount: 0,
+      })
+    );
 
     // Mock task dispatcher
     mockTaskDispatcher = {
@@ -671,6 +681,39 @@ describe('retryTask use case', () => {
       expect(createCallInput?.prompt).toContain('Original prompt');
       expect(createCallInput?.prompt).toContain('Additional context (retry)');
       expect(createCallInput?.prompt).toContain(additionalContext);
+    });
+
+    it('should refresh Linear labels and children before dispatch', async () => {
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        linearIssueLabels: ['stale-label'],
+        hasChildren: false,
+      });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Retry mechanism test',
+          url: 'https://linear.app/intexuraos/issue/INT-520',
+          labels: ['code-task'],
+          childCount: 2,
+        })
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, {
+        originalTaskId,
+        userId,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueLabels: ['code-task'],
+          hasChildren: true,
+        })
+      );
     });
 
     it('should bypass deduplication for retry tasks', async () => {

@@ -168,11 +168,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const task = taskResult.value;
+      const completedAt = new Date();
 
       // Step 3: Update task based on status
       if (status === 'completed') {
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'completed',
+          completedAt,
           ...(result !== undefined && { result }),
           callbackReceived: true,
         });
@@ -245,6 +247,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const taskError = error ?? { code: 'UNKNOWN_FAILURE', message: 'Task failed without error details' };
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'failed',
+          completedAt,
           error: {
             code: taskError.code,
             message: taskError.message,
@@ -305,6 +308,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       /* v8 ignore stop @preserve */
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'interrupted',
+          completedAt,
           error: {
             code: 'worker_interrupted',
             message: 'Worker was interrupted during task execution',

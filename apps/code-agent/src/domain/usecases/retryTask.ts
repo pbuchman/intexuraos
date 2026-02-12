@@ -126,6 +126,8 @@ export async function retryTask(
   }
 
   const originalTask = originalTaskResult.value;
+  let linearIssueLabelsForDispatch = originalTask.linearIssueLabels ?? [];
+  let hasChildrenForDispatch = originalTask.hasChildren ?? false;
 
   // Step 2: Validate status is failed, cancelled, or interrupted
   if (!['failed', 'cancelled', 'interrupted'].includes(originalTask.status)) {
@@ -189,6 +191,28 @@ export async function retryTask(
         code: 'invalid_status',
         message: 'An active task already exists for this Linear issue. Please wait for it to complete.',
       });
+    }
+  }
+
+  // Refresh Linear issue metadata so retries use current phase labels/child state.
+  if (originalTask.linearIssueId !== undefined) {
+    const validateIssueResult = await linearAgentClient.validateIssue({
+      userId,
+      identifier: originalTask.linearIssueId,
+    });
+
+    if (validateIssueResult.ok) {
+      linearIssueLabelsForDispatch = validateIssueResult.value.labels;
+      hasChildrenForDispatch = validateIssueResult.value.childCount > 0;
+    } else {
+      logger.warn(
+        {
+          linearIssueId: originalTask.linearIssueId,
+          errorCode: validateIssueResult.error.code,
+          errorMessage: validateIssueResult.error.message,
+        },
+        'Failed to refresh Linear issue labels for retry; using stored task labels'
+      );
     }
   }
 
@@ -304,8 +328,8 @@ ${additionalContext.trim()}
     webhookSecret,
     workerCredentials,
     retriedFrom: originalTaskId,
-    linearIssueLabels: originalTask.linearIssueLabels ?? [],
-    hasChildren: originalTask.hasChildren ?? false,
+    linearIssueLabels: linearIssueLabelsForDispatch,
+    hasChildren: hasChildrenForDispatch,
   };
 
   // Only include optional fields if defined

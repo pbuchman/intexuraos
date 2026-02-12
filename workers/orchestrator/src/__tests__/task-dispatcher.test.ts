@@ -1569,6 +1569,48 @@ describe('TaskDispatcher', () => {
         })
       );
     });
+
+    it('should detect Claude error when result JSON is split across log chunks', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'split-json-error',
+        workerType: 'auto',
+        prompt: 'Test split json',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await headerDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+
+      onLog?.('{"type":"result","is_error":true,');
+      onLog?.('"result":"split_error_detected"}');
+      onComplete?.(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await headerDispatcher.getTask('split-json-error');
+      expect(task?.status).toBe('failed');
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'CLAUDE_REPORTED_ERROR',
+              message: 'split_error_detected',
+            }),
+          }),
+        })
+      );
+    });
   });
 
   describe('API key validation', () => {
