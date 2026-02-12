@@ -34,33 +34,34 @@ orchestrator (local)
 
 ## Environment Variables
 
-All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.local` (local overrides). See `.envrc.local.example` for the full list.
+All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.local` (local overrides). If secrets are missing, run `./scripts/sync-secrets.sh --add-new`.
 
 ### Required (startup fails if missing)
 
-| Variable                            | Source         | Description                        |
-| ----------------------------------- | -------------- | ---------------------------------- |
-| `INTEXURAOS_REPOSITORY_URL`         | `.envrc.local` | GitHub repo URL for clone/fetch    |
-| `INTEXURAOS_CODE_AGENT_URL`         | `.envrc.local` | Webhook callback URL (Cloud Run)   |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`    | `.envrc`       | HMAC signing secret                |
-| `INTEXURAOS_PROJECT_ID`             | `.envrc.local` | GCP project for Secret Manager     |
-| `INTEXURAOS_GITHUB_APP_ID`          | `.envrc`       | GitHub App ID                      |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID` | `.envrc`       | GitHub App installation ID         |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | `.envrc`       | Service-to-service auth            |
-| `INTEXURAOS_LINEAR_API_KEY`         | `.envrc`       | Linear API key (passed to workers) |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | `.envrc`       | Sentry auth (passed to workers)    |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | `.envrc.local` | GCP SA key path                    |
+| Variable                            | Source         | Description                                       |
+| ----------------------------------- | -------------- | ------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL`         | `.envrc.local` | GitHub repo URL for clone/fetch                   |
+| `INTEXURAOS_CODE_AGENT_URL`         | `.envrc.local` | Webhook callback URL (Cloud Run)                  |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`    | `.envrc`       | HMAC signing secret                               |
+| `INTEXURAOS_PROJECT_ID`             | `.envrc.local` | GCP project for Secret Manager                    |
+| `INTEXURAOS_GITHUB_APP_ID`          | `.envrc`       | GitHub App ID                                     |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID` | `.envrc`       | GitHub App installation ID                        |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | `.envrc`       | Service-to-service auth                           |
+| `INTEXURAOS_LINEAR_API_KEY`         | `.envrc`       | Linear API key (passed to workers)                |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | `.envrc`       | Sentry auth (passed to workers)                   |
+| `INTEXURAOS_ANTHROPIC_API_KEY`      | `.envrc`       | Anthropic API key (passed to workers)             |
+| `INTEXURAOS_ZAI_API_KEY`            | `.envrc`       | ZAI API key (passed to workers)                   |
+| `INTEXURAOS_GEMINI_APP_API_KEY`     | `.envrc`       | Gemini API key (required for completion verifier) |
+| `GOOGLE_APPLICATION_CREDENTIALS`    | `.envrc.local` | GCP SA key path                                   |
 
 ### Optional
 
-| Variable                       | Default                       | Description                  |
-| ------------------------------ | ----------------------------- | ---------------------------- |
-| `INTEXURAOS_REPOSITORY_PATH`   | `~/.claude-orchestrator/repo` | Local repo clone path        |
-| `INTEXURAOS_ANTHROPIC_API_KEY` | `""`                          | Claude API key (for workers) |
-| `INTEXURAOS_ZAI_API_KEY`       | `""`                          | ZAI API key (for workers)    |
-| `INTEXURAOS_WORKER_CAPACITY`   | `2`                           | Max concurrent tasks         |
-| `PORT`                         | `8199`                        | HTTP server port             |
-| `LOG_LEVEL`                    | `info`                        | Pino log level               |
+| Variable                     | Default                       | Description           |
+| ---------------------------- | ----------------------------- | --------------------- |
+| `INTEXURAOS_REPOSITORY_PATH` | `~/.claude-orchestrator/repo` | Local repo clone path |
+| `INTEXURAOS_WORKER_CAPACITY` | `2`                           | Max concurrent tasks  |
+| `PORT`                       | `8199`                        | HTTP server port      |
+| `LOG_LEVEL`                  | `info`                        | Pino log level        |
 
 ---
 
@@ -80,6 +81,9 @@ pnpm install && pnpm build
 # 2. Sync secrets from GCP (creates .envrc)
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
 PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh
+
+# Optional: prompt to add missing Terraform-defined secret values
+PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh --add-new
 
 # 3. Add orchestrator vars to .envrc.local (see .envrc.local.example for full list)
 cat >> .envrc.local << 'EOF'

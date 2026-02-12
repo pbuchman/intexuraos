@@ -5,6 +5,8 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import type { AuditSink } from '@intexuraos/llm-audit';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 export type {
   LLMError as GlmError,
@@ -48,4 +50,8 @@ export interface GlmConfig {
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
+  /** Optional audit sink override (defaults to Firestore audit sink) */
+  auditSink?: AuditSink;
+  /** Optional usage sink override (defaults to Firestore usage sink) */
+  usageSink?: UsageSink;
 }

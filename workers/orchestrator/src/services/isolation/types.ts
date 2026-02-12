@@ -45,7 +45,7 @@ export interface WorkerConfig {
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
-  jsonSchema?: string;
+  continueSession?: boolean;
   onLog?: (chunk: string) => void;
   onComplete?: (exitCode: number) => void;
 }
@@ -113,4 +113,9 @@ export interface IsolationProvider {
    * List all running worker containers.
    */
   listWorkers(): Promise<WorkerHandle[]>;
+
+  /**
+   * Cleanup persistent per-task session artifacts.
+   */
+  cleanupTaskSession?(taskId: string): Promise<void>;
 }

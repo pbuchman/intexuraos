@@ -28,12 +28,15 @@ import { createIsolationProvider, TokenRefresher } from './services/isolation/in
 import { ApiKeyValidator } from './services/api-key-validator.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
-import type { IsolationConfig } from './services/task-dispatcher.js';
+import type { CompletionControlConfig, IsolationConfig } from './services/task-dispatcher.js';
+import { LlmModels } from '@intexuraos/llm-contract';
+import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
 const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 const EXEC_TIMEOUT_MS = 30 * 1000; // 30 seconds for external commands
+const DEFAULT_COMPLETION_MAX_ATTEMPTS = 3;
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -374,12 +377,11 @@ async function bootstrap(): Promise<void> {
 
   // Get API keys for workers
   const apiKeySecrets = {
-    // ANTHROPIC_API_KEY is optional - tasks with 'opus' or 'auto' workerType will fail
-    // if not set, but 'glm' (ZAI) tasks can still run
-    ANTHROPIC_API_KEY: getOptionalEnv('INTEXURAOS_ANTHROPIC_API_KEY', ''),
+    // Fail-fast: orchestrator requires both worker API keys at startup.
+    ANTHROPIC_API_KEY: getRequiredEnv('INTEXURAOS_ANTHROPIC_API_KEY'),
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
-    ZAI_API_KEY: getOptionalEnv('INTEXURAOS_ZAI_API_KEY', ''),
+    ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_API_KEY'),
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
@@ -400,6 +402,37 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  const completionMaxAttemptsRaw = parseInt(
+    getOptionalEnv('INTEXURAOS_COMPLETION_MAX_ATTEMPTS', String(DEFAULT_COMPLETION_MAX_ATTEMPTS)),
+    10
+  );
+  if (!Number.isInteger(completionMaxAttemptsRaw) || completionMaxAttemptsRaw < 1) {
+    process.stderr.write(
+      `\n❌ PRECONDITION FAILED: INTEXURAOS_COMPLETION_MAX_ATTEMPTS must be >= 1\n\n`
+    );
+    process.exit(1);
+  }
+
+  // Hard gate: completion verification is always enabled and Gemini-only.
+  const geminiVerifierKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY');
+  const completionVerifier = new OrchestratorCompletionVerifier(logger, {
+    model: LlmModels.Gemini25Flash,
+    geminiApiKey: geminiVerifierKey,
+  });
+
+  const completionControl: CompletionControlConfig = {
+    maxAttempts: completionMaxAttemptsRaw,
+    verifier: completionVerifier,
+  };
+
+  logger.info(
+    {
+      completionMaxAttempts: completionControl.maxAttempts,
+      verifier: completionVerifier.describe(),
+    },
+    'Completion verification configuration'
+  );
+
   const dispatcher = new TaskDispatcher(
     config,
     statePersistence,
@@ -408,7 +441,8 @@ async function bootstrap(): Promise<void> {
     webhookClient,
     tokenService,
     logger,
-    isolationConfig
+    isolationConfig,
+    completionControl
   );
 
   // Create heartbeat manager

@@ -64,8 +64,14 @@ const fakeLogger: Logger = {
   debug: vi.fn(),
 };
 
-const { UsageLogger, createUsageLogger, logUsage, isUsageLoggingEnabled } =
-  await import('../usageLogger.js');
+const {
+  UsageLogger,
+  createUsageLogger,
+  logUsage,
+  isUsageLoggingEnabled,
+  NoopUsageSink,
+  StructuredLogUsageSink,
+} = await import('../usageLogger.js');
 
 describe('usageLogger', () => {
   const originalEnv = process.env;
@@ -155,6 +161,63 @@ describe('usageLogger', () => {
     });
 
     describe('log', () => {
+      it('uses custom sink when provided and does not require Firestore', async () => {
+        const sink = {
+          log: vi.fn().mockResolvedValue(undefined),
+        };
+        const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
+        await usageLogger.log(baseParams);
+
+        expect(sink.log).toHaveBeenCalledWith(baseParams);
+        expect(mockFirestore.collection).not.toHaveBeenCalled();
+      });
+
+      it('structured sink emits usage payload to logger', async () => {
+        const sink = new StructuredLogUsageSink({ logger: fakeLogger });
+        const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
+        await usageLogger.log(baseParams);
+
+        expect(fakeLogger.info).toHaveBeenCalledWith(
+          expect.objectContaining({
+            usage: expect.objectContaining({
+              userId: 'user-123',
+              model: LlmModels.Gemini25Flash,
+              callType: 'research',
+              costUsd: 0.001,
+            }),
+          }),
+          'LLM usage sink log'
+        );
+        expect(mockFirestore.collection).not.toHaveBeenCalled();
+      });
+
+      it('structured sink includes errorMessage when provided', async () => {
+        const sink = new StructuredLogUsageSink({ logger: fakeLogger });
+        const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
+        await usageLogger.log({
+          ...baseParams,
+          success: false,
+          errorMessage: 'rate limited',
+        });
+
+        expect(fakeLogger.info).toHaveBeenCalledWith(
+          expect.objectContaining({
+            usage: expect.objectContaining({
+              success: false,
+              errorMessage: 'rate limited',
+            }),
+          }),
+          'LLM usage sink log'
+        );
+      });
+
+      it('noop sink discards usage writes without Firestore access', async () => {
+        const usageLogger = new UsageLogger({ logger: fakeLogger, sink: new NoopUsageSink() });
+        await usageLogger.log(baseParams);
+
+        expect(mockFirestore.collection).not.toHaveBeenCalled();
+      });
+
       it('uses model as document ID in collection', async () => {
         mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
 
@@ -328,7 +391,7 @@ describe('usageLogger', () => {
             error: 'Firestore error',
             params: baseParams,
           },
-          'Failed to log LLM usage to Firestore'
+          'Failed to log LLM usage'
         );
       });
 

@@ -6,6 +6,17 @@ export type TaskStatus =
   | 'interrupted'
   | 'cancelled';
 
+export interface TaskVerificationRecord {
+  attempt: number;
+  passed: boolean;
+  confidence: number;
+  reasons: string[];
+  missingCriteria: string[];
+  resumeInstruction: string;
+  usedLlm: boolean;
+  createdAt: string;
+}
+
 export interface Task {
   taskId: string;
   workerType: 'opus' | 'auto' | 'glm';
@@ -15,6 +26,7 @@ export interface Task {
   linearIssueId?: string;
   linearIssueTitle?: string;
   linearIssueLabels: string[];
+  hasChildren?: boolean;
   slug?: string;
   webhookUrl: string;
   webhookSecret: string;
@@ -29,6 +41,22 @@ export interface Task {
    * Used for tracking retry chains and debugging.
    */
   retriedFrom?: string;
+  /**
+   * Current execution attempt (starts at 1).
+   */
+  attemptCount?: number;
+  /**
+   * Maximum attempts allowed before terminal failure.
+   */
+  maxAttempts?: number;
+  /**
+   * Exit code from the most recent worker attempt.
+   */
+  lastExitCode?: number;
+  /**
+   * Verification history for each completed attempt.
+   */
+  verificationHistory?: TaskVerificationRecord[];
 }
 
 export interface TaskResult {

@@ -119,7 +119,7 @@ if [ -f "/repo/pnpm-lock.yaml" ]; then
 fi
 
 # ------------------------------------------------------------------------------
-# Start Claude in --print mode (non-interactive, structured JSON output)
+# Start Claude in --print mode (non-interactive)
 # ------------------------------------------------------------------------------
 echo "[entrypoint] Starting Claude..."
 echo "[entrypoint] Working directory: $(pwd)"
@@ -141,15 +141,22 @@ SYSTEM_PROMPT=$(cat /secrets/system-prompt.txt)
 echo "[entrypoint] System prompt loaded (${#SYSTEM_PROMPT} chars)"
 echo "[entrypoint] User prompt loaded ($(wc -c < /secrets/user-prompt.txt | tr -d ' ') bytes)"
 
-SCHEMA_FLAG=""
-if [ -f "/secrets/json-schema.json" ]; then
-    echo "[entrypoint] JSON schema loaded ($(wc -c < /secrets/json-schema.json | tr -d ' ') bytes)"
-    SCHEMA_FLAG="--json-schema $(cat /secrets/json-schema.json)"
+CLAUDE_CONTINUE_FLAG=""
+if [ "${CLAUDE_CONTINUE:-0}" = "1" ]; then
+    echo "[entrypoint] Resuming previous Claude session with --continue"
+    CLAUDE_CONTINUE_FLAG="--continue"
 fi
 
 echo "[entrypoint] Starting Claude in --print mode..."
-exec claude --print --verbose --output-format stream-json \
-    --dangerously-skip-permissions \
-    --system-prompt "$SYSTEM_PROMPT" \
-    $SCHEMA_FLAG \
-    < /secrets/user-prompt.txt
+if [ -n "$CLAUDE_CONTINUE_FLAG" ]; then
+    exec claude --print --verbose --output-format stream-json \
+        --dangerously-skip-permissions \
+        --system-prompt "$SYSTEM_PROMPT" \
+        --continue \
+        < /secrets/user-prompt.txt
+else
+    exec claude --print --verbose --output-format stream-json \
+        --dangerously-skip-permissions \
+        --system-prompt "$SYSTEM_PROMPT" \
+        < /secrets/user-prompt.txt
+fi

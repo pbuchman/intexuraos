@@ -2,31 +2,38 @@
 
 Build, deployment, and utility scripts.
 
-## populate-secrets.sh
+## sync-secrets.sh
 
-Interactive script to populate GCP Secret Manager secrets from Terraform configuration.
+Single entrypoint for local secrets workflow.
 
 ```bash
 # Run from repository root
-./scripts/populate-secrets.sh [environment]
+./scripts/sync-secrets.sh [environment]
 
 # Examples:
-./scripts/populate-secrets.sh      # uses dev environment
-./scripts/populate-secrets.sh dev  # explicit dev
+./scripts/sync-secrets.sh                  # sync only (non-interactive)
+./scripts/sync-secrets.sh dev              # explicit environment
+./scripts/sync-secrets.sh --add-new        # sync + prompt for missing values
+./scripts/sync-secrets.sh dev --add-new    # env-specific add-new mode
 ```
 
-The script:
+Mode 1: default (non-interactive)
 
-1. Extracts all `INTEXURAOS_*` secret names from `terraform/environments/<env>/main.tf`
-2. Prompts for each secret value (sensitive values like tokens/secrets are hidden)
-3. Skips secrets that already have values (with option to overwrite)
-4. Outputs all populated secrets at the end (save this output!)
+1. Reads Terraform-defined `INTEXURAOS_*` secrets from `terraform/environments/<env>/main.tf`
+2. Syncs readable/exportable secrets from GCP Secret Manager into `.envrc`
+3. Prints missing/unreadable secrets (no prompts)
+
+Mode 2: `--add-new` (interactive)
+
+1. Runs the same sync flow as default mode
+2. Prompts only for missing secret values (no overwrite flow)
+3. Re-syncs `.envrc` after successful additions
 
 Prerequisites:
 
 - gcloud CLI installed and authenticated
-- Project configured: `gcloud config set project <PROJECT_ID>`
-- Terraform applied: secrets must exist before populating values
+- Project configured (or provided with `--project-id`)
+- Terraform applied (secret resources must exist before adding versions)
 
 ## verify-connections.sh
 
@@ -48,7 +55,7 @@ See [docs/setup/10-claude-code-cloud-dev.md](../docs/setup/10-claude-code-cloud-
 
 ## Other Scripts
 
-- `sync-secrets.sh` - Sync secrets between environments
+- `sync-secrets.sh` - Sync `.envrc` from Secret Manager and optionally add missing values
 - `verify-boundaries.mjs` - Verify package import boundaries
 - `verify-common.mjs` - Verify common package constraints
 - `verify-package-json.mjs` - Verify package.json consistency

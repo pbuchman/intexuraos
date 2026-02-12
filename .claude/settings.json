@@ -134,6 +134,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/completion-validator.sh"
+          },
+          {
+            "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ownership-check.sh"
           }
         ]

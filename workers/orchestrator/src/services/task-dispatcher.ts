@@ -14,8 +14,9 @@ import type { IsolationProvider, WorkerConfig, WorkerType } from './isolation/ty
 import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
-import { buildSystemPrompt, buildOutputSchema } from './system-prompt.js';
+import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
+import { type CompletionVerifier, type CompletionVerifierVerdict } from './completion-verifier.js';
 
 const execAsync = promisify(exec);
 
@@ -49,6 +50,11 @@ export interface IsolationConfig {
   githubAppKeyPath: string;
 }
 
+export interface CompletionControlConfig {
+  maxAttempts: number;
+  verifier: CompletionVerifier;
+}
+
 export class TaskDispatcher {
   private runningCount = 0;
   private readonly capacityMutex = new Mutex();
@@ -56,6 +62,9 @@ export class TaskDispatcher {
   private readonly claudeErrors = new Map<string, string>();
   private readonly taskExitCodes = new Map<string, number>();
   private readonly claudeLogBuffers = new Map<string, string>();
+  private readonly completionInProgress = new Set<string>();
+  private readonly completionMaxAttempts: number;
+  private readonly completionVerifier: CompletionVerifier;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -65,8 +74,12 @@ export class TaskDispatcher {
     private readonly webhookClient: WebhookClient,
     _githubTokenService: GitHubTokenService,
     private readonly logger: Logger,
-    private readonly isolation: IsolationConfig
-  ) {}
+    private readonly isolation: IsolationConfig,
+    completionControl: CompletionControlConfig
+  ) {
+    this.completionMaxAttempts = completionControl.maxAttempts;
+    this.completionVerifier = completionControl.verifier;
+  }
 
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
     // Atomic capacity check
@@ -109,51 +122,6 @@ export class TaskDispatcher {
         return;
       }
 
-      // Start Docker container worker
-      let containerId: string;
-      const schemaEnabled = process.env['INTEXURAOS_WORKER_JSON_SCHEMA_ENABLED'] === '1';
-      const workerConfig: WorkerConfig = {
-        taskId,
-        worktreePath,
-        prompt: request.prompt,
-        /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
-        systemPrompt: buildSystemPrompt({
-          taskId,
-          worktreePath,
-          ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
-          linearIssueLabels: request.linearIssueLabels,
-          hasChildren: request.hasChildren,
-        }),
-        /* v8 ignore stop @preserve */
-        ...(schemaEnabled && {
-          jsonSchema: JSON.stringify(
-            buildOutputSchema({
-              taskId,
-              worktreePath,
-              ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
-              linearIssueLabels: request.linearIssueLabels,
-              hasChildren: request.hasChildren,
-            })
-          ),
-        }),
-        workerType: request.workerType,
-        secrets: this.isolation.secrets,
-        gcpSaKeyPath: this.isolation.gcpSaKeyPath,
-        githubAppKeyPath: this.isolation.githubAppKeyPath,
-        onLog: (chunk) => {
-          const cleaned = stripDockerHeaders(chunk);
-          this.logForwarder.appendChunk(taskId, cleaned);
-          this.detectClaudeError(taskId, cleaned);
-        },
-        onComplete: (exitCode) => {
-          this.flushClaudeErrorBuffer(taskId);
-          this.taskExitCodes.set(taskId, exitCode);
-          this.logForwarder.flushAndStop(taskId).catch((error: unknown) => {
-            this.logger.error({ taskId, error }, 'Failed to flush logs on completion');
-          });
-        },
-      };
-
       this.logForwarder.registerTask(taskId, request.webhookSecret);
 
       const workerTypeConfig = WORKER_TYPES[request.workerType as WorkerType];
@@ -171,30 +139,6 @@ export class TaskDispatcher {
         }
       }
 
-      try {
-        await this.isolation.tokenRefresher.registerTask(taskId);
-
-        const handle = await this.isolation.provider.createWorker(workerConfig);
-        containerId = handle.containerId;
-      } catch (error) {
-        this.runningCount--;
-        /* v8 ignore start -- ts-type: ternary type narrowing for error message extraction @preserve */
-        this.logger.error(
-          { taskId, error, errorMessage: error instanceof Error ? error.message : String(error) },
-          'Failed to create worker container'
-        );
-        /* v8 ignore stop @preserve */
-        this.logForwarder.unregisterTask(taskId);
-        this.worktreeManager.removeWorktree(taskId).catch((cleanupError: unknown) => {
-          this.logger.error(
-            { taskId, cleanupError },
-            'Failed to cleanup worktree after worker start failure'
-          );
-        });
-        await this.sendSetupFailureWebhook(request, 'Failed to start worker container', error);
-        return;
-      }
-
       // Create task object
       const task: Task = {
         taskId,
@@ -206,17 +150,59 @@ export class TaskDispatcher {
         webhookSecret: request.webhookSecret,
         status: 'running',
         worktreePath,
-        containerId,
+        containerId: '',
         ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
         ...(request.linearIssueTitle !== undefined && {
           linearIssueTitle: request.linearIssueTitle,
         }),
         linearIssueLabels: request.linearIssueLabels,
+        hasChildren: request.hasChildren,
         ...(request.slug !== undefined && { slug: request.slug }),
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
         startedAt: new Date().toISOString(),
+        attemptCount: 1,
+        maxAttempts: this.completionMaxAttempts,
+        verificationHistory: [],
       };
+
+      const startResult = await this.startWorkerAttempt(task, {
+        prompt: request.prompt,
+        hasChildren: request.hasChildren,
+        continueSession: false,
+      });
+      if (!startResult.ok) {
+        this.runningCount--;
+        /* v8 ignore start -- ts-type: ternary type narrowing for error message extraction @preserve */
+        this.logger.error(
+          {
+            taskId,
+            error: startResult.error,
+            errorMessage:
+              startResult.error instanceof Error
+                ? startResult.error.message
+                : String(startResult.error),
+          },
+          'Failed to create worker container'
+        );
+        /* v8 ignore stop @preserve */
+        this.isolation.tokenRefresher.unregisterTask(taskId);
+        this.logForwarder.unregisterTask(taskId);
+        await this.isolation.provider.cleanupTaskSession?.(taskId);
+        this.worktreeManager.removeWorktree(taskId).catch((cleanupError: unknown) => {
+          this.logger.error(
+            { taskId, cleanupError },
+            'Failed to cleanup worktree after worker start failure'
+          );
+        });
+        await this.sendSetupFailureWebhook(
+          request,
+          'Failed to start worker container',
+          startResult.error
+        );
+        return;
+      }
+      task.containerId = startResult.containerId;
 
       await this.saveTask(task);
 
@@ -293,6 +279,8 @@ export class TaskDispatcher {
       this.claudeErrors.delete(taskId);
       this.taskExitCodes.delete(taskId);
       this.claudeLogBuffers.delete(taskId);
+      this.completionInProgress.delete(taskId);
+      await this.isolation.provider.cleanupTaskSession?.(taskId);
 
       // Update task status
       task.status = 'cancelled';
@@ -404,6 +392,8 @@ export class TaskDispatcher {
           this.claudeErrors.delete(taskId);
           this.taskExitCodes.delete(taskId);
           this.claudeLogBuffers.delete(taskId);
+          this.completionInProgress.delete(taskId);
+          await this.isolation.provider.cleanupTaskSession?.(taskId);
 
           // Check for PR
           const result = await this.checkForResult(task);
@@ -453,8 +443,15 @@ export class TaskDispatcher {
           const isRunning = await this.isolation.provider.isWorkerRunning(taskId);
 
           if (!isRunning) {
-            // Task completed
-            await this.handleTaskCompletion(task);
+            if (this.completionInProgress.has(taskId)) {
+              return;
+            }
+            this.completionInProgress.add(taskId);
+            try {
+              await this.handleTaskCompletion(task);
+            } finally {
+              this.completionInProgress.delete(taskId);
+            }
           }
         } catch (error) {
           this.logger.error({ taskId, error }, 'Error in completion monitoring callback');
@@ -466,7 +463,14 @@ export class TaskDispatcher {
   }
 
   private async handleTaskCompletion(task: Task): Promise<void> {
-    this.logger.info({ taskId: task.taskId }, 'Task completed naturally');
+    const attempt = task.attemptCount ?? 1;
+    const maxAttempts = task.maxAttempts ?? this.completionMaxAttempts;
+    const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'phase2' : 'phase1';
+
+    this.logger.info(
+      { taskId: task.taskId, attempt, maxAttempts, phase },
+      'Worker attempt finished, running completion verification'
+    );
 
     try {
       await this.logForwarder.flushAndStop(task.taskId);
@@ -476,83 +480,220 @@ export class TaskDispatcher {
         'Failed to flush logs on task completion'
       );
     }
-    this.logForwarder.unregisterTask(task.taskId);
-    this.isolation.tokenRefresher.unregisterTask(task.taskId);
+
+    const result = await this.checkForResult(task);
+    const claudeError = this.claudeErrors.get(task.taskId);
+    const exitCode = this.taskExitCodes.get(task.taskId);
+    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
+    const verification = await this.completionVerifier.verify({
+      taskId: task.taskId,
+      attempt,
+      maxAttempts,
+      phase,
+      originalPrompt: task.prompt,
+      rawLogs,
+      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+      linearIssueLabels: task.linearIssueLabels,
+      ...(result !== undefined && { taskResult: result }),
+      ...(typeof exitCode === 'number' && { workerExitCode: exitCode }),
+      ...(claudeError !== undefined && { claudeError }),
+    });
+
+    if (typeof exitCode === 'number') {
+      task.lastExitCode = exitCode;
+    } else {
+      delete task.lastExitCode;
+    }
+    task.verificationHistory = [
+      ...(task.verificationHistory ?? []),
+      {
+        attempt,
+        passed: verification.passed,
+        confidence: verification.confidence,
+        reasons: verification.reasons,
+        missingCriteria: verification.missingCriteria,
+        resumeInstruction: verification.resumeInstruction,
+        usedLlm: verification.usedLlm,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    if (!verification.passed && attempt < maxAttempts) {
+      await this.teardownAttempt(task.taskId, true);
+
+      const resumePrompt = this.buildResumePrompt(task.prompt, verification);
+      const nextAttempt = attempt + 1;
+      const resumeStart = await this.startWorkerAttempt(task, {
+        prompt: resumePrompt,
+        hasChildren: task.hasChildren ?? false,
+        continueSession: true,
+      });
+
+      if (resumeStart.ok) {
+        task.attemptCount = nextAttempt;
+        task.containerId = resumeStart.containerId;
+        await this.saveTask(task);
+        this.logger.info(
+          { taskId: task.taskId, attempt: nextAttempt, maxAttempts },
+          'Resumed task with follow-up attempt'
+        );
+        this.claudeErrors.delete(task.taskId);
+        this.taskExitCodes.delete(task.taskId);
+        return;
+      }
+
+      const resumeError: TaskError = {
+        code: 'RESUME_ATTEMPT_FAILED',
+        message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
+        remediation: { action: 'retry' },
+      };
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error: resumeError,
+      });
+      return;
+    }
+
+    if (verification.passed) {
+      await this.finalizeTask(task, 'completed', {
+        ...(result !== undefined && { result }),
+      });
+      return;
+    }
+
+    const error: TaskError = {
+      code: 'TASK_COMPLETION_VERIFICATION_FAILED',
+      message: verification.reasons.join('; '),
+      remediation: {
+        action: 'retry',
+        ...(verification.missingCriteria.length > 0 && {
+          manualSteps: verification.missingCriteria,
+        }),
+      },
+    };
+
+    await this.finalizeTask(task, 'failed', {
+      ...(result !== undefined && { result }),
+      error,
+    });
+  }
+
+  private buildResumePrompt(
+    originalPrompt: string,
+    verification: CompletionVerifierVerdict
+  ): string {
+    const missingCriteria =
+      verification.missingCriteria.length > 0
+        ? verification.missingCriteria.map((criteria) => `- ${criteria}`).join('\n')
+        : '- Completion criteria not met';
+
+    return [
+      originalPrompt,
+      '',
+      '[AUTO-CONTINUE ATTEMPT]',
+      'Previous attempt did not meet completion criteria.',
+      'Address the exact gaps below, then finish.',
+      '',
+      'Missing criteria:',
+      missingCriteria,
+      '',
+      'Required action:',
+      verification.resumeInstruction,
+      '',
+      'Constraints:',
+      '- Do not restart from scratch.',
+      '- Continue from current repository/worktree state.',
+      '- Your last message must satisfy the required phase final block contract.',
+    ].join('\n');
+  }
+
+  private async startWorkerAttempt(
+    task: Task,
+    params: { prompt: string; hasChildren: boolean; continueSession: boolean }
+  ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
+    const workerConfig: WorkerConfig = {
+      taskId: task.taskId,
+      worktreePath: task.worktreePath,
+      prompt: params.prompt,
+      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+      systemPrompt: buildSystemPrompt({
+        taskId: task.taskId,
+        worktreePath: task.worktreePath,
+        ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+        linearIssueLabels: task.linearIssueLabels,
+        hasChildren: params.hasChildren,
+      }),
+      /* v8 ignore stop @preserve */
+      workerType: task.workerType,
+      secrets: this.isolation.secrets,
+      gcpSaKeyPath: this.isolation.gcpSaKeyPath,
+      githubAppKeyPath: this.isolation.githubAppKeyPath,
+      continueSession: params.continueSession,
+      onLog: (chunk) => {
+        const cleaned = stripDockerHeaders(chunk);
+        this.logForwarder.appendChunk(task.taskId, cleaned);
+        this.detectClaudeError(task.taskId, cleaned);
+      },
+      onComplete: (exitCode) => {
+        this.flushClaudeErrorBuffer(task.taskId);
+        this.taskExitCodes.set(task.taskId, exitCode);
+        this.logForwarder.flushAndStop(task.taskId).catch((error: unknown) => {
+          this.logger.error({ taskId: task.taskId, error }, 'Failed to flush logs on completion');
+        });
+      },
+    };
+
+    this.claudeErrors.delete(task.taskId);
+    this.taskExitCodes.delete(task.taskId);
     this.claudeLogBuffers.delete(task.taskId);
 
-    // Check for PR
-    const result = await this.checkForResult(task);
-
-    // Determine final status based on phase/final-message contract
-    const isPhase2 = this.hasCodeTaskLabel(task.linearIssueLabels);
-    let finalStatus: TaskStatus;
-    let error: TaskError | undefined;
-
-    // Check if Claude reported an error in its stream result
-    const claudeError = this.claudeErrors.get(task.taskId);
-    this.claudeErrors.delete(task.taskId);
-    const exitCode = this.taskExitCodes.get(task.taskId);
-    this.taskExitCodes.delete(task.taskId);
-
-    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
-    const verification = this.verifyCompletionContract(rawLogs, isPhase2);
-
-    /* v8 ignore start -- ts-type: optional chaining on result?.prUrl creates type narrowing branch @preserve */
-    if (claudeError !== undefined) {
-      finalStatus = 'failed';
-      error = {
-        code: 'CLAUDE_REPORTED_ERROR',
-        message: claudeError,
-        remediation: { action: 'retry' },
-      };
-    } else if (typeof exitCode === 'number' && exitCode !== 0) {
-      finalStatus = 'failed';
-      error = {
-        code: 'WORKER_EXIT_NONZERO',
-        message: `Worker exited with non-zero code: ${String(exitCode)}`,
-        remediation: { action: 'retry' },
-      };
-    } else if (!verification.ok) {
-      finalStatus = 'failed';
-      error = {
-        code: 'TASK_COMPLETION_CONTRACT_NOT_MET',
-        message: verification.reason,
-        remediation: { action: 'retry' },
-      };
-    } else if (isPhase2) {
-      if (result?.prUrl !== undefined) {
-        finalStatus = 'completed';
-      } else {
-        finalStatus = 'failed';
-        error = {
-          code: 'NO_PR_CREATED',
-          message: 'Task completed but no PR was created',
-          remediation: { action: 'retry' },
-        };
-      }
-    } else {
-      finalStatus = 'completed';
+    try {
+      await this.isolation.tokenRefresher.registerTask(task.taskId);
+      const handle = await this.isolation.provider.createWorker(workerConfig);
+      return { ok: true, containerId: handle.containerId };
+    } catch (error) {
+      return { ok: false, error };
     }
-    /* v8 ignore stop @preserve */
+  }
 
-    // Update task
+  private async teardownAttempt(taskId: string, keepSession: boolean): Promise<void> {
+    try {
+      await this.isolation.provider.destroyWorker(taskId);
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to destroy worker after attempt completion');
+    }
+    if (!keepSession) {
+      await this.isolation.provider.cleanupTaskSession?.(taskId);
+    }
+  }
+
+  private async finalizeTask(
+    task: Task,
+    finalStatus: TaskStatus,
+    payload: { result?: TaskResult; error?: TaskError }
+  ): Promise<void> {
+    await this.teardownAttempt(task.taskId, false);
+    this.logForwarder.unregisterTask(task.taskId);
+    this.isolation.tokenRefresher.unregisterTask(task.taskId);
+    this.claudeErrors.delete(task.taskId);
+    this.taskExitCodes.delete(task.taskId);
+    this.claudeLogBuffers.delete(task.taskId);
+
     task.status = finalStatus;
     task.completedAt = new Date().toISOString();
     await this.saveTask(task);
 
-    // Decrease running count
     this.runningCount--;
     this.clearTaskTimers(task.taskId);
 
-    // Send webhook
     await this.webhookClient.send({
       url: task.webhookUrl,
       secret: task.webhookSecret,
       payload: {
         taskId: task.taskId,
         status: finalStatus,
-        result,
-        error,
+        ...(payload.result !== undefined && { result: payload.result }),
+        ...(payload.error !== undefined && { error: payload.error }),
         duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
       },
       taskId: task.taskId,
@@ -591,7 +732,7 @@ export class TaskDispatcher {
         /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
 
         // Check CI status
-        let ciFailed = false;
+        let ciFailed: boolean | undefined;
         try {
           const { stdout: ciOutput } = await execAsync(
             /* v8 ignore stop @preserve */
@@ -600,10 +741,7 @@ export class TaskDispatcher {
           );
           ciFailed = parseInt(ciOutput.trim(), 10) > 0;
         } catch {
-          this.logger.warn(
-            { taskId: task.taskId },
-            'Failed to check CI status, assuming not failed'
-          );
+          this.logger.warn({ taskId: task.taskId }, 'Failed to check CI status for PR');
         }
 
         // Check for rebase result
@@ -640,7 +778,7 @@ export class TaskDispatcher {
           commits,
           prUrl: pr.url,
           summary: pr.title,
-          ciFailed,
+          ...(ciFailed !== undefined && { ciFailed }),
           /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
           ...(rebaseResult !== undefined && { rebaseResult }),
           /* v8 ignore stop @preserve */
@@ -663,112 +801,6 @@ export class TaskDispatcher {
       const normalized = label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
       return normalized === 'code-task';
     });
-  }
-
-  private verifyCompletionContract(
-    rawLogs: string,
-    isPhase2: boolean
-  ): { ok: true } | { ok: false; reason: string } {
-    const lastAssistantMessage = this.extractLastAssistantMessage(rawLogs);
-    if (lastAssistantMessage === null) {
-      return { ok: false, reason: 'Missing assistant final message in worker logs' };
-    }
-
-    if (!isPhase2) {
-      return this.verifyPhase1Final(lastAssistantMessage);
-    }
-    return this.verifyPhase2Final(lastAssistantMessage);
-  }
-
-  private extractLastAssistantMessage(rawLogs: string): string | null {
-    let lastAssistantText: string | null = null;
-
-    for (const rawLine of stripDockerHeaders(rawLogs).split('\n')) {
-      const line = rawLine.trim();
-      if (line === '') continue;
-      const jsonStart = line.indexOf('{');
-      if (jsonStart === -1) continue;
-      const candidate = line.slice(jsonStart);
-
-      try {
-        const parsed = JSON.parse(candidate) as {
-          type?: string;
-          message?: { content?: { type?: string; text?: string }[] };
-        };
-        if (parsed.type !== 'assistant') continue;
-        const text = (parsed.message?.content ?? [])
-          .filter((part) => part.type === 'text' && typeof part.text === 'string')
-          .map((part) => part.text ?? '')
-          .join('\n')
-          .trim();
-        if (text !== '') {
-          lastAssistantText = text;
-        }
-      } catch {
-        // Ignore non-JSON lines
-      }
-    }
-
-    return lastAssistantText;
-  }
-
-  private verifyPhase1Final(message: string): { ok: true } | { ok: false; reason: string } {
-    if (!message.includes('PHASE1_FINAL:')) {
-      return { ok: false, reason: 'Missing PHASE1_FINAL block in final message' };
-    }
-    const labelMatch = /- Linear label set:\s*(code-task|unclear)\s*$/im.exec(message);
-    const readyMatch = /- Phase 2 ready:\s*(yes|no)\s*$/im.exec(message);
-    const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
-    const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
-
-    if (labelMatch?.[1] === undefined) {
-      return { ok: false, reason: 'Missing or invalid Phase 1 label line' };
-    }
-    if (readyMatch?.[1] === undefined) {
-      return { ok: false, reason: 'Missing or invalid Phase 1 readiness line' };
-    }
-    if (linearMatch?.[1] === undefined) {
-      return { ok: false, reason: 'Missing Linear issue URL in Phase 1 final block' };
-    }
-    if ((summaryMatch?.[1] ?? '').trim() === '') {
-      return { ok: false, reason: 'Missing summary in Phase 1 final block' };
-    }
-
-    const label = labelMatch[1].toLowerCase();
-    const ready = readyMatch[1].toLowerCase();
-    if (label === 'code-task' && ready !== 'yes') {
-      return { ok: false, reason: 'Phase 1 contract mismatch: code-task requires Phase 2 ready yes' };
-    }
-    if (label === 'unclear' && ready !== 'no') {
-      return { ok: false, reason: 'Phase 1 contract mismatch: unclear requires Phase 2 ready no' };
-    }
-
-    return { ok: true };
-  }
-
-  private verifyPhase2Final(message: string): { ok: true } | { ok: false; reason: string } {
-    if (!message.includes('PHASE2_FINAL:')) {
-      return { ok: false, reason: 'Missing PHASE2_FINAL block in final message' };
-    }
-    const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
-    const ciMatch = /- CI evidence:\s*pnpm run ci:tracked successful\s*$/im.exec(message);
-    const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
-    const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
-
-    if (prMatch?.[1] === undefined) {
-      return { ok: false, reason: 'Missing PR URL in Phase 2 final block' };
-    }
-    if (ciMatch?.[0] === undefined) {
-      return { ok: false, reason: 'Missing CI evidence line in Phase 2 final block' };
-    }
-    if (linearMatch?.[1] === undefined) {
-      return { ok: false, reason: 'Missing Linear issue URL in Phase 2 final block' };
-    }
-    if ((summaryMatch?.[1] ?? '').trim() === '') {
-      return { ok: false, reason: 'Missing summary in Phase 2 final block' };
-    }
-
-    return { ok: true };
   }
 
   private detectClaudeError(taskId: string, chunk: string): void {
@@ -832,5 +864,6 @@ export class TaskDispatcher {
         this.activeTasks.delete(key);
       }
     }
+    this.completionInProgress.delete(taskId);
   }
 }

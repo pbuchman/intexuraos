@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSystemPrompt, buildOutputSchema } from '../system-prompt.js';
+import { buildSystemPrompt } from '../system-prompt.js';
 
 describe('system-prompt', () => {
   describe('buildSystemPrompt', () => {
@@ -84,21 +84,6 @@ describe('system-prompt', () => {
         });
 
         expect(result).toContain('[PHASE:1]');
-      });
-
-      it('should include structured output section in Phase 1', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
-
-        expect(result).toContain('### Structured Output');
-        expect(result).toContain('`linearUrl`');
-        expect(result).toContain('`label`');
-        expect(result).toContain('`prUrl`');
-        expect(result).toContain('`summary`');
-        expect(result).not.toContain('---COMPLETION---');
-        expect(result).not.toContain('---END---');
       });
 
       it('should mention both code-task and unclear labels in Phase 1', () => {
@@ -217,21 +202,6 @@ describe('system-prompt', () => {
 
         expect(result).toContain('[PHASE:2]');
       });
-
-      it('should include structured output section in Phase 2', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['code-task'],
-        });
-
-        expect(result).toContain('### Structured Output');
-        expect(result).toContain('`prUrl`');
-        expect(result).toContain('`linearUrl`');
-        expect(result).toContain('`ciPassed`');
-        expect(result).toContain('`summary`');
-        expect(result).not.toContain('---COMPLETION---');
-        expect(result).not.toContain('---END---');
-      });
     });
 
     describe('Label Detection', () => {
@@ -270,102 +240,6 @@ describe('system-prompt', () => {
 
         expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
       });
-    });
-  });
-
-  describe('buildOutputSchema', () => {
-    const baseParams = {
-      taskId: 'task-123',
-      worktreePath: '/tmp/worktree-task-123',
-      linearIssueId: 'INT-123',
-      linearIssueLabels: [] as string[],
-      hasChildren: false,
-    };
-
-    it('should return Phase 1 schema when code-task label is absent', () => {
-      const schema = buildOutputSchema({
-        ...baseParams,
-        linearIssueLabels: [],
-      }) as Record<string, unknown>;
-
-      expect(schema['type']).toBe('object');
-      const required = schema['required'] as string[];
-      expect(required).toContain('phase');
-      expect(required).toContain('linearUrl');
-      expect(required).toContain('label');
-      expect(required).toContain('summary');
-      expect(required).not.toContain('prUrl');
-      expect(required).not.toContain('ciPassed');
-    });
-
-    it('should return Phase 2 schema when code-task label is present', () => {
-      const schema = buildOutputSchema({
-        ...baseParams,
-        linearIssueLabels: ['code-task'],
-      }) as Record<string, unknown>;
-
-      expect(schema['type']).toBe('object');
-      const required = schema['required'] as string[];
-      expect(required).toContain('phase');
-      expect(required).toContain('prUrl');
-      expect(required).toContain('linearUrl');
-      expect(required).toContain('ciPassed');
-      expect(required).toContain('summary');
-      expect(required).not.toContain('label');
-    });
-
-    it('should accept both integer and string phase values in Phase 1 schema', () => {
-      const schema = buildOutputSchema({
-        ...baseParams,
-        linearIssueLabels: [],
-      }) as { properties: Record<string, { oneOf?: { const: unknown }[] }> };
-
-      const phaseOneOf = schema.properties['phase']?.oneOf;
-      expect(phaseOneOf).toBeDefined();
-      expect(phaseOneOf).toHaveLength(2);
-      expect(phaseOneOf?.[0]?.const).toBe(1);
-      expect(phaseOneOf?.[1]?.const).toBe('1');
-    });
-
-    it('should accept both integer and string phase values in Phase 2 schema', () => {
-      const schema = buildOutputSchema({
-        ...baseParams,
-        linearIssueLabels: ['code-task'],
-      }) as { properties: Record<string, { oneOf?: { const: unknown }[] }> };
-
-      const phaseOneOf = schema.properties['phase']?.oneOf;
-      expect(phaseOneOf).toBeDefined();
-      expect(phaseOneOf).toHaveLength(2);
-      expect(phaseOneOf?.[0]?.const).toBe(2);
-      expect(phaseOneOf?.[1]?.const).toBe('2');
-    });
-
-    it('should include label enum in Phase 1 schema', () => {
-      const schema = buildOutputSchema({
-        ...baseParams,
-        linearIssueLabels: [],
-      }) as { properties: Record<string, Record<string, unknown>> };
-
-      expect(schema.properties['label']?.['enum']).toEqual(['code-task', 'unclear']);
-    });
-
-    it('should include URL patterns in Phase 2 schema', () => {
-      const schema = buildOutputSchema({
-        ...baseParams,
-        linearIssueLabels: ['code-task'],
-      }) as { properties: Record<string, Record<string, unknown>> };
-
-      expect(schema.properties['prUrl']?.['pattern']).toContain('github\\.com');
-      expect(schema.properties['linearUrl']?.['pattern']).toContain('linear\\.app');
-    });
-
-    it('should select Phase 2 when code-task is among other labels', () => {
-      const schema = buildOutputSchema({
-        ...baseParams,
-        linearIssueLabels: ['bug', 'code-task', 'high-priority'],
-      }) as { properties: Record<string, { oneOf?: { const: unknown }[] }> };
-
-      expect(schema.properties['phase']?.oneOf?.[0]?.const).toBe(2);
     });
   });
 });

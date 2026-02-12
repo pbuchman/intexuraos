@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-audit": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-glm": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
