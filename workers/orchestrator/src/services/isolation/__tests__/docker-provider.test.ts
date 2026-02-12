@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { DockerProvider, type DockerProviderConfig } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
 
@@ -57,8 +58,17 @@ function createMockDocker(): MockDockerResult {
         limit: 1024 * 1024 * 1024 * 8,
       },
     }),
-    exec: vi.fn().mockResolvedValue({
-      start: vi.fn().mockResolvedValue({ on: vi.fn(), end: vi.fn() }),
+    exec: vi.fn().mockImplementation(async () => {
+      const stream = new EventEmitter() as unknown as NodeJS.ReadableStream;
+      const start = vi.fn().mockImplementation(async () => {
+        setTimeout(() => {
+          stream.emit('data', Buffer.from('attempt logs'));
+          stream.emit('end');
+        }, 0);
+        return stream;
+      });
+      const inspect = vi.fn().mockResolvedValue({ ExitCode: 0 });
+      return { start, inspect };
     }),
     kill: vi.fn().mockResolvedValue(undefined),
   };
@@ -263,6 +273,23 @@ describe('DockerProvider', () => {
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       expect(envArr).toContainEqual('CLAUDE_CONTINUE=1');
+    });
+
+    it('reuses existing container for continued attempts', async () => {
+      const initialConfig = createTestConfig({ continueSession: false });
+      await provider.createWorker(initialConfig);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      await provider.createWorker(
+        createTestConfig({
+          continueSession: true,
+          prompt: 'Second attempt prompt',
+          systemPrompt: 'Second attempt system prompt',
+        })
+      );
+
+      expect(mocks.mockDocker.createContainer).toHaveBeenCalledTimes(1);
+      expect(mocks.mockContainer.exec).toHaveBeenCalledTimes(2);
     });
 
     it('does not set CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env var', async () => {

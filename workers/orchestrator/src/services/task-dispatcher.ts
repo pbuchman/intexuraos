@@ -62,6 +62,7 @@ export class TaskDispatcher {
   private readonly claudeErrors = new Map<string, string>();
   private readonly taskExitCodes = new Map<string, number>();
   private readonly claudeLogBuffers = new Map<string, string>();
+  private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
@@ -279,6 +280,7 @@ export class TaskDispatcher {
       this.claudeErrors.delete(taskId);
       this.taskExitCodes.delete(taskId);
       this.claudeLogBuffers.delete(taskId);
+      this.attemptCompletionSignals.delete(taskId);
       this.completionInProgress.delete(taskId);
       await this.isolation.provider.cleanupTaskSession?.(taskId);
 
@@ -392,6 +394,7 @@ export class TaskDispatcher {
           this.claudeErrors.delete(taskId);
           this.taskExitCodes.delete(taskId);
           this.claudeLogBuffers.delete(taskId);
+          this.attemptCompletionSignals.delete(taskId);
           this.completionInProgress.delete(taskId);
           await this.isolation.provider.cleanupTaskSession?.(taskId);
 
@@ -441,8 +444,9 @@ export class TaskDispatcher {
 
           // Check if Docker container is still running
           const isRunning = await this.isolation.provider.isWorkerRunning(taskId);
+          const attemptCompleted = this.attemptCompletionSignals.has(taskId);
 
-          if (!isRunning) {
+          if (!isRunning || attemptCompleted) {
             if (this.completionInProgress.has(taskId)) {
               return;
             }
@@ -466,6 +470,7 @@ export class TaskDispatcher {
     const attempt = task.attemptCount ?? 1;
     const maxAttempts = task.maxAttempts ?? this.completionMaxAttempts;
     const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'phase2' : 'phase1';
+    this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(
       { taskId: task.taskId, attempt, maxAttempts, phase },
@@ -611,6 +616,8 @@ export class TaskDispatcher {
     task: Task,
     params: { prompt: string; hasChildren: boolean; continueSession: boolean }
   ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
+    this.attemptCompletionSignals.delete(task.taskId);
+
     const workerConfig: WorkerConfig = {
       taskId: task.taskId,
       worktreePath: task.worktreePath,
@@ -637,6 +644,7 @@ export class TaskDispatcher {
       onComplete: (exitCode) => {
         this.flushClaudeErrorBuffer(task.taskId);
         this.taskExitCodes.set(task.taskId, exitCode);
+        this.attemptCompletionSignals.add(task.taskId);
         this.logForwarder.flushAndStop(task.taskId).catch((error: unknown) => {
           this.logger.error({ taskId: task.taskId, error }, 'Failed to flush logs on completion');
         });
@@ -657,12 +665,12 @@ export class TaskDispatcher {
   }
 
   private async teardownAttempt(taskId: string, keepSession: boolean): Promise<void> {
-    try {
-      await this.isolation.provider.destroyWorker(taskId);
-    } catch (error) {
-      this.logger.warn({ taskId, error }, 'Failed to destroy worker after attempt completion');
-    }
     if (!keepSession) {
+      try {
+        await this.isolation.provider.destroyWorker(taskId);
+      } catch (error) {
+        this.logger.warn({ taskId, error }, 'Failed to destroy worker after attempt completion');
+      }
       await this.isolation.provider.cleanupTaskSession?.(taskId);
     }
   }
@@ -678,6 +686,7 @@ export class TaskDispatcher {
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
     this.claudeLogBuffers.delete(task.taskId);
+    this.attemptCompletionSignals.delete(task.taskId);
 
     task.status = finalStatus;
     task.completedAt = new Date().toISOString();
@@ -865,5 +874,6 @@ export class TaskDispatcher {
       }
     }
     this.completionInProgress.delete(taskId);
+    this.attemptCompletionSignals.delete(taskId);
   }
 }

@@ -424,6 +424,16 @@ describe('formatLogChunk', () => {
       const result = formatLogChunk(json, 0, ts());
       expect(result).toEqual([]);
     });
+
+    it('strips system-reminder block from tool_result content', () => {
+      const json = JSON.stringify({
+        type: 'tool_result',
+        content:
+          'line 1\n<system-reminder>secret reminder</system-reminder>\nline 2'
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 line 1\n    line 2');
+    });
   });
 
   describe('user messages (tool results)', () => {
@@ -654,12 +664,78 @@ describe('formatLogChunk', () => {
       ].join('\n');
 
       const result = formatLogChunk(chunk, 0, ts());
-      expect(result).toHaveLength(5);
+      expect(result).toHaveLength(4);
       expect(result[0]?.text).toBe('[init] Model: opus');
       expect(result[1]?.text).toBe('Starting task');
       expect(result[2]?.text).toBe('[tool] Read: /test.ts');
-      expect(result[3]?.text).toBe('  \u2192 export const x = 1;');
-      expect(result[4]?.text).toBe('[done] 1.5s, 1 turns');
+      expect(result[3]?.text).toBe('[done] 1.5s, 1 turns');
+    });
+
+    it('suppresses successful Read tool output but keeps Read errors', () => {
+      const readCallId = 'call_123';
+      const chunk = [
+        JSON.stringify({
+          type: 'assistant',
+          message: {
+            content: [{
+              type: 'tool_use',
+              id: readCallId,
+              name: 'Read',
+              input: { file_path: '/repo/apps/web/src/styles/index.css' }
+            }]
+          }
+        }),
+        JSON.stringify({
+          type: 'user',
+          message: {
+            content: [{
+              type: 'tool_result',
+              tool_use_id: readCallId,
+              content: '1\u2192body { color: red; }'
+            }]
+          }
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          message: {
+            content: [{
+              type: 'tool_use',
+              id: 'call_456',
+              name: 'Read',
+              input: { file_path: '/repo/missing.ts' }
+            }]
+          }
+        }),
+        JSON.stringify({
+          type: 'user',
+          message: {
+            content: [{
+              type: 'tool_result',
+              tool_use_id: 'call_456',
+              content: 'File does not exist.',
+              is_error: true
+            }]
+          }
+        })
+      ].join('\n');
+
+      const result = formatLogChunk(chunk, 0, ts());
+      expect(result).toHaveLength(3);
+      expect(result[0]?.text).toBe('[tool] Read: /repo/apps/web/src/styles/index.css');
+      expect(result[1]?.text).toBe('[tool] Read: /repo/missing.ts');
+      expect(result[2]?.text).toBe('  \u2717 File does not exist.');
+    });
+
+    it('drops standalone system-reminder raw line', () => {
+      const raw = [
+        'before',
+        '<system-reminder>remove this noise</system-reminder>',
+        'after'
+      ].join('\n');
+      const result = formatLogChunk(raw, 0, ts());
+      expect(result).toHaveLength(2);
+      expect(result[0]?.text).toBe('before');
+      expect(result[1]?.text).toBe('after');
     });
   });
 });
