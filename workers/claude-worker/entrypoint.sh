@@ -5,6 +5,73 @@ set -euo pipefail
 # Claude Worker Container Entrypoint
 # ==============================================================================
 
+setup_github_token() {
+    if [ -f "/secrets/github-token" ]; then
+        export GITHUB_TOKEN=$(cat /secrets/github-token)
+        # Configure git to use the token for HTTPS pushes
+        git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
+        echo "[entrypoint] GitHub token loaded and git credential configured"
+    else
+        echo "[entrypoint] WARNING: GitHub token not found at /secrets/github-token"
+    fi
+}
+
+run_claude_attempt() {
+    if [ ! -d "/repo" ]; then
+        echo "[entrypoint] ERROR: /repo directory not mounted" >&2
+        return 1
+    fi
+
+    cd /repo
+    setup_github_token
+
+    if [ ! -f "/secrets/system-prompt.txt" ]; then
+        echo "[entrypoint] ERROR: /secrets/system-prompt.txt not found" >&2
+        return 1
+    fi
+
+    if [ ! -f "/secrets/user-prompt.txt" ]; then
+        echo "[entrypoint] ERROR: /secrets/user-prompt.txt not found" >&2
+        return 1
+    fi
+
+    local system_prompt
+    system_prompt=$(cat /secrets/system-prompt.txt)
+    echo "[entrypoint] System prompt loaded (${#system_prompt} chars)"
+    echo "[entrypoint] User prompt loaded ($(wc -c < /secrets/user-prompt.txt | tr -d ' ') bytes)"
+
+    local continue_flag="${CLAUDE_CONTINUE:-0}"
+    if [ "$continue_flag" = "1" ]; then
+        echo "[entrypoint] Resuming previous Claude session with --continue"
+    fi
+
+    echo "[entrypoint] Starting Claude in --print mode..."
+
+    set +e
+    if [ "$continue_flag" = "1" ]; then
+        claude --print --verbose --output-format stream-json \
+            --dangerously-skip-permissions \
+            --system-prompt "$system_prompt" \
+            --continue \
+            < /secrets/user-prompt.txt
+    else
+        claude --print --verbose --output-format stream-json \
+            --dangerously-skip-permissions \
+            --system-prompt "$system_prompt" \
+            < /secrets/user-prompt.txt
+    fi
+    local exit_code=$?
+    set -e
+
+    echo "[entrypoint] Claude attempt finished with exit code: ${exit_code}"
+    return "$exit_code"
+}
+
+if [ "${1:-}" = "run-attempt" ]; then
+    run_claude_attempt
+    exit $?
+fi
+
 echo "[entrypoint] Claude worker starting at $(date)"
 echo "[entrypoint] Task ID: ${TASK_ID:-unknown}"
 
@@ -77,16 +144,6 @@ fi
 # ------------------------------------------------------------------------------
 # Set up GitHub token (refreshed by orchestrator)
 # ------------------------------------------------------------------------------
-setup_github_token() {
-    if [ -f "/secrets/github-token" ]; then
-        export GITHUB_TOKEN=$(cat /secrets/github-token)
-        # Configure git to use the token for HTTPS pushes
-        git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
-        echo "[entrypoint] GitHub token loaded and git credential configured"
-    else
-        echo "[entrypoint] WARNING: GitHub token not found at /secrets/github-token"
-    fi
-}
 setup_github_token
 
 # Watch for token refresh in background
@@ -119,7 +176,17 @@ if [ -f "/repo/pnpm-lock.yaml" ]; then
 fi
 
 # ------------------------------------------------------------------------------
-# Start Claude in --print mode (non-interactive)
+# Managed mode: stay alive and wait for orchestrator to run attempts via docker exec
+# ------------------------------------------------------------------------------
+if [ "${CLAUDE_MANAGED_MODE:-0}" = "1" ]; then
+    echo "[entrypoint] Managed attempt mode enabled; waiting for run-attempt invocations"
+    while true; do
+        sleep 3600
+    done
+fi
+
+# ------------------------------------------------------------------------------
+# Legacy mode: run Claude once and exit container
 # ------------------------------------------------------------------------------
 echo "[entrypoint] Starting Claude..."
 echo "[entrypoint] Working directory: $(pwd)"
@@ -127,36 +194,5 @@ if [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; then
     echo "[entrypoint] Git branch: $(git -C /repo branch --show-current 2>/dev/null || echo 'unknown')"
 fi
 
-if [ ! -f "/secrets/system-prompt.txt" ]; then
-    echo "[entrypoint] ERROR: /secrets/system-prompt.txt not found" >&2
-    exit 1
-fi
-
-if [ ! -f "/secrets/user-prompt.txt" ]; then
-    echo "[entrypoint] ERROR: /secrets/user-prompt.txt not found" >&2
-    exit 1
-fi
-
-SYSTEM_PROMPT=$(cat /secrets/system-prompt.txt)
-echo "[entrypoint] System prompt loaded (${#SYSTEM_PROMPT} chars)"
-echo "[entrypoint] User prompt loaded ($(wc -c < /secrets/user-prompt.txt | tr -d ' ') bytes)"
-
-CLAUDE_CONTINUE_FLAG=""
-if [ "${CLAUDE_CONTINUE:-0}" = "1" ]; then
-    echo "[entrypoint] Resuming previous Claude session with --continue"
-    CLAUDE_CONTINUE_FLAG="--continue"
-fi
-
-echo "[entrypoint] Starting Claude in --print mode..."
-if [ -n "$CLAUDE_CONTINUE_FLAG" ]; then
-    exec claude --print --verbose --output-format stream-json \
-        --dangerously-skip-permissions \
-        --system-prompt "$SYSTEM_PROMPT" \
-        --continue \
-        < /secrets/user-prompt.txt
-else
-    exec claude --print --verbose --output-format stream-json \
-        --dangerously-skip-permissions \
-        --system-prompt "$SYSTEM_PROMPT" \
-        < /secrets/user-prompt.txt
-fi
+run_claude_attempt
+exit $?

@@ -216,17 +216,28 @@ describe('TaskDispatcher', () => {
     debug(): void {},
   };
 
+  interface VerifierMockResult {
+    passed: boolean;
+    confidence: number;
+    reasons: string[];
+    missingCriteria: string[];
+    resumeInstruction: string;
+    usedLlm: boolean;
+  }
+
   const singleAttemptCompletionControl = {
     maxAttempts: 1,
     verifier: {
-      verify: vi.fn(async () => ({
-        passed: true,
-        confidence: 1,
-        reasons: ['verification passed'],
-        missingCriteria: [],
-        resumeInstruction: 'No further action required.',
-        usedLlm: true,
-      })),
+      verify: vi.fn(
+        async (_input: unknown): Promise<VerifierMockResult> => ({
+          passed: true,
+          confidence: 1,
+          reasons: ['verification passed'],
+          missingCriteria: [],
+          resumeInstruction: 'No further action required.',
+          usedLlm: true,
+        })
+      ),
       describe: (): { enabled: boolean; provider: string; model: string } => ({
         enabled: true,
         provider: 'gemini',
@@ -1374,7 +1385,7 @@ describe('TaskDispatcher', () => {
 
     it('should mark task as failed when Claude reports is_error in stream result', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockImplementationOnce(
-        async (input) => {
+        async (input: unknown) => {
           const claudeError =
             typeof input === 'object' && input !== null && 'claudeError' in input
               ? (input as { claudeError?: string }).claudeError
@@ -1590,7 +1601,7 @@ describe('TaskDispatcher', () => {
 
     it('should detect Claude error in chunk with Docker header prefix', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockImplementationOnce(
-        async (input) => {
+        async (input: unknown) => {
           const claudeError =
             typeof input === 'object' && input !== null && 'claudeError' in input
               ? (input as { claudeError?: string }).claudeError
@@ -1659,7 +1670,7 @@ describe('TaskDispatcher', () => {
 
     it('should detect Claude error when result JSON is split across log chunks', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockImplementationOnce(
-        async (input) => {
+        async (input: unknown) => {
           const claudeError =
             typeof input === 'object' && input !== null && 'claudeError' in input
               ? (input as { claudeError?: string }).claudeError
@@ -1720,6 +1731,40 @@ describe('TaskDispatcher', () => {
               code: 'TASK_COMPLETION_VERIFICATION_FAILED',
               message: expect.stringContaining('Claude stream reported an explicit error'),
             }),
+          }),
+        })
+      );
+    });
+
+    it('should complete task when attempt finishes even if container stays running', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'attempt-signal-complete',
+        workerType: 'auto',
+        prompt: 'Test managed mode completion signal',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await headerDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onComplete).toBeDefined();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      onComplete?.(0);
+
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await headerDispatcher.getTask('attempt-signal-complete');
+      expect(task?.status).toBe('completed');
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'completed',
           }),
         })
       );

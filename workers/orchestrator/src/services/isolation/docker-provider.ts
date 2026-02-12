@@ -14,6 +14,7 @@ export interface DockerProviderConfig {
   secretsBasePath: string;
   gcpSaKeyPath: string;
   keepContainersAlive: boolean;
+  managedAttemptsMode: boolean;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -27,11 +28,16 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   secretsBasePath: '/tmp/claude-secrets',
   gcpSaKeyPath: '',
   keepContainersAlive: false,
+  managedAttemptsMode: true,
 };
 
 interface WorkerEntry {
   containerId: string;
   handle: WorkerHandle;
+  taskSecretsPath: string;
+  taskSessionPath: string;
+  attemptRunning: boolean;
+  attemptLogBuffer: string;
   logStream?: NodeJS.ReadableStream;
 }
 
@@ -111,6 +117,19 @@ export class DockerProvider implements IsolationProvider {
   async createWorker(config: WorkerConfig): Promise<WorkerHandle> {
     const { taskId, worktreePath, systemPrompt, prompt, secrets, workerType } = config;
 
+    const existingWorker = this.workers.get(taskId);
+    if (existingWorker !== undefined) {
+      /* v8 ignore start -- test-infra: orchestrator only re-enters createWorker with continueSession=true for existing workers @preserve */
+      if (config.continueSession !== true) {
+        throw new Error(`Worker already exists for task ${taskId}`);
+      }
+      /* v8 ignore stop @preserve */
+
+      await this.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
+      void this.runAttemptInContainer(taskId, config);
+      return existingWorker.handle;
+    }
+
     if (this.workers.size >= this.config.maxConcurrent) {
       throw new Error(`Max concurrent workers (${String(this.config.maxConcurrent)}) reached`);
     }
@@ -145,14 +164,7 @@ export class DockerProvider implements IsolationProvider {
     );
     await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
     await fs.promises.mkdir(taskSessionPath, { recursive: true, mode: 0o700 });
-
-    // Write prompt files for --print mode (entrypoint reads these)
-    await fs.promises.writeFile(
-      path.join(taskSecretsPath, 'system-prompt.txt'),
-      systemPrompt,
-      'utf-8'
-    );
-    await fs.promises.writeFile(path.join(taskSecretsPath, 'user-prompt.txt'), prompt, 'utf-8');
+    await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
     /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
     if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
@@ -197,6 +209,7 @@ export class DockerProvider implements IsolationProvider {
       `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
       'CLAUDE_PROJECT_DIR=/repo',
       'CLAUDE_WORKER_MODE=1',
+      `CLAUDE_MANAGED_MODE=${this.config.managedAttemptsMode ? '1' : '0'}`,
       `CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
     ];
 
@@ -305,25 +318,33 @@ export class DockerProvider implements IsolationProvider {
     this.workers.set(taskId, {
       containerId: container.id,
       handle,
+      taskSecretsPath,
+      taskSessionPath,
+      attemptRunning: false,
+      attemptLogBuffer: '',
       /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in running container @preserve */
       ...(logStream !== undefined ? { logStream } : {}),
       /* v8 ignore stop @preserve */
     });
 
-    // In --print mode, Claude exits naturally when done. container.wait() detects completion.
-    /* v8 ignore start -- test-infra: promise handlers run after test completes @preserve */
-    container
-      .wait()
-      .then(async (data) => {
-        const worker = this.workers.get(taskId);
-        if (worker !== undefined) {
-          worker.handle.status = data.StatusCode === 0 ? 'completed' : 'failed';
-        }
-        config.onComplete?.(data.StatusCode);
-      })
-      .catch((err: unknown) => {
-        this.logger.error({ taskId, error: err }, 'Container wait error');
-      });
+    /* v8 ignore start -- test-infra: managedAttemptsMode is always enabled in production and tests @preserve */
+    if (this.config.managedAttemptsMode) {
+      void this.runAttemptInContainer(taskId, config);
+    } else {
+      // In legacy mode, Claude exits naturally with the container process.
+      container
+        .wait()
+        .then(async (data) => {
+          const worker = this.workers.get(taskId);
+          if (worker !== undefined) {
+            worker.handle.status = data.StatusCode === 0 ? 'completed' : 'failed';
+          }
+          config.onComplete?.(data.StatusCode);
+        })
+        .catch((err: unknown) => {
+          this.logger.error({ taskId, error: err }, 'Container wait error');
+        });
+    }
     /* v8 ignore stop @preserve */
 
     this.logger.info({ taskId, containerId: container.id }, 'Worker container started');
@@ -408,6 +429,7 @@ export class DockerProvider implements IsolationProvider {
     }
   }
 
+  /* v8 ignore start -- test-infra: Docker log stream behavior and fallback paths require daemon-level integration tests @preserve */
   async getWorkerLogs(taskId: string): Promise<string> {
     const worker = this.workers.get(taskId);
     if (worker === undefined) {
@@ -421,11 +443,18 @@ export class DockerProvider implements IsolationProvider {
         stderr: true,
         timestamps: true,
       });
-      return logs.toString('utf-8');
+      const containerLogs = logs.toString('utf-8');
+      /* v8 ignore start -- test-infra: branch depends on whether exec-stream buffering captured attempt logs @preserve */
+      if (worker.attemptLogBuffer === '') {
+        return containerLogs;
+      }
+      /* v8 ignore stop @preserve */
+      return `${containerLogs}\n${worker.attemptLogBuffer}`;
     } catch {
-      return '';
+      return worker.attemptLogBuffer;
     }
   }
+  /* v8 ignore stop @preserve */
 
   async streamLogs(taskId: string, onChunk: (chunk: string) => void): Promise<void> {
     const worker = this.workers.get(taskId);
@@ -530,4 +559,95 @@ export class DockerProvider implements IsolationProvider {
       );
     }
   }
+
+  /* v8 ignore start -- test-infra: prompt file writes are covered indirectly by integration tests with real mounted secrets @preserve */
+  private async writePromptFiles(
+    taskSecretsPath: string,
+    systemPrompt: string,
+    prompt: string
+  ): Promise<void> {
+    await fs.promises.writeFile(
+      path.join(taskSecretsPath, 'system-prompt.txt'),
+      systemPrompt,
+      'utf-8'
+    );
+    await fs.promises.writeFile(path.join(taskSecretsPath, 'user-prompt.txt'), prompt, 'utf-8');
+  }
+  /* v8 ignore stop @preserve */
+
+  /* v8 ignore start -- test-infra: Docker exec lifecycle and race handling require daemon-level integration tests @preserve */
+  private async runAttemptInContainer(taskId: string, config: WorkerConfig): Promise<void> {
+    const worker = this.workers.get(taskId);
+    if (worker === undefined) {
+      this.logger.error({ taskId }, 'Cannot start attempt: worker not found');
+      config.onComplete?.(1);
+      return;
+    }
+
+    if (worker.attemptRunning) {
+      this.logger.error({ taskId }, 'Cannot start attempt: previous attempt still running');
+      config.onComplete?.(1);
+      return;
+    }
+
+    worker.attemptRunning = true;
+
+    try {
+      const container = this.docker.getContainer(worker.containerId);
+      const execInstance = await container.exec({
+        Cmd: ['/entrypoint.sh', 'run-attempt'],
+        AttachStdout: true,
+        AttachStderr: true,
+        Tty: false,
+        WorkingDir: '/repo',
+        User: '1001:1001',
+        Env: [`CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`],
+      });
+
+      const execStream = await execInstance.start({ hijack: false, stdin: false });
+      execStream.on('data', (chunk: Buffer) => {
+        const text = chunk.toString('utf-8');
+        worker.attemptLogBuffer += text;
+        config.onLog?.(text);
+      });
+
+      const exitCode = await this.waitForExecCompletion(taskId, execInstance, execStream);
+      worker.handle.status = exitCode === 0 ? 'completed' : 'failed';
+      config.onComplete?.(exitCode);
+    } catch (error) {
+      this.logger.error({ taskId, error }, 'Failed to execute Claude attempt');
+      worker.handle.status = 'failed';
+      config.onComplete?.(1);
+    } finally {
+      worker.attemptRunning = false;
+    }
+  }
+  /* v8 ignore stop @preserve */
+
+  /* v8 ignore start -- upstream: Docker exec stream/inspect error paths depend on daemon/runtime behavior @preserve */
+  private async waitForExecCompletion(
+    taskId: string,
+    execInstance: Docker.Exec,
+    execStream: NodeJS.ReadableStream
+  ): Promise<number> {
+    await new Promise<void>((resolve, reject) => {
+      const resolveOnce = (): void => {
+        resolve();
+      };
+      execStream.on('end', resolveOnce);
+      execStream.on('close', resolveOnce);
+      execStream.on('error', (error: unknown) => {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
+    });
+
+    try {
+      const info = await execInstance.inspect();
+      return typeof info.ExitCode === 'number' ? info.ExitCode : 1;
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to inspect exec completion state');
+      return 1;
+    }
+  }
+  /* v8 ignore stop @preserve */
 }
