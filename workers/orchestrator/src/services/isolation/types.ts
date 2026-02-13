@@ -118,4 +118,8 @@ export interface IsolationProvider {
    * Cleanup persistent per-task session artifacts.
    */
   cleanupTaskSession?(taskId: string): Promise<void>;
+
+  preserveWorker?(taskId: string): Promise<void>;
+
+  listPreservedWorkers?(): Promise<{ containerId: string; taskId: string; preservedAt: string }[]>;
 }

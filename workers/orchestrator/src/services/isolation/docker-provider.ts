@@ -6,6 +6,7 @@ import type { IsolationProvider, WorkerConfig, WorkerHandle, ResourceUsage } fro
 
 export interface DockerProviderConfig {
   imageName: string;
+  imagePullPolicy: 'always' | 'if-not-present';
   networkName: string;
   maxConcurrent: number;
   memoryLimitBytes: number;
@@ -20,6 +21,7 @@ export interface DockerProviderConfig {
 const DEFAULT_CONFIG: DockerProviderConfig = {
   imageName:
     'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest',
+  imagePullPolicy: 'always',
   networkName: 'claude-worker-net',
   maxConcurrent: 4,
   memoryLimitBytes: 8 * 1024 * 1024 * 1024,
@@ -41,6 +43,12 @@ interface WorkerEntry {
   logStream?: NodeJS.ReadableStream;
 }
 
+interface PreservedWorkerEntry {
+  containerId: string;
+  taskId: string;
+  preservedAt: string;
+}
+
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
 const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
 
@@ -49,6 +57,7 @@ export class DockerProvider implements IsolationProvider {
   private readonly config: DockerProviderConfig;
   private readonly logger: Logger;
   private readonly workers: Map<string, WorkerEntry>;
+  private readonly preservedWorkers = new Map<string, PreservedWorkerEntry>();
 
   constructor(config: Partial<DockerProviderConfig>, logger: Logger) {
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
@@ -221,41 +230,18 @@ export class DockerProvider implements IsolationProvider {
     /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
     const keySuffix = apiKey.length > 4 ? '...' + apiKey.slice(-4) : '****';
     /* v8 ignore stop @preserve */
+    const requestedImage = this.config.imageName;
+    const resolvedImage = await this.pullAndResolveImage(taskId, requestedImage);
     this.logger.info(
-      { taskId, worktreePath, workerType, apiKey: keySuffix, baseUrl: workerTypeConfig.apiBaseUrl },
-      'Creating worker container'
+      {},
+      `Creating worker container: taskId=${taskId} workerType=${workerType} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${workerTypeConfig.apiBaseUrl} worktreePath=${worktreePath}`
     );
 
     const pnpmStorePath = path.join(path.dirname(this.config.secretsBasePath), PNPM_STORE_DIR_NAME);
     fs.mkdirSync(pnpmStorePath, { recursive: true });
 
-    /* v8 ignore start -- test-infra: image pull requires Docker daemon with registry access @preserve */
-    try {
-      const pullOpts: Record<string, unknown> = { platform: 'linux/amd64' };
-      if (this.config.gcpSaKeyPath !== '' && fs.existsSync(this.config.gcpSaKeyPath)) {
-        const saKey = fs.readFileSync(this.config.gcpSaKeyPath, 'utf-8');
-        const registry = this.config.imageName.split('/')[0] ?? '';
-        pullOpts['authconfig'] = {
-          username: '_json_key',
-          password: saKey,
-          serveraddress: `https://${registry}`,
-        };
-      }
-      const pullStream = await this.docker.pull(this.config.imageName, pullOpts);
-      await new Promise<void>((resolve, reject) => {
-        this.docker.modem.followProgress(pullStream, (err: Error | null) => {
-          if (err !== null) reject(err);
-          else resolve();
-        });
-      });
-      this.logger.debug({ taskId, image: this.config.imageName }, 'Image pulled');
-    } catch (err: unknown) {
-      this.logger.warn({ taskId, error: err }, 'Image pull failed — using cached image');
-    }
-    /* v8 ignore stop @preserve */
-
     const container = await this.docker.createContainer({
-      Image: this.config.imageName,
+      Image: resolvedImage,
       name: `claude-worker-${taskId}`,
       Env: env,
       WorkingDir: '/repo',
@@ -293,10 +279,26 @@ export class DockerProvider implements IsolationProvider {
 
     await container.start();
 
+    if (this.config.managedAttemptsMode) {
+      try {
+        await this.assertManagedEntrypointSupport(taskId, container);
+      } catch (error) {
+        try {
+          await container.remove({ force: true });
+        } catch (removeError) {
+          this.logger.warn(
+            { taskId, error: removeError },
+            'Failed to remove incompatible worker container'
+          );
+        }
+        throw error;
+      }
+    }
+
     // Capture logs via container.logs() (replaces attach stream)
     /* v8 ignore start -- test-infra: log stream setup tested via mock, requires running container @preserve */
     let logStream: NodeJS.ReadableStream | undefined;
-    if (config.onLog !== undefined) {
+    if (config.onLog !== undefined && !this.config.managedAttemptsMode) {
       logStream = await container.logs({
         follow: true,
         stdout: true,
@@ -347,7 +349,7 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
-    this.logger.info({ taskId, containerId: container.id }, 'Worker container started');
+    this.logger.info({}, `Worker container started: taskId=${taskId} containerId=${container.id}`);
 
     return handle;
   }
@@ -556,6 +558,111 @@ export class DockerProvider implements IsolationProvider {
       this.logger.error(
         { taskId, error: err, path: taskSessionPath },
         'Failed to remove task session directory'
+      );
+    }
+  }
+
+  async preserveWorker(taskId: string): Promise<void> {
+    const worker = this.workers.get(taskId);
+    if (worker === undefined) {
+      return;
+    }
+
+    this.preservedWorkers.set(taskId, {
+      containerId: worker.containerId,
+      taskId,
+      preservedAt: new Date().toISOString(),
+    });
+    this.workers.delete(taskId);
+
+    const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
+    try {
+      await fs.promises.rm(taskSecretsPath, { recursive: true, force: true });
+    } catch (err: unknown) {
+      this.logger.error(
+        { taskId, error: err, path: taskSecretsPath },
+        'Failed to remove task secrets directory during preservation'
+      );
+    }
+
+    this.logger.info({ taskId, containerId: worker.containerId }, 'Worker preserved for debugging');
+  }
+
+  async listPreservedWorkers(): Promise<
+    { containerId: string; taskId: string; preservedAt: string }[]
+  > {
+    return Array.from(this.preservedWorkers.values());
+  }
+
+  private async pullAndResolveImage(taskId: string, imageName: string): Promise<string> {
+    if (this.config.imagePullPolicy !== 'always') {
+      return imageName;
+    }
+
+    const pullOpts: Record<string, unknown> = { platform: 'linux/amd64' };
+    if (this.config.gcpSaKeyPath !== '' && fs.existsSync(this.config.gcpSaKeyPath)) {
+      const saKey = fs.readFileSync(this.config.gcpSaKeyPath, 'utf-8');
+      const registry = imageName.split('/')[0] ?? '';
+      pullOpts['authconfig'] = {
+        username: '_json_key',
+        password: saKey,
+        serveraddress: `https://${registry}`,
+      };
+    }
+
+    try {
+      const pullStream = await this.docker.pull(imageName, pullOpts);
+      await new Promise<void>((resolve, reject) => {
+        this.docker.modem.followProgress(pullStream, (err: Error | null) => {
+          if (err !== null) reject(err);
+          else resolve();
+        });
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to pull worker image ${imageName}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    try {
+      const imageInfo = await this.docker.getImage(imageName).inspect();
+      const repoDigests = Array.isArray(imageInfo.RepoDigests) ? imageInfo.RepoDigests : [];
+      const resolvedImage = repoDigests.find((digest) =>
+        digest.startsWith(imageName.split(':')[0] ?? '')
+      );
+      const finalImage = resolvedImage ?? repoDigests[0] ?? imageName;
+      this.logger.info(
+        {},
+        `Worker image pulled: taskId=${taskId} requested=${imageName} resolved=${finalImage}`
+      );
+      return finalImage;
+    } catch (error) {
+      this.logger.warn(
+        { taskId, error },
+        'Failed to inspect pulled image digest; using configured image reference'
+      );
+      return imageName;
+    }
+  }
+
+  private async assertManagedEntrypointSupport(
+    taskId: string,
+    container: Docker.Container
+  ): Promise<void> {
+    const execInstance = await container.exec({
+      Cmd: ['sh', '-lc', 'grep -q "run-attempt" /entrypoint.sh'],
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+      WorkingDir: '/repo',
+      User: '1001:1001',
+    });
+
+    const execStream = await execInstance.start({ hijack: false, stdin: false });
+    const exitCode = await this.waitForExecCompletion(taskId, execInstance, execStream);
+    if (exitCode !== 0) {
+      throw new Error(
+        'Worker image is incompatible: missing managed-attempt run-attempt entrypoint support'
       );
     }
   }
