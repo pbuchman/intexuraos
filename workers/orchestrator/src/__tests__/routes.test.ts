@@ -814,6 +814,7 @@ describe('Routes', () => {
         tokenService,
         { orchestratorSecret },
         mockLogger,
+        undefined,
         mockProvider as never
       );
       await appWithProvider.ready();
