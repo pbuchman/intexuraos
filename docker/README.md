@@ -2,31 +2,35 @@
 
 Container configurations for local development.
 
-## Quick Start (Recommended)
+## Overview
+
+Local development uses a **Pub/Sub emulator** for message isolation. All other GCP services (Firestore, Google Cloud Storage) use **real GCP** via Application Default Credentials (ADC).
+
+This setup provides:
+
+- **Isolated messaging**: Pub/Sub messages stay local, preventing cross-contamination with production
+- **Real data**: Firestore and GCS use actual cloud resources for realistic testing
+- **Simple onboarding**: No large data syncs or complex multi-emulator orchestration
+
+## Quick Start
 
 ```bash
-# Start emulators (uses existing local data)
+# Start Pub/Sub emulator
 pnpm run emulators:start
 
-# Start all services via PM2
-pnpm run services:start
+# Stop
+pnpm run emulators:stop
 
-# Or combined (emulators + services, no sync)
-pnpm run dev
-
-# Full sync from GCP + start everything
-pnpm run dev:sync
+# View logs
+pnpm run emulators:logs
 ```
 
-This starts **3 Docker containers**:
+This starts **2 Docker containers**:
 
-| Container         | Purpose                                       | Port            |
-| ----------------- | --------------------------------------------- | --------------- |
-| firebase-emulator | Firestore, Pub/Sub emulator, Firebase Auth    | 8100-8102, 8104 |
-| fake-gcs          | Google Cloud Storage emulator                 | 8103            |
-| pubsub-ui         | Pub/Sub message bridge + monitoring dashboard | 8105            |
-
-Plus **18 services** via PM2 with auto-restart.
+| Service         | Image                                                     | Ports |
+| --------------- | --------------------------------------------------------- | ----- |
+| pubsub-emulator | gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators | 8102  |
+| pubsub-ui       | Built from tools/pubsub-ui                                | 8105  |
 
 ## Pub/Sub Architecture (Local)
 
@@ -52,68 +56,39 @@ In production, GCP Pub/Sub automatically pushes messages to Cloud Run endpoints.
 1. **Message forwarding**: Pulls from emulator, POSTs to local service endpoints
 2. **Monitoring dashboard**: Real-time event visualization at http://localhost:8105
 
-## Emulator Management
+### How pubsub-ui works
 
-```bash
-# Start emulators (no sync)
-pnpm run emulators:start
+The bridge reads topic-to-endpoint mappings from `tools/pubsub-ui/topics.json`:
 
-# Sync from GCP then start emulators
-pnpm run emulators:sync
-
-# Stop emulators
-pnpm run emulators:stop
-
-# View emulator logs
-pnpm run emulators:logs
+```json
+{
+  "actions-queue": {
+    "endpoint": "http://localhost:8118/internal/actions/process",
+    "description": "Process queued actions"
+  }
+}
 ```
 
-## Service Management (PM2)
+When a message is published to `actions-queue`, pubsub-ui:
 
-```bash
-# Start all services
-pnpm run services:start
+1. Pulls the message from the emulator
+2. POSTs it to `http://localhost:8118/internal/actions/process`
+3. Acknowledges the message after successful delivery
 
-# Stop all services
-pnpm run services:stop
+## Environment Variables
 
-# View service status
-pnpm run services:status
+The Docker Compose setup requires two environment variables:
 
-# View logs (live tail)
-pnpm run services:logs
+- `INTEXURAOS_INTERNAL_AUTH_TOKEN` - Authenticates forwarded messages to service endpoints
+- `INTEXURAOS_GCP_PROJECT_ID` - GCP project ID for emulator configuration
 
-# Interactive monitoring TUI
-pnpm run services:monit
+These are read from the shell environment (via direnv) at `docker compose up` time.
 
-# Restart all services
-pnpm run services:restart
-```
-
-### Emulator Ports
-
-| Emulator      | Port | UI/Endpoint                                        |
-| ------------- | ---- | -------------------------------------------------- |
-| Firebase UI   | 8100 | http://localhost:8100                              |
-| Firestore     | 8101 | (used internally via FIRESTORE_EMULATOR_HOST)      |
-| Pub/Sub       | 8102 | (used internally via PUBSUB_EMULATOR_HOST)         |
-| Fake GCS      | 8103 | http://localhost:8103/storage/v1/b                 |
-| Firebase Auth | 8104 | (used internally via FIREBASE_AUTH_EMULATOR_HOST)  |
-| Pub/Sub UI    | 8105 | http://localhost:8105 (message bridge + dashboard) |
-
-## Prerequisites
-
-1. **Docker** - Must be running
-2. **Node 22+** - For `node --watch` support
-3. **direnv** - For environment variable management
-4. **Sync secrets and configure local overrides:**
+**Setup:**
 
 ```bash
 # Sync secrets from GCP Secret Manager (creates .envrc)
 ./scripts/sync-secrets.sh
-
-# Optional: prompt for missing Terraform-defined secret values
-./scripts/sync-secrets.sh --add-new
 
 # Copy local overrides template
 cp .envrc.local.example .envrc.local
@@ -122,13 +97,13 @@ cp .envrc.local.example .envrc.local
 direnv allow
 ```
 
-The `.envrc.local` file overrides cloud service URLs with localhost URLs for local development.
+## Files
 
-## Docker Compose Files
-
-| File                        | Purpose                                  |
-| --------------------------- | ---------------------------------------- |
-| `docker-compose.local.yaml` | Emulators only (Firestore, Pub/Sub, GCS) |
+| File                               | Purpose                    |
+| ---------------------------------- | -------------------------- |
+| `docker/docker-compose.local.yaml` | Pub/Sub emulator + UI      |
+| `tools/pubsub-ui/`                 | Message bridge source code |
+| `tools/pubsub-ui/topics.json`      | Topic → endpoint mapping   |
 
 ## Troubleshooting
 
@@ -141,7 +116,7 @@ The `.envrc.local` file overrides cloud service URLs with localhost URLs for loc
 **Fix:**
 
 ```bash
-# Check all 3 containers are running
+# Check both containers are running
 docker compose -f docker/docker-compose.local.yaml ps
 
 # If pubsub-ui is missing, restart all:
@@ -174,15 +149,6 @@ curl -X POST http://localhost:8105/publish \
 
 # 3. Check pubsub-ui logs for forwarding
 docker compose -f docker/docker-compose.local.yaml logs pubsub-ui --tail 10
-```
-
-## Testing
-
-Tests use **fake repositories** (in-memory) via dependency injection, so no external services are required:
-
-```bash
-pnpm run test          # Run all tests
-pnpm run test:coverage # Run with coverage
 ```
 
 ## See Also

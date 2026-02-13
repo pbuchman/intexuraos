@@ -21,9 +21,6 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_GCP_PROJECT_ID: process.env.INTEXURAOS_GCP_PROJECT_ID ?? 'intexuraos-dev',
   INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   INTEXURAOS_GUEST_ZAI_API_KEY: process.env.INTEXURAOS_GUEST_ZAI_API_KEY ?? '',
-  ...(process.env.PREDEV_ENVIRONMENT !== 'true' && {
-    FIREBASE_AUTH_EMULATOR_HOST: 'localhost:8104',
-  }),
 };
 
 // All service URLs - mirrors Terraform local.common_service_env_vars

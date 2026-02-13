@@ -74,11 +74,10 @@ The app will be available at `http://localhost:3000`
 
 The web app can connect to either:
 
-| Option          | When to Use         | How                               |
-| --------------- | ------------------- | --------------------------------- |
-| Cloud services  | Default integration | No config needed (uses env vars)  |
-| Local emulators | Offline development | Set `FIRESTORE_EMULATOR_HOST`     |
-| Predev mode     | Local reverse proxy | Set `INTEXURAOS_PREDEV_MODE=true` |
+| Option         | When to Use         | How                               |
+| -------------- | ------------------- | --------------------------------- |
+| Cloud services | Default integration | No config needed (uses env vars)  |
+| Predev mode    | Local reverse proxy | Set `INTEXURAOS_PREDEV_MODE=true` |
 
 ### Step 2.2: Service URLs
 

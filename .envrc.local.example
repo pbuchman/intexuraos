@@ -20,17 +20,6 @@ export AUTH_ISSUER=$INTEXURAOS_AUTH_ISSUER
 export AUTH_AUDIENCE=$INTEXURAOS_AUTH_AUDIENCE
 
 # =============================================================================
-# EMULATORS
-# =============================================================================
-# Uncomment to use local emulators instead of GCP services.
-# These are automatically set when using 'pnpm run dev', but you can
-# also set them here if running services manually.
-
-export FIRESTORE_EMULATOR_HOST=localhost:8101
-export PUBSUB_EMULATOR_HOST=localhost:8102
-export STORAGE_EMULATOR_HOST=http://localhost:8103
-
-# =============================================================================
 # SERVICE URLS (override run.app -> localhost)
 # =============================================================================
 # Override cloud-deployed services with locally running instances.
@@ -53,18 +42,22 @@ export INTEXURAOS_CALENDAR_AGENT_URL=http://localhost:8125
 export INTEXURAOS_LINEAR_AGENT_URL=http://localhost:8126
 
 # =============================================================================
-# GCS BUCKETS (for local fake-gcs-server)
+# GCS BUCKETS
 # =============================================================================
-# Required for media storage
-export INTEXURAOS_WHATSAPP_MEDIA_BUCKET=intexuraos-whatsapp-media-local
-export INTEXURAOS_IMAGE_BUCKET=intexuraos-images-local
+# Required for media storage (uses real GCP buckets)
+export INTEXURAOS_WHATSAPP_MEDIA_BUCKET=intexuraos-whatsapp-media
+export INTEXURAOS_IMAGE_BUCKET=intexuraos-images
 
 # =============================================================================
-# PUB/SUB (for local Firebase emulator)
+# PUB/SUB (local emulator — required for local dev)
 # =============================================================================
+# Pub/Sub uses a local emulator to avoid topic conflicts between environments.
+# Start with: pnpm run emulators:start
+# The pubsub-ui container bridges emulator messages to local service endpoints.
+
 # Required by whatsapp-service for media cleanup events
-export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC=media-cleanup-local
-export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=media-cleanup-sub-local
+export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC=media-cleanup
+export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=media-cleanup-sub
 
 # Required for WhatsApp message sending via Pub/Sub
 # research-agent publishes, whatsapp-service subscribes
@@ -81,13 +74,11 @@ export INTEXURAOS_TODOS_PROCESSING_TOPIC=todos-processing
 # INTEXURAOS_INTERNAL_AUTH_TOKEN is loaded from .envrc (synced from Secret Manager)
 
 # =============================================================================
-# GCP PROJECT (for local emulators)
+# GCP PROJECT
 # =============================================================================
 # Required by Google Cloud SDKs (Firestore, Pub/Sub, GCS).
-# GOOGLE_CLOUD_PROJECT is the standard env var that Google SDKs look for.
-# INTEXURAOS_GCP_PROJECT_ID is used by whatsapp-service.
-export GOOGLE_CLOUD_PROJECT=demo-intexuraos
-export INTEXURAOS_GCP_PROJECT_ID=demo-intexuraos
+export GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman
+export INTEXURAOS_GCP_PROJECT_ID=intexuraos-dev-pbuchman
 
 # =============================================================================
 # ENCRYPTION (for LLM API key storage)

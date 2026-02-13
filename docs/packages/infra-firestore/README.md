@@ -11,7 +11,7 @@ Firestore database client singleton and in-memory testing fake. Provides the sha
 
 ### `getFirestore(): Firestore`
 
-Returns the Firestore client singleton. Creates a new instance on first call using `INTEXURAOS_GCP_PROJECT_ID`. Automatically uses `FIRESTORE_EMULATOR_HOST` when set (local development).
+Returns the Firestore client singleton. Creates a new instance on first call using `INTEXURAOS_GCP_PROJECT_ID`. Connects to real GCP Firestore in all environments.
 
 ```ts
 import { getFirestore } from '@intexuraos/infra-firestore';
@@ -82,10 +82,9 @@ interface FakeFirestoreConfig {
 
 ### Environment Variables
 
-| Variable                    | Description                              | Required |
-| --------------------------- | ---------------------------------------- | -------- |
-| `INTEXURAOS_GCP_PROJECT_ID` | Google Cloud project ID                  | Yes      |
-| `FIRESTORE_EMULATOR_HOST`   | Firestore emulator host (local dev only) | No       |
+| Variable                    | Description             | Required |
+| --------------------------- | ----------------------- | -------- |
+| `INTEXURAOS_GCP_PROJECT_ID` | Google Cloud project ID | Yes      |
 
 ## Error Handling
 
