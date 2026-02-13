@@ -607,6 +607,72 @@ describe('DockerProvider', () => {
     });
   });
 
+  describe('startup failure cleanup', () => {
+    it('cleans up secrets and session dirs on image pull failure', async () => {
+      const fs = await import('node:fs');
+      mocks.mockDocker.pull.mockRejectedValueOnce(new Error('registry unavailable'));
+
+      await expect(provider.createWorker(createTestConfig())).rejects.toThrow(
+        'Failed to pull worker image'
+      );
+
+      const rmCalls = (fs.promises.rm as ReturnType<typeof vi.fn>).mock.calls;
+      expect(rmCalls).toHaveLength(2);
+      expect(rmCalls[0]?.[0]).toContain('test-task-123');
+      expect(rmCalls[0]?.[0]).not.toContain('claude-session');
+      expect(rmCalls[1]?.[0]).toContain('claude-session-test-task-123');
+    });
+
+    it('cleans up secrets, session dirs, and container on readiness failure', async () => {
+      const fs = await import('node:fs');
+      const originalExecImpl = mocks.mockContainer.exec.getMockImplementation() as
+        | ((...args: unknown[]) => unknown)
+        | undefined;
+      mocks.mockContainer.exec = vi.fn().mockImplementation((opts: { Cmd?: string[] }) => {
+        const cmd = opts?.Cmd?.join?.(' ') ?? '';
+        if (cmd.includes('worker-ready')) {
+          return Promise.resolve({
+            start: vi.fn().mockResolvedValue(undefined),
+            inspect: vi.fn().mockResolvedValue({ ExitCode: 1 }),
+          });
+        }
+        return originalExecImpl?.(opts);
+      });
+
+      provider = new TestableDockerProvider(
+        { managedAttemptsMode: true, workerReadyTimeoutMs: 200 },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await expect(
+        provider.createWorker(createTestConfig({ taskId: 'cleanup-task' }))
+      ).rejects.toThrow(/readiness.*timeout/i);
+
+      const rmCalls = (fs.promises.rm as ReturnType<typeof vi.fn>).mock.calls;
+      expect(rmCalls).toHaveLength(2);
+      expect(rmCalls[0]?.[0]).toContain('cleanup-task');
+      expect(rmCalls[0]?.[0]).not.toContain('claude-session');
+      expect(rmCalls[1]?.[0]).toContain('claude-session-cleanup-task');
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+    });
+
+    it('cleans up secrets and session dirs on container creation failure', async () => {
+      const fs = await import('node:fs');
+      mocks.mockDocker.createContainer.mockRejectedValueOnce(new Error('docker daemon error'));
+
+      await expect(provider.createWorker(createTestConfig())).rejects.toThrow(
+        'docker daemon error'
+      );
+
+      const rmCalls = (fs.promises.rm as ReturnType<typeof vi.fn>).mock.calls;
+      expect(rmCalls).toHaveLength(2);
+      expect(rmCalls[0]?.[0]).toContain('test-task-123');
+      expect(rmCalls[1]?.[0]).toContain('claude-session-test-task-123');
+      expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
+    });
+  });
+
   describe('readiness gate', () => {
     it('checks for readiness marker after container start in managed mode', async () => {
       provider = new TestableDockerProvider(
