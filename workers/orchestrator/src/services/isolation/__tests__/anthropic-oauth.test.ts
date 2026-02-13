@@ -206,7 +206,7 @@ describe('AnthropicOAuthManager', () => {
       expect(mockWriteFile).toHaveBeenCalledWith(
         '/home/user/.claude/.credentials.json',
         expect.stringContaining('sk-ant-ort01-rotated'),
-        'utf-8'
+        { mode: 0o600 }
       );
     });
 
@@ -274,6 +274,26 @@ describe('AnthropicOAuthManager', () => {
             'X-Internal-Auth': 'test-token',
           }),
         })
+      );
+    });
+
+    it('handles non-JSON error response gracefully', async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(JSON.stringify(EXPIRED_CREDENTIALS));
+      manager.loadCredentials();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: () => Promise.reject(new SyntaxError('Unexpected token < in JSON')),
+      });
+
+      const token = await manager.getAccessToken();
+
+      expect(token).toBeNull();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 502 }),
+        expect.stringContaining('refresh failed')
       );
     });
 
@@ -378,6 +398,39 @@ describe('AnthropicOAuthManager', () => {
       expect(t1).toBe('sk-ant-oat01-deduped');
       expect(t2).toBe('sk-ant-oat01-deduped');
       expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('getCurrentAccessToken', () => {
+    it('returns null when credentials not loaded', () => {
+      expect(manager.getCurrentAccessToken()).toBeNull();
+    });
+
+    it('returns current token after loading credentials', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(JSON.stringify(VALID_CREDENTIALS));
+      manager.loadCredentials();
+
+      expect(manager.getCurrentAccessToken()).toBe('sk-ant-oat01-valid-access-token');
+    });
+
+    it('returns refreshed token after getAccessToken refresh', async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(JSON.stringify(EXPIRED_CREDENTIALS));
+      manager.loadCredentials();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'sk-ant-oat01-refreshed-sync',
+            expires_in: 14400,
+          }),
+      });
+
+      await manager.getAccessToken();
+
+      expect(manager.getCurrentAccessToken()).toBe('sk-ant-oat01-refreshed-sync');
     });
   });
 

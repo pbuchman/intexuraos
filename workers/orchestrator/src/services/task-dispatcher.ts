@@ -40,7 +40,7 @@ export interface IsolationConfig {
   provider: IsolationProvider;
   tokenRefresher: TokenRefresher;
   apiKeyValidator: ApiKeyValidator;
-  secrets: {
+  getSecrets: () => {
     ANTHROPIC_API_KEY: string;
     LINEAR_API_KEY: string;
     SENTRY_AUTH_TOKEN: string;
@@ -719,7 +719,7 @@ export class TaskDispatcher {
       }),
       /* v8 ignore stop @preserve */
       workerType: task.workerType,
-      secrets: this.isolation.secrets,
+      secrets: this.isolation.getSecrets(),
       gcpSaKeyPath: this.isolation.gcpSaKeyPath,
       githubAppKeyPath: this.isolation.githubAppKeyPath,
       continueSession: params.continueSession,
