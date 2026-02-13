@@ -504,7 +504,7 @@ module "secret_manager" {
     "INTEXURAOS_GITHUB_APP_ID"          = "GitHub App ID for code worker"
     "INTEXURAOS_GITHUB_INSTALLATION_ID" = "GitHub App installation ID for pbuchman/intexuraos"
     # Orchestrator repository management (INT-515)
-    "INTEXURAOS_REPOSITORY_URL" = "GitHub repository URL for orchestrator self-managed clone"
+    "INTEXURAOS_REPOSITORY_URL"        = "GitHub repository URL for orchestrator self-managed clone"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
   }
 
