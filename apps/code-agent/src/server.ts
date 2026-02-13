@@ -61,7 +61,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   app.get('/health', () => {
-    return { status: 'ok', service: 'code-agent', version: '0.0.1' };
+    return { status: 'ok', service: 'code-agent' };
   });
 
   return await app;
