@@ -74,11 +74,11 @@ The app will be available at `http://localhost:3000`
 
 The web app can connect to either:
 
-| Option          | When to Use          | How                               |
-| --------------- | -------------------- | --------------------------------- |
-| Cloud services  | Default integration  | No config needed (uses env vars)  |
-| Local emulators | Offline development  | Set `FIRESTORE_EMULATOR_HOST`     |
-| Predev mode     | Predev VM deployment | Set `INTEXURAOS_PREDEV_MODE=true` |
+| Option          | When to Use         | How                               |
+| --------------- | ------------------- | --------------------------------- |
+| Cloud services  | Default integration | No config needed (uses env vars)  |
+| Local emulators | Offline development | Set `FIRESTORE_EMULATOR_HOST`     |
+| Predev mode     | Local reverse proxy | Set `INTEXURAOS_PREDEV_MODE=true` |
 
 ### Step 2.2: Service URLs
 
@@ -97,7 +97,7 @@ INTEXURAOS_USER_SERVICE_URL=http://localhost:8001
 INTEXURAOS_COMMANDS_AGENT_URL=http://localhost:8002
 ```
 
-**Note:** In predev mode (`INTEXURAOS_PREDEV_MODE=true`), service URLs are ignored and requests go through the predev proxy using relative API paths (e.g., `/api/code`).
+**Note:** In predev mode (`INTEXURAOS_PREDEV_MODE=true`), service URLs are ignored and requests go through a local reverse proxy using relative API paths (e.g., `/api/code`).
 
 ### Step 2.3: Firebase Configuration
 

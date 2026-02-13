@@ -14,7 +14,7 @@ graph TB
         GH[GitHub API<br/>Installation tokens]
     end
 
-    subgraph "Local Machine (macOS / Predev VM)"
+    subgraph "Local Machine (macOS)"
         CF[Cloudflare Tunnel<br/>cc-mac.intexuraos.cloud]
         CF --> ORCH
 

@@ -178,7 +178,6 @@ jobs:
           done
           bash cloudbuild/scripts/deploy-function.sh vm-lifecycle &
           bash cloudbuild/scripts/deploy-function.sh log-cleanup &
-          bash cloudbuild/scripts/deploy-function.sh predev-lifecycle &
           wait
 
       - name: Fetch web config
@@ -358,7 +357,7 @@ jobs:
 
           # Workers (Cloud Functions)
           case "$TARGET" in
-            vm-lifecycle|log-cleanup|predev-lifecycle)
+            vm-lifecycle|log-cleanup)
               echo "Deploying worker: $TARGET"
               bash cloudbuild/scripts/deploy-function.sh "$TARGET"
               exit 0

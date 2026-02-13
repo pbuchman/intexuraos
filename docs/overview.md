@@ -56,13 +56,11 @@ This release introduces a complete autonomous coding pipeline, an in-app AI assi
 - Pre-baked developer toolchain (git, pnpm, ripgrep, fd, bat, jq, terraform, gcloud, gh)
 - GitHub token auto-refresh every 30 minutes
 
-**VM Lifecycle & Predev Lifecycle (workers)**
+**VM Lifecycle (worker)**
 
 - Scheduled VM start/stop on weekday schedule (7 AM start, 11 PM stop, Europe/Warsaw)
 - Health-aware startup with automatic restart of unhealthy VMs
 - Graceful shutdown with orchestrator coordination (waits for running tasks)
-- Scale-to-zero predev environment with on-demand startup from first HTTP request
-- GitHub webhook-driven branch tracking and hot code reload
 
 **Log Cleanup (worker)**
 
@@ -262,7 +260,7 @@ graph TB
 
 ## Agent Architecture
 
-IntexuraOS deploys **20 apps**, **5 workers**, and **21 packages** — a total of **46 components** across three architectural layers:
+IntexuraOS deploys **20 apps**, **4 workers**, and **21 packages** — a total of **45 components** across three architectural layers:
 
 ### AI Agents (Primary Intelligence)
 
@@ -302,13 +300,12 @@ Workers are event-driven components that run outside Cloud Run, either as Cloud 
 
 ### Workers
 
-| Worker               | Runtime          | Purpose                                                                |
-| -------------------- | ---------------- | ---------------------------------------------------------------------- |
-| **orchestrator**     | Local (PM2)      | Dispatches code tasks to Docker containers, manages worktrees and logs |
-| **claude-worker**    | Docker container | Sandboxed Claude Code execution with filesystem and resource isolation |
-| **log-cleanup**      | Cloud Function   | Daily retention-based deletion of old execution logs (90-day default)  |
-| **predev-lifecycle** | Cloud Function   | Scale-to-zero predev VM: gateway proxy, webhook, idle check, readiness |
-| **vm-lifecycle**     | Cloud Function   | Scheduled VM start/stop with health checks and graceful shutdown       |
+| Worker            | Runtime          | Purpose                                                                |
+| ----------------- | ---------------- | ---------------------------------------------------------------------- |
+| **orchestrator**  | Local (PM2)      | Dispatches code tasks to Docker containers, manages worktrees and logs |
+| **claude-worker** | Docker container | Sandboxed Claude Code execution with filesystem and resource isolation |
+| **log-cleanup**   | Cloud Function   | Daily retention-based deletion of old execution logs (90-day default)  |
+| **vm-lifecycle**  | Cloud Function   | Scheduled VM start/stop with health checks and graceful shutdown       |
 
 ### Worker Deployment Model
 
@@ -316,11 +313,10 @@ Workers are event-driven components that run outside Cloud Run, either as Cloud 
 graph LR
     subgraph "Cloud Functions"
         LC[log-cleanup]
-        PL[predev-lifecycle]
         VL[vm-lifecycle]
     end
 
-    subgraph "Local Machine / Predev VM"
+    subgraph "Local Machine"
         ORCH[orchestrator]
         CW1[claude-worker 1]
         CW2[claude-worker 2]
@@ -337,7 +333,6 @@ graph LR
 
     LC --> |POST cleanup| CA
     VL --> |Start/Stop| ORCH
-    PL --> |Gateway proxy| VM[GCE Spot VM]
 ```
 
 ---
@@ -487,7 +482,6 @@ Each service owns its collections (enforced by CI):
 | `github-pr-events`           | code-agent          | v3.0.0  |
 | `pr_task_locks`              | code-agent          | v3.0.0  |
 | `doc_embeddings`             | chat-agent          | v3.0.0  |
-| `predev-state`               | predev-lifecycle    | v3.0.0  |
 
 ---
 
@@ -702,7 +696,6 @@ User API Keys → AES-256-GCM Encryption → Firestore
 - [orchestrator](services/orchestrator/features.md) - Code task orchestration (v3.0.0)
 - [claude-worker](services/claude-worker/features.md) - Docker sandbox (v3.0.0)
 - [log-cleanup](services/log-cleanup/features.md) - Log retention management (v3.0.0)
-- [predev-lifecycle](services/predev-lifecycle/features.md) - Scale-to-zero dev environment (v3.0.0)
 - [vm-lifecycle](services/vm-lifecycle/features.md) - VM schedule management (v3.0.0)
 
 ---
@@ -712,7 +705,7 @@ User API Keys → AES-256-GCM Encryption → Firestore
 | Document                                              | Purpose                            |
 | ----------------------------------------------------- | ---------------------------------- |
 | [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration     |
-| [Services Catalog](services/index.md)                 | All 20 apps + 5 workers documented |
+| [Services Catalog](services/index.md)                 | All 20 apps + 4 workers documented |
 | [Architecture Patterns](architecture/)                | System design decisions            |
 | [Setup Guide](setup/01-gcp-project.md)                | Getting started                    |
 | [API Contracts](architecture/api-contracts.md)        | HTTP API standards                 |

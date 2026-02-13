@@ -30,6 +30,7 @@ Frontend JS tries to call http://localhost:8110, :8112, :8113, etc.
 ### Current service URL configuration
 
 The web app (PM2 process #18) has env vars like:
+
 ```
 INTEXURAOS_USER_SERVICE_URL=http://localhost:8110
 INTEXURAOS_NOTION_SERVICE_URL=http://localhost:8112
@@ -63,6 +64,7 @@ All 20 services run via PM2 on ports 8110-8129. They work fine when accessed dir
 ## Possible Solutions to Brainstorm
 
 ### Option A: Predev mode + Caddy proxy routes
+
 - Set `INTEXURAOS_PREDEV_MODE=true` when building the frontend
 - Configure Caddy to proxy `/api/user/*` → `localhost:8110`, `/api/whatsapp/*` → `localhost:8113`, etc.
 - Frontend uses relative paths, Caddy handles routing
@@ -70,17 +72,20 @@ All 20 services run via PM2 on ports 8110-8129. They work fine when accessed dir
 - Con: Caddy config gets complex with 20 proxy routes
 
 ### Option B: Build with home-dev IP/hostname URLs
+
 - Set `INTEXURAOS_USER_SERVICE_URL=http://home-dev:8110` (Tailscale hostname)
 - Or use `http://192.168.0.98:8110` (LAN IP)
 - Pro: Simple, no proxy needed
 - Con: Only works on same network/Tailscale, CORS headers needed, IP may change
 
 ### Option C: CF tunnel per-service subdomains
+
 - Create CF tunnel routes like `user-service.dev.intexuraos.cloud` → `localhost:8110`
 - Pro: Works from anywhere, HTTPS
 - Con: 20 tunnel routes, complex CF config
 
 ### Option D: Single CF tunnel + Caddy path-based routing
+
 - `dev.intexuraos.cloud/api/*` → Caddy → backend services
 - Same as Option A but emphasizing the CF tunnel path
 - Pro: Single entry point, works from anywhere
@@ -89,6 +94,7 @@ All 20 services run via PM2 on ports 8110-8129. They work fine when accessed dir
 ## Webhook Issue
 
 ### What exists
+
 - `webhook-handler.mjs` running on home-dev:9000 via PM2
 - Listens for GitHub push webhooks on `/webhook`
 - Verifies HMAC signature, detects affected services, runs `git pull` + `pnpm install` + `pm2 restart`
@@ -96,11 +102,13 @@ All 20 services run via PM2 on ports 8110-8129. They work fine when accessed dir
 - Exposed via CF tunnel (needs verification of which hostname)
 
 ### What's missing
+
 - No webhook configured in GitHub repo settings (Settings → Webhooks)
 - Need: `WEBHOOK_SECRET` env var on home-dev matching the GitHub webhook secret
 - Need: CF tunnel route for the webhook endpoint (verify current state)
 
 ### To configure
+
 1. Check which CF tunnel hostname routes to port 9000
 2. Create webhook in GitHub repo: `https://<hostname>/webhook`
 3. Set content type: `application/json`
@@ -111,6 +119,7 @@ All 20 services run via PM2 on ports 8110-8129. They work fine when accessed dir
 ## Session Context (2026-02-13)
 
 This session completed the self-hosted runner deploy pipeline (Phase 5):
+
 - deploy.yml rewritten with check-runner → local/cloud split
 - All 20 Docker images built in parallel on home-dev (i5-14500, 20 threads)
 - Performance: 16m36s → 3m23s (monolith), 2m08s (individual service)

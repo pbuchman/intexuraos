@@ -505,9 +505,7 @@ module "secret_manager" {
     "INTEXURAOS_GITHUB_INSTALLATION_ID" = "GitHub App installation ID for pbuchman/intexuraos"
     # Orchestrator repository management (INT-515)
     "INTEXURAOS_REPOSITORY_URL" = "GitHub repository URL for orchestrator self-managed clone"
-    # Pre-dev environment secrets
-    "INTEXURAOS_PREDEV_ENV_VARS"       = "Aggregated environment variables for pre-dev VM .envrc.local"
-    "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation (predev branch switch)"
+    "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
   }
 
   depends_on = [google_project_service.apis]
@@ -2156,29 +2154,6 @@ resource "google_cloud_scheduler_job" "log_cleanup" {
 }
 
 # -----------------------------------------------------------------------------
-# Pre-Dev Environment (Scale-to-Zero Cloud Development)
-# -----------------------------------------------------------------------------
-
-module "predev_environment" {
-  source = "../../modules/predev-environment"
-
-  project_id              = var.project_id
-  region                  = var.region
-  zone                    = "${var.region}-a"
-  environment             = var.environment
-  functions_source_bucket = google_storage_bucket.cloud_functions_source.name
-  github_repo             = "${var.github_owner}/${var.github_repo}"
-
-  internal_auth_token_secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  github_webhook_secret_id      = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
-
-  depends_on = [
-    google_project_service.apis,
-    module.secret_manager,
-  ]
-}
-
-# -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
 
@@ -2384,27 +2359,3 @@ output "pubsub_log_cleanup_topic" {
   value       = google_pubsub_topic.log_cleanup.name
 }
 
-output "predev_gateway_url" {
-  description = "Pre-dev gateway URL (main entry point for cloud dev environment)"
-  value       = module.predev_environment.gateway_url
-}
-
-output "predev_webhook_url" {
-  description = "Pre-dev webhook URL (configure in GitHub for branch switching)"
-  value       = module.predev_environment.webhook_url
-}
-
-output "predev_vm_service_account" {
-  description = "Pre-dev VM service account email"
-  value       = module.predev_environment.vm_service_account
-}
-
-output "predev_functions_service_account" {
-  description = "Pre-dev Cloud Functions service account email"
-  value       = module.predev_environment.functions_service_account
-}
-
-output "predev_mig_name" {
-  description = "Pre-dev Managed Instance Group name"
-  value       = module.predev_environment.mig_name
-}
