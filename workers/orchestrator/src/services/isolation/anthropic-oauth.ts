@@ -101,6 +101,10 @@ export class AnthropicOAuthManager {
     }
   }
 
+  getCurrentAccessToken(): string | null {
+    return this.credentials?.accessToken ?? null;
+  }
+
   getState(): OAuthState {
     if (this.credentials === null) {
       return { status: 'not_configured', message: 'Anthropic OAuth credentials not found' };
@@ -186,7 +190,13 @@ export class AnthropicOAuthManager {
       });
 
       if (!resp.ok) {
-        const errorBody = (await resp.json()) as { error?: string };
+        let errorBody: { error?: string } = {};
+        try {
+          errorBody = (await resp.json()) as { error?: string };
+        } catch {
+          /* v8 ignore start -- upstream: non-JSON error response from Anthropic OAuth endpoint @preserve */
+          /* v8 ignore stop @preserve */
+        }
 
         if (errorBody.error === 'invalid_grant') {
           this.logger.error(
@@ -262,11 +272,9 @@ export class AnthropicOAuthManager {
     }
 
     existing['claudeAiOauth'] = this.credentials;
-    await fs.promises.writeFile(
-      this.config.credentialsPath,
-      JSON.stringify(existing, null, 2),
-      'utf-8'
-    );
+    await fs.promises.writeFile(this.config.credentialsPath, JSON.stringify(existing, null, 2), {
+      mode: 0o600,
+    });
   }
 
   private async alertCodeAgent(message: string): Promise<void> {
