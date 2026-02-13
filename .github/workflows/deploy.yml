@@ -165,7 +165,10 @@ jobs:
           bash cloudbuild/scripts/build-push-monitored.sh chat-agent apps/chat-agent/Dockerfile &
           wait
 
-      - name: Deploy Cloud Run services
+      - name: Build workers
+        run: bash cloudbuild/scripts/build-all-workers.sh
+
+      - name: Deploy Cloud Run services + Cloud Functions
         run: |
           SERVICES=(
             image-service api-docs-hub notion-service user-service whatsapp-service
@@ -177,11 +180,6 @@ jobs:
           for svc in "${SERVICES[@]}"; do
             bash "cloudbuild/scripts/deploy-${svc}.sh" &
           done
-          wait
-
-      - name: Build and deploy workers
-        run: |
-          bash cloudbuild/scripts/build-all-workers.sh
           bash cloudbuild/scripts/deploy-function.sh vm-lifecycle &
           bash cloudbuild/scripts/deploy-function.sh log-cleanup &
           bash cloudbuild/scripts/deploy-function.sh predev-lifecycle &
