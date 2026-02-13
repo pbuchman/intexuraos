@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
 import type { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
+import type { IsolationProvider } from './services/isolation/types.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from './types/api.js';
 import { CreateTaskRequestSchema } from './types/schemas.js';
@@ -53,45 +54,15 @@ export function registerRoutes(
   tokenService: GitHubTokenService,
   config: { orchestratorSecret: string },
   logger: Logger,
-  anthropicOAuth?: AnthropicOAuthManager
+  anthropicOAuth?: AnthropicOAuthManager,
+  isolationProvider?: IsolationProvider
 ): void {
   const nonceCache: NonceCache = {};
 
-  // Request/Response logging hooks
-  // Note: Body is not yet parsed in onRequest - taskId from POST body is logged in route handler
-  app.addHook('onRequest', async (request) => {
-    const logData: Record<string, unknown> = {
-      method: request.method,
-      url: request.url,
-      requestId: request.id,
-    };
-
-    // Add task ID from URL params if available (e.g., GET/DELETE /tasks/:id)
-    const params = request.params as { id?: string } | undefined;
-    if (params?.id !== undefined) {
-      logData['taskId'] = params.id;
-    }
-
-    logger.info(logData, 'Incoming request');
-  });
-
+  // Emit one concise line per completed HTTP request.
   app.addHook('onResponse', async (request, reply) => {
-    const logData: Record<string, unknown> = {
-      method: request.method,
-      url: request.url,
-      statusCode: reply.statusCode,
-      responseTimeMs: Math.round(reply.elapsedTime),
-      requestId: request.id,
-    };
-
-    // Add taskId context if available
-    const params = request.params as { id?: string } | undefined;
-    if (params?.id !== undefined) {
-      logData['taskId'] = params.id;
-    }
-
-    const level = reply.statusCode >= 400 ? 'warn' : 'info';
-    logger[level](logData, 'Request completed');
+    const level = reply.statusCode >= 500 ? 'error' : reply.statusCode >= 400 ? 'warn' : 'info';
+    logger[level]({}, `${request.method} ${String(reply.statusCode)} ${request.url}`);
   });
 
   const verifyDispatchSignature = async (
@@ -154,7 +125,7 @@ export function registerRoutes(
           webhookSecret: rawBody['webhookSecret'] ? '[REDACTED]' : undefined,
         },
       },
-      'Incoming request'
+      'Task submission payload'
     );
 
     const parseResult = CreateTaskRequestSchema.safeParse(request.body);
@@ -278,6 +249,12 @@ export function registerRoutes(
       githubTokenExpiresAt: tokenExpiry?.toISOString() ?? null,
       anthropicOAuth: oauthState,
     });
+  });
+
+  // GET /meta/worker-image - Worker image diagnostics
+  app.get('/meta/worker-image', async (_request, reply) => {
+    const imageInfo = isolationProvider?.getImageInfo?.() ?? null;
+    reply.send(imageInfo ?? { error: 'Image info not available' });
   });
 
   // POST /admin/shutdown - Graceful shutdown

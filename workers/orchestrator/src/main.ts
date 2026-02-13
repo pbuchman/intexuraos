@@ -7,6 +7,7 @@ import type { GitHubTokenService } from './github/token-service.js';
 import type { WebhookClient } from './services/webhook-client.js';
 import type { HeartbeatManager } from './heartbeat.js';
 import type { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
+import type { IsolationProvider } from './services/isolation/types.js';
 import { registerRoutes } from './routes.js';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
@@ -41,7 +42,8 @@ export async function main(
   webhookClient: WebhookClient,
   heartbeatManager: HeartbeatManager,
   logger: Logger,
-  anthropicOAuth?: AnthropicOAuthManager
+  anthropicOAuth?: AnthropicOAuthManager,
+  isolationProvider?: IsolationProvider
 ): Promise<void> {
   serviceState = {
     status: 'initializing',
@@ -51,12 +53,8 @@ export async function main(
   try {
     // Start HTTP server
     const app = fastify({
-      logger: {
-        /* v8 ignore start -- test-infra: environment config hard to test @preserve */
-        level: process.env['LOG_LEVEL'] ?? 'info',
-        /* v8 ignore stop @preserve */
-        transport: { target: 'pino-pretty', options: { colorize: true, singleLine: true } },
-      },
+      logger: false,
+      disableRequestLogging: true,
     });
 
     void app.register(cors);
@@ -67,7 +65,8 @@ export async function main(
       tokenService,
       config,
       logger,
-      anthropicOAuth
+      anthropicOAuth,
+      isolationProvider
     );
 
     await app.listen({ port: config.port, host: '0.0.0.0' });

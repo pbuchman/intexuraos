@@ -136,4 +136,11 @@ export interface IsolationProvider {
   preserveWorker?(taskId: string): Promise<void>;
 
   listPreservedWorkers?(): Promise<{ containerId: string; taskId: string; preservedAt: string }[]>;
+
+  getImageInfo?(): {
+    configuredRef: string;
+    lastResolvedDigest: string | null;
+    pullPolicy: string;
+    managedAttemptsMode: boolean;
+  };
 }

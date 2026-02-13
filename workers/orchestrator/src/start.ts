@@ -38,6 +38,8 @@ const DEFAULT_CAPACITY = 2;
 const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 const EXEC_TIMEOUT_MS = 30 * 1000; // 30 seconds for external commands
 const DEFAULT_COMPLETION_MAX_ATTEMPTS = 3;
+const DEFAULT_WORKER_IMAGE =
+  'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -304,18 +306,28 @@ async function bootstrap(): Promise<void> {
   };
 
   const logFilePath = join(logsDir, 'orchestrator.log');
+  const llmAuditLogPath = join(logsDir, 'llm-audit.log');
   const logLevel = process.env['LOG_LEVEL'] ?? 'info';
 
   // Create logger — pretty stdout + JSON file for debugging
   const logger = pino({
     level: logLevel,
+    serializers: errorSerializers,
     transport: {
       targets: [
-        { target: 'pino-pretty', options: { colorize: true, singleLine: true }, level: logLevel },
+        {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            singleLine: true,
+            translateTime: 'HH:MM:ss.l',
+            ignore: 'pid,hostname',
+          },
+          level: logLevel,
+        },
         { target: 'pino/file', options: { destination: logFilePath }, level: logLevel },
       ],
     },
-    serializers: errorSerializers,
   });
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
@@ -357,12 +369,20 @@ async function bootstrap(): Promise<void> {
 
   // Create Docker isolation provider
   const secretsBasePath = join(orchestratorDir, 'secrets');
+  const workerImage = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE);
   const keepContainersAlive = process.env['KEEP_CONTAINERS_ALIVE'] === '1';
   if (keepContainersAlive) {
-    logger.info('Debug mode: containers will be kept alive after task completion');
+    logger.info({}, 'Debug mode: containers will be kept alive after task completion');
   }
+  const preserveFailedContainers =
+    getOptionalEnv('INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS', '1') !== '0';
   const isolationProvider = await createIsolationProvider(
-    { secretsBasePath, gcpSaKeyPath, keepContainersAlive },
+    {
+      secretsBasePath,
+      gcpSaKeyPath,
+      keepContainersAlive,
+      imageName: workerImage,
+    },
     logger
   );
   const tokenRefresher = new TokenRefresher(
@@ -460,16 +480,20 @@ async function bootstrap(): Promise<void> {
   const completionVerifier = new OrchestratorCompletionVerifier(logger, {
     model: LlmModels.Gemini25Flash,
     geminiApiKey: geminiVerifierKey,
+    auditLogPath: llmAuditLogPath,
   });
 
   const completionControl: CompletionControlConfig = {
     maxAttempts: completionMaxAttemptsRaw,
     verifier: completionVerifier,
+    preserveFailedContainers,
   };
 
   logger.info(
     {
       completionMaxAttempts: completionControl.maxAttempts,
+      preserveFailedContainers,
+      workerImage,
       verifier: completionVerifier.describe(),
     },
     'Completion verification configuration'
@@ -507,7 +531,8 @@ async function bootstrap(): Promise<void> {
     webhookClient,
     heartbeatManager,
     logger,
-    anthropicOAuth
+    anthropicOAuth,
+    isolationProvider
   );
 }
 /* v8 ignore stop @preserve */
