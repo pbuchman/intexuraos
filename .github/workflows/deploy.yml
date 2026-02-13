@@ -71,7 +71,7 @@ jobs:
   check-runner:
     name: Check Self-Hosted Runner
     needs: analyze
-    if: needs.analyze.outputs.strategy != 'NONE'
+    if: needs.analyze.outputs.strategy != 'NONE' || github.event.inputs.force_strategy == 'monolith'
     runs-on: ubuntu-latest
     outputs:
       available: ${{ steps.check.outputs.available }}
@@ -532,7 +532,7 @@ jobs:
   skip-deploy:
     name: No Changes to Deploy
     needs: analyze
-    if: needs.analyze.outputs.strategy == 'NONE'
+    if: needs.analyze.outputs.strategy == 'NONE' && github.event.inputs.force_strategy != 'monolith'
     runs-on: ubuntu-latest
 
     steps:
