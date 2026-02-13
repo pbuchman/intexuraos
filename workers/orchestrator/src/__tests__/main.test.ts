@@ -1125,6 +1125,7 @@ describe('main.ts', () => {
         mockTokenService,
         mockConfig,
         mockLogger,
+        undefined,
         undefined
       );
 
