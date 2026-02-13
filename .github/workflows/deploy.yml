@@ -107,6 +107,7 @@ jobs:
       FUNCTIONS_SOURCE_BUCKET: ${{ vars.FUNCTIONS_SOURCE_BUCKET }}
       WORKSPACE_ROOT: ${{ github.workspace }}
       DOCKER_BUILDKIT: '1'
+      GOOGLE_APPLICATION_CREDENTIALS: /home/pbuchman/.config/gcloud/sa-key.json
 
     steps:
       - name: Checkout
@@ -116,7 +117,7 @@ jobs:
 
       - name: Authenticate to GCP
         run: |
-          gcloud auth activate-service-account --key-file="$HOME/.config/gcloud/sa-key.json"
+          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
           gcloud auth configure-docker europe-central2-docker.pkg.dev --quiet
 
       - name: Setup Node.js (fnm)
@@ -346,6 +347,7 @@ jobs:
       FUNCTIONS_SOURCE_BUCKET: ${{ vars.FUNCTIONS_SOURCE_BUCKET }}
       WORKSPACE_ROOT: ${{ github.workspace }}
       DOCKER_BUILDKIT: '1'
+      GOOGLE_APPLICATION_CREDENTIALS: /home/pbuchman/.config/gcloud/sa-key.json
 
     steps:
       - name: Checkout
@@ -355,7 +357,7 @@ jobs:
 
       - name: Authenticate to GCP
         run: |
-          gcloud auth activate-service-account --key-file="$HOME/.config/gcloud/sa-key.json"
+          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
           gcloud auth configure-docker europe-central2-docker.pkg.dev --quiet
 
       - name: Setup Node.js (fnm)
