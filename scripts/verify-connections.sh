@@ -41,10 +41,10 @@ else
   echo "      (Check .env.local for configuration)"
 fi
 
-if [ -f "/home/user/intexuraos/gcp-service-account.json" ]; then
+if [ -f "$HOME/.config/gcloud/sa-key.json" ]; then
   echo "   ✅ Service account key file exists"
-  PROJECT_ID=$(grep -o '"project_id": "[^"]*"' /home/user/intexuraos/gcp-service-account.json | cut -d'"' -f4)
-  CLIENT_EMAIL=$(grep -o '"client_email": "[^"]*"' /home/user/intexuraos/gcp-service-account.json | cut -d'"' -f4)
+  PROJECT_ID=$(grep -o '"project_id": "[^"]*"' $HOME/.config/gcloud/sa-key.json | cut -d'"' -f4)
+  CLIENT_EMAIL=$(grep -o '"client_email": "[^"]*"' $HOME/.config/gcloud/sa-key.json | cut -d'"' -f4)
   echo "      Project: $PROJECT_ID"
   echo "      Service Account: $CLIENT_EMAIL"
 else
@@ -61,7 +61,7 @@ echo ""
 
 # Git Ignore Check
 echo "🔒 Security:"
-if git check-ignore -q gcp-service-account.json; then
+if git check-ignore -q sa-key.json; then
   echo "   ✅ Service account key is gitignored"
 else
   echo "   ⚠️  Service account key is NOT gitignored!"

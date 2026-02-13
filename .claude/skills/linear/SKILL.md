@@ -147,7 +147,7 @@ Before ANY operation, verify all required tools:
 
 ### GCloud Verification
 
-**Service account key location:** `~/personal/gcloud-claude-code-dev.json`
+**Service account key location:** `~/.config/gcloud/sa-key.json`
 
 1. Check if credentials file exists
 2. If `gcloud auth list` shows no active account, activate service account
