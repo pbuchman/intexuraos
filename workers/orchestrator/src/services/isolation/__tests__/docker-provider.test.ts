@@ -349,7 +349,7 @@ describe('DockerProvider', () => {
       );
 
       expect(mocks.mockDocker.createContainer).toHaveBeenCalledTimes(1);
-      expect(mocks.mockContainer.exec).toHaveBeenCalledTimes(3);
+      expect(mocks.mockContainer.exec).toHaveBeenCalledTimes(4);
     });
 
     it('does not set CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env var', async () => {
@@ -604,6 +604,64 @@ describe('DockerProvider', () => {
     it('returns empty array when no workers preserved', async () => {
       const preserved = await provider.listPreservedWorkers();
       expect(preserved).toHaveLength(0);
+    });
+  });
+
+  describe('readiness gate', () => {
+    it('checks for readiness marker after container start in managed mode', async () => {
+      provider = new TestableDockerProvider(
+        { managedAttemptsMode: true },
+        mockLogger,
+        mocks.mockDocker
+      );
+      await provider.createWorker(createTestConfig());
+
+      const execCalls = mocks.mockContainer.exec.mock.calls;
+      const readinessCall = execCalls.find(
+        (call: unknown[]) => JSON.stringify((call[0] as { Cmd?: string[] })?.Cmd).includes('worker-ready')
+      );
+      expect(readinessCall).toBeDefined();
+    });
+
+    it('skips readiness check when managedAttemptsMode is disabled', async () => {
+      provider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+      await provider.createWorker(createTestConfig());
+
+      const execCalls = mocks.mockContainer.exec.mock.calls;
+      const readinessCall = execCalls.find(
+        (call: unknown[]) => JSON.stringify((call[0] as { Cmd?: string[] })?.Cmd).includes('worker-ready')
+      );
+      expect(readinessCall).toBeUndefined();
+    });
+
+    it('throws readiness timeout when marker never appears', async () => {
+      const originalExecImpl = mocks.mockContainer.exec.getMockImplementation() as
+        | ((...args: unknown[]) => unknown)
+        | undefined;
+      mocks.mockContainer.exec = vi.fn().mockImplementation((opts: { Cmd?: string[] }) => {
+        const cmd = opts?.Cmd?.join?.(' ') ?? '';
+        if (cmd.includes('worker-ready')) {
+          return Promise.resolve({
+            start: vi.fn().mockResolvedValue(undefined),
+            inspect: vi.fn().mockResolvedValue({ ExitCode: 1 }),
+          });
+        }
+        return originalExecImpl?.(opts);
+      });
+
+      provider = new TestableDockerProvider(
+        { managedAttemptsMode: true, workerReadyTimeoutMs: 200 },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await expect(
+        provider.createWorker(createTestConfig({ taskId: 'timeout-task' }))
+      ).rejects.toThrow(/readiness.*timeout/i);
     });
   });
 
