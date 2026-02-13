@@ -55,12 +55,14 @@ All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.
 
 ### Optional
 
-| Variable                     | Default                       | Description           |
-| ---------------------------- | ----------------------------- | --------------------- |
-| `INTEXURAOS_REPOSITORY_PATH` | `~/.claude-orchestrator/repo` | Local repo clone path |
-| `INTEXURAOS_WORKER_CAPACITY` | `2`                           | Max concurrent tasks  |
-| `PORT`                       | `8199`                        | HTTP server port      |
-| `LOG_LEVEL`                  | `info`                        | Pino log level        |
+| Variable                                       | Default                       | Description                                      |
+| ---------------------------------------------- | ----------------------------- | ------------------------------------------------ |
+| `INTEXURAOS_REPOSITORY_PATH`                   | `~/.claude-orchestrator/repo` | Local repo clone path                            |
+| `INTEXURAOS_WORKER_CAPACITY`                   | `2`                           | Max concurrent tasks                             |
+| `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | `.../claude-worker:latest`    | Worker image reference (tag or digest)           |
+| `INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS` | `1`                           | Keep failed/interrupted containers for debugging |
+| `PORT`                                         | `8199`                        | HTTP server port                                 |
+| `LOG_LEVEL`                                    | `info`                        | Pino log level                                   |
 
 ---
 
@@ -90,6 +92,8 @@ export INTEXURAOS_REPOSITORY_URL=https://github.com/pbuchman/intexuraos.git
 export INTEXURAOS_REPOSITORY_PATH=$HOME/claude-orchestrator/intexuraos
 export INTEXURAOS_PROJECT_ID=$PROJECT_ID
 export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
+# Optional but recommended: pin to immutable digest
+# export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/.../claude-worker@sha256:<digest>
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
 EOF
 
@@ -381,3 +385,9 @@ cd ../orchestrator && pnpm test:e2e
 | Container name conflict             | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`                 |
 | OAuth credentials missing           | Run `claude login` on VM (use SSH tunnel for headless)                       |
 | OAuth token expired                 | Orchestrator auto-refreshes; if refresh token revoked, re-run `claude login` |
+
+### Worker Image Policy
+
+- Orchestrator pulls the worker image before each new task container.
+- Pull failure is fail-fast (no cached-image fallback) to prevent stale runtime behavior.
+- Startup logs include requested image ref and resolved digest.
