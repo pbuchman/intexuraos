@@ -174,12 +174,12 @@ describe('TaskDispatcher', () => {
     provider: mockIsolationProvider,
     tokenRefresher: mockTokenRefresher,
     apiKeyValidator: mockApiKeyValidator,
-    secrets: {
+    getSecrets: () => ({
       ANTHROPIC_API_KEY: 'test-anthropic-key',
       LINEAR_API_KEY: 'test-linear-key',
       SENTRY_AUTH_TOKEN: 'test-sentry-token',
       ZAI_API_KEY: 'test-zai-key',
-    },
+    }),
     gcpSaKeyPath: '/tmp/gcp-sa.json',
     githubAppKeyPath: '/tmp/github-app.pem',
   };

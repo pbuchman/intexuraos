@@ -143,6 +143,11 @@ export class DockerProvider implements IsolationProvider {
       /* v8 ignore stop @preserve */
 
       await this.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
+      /* v8 ignore start -- test-infra: anthropicOAuth not injected in unit tests @preserve */
+      if (this.anthropicOAuth !== undefined) {
+        await this.anthropicOAuth.writeTaskCredentials(existingWorker.taskSessionPath);
+      }
+      /* v8 ignore stop @preserve */
       void this.runAttemptInContainer(taskId, config);
       return existingWorker.handle;
     }
@@ -211,7 +216,11 @@ export class DockerProvider implements IsolationProvider {
         ANTHROPIC_API_KEY: 'sk-ant-',
       };
       const expectedPrefix = KEY_FORMAT[workerTypeConfig.apiKeyEnvVar];
-      if (expectedPrefix !== undefined && !apiKey.startsWith(expectedPrefix)) {
+      if (
+        expectedPrefix !== undefined &&
+        !apiKey.startsWith(expectedPrefix) &&
+        this.anthropicOAuth === undefined
+      ) {
         this.logger.error(
           {
             taskId,
