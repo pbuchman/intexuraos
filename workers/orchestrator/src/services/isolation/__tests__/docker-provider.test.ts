@@ -731,6 +731,73 @@ describe('DockerProvider', () => {
     });
   });
 
+  describe('getImageInfo', () => {
+    it('returns configured image info with null digest before any pull', () => {
+      const info = provider.getImageInfo();
+      expect(info.configuredRef).toBe(
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest'
+      );
+      expect(info.lastResolvedDigest).toBeNull();
+      expect(info.pullPolicy).toBe('always');
+      expect(info.managedAttemptsMode).toBe(true);
+    });
+
+    it('stores resolved digest after successful image pull', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const info = provider.getImageInfo();
+      expect(info.lastResolvedDigest).toBe(
+        'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:testdigest'
+      );
+    });
+
+    it('reflects custom config values', () => {
+      const customProvider = new TestableDockerProvider(
+        { imageName: 'custom-image:v1', imagePullPolicy: 'if-not-present', managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      const info = customProvider.getImageInfo();
+      expect(info.configuredRef).toBe('custom-image:v1');
+      expect(info.pullPolicy).toBe('if-not-present');
+      expect(info.managedAttemptsMode).toBe(false);
+    });
+  });
+
+  describe('mutable tag warning', () => {
+    it('logs warning when image uses :latest tag', async () => {
+      await provider.createWorker(createTestConfig());
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ imageName: expect.stringContaining(':latest') }),
+        expect.stringContaining('mutable tag')
+      );
+    });
+
+    it('does not log warning when image does not use :latest tag', async () => {
+      const pinnedProvider = new TestableDockerProvider(
+        { imageName: 'registry/image:v1.2.3' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      mocks.mockDocker.getImage.mockReturnValueOnce({
+        inspect: vi.fn().mockResolvedValue({
+          RepoDigests: ['registry/image@sha256:abc123'],
+        }),
+      });
+
+      await pinnedProvider.createWorker(createTestConfig());
+
+      const warnCalls = (mockLogger.warn as ReturnType<typeof vi.fn>).mock.calls;
+      const mutableTagWarns = warnCalls.filter(
+        (call: unknown[]) => typeof call[1] === 'string' && (call[1] as string).includes('mutable tag')
+      );
+      expect(mutableTagWarns).toHaveLength(0);
+    });
+  });
+
   describe('getResourceUsage', () => {
     it('returns resource usage stats', async () => {
       await provider.createWorker(createTestConfig());
