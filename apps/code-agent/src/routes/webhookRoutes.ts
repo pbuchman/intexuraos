@@ -419,8 +419,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               received: { type: 'boolean', enum: [true] },
+              acknowledgedSequences: { type: 'array', items: { type: 'number' } },
+              count: { type: 'number' },
             },
-            required: ['received'],
+            required: ['received', 'acknowledgedSequences', 'count'],
           },
           401: {
             description: 'Invalid signature',
@@ -507,7 +509,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 3: Store chunks in Firestore subcollection
       const logChunks = chunks.map((chunk) => ({
-        id: '', // Will be auto-generated
+        id: '',
         sequence: chunk.sequence,
         content: chunk.content,
         timestamp: Timestamp.fromDate(new Date(chunk.timestamp)),
@@ -533,9 +535,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       }
 
+      const acknowledgedSequences = chunks.map((c) => c.sequence);
       request.log.debug({ taskId, count: chunks.length, lines: allLines.length }, 'Log chunks stored successfully');
-      // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
-      return await reply.send({ received: true });
+      // @allow-raw-send: external webhook callback - orchestrator expects ACK with acknowledged sequences
+      return await reply.send({ received: true, acknowledgedSequences, count: acknowledgedSequences.length });
     }
   );
 
