@@ -683,8 +683,8 @@ describe('DockerProvider', () => {
       await provider.createWorker(createTestConfig());
 
       const execCalls = mocks.mockContainer.exec.mock.calls;
-      const readinessCall = execCalls.find(
-        (call: unknown[]) => JSON.stringify((call[0] as { Cmd?: string[] })?.Cmd).includes('worker-ready')
+      const readinessCall = execCalls.find((call: unknown[]) =>
+        JSON.stringify((call[0] as { Cmd?: string[] })?.Cmd).includes('worker-ready')
       );
       expect(readinessCall).toBeDefined();
     });
@@ -698,8 +698,8 @@ describe('DockerProvider', () => {
       await provider.createWorker(createTestConfig());
 
       const execCalls = mocks.mockContainer.exec.mock.calls;
-      const readinessCall = execCalls.find(
-        (call: unknown[]) => JSON.stringify((call[0] as { Cmd?: string[] })?.Cmd).includes('worker-ready')
+      const readinessCall = execCalls.find((call: unknown[]) =>
+        JSON.stringify((call[0] as { Cmd?: string[] })?.Cmd).includes('worker-ready')
       );
       expect(readinessCall).toBeUndefined();
     });
@@ -753,7 +753,11 @@ describe('DockerProvider', () => {
 
     it('reflects custom config values', () => {
       const customProvider = new TestableDockerProvider(
-        { imageName: 'custom-image:v1', imagePullPolicy: 'if-not-present', managedAttemptsMode: false },
+        {
+          imageName: 'custom-image:v1',
+          imagePullPolicy: 'if-not-present',
+          managedAttemptsMode: false,
+        },
         mockLogger,
         mocks.mockDocker
       );
@@ -792,7 +796,8 @@ describe('DockerProvider', () => {
 
       const warnCalls = (mockLogger.warn as ReturnType<typeof vi.fn>).mock.calls;
       const mutableTagWarns = warnCalls.filter(
-        (call: unknown[]) => typeof call[1] === 'string' && (call[1] as string).includes('mutable tag')
+        (call: unknown[]) =>
+          typeof call[1] === 'string' && (call[1] as string).includes('mutable tag')
       );
       expect(mutableTagWarns).toHaveLength(0);
     });
