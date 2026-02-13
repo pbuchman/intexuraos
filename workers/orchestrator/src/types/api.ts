@@ -1,4 +1,5 @@
 import type { OrchestratorStatus } from './state.js';
+import type { OAuthState } from '../services/isolation/types.js';
 
 // POST /tasks request
 export interface CreateTaskRequest {
@@ -29,4 +30,5 @@ export interface HealthResponse {
   running: number;
   available: number;
   githubTokenExpiresAt: string | null;
+  anthropicOAuth: OAuthState;
 }

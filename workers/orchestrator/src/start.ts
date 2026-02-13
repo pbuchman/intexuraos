@@ -25,6 +25,7 @@ import { WorktreeManager } from './services/worktree-manager.js';
 import { LogForwarder } from './services/log-forwarder.js';
 import { createHeartbeatManager } from './heartbeat.js';
 import { createIsolationProvider, TokenRefresher } from './services/isolation/index.js';
+import { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
 import { ApiKeyValidator } from './services/api-key-validator.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
@@ -395,16 +396,57 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  // Anthropic OAuth credential management
+  const credentialsPath = join(home, '.claude', '.credentials.json');
+  const anthropicOAuth = new AnthropicOAuthManager(
+    {
+      credentialsPath,
+      codeAgentUrl: config.codeAgentUrl,
+      internalAuthToken: internalAuthToken,
+    },
+    logger
+  );
+
+  const oauthLoaded = anthropicOAuth.loadCredentials();
+  if (!oauthLoaded) {
+    process.stderr.write(
+      `\n❌ PRECONDITION FAILED: Anthropic OAuth credentials not found at ${credentialsPath}\n`
+    );
+    process.stderr.write(`   Run \`claude login\` on this machine first.\n`);
+    process.stderr.write(
+      `   For headless VMs: ssh -R 8080:localhost:8080 user@vm && claude login\n\n`
+    );
+    process.exit(1);
+  }
+  anthropicOAuth.logStartupStatus();
+
+  // Get initial access token from OAuth
+  const anthropicToken = await anthropicOAuth.getAccessToken();
+  if (anthropicToken === null) {
+    process.stderr.write(
+      `\n❌ PRECONDITION FAILED: Failed to obtain Anthropic access token (may need refresh)\n\n`
+    );
+    process.exit(1);
+  }
+
   // Get API keys for workers
   const apiKeySecrets = {
-    // Fail-fast: orchestrator requires both worker API keys at startup.
-    ANTHROPIC_API_KEY: getRequiredEnv('INTEXURAOS_ANTHROPIC_API_KEY'),
+    ANTHROPIC_API_KEY: anthropicToken,
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_API_KEY'),
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
+  apiKeyValidator.setAnthropicOAuth(anthropicOAuth);
+
+  // Wire OAuth manager into token refresher and isolation provider
+  tokenRefresher.setAnthropicOAuth(anthropicOAuth);
+  if ('setAnthropicOAuth' in isolationProvider) {
+    (isolationProvider as { setAnthropicOAuth(m: AnthropicOAuthManager): void }).setAnthropicOAuth(
+      anthropicOAuth
+    );
+  }
 
   const isolationConfig: IsolationConfig = {
     provider: isolationProvider,
@@ -499,7 +541,8 @@ async function bootstrap(): Promise<void> {
     webhookClient,
     heartbeatManager,
     logger,
-    isolationProvider
+    isolationProvider,
+    anthropicOAuth
   );
 }
 /* v8 ignore stop @preserve */

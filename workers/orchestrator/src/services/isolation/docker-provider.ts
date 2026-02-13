@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Logger } from '@intexuraos/common-core';
 import type { IsolationProvider, WorkerConfig, WorkerHandle, ResourceUsage } from './types.js';
+import type { AnthropicOAuthManager } from './anthropic-oauth.js';
 
 export interface DockerProviderConfig {
   imageName: string;
@@ -60,12 +61,17 @@ export class DockerProvider implements IsolationProvider {
   private readonly workers: Map<string, WorkerEntry>;
   private readonly preservedWorkers = new Map<string, PreservedWorkerEntry>();
   private lastResolvedDigest: string | null = null;
+  private anthropicOAuth?: AnthropicOAuthManager | undefined;
 
   constructor(config: Partial<DockerProviderConfig>, logger: Logger) {
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.logger = logger;
     this.workers = new Map();
+  }
+
+  setAnthropicOAuth(manager: AnthropicOAuthManager): void {
+    this.anthropicOAuth = manager;
   }
 
   /**
@@ -176,6 +182,12 @@ export class DockerProvider implements IsolationProvider {
     await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
     await fs.promises.mkdir(taskSessionPath, { recursive: true, mode: 0o700 });
     await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
+
+    /* v8 ignore start -- test-infra: anthropicOAuth not injected in unit tests @preserve */
+    if (this.anthropicOAuth !== undefined) {
+      await this.anthropicOAuth.writeTaskCredentials(taskSessionPath);
+    }
+    /* v8 ignore stop @preserve */
 
     let container: Docker.Container | undefined;
     try {

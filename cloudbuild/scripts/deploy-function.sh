@@ -20,7 +20,7 @@ source "${SCRIPT_DIR}/lib.sh"
 WORKER="$1"
 require_env_vars REGION ENVIRONMENT FUNCTIONS_SOURCE_BUCKET
 
-WORKER_DIR="/workspace/workers/${WORKER}"
+WORKER_DIR="${WORKSPACE_ROOT:-/workspace}/workers/${WORKER}"
 
 log "Deploying Cloud Function worker: ${WORKER}"
 

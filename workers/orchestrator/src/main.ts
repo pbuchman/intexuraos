@@ -7,6 +7,7 @@ import type { GitHubTokenService } from './github/token-service.js';
 import type { WebhookClient } from './services/webhook-client.js';
 import type { HeartbeatManager } from './heartbeat.js';
 import type { IsolationProvider } from './services/isolation/types.js';
+import type { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
 import { registerRoutes } from './routes.js';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
@@ -41,7 +42,8 @@ export async function main(
   webhookClient: WebhookClient,
   heartbeatManager: HeartbeatManager,
   logger: Logger,
-  isolationProvider?: IsolationProvider
+  isolationProvider?: IsolationProvider,
+  anthropicOAuth?: AnthropicOAuthManager
 ): Promise<void> {
   serviceState = {
     status: 'initializing',
@@ -63,7 +65,8 @@ export async function main(
       tokenService,
       config,
       logger,
-      isolationProvider
+      isolationProvider,
+      anthropicOAuth
     );
 
     await app.listen({ port: config.port, host: '0.0.0.0' });

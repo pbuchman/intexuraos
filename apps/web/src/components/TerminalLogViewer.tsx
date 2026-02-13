@@ -44,12 +44,15 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const followLogsRef = useRef(true);
 
+  const terminalWrapperRef = useRef<HTMLDivElement>(null);
+  const terminalBodyRef = useRef<HTMLDivElement>(null);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const unsubscribeRef = useRef<Unsubscribe | null>(null);
   const firebaseAuthenticatedRef = useRef(false);
   const isMountedRef = useRef(true);
+  const isAutoScrollingRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -79,11 +82,47 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const isFullscreen = isMobileViewport && isOverlayOpen;
 
   useEffect(() => {
+    const wrapper = terminalWrapperRef.current;
+    const body = terminalBodyRef.current;
+    if (wrapper === null || body === null || isFullscreen) {
+      if (body !== null) body.style.maxHeight = '';
+      return;
+    }
+
+    const updateMaxHeight = (): void => {
+      const rect = wrapper.getBoundingClientRect();
+      const headerHeight = 44;
+      const bottomPadding = 24;
+      const available = window.innerHeight - rect.top - headerHeight - bottomPadding;
+      body.style.maxHeight = `${String(Math.max(200, available))}px`;
+    };
+
+    updateMaxHeight();
+    window.addEventListener('resize', updateMaxHeight);
+    return (): void => {
+      window.removeEventListener('resize', updateMaxHeight);
+    };
+  }, [isFullscreen]);
+
+  useEffect(() => {
     if (!isFullscreen) return;
     const previousOverflow = document.body.style.overflow;
+    const previousPosition = document.body.style.position;
+    const previousWidth = document.body.style.width;
+    const previousHeight = document.body.style.height;
+
     document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    document.body.classList.add('terminal-fullscreen');
+
     return (): void => {
       document.body.style.overflow = previousOverflow;
+      document.body.style.position = previousPosition;
+      document.body.style.width = previousWidth;
+      document.body.style.height = previousHeight;
+      document.body.classList.remove('terminal-fullscreen');
     };
   }, [isFullscreen]);
 
@@ -92,13 +131,14 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
     const terminal = new XTerm({
       theme: { background: '#0f172a' },
-      fontSize: 13,
+      fontSize: isMobileViewport ? 11 : 13,
       fontFamily: 'monospace',
       convertEol: true,
       scrollback: 10000,
       cursorStyle: 'bar',
       cursorBlink: false,
       disableStdin: true,
+      allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();
@@ -124,7 +164,20 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     });
     resizeObserver.observe(container);
 
+    const scrollDisposable = terminal.onScroll(() => {
+      if (isAutoScrollingRef.current) return;
+      if (!followLogsRef.current) return;
+
+      const buffer = terminal.buffer.active;
+      const isAtBottom = buffer.viewportY >= buffer.baseY;
+      if (!isAtBottom) {
+        followLogsRef.current = false;
+        setFollowLogs(false);
+      }
+    });
+
     return (): void => {
+      scrollDisposable.dispose();
       resizeObserver.disconnect();
       terminal.dispose();
       terminalRef.current = null;
@@ -183,7 +236,11 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
             setLineCount((prev) => prev + addedLines.length);
             if (followLogsRef.current) {
+              isAutoScrollingRef.current = true;
               terminal.scrollToBottom();
+              requestAnimationFrame(() => {
+                isAutoScrollingRef.current = false;
+              });
             }
 
             setLogsLoading(false);
@@ -218,14 +275,12 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     followLogsRef.current = next;
     setFollowLogs(next);
     if (next) {
+      isAutoScrollingRef.current = true;
       terminalRef.current?.scrollToBottom();
+      requestAnimationFrame(() => {
+        isAutoScrollingRef.current = false;
+      });
     }
-  };
-
-  const disableFollowOnManualScroll = (): void => {
-    if (!followLogsRef.current) return;
-    followLogsRef.current = false;
-    setFollowLogs(false);
   };
 
   const copyLogs = (): void => {
@@ -253,49 +308,9 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     }
   };
 
-  useEffect(() => {
-    const container = terminalContainerRef.current;
-    if (container === null) return;
-    const viewport = container.querySelector('.xterm-viewport');
-    if (!(viewport instanceof HTMLElement)) return;
-
-    let isTouchScrolling = false;
-    const handleWheel = (): void => {
-      disableFollowOnManualScroll();
-    };
-    const handleTouchStart = (): void => {
-      isTouchScrolling = false;
-    };
-    const handleTouchMove = (): void => {
-      isTouchScrolling = true;
-      disableFollowOnManualScroll();
-    };
-    const handleTouchEnd = (): void => {
-      isTouchScrolling = false;
-    };
-    const handleScroll = (): void => {
-      if (isTouchScrolling) {
-        disableFollowOnManualScroll();
-      }
-    };
-
-    viewport.addEventListener('wheel', handleWheel, { passive: true });
-    viewport.addEventListener('touchstart', handleTouchStart, { passive: true });
-    viewport.addEventListener('touchmove', handleTouchMove, { passive: true });
-    viewport.addEventListener('touchend', handleTouchEnd, { passive: true });
-    viewport.addEventListener('scroll', handleScroll, { passive: true });
-
-    return (): void => {
-      viewport.removeEventListener('wheel', handleWheel);
-      viewport.removeEventListener('touchstart', handleTouchStart);
-      viewport.removeEventListener('touchmove', handleTouchMove);
-      viewport.removeEventListener('touchend', handleTouchEnd);
-      viewport.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
 
   return (
-    <div className={isFullscreen ? 'fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm' : 'mt-6 mb-6'}>
+    <div ref={terminalWrapperRef} className={isFullscreen ? 'fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm' : 'mt-6 mb-6'}>
       <div
         className={`flex items-center justify-between border-b border-slate-700 bg-slate-800 px-4 ${isFullscreen ? 'safe-area-inset-top py-3' : 'rounded-t-lg py-2'}`}
       >
@@ -374,12 +389,13 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
       </div>
 
       <div
-        className={`terminal-flow relative bg-slate-900 overflow-hidden ${isFullscreen ? 'flex-1 min-h-0' : 'rounded-b-lg min-h-[200px] max-h-[1190px]'}`}
+        ref={terminalBodyRef}
+        className={`terminal-flow relative bg-slate-900 ${isFullscreen ? 'flex-1 min-h-0 overflow-hidden' : 'rounded-b-lg min-h-[200px] overflow-y-auto'}`}
         onClick={isMobileViewport && !isFullscreen ? handleOpenOverlay : undefined}
       >
         <div
           ref={terminalContainerRef}
-          className={`w-full p-2 ${isMobileViewport ? '[&_.xterm_.xterm-viewport]:[touch-action:pan-y] [&_.xterm_.xterm-viewport]:[-webkit-overflow-scrolling:touch] [&_.xterm_.xterm-viewport]:[overscroll-behavior:contain]' : ''}`}
+          className="w-full p-2"
         />
         {logsLoading ? (
           <div className="absolute inset-0 flex items-center gap-2 rounded-b-lg p-4 text-slate-400 font-mono text-sm bg-slate-900">

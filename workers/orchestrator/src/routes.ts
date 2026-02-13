@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
 import type { IsolationProvider } from './services/isolation/types.js';
+import type { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from './types/api.js';
 import { CreateTaskRequestSchema } from './types/schemas.js';
@@ -53,7 +54,8 @@ export function registerRoutes(
   tokenService: GitHubTokenService,
   config: { orchestratorSecret: string },
   logger: Logger,
-  isolationProvider?: IsolationProvider
+  isolationProvider?: IsolationProvider,
+  anthropicOAuth?: AnthropicOAuthManager
 ): void {
   const nonceCache: NonceCache = {};
 
@@ -234,6 +236,10 @@ export function registerRoutes(
     const running = dispatcher.getRunningCount();
     const capacity = dispatcher.getCapacity();
     const tokenExpiry = tokenService.getExpiresAt();
+    const oauthState = anthropicOAuth?.getState() ?? {
+      status: 'not_configured' as const,
+      message: 'OAuth manager not initialized',
+    };
 
     reply.send({
       status: 'ready',
@@ -241,6 +247,7 @@ export function registerRoutes(
       running,
       available: capacity - running,
       githubTokenExpiresAt: tokenExpiry?.toISOString() ?? null,
+      anthropicOAuth: oauthState,
     });
   });
 

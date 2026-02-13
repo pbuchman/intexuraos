@@ -5,6 +5,20 @@
  * Implementations may use Docker containers, VMs, or other isolation mechanisms.
  */
 
+export interface AnthropicOAuthCredentials {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  scopes: string[];
+  subscriptionType: string;
+  rateLimitTier: string;
+}
+
+export type OAuthState =
+  | { status: 'active'; expiresAt: string; expiresInMinutes: number; subscriptionType: string }
+  | { status: 'expired'; message: string }
+  | { status: 'not_configured'; message: string };
+
 export type WorkerType = 'opus' | 'auto' | 'glm';
 
 export interface WorkerTypeConfig {
