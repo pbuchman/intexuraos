@@ -17,6 +17,7 @@ export interface DockerProviderConfig {
   gcpSaKeyPath: string;
   keepContainersAlive: boolean;
   managedAttemptsMode: boolean;
+  workerReadyTimeoutMs?: number;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -294,6 +295,7 @@ export class DockerProvider implements IsolationProvider {
     if (this.config.managedAttemptsMode) {
       try {
         await this.assertManagedEntrypointSupport(taskId, container);
+        await this.waitForWorkerReady(taskId, container);
       } catch (error) {
         try {
           await container.remove({ force: true });
@@ -656,6 +658,39 @@ export class DockerProvider implements IsolationProvider {
       return imageName;
     }
   }
+
+  /* v8 ignore start -- test-infra: readiness polling requires running container with entrypoint @preserve */
+  private async waitForWorkerReady(
+    taskId: string,
+    container: Docker.Container
+  ): Promise<void> {
+    const timeoutMs = this.config.workerReadyTimeoutMs ?? 600_000;
+    const pollIntervalMs = 2_000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      const execInstance = await container.exec({
+        Cmd: ['test', '-f', '/tmp/worker-ready'],
+        AttachStdout: false,
+        AttachStderr: false,
+      });
+      await execInstance.start({ hijack: false, stdin: false });
+      const info = await execInstance.inspect();
+      if (info.ExitCode === 0) {
+        this.logger.info(
+          { taskId, elapsedMs: Date.now() - startTime },
+          'Worker readiness confirmed'
+        );
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new Error(
+      `Worker readiness timeout after ${String(timeoutMs)}ms for task ${taskId}`
+    );
+  }
+  /* v8 ignore stop @preserve */
 
   private async assertManagedEntrypointSupport(
     taskId: string,
