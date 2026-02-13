@@ -137,7 +137,7 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Build and push Docker images (batch 1)
+      - name: Build and push all Docker images
         run: |
           bash cloudbuild/scripts/build-push-monitored.sh image-service apps/image-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh api-docs-hub apps/api-docs-hub/Dockerfile &
@@ -149,10 +149,6 @@ jobs:
           bash cloudbuild/scripts/build-push-monitored.sh mobile-notifications-service apps/mobile-notifications-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh research-agent apps/research-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh commands-agent apps/commands-agent/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 2)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh actions-agent apps/actions-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh data-insights-agent apps/data-insights-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh notes-agent apps/notes-agent/Dockerfile &
