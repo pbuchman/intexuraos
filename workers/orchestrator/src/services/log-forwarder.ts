@@ -493,12 +493,13 @@ export class LogForwarder {
     /* v8 ignore stop @preserve */
 
     /* v8 ignore start -- upstream: truncation path for oversized chunks, normal path returns early @preserve */
-    // Truncate and preserve last 1KB
     const tailSize = 1024;
-    const tail = chunk.slice(-tailSize);
     const marker = '\n[... TRUNCATED ...]\n';
+    const headSize = MAX_CHUNK_SIZE - tailSize - marker.length;
+    const head = chunk.slice(0, headSize);
+    const tail = chunk.slice(-tailSize);
 
-    return tail + marker;
+    return head + marker + tail;
     /* v8 ignore stop @preserve */
   }
 

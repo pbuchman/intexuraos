@@ -287,6 +287,15 @@ async function bootstrap(): Promise<void> {
     10
   );
 
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid PORT: ${getOptionalEnv('PORT', String(DEFAULT_PORT))}`);
+  }
+  if (!Number.isFinite(capacity) || capacity < 1) {
+    throw new Error(
+      `Invalid INTEXURAOS_WORKER_CAPACITY: ${getOptionalEnv('INTEXURAOS_WORKER_CAPACITY', String(DEFAULT_CAPACITY))}`
+    );
+  }
+
   // Validate port is available before starting
   validatePortAvailable(port);
 

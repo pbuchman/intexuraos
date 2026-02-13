@@ -491,7 +491,8 @@ export class DockerProvider implements IsolationProvider {
       }
       /* v8 ignore stop @preserve */
       return `${containerLogs}\n${worker.attemptLogBuffer}`;
-    } catch {
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to retrieve container logs');
       return worker.attemptLogBuffer;
     }
   }
@@ -663,6 +664,7 @@ export class DockerProvider implements IsolationProvider {
       };
     }
 
+    const pullStart = Date.now();
     try {
       const pullStream = await this.docker.pull(imageName, pullOpts);
       await new Promise<void>((resolve, reject) => {
@@ -676,6 +678,7 @@ export class DockerProvider implements IsolationProvider {
         `Failed to pull worker image ${imageName}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+    const pullDurationMs = Date.now() - pullStart;
 
     try {
       const imageInfo = await this.docker.getImage(imageName).inspect();
@@ -686,8 +689,8 @@ export class DockerProvider implements IsolationProvider {
       const finalImage = resolvedImage ?? repoDigests[0] ?? imageName;
       this.lastResolvedDigest = finalImage;
       this.logger.info(
-        {},
-        `Worker image pulled: taskId=${taskId} requested=${imageName} resolved=${finalImage}`
+        { taskId, pullDurationMs },
+        `Worker image pulled: requested=${imageName} resolved=${finalImage}`
       );
       if (imageName.includes(':latest')) {
         this.logger.warn(
