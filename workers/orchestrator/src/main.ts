@@ -6,6 +6,7 @@ import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
 import type { WebhookClient } from './services/webhook-client.js';
 import type { HeartbeatManager } from './heartbeat.js';
+import type { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
 import { registerRoutes } from './routes.js';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
@@ -39,7 +40,8 @@ export async function main(
   tokenService: GitHubTokenService,
   webhookClient: WebhookClient,
   heartbeatManager: HeartbeatManager,
-  logger: Logger
+  logger: Logger,
+  anthropicOAuth?: AnthropicOAuthManager
 ): Promise<void> {
   serviceState = {
     status: 'initializing',
@@ -64,7 +66,8 @@ export async function main(
       dispatcher,
       tokenService,
       config,
-      logger
+      logger,
+      anthropicOAuth
     );
 
     await app.listen({ port: config.port, host: '0.0.0.0' });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ApiKeyValidator } from '../api-key-validator.js';
+import type { AnthropicOAuthManager } from '../isolation/anthropic-oauth.js';
 import type { Logger } from '@intexuraos/common-core';
 
 /* eslint-disable @typescript-eslint/no-empty-function */
@@ -175,5 +176,47 @@ describe('ApiKeyValidator', () => {
     const result2 = await validator.validate('anthropic');
     expect(result2.valid).toBe(true);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  describe('OAuth-aware validation', () => {
+    it('should return valid when OAuth token is available', async () => {
+      const mockOAuth = {
+        getAccessToken: vi.fn(async () => 'sk-ant-oat01-valid'),
+      } as unknown as AnthropicOAuthManager;
+
+      const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: '' }, mockLogger);
+      validator.setAnthropicOAuth(mockOAuth);
+
+      const result = await validator.validate('anthropic');
+
+      expect(result.valid).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('should return invalid when OAuth returns null', async () => {
+      const mockOAuth = {
+        getAccessToken: vi.fn(async () => null),
+      } as unknown as AnthropicOAuthManager;
+
+      const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: '' }, mockLogger);
+      validator.setAnthropicOAuth(mockOAuth);
+
+      const result = await validator.validate('anthropic');
+
+      expect(result.valid).toBe(false);
+      expect(result.errorMessage).toContain('OAuth');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('should skip OAuth and fall through when not set', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+      const validator = new ApiKeyValidator({ ANTHROPIC_API_KEY: 'sk-ant-test' }, mockLogger);
+
+      const result = await validator.validate('anthropic');
+
+      expect(result.valid).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });

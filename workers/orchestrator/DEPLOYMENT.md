@@ -13,6 +13,7 @@ Consolidated reference for building, deploying, and managing the orchestrator an
 │  orchestrator (Node.js process via LaunchAgent)             │
 │  ├── Fastify HTTP server on :8199                           │
 │  ├── Cloudflare Tunnel → cc-mac.intexuraos.cloud            │
+│  ├── OAuth credential management (Anthropic Max sub)        │
 │  └── Docker SDK (dockerode) → spawns worker containers      │
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐   │
@@ -131,7 +132,7 @@ Set by `docker-provider.ts` when creating containers:
 | Variable                            | Source                | Purpose                           |
 | ----------------------------------- | --------------------- | --------------------------------- |
 | `TASK_ID`                           | Task config           | Task identifier                   |
-| `ANTHROPIC_API_KEY`                 | Secrets               | Claude API authentication         |
+| `ANTHROPIC_API_KEY`                 | OAuth access token    | Claude API authentication         |
 | `ANTHROPIC_BASE_URL`                | Worker type config    | API endpoint (varies by provider) |
 | `ANTHROPIC_MODEL`                   | Worker type config    | Model override (optional)         |
 | `LINEAR_API_KEY`                    | Secrets               | Linear MCP integration            |
@@ -185,6 +186,10 @@ pnpm --filter orchestrator test:e2e
 
 1. Rebuild: `pnpm --filter orchestrator build`
 2. Restart the orchestrator process (LaunchAgent or manual)
+
+### After VM Provisioning
+
+1. Run `claude login` on the VM before starting orchestrator (use SSH tunnel: `ssh -R 8080:localhost:8080 user@vm`)
 
 ### When Both Change (e.g., INT-491)
 

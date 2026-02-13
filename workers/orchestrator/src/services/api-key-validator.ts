@@ -1,4 +1,5 @@
 import type { Logger } from '@intexuraos/common-core';
+import type { AnthropicOAuthManager } from './isolation/anthropic-oauth.js';
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -16,11 +17,16 @@ interface CacheEntry {
 export class ApiKeyValidator {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly inFlight = new Map<string, Promise<ApiKeyValidationResult>>();
+  private anthropicOAuth?: AnthropicOAuthManager | undefined;
 
   constructor(
     private readonly secrets: { ANTHROPIC_API_KEY: string },
     private readonly logger: Logger
   ) {}
+
+  setAnthropicOAuth(manager: AnthropicOAuthManager): void {
+    this.anthropicOAuth = manager;
+  }
 
   async validate(keyType: 'anthropic'): Promise<ApiKeyValidationResult> {
     const cached = this.cache.get(keyType);
@@ -43,6 +49,21 @@ export class ApiKeyValidator {
   }
 
   private async doValidate(keyType: 'anthropic'): Promise<ApiKeyValidationResult> {
+    if (this.anthropicOAuth !== undefined) {
+      const token = await this.anthropicOAuth.getAccessToken();
+      if (token !== null) {
+        const result: ApiKeyValidationResult = { valid: true };
+        this.setCache(keyType, result);
+        return result;
+      }
+      const result: ApiKeyValidationResult = {
+        valid: false,
+        errorMessage: 'Anthropic OAuth credentials expired or unavailable',
+      };
+      this.setCache(keyType, result);
+      return result;
+    }
+
     const key = this.secrets.ANTHROPIC_API_KEY;
 
     if (key === '') {

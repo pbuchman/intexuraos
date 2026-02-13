@@ -4,12 +4,14 @@ import { createHmac } from 'node:crypto';
 import { registerRoutes, cleanUpExpiredNonces } from '../routes.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
+import type { AnthropicOAuthManager } from '../services/isolation/anthropic-oauth.js';
 import type { Logger } from '@intexuraos/common-core';
 
 describe('Routes', () => {
   let app: FastifyInstance;
   let dispatcher: TaskDispatcher;
   let tokenService: GitHubTokenService;
+  let anthropicOAuth: AnthropicOAuthManager;
 
   const mockLogger: Logger = {
     info: () => undefined,
@@ -57,7 +59,27 @@ describe('Routes', () => {
       refreshToken: vi.fn(async () => ({ ok: true, value: 'new-token' })),
     } as unknown as GitHubTokenService;
 
-    registerRoutes(app, dispatcher, tokenService, { orchestratorSecret }, mockLogger);
+    anthropicOAuth = {
+      getState: vi.fn(() => ({
+        status: 'active',
+        expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
+        expiresInMinutes: 240,
+        subscriptionType: 'max',
+      })),
+      getAccessToken: vi.fn(async () => 'sk-ant-oat01-mock'),
+      loadCredentials: vi.fn(() => true),
+      logStartupStatus: vi.fn(),
+      writeTaskCredentials: vi.fn(async () => undefined),
+    } as unknown as AnthropicOAuthManager;
+
+    registerRoutes(
+      app,
+      dispatcher,
+      tokenService,
+      { orchestratorSecret },
+      mockLogger,
+      anthropicOAuth
+    );
     await app.ready();
   });
 
@@ -333,7 +355,7 @@ describe('Routes', () => {
   });
 
   describe('GET /health', () => {
-    it('should return health status', async () => {
+    it('should return health status with anthropicOAuth', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/health',
@@ -348,6 +370,11 @@ describe('Routes', () => {
         available: 5,
       });
       expect(json).toHaveProperty('githubTokenExpiresAt');
+      expect(json.anthropicOAuth).toMatchObject({
+        status: 'active',
+        subscriptionType: 'max',
+      });
+      expect(json.anthropicOAuth.expiresInMinutes).toBe(240);
     });
 
     it('should return null githubTokenExpiresAt when token expiry is not set', async () => {
@@ -361,6 +388,38 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json.githubTokenExpiresAt).toBeNull();
+    });
+
+    it('should return expired anthropicOAuth status', async () => {
+      vi.mocked(anthropicOAuth.getState).mockReturnValueOnce({
+        status: 'expired',
+        message: 'Access token expired',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.anthropicOAuth.status).toBe('expired');
+    });
+
+    it('should return not_configured anthropicOAuth status', async () => {
+      vi.mocked(anthropicOAuth.getState).mockReturnValueOnce({
+        status: 'not_configured',
+        message: 'OAuth credentials not found',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.anthropicOAuth.status).toBe('not_configured');
     });
   });
 
