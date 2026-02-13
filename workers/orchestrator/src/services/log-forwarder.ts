@@ -43,6 +43,8 @@ export class LogForwarder {
 
   private readonly taskSecrets = new Map<string, string>();
 
+  private readonly taskSequences = new Map<string, { produced: number; acked: number }>();
+
   constructor(
     private readonly config: LogForwarderConfig,
     private readonly logger: Logger
@@ -54,6 +56,7 @@ export class LogForwarder {
    */
   registerTask(taskId: string, webhookSecret: string): void {
     this.taskSecrets.set(taskId, webhookSecret);
+    this.taskSequences.set(taskId, { produced: 0, acked: 0 });
   }
 
   /**
@@ -91,7 +94,6 @@ export class LogForwarder {
     }
     /* v8 ignore stop @preserve */
 
-    // Remove from tracking
     this.forwarders.delete(taskId);
   }
 
@@ -213,13 +215,14 @@ export class LogForwarder {
           'No webhook secret registered - log upload signatures will fail'
         );
       }
+      const existingSeq = this.taskSequences.get(taskId);
       state = {
         taskId,
-        logFilePath: '', // Not used in Docker mode
+        logFilePath: '',
         position: 0,
         buffer: '',
         partialLine: '',
-        sequence: 0,
+        sequence: existingSeq?.produced ?? 0,
         chunksSent: 0,
         totalBytes: 0,
         droppedChunks: 0,
@@ -372,12 +375,21 @@ export class LogForwarder {
       chunks: chunkPayloads,
     };
 
-    const success = await this.sendWithRetry(payload, state.webhookSecret);
+    const result = await this.sendWithRetry(payload, state.webhookSecret);
 
-    if (success) {
+    if (result.success) {
       state.sequence += chunks.length;
       state.chunksSent += chunks.length;
       state.totalBytes += chunks.reduce((sum, c) => sum + c.length, 0);
+
+      const seqState = this.taskSequences.get(taskId);
+      if (seqState !== undefined) {
+        seqState.produced = state.sequence;
+        if (result.acknowledgedSequences.length > 0) {
+          const maxAcked = Math.max(...result.acknowledgedSequences);
+          seqState.acked = Math.max(seqState.acked, maxAcked);
+        }
+      }
     } else {
       state.droppedChunks += chunks.length;
       this.logger.error(
@@ -394,7 +406,7 @@ export class LogForwarder {
       chunks: { sequence: number; content: string; timestamp: string }[];
     },
     webhookSecret: string
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; acknowledgedSequences: number[] }> {
     const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
     const url = `${baseUrl}/internal/logs`;
     const jsonBody = JSON.stringify(payload);
@@ -416,14 +428,26 @@ export class LogForwarder {
           body: jsonBody,
         });
 
-        if (response.ok) return true;
+        if (response.ok) {
+          try {
+            const ackBody = (await response.json()) as {
+              acknowledgedSequences?: number[];
+            };
+            return {
+              success: true,
+              acknowledgedSequences: ackBody.acknowledgedSequences ?? [],
+            };
+          } catch {
+            return { success: true, acknowledgedSequences: [] };
+          }
+        }
 
         if (response.status >= 400 && response.status < 500) {
           this.logger.error(
             { taskId: payload.taskId, status: response.status, url },
             'Log upload rejected with client error - not retrying'
           );
-          return false;
+          return { success: false, acknowledgedSequences: [] };
         }
 
         this.logger.warn(
@@ -448,7 +472,7 @@ export class LogForwarder {
       }
     }
 
-    return false;
+    return { success: false, acknowledgedSequences: [] };
   }
 
   private signPayload(payload: string, timestamp: number, secret: string): string {
@@ -469,6 +493,56 @@ export class LogForwarder {
 
     return tail + marker;
     /* v8 ignore stop @preserve */
+  }
+
+  async flush(taskId: string): Promise<void> {
+    const state = this.forwarders.get(taskId);
+    if (state === undefined) return;
+
+    if (state.partialLine !== '') {
+      state.buffer += stripDockerHeaders(state.partialLine + '\n');
+      state.partialLine = '';
+    }
+
+    await this.flushBuffer(taskId, true);
+  }
+
+  async awaitDrain(taskId: string, timeoutMs: number): Promise<void> {
+    const startTime = Date.now();
+    const pollMs = 500;
+
+    while (Date.now() - startTime < timeoutMs) {
+      const seqState = this.taskSequences.get(taskId);
+      if (
+        seqState === undefined ||
+        seqState.produced === 0 ||
+        seqState.acked >= seqState.produced - 1
+      ) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    const seqState = this.taskSequences.get(taskId);
+    /* v8 ignore start -- test-infra: throw only reachable after real timeout expiry in awaitDrain polling loop @preserve */
+    throw new Error(
+      `Log drain timeout after ${String(timeoutMs)}ms: produced=${String(seqState?.produced ?? 0)} acked=${String(seqState?.acked ?? 0)}`
+    );
+    /* v8 ignore stop @preserve */
+  }
+
+  close(taskId: string): void {
+    this.forwarders.delete(taskId);
+    this.taskSequences.delete(taskId);
+  }
+
+  getDeliveryStats(taskId: string): { produced: number; acked: number; pending: number } {
+    const seqState = this.taskSequences.get(taskId);
+    if (seqState === undefined) return { produced: 0, acked: 0, pending: 0 };
+    /* v8 ignore start -- ts-type: ternary type narrowing for zero-produce guard @preserve */
+    const pending = seqState.produced > 0 ? seqState.produced - 1 - seqState.acked : 0;
+    /* v8 ignore stop @preserve */
+    return { produced: seqState.produced, acked: seqState.acked, pending: Math.max(0, pending) };
   }
 
   getActiveTaskIds(): string[] {

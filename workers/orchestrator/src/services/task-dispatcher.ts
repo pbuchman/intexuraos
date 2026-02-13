@@ -54,6 +54,7 @@ export interface CompletionControlConfig {
   maxAttempts: number;
   verifier: CompletionVerifier;
   preserveFailedContainers?: boolean;
+  logDrainTimeoutMs?: number;
 }
 
 export class TaskDispatcher {
@@ -68,6 +69,7 @@ export class TaskDispatcher {
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
   private readonly preserveFailedContainers: boolean;
+  private readonly logDrainTimeoutMs: number;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -83,6 +85,7 @@ export class TaskDispatcher {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
     this.preserveFailedContainers = completionControl.preserveFailedContainers ?? false;
+    this.logDrainTimeoutMs = completionControl.logDrainTimeoutMs ?? 30000;
   }
 
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
@@ -761,9 +764,10 @@ export class TaskDispatcher {
 
   private async finalizeTask(
     task: Task,
-    finalStatus: TaskStatus,
+    statusParam: TaskStatus,
     payload: { result?: TaskResult; error?: TaskError }
   ): Promise<void> {
+    let finalStatus = statusParam;
     const shouldPreserve =
       this.preserveFailedContainers && (finalStatus === 'failed' || finalStatus === 'interrupted');
     if (shouldPreserve) {
@@ -783,7 +787,19 @@ export class TaskDispatcher {
     } else {
       await this.teardownAttempt(task.taskId, false);
     }
-    this.logForwarder.unregisterTask(task.taskId);
+
+    try {
+      await this.logForwarder.flush(task.taskId);
+      await this.logForwarder.awaitDrain(task.taskId, this.logDrainTimeoutMs);
+    } catch (drainError) {
+      this.logger.error({ taskId: task.taskId, error: drainError }, 'Log drain failed');
+      finalStatus = 'failed';
+      payload.error = {
+        code: 'LOG_DELIVERY_FAILED',
+        message: drainError instanceof Error ? drainError.message : String(drainError),
+      };
+    }
+    this.logForwarder.close(task.taskId);
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
