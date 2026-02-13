@@ -491,7 +491,8 @@ export class DockerProvider implements IsolationProvider {
       }
       /* v8 ignore stop @preserve */
       return `${containerLogs}\n${worker.attemptLogBuffer}`;
-    } catch {
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to retrieve container logs');
       return worker.attemptLogBuffer;
     }
   }
@@ -663,6 +664,7 @@ export class DockerProvider implements IsolationProvider {
       };
     }
 
+    const pullStart = Date.now();
     try {
       const pullStream = await this.docker.pull(imageName, pullOpts);
       await new Promise<void>((resolve, reject) => {
@@ -676,6 +678,7 @@ export class DockerProvider implements IsolationProvider {
         `Failed to pull worker image ${imageName}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+    const pullDurationMs = Date.now() - pullStart;
 
     try {
       const imageInfo = await this.docker.getImage(imageName).inspect();
@@ -686,8 +689,8 @@ export class DockerProvider implements IsolationProvider {
       const finalImage = resolvedImage ?? repoDigests[0] ?? imageName;
       this.lastResolvedDigest = finalImage;
       this.logger.info(
-        {},
-        `Worker image pulled: taskId=${taskId} requested=${imageName} resolved=${finalImage}`
+        { taskId, pullDurationMs },
+        `Worker image pulled: requested=${imageName} resolved=${finalImage}`
       );
       if (imageName.includes(':latest')) {
         this.logger.warn(
@@ -714,10 +717,16 @@ export class DockerProvider implements IsolationProvider {
     while (Date.now() - startTime < timeoutMs) {
       const execInstance = await container.exec({
         Cmd: ['test', '-f', '/tmp/worker-ready'],
-        AttachStdout: false,
+        AttachStdout: true,
         AttachStderr: false,
+        WorkingDir: '/',
       });
-      await execInstance.start({ hijack: false, stdin: false });
+      const execStream = await execInstance.start({ hijack: false, stdin: false });
+      await new Promise<void>((resolve) => {
+        execStream.on('end', resolve);
+        execStream.on('close', resolve);
+        execStream.resume();
+      });
       const info = await execInstance.inspect();
       if (info.ExitCode === 0) {
         this.logger.info(
@@ -742,7 +751,7 @@ export class DockerProvider implements IsolationProvider {
       AttachStdout: true,
       AttachStderr: true,
       Tty: false,
-      WorkingDir: '/repo',
+      WorkingDir: '/',
       User: '1001:1001',
     });
 
@@ -794,7 +803,7 @@ export class DockerProvider implements IsolationProvider {
         AttachStdout: true,
         AttachStderr: true,
         Tty: false,
-        WorkingDir: '/repo',
+        WorkingDir: '/',
         User: '1001:1001',
         Env: [`CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`],
       });
@@ -834,6 +843,7 @@ export class DockerProvider implements IsolationProvider {
       execStream.on('error', (error: unknown) => {
         reject(error instanceof Error ? error : new Error(String(error)));
       });
+      execStream.resume();
     });
 
     try {
