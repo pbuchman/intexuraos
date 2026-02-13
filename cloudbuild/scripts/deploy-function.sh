@@ -89,7 +89,8 @@ for FUNC in "${FUNCTIONS[@]}"; do
     --region="${REGION}" \
     --source="${DEST_PATH}" \
     --gen2 \
-    --quiet
+    --quiet &
 done
+wait
 
 log "Deployment complete for ${WORKER}"

@@ -137,50 +137,30 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Build and push Docker images (batch 1 - foundation)
+      - name: Build and push Docker images (batch 1)
         run: |
           bash cloudbuild/scripts/build-push-monitored.sh image-service apps/image-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh api-docs-hub apps/api-docs-hub/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh claude-worker workers/claude-worker/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 2 - core A)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh notion-service apps/notion-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh user-service apps/user-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh whatsapp-service apps/whatsapp-service/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 3 - core B)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh app-settings-service apps/app-settings-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh mobile-notifications-service apps/mobile-notifications-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh research-agent apps/research-agent/Dockerfile &
+          bash cloudbuild/scripts/build-push-monitored.sh commands-agent apps/commands-agent/Dockerfile &
           wait
 
-      - name: Build and push Docker images (batch 4 - agents A)
+      - name: Build and push Docker images (batch 2)
         run: |
-          bash cloudbuild/scripts/build-push-monitored.sh commands-agent apps/commands-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh actions-agent apps/actions-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh data-insights-agent apps/data-insights-agent/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 5 - agents B)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh notes-agent apps/notes-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh todos-agent apps/todos-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh bookmarks-agent apps/bookmarks-agent/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 6 - agents C)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh calendar-agent apps/calendar-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh linear-agent apps/linear-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh web-agent apps/web-agent/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 7)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh code-agent apps/code-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh chat-agent apps/chat-agent/Dockerfile &
           wait
@@ -199,8 +179,13 @@ jobs:
           done
           wait
 
-      - name: Deploy workers
-        run: bash cloudbuild/scripts/deploy-all-workers.sh
+      - name: Build and deploy workers
+        run: |
+          bash cloudbuild/scripts/build-all-workers.sh
+          bash cloudbuild/scripts/deploy-function.sh vm-lifecycle &
+          bash cloudbuild/scripts/deploy-function.sh log-cleanup &
+          bash cloudbuild/scripts/deploy-function.sh predev-lifecycle &
+          wait
 
       - name: Fetch web config
         run: |
