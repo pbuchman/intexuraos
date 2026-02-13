@@ -53,6 +53,7 @@ export interface IsolationConfig {
 export interface CompletionControlConfig {
   maxAttempts: number;
   verifier: CompletionVerifier;
+  preserveFailedContainers?: boolean;
 }
 
 export class TaskDispatcher {
@@ -66,6 +67,7 @@ export class TaskDispatcher {
   private readonly completionInProgress = new Set<string>();
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
+  private readonly preserveFailedContainers: boolean;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -80,6 +82,7 @@ export class TaskDispatcher {
   ) {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
+    this.preserveFailedContainers = completionControl.preserveFailedContainers ?? false;
   }
 
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
@@ -211,8 +214,11 @@ export class TaskDispatcher {
       this.scheduleTimeoutKill(taskId);
 
       this.startCompletionMonitoring(taskId);
-
-      this.logger.info({ taskId, runningCount: this.runningCount }, 'Task started');
+      this.appendOrchestratorTaskLog(
+        taskId,
+        `Task started: id=${taskId} attempt=1/${String(this.completionMaxAttempts)} workerType=${task.workerType}`
+      );
+      this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
       this.runningCount--;
       await this.sendSetupFailureWebhook(request, 'Failed to start task', error);
@@ -473,8 +479,12 @@ export class TaskDispatcher {
     this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(
-      { taskId: task.taskId, attempt, maxAttempts, phase },
-      'Worker attempt finished, running completion verification'
+      {},
+      `Worker attempt finished: taskId=${task.taskId} attempt=${String(attempt)}/${String(maxAttempts)} phase=${phase}`
+    );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Attempt finished: attempt=${String(attempt)}/${String(maxAttempts)} phase=${phase}`
     );
 
     try {
@@ -489,6 +499,10 @@ export class TaskDispatcher {
     const result = await this.checkForResult(task);
     const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Running completion verification: exitCode=${String(exitCode ?? 'unknown')} claudeError=${claudeError ?? 'none'} detectedPr=${result?.prUrl ?? 'none'}`
+    );
     const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
     const verification = await this.completionVerifier.verify({
       taskId: task.taskId,
@@ -503,6 +517,10 @@ export class TaskDispatcher {
       ...(typeof exitCode === 'number' && { workerExitCode: exitCode }),
       ...(claudeError !== undefined && { claudeError }),
     });
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Gemini verifier verdict: passed=${String(verification.passed)} confidence=${verification.confidence.toFixed(2)} reasons=${verification.reasons.join(' | ') || 'none'} missing=${verification.missingCriteria.join(' | ') || 'none'} resumeInstruction=${verification.resumeInstruction}`
+    );
 
     if (typeof exitCode === 'number') {
       task.lastExitCode = exitCode;
@@ -543,11 +561,21 @@ export class TaskDispatcher {
         failurePayload.result = result;
       }
       /* v8 ignore stop @preserve */
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Terminal failure: verifier unavailable (${verification.reasons.join(' | ')})`
+      );
+      await this.flushTaskLogs(task.taskId);
       await this.finalizeTask(task, 'failed', failurePayload);
       return;
     }
 
     if (!verification.passed && attempt < maxAttempts) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Verification failed; continuing with next attempt (${String(attempt + 1)}/${String(maxAttempts)})`
+      );
+      await this.flushTaskLogs(task.taskId);
       await this.teardownAttempt(task.taskId, true);
 
       const resumePrompt = this.buildResumePrompt(task.prompt, verification);
@@ -566,6 +594,10 @@ export class TaskDispatcher {
           { taskId: task.taskId, attempt: nextAttempt, maxAttempts },
           'Resumed task with follow-up attempt'
         );
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Resume attempt started successfully: attempt=${String(nextAttempt)}/${String(maxAttempts)}`
+        );
         this.claudeErrors.delete(task.taskId);
         this.taskExitCodes.delete(task.taskId);
         return;
@@ -576,6 +608,11 @@ export class TaskDispatcher {
         message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
         remediation: { action: 'retry' },
       };
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
+      );
+      await this.flushTaskLogs(task.taskId);
       await this.finalizeTask(task, 'failed', {
         ...(result !== undefined && { result }),
         error: resumeError,
@@ -584,6 +621,8 @@ export class TaskDispatcher {
     }
 
     if (verification.passed) {
+      this.appendOrchestratorTaskLog(task.taskId, 'Completion verification passed');
+      await this.flushTaskLogs(task.taskId);
       await this.finalizeTask(task, 'completed', {
         ...(result !== undefined && { result }),
       });
@@ -600,6 +639,11 @@ export class TaskDispatcher {
         }),
       },
     };
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Terminal failure: completion criteria not met (${verification.reasons.join(' | ')})`
+    );
+    await this.flushTaskLogs(task.taskId);
 
     await this.finalizeTask(task, 'failed', {
       ...(result !== undefined && { result }),
@@ -641,6 +685,10 @@ export class TaskDispatcher {
     params: { prompt: string; hasChildren: boolean; continueSession: boolean }
   ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
     this.attemptCompletionSignals.delete(task.taskId);
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Starting worker attempt: continueSession=${String(params.continueSession)} hasChildren=${String(params.hasChildren)}`
+    );
 
     const workerConfig: WorkerConfig = {
       taskId: task.taskId,
@@ -669,6 +717,10 @@ export class TaskDispatcher {
         this.flushClaudeErrorBuffer(task.taskId);
         this.taskExitCodes.set(task.taskId, exitCode);
         this.attemptCompletionSignals.add(task.taskId);
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Worker attempt completed: exitCode=${String(exitCode)}`
+        );
         this.logForwarder.flushAndStop(task.taskId).catch((error: unknown) => {
           this.logger.error({ taskId: task.taskId, error }, 'Failed to flush logs on completion');
         });
@@ -682,8 +734,16 @@ export class TaskDispatcher {
     try {
       await this.isolation.tokenRefresher.registerTask(task.taskId);
       const handle = await this.isolation.provider.createWorker(workerConfig);
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Worker container ready: containerId=${handle.containerId}`
+      );
       return { ok: true, containerId: handle.containerId };
     } catch (error) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Worker start failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       return { ok: false, error };
     }
   }
@@ -704,7 +764,25 @@ export class TaskDispatcher {
     finalStatus: TaskStatus,
     payload: { result?: TaskResult; error?: TaskError }
   ): Promise<void> {
-    await this.teardownAttempt(task.taskId, false);
+    const shouldPreserve =
+      this.preserveFailedContainers && (finalStatus === 'failed' || finalStatus === 'interrupted');
+    if (shouldPreserve) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Preserving worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
+      );
+    }
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Finalizing task: status=${finalStatus} hasResult=${String(payload.result !== undefined)} hasError=${String(payload.error !== undefined)}`
+    );
+    await this.flushTaskLogs(task.taskId);
+
+    if (shouldPreserve) {
+      await this.isolation.provider.preserveWorker?.(task.taskId);
+    } else {
+      await this.teardownAttempt(task.taskId, false);
+    }
     this.logForwarder.unregisterTask(task.taskId);
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
     this.claudeErrors.delete(task.taskId);
@@ -731,6 +809,10 @@ export class TaskDispatcher {
       },
       taskId: task.taskId,
     });
+    this.logger.info(
+      {},
+      `Task finalized: id=${task.taskId} status=${finalStatus} durationMs=${String(new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime())}`
+    );
   }
 
   private async checkForResult(task: Task): Promise<TaskResult | undefined> {
@@ -882,6 +964,21 @@ export class TaskDispatcher {
       }
     } catch {
       // Ignore non-JSON stream lines.
+    }
+  }
+
+  private appendOrchestratorTaskLog(taskId: string, message: string): void {
+    this.logForwarder.appendChunk(
+      taskId,
+      `[orchestrator] ${new Date().toISOString()} ${message}\n`
+    );
+  }
+
+  private async flushTaskLogs(taskId: string): Promise<void> {
+    try {
+      await this.logForwarder.flushAndStop(taskId);
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to flush task logs');
     }
   }
 

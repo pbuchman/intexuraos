@@ -8,6 +8,9 @@ interface MockDocker {
   createContainer: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
   listContainers: ReturnType<typeof vi.fn>;
+  pull: ReturnType<typeof vi.fn>;
+  getImage: ReturnType<typeof vi.fn>;
+  modem: { followProgress: ReturnType<typeof vi.fn> };
 }
 
 interface MockContainer {
@@ -77,6 +80,19 @@ function createMockDocker(): MockDockerResult {
     createContainer: vi.fn().mockResolvedValue(mockContainer),
     getContainer: vi.fn().mockReturnValue(mockContainer),
     listContainers: vi.fn().mockResolvedValue([]),
+    pull: vi.fn().mockResolvedValue({}),
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        RepoDigests: [
+          'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:testdigest',
+        ],
+      }),
+    }),
+    modem: {
+      followProgress: vi.fn((_stream: unknown, onFinished: (err: Error | null) => void) => {
+        onFinished(null);
+      }),
+    },
   };
 
   return {
@@ -167,6 +183,50 @@ describe('DockerProvider', () => {
       expect(handle.startedAt).toBeInstanceOf(Date);
       expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
       expect(mocks.mockContainer.start).toHaveBeenCalled();
+    });
+
+    it('fails fast when worker image pull fails', async () => {
+      mocks.mockDocker.pull.mockRejectedValueOnce(new Error('registry unavailable'));
+
+      await expect(provider.createWorker(createTestConfig())).rejects.toThrow(
+        'Failed to pull worker image'
+      );
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+    });
+
+    it('fails when image does not support managed run-attempt mode', async () => {
+      mocks.mockContainer.exec.mockImplementationOnce(async () => {
+        const stream = new EventEmitter() as unknown as NodeJS.ReadableStream;
+        const start = vi.fn().mockImplementation(async () => {
+          setTimeout(() => {
+            stream.emit('end');
+          }, 0);
+          return stream;
+        });
+        const inspect = vi.fn().mockResolvedValue({ ExitCode: 1 });
+        return { start, inspect };
+      });
+
+      await expect(provider.createWorker(createTestConfig())).rejects.toThrow(
+        'missing managed-attempt run-attempt entrypoint support'
+      );
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+    });
+
+    it('skips managed-entrypoint compatibility check when managedAttemptsMode is disabled', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await nonManagedProvider.createWorker(createTestConfig());
+
+      expect(mocks.mockContainer.exec).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          Cmd: ['sh', '-lc', 'grep -q "run-attempt" /entrypoint.sh'],
+        })
+      );
     });
 
     it('creates container with Tty: false (non-interactive --print mode)', async () => {
@@ -289,7 +349,7 @@ describe('DockerProvider', () => {
       );
 
       expect(mocks.mockDocker.createContainer).toHaveBeenCalledTimes(1);
-      expect(mocks.mockContainer.exec).toHaveBeenCalledTimes(2);
+      expect(mocks.mockContainer.exec).toHaveBeenCalledTimes(3);
     });
 
     it('does not set CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env var', async () => {
@@ -460,6 +520,90 @@ describe('DockerProvider', () => {
       expect(workers).toHaveLength(2);
       expect(workers.map((w) => w.taskId)).toContain('task-1');
       expect(workers.map((w) => w.taskId)).toContain('task-2');
+    });
+  });
+
+  describe('preserveWorker', () => {
+    it('moves worker from active to preserved map', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'task-1' }));
+
+      await provider.preserveWorker('task-1');
+
+      const workers = await provider.listWorkers();
+      expect(workers).toHaveLength(0);
+
+      const preserved = await provider.listPreservedWorkers();
+      expect(preserved).toHaveLength(1);
+      expect(preserved[0]?.taskId).toBe('task-1');
+      expect(preserved[0]?.containerId).toBe('test-container-id');
+      expect(preserved[0]?.preservedAt).toBeDefined();
+    });
+
+    it('frees concurrency slot so new workers can be created', async () => {
+      const limitedProvider = new TestableDockerProvider(
+        { maxConcurrent: 1 },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await limitedProvider.createWorker(createTestConfig({ taskId: 'task-1' }));
+      await expect(
+        limitedProvider.createWorker(createTestConfig({ taskId: 'task-2' }))
+      ).rejects.toThrow('Max concurrent workers (1) reached');
+
+      await limitedProvider.preserveWorker('task-1');
+
+      const handle = await limitedProvider.createWorker(createTestConfig({ taskId: 'task-3' }));
+      expect(handle.taskId).toBe('task-3');
+    });
+
+    it('cleans up secrets directory but not session directory', async () => {
+      const fs = await import('node:fs');
+      await provider.createWorker(createTestConfig({ taskId: 'task-1' }));
+
+      await provider.preserveWorker('task-1');
+
+      const rmCalls = (fs.promises.rm as ReturnType<typeof vi.fn>).mock.calls;
+      expect(rmCalls).toHaveLength(1);
+      expect(rmCalls[0]?.[0]).toContain('task-1');
+      expect(rmCalls[0]?.[0]).not.toContain('claude-session');
+    });
+
+    it('does not stop or remove the container', async () => {
+      await provider.createWorker(createTestConfig({ taskId: 'task-1' }));
+
+      await provider.preserveWorker('task-1');
+
+      expect(mocks.mockContainer.stop).not.toHaveBeenCalled();
+      expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
+    });
+
+    it('returns early for non-existent worker', async () => {
+      await provider.preserveWorker('non-existent');
+
+      const preserved = await provider.listPreservedWorkers();
+      expect(preserved).toHaveLength(0);
+    });
+
+    it('logs secrets cleanup failure without throwing', async () => {
+      const fs = await import('node:fs');
+      (fs.promises.rm as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('permission denied')
+      );
+
+      await provider.createWorker(createTestConfig({ taskId: 'task-1' }));
+      await expect(provider.preserveWorker('task-1')).resolves.not.toThrow();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-1' }),
+        'Failed to remove task secrets directory during preservation'
+      );
+    });
+  });
+
+  describe('listPreservedWorkers', () => {
+    it('returns empty array when no workers preserved', async () => {
+      const preserved = await provider.listPreservedWorkers();
+      expect(preserved).toHaveLength(0);
     });
   });
 

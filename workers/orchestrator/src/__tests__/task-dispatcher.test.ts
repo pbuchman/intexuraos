@@ -2094,6 +2094,263 @@ describe('TaskDispatcher', () => {
       vi.useRealTimers();
     });
 
+    it('logs verifier summary fallback placeholders when reasons are empty', async () => {
+      vi.useFakeTimers();
+      const fallbackSummaryState = createStatePersistence();
+      const verify = vi.fn().mockResolvedValue({
+        passed: true,
+        confidence: 1,
+        reasons: [],
+        missingCriteria: [],
+        resumeInstruction: 'done',
+        usedLlm: true,
+      });
+
+      const fallbackSummaryDispatcher = new TaskDispatcher(
+        mockConfig,
+        fallbackSummaryState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          verifier: {
+            verify,
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'empty-verifier-reasons-task',
+        workerType: 'auto',
+        prompt: 'Verifier fallback placeholders',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await fallbackSummaryDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await fallbackSummaryDispatcher.getTask('empty-verifier-reasons-task');
+      expect(task?.status).toBe('completed');
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        'empty-verifier-reasons-task',
+        expect.stringContaining(
+          'Gemini verifier verdict: passed=true confidence=1.00 reasons=none missing=none resumeInstruction=done'
+        )
+      );
+      vi.useRealTimers();
+    });
+
+    it('logs non-Error worker start failures and fails setup webhook', async () => {
+      const createWorker = vi.fn().mockRejectedValue('opaque-start-error');
+      const localIsolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        createWorker,
+      };
+      const localWorktreeManager = {
+        ...mockWorktreeManager,
+        removeWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
+      } as unknown as WorktreeManager;
+      const localIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: localIsolationProvider,
+      };
+
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        createStatePersistence(),
+        localWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        localIsolation,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'non-error-worker-start',
+        workerType: 'auto',
+        prompt: 'Worker start failure branch',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await localDispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'non-error-worker-start',
+            status: 'failed',
+            error: expect.objectContaining({ code: 'SETUP_FAILED' }),
+          }),
+        })
+      );
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        'non-error-worker-start',
+        expect.stringContaining('Worker start failed: opaque-start-error')
+      );
+    });
+
+    it('preserves failed worker container when preserveFailedContainers is enabled', async () => {
+      vi.useFakeTimers();
+      const preserveState = createStatePersistence();
+      const localDestroyWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => undefined);
+      const localIsolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker: localDestroyWorker,
+        isWorkerRunning: vi.fn(async () => false),
+        preserveWorker: localPreserveWorker,
+      };
+      const localIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: localIsolationProvider,
+      };
+      const verify = vi.fn().mockResolvedValue({
+        passed: false,
+        confidence: 0.25,
+        reasons: ['missing completion criteria'],
+        missingCriteria: ['criteria A'],
+        resumeInstruction: 'Fix and retry',
+        usedLlm: true,
+      });
+
+      const preserveDispatcher = new TaskDispatcher(
+        mockConfig,
+        preserveState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        localIsolation,
+        {
+          maxAttempts: 1,
+          preserveFailedContainers: true,
+          verifier: {
+            verify,
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'preserve-failed-container-task',
+        workerType: 'auto',
+        prompt: 'Fail and preserve container',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await preserveDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await preserveDispatcher.getTask('preserve-failed-container-task');
+      expect(task?.status).toBe('failed');
+      expect(localDestroyWorker).not.toHaveBeenCalled();
+      expect(localPreserveWorker).toHaveBeenCalledWith('preserve-failed-container-task');
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        'preserve-failed-container-task',
+        expect.stringContaining('Preserving worker container for debugging')
+      );
+      vi.useRealTimers();
+    });
+
+    it('preserves container when interrupted finalization is invoked with preserve flag', async () => {
+      const preserveState = createStatePersistence();
+      const localDestroyWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => undefined);
+      const localIsolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker: localDestroyWorker,
+        preserveWorker: localPreserveWorker,
+      };
+      const localIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: localIsolationProvider,
+      };
+
+      const preserveDispatcher = new TaskDispatcher(
+        mockConfig,
+        preserveState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        localIsolation,
+        {
+          maxAttempts: 1,
+          preserveFailedContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              confidence: 1,
+              reasons: ['ok'],
+              missingCriteria: [],
+              resumeInstruction: 'done',
+              usedLlm: true,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+        }
+      );
+
+      const taskId = 'preserve-interrupted-branch';
+      await preserveDispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'Finalize interrupted branch',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await flushAsync();
+
+      const task = await preserveDispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const preserveInternal = preserveDispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'interrupted',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await preserveInternal.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'interrupted',
+        {}
+      );
+
+      expect(localDestroyWorker).not.toHaveBeenCalled();
+      expect(localPreserveWorker).toHaveBeenCalledWith(taskId);
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        taskId,
+        expect.stringContaining('Preserving worker container for debugging')
+      );
+    });
+
     it('uses fallback attempt metadata when persisted task is missing fields', async () => {
       vi.useFakeTimers();
       const fallbackState = createStatePersistence();
