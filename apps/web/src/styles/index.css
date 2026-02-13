@@ -105,6 +105,22 @@ body.dark {
   padding-right: env(safe-area-inset-right);
 }
 
+/* Terminal touch scrolling support for mobile PWA */
+.terminal-flow {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.terminal-flow .xterm-viewport {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+body.terminal-fullscreen {
+  touch-action: none;
+}
+
 /* Enhanced prose styling for markdown content */
 .prose table {
   @apply w-full border-collapse border border-slate-300 my-4 dark:border-slate-600;
