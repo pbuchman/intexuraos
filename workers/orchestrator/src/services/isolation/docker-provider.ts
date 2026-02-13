@@ -193,10 +193,7 @@ export class DockerProvider implements IsolationProvider {
     try {
       /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
       if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
-        await fs.promises.copyFile(
-          config.gcpSaKeyPath,
-          path.join(taskSecretsPath, 'gcp-sa.json')
-        );
+        await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));
       }
       /* v8 ignore stop @preserve */
 
@@ -251,6 +248,7 @@ export class DockerProvider implements IsolationProvider {
       /* v8 ignore stop @preserve */
       const requestedImage = this.config.imageName;
       const resolvedImage = await this.pullAndResolveImage(taskId, requestedImage);
+      this.logger.info({ taskId }, 'Container creation started');
       this.logger.info(
         {},
         `Creating worker container: taskId=${taskId} workerType=${workerType} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${workerTypeConfig.apiBaseUrl} worktreePath=${worktreePath}`
@@ -300,6 +298,7 @@ export class DockerProvider implements IsolationProvider {
       });
 
       await container.start();
+      this.logger.info({ taskId, containerId: container.id }, 'Container creation finished');
 
       if (this.config.managedAttemptsMode) {
         await this.assertManagedEntrypointSupport(taskId, container);
@@ -707,10 +706,7 @@ export class DockerProvider implements IsolationProvider {
   }
 
   /* v8 ignore start -- test-infra: readiness polling requires running container with entrypoint @preserve */
-  private async waitForWorkerReady(
-    taskId: string,
-    container: Docker.Container
-  ): Promise<void> {
+  private async waitForWorkerReady(taskId: string, container: Docker.Container): Promise<void> {
     const timeoutMs = this.config.workerReadyTimeoutMs ?? 600_000;
     const pollIntervalMs = 2_000;
     const startTime = Date.now();
@@ -733,9 +729,7 @@ export class DockerProvider implements IsolationProvider {
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
-    throw new Error(
-      `Worker readiness timeout after ${String(timeoutMs)}ms for task ${taskId}`
-    );
+    throw new Error(`Worker readiness timeout after ${String(timeoutMs)}ms for task ${taskId}`);
   }
   /* v8 ignore stop @preserve */
 
