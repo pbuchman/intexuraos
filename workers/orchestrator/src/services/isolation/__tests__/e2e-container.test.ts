@@ -350,6 +350,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
             cpuCount: 1,
             timeoutMs: 3000,
             secretsBasePath: testSecretsPath,
+            managedAttemptsMode: false,
           },
           createMockLogger() as never
         );

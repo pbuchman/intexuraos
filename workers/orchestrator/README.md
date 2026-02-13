@@ -49,7 +49,6 @@ All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | `.envrc`       | Service-to-service auth                           |
 | `INTEXURAOS_LINEAR_API_KEY`         | `.envrc`       | Linear API key (passed to workers)                |
 | `INTEXURAOS_SENTRY_AUTH_TOKEN`      | `.envrc`       | Sentry auth (passed to workers)                   |
-| `INTEXURAOS_ANTHROPIC_API_KEY`      | `.envrc`       | Anthropic API key (passed to workers)             |
 | `INTEXURAOS_ZAI_API_KEY`            | `.envrc`       | ZAI API key (passed to workers)                   |
 | `INTEXURAOS_GEMINI_APP_API_KEY`     | `.envrc`       | Gemini API key (required for completion verifier) |
 | `GOOGLE_APPLICATION_CREDENTIALS`    | `.envrc.local` | GCP SA key path                                   |
@@ -227,6 +226,101 @@ brew install cloudflared && sudo cloudflared service install
 
 ---
 
+## Anthropic OAuth (Max Subscription)
+
+The orchestrator uses Claude Code OAuth credentials (Max subscription) instead of a static API key.
+
+**Prerequisite:** Run `claude login` on the orchestrator machine before first start.
+
+For headless machines (SSH-only, no browser):
+
+1. Open an SSH session with reverse port forwarding from your workstation:
+
+   ```bash
+   ssh -R 8080:localhost:8080 user@orchestrator-vm
+   ```
+
+   This forwards port 8080 on the VM back to your workstation, allowing the OAuth
+   callback to reach your local browser.
+
+2. On the VM, run the Claude login command:
+
+   ```bash
+   claude login
+   ```
+
+3. A URL is printed to the terminal. Open it in your workstation's browser.
+   Complete the Anthropic OAuth consent flow and authorize the CLI.
+
+4. On success, credentials are written to `~/.claude/.credentials.json` on the VM.
+
+5. Start the orchestrator — it reads credentials automatically:
+   ```bash
+   node workers/orchestrator/dist/index.js
+   ```
+
+The orchestrator:
+
+- Reads OAuth credentials from `~/.claude/.credentials.json` at startup
+- Logs credential expiry time and subscription type on boot
+- Refreshes access tokens automatically (30-minute check cycle, tokens last ~4-5h)
+- Persists rotated refresh tokens back to the credentials file
+- Alerts code-agent via webhook if the refresh token is revoked
+- Rejects new Anthropic tasks when credentials are degraded
+
+**Credential isolation:** The orchestrator reads from the global `~/.claude/.credentials.json` on the host.
+For each task, it copies the credentials into the task's session directory (`~/.claude-orchestrator/secrets/{taskId}/`),
+which is bind-mounted into the Docker container at `/home/claude/.claude/`. Containers never access the host's global file directly.
+When tokens are refreshed, the orchestrator updates both the global file and all active task session directories.
+
+**Re-authentication:** If the refresh token is revoked, SSH tunnel into the VM and run `claude login` again.
+
+Check credential status: `curl http://localhost:8199/health | jq .anthropicOAuth`
+
+#### Health Endpoint Examples
+
+**Healthy (credentials active):**
+
+```json
+{
+  "status": "ready",
+  "capacity": 2,
+  "running": 0,
+  "available": 2,
+  "githubTokenExpiresAt": "2026-02-13T14:30:00.000Z",
+  "anthropicOAuth": {
+    "status": "active",
+    "expiresAt": "2026-02-13T18:00:00.000Z",
+    "expiresInMinutes": 210,
+    "subscriptionType": "max"
+  }
+}
+```
+
+**Degraded (token expired, awaiting refresh):**
+
+```json
+{
+  "anthropicOAuth": {
+    "status": "expired",
+    "message": "Access token expired — awaiting refresh"
+  }
+}
+```
+
+**Not configured (credentials file missing):**
+
+```json
+{
+  "anthropicOAuth": {
+    "status": "not_configured",
+    "message": "Anthropic OAuth credentials not found"
+  }
+}
+```
+
+---
+
 ## Testing
 
 ```bash
@@ -256,6 +350,9 @@ cd ../orchestrator && pnpm test:e2e
 ## Directory Structure
 
 ```
+~/.claude/
++-- .credentials.json       # OAuth credentials (created by `claude login`)
+
 ~/claude-workers/
 +-- worktrees/              # Git worktrees for tasks (auto-created)
 
@@ -272,13 +369,15 @@ cd ../orchestrator && pnpm test:e2e
 
 ## Troubleshooting
 
-| Issue                               | Fix                                                                       |
-| ----------------------------------- | ------------------------------------------------------------------------- |
-| Missing `INTEXURAOS_REPOSITORY_URL` | Add to `.envrc.local`, run `direnv allow`                                 |
-| 502 from tunnel                     | Orchestrator not running: `pnpm --filter orchestrator dev`                |
-| HMAC signature mismatch             | `dispatchSigningSecret` in UI must match `INTEXURAOS_ORCHESTRATOR_SECRET` |
-| "Secret Manager" fetch failed       | Check `GOOGLE_APPLICATION_CREDENTIALS` path exists                        |
-| Tests skipped                       | Check E2E prerequisites above                                             |
-| "Network not found"                 | `./scripts/setup-worker-network.sh`                                       |
-| "Image not found"                   | `docker build -t claude-worker:test -f Dockerfile.test .`                 |
-| Container name conflict             | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`              |
+| Issue                               | Fix                                                                          |
+| ----------------------------------- | ---------------------------------------------------------------------------- |
+| Missing `INTEXURAOS_REPOSITORY_URL` | Add to `.envrc.local`, run `direnv allow`                                    |
+| 502 from tunnel                     | Orchestrator not running: `pnpm --filter orchestrator dev`                   |
+| HMAC signature mismatch             | `dispatchSigningSecret` in UI must match `INTEXURAOS_ORCHESTRATOR_SECRET`    |
+| "Secret Manager" fetch failed       | Check `GOOGLE_APPLICATION_CREDENTIALS` path exists                           |
+| Tests skipped                       | Check E2E prerequisites above                                                |
+| "Network not found"                 | `./scripts/setup-worker-network.sh`                                          |
+| "Image not found"                   | `docker build -t claude-worker:test -f Dockerfile.test .`                    |
+| Container name conflict             | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`                 |
+| OAuth credentials missing           | Run `claude login` on VM (use SSH tunnel for headless)                       |
+| OAuth token expired                 | Orchestrator auto-refreshes; if refresh token revoked, re-run `claude login` |
