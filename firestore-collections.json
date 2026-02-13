@@ -171,10 +171,6 @@
       "owner": "code-agent",
       "description": "Per-user worker configuration with encrypted credentials (CF Access, dispatch signing) for Mac and VM workers"
     },
-    "predev-state": {
-      "owner": "predev-lifecycle",
-      "description": "Pre-development environment state tracking (VM status, IP, branch, activity)"
-    },
     "doc_embeddings": {
       "owner": "chat-agent",
       "description": "Documentation chunks with vector embeddings for RAG similarity search (1536-dim OpenAI embeddings)"

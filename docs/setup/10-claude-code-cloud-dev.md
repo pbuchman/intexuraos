@@ -86,7 +86,7 @@ Copy the entire contents of the downloaded JSON file and provide it to Claude Co
 
 Claude Code will:
 
-1. Create `/home/user/intexuraos/gcp-service-account.json`
+1. Create `$HOME/.config/gcloud/sa-key.json`
 2. Add it to `.gitignore` (never committed to git)
 3. Create `.env.local` with `GOOGLE_APPLICATION_CREDENTIALS` pointing to the key file
 4. Configure environment variables for GCP access
@@ -117,7 +117,7 @@ Applications using `@google-cloud/*` packages will automatically use the service
 `.env.local` contains:
 
 ```bash
-GOOGLE_APPLICATION_CREDENTIALS=/home/user/intexuraos/gcp-service-account.json
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
 GOOGLE_CLOUD_PROJECT=your-project-id
 LOG_LEVEL=debug
 ```
@@ -159,10 +159,10 @@ curl http://localhost:8080/health
 ```bash
 # Verify the environment variable is set
 echo $GOOGLE_APPLICATION_CREDENTIALS
-# Should output: /home/user/intexuraos/gcp-service-account.json
+# Should output: $HOME/.config/gcloud/sa-key.json
 
 # Verify the file exists
-ls -la /home/user/intexuraos/gcp-service-account.json
+ls -la $HOME/.config/gcloud/sa-key.json
 ```
 
 ### "Permission denied" errors
@@ -181,7 +181,7 @@ ls -la /home/user/intexuraos/gcp-service-account.json
 **Solution:**
 
 1. Verify `.env.local` exists and contains `GOOGLE_APPLICATION_CREDENTIALS`
-2. Verify `gcp-service-account.json` exists
+2. Verify `$HOME/.config/gcloud/sa-key.json` exists
 3. If missing, regenerate the key (section 2)
 
 ## 7. Differences from Local Setup
@@ -206,7 +206,7 @@ ls -la /home/user/intexuraos/gcp-service-account.json
 ```
 intexuraos/
 ├── .env.local                          # Environment variables (gitignored)
-├── gcp-service-account.json           # Service account key (gitignored)
+├── ~/.config/gcloud/sa-key.json       # Service account key (outside repo)
 ├── .gitignore                         # Updated with GCP credential patterns
 ├── scripts/
 │   └── verify-connections.sh          # Connection verification script

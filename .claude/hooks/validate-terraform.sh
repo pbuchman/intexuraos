@@ -28,7 +28,7 @@ BLOCKED: Terraform without clearing emulator env vars will connect to emulators,
 
 CORRECT:
   STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-  GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+  GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
   terraform <command>
 EOF
     log_blocked "$HOOK_NAME" "missing-emulator-env-clear" \

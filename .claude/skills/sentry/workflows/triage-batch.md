@@ -37,7 +37,7 @@ Before processing any issues, verify access to all required tools:
 
 4. **GCloud**: Is service account authenticated for Firestore access?
    ```
-   Check: ~/personal/gcloud-claude-code-dev.json exists
+   Check: ~/.config/gcloud/sa-key.json exists
    Run: gcloud auth activate-service-account --key-file=...
    ```
 

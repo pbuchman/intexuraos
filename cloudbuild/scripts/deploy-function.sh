@@ -68,14 +68,6 @@ case "${WORKER}" in
   log-cleanup)
     FUNCTIONS=("intexuraos-log-cleanup-${ENVIRONMENT}")
     ;;
-  predev-lifecycle)
-    FUNCTIONS=(
-      "intexuraos-predev-gateway-${ENVIRONMENT}"
-      "intexuraos-predev-webhook-${ENVIRONMENT}"
-      "intexuraos-predev-idle-check-${ENVIRONMENT}"
-      "intexuraos-predev-report-ready-${ENVIRONMENT}"
-    )
-    ;;
   *)
     log "WARNING: No function mapping found for worker: ${WORKER}"
     log "Source uploaded but functions not redeployed"

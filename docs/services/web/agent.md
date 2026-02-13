@@ -268,7 +268,6 @@ None (web app is a consumer, not publisher).
 | Global Auth    | React Context (`AuthContext`)       | App-wide                           |
 | Sync Queue     | React Context (`SyncQueueContext`)  | App-wide                           |
 | Theme          | React Context (`ThemeContext`)      | App-wide (light/dark/system)       |
-| Predev         | React Context (`PredevProvider`)    | App-wide (predev mode only)        |
 | PWA Install    | React Context (`PWAProvider`)       | App-wide                           |
 | UI State       | useState (component-level)          | Per component                      |
 | Preferences    | localStorage                        | Persisted across sessions          |

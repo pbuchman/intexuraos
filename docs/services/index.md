@@ -8,16 +8,15 @@ Complete documentation for all IntexuraOS services, workers, and packages.
 
 ## v3.0.0 Highlights
 
-| Component            | Key Changes                                                         |
-| -------------------- | ------------------------------------------------------------------- |
-| **chat-agent**       | New: In-app AI assistant with RAG, guest access, command creation   |
-| **code-agent**       | New: Autonomous code execution with worker dispatch and dedup       |
-| **orchestrator**     | New: Local worker orchestration for Claude Code sessions via Docker |
-| **claude-worker**    | New: Docker container image for isolated Claude Code execution      |
-| **log-cleanup**      | New: Cloud Function for scheduled log retention management          |
-| **vm-lifecycle**     | New: Cloud Functions for GCE VM start/stop lifecycle control        |
-| **predev-lifecycle** | New: Cloud Functions for pre-dev environment with scale-to-zero     |
-| **21 packages**      | New: All shared packages documented (common, infra, LLM stack)      |
+| Component         | Key Changes                                                         |
+| ----------------- | ------------------------------------------------------------------- |
+| **chat-agent**    | New: In-app AI assistant with RAG, guest access, command creation   |
+| **code-agent**    | New: Autonomous code execution with worker dispatch and dedup       |
+| **orchestrator**  | New: Local worker orchestration for Claude Code sessions via Docker |
+| **claude-worker** | New: Docker container image for isolated Claude Code execution      |
+| **log-cleanup**   | New: Cloud Function for scheduled log retention management          |
+| **vm-lifecycle**  | New: Cloud Functions for GCE VM start/stop lifecycle control        |
+| **21 packages**   | New: All shared packages documented (common, infra, LLM stack)      |
 
 ## v2.1.0 Highlights (Previous)
 
@@ -190,7 +189,6 @@ Cloud Functions and local services that run outside Cloud Run.
 | claude-worker                                        | Docker image    | Isolated Claude Code execution environment with git and tools  | Started by orchestrator     |
 | [log-cleanup](../packages/log-cleanup)               | Cloud Function  | Deletes old task logs via code-agent cleanup API               | Pub/Sub (scheduled)         |
 | [vm-lifecycle](../packages/vm-lifecycle)             | Cloud Functions | Starts and stops GCE VM instances with health polling          | HTTP (internal auth)        |
-| [predev-lifecycle](../packages/predev-lifecycle)     | Cloud Functions | Pre-dev environment gateway, idle detection, scale-to-zero     | HTTP + Pub/Sub (scheduled)  |
 
 ### Worker Details
 
@@ -201,13 +199,6 @@ Cloud Functions and local services that run outside Cloud Run.
 **log-cleanup** -- Pub/Sub-triggered Cloud Function that calls the code-agent's internal cleanup API to delete task logs older than the configured retention period (default 90 days).
 
 **vm-lifecycle** -- Two HTTP-triggered Cloud Functions (`startVm` and `stopVm`) that manage GCE Spot VM instances. `startVm` polls for health after boot; `stopVm` gracefully drains running tasks before shutdown.
-
-**predev-lifecycle** -- Four Cloud Functions managing a pre-development environment:
-
-- `gateway` -- HTTP proxy that auto-starts the VM on first request and shows a loading page during boot
-- `idleCheck` -- Scheduled function that stops the VM after a configurable idle timeout
-- `webhook` -- Handles Cloud Build push notifications for branch deployments
-- `reportReady` -- Callback from the VM to signal readiness after startup
 
 ---
 
@@ -384,7 +375,7 @@ graph TD
 | Metric                 | Count    |
 | ---------------------- | -------- |
 | Total Apps             | 20       |
-| Total Workers          | 5        |
+| Total Workers          | 4        |
 | Total Packages         | 21       |
 | Apps with features.md  | 20       |
 | Apps with technical.md | 20       |
@@ -392,7 +383,7 @@ graph TD
 | Apps with tech-debt.md | 20       |
 | Apps with agent.md     | 20       |
 | Packages with README   | 21       |
-| Workers with docs      | 5        |
+| Workers with docs      | 4        |
 | **Coverage**           | **100%** |
 
 ---
@@ -436,4 +427,4 @@ graph TD
 
 **Last updated:** 2026-02-08
 
-**Components documented:** 20 apps + 5 workers + 21 packages = 46 total (100%)
+**Components documented:** 20 apps + 4 workers + 21 packages = 45 total (100%)

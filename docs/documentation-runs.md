@@ -166,7 +166,6 @@ Log of all `/document-service` runs.
 - orchestrator - Coordinates multi-agent workflows and resource management
 - claude-worker - Handles Claude API interactions with retry logic and rate limiting
 - log-cleanup - Automated log rotation and archival system
-- predev-lifecycle - Manages pre-development environment lifecycle operations
 - vm-lifecycle - Virtual machine provisioning and lifecycle management
 
 **New Packages:**

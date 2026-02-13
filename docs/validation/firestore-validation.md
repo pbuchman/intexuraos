@@ -40,7 +40,6 @@
 | 29  | `notion_connections`             | notion-service               | notion-service               | None                                   | OK     |
 | 30  | `oauth_connections`              | user-service                 | user-service                 | None                                   | OK     |
 | 31  | `pr_task_locks`                  | code-agent                   | code-agent                   | None                                   | OK     |
-| 32  | `predev-state`                   | predev-lifecycle             | `workers/predev-lifecycle`   | None                                   | OK     |
 | 33  | `research_export_settings`       | research-agent               | research-agent               | None                                   | OK     |
 | 34  | `researches`                     | research-agent               | research-agent               | None                                   | OK     |
 | 35  | `settings`                       | app-settings-service         | app-settings-service         | research-agent (HTTP), others (HTTP)   | OK     |

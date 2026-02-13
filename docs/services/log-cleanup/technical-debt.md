@@ -17,7 +17,7 @@ Last updated: 2026-02-08
 
 **Severity:** Low
 
-The worker imports `serializeError` from `@intexuraos/common-core` for logger serialization. This creates a build-time dependency on a shared package for a single utility function. Other workers (predev-lifecycle) inline a local copy instead. Neither approach is ideal -- the pattern should be consistent across all workers.
+The worker imports `serializeError` from `@intexuraos/common-core` for logger serialization. This creates a build-time dependency on a shared package for a single utility function. The pattern should be consistent across all workers.
 
 ## Future Plans
 

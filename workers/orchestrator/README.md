@@ -80,7 +80,7 @@ git clone https://github.com/pbuchman/intexuraos.git && cd intexuraos
 pnpm install && pnpm build
 
 # 2. Sync secrets from GCP (creates .envrc)
-export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
+export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
 PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh
 
 # Optional: prompt to add missing Terraform-defined secret values
@@ -94,7 +94,7 @@ export INTEXURAOS_PROJECT_ID=$PROJECT_ID
 export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
 # Optional but recommended: pin to immutable digest
 # export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/.../claude-worker@sha256:<digest>
-export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
+export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
 EOF
 
 # 4. Reload env

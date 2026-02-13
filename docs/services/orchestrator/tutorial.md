@@ -25,7 +25,7 @@ pnpm build
 ### Step 2: Sync secrets from GCP
 
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
+export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
 PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh
 
 # Optional: prompt for missing Terraform-defined secret values
@@ -44,7 +44,7 @@ export INTEXURAOS_REPOSITORY_URL=https://github.com/pbuchman/intexuraos.git
 export INTEXURAOS_REPOSITORY_PATH=$HOME/.claude-orchestrator/repo
 export INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman
 export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
-export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
+export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
 EOF
 ```
 
