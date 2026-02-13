@@ -2,7 +2,7 @@
 
 ## Overview
 
-Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to 15+ backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, an AI chat assistant (Intex Chat), a code task management system, and a developer toolbar (DevBar) for local/predev environments.
+Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to 15+ backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, an AI chat assistant (Intex Chat), a code task management system, and a developer toolbar (DevBar) for local development.
 
 ## Architecture
 
@@ -92,7 +92,6 @@ apps/web/src/
 │   └── ...
 ├── context/            # React context providers
 │   ├── AuthContext.tsx     # Auth0 authentication wrapper
-│   ├── PredevContext.tsx   # Predev environment state (branch lock, status)
 │   ├── SyncQueueContext.tsx # Offline sync queue
 │   ├── ThemeContext.tsx    # Dark/light/system theme management
 │   └── pwa-context.tsx    # PWA install prompts
@@ -221,7 +220,7 @@ The app uses Firestore listeners for real-time updates:
 
 ## State Management
 
-- **React Context** for global state (auth, sync queue, PWA, theme, predev)
+- **React Context** for global state (auth, sync queue, PWA, theme)
 - **Component State** (`useState`) for local UI state
 - **localStorage** for user preferences (active tab, filters, theme, chat sessions, chat panel size, DevBar state)
 - **sessionStorage** for one-time flags (deep link fetch tracking)
@@ -261,7 +260,7 @@ Environment variables (prefixed with `INTEXURAOS_`):
 | `INTEXURAOS_COMMIT_SHA`                       | Git commit SHA for version modal | No       |
 | `INTEXURAOS_COMMIT_MESSAGE`                   | Git commit message               | No       |
 | `INTEXURAOS_BUILD_DATE`                       | Build timestamp                  | No       |
-| `INTEXURAOS_PREDEV_MODE`                      | Enable predev proxy mode         | No       |
+| `INTEXURAOS_PREDEV_MODE`                      | Enable local reverse proxy mode  | No       |
 
 ## PWA Configuration
 
@@ -335,8 +334,8 @@ The `actionConfigLoader` reads this at runtime and `ActionItem` renders buttons 
 - **CostGuard markers:** Comments marked with `#CostGuard` indicate cost optimization patterns (batching, debouncing, conditional listeners)
 - **Vega bundle size:** Chart library is large; maximum file size for service worker caching is 4MB
 - **Deep linking:** URL query parameters work with hash routing (`/#/inbox?action=xyz`)
-- **Predev mode:** When `INTEXURAOS_PREDEV_MODE=true`, service URLs use relative API paths (e.g., `/api/code`) routed through the predev proxy gateway instead of absolute service URLs
-- **DevBar visibility:** Only renders in local (`localhost`) or predev (`cloudfunctions.net`) environments, never in production
+- **Predev mode:** When `INTEXURAOS_PREDEV_MODE=true`, service URLs use relative API paths (e.g., `/api/code`) routed through a local reverse proxy instead of absolute service URLs
+- **DevBar visibility:** Only renders in local development (`localhost`) environments, never in production
 - **Chat guest sessions:** Unauthenticated users can use the chat with rate limiting via `X-Guest-Session` header; session ID persists in localStorage
 - **xterm.js terminal:** Code task logs use xterm.js for ANSI color rendering; the terminal component subscribes to Firestore for real-time log chunks
 

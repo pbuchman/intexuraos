@@ -211,7 +211,7 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
 - Run terraform validation (hook enforces env var clearing):
   ```bash
   STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-  GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+  GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
   terraform fmt -check -recursive && terraform validate
   ```
 - Instruct user to run `terraform apply` in `terraform/environments/dev/` (with same env vars)
@@ -382,7 +382,7 @@ functions.http('handlerName', async (req, res) => {
 ```bash
 pnpm run ci:tracked
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform fmt -check -recursive && terraform validate
 ```
 

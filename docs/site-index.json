@@ -360,23 +360,6 @@
       "docs": "services/log-cleanup"
     },
     {
-      "id": "predev-lifecycle",
-      "name": "Pre-Dev Lifecycle Worker",
-      "category": "workers",
-      "summary": "Cloud Functions managing a scale-to-zero GCP Spot VM for cloud-based development",
-      "features": [
-        "On-demand VM startup with branded Starting page",
-        "HTTP request proxying to running VM",
-        "GitHub webhook branch tracking with hot code reload",
-        "Branch locking for demos and reviews",
-        "Scale-to-zero idle shutdown after 30 minutes",
-        "SSE proxy for DevBar log and event streams",
-        "4 Cloud Functions: gateway, webhook, idle-check, report-ready"
-      ],
-      "endpoints": 4,
-      "docs": "services/predev-lifecycle"
-    },
-    {
       "id": "vm-lifecycle",
       "name": "VM Lifecycle Worker",
       "category": "workers",
@@ -741,13 +724,7 @@
     "workers": {
       "name": "Workers",
       "description": "Cloud Functions and local worker processes for background tasks and infrastructure management",
-      "services": [
-        "orchestrator",
-        "claude-worker",
-        "log-cleanup",
-        "predev-lifecycle",
-        "vm-lifecycle"
-      ]
+      "services": ["orchestrator", "claude-worker", "log-cleanup", "vm-lifecycle"]
     },
     "packages": {
       "name": "Packages",
@@ -778,8 +755,8 @@
     }
   },
   "stats": {
-    "total": 46,
-    "documented": 46,
+    "total": 45,
+    "documented": 45,
     "completion": 100,
     "version": "3.0.0",
     "lastUpdated": "2026-02-08"

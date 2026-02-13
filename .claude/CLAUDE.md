@@ -244,11 +244,11 @@ git diff --name-only HEAD~1 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" 
 
 # 2. IF terraform changed, run validation (with env var clearing):
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform fmt -check -recursive
 
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform validate
 ```
 
@@ -274,19 +274,17 @@ terraform validate
 
 ## Infrastructure (MANDATORY)
 
-**Service account:** `$HOME/personal/gcloud-claude-code-dev.json`
+**Service account:** `$HOME/.config/gcloud/sa-key.json`
 
 **Full reference:** `.claude/reference/infrastructure.md` (GCloud auth, Terraform, Cloud Build, Pub/Sub, resource creation rules)
 
 **Quick commands:**
 
-- GCloud CLI: `gcloud auth activate-service-account --key-file=$HOME/personal/gcloud-claude-code-dev.json`
+- GCloud CLI: `gcloud auth activate-service-account --key-file=$HOME/.config/gcloud/sa-key.json`
 - Terraform: Clear emulator vars + set GOOGLE_APPLICATION_CREDENTIALS (see reference)
 - New service image: `./scripts/push-missing-images.sh`
 
 **RULE:** ALL infrastructure via Terraform only. See reference for CLI-to-Terraform mapping.
-
-**Predev Environment:** See `docs/designs/predev-environment.md` for predev VM architecture (scale-to-zero GCP Spot instance). The `INTEXURAOS_PREDEV_ENV_VARS` secret stores all env vars for the predev VM and is excluded from `sync-secrets.sh`.
 
 ---
 

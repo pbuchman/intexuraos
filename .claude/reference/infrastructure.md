@@ -39,7 +39,7 @@ gcloud artifacts repositories list --location=europe-central2
 ### Service Account Credentials
 
 ```
-~/personal/gcloud-claude-code-dev.json
+~/.config/gcloud/sa-key.json
 ```
 
 ### Verification Steps
@@ -47,13 +47,13 @@ gcloud artifacts repositories list --location=europe-central2
 1. **Check if credentials file exists:**
 
    ```bash
-   ls -la ~/personal/gcloud-claude-code-dev.json
+   ls -la ~/.config/gcloud/sa-key.json
    ```
 
 2. **Activate service account if needed:**
 
    ```bash
-   gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
+   gcloud auth activate-service-account --key-file=~/.config/gcloud/sa-key.json
    ```
 
 3. **Verify authentication:**
@@ -84,17 +84,17 @@ gcloud artifacts repositories list --location=europe-central2
 ```bash
 # Plan changes
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform plan
 
 # Apply changes
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform apply
 
 # Init (when needed)
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform init
 ```
 

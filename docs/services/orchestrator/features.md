@@ -15,7 +15,7 @@ Executing autonomous AI code tasks against a real codebase requires solving seve
 
 ## How It Helps
 
-The orchestrator runs on a local machine (macOS or Predev VM) behind a Cloudflare Tunnel and solves all six problems:
+The orchestrator runs on a local machine (macOS) behind a Cloudflare Tunnel and solves all six problems:
 
 1. **Docker isolation** - Each task runs in a dedicated container with dropped capabilities, read-only secrets, memory limits, and `no-new-privileges` security
 2. **Token lifecycle** - GitHub App installation tokens are minted via JWT, written to per-task secret directories, and refreshed every 30 minutes while a task runs
