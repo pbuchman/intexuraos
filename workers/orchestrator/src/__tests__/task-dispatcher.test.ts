@@ -2860,5 +2860,90 @@ describe('TaskDispatcher', () => {
         message: 'string-error',
       });
     });
+
+    it('preserves original error when drain fails on already-failed task', async () => {
+      const drainState = createStatePersistence();
+      const drainLogForwarder = {
+        ...mockLogForwarder,
+        flush: vi.fn(async () => undefined),
+        awaitDrain: vi.fn().mockRejectedValue(new Error('Drain timeout')),
+        close: vi.fn(),
+        getDeliveryStats: vi.fn().mockReturnValue({ produced: 5, acked: 2, pending: 3 }),
+      } as unknown as LogForwarder;
+
+      const drainWebhook = {
+        ...mockWebhookClient,
+        send: vi.fn(async () => ({ ok: true, value: undefined })),
+      } as unknown as WebhookClient;
+
+      const drainDispatcher = new TaskDispatcher(
+        mockConfig,
+        drainState,
+        mockWorktreeManager,
+        drainLogForwarder,
+        drainWebhook,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: false,
+              confidence: 0,
+              reasons: ['verification failed'],
+              missingCriteria: [],
+              resumeInstruction: 'retry',
+              usedLlm: true,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+          logDrainTimeoutMs: 5000,
+        }
+      );
+
+      await drainDispatcher.submitTask({
+        taskId: 'drain-preserve-err',
+        workerType: 'auto',
+        prompt: 'Drain preserve error test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await flushAsync();
+
+      const task = await drainDispatcher.getTask('drain-preserve-err');
+      if (task === null) throw new Error('Task not found');
+
+      const originalError = {
+        code: 'VERIFICATION_FAILED',
+        message: 'Task did not pass verification',
+      };
+      const internal = drainDispatcher as unknown as {
+        finalizeTask: (
+          t: Record<string, unknown>,
+          s: string,
+          p: { result?: unknown; error?: { code: string; message: string } }
+        ) => Promise<void>;
+      };
+      await internal.finalizeTask(task as unknown as Record<string, unknown>, 'failed', {
+        error: originalError,
+      });
+
+      const webhookCalls = vi.mocked(drainWebhook.send).mock.calls;
+      const terminalCall = webhookCalls.find(
+        (c) => (c[0] as { payload: { taskId: string } }).payload.taskId === 'drain-preserve-err'
+      );
+      expect(terminalCall).toBeDefined();
+      if (terminalCall === undefined) throw new Error('Expected terminal webhook call');
+      const terminalPayload = (
+        terminalCall[0] as {
+          payload: { status: string; error?: { code: string; message: string } };
+        }
+      ).payload;
+      expect(terminalPayload.status).toBe('failed');
+      expect(terminalPayload.error).toEqual(originalError);
+    });
   });
 });

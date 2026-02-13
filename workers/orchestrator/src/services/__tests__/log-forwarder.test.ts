@@ -91,14 +91,14 @@ describe('LogForwarder', () => {
     });
 
     it('returns correct stats after sending and acking', async () => {
-      fetchSpy.mockResolvedValue(ackResponse([0, 1]));
+      fetchSpy.mockResolvedValue(ackResponse([0]));
       forwarder.registerTask('task-1', 'secret');
       forwarder.appendChunk('task-1', 'line 1\nline 2\n');
       await forwarder.flush('task-1');
 
       const stats = forwarder.getDeliveryStats('task-1');
       expect(stats.produced).toBe(1);
-      expect(stats.acked).toBe(1);
+      expect(stats.acked).toBe(0);
       expect(stats.pending).toBe(0);
     });
 

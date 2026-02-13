@@ -386,7 +386,10 @@ export class LogForwarder {
       if (seqState !== undefined) {
         seqState.produced = state.sequence;
         if (result.acknowledgedSequences.length > 0) {
-          const maxAcked = Math.max(...result.acknowledgedSequences);
+          const maxAcked = Math.min(
+            Math.max(...result.acknowledgedSequences),
+            seqState.produced - 1
+          );
           seqState.acked = Math.max(seqState.acked, maxAcked);
         }
       }
@@ -437,7 +440,11 @@ export class LogForwarder {
               success: true,
               acknowledgedSequences: ackBody.acknowledgedSequences ?? [],
             };
-          } catch {
+          } catch (parseError) {
+            this.logger.warn(
+              { taskId: payload.taskId, error: parseError },
+              'Failed to parse ACK response JSON — delivery tracking degraded'
+            );
             return { success: true, acknowledgedSequences: [] };
           }
         }
@@ -513,6 +520,7 @@ export class LogForwarder {
 
     while (Date.now() - startTime < timeoutMs) {
       const seqState = this.taskSequences.get(taskId);
+      // produced = next sequence number (0-indexed), so highest sent = produced - 1
       if (
         seqState === undefined ||
         seqState.produced === 0 ||

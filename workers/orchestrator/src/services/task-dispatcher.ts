@@ -780,7 +780,6 @@ export class TaskDispatcher {
       task.taskId,
       `Finalizing task: status=${finalStatus} hasResult=${String(payload.result !== undefined)} hasError=${String(payload.error !== undefined)}`
     );
-    await this.flushTaskLogs(task.taskId);
 
     if (shouldPreserve) {
       await this.isolation.provider.preserveWorker?.(task.taskId);
@@ -793,14 +792,16 @@ export class TaskDispatcher {
       await this.logForwarder.awaitDrain(task.taskId, this.logDrainTimeoutMs);
     } catch (drainError) {
       this.logger.error({ taskId: task.taskId, error: drainError }, 'Log drain failed');
-      finalStatus = 'failed';
-      payload.error = {
-        code: 'LOG_DELIVERY_FAILED',
-        message: drainError instanceof Error ? drainError.message : String(drainError),
-      };
+      if (payload.error === undefined) {
+        finalStatus = 'failed';
+        payload.error = {
+          code: 'LOG_DELIVERY_FAILED',
+          message: drainError instanceof Error ? drainError.message : String(drainError),
+        };
+      }
     }
-    this.logForwarder.close(task.taskId);
     const logStats = this.logForwarder.getDeliveryStats(task.taskId);
+    this.logForwarder.close(task.taskId);
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Log delivery stats: produced=${String(logStats.produced)} acked=${String(logStats.acked)} pending=${String(logStats.pending)}`
@@ -997,7 +998,7 @@ export class TaskDispatcher {
 
   private async flushTaskLogs(taskId: string): Promise<void> {
     try {
-      await this.logForwarder.flushAndStop(taskId);
+      await this.logForwarder.flush(taskId);
     } catch (error) {
       this.logger.warn({ taskId, error }, 'Failed to flush task logs');
     }
