@@ -2780,7 +2780,7 @@ describe('TaskDispatcher', () => {
       expect(terminalPayload.status).toBe('failed');
       expect(terminalPayload.error).toEqual({
         code: 'LOG_DELIVERY_FAILED',
-        message: 'Drain timeout after 5000ms',
+        message: 'Drain timeout after 5000ms (produced=0 acked=0 pending=0)',
       });
     });
 
@@ -2857,7 +2857,7 @@ describe('TaskDispatcher', () => {
       ).payload;
       expect(terminalPayload.error).toEqual({
         code: 'LOG_DELIVERY_FAILED',
-        message: 'string-error',
+        message: 'string-error (produced=0 acked=0 pending=0)',
       });
     });
 

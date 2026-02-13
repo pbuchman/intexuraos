@@ -78,6 +78,7 @@ describe('Routes', () => {
       tokenService,
       { orchestratorSecret },
       mockLogger,
+      undefined,
       anthropicOAuth
     );
     await app.ready();
@@ -814,6 +815,7 @@ describe('Routes', () => {
         tokenService,
         { orchestratorSecret },
         mockLogger,
+        undefined,
         undefined,
         mockProvider as never
       );

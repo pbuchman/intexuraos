@@ -4,6 +4,12 @@ import { EventEmitter } from 'node:events';
 import { DockerProvider, type DockerProviderConfig } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
 
+function createMockExecStream(): NodeJS.ReadableStream & { resume: () => void } {
+  const stream = new EventEmitter() as unknown as NodeJS.ReadableStream & { resume: () => void };
+  stream.resume = vi.fn();
+  return stream;
+}
+
 interface MockDocker {
   createContainer: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
@@ -62,7 +68,7 @@ function createMockDocker(): MockDockerResult {
       },
     }),
     exec: vi.fn().mockImplementation(async () => {
-      const stream = new EventEmitter() as unknown as NodeJS.ReadableStream;
+      const stream = createMockExecStream();
       const start = vi.fn().mockImplementation(async () => {
         setTimeout(() => {
           stream.emit('data', Buffer.from('attempt logs'));
@@ -196,7 +202,7 @@ describe('DockerProvider', () => {
 
     it('fails when image does not support managed run-attempt mode', async () => {
       mocks.mockContainer.exec.mockImplementationOnce(async () => {
-        const stream = new EventEmitter() as unknown as NodeJS.ReadableStream;
+        const stream = createMockExecStream();
         const start = vi.fn().mockImplementation(async () => {
           setTimeout(() => {
             stream.emit('end');
@@ -631,8 +637,12 @@ describe('DockerProvider', () => {
       mocks.mockContainer.exec = vi.fn().mockImplementation((opts: { Cmd?: string[] }) => {
         const cmd = opts?.Cmd?.join?.(' ') ?? '';
         if (cmd.includes('worker-ready')) {
+          const readyStream = createMockExecStream();
           return Promise.resolve({
-            start: vi.fn().mockResolvedValue(undefined),
+            start: vi.fn().mockImplementation(async () => {
+              setTimeout(() => readyStream.emit('end'), 0);
+              return readyStream;
+            }),
             inspect: vi.fn().mockResolvedValue({ ExitCode: 1 }),
           });
         }
@@ -711,8 +721,12 @@ describe('DockerProvider', () => {
       mocks.mockContainer.exec = vi.fn().mockImplementation((opts: { Cmd?: string[] }) => {
         const cmd = opts?.Cmd?.join?.(' ') ?? '';
         if (cmd.includes('worker-ready')) {
+          const readyStream = createMockExecStream();
           return Promise.resolve({
-            start: vi.fn().mockResolvedValue(undefined),
+            start: vi.fn().mockImplementation(async () => {
+              setTimeout(() => readyStream.emit('end'), 0);
+              return readyStream;
+            }),
             inspect: vi.fn().mockResolvedValue({ ExitCode: 1 }),
           });
         }
