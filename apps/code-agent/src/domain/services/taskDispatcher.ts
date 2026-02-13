@@ -116,4 +116,26 @@ export interface TaskDispatcherService {
     location: string,
     credentials?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string }
   ): Promise<void>;
+
+  /**
+   * Send a user message to a running task on a worker.
+   *
+   * Sends an HMAC-signed POST to the worker's /tasks/:id/message endpoint.
+   * The worker interrupts the current Claude session and resumes with --continue.
+   *
+   * @param taskId - The task ID on the orchestrator
+   * @param message - The user message to deliver
+   * @param credentials - Worker credentials for HMAC signing and Cloudflare access
+   * @param workerUrl - Direct URL of the worker
+   */
+  sendMessageToWorker(
+    taskId: string,
+    message: string,
+    credentials: {
+      url: string;
+      cfAccessClientId: string;
+      cfAccessClientSecret: string;
+      dispatchSigningSecret: string;
+    }
+  ): Promise<Result<void, string>>;
 }

@@ -115,6 +115,9 @@ describe('codeRoutes', () => {
           },
         };
       },
+      async sendMessageToWorker(): Promise<Result<void, string>> {
+        return ok(undefined);
+      },
       async cancelOnWorker(): Promise<void> {
         return;
       },
@@ -1275,6 +1278,9 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
               message: 'No workers available',
             },
           };
+        },
+        async sendMessageToWorker(): Promise<Result<void, string>> {
+          return ok(undefined);
         },
         async cancelOnWorker(): Promise<void> {
           // No-op for test

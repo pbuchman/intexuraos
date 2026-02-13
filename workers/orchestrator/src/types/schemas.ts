@@ -39,5 +39,11 @@ export const CreateTaskRequestSchema = z.object({
   actionId: z.string().optional(),
 });
 
+// POST /tasks/:id/message request schema
+export const SendMessageRequestSchema = z.object({
+  message: z.string().min(1).max(10000),
+});
+
 // Type inference from schema
 export type CreateTaskRequestInput = z.infer<typeof CreateTaskRequestSchema>;
+export type SendMessageRequestInput = z.infer<typeof SendMessageRequestSchema>;

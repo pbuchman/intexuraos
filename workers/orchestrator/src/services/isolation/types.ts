@@ -132,4 +132,13 @@ export interface IsolationProvider {
    * Cleanup persistent per-task session artifacts.
    */
   cleanupTaskSession?(taskId: string): Promise<void>;
+
+  /**
+   * Interrupt the current Claude attempt inside the worker container.
+   * Sends SIGTERM to the Claude process, causing the exec to end naturally.
+   * The onComplete callback fires when the exec finishes.
+   *
+   * @returns true if interrupt was sent, false if worker not found
+   */
+  interruptAttempt?(taskId: string): Promise<boolean>;
 }

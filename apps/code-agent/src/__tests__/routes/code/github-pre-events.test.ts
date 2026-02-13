@@ -19,7 +19,7 @@ import { resetServices, setServices } from '../../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from 'pino';
-import { ok } from '@intexuraos/common-core';
+import { ok, type Result } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { mockWorkerHealthProbe } from '../../helpers/mockServices.js';
@@ -95,6 +95,9 @@ describe('GET /code/github-pr-events', () => {
           dispatched: true,
           workerLocation: 'mac',
         });
+      },
+      async sendMessageToWorker(): Promise<Result<void, string>> {
+        return ok(undefined);
       },
       async cancelOnWorker(): Promise<void> {
         return;

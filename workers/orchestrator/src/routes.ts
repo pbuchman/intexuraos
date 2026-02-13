@@ -5,7 +5,7 @@ import type { GitHubTokenService } from './github/token-service.js';
 import type { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from './types/api.js';
-import { CreateTaskRequestSchema } from './types/schemas.js';
+import { CreateTaskRequestSchema, SendMessageRequestSchema } from './types/schemas.js';
 
 interface TaskParams {
   id: string;
@@ -259,6 +259,41 @@ export function registerRoutes(
 
     reply.send({ taskId: id, status: 'cancelled' });
   });
+
+  // POST /tasks/:id/message - Send user message to running task
+  app.post<{ Params: TaskParams; Body: unknown }>(
+    '/tasks/:id/message',
+    { preHandler: [verifyDispatchSignature] },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const parseResult = SendMessageRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        reply.status(400).send({ error: parseResult.error.message }); // @allow-raw-send: orchestrator uses raw Fastify (no reply.ok/fail plugin)
+        return;
+      }
+
+      const { message } = parseResult.data;
+      logger.info({ taskId: id, messageLength: message.length }, 'Received user message for task');
+
+      const result = await dispatcher.sendMessage(id, message);
+
+      if (!result.ok) {
+        const { error } = result;
+        const statusMap: Record<string, number> = {
+          not_found: 404,
+          not_running: 409,
+          concurrent_message: 409,
+        };
+        const status = statusMap[error.type] ?? 500;
+        reply.status(status).send({ error: error.message }); // @allow-raw-send: orchestrator uses raw Fastify
+        return;
+      }
+
+      const { action } = result.value;
+      reply.send({ taskId: id, action }); // @allow-raw-send: orchestrator uses raw Fastify
+    }
+  );
 
   // GET /health - Health check
   app.get('/health', async (_request, reply) => {

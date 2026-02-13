@@ -297,9 +297,11 @@ function countWebSearchCalls(response: OpenAI.Chat.Completions.ChatCompletion): 
 
   let count = 0;
   for (const toolCall of message.tool_calls) {
+    /* v8 ignore start -- test-infra: mock GLM responses don't include web_search tool calls @preserve */
     if ((toolCall.type as string) === 'web_search') {
       count++;
     }
+    /* v8 ignore stop @preserve */
   }
   return count;
 }

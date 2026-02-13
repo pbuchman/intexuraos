@@ -557,6 +557,29 @@ export class DockerProvider implements IsolationProvider {
     return Array.from(this.workers.values()).map((w) => w.handle);
   }
 
+  /* v8 ignore start -- test-infra: Docker exec to pkill inside container requires running daemon @preserve */
+  async interruptAttempt(taskId: string): Promise<boolean> {
+    const worker = this.workers.get(taskId);
+    if (worker === undefined) {
+      return false;
+    }
+
+    try {
+      const container = this.docker.getContainer(worker.containerId);
+      const execInstance = await container.exec({
+        Cmd: ['pkill', '-TERM', '-f', 'claude'],
+        User: '1001:1001',
+      });
+      await execInstance.start({ hijack: false, stdin: false });
+      this.logger.info({ taskId }, 'Sent SIGTERM to Claude process inside container');
+      return true;
+    } catch (error) {
+      this.logger.error({ taskId, error }, 'Failed to interrupt Claude process');
+      return false;
+    }
+  }
+  /* v8 ignore stop @preserve */
+
   async cleanupTaskSession(taskId: string): Promise<void> {
     const taskSessionPath = path.join(
       this.config.secretsBasePath,

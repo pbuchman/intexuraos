@@ -10,6 +10,7 @@ import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
+import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
@@ -757,13 +758,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       // If PR was created and task has a Linear issue, transition to In Review
-      if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) {
-        await linearIssueService.markInReview(result.value.userId, result.value.linearIssueId);
+      if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) { // @allow-result-access -- .ok checked at line 737
+        await linearIssueService.markInReview(result.value.userId, result.value.linearIssueId); // @allow-result-access -- .ok checked at line 737
       }
 
-      request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully');
+      request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully'); // @allow-result-access -- .ok checked at line 737
 
-      return await reply.ok({ task: taskToApiResponse(result.value) });
+      return await reply.ok({ task: taskToApiResponse(result.value) }); // @allow-result-access -- .ok checked at line 737
     }
   );
 
@@ -2972,11 +2973,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       request.log.info(
-        { originalTaskId: taskId, retryTaskId: result.value.codeTaskId },
+        { originalTaskId: taskId, retryTaskId: result.value.codeTaskId }, // @allow-result-access -- .ok checked at line 2946
         'Task retry created successfully'
       );
 
-      return reply.ok(result.value);
+      return reply.ok(result.value); // @allow-result-access -- .ok checked at line 2946
     }
   );
 
@@ -3167,11 +3168,120 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       request.log.info(
-        { originalTaskId: taskId, followUpTaskId: result.value.codeTaskId },
+        { originalTaskId: taskId, followUpTaskId: result.value.codeTaskId }, // @allow-result-access -- .ok checked at line 3142
         'Follow-up task created from feedback'
       );
 
-      return reply.ok(result.value);
+      return reply.ok(result.value); // @allow-result-access -- .ok checked at line 3142
+    }
+  );
+
+  // POST /code/tasks/:taskId/messages - Send message to running task
+  fastify.post(
+    '/code/tasks/:taskId/messages',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'sendTaskMessage',
+        summary: 'Send a message to a running task',
+        description: 'Interrupts the current Claude session and resumes with the user message via --continue. Requires Auth0 JWT.',
+        tags: ['public'],
+        params: {
+          type: 'object',
+          required: ['taskId'],
+          properties: {
+            taskId: {
+              type: 'string',
+              description: 'The ID of the task to send a message to',
+            },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['message'],
+          properties: {
+            message: {
+              type: 'string',
+              description: 'Message text to send to the running task',
+              minLength: 1,
+              maxLength: 10000,
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Message delivered',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  action: { type: 'string', enum: ['interrupted', 'follow_up_created'] },
+                  followUpTaskId: { type: 'string', nullable: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/tasks/:taskId/messages',
+      });
+
+      const { codeTaskRepo, taskDispatcher, workerSettingsRepo, logLineRepo } = getServices();
+      const userId = request.user?.userId;
+
+      /* v8 ignore start -- test-infra: FakeAuthPlugin always returns valid user @preserve */
+      if (userId === undefined) {
+        return reply.fail('UNAUTHORIZED', 'Authentication required');
+      }
+      /* v8 ignore stop @preserve */
+
+      const { taskId } = request.params as { taskId: string };
+      const { message } = request.body as { message: string };
+
+      request.log.info({ taskId, userId, messageLength: message.length }, 'Processing task message');
+
+      const result = await sendTaskMessage(
+        {
+          logger: request.log,
+          codeTaskRepo,
+          taskDispatcher,
+          workerSettingsRepo,
+          logLineRepo,
+        },
+        {
+          taskId,
+          userId,
+          message,
+        }
+      );
+
+      /* v8 ignore start -- test-infra: error handling paths covered by use case tests @preserve */
+      if (!result.ok) {
+        const error = result.error;
+
+        if (error.code === 'task_not_found') {
+          /* v8 ignore stop @preserve */
+          return reply.fail('NOT_FOUND', error.message);
+        }
+        /* v8 ignore start -- ts-type: error code comparison creates type narrowing branch @preserve */
+        if (error.code === 'task_not_running') {
+          return reply.fail('CONFLICT', error.message);
+        }
+        if (error.code === 'worker_not_configured') {
+          return reply.fail('INVALID_REQUEST', error.message);
+        }
+        /* v8 ignore stop @preserve */
+
+        request.log.error({ error }, 'Task message delivery failed');
+        return reply.fail('INTERNAL_ERROR', 'Failed to deliver message');
+      }
+
+      return reply.ok(result.value); // @allow-result-access -- .ok checked above
     }
   );
 

@@ -17,6 +17,9 @@ import {
   isFirebaseAuthenticated,
   initializeFirebase,
 } from '@/services/firebase';
+import { sendTaskMessage } from '@/services/codeAgentApi.js';
+import { TerminalMessageInput } from '@/components/TerminalMessageInput.js';
+import type { CodeTaskStatus } from '@/types';
 
 const MAX_TERMINAL_ROWS = 70;
 
@@ -28,11 +31,13 @@ interface LogLineDoc {
 interface TerminalLogViewerProps {
   taskId: string;
   isActive: boolean;
+  taskStatus: CodeTaskStatus;
 }
 
 export const TerminalLogViewer = memo(function TerminalLogViewer({
   taskId,
   isActive,
+  taskStatus,
 }: TerminalLogViewerProps): React.JSX.Element {
   const { getAccessToken } = useAuth();
   const [logsLoading, setLogsLoading] = useState(true);
@@ -80,6 +85,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   }, [isMobileViewport]);
 
   const isFullscreen = isMobileViewport && isOverlayOpen;
+  const isRunningStatus = taskStatus === 'running' || taskStatus === 'dispatched';
 
   useEffect(() => {
     const wrapper = terminalWrapperRef.current;
@@ -308,6 +314,10 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     }
   };
 
+  const handleSendMessage = async (message: string): Promise<void> => {
+    const token = await getAccessToken();
+    await sendTaskMessage(token, taskId, { message });
+  };
 
   return (
     <div ref={terminalWrapperRef} className={isFullscreen ? 'fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm' : 'mt-6 mb-6'}>
@@ -390,7 +400,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
       <div
         ref={terminalBodyRef}
-        className={`terminal-flow relative bg-slate-900 ${isFullscreen ? 'flex-1 min-h-0 overflow-hidden' : 'rounded-b-lg min-h-[200px] overflow-y-auto'}`}
+        className={`terminal-flow relative bg-slate-900 ${isFullscreen ? 'flex-1 min-h-0 overflow-hidden' : `min-h-[200px] overflow-y-auto ${isRunningStatus ? '' : 'rounded-b-lg'}`}`}
         onClick={isMobileViewport && !isFullscreen ? handleOpenOverlay : undefined}
       >
         <div
@@ -398,19 +408,22 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
           className="w-full p-2"
         />
         {logsLoading ? (
-          <div className="absolute inset-0 flex items-center gap-2 rounded-b-lg p-4 text-slate-400 font-mono text-sm bg-slate-900">
+          <div className={`absolute inset-0 flex items-center gap-2 p-4 text-slate-400 font-mono text-sm bg-slate-900 ${isRunningStatus ? '' : 'rounded-b-lg'}`}>
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading logs...
           </div>
         ) : null}
         {logsError !== null ? (
-          <div className="absolute inset-0 rounded-b-lg p-4 text-red-400 font-mono text-sm bg-slate-900">
+          <div className={`absolute inset-0 p-4 text-red-400 font-mono text-sm bg-slate-900 ${isRunningStatus ? '' : 'rounded-b-lg'}`}>
             Error: {logsError}
           </div>
         ) : null}
       </div>
+      {!isFullscreen ? (
+        <TerminalMessageInput taskStatus={taskStatus} onSend={handleSendMessage} />
+      ) : null}
     </div>
   );
 }, (prevProps, nextProps) => {
-  return prevProps.taskId === nextProps.taskId && prevProps.isActive === nextProps.isActive;
+  return prevProps.taskId === nextProps.taskId && prevProps.isActive === nextProps.isActive && prevProps.taskStatus === nextProps.taskStatus;
 });

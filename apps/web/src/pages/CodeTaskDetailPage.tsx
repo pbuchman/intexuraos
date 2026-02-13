@@ -362,7 +362,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
 
       {task.error !== undefined ? <TaskErrorCard task={task} /> : null}
 
-      <TerminalLogViewer taskId={task.id} isActive={isRunning} />
+      <TerminalLogViewer taskId={task.id} isActive={isRunning} taskStatus={task.status} />
     </Layout>
   );
 }

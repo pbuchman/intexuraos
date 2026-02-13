@@ -98,6 +98,26 @@ export async function refreshWorkersStatus(accessToken: string): Promise<Workers
 }
 
 /**
+ * Send a message to a running code task
+ */
+export async function sendTaskMessage(
+  accessToken: string,
+  taskId: string,
+  request: { message: string }
+): Promise<{ action: 'interrupted' | 'follow_up_created'; followUpTaskId?: string }> {
+  return await apiRequest<{ action: 'interrupted' | 'follow_up_created'; followUpTaskId?: string }>(
+    config.codeAgentUrl,
+    `/code/tasks/${taskId}/messages`,
+    accessToken,
+    {
+      method: 'POST',
+      body: request,
+      timeout: 65000,
+    }
+  );
+}
+
+/**
  * Get GitHub PR events for a repository
  */
 export async function getGitHubPREvents(
