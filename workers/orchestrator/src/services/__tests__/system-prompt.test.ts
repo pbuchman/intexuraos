@@ -232,13 +232,13 @@ describe('system-prompt', () => {
         expect(result).toContain('[PHASE 2: STRICT EXECUTION]');
       });
 
-      it('should be case-sensitive for code-task label', () => {
+      it('should normalize case for code-task label', () => {
         const result = buildSystemPrompt({
           ...baseParams,
           linearIssueLabels: ['CODE-TASK'],
         });
 
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
+        expect(result).toContain('[PHASE 2: STRICT EXECUTION]');
       });
     });
   });

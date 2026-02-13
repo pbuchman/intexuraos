@@ -174,12 +174,12 @@ describe('TaskDispatcher', () => {
     provider: mockIsolationProvider,
     tokenRefresher: mockTokenRefresher,
     apiKeyValidator: mockApiKeyValidator,
-    secrets: {
+    getSecrets: () => ({
       ANTHROPIC_API_KEY: 'test-anthropic-key',
       LINEAR_API_KEY: 'test-linear-key',
       SENTRY_AUTH_TOKEN: 'test-sentry-token',
       ZAI_API_KEY: 'test-zai-key',
-    },
+    }),
     gcpSaKeyPath: '/tmp/gcp-sa.json',
     githubAppKeyPath: '/tmp/github-app.pem',
   };
@@ -2780,7 +2780,7 @@ describe('TaskDispatcher', () => {
       expect(terminalPayload.status).toBe('failed');
       expect(terminalPayload.error).toEqual({
         code: 'LOG_DELIVERY_FAILED',
-        message: 'Drain timeout after 5000ms',
+        message: 'Drain timeout after 5000ms (produced=0 acked=0 pending=0)',
       });
     });
 
@@ -2857,7 +2857,7 @@ describe('TaskDispatcher', () => {
       ).payload;
       expect(terminalPayload.error).toEqual({
         code: 'LOG_DELIVERY_FAILED',
-        message: 'string-error',
+        message: 'string-error (produced=0 acked=0 pending=0)',
       });
     });
 

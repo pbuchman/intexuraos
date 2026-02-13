@@ -71,7 +71,7 @@ jobs:
   check-runner:
     name: Check Self-Hosted Runner
     needs: analyze
-    if: needs.analyze.outputs.strategy != 'NONE'
+    if: needs.analyze.outputs.strategy != 'NONE' || github.event.inputs.force_strategy == 'monolith'
     runs-on: ubuntu-latest
     outputs:
       available: ${{ steps.check.outputs.available }}
@@ -107,6 +107,7 @@ jobs:
       FUNCTIONS_SOURCE_BUCKET: ${{ vars.FUNCTIONS_SOURCE_BUCKET }}
       WORKSPACE_ROOT: ${{ github.workspace }}
       DOCKER_BUILDKIT: '1'
+      GOOGLE_APPLICATION_CREDENTIALS: ${{ vars.GCP_SA_KEY_PATH }}
 
     steps:
       - name: Checkout
@@ -116,8 +117,14 @@ jobs:
 
       - name: Authenticate to GCP
         run: |
-          gcloud auth activate-service-account --key-file="$HOME/.config/gcloud/sa-key.json"
+          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
           gcloud auth configure-docker europe-central2-docker.pkg.dev --quiet
+
+      - name: Setup Node.js (fnm)
+        run: |
+          export PATH="$HOME/.local/share/fnm:$PATH"
+          eval "$(fnm env)"
+          echo "$(dirname $(which node))" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -130,55 +137,34 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Build and push Docker images (batch 1 - foundation)
+      - name: Build and push all Docker images
         run: |
           bash cloudbuild/scripts/build-push-monitored.sh image-service apps/image-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh api-docs-hub apps/api-docs-hub/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh claude-worker workers/claude-worker/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 2 - core A)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh notion-service apps/notion-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh user-service apps/user-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh whatsapp-service apps/whatsapp-service/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 3 - core B)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh app-settings-service apps/app-settings-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh mobile-notifications-service apps/mobile-notifications-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh research-agent apps/research-agent/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 4 - agents A)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh commands-agent apps/commands-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh actions-agent apps/actions-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh data-insights-agent apps/data-insights-agent/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 5 - agents B)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh notes-agent apps/notes-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh todos-agent apps/todos-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh bookmarks-agent apps/bookmarks-agent/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 6 - agents C)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh calendar-agent apps/calendar-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh linear-agent apps/linear-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh web-agent apps/web-agent/Dockerfile &
-          wait
-
-      - name: Build and push Docker images (batch 7)
-        run: |
           bash cloudbuild/scripts/build-push-monitored.sh code-agent apps/code-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh chat-agent apps/chat-agent/Dockerfile &
           wait
 
-      - name: Deploy Cloud Run services
+      - name: Build workers
+        run: bash cloudbuild/scripts/build-all-workers.sh
+
+      - name: Deploy Cloud Run services + Cloud Functions
         run: |
           SERVICES=(
             image-service api-docs-hub notion-service user-service whatsapp-service
@@ -190,10 +176,10 @@ jobs:
           for svc in "${SERVICES[@]}"; do
             bash "cloudbuild/scripts/deploy-${svc}.sh" &
           done
+          bash cloudbuild/scripts/deploy-function.sh vm-lifecycle &
+          bash cloudbuild/scripts/deploy-function.sh log-cleanup &
+          bash cloudbuild/scripts/deploy-function.sh predev-lifecycle &
           wait
-
-      - name: Deploy workers
-        run: bash cloudbuild/scripts/deploy-all-workers.sh
 
       - name: Fetch web config
         run: |
@@ -340,6 +326,7 @@ jobs:
       FUNCTIONS_SOURCE_BUCKET: ${{ vars.FUNCTIONS_SOURCE_BUCKET }}
       WORKSPACE_ROOT: ${{ github.workspace }}
       DOCKER_BUILDKIT: '1'
+      GOOGLE_APPLICATION_CREDENTIALS: ${{ vars.GCP_SA_KEY_PATH }}
 
     steps:
       - name: Checkout
@@ -349,8 +336,14 @@ jobs:
 
       - name: Authenticate to GCP
         run: |
-          gcloud auth activate-service-account --key-file="$HOME/.config/gcloud/sa-key.json"
+          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
           gcloud auth configure-docker europe-central2-docker.pkg.dev --quiet
+
+      - name: Setup Node.js (fnm)
+        run: |
+          export PATH="$HOME/.local/share/fnm:$PATH"
+          eval "$(fnm env)"
+          echo "$(dirname $(which node))" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -377,7 +370,6 @@ jobs:
               ;;
             web)
               echo "Deploying web frontend"
-              # Fetch service URLs and secrets for .env
               CLOUD_RUN_SERVICES=(
                 "user-service:USER_SERVICE"
                 "whatsapp-service:WHATSAPP_SERVICE"
@@ -521,7 +513,7 @@ jobs:
   skip-deploy:
     name: No Changes to Deploy
     needs: analyze
-    if: needs.analyze.outputs.strategy == 'NONE'
+    if: needs.analyze.outputs.strategy == 'NONE' && github.event.inputs.force_strategy != 'monolith'
     runs-on: ubuntu-latest
 
     steps:

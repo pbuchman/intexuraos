@@ -57,6 +57,7 @@ describe('Orchestrator Types', () => {
         running: 2,
         available: 3,
         githubTokenExpiresAt: null,
+        anthropicOAuth: { status: 'not_configured', message: 'Not configured' },
       };
 
       expect(health.status).toBe('ready');

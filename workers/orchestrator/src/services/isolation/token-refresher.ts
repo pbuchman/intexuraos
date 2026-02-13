@@ -128,6 +128,17 @@ export class TokenRefresher {
     if (this.anthropicOAuth !== undefined) {
       try {
         await this.anthropicOAuth.getAccessToken();
+        for (const taskId of this.activeTaskIds) {
+          const sessionPath = path.join(this.config.secretsBasePath, `claude-session-${taskId}`);
+          try {
+            await this.anthropicOAuth.writeTaskCredentials(sessionPath);
+          } catch (err) {
+            this.logger.warn(
+              { taskId, error: err },
+              'Failed to propagate OAuth credentials to task'
+            );
+          }
+        }
       } catch (error) {
         this.logger.error({ error }, 'Anthropic OAuth refresh failed during token cycle');
       }

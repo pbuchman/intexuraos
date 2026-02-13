@@ -2,8 +2,9 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createHmac } from 'node:crypto';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
-import type { IsolationProvider } from './services/isolation/types.js';
 import type { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
+import type { IsolationProvider } from './services/isolation/types.js';
+import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from './types/api.js';
 import { CreateTaskRequestSchema } from './types/schemas.js';
@@ -54,8 +55,9 @@ export function registerRoutes(
   tokenService: GitHubTokenService,
   config: { orchestratorSecret: string },
   logger: Logger,
-  isolationProvider?: IsolationProvider,
-  anthropicOAuth?: AnthropicOAuthManager
+  getStatus?: () => OrchestratorStatus,
+  anthropicOAuth?: AnthropicOAuthManager,
+  isolationProvider?: IsolationProvider
 ): void {
   const nonceCache: NonceCache = {};
 
@@ -242,7 +244,7 @@ export function registerRoutes(
     };
 
     reply.send({
-      status: 'ready',
+      status: getStatus?.() ?? 'ready',
       capacity,
       running,
       available: capacity - running,

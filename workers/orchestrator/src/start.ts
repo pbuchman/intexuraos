@@ -287,6 +287,15 @@ async function bootstrap(): Promise<void> {
     10
   );
 
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid PORT: ${getOptionalEnv('PORT', String(DEFAULT_PORT))}`);
+  }
+  if (!Number.isFinite(capacity) || capacity < 1) {
+    throw new Error(
+      `Invalid INTEXURAOS_WORKER_CAPACITY: ${getOptionalEnv('INTEXURAOS_WORKER_CAPACITY', String(DEFAULT_CAPACITY))}`
+    );
+  }
+
   // Validate port is available before starting
   validatePortAvailable(port);
 
@@ -452,17 +461,16 @@ async function bootstrap(): Promise<void> {
     provider: isolationProvider,
     tokenRefresher,
     apiKeyValidator,
-    secrets: apiKeySecrets,
+    getSecrets: () => ({
+      ...apiKeySecrets,
+      ANTHROPIC_API_KEY: anthropicOAuth.getCurrentAccessToken() ?? apiKeySecrets.ANTHROPIC_API_KEY,
+    }),
     gcpSaKeyPath,
     githubAppKeyPath: config.githubAppPrivateKeyPath,
   };
 
   // Validate API keys asynchronously (non-blocking, warns on failure)
-  void validateWorkerApiKeys(
-    isolationConfig.secrets.ANTHROPIC_API_KEY,
-    isolationConfig.secrets.ZAI_API_KEY,
-    logger
-  );
+  void validateWorkerApiKeys('', isolationConfig.getSecrets().ZAI_API_KEY, logger);
 
   const completionMaxAttemptsRaw = parseInt(
     getOptionalEnv('INTEXURAOS_COMPLETION_MAX_ATTEMPTS', String(DEFAULT_COMPLETION_MAX_ATTEMPTS)),
@@ -541,8 +549,8 @@ async function bootstrap(): Promise<void> {
     webhookClient,
     heartbeatManager,
     logger,
-    isolationProvider,
-    anthropicOAuth
+    anthropicOAuth,
+    isolationProvider
   );
 }
 /* v8 ignore stop @preserve */

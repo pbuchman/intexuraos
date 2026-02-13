@@ -138,19 +138,18 @@ Orchestrator reuses the same container for follow-up attempts and invokes `--con
 
 Set by `docker-provider.ts` when creating containers:
 
-| Variable                            | Source                | Purpose                           |
-| ----------------------------------- | --------------------- | --------------------------------- |
-| `TASK_ID`                           | Task config           | Task identifier                   |
-| `ANTHROPIC_API_KEY`                 | OAuth access token    | Claude API authentication         |
-| `ANTHROPIC_BASE_URL`                | Worker type config    | API endpoint (varies by provider) |
-| `ANTHROPIC_MODEL`                   | Worker type config    | Model override (optional)         |
-| `LINEAR_API_KEY`                    | Secrets               | Linear MCP integration            |
-| `SENTRY_AUTH_TOKEN`                 | Secrets               | Sentry MCP integration            |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | Hardcoded `/secrets/` | GCP auth inside container         |
-| `CLAUDE_PROJECT_DIR`                | Hardcoded `/repo`     | Hook path resolution              |
-| `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY` | Hardcoded `10000`     | Exit 10s after idle               |
-| `CLAUDE_MANAGED_MODE`               | Hardcoded `1`         | Enable managed run-attempt mode   |
-| `CLAUDE_CONTINUE`                   | Per-attempt config    | Resume previous Claude session    |
+| Variable                         | Source                | Purpose                           |
+| -------------------------------- | --------------------- | --------------------------------- |
+| `TASK_ID`                        | Task config           | Task identifier                   |
+| `ANTHROPIC_API_KEY`              | OAuth access token    | Claude API authentication         |
+| `ANTHROPIC_BASE_URL`             | Worker type config    | API endpoint (varies by provider) |
+| `ANTHROPIC_MODEL`                | Worker type config    | Model override (optional)         |
+| `LINEAR_API_KEY`                 | Secrets               | Linear MCP integration            |
+| `SENTRY_AUTH_TOKEN`              | Secrets               | Sentry MCP integration            |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Hardcoded `/secrets/` | GCP auth inside container         |
+| `CLAUDE_PROJECT_DIR`             | Hardcoded `/repo`     | Hook path resolution              |
+| `CLAUDE_MANAGED_MODE`            | Hardcoded `1`         | Enable managed run-attempt mode   |
+| `CLAUDE_CONTINUE`                | Per-attempt config    | Resume previous Claude session    |
 
 ---
 
