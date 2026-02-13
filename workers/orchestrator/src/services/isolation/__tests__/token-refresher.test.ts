@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import * as fs from 'node:fs';
 import { TokenRefresher, type TokenRefresherConfig } from '../token-refresher.js';
+import type { AnthropicOAuthManager } from '../anthropic-oauth.js';
 
 // Mock fs at module level
 vi.mock('node:fs', async (importOriginal) => {
@@ -291,6 +292,60 @@ describe('TokenRefresher', () => {
         expect.any(String),
         expect.any(Object)
       );
+    });
+  });
+
+  describe('Anthropic OAuth integration', () => {
+    it('calls OAuth getAccessToken during refresh cycle', async () => {
+      const mockOAuth = {
+        getAccessToken: vi.fn(async () => 'sk-ant-oat01-fresh'),
+      } as unknown as AnthropicOAuthManager;
+
+      refresher.setAnthropicOAuth(mockOAuth);
+      await refresher.registerTask('task-1');
+
+      // Clear initial calls
+      mockWriteFile.mockClear();
+      vi.mocked(mockOAuth.getAccessToken).mockClear();
+
+      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
+
+      expect(mockOAuth.getAccessToken).toHaveBeenCalledTimes(1);
+      expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not break GitHub token refresh when OAuth fails', async () => {
+      const mockOAuth = {
+        getAccessToken: vi.fn(async () => {
+          throw new Error('OAuth network error');
+        }),
+      } as unknown as AnthropicOAuthManager;
+
+      refresher.setAnthropicOAuth(mockOAuth);
+      await refresher.registerTask('task-1');
+
+      mockWriteFile.mockClear();
+      vi.mocked(mockLogger.error).mockClear();
+
+      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.any(Error) }),
+        'Anthropic OAuth refresh failed during token cycle'
+      );
+      // GitHub tokens still refreshed
+      expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call OAuth when not set', async () => {
+      await refresher.registerTask('task-1');
+
+      mockWriteFile.mockClear();
+
+      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
+
+      // Only GitHub token refresh, no OAuth calls
+      expect(mockWriteFile).toHaveBeenCalledTimes(1);
     });
   });
 });

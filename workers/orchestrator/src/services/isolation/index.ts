@@ -66,6 +66,8 @@ export type {
   WorkerType,
   WorkerTypeConfig,
   ResourceUsage,
+  AnthropicOAuthCredentials,
+  OAuthState,
 } from './types.js';
 
 export { WORKER_TYPES } from './types.js';
@@ -73,3 +75,4 @@ export { WORKER_TYPES } from './types.js';
 // Re-export implementations
 export { DockerProvider, type DockerProviderConfig } from './docker-provider.js';
 export { TokenRefresher, type TokenRefresherConfig } from './token-refresher.js';
+export { AnthropicOAuthManager, type AnthropicOAuthManagerConfig } from './anthropic-oauth.js';
