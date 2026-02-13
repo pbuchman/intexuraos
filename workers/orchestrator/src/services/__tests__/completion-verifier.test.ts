@@ -28,10 +28,11 @@ const logger: Logger = {
 const defaultConfig = {
   model: LlmModels.Gemini25Flash,
   geminiApiKey: 'gemini-key',
+  auditLogPath: '/tmp/orchestrator-llm-audit.test.log',
 } as const;
 
 function createVerifier(
-  overrides: Partial<{ model: string; geminiApiKey: string }> = {}
+  overrides: Partial<{ model: string; geminiApiKey: string; auditLogPath: string }> = {}
 ): InstanceType<typeof OrchestratorCompletionVerifier> {
   return new OrchestratorCompletionVerifier(logger, { ...defaultConfig, ...overrides });
 }
@@ -184,7 +185,7 @@ describe('completion-verifier', () => {
         taskId: 'task-1',
         attempt: 1,
         phase: 'phase1',
-        prompt: expect.stringContaining('TASK task-1 ATTEMPT 1/3 PHASE phase1'),
+        promptChars: expect.any(Number),
       }),
       'Gemini completion verifier request'
     );
@@ -192,7 +193,7 @@ describe('completion-verifier', () => {
       expect.objectContaining({
         taskId: 'task-1',
         attempt: 1,
-        response: expect.any(String),
+        responseChars: expect.any(Number),
       }),
       'Gemini completion verifier response'
     );
@@ -550,6 +551,12 @@ describe('completion-verifier', () => {
   it('throws when gemini verifier key is an empty string', () => {
     expect(() => createVerifier({ geminiApiKey: '' })).toThrow(
       'INTEXURAOS_GEMINI_APP_API_KEY is required'
+    );
+  });
+
+  it('throws when audit log path is an empty string', () => {
+    expect(() => createVerifier({ auditLogPath: '' })).toThrow(
+      'Completion verifier auditLogPath is required'
     );
   });
 });

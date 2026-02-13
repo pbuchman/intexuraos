@@ -37,7 +37,7 @@ export class FirestoreLogChunkRepository implements LogChunkRepository {
         .collection('code_tasks')
         .doc(taskId)
         .collection('logs')
-        .doc();
+        .doc(String(chunk.sequence).padStart(12, '0'));
 
       batch.set(docRef, {
         sequence: chunk.sequence,

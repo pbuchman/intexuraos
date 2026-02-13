@@ -16,7 +16,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{
     Body: {
       taskId: string;
-      status: 'completed' | 'failed' | 'interrupted';
+      status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
       result?: {
         prUrl?: string;
         branch: string;
@@ -44,7 +44,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           type: 'object',
           properties: {
             taskId: { type: 'string' },
-            status: { type: 'string', enum: ['completed', 'failed', 'interrupted'] },
+            status: { type: 'string', enum: ['completed', 'failed', 'interrupted', 'cancelled'] },
             result: {
               type: 'object',
               properties: {
@@ -98,7 +98,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted'; result?: { prUrl?: string; branch: string; commits: number; summary: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped' }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch: string; commits: number; summary: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped' }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/webhooks/task-complete',
       });
@@ -371,6 +371,64 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
       /* v8 ignore stop @preserve */
 
+      /* v8 ignore start -- test-infra: status === 'cancelled' conditional requires specific webhook payload @preserve */
+      if (status === 'cancelled') {
+      /* v8 ignore stop @preserve */
+        const updateResult = await codeTaskRepo.update(taskId, {
+          status: 'cancelled',
+          completedAt,
+          error: {
+            code: 'task_cancelled',
+            message: 'Task was cancelled by user',
+          },
+          callbackReceived: true,
+        });
+
+        if (!updateResult.ok) {
+          request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as cancelled');
+          return reply.fail('INTERNAL_ERROR', updateResult.error.message);
+        }
+
+        /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
+        if (task.actionId) {
+        /* v8 ignore stop @preserve */
+          const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'cancelled', undefined, traceId);
+
+          if (!actionsResult.ok) {
+            request.log.warn(
+              { taskId, actionId: task.actionId, error: actionsResult.error },
+              'Failed to notify actions-agent - action status may be stale'
+            );
+          }
+        }
+
+        await whatsappNotifier.notifyTaskFailed(
+          task.userId,
+          task,
+          {
+            code: 'task_cancelled',
+            message: 'Task was cancelled by user',
+          }
+        );
+
+        rateLimitService.recordTaskComplete(task.userId).catch((err) => {
+          request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
+        });
+
+        metricsClient.incrementTasksCompleted(task.workerType, 'cancelled').catch((err) => {
+          request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
+        });
+        if (request.body.duration) {
+          metricsClient.recordTaskDuration(task.workerType, request.body.duration).catch((err) => {
+            request.log.warn({ taskId, error: err }, 'Failed to record task duration metric');
+          });
+        }
+
+        request.log.info({ taskId }, 'Task marked as cancelled');
+        // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+        return await reply.send({ received: true });
+      }
+
       // Should not reach here, but TypeScript needs it
       return reply.fail('INVALID_REQUEST', 'Unknown task status');
     }
@@ -419,8 +477,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               received: { type: 'boolean', enum: [true] },
+              acknowledgedSequences: { type: 'array', items: { type: 'number' } },
+              count: { type: 'number' },
             },
-            required: ['received'],
+            required: ['received', 'acknowledgedSequences', 'count'],
           },
           401: {
             description: 'Invalid signature',
@@ -507,7 +567,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 3: Store chunks in Firestore subcollection
       const logChunks = chunks.map((chunk) => ({
-        id: '', // Will be auto-generated
+        id: '',
         sequence: chunk.sequence,
         content: chunk.content,
         timestamp: Timestamp.fromDate(new Date(chunk.timestamp)),
@@ -533,9 +593,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       }
 
+      const acknowledgedSequences = chunks.map((c) => c.sequence);
       request.log.debug({ taskId, count: chunks.length, lines: allLines.length }, 'Log chunks stored successfully');
-      // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
-      return await reply.send({ received: true });
+      // @allow-raw-send: external webhook callback - orchestrator expects ACK with acknowledged sequences
+      return await reply.send({ received: true, acknowledgedSequences, count: acknowledgedSequences.length });
     }
   );
 

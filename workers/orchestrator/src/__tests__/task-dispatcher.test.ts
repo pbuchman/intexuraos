@@ -189,7 +189,11 @@ describe('TaskDispatcher', () => {
     startForwarding: vi.fn(),
     stopForwarding: vi.fn(async () => undefined),
     flushAndStop: vi.fn(async () => undefined),
+    flush: vi.fn(async () => undefined),
+    awaitDrain: vi.fn(async () => undefined),
+    close: vi.fn(),
     getDroppedChunkCount: vi.fn(() => 0),
+    getDeliveryStats: vi.fn(() => ({ produced: 0, acked: 0, pending: 0 })),
     registerTask: vi.fn(),
     unregisterTask: vi.fn(),
     appendChunk: vi.fn(),
@@ -2094,6 +2098,263 @@ describe('TaskDispatcher', () => {
       vi.useRealTimers();
     });
 
+    it('logs verifier summary fallback placeholders when reasons are empty', async () => {
+      vi.useFakeTimers();
+      const fallbackSummaryState = createStatePersistence();
+      const verify = vi.fn().mockResolvedValue({
+        passed: true,
+        confidence: 1,
+        reasons: [],
+        missingCriteria: [],
+        resumeInstruction: 'done',
+        usedLlm: true,
+      });
+
+      const fallbackSummaryDispatcher = new TaskDispatcher(
+        mockConfig,
+        fallbackSummaryState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          verifier: {
+            verify,
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'empty-verifier-reasons-task',
+        workerType: 'auto',
+        prompt: 'Verifier fallback placeholders',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await fallbackSummaryDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await fallbackSummaryDispatcher.getTask('empty-verifier-reasons-task');
+      expect(task?.status).toBe('completed');
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        'empty-verifier-reasons-task',
+        expect.stringContaining(
+          'Gemini verifier verdict: passed=true confidence=1.00 reasons=none missing=none resumeInstruction=done'
+        )
+      );
+      vi.useRealTimers();
+    });
+
+    it('logs non-Error worker start failures and fails setup webhook', async () => {
+      const createWorker = vi.fn().mockRejectedValue('opaque-start-error');
+      const localIsolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        createWorker,
+      };
+      const localWorktreeManager = {
+        ...mockWorktreeManager,
+        removeWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
+      } as unknown as WorktreeManager;
+      const localIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: localIsolationProvider,
+      };
+
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        createStatePersistence(),
+        localWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        localIsolation,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'non-error-worker-start',
+        workerType: 'auto',
+        prompt: 'Worker start failure branch',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await localDispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'non-error-worker-start',
+            status: 'failed',
+            error: expect.objectContaining({ code: 'SETUP_FAILED' }),
+          }),
+        })
+      );
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        'non-error-worker-start',
+        expect.stringContaining('Worker start failed: opaque-start-error')
+      );
+    });
+
+    it('preserves failed worker container when preserveFailedContainers is enabled', async () => {
+      vi.useFakeTimers();
+      const preserveState = createStatePersistence();
+      const localDestroyWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => undefined);
+      const localIsolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker: localDestroyWorker,
+        isWorkerRunning: vi.fn(async () => false),
+        preserveWorker: localPreserveWorker,
+      };
+      const localIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: localIsolationProvider,
+      };
+      const verify = vi.fn().mockResolvedValue({
+        passed: false,
+        confidence: 0.25,
+        reasons: ['missing completion criteria'],
+        missingCriteria: ['criteria A'],
+        resumeInstruction: 'Fix and retry',
+        usedLlm: true,
+      });
+
+      const preserveDispatcher = new TaskDispatcher(
+        mockConfig,
+        preserveState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        localIsolation,
+        {
+          maxAttempts: 1,
+          preserveFailedContainers: true,
+          verifier: {
+            verify,
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'preserve-failed-container-task',
+        workerType: 'auto',
+        prompt: 'Fail and preserve container',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await preserveDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await preserveDispatcher.getTask('preserve-failed-container-task');
+      expect(task?.status).toBe('failed');
+      expect(localDestroyWorker).not.toHaveBeenCalled();
+      expect(localPreserveWorker).toHaveBeenCalledWith('preserve-failed-container-task');
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        'preserve-failed-container-task',
+        expect.stringContaining('Preserving worker container for debugging')
+      );
+      vi.useRealTimers();
+    });
+
+    it('preserves container when interrupted finalization is invoked with preserve flag', async () => {
+      const preserveState = createStatePersistence();
+      const localDestroyWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => undefined);
+      const localIsolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker: localDestroyWorker,
+        preserveWorker: localPreserveWorker,
+      };
+      const localIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: localIsolationProvider,
+      };
+
+      const preserveDispatcher = new TaskDispatcher(
+        mockConfig,
+        preserveState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        localIsolation,
+        {
+          maxAttempts: 1,
+          preserveFailedContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              confidence: 1,
+              reasons: ['ok'],
+              missingCriteria: [],
+              resumeInstruction: 'done',
+              usedLlm: true,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+        }
+      );
+
+      const taskId = 'preserve-interrupted-branch';
+      await preserveDispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'Finalize interrupted branch',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await flushAsync();
+
+      const task = await preserveDispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const preserveInternal = preserveDispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'interrupted',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await preserveInternal.finalizeTask(
+        task as unknown as Record<string, unknown>,
+        'interrupted',
+        {}
+      );
+
+      expect(localDestroyWorker).not.toHaveBeenCalled();
+      expect(localPreserveWorker).toHaveBeenCalledWith(taskId);
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        taskId,
+        expect.stringContaining('Preserving worker container for debugging')
+      );
+    });
+
     it('uses fallback attempt metadata when persisted task is missing fields', async () => {
       vi.useFakeTimers();
       const fallbackState = createStatePersistence();
@@ -2365,6 +2626,324 @@ describe('TaskDispatcher', () => {
       expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(1);
       expect(mockApiKeyValidator.validate).toHaveBeenCalledWith('anthropic');
+    });
+  });
+
+  describe('log drain barrier in finalizeTask', () => {
+    it('calls flush and awaitDrain before terminal webhook', async () => {
+      const drainState = createStatePersistence();
+      const drainLogForwarder = {
+        ...mockLogForwarder,
+        flush: vi.fn(async () => undefined),
+        awaitDrain: vi.fn(async () => undefined),
+        close: vi.fn(),
+      } as unknown as LogForwarder;
+
+      const drainDispatcher = new TaskDispatcher(
+        mockConfig,
+        drainState,
+        mockWorktreeManager,
+        drainLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              confidence: 1,
+              reasons: ['ok'],
+              missingCriteria: [],
+              resumeInstruction: 'done',
+              usedLlm: true,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+          logDrainTimeoutMs: 5000,
+        }
+      );
+
+      await drainDispatcher.submitTask({
+        taskId: 'drain-test',
+        workerType: 'auto',
+        prompt: 'Drain test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await flushAsync();
+
+      const task = await drainDispatcher.getTask('drain-test');
+      if (task === null) throw new Error('Task not found');
+
+      const internal = drainDispatcher as unknown as {
+        finalizeTask: (
+          t: Record<string, unknown>,
+          s: string,
+          p: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internal.finalizeTask(task as unknown as Record<string, unknown>, 'completed', {});
+
+      expect(drainLogForwarder.flush).toHaveBeenCalledWith('drain-test');
+      expect(drainLogForwarder.awaitDrain).toHaveBeenCalledWith('drain-test', 5000);
+      expect(drainLogForwarder.close).toHaveBeenCalledWith('drain-test');
+
+      const webhookCalls = vi.mocked(mockWebhookClient.send).mock.calls;
+      const terminalCall = webhookCalls.find(
+        (c) => (c[0] as { payload: { taskId: string } }).payload.taskId === 'drain-test'
+      );
+      expect(terminalCall).toBeDefined();
+    });
+
+    it('sets status to failed with LOG_DELIVERY_FAILED when awaitDrain throws', async () => {
+      const drainState = createStatePersistence();
+      const drainLogForwarder = {
+        ...mockLogForwarder,
+        flush: vi.fn(async () => undefined),
+        awaitDrain: vi.fn().mockRejectedValue(new Error('Drain timeout after 5000ms')),
+        close: vi.fn(),
+      } as unknown as LogForwarder;
+
+      const drainWebhook = {
+        ...mockWebhookClient,
+        send: vi.fn(async () => ({ ok: true, value: undefined })),
+      } as unknown as WebhookClient;
+
+      const drainDispatcher = new TaskDispatcher(
+        mockConfig,
+        drainState,
+        mockWorktreeManager,
+        drainLogForwarder,
+        drainWebhook,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              confidence: 1,
+              reasons: ['ok'],
+              missingCriteria: [],
+              resumeInstruction: 'done',
+              usedLlm: true,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+          logDrainTimeoutMs: 5000,
+        }
+      );
+
+      await drainDispatcher.submitTask({
+        taskId: 'drain-fail-test',
+        workerType: 'auto',
+        prompt: 'Drain fail test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await flushAsync();
+
+      const task = await drainDispatcher.getTask('drain-fail-test');
+      if (task === null) throw new Error('Task not found');
+
+      const internal = drainDispatcher as unknown as {
+        finalizeTask: (
+          t: Record<string, unknown>,
+          s: string,
+          p: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internal.finalizeTask(task as unknown as Record<string, unknown>, 'completed', {});
+
+      expect(drainLogForwarder.close).toHaveBeenCalledWith('drain-fail-test');
+
+      const webhookCalls = vi.mocked(drainWebhook.send).mock.calls;
+      const terminalCall = webhookCalls.find(
+        (c) =>
+          (c[0] as { payload: { taskId: string; status: string } }).payload.taskId ===
+          'drain-fail-test'
+      );
+      expect(terminalCall).toBeDefined();
+      if (terminalCall === undefined) throw new Error('Expected terminal webhook call');
+      const terminalPayload = (
+        terminalCall[0] as {
+          payload: { status: string; error?: { code: string; message: string } };
+        }
+      ).payload;
+      expect(terminalPayload.status).toBe('failed');
+      expect(terminalPayload.error).toEqual({
+        code: 'LOG_DELIVERY_FAILED',
+        message: 'Drain timeout after 5000ms (produced=0 acked=0 pending=0)',
+      });
+    });
+
+    it('handles non-Error drain failures with String coercion', async () => {
+      const drainState = createStatePersistence();
+      const drainLogForwarder = {
+        ...mockLogForwarder,
+        flush: vi.fn().mockRejectedValue('string-error'),
+        awaitDrain: vi.fn(async () => undefined),
+        close: vi.fn(),
+      } as unknown as LogForwarder;
+
+      const drainWebhook = {
+        ...mockWebhookClient,
+        send: vi.fn(async () => ({ ok: true, value: undefined })),
+      } as unknown as WebhookClient;
+
+      const drainDispatcher = new TaskDispatcher(
+        mockConfig,
+        drainState,
+        mockWorktreeManager,
+        drainLogForwarder,
+        drainWebhook,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              confidence: 1,
+              reasons: ['ok'],
+              missingCriteria: [],
+              resumeInstruction: 'done',
+              usedLlm: true,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+        }
+      );
+
+      await drainDispatcher.submitTask({
+        taskId: 'drain-string-err',
+        workerType: 'auto',
+        prompt: 'Drain string error test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await flushAsync();
+
+      const task = await drainDispatcher.getTask('drain-string-err');
+      if (task === null) throw new Error('Task not found');
+
+      const internal = drainDispatcher as unknown as {
+        finalizeTask: (
+          t: Record<string, unknown>,
+          s: string,
+          p: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await internal.finalizeTask(task as unknown as Record<string, unknown>, 'completed', {});
+
+      const webhookCalls = vi.mocked(drainWebhook.send).mock.calls;
+      const terminalCall = webhookCalls.find(
+        (c) => (c[0] as { payload: { taskId: string } }).payload.taskId === 'drain-string-err'
+      );
+      expect(terminalCall).toBeDefined();
+      if (terminalCall === undefined) throw new Error('Expected terminal webhook call');
+      const terminalPayload = (
+        terminalCall[0] as { payload: { error?: { code: string; message: string } } }
+      ).payload;
+      expect(terminalPayload.error).toEqual({
+        code: 'LOG_DELIVERY_FAILED',
+        message: 'string-error (produced=0 acked=0 pending=0)',
+      });
+    });
+
+    it('preserves original error when drain fails on already-failed task', async () => {
+      const drainState = createStatePersistence();
+      const drainLogForwarder = {
+        ...mockLogForwarder,
+        flush: vi.fn(async () => undefined),
+        awaitDrain: vi.fn().mockRejectedValue(new Error('Drain timeout')),
+        close: vi.fn(),
+        getDeliveryStats: vi.fn().mockReturnValue({ produced: 5, acked: 2, pending: 3 }),
+      } as unknown as LogForwarder;
+
+      const drainWebhook = {
+        ...mockWebhookClient,
+        send: vi.fn(async () => ({ ok: true, value: undefined })),
+      } as unknown as WebhookClient;
+
+      const drainDispatcher = new TaskDispatcher(
+        mockConfig,
+        drainState,
+        mockWorktreeManager,
+        drainLogForwarder,
+        drainWebhook,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: false,
+              confidence: 0,
+              reasons: ['verification failed'],
+              missingCriteria: [],
+              resumeInstruction: 'retry',
+              usedLlm: true,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+          },
+          logDrainTimeoutMs: 5000,
+        }
+      );
+
+      await drainDispatcher.submitTask({
+        taskId: 'drain-preserve-err',
+        workerType: 'auto',
+        prompt: 'Drain preserve error test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await flushAsync();
+
+      const task = await drainDispatcher.getTask('drain-preserve-err');
+      if (task === null) throw new Error('Task not found');
+
+      const originalError = {
+        code: 'VERIFICATION_FAILED',
+        message: 'Task did not pass verification',
+      };
+      const internal = drainDispatcher as unknown as {
+        finalizeTask: (
+          t: Record<string, unknown>,
+          s: string,
+          p: { result?: unknown; error?: { code: string; message: string } }
+        ) => Promise<void>;
+      };
+      await internal.finalizeTask(task as unknown as Record<string, unknown>, 'failed', {
+        error: originalError,
+      });
+
+      const webhookCalls = vi.mocked(drainWebhook.send).mock.calls;
+      const terminalCall = webhookCalls.find(
+        (c) => (c[0] as { payload: { taskId: string } }).payload.taskId === 'drain-preserve-err'
+      );
+      expect(terminalCall).toBeDefined();
+      if (terminalCall === undefined) throw new Error('Expected terminal webhook call');
+      const terminalPayload = (
+        terminalCall[0] as {
+          payload: { status: string; error?: { code: string; message: string } };
+        }
+      ).payload;
+      expect(terminalPayload.status).toBe('failed');
+      expect(terminalPayload.error).toEqual(originalError);
     });
   });
 });

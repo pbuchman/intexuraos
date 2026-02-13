@@ -78,6 +78,7 @@ describe('Routes', () => {
       tokenService,
       { orchestratorSecret },
       mockLogger,
+      undefined,
       anthropicOAuth
     );
     await app.ready();
@@ -788,6 +789,62 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json.tokenExpiresAt).toBeNull();
+    });
+  });
+
+  describe('GET /meta/worker-image', () => {
+    it('returns image info when isolation provider is available', async () => {
+      const appWithProvider = Fastify();
+      const mockProvider = {
+        getImageInfo: (): {
+          configuredRef: string;
+          lastResolvedDigest: string | null;
+          pullPolicy: string;
+          managedAttemptsMode: boolean;
+        } => ({
+          configuredRef: 'registry/image:latest',
+          lastResolvedDigest: 'registry/image@sha256:abc',
+          pullPolicy: 'always',
+          managedAttemptsMode: true,
+        }),
+      };
+
+      registerRoutes(
+        appWithProvider,
+        dispatcher,
+        tokenService,
+        { orchestratorSecret },
+        mockLogger,
+        undefined,
+        undefined,
+        mockProvider as never
+      );
+      await appWithProvider.ready();
+
+      const response = await appWithProvider.inject({
+        method: 'GET',
+        url: '/meta/worker-image',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        configuredRef: 'registry/image:latest',
+        lastResolvedDigest: 'registry/image@sha256:abc',
+        pullPolicy: 'always',
+        managedAttemptsMode: true,
+      });
+
+      await appWithProvider.close();
+    });
+
+    it('returns error when no isolation provider is available', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/meta/worker-image',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ error: 'Image info not available' });
     });
   });
 

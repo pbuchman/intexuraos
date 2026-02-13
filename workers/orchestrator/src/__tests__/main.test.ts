@@ -624,64 +624,6 @@ describe('main.ts', () => {
     });
   });
 
-  describe('scheduleTaskPolling', () => {
-    it('should schedule task polling at 30 second intervals', async () => {
-      // exit is mocked at module level via mockExit
-
-      const { main } = await import('../main.js');
-
-      try {
-        await main(
-          mockConfig,
-          mockStatePersistence,
-          mockDispatcher,
-          mockTokenService,
-          mockWebhookClient,
-          mockHeartbeatManager,
-          mockLogger
-        );
-      } catch {
-        // Expected
-      }
-
-      // Advance time to trigger task polling
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-
-      expect(mockLogger.debug).toHaveBeenCalledWith({ message: 'Task polling check' });
-
-      // mockExit doesn't need restore - it's cleared in beforeEach
-    });
-
-    it('should continue polling at 30 second intervals', async () => {
-      // exit is mocked at module level via mockExit
-
-      const { main } = await import('../main.js');
-
-      try {
-        await main(
-          mockConfig,
-          mockStatePersistence,
-          mockDispatcher,
-          mockTokenService,
-          mockWebhookClient,
-          mockHeartbeatManager,
-          mockLogger
-        );
-      } catch {
-        // Expected
-      }
-
-      // Advance through multiple polling intervals
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-
-      expect(mockLogger.debug).toHaveBeenCalledWith({ message: 'Task polling check' });
-
-      // mockExit doesn't need restore - it's cleared in beforeEach
-    });
-  });
-
   describe('setupShutdownHandlers', () => {
     it('should register SIGTERM and SIGINT handlers', async () => {
       const onSpy = vi.spyOn(process, 'on');
@@ -745,8 +687,7 @@ describe('main.ts', () => {
         }
       }
 
-      // Should clear 3 intervals (token refresh, webhook retry, task polling)
-      expect(clearIntervalSpy).toHaveBeenCalledTimes(3);
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(2);
 
       // mockExit doesn't need restore - it's cleared in beforeEach
     });
@@ -955,6 +896,9 @@ describe('main.ts', () => {
         }
       }
 
+      // Flush microtasks so the fire-and-forget shutdown() completes
+      await vi.advanceTimersByTimeAsync(0);
+
       // Calling SIGINT should return early (already shutting down)
       const saveCallCount = vi.mocked(mockStatePersistence.save).mock.calls.length;
 
@@ -1125,6 +1069,8 @@ describe('main.ts', () => {
         mockTokenService,
         mockConfig,
         mockLogger,
+        expect.any(Function),
+        undefined,
         undefined
       );
 

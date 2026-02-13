@@ -1,11 +1,11 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { StructuredLogAuditSink } from '@intexuraos/llm-audit';
 import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
 import { z } from 'zod';
 import type { TaskResult } from '../types/task.js';
 import { stripDockerHeaders } from './log-formatter.js';
+import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
 export type CompletionPhase = 'phase1' | 'phase2';
 
@@ -41,6 +41,7 @@ export interface CompletionVerifier {
 export interface CompletionVerifierConfig {
   model: string;
   geminiApiKey: string;
+  auditLogPath: string;
 }
 
 interface DeterministicContractResult {
@@ -391,7 +392,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         maxAttempts: input.maxAttempts,
         phase: input.phase,
         model: this.model,
-        prompt: verifierPrompt,
+        promptChars: verifierPrompt.length,
       },
       'Gemini completion verifier request'
     );
@@ -416,7 +417,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         taskId: input.taskId,
         attempt: input.attempt,
         model: this.model,
-        response: generated.value.content,
+        responseChars: generated.value.content.length,
       },
       'Gemini completion verifier response'
     );
@@ -481,13 +482,20 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       throw new Error('INTEXURAOS_GEMINI_APP_API_KEY is required');
     }
 
+    if (config.auditLogPath === '') {
+      throw new Error('Completion verifier auditLogPath is required');
+    }
+
     return createLlmClient({
       apiKey: config.geminiApiKey,
       model: config.model,
       userId: 'orchestrator-completion-verifier',
       pricing,
       logger: this.logger,
-      auditSink: new StructuredLogAuditSink({ logger: this.logger }),
+      auditSink: new OrchestratorFileAuditSink({
+        logger: this.logger,
+        auditLogPath: config.auditLogPath,
+      }),
       usageSink: new StructuredLogUsageSink({ logger: this.logger }),
     });
   }

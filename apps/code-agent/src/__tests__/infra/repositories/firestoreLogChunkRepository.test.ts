@@ -135,7 +135,33 @@ describe('FirestoreLogChunkRepository', () => {
         expect(mockFirestore.collection).toHaveBeenCalledWith('code_tasks');
         expect(mockTasksCollection.doc).toHaveBeenCalledWith('task-123');
         expect(mockTaskDoc.collection).toHaveBeenCalledWith('logs');
-        expect(mockLogsCollection.doc).toHaveBeenCalledWith();
+        expect(mockLogsCollection.doc).toHaveBeenCalledWith('000000000001');
+      });
+
+      it('uses zero-padded sequence as doc ID', async () => {
+        const repo = createFirestoreLogChunkRepository({
+          firestore: mockFirestore as unknown as Firestore,
+          logger,
+        });
+
+        const chunk = createLogChunk({ sequence: 42 });
+        await repo.storeBatch('task-123', [chunk]);
+
+        expect(mockLogsCollection.doc).toHaveBeenCalledWith('000000000042');
+      });
+
+      it('overwrites same doc on duplicate sequence (idempotent)', async () => {
+        const repo = createFirestoreLogChunkRepository({
+          firestore: mockFirestore as unknown as Firestore,
+          logger,
+        });
+
+        const chunk = createLogChunk({ sequence: 7 });
+        await repo.storeBatch('task-123', [chunk]);
+        await repo.storeBatch('task-123', [chunk]);
+
+        expect(mockLogsCollection.doc).toHaveBeenCalledWith('000000000007');
+        expect(mockLogsCollection.doc).toHaveBeenCalledTimes(2);
       });
 
       it('creates batch and commits', async () => {

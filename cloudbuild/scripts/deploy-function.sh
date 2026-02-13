@@ -20,7 +20,7 @@ source "${SCRIPT_DIR}/lib.sh"
 WORKER="$1"
 require_env_vars REGION ENVIRONMENT FUNCTIONS_SOURCE_BUCKET
 
-WORKER_DIR="/workspace/workers/${WORKER}"
+WORKER_DIR="${WORKSPACE_ROOT:-/workspace}/workers/${WORKER}"
 
 log "Deploying Cloud Function worker: ${WORKER}"
 
@@ -89,7 +89,8 @@ for FUNC in "${FUNCTIONS[@]}"; do
     --region="${REGION}" \
     --source="${DEST_PATH}" \
     --gen2 \
-    --quiet
+    --quiet &
 done
+wait
 
 log "Deployment complete for ${WORKER}"

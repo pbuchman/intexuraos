@@ -1,34 +1,26 @@
 import { exit } from 'node:process';
-import { createServer } from 'node:http';
 import type { OrchestratorConfig } from './types/config.js';
+import type { OrchestratorStatus } from './types/state.js';
 import type { StatePersistence } from './services/state-persistence.js';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
 import type { WebhookClient } from './services/webhook-client.js';
 import type { HeartbeatManager } from './heartbeat.js';
 import type { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
+import type { IsolationProvider } from './services/isolation/types.js';
 import { registerRoutes } from './routes.js';
-import fastify from 'fastify';
+import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { Logger } from '@intexuraos/common-core';
 
 const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const WEBHOOK_RETRY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const TASK_POLL_INTERVAL_MS = 30 * 1000; // 30 seconds
 
 const SHUTDOWN_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
-type OrchestratorStatus =
-  | 'initializing'
-  | 'recovering'
-  | 'ready'
-  | 'degraded'
-  | 'auth_degraded'
-  | 'shutting_down';
-
 interface ServiceState {
   status: OrchestratorStatus;
-  server: ReturnType<typeof createServer>;
+  app: FastifyInstance;
 }
 
 let serviceState: ServiceState | null = null;
@@ -41,24 +33,20 @@ export async function main(
   webhookClient: WebhookClient,
   heartbeatManager: HeartbeatManager,
   logger: Logger,
-  anthropicOAuth?: AnthropicOAuthManager
+  anthropicOAuth?: AnthropicOAuthManager,
+  isolationProvider?: IsolationProvider
 ): Promise<void> {
+  const app = fastify({
+    logger: false,
+    disableRequestLogging: true,
+  });
+
   serviceState = {
     status: 'initializing',
-    server: createServer(),
+    app,
   };
 
   try {
-    // Start HTTP server
-    const app = fastify({
-      logger: {
-        /* v8 ignore start -- test-infra: environment config hard to test @preserve */
-        level: process.env['LOG_LEVEL'] ?? 'info',
-        /* v8 ignore stop @preserve */
-        transport: { target: 'pino-pretty', options: { colorize: true, singleLine: true } },
-      },
-    });
-
     void app.register(cors);
 
     registerRoutes(
@@ -67,7 +55,9 @@ export async function main(
       tokenService,
       config,
       logger,
-      anthropicOAuth
+      () => getServiceStatus(),
+      anthropicOAuth,
+      isolationProvider
     );
 
     await app.listen({ port: config.port, host: '0.0.0.0' });
@@ -80,7 +70,6 @@ export async function main(
     // Schedule background jobs
     const tokenRefreshInterval = scheduleTokenRefresh(tokenService, logger);
     const webhookRetryInterval = scheduleWebhookRetry(webhookClient, logger);
-    const taskPollInterval = scheduleTaskPolling(dispatcher, logger);
 
     // Start heartbeat manager
     heartbeatManager.start();
@@ -92,7 +81,7 @@ export async function main(
     setupShutdownHandlers({
       tokenRefreshInterval,
       webhookRetryInterval,
-      taskPollInterval,
+      app,
       dispatcher,
       statePersistence,
       heartbeatManager,
@@ -181,16 +170,10 @@ function scheduleWebhookRetry(webhookClient: WebhookClient, logger: Logger): Nod
   }, WEBHOOK_RETRY_INTERVAL_MS);
 }
 
-function scheduleTaskPolling(_dispatcher: TaskDispatcher, logger: Logger): NodeJS.Timeout {
-  return setInterval(() => {
-    logger.debug({ message: 'Task polling check' });
-  }, TASK_POLL_INTERVAL_MS);
-}
-
 interface ShutdownHandlers {
   tokenRefreshInterval: NodeJS.Timeout;
   webhookRetryInterval: NodeJS.Timeout;
-  taskPollInterval: NodeJS.Timeout;
+  app: FastifyInstance;
   dispatcher: TaskDispatcher;
   statePersistence: StatePersistence;
   heartbeatManager: HeartbeatManager;
@@ -206,10 +189,12 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     serviceState.status = 'shutting_down';
     handlers.logger.info({ signal }, 'Shutdown requested');
 
+    // Close HTTP server first to stop accepting new requests
+    await handlers.app.close();
+
     // Clear intervals
     clearInterval(handlers.tokenRefreshInterval);
     clearInterval(handlers.webhookRetryInterval);
-    clearInterval(handlers.taskPollInterval);
     handlers.heartbeatManager.stop();
 
     // Wait for running tasks (up to timeout)
@@ -224,14 +209,6 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
 
     // Save state
     await handlers.statePersistence.save(await handlers.statePersistence.load());
-
-    // Close server
-    /* v8 ignore start -- ts-type: optional chaining type narrowing @preserve */
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (serviceState?.server) {
-      serviceState.server.close();
-    }
-    /* v8 ignore stop @preserve */
 
     handlers.logger.info({ message: 'Orchestrator shutdown complete' });
     exit(0);

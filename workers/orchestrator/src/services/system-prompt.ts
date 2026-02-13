@@ -192,7 +192,9 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export function buildSystemPrompt(params: SystemPromptParams): string {
   const { linearIssueLabels } = params;
 
-  const hasCodeTaskLabel = linearIssueLabels.includes('code-task');
+  const hasCodeTaskLabel = linearIssueLabels.some(
+    (label) => label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-') === 'code-task'
+  );
 
   if (!hasCodeTaskLabel) {
     return buildPhase1Prompt(params);

@@ -76,6 +76,12 @@ Or via macOS LaunchAgent (see `workers/orchestrator/README.md` for plist templat
 europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
 ```
 
+For deterministic runtime behavior, prefer digest pinning in orchestrator env:
+
+```bash
+export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:<digest>
+```
+
 ### Build
 
 ```bash
@@ -99,6 +105,8 @@ PUSH=true ./scripts/build-worker-image.sh latest
 docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest
 ```
 
+After push, capture digest and update `INTEXURAOS_CLAUDE_WORKER_IMAGE` (digest form) on orchestrator host.
+
 ### Cache Busting
 
 Docker layer cache can mask entrypoint changes because `COPY entrypoint.sh` is a late layer.
@@ -121,25 +129,27 @@ Always use `--no-cache` when the entrypoint or any COPY'd file has changed.
 4. Verifies `/repo` mount and git state
 5. Activates GCP service account
 6. Loads GitHub token (with background refresh loop)
-7. Starts Claude in interactive mode: `exec claude --dangerously-skip-permissions --verbose`
+7. In managed mode, installs dependencies once and waits for `run-attempt` invocations
+8. For each attempt (`/entrypoint.sh run-attempt`), runs Claude in `--print --output-format stream-json`
 
-The orchestrator writes the system prompt to Claude's stdin via the Docker attach stream.
+Orchestrator reuses the same container for follow-up attempts and invokes `--continue` when resuming.
 
 ### Container Environment Variables
 
 Set by `docker-provider.ts` when creating containers:
 
-| Variable                            | Source                | Purpose                           |
-| ----------------------------------- | --------------------- | --------------------------------- |
-| `TASK_ID`                           | Task config           | Task identifier                   |
-| `ANTHROPIC_API_KEY`                 | OAuth access token    | Claude API authentication         |
-| `ANTHROPIC_BASE_URL`                | Worker type config    | API endpoint (varies by provider) |
-| `ANTHROPIC_MODEL`                   | Worker type config    | Model override (optional)         |
-| `LINEAR_API_KEY`                    | Secrets               | Linear MCP integration            |
-| `SENTRY_AUTH_TOKEN`                 | Secrets               | Sentry MCP integration            |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | Hardcoded `/secrets/` | GCP auth inside container         |
-| `CLAUDE_PROJECT_DIR`                | Hardcoded `/repo`     | Hook path resolution              |
-| `CLAUDE_CODE_EXIT_AFTER_STOP_DELAY` | Hardcoded `10000`     | Exit 10s after idle               |
+| Variable                         | Source                | Purpose                           |
+| -------------------------------- | --------------------- | --------------------------------- |
+| `TASK_ID`                        | Task config           | Task identifier                   |
+| `ANTHROPIC_API_KEY`              | OAuth access token    | Claude API authentication         |
+| `ANTHROPIC_BASE_URL`             | Worker type config    | API endpoint (varies by provider) |
+| `ANTHROPIC_MODEL`                | Worker type config    | Model override (optional)         |
+| `LINEAR_API_KEY`                 | Secrets               | Linear MCP integration            |
+| `SENTRY_AUTH_TOKEN`              | Secrets               | Sentry MCP integration            |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Hardcoded `/secrets/` | GCP auth inside container         |
+| `CLAUDE_PROJECT_DIR`             | Hardcoded `/repo`     | Hook path resolution              |
+| `CLAUDE_MANAGED_MODE`            | Hardcoded `1`         | Enable managed run-attempt mode   |
+| `CLAUDE_CONTINUE`                | Per-attempt config    | Resume previous Claude session    |
 
 ---
 
@@ -180,7 +190,8 @@ pnpm --filter orchestrator test:e2e
 
 1. Build image: `docker build --no-cache ...`
 2. Push image: `docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`
-3. Running containers use the old image until recreated (no hot reload)
+3. Capture pushed digest and update `INTEXURAOS_CLAUDE_WORKER_IMAGE` to that digest
+4. Running containers use the old image until recreated (no hot reload)
 
 ### When Orchestrator Source Changes
 
@@ -195,8 +206,9 @@ pnpm --filter orchestrator test:e2e
 
 1. Commit and push code
 2. Build and push claude-worker image (`--no-cache`)
-3. Rebuild orchestrator: `pnpm --filter orchestrator build`
-4. Restart orchestrator process
+3. Update orchestrator env (`INTEXURAOS_CLAUDE_WORKER_IMAGE=@sha256:...`)
+4. Rebuild orchestrator: `pnpm --filter orchestrator build`
+5. Restart orchestrator process
 
 ---
 

@@ -7,6 +7,7 @@ import type { AnthropicOAuthManager } from './anthropic-oauth.js';
 
 export interface DockerProviderConfig {
   imageName: string;
+  imagePullPolicy: 'always' | 'if-not-present';
   networkName: string;
   maxConcurrent: number;
   memoryLimitBytes: number;
@@ -16,11 +17,13 @@ export interface DockerProviderConfig {
   gcpSaKeyPath: string;
   keepContainersAlive: boolean;
   managedAttemptsMode: boolean;
+  workerReadyTimeoutMs?: number;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
   imageName:
     'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest',
+  imagePullPolicy: 'always',
   networkName: 'claude-worker-net',
   maxConcurrent: 4,
   memoryLimitBytes: 8 * 1024 * 1024 * 1024,
@@ -42,6 +45,12 @@ interface WorkerEntry {
   logStream?: NodeJS.ReadableStream;
 }
 
+interface PreservedWorkerEntry {
+  containerId: string;
+  taskId: string;
+  preservedAt: string;
+}
+
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
 const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
 
@@ -51,6 +60,8 @@ export class DockerProvider implements IsolationProvider {
   private readonly logger: Logger;
   private readonly workers: Map<string, WorkerEntry>;
   private anthropicOAuth?: AnthropicOAuthManager | undefined;
+  private readonly preservedWorkers = new Map<string, PreservedWorkerEntry>();
+  private lastResolvedDigest: string | null = null;
 
   constructor(config: Partial<DockerProviderConfig>, logger: Logger) {
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
@@ -178,190 +189,208 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
 
-    /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
-    if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
-      await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));
-    }
-    /* v8 ignore stop @preserve */
-
-    const workerTypeConfig = (await import('./types.js')).WORKER_TYPES[workerType];
-    const apiKey = secrets[workerTypeConfig.apiKeyEnvVar];
-
-    /* v8 ignore start -- test-infra: tests always provide mock API keys @preserve */
-    if (apiKey === '') {
-      throw new Error(
-        `Worker type '${workerType}' requires ${workerTypeConfig.apiKeyEnvVar} but it is not configured`
-      );
-    }
-
-    const KEY_FORMAT: Record<string, string> = {
-      ANTHROPIC_API_KEY: 'sk-ant-',
-    };
-    const expectedPrefix = KEY_FORMAT[workerTypeConfig.apiKeyEnvVar];
-    if (expectedPrefix !== undefined && !apiKey.startsWith(expectedPrefix)) {
-      this.logger.error(
-        {
-          taskId,
-          workerType,
-          envVar: workerTypeConfig.apiKeyEnvVar,
-          keyPrefix: apiKey.slice(0, 6) + '...',
-        },
-        `API key does not match expected format (expected ${expectedPrefix}*) — task will likely fail with 401`
-      );
-    }
-    /* v8 ignore stop @preserve */
-
-    /* v8 ignore start -- test-infra: worker type configuration varies by test @preserve */
-    const env = [
-      `TASK_ID=${taskId}`,
-      `ANTHROPIC_API_KEY=${apiKey}`,
-      `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`,
-      `LINEAR_API_KEY=${secrets.LINEAR_API_KEY}`,
-      `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
-      `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
-      'CLAUDE_PROJECT_DIR=/repo',
-      'CLAUDE_WORKER_MODE=1',
-      `CLAUDE_MANAGED_MODE=${this.config.managedAttemptsMode ? '1' : '0'}`,
-      `CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
-    ];
-
-    if (workerTypeConfig.model !== undefined) {
-      env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
-    }
-    /* v8 ignore stop @preserve */
-
-    /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
-    const keySuffix = apiKey.length > 4 ? '...' + apiKey.slice(-4) : '****';
-    /* v8 ignore stop @preserve */
-    this.logger.info(
-      { taskId, worktreePath, workerType, apiKey: keySuffix, baseUrl: workerTypeConfig.apiBaseUrl },
-      'Creating worker container'
-    );
-
-    const pnpmStorePath = path.join(path.dirname(this.config.secretsBasePath), PNPM_STORE_DIR_NAME);
-    fs.mkdirSync(pnpmStorePath, { recursive: true });
-
-    /* v8 ignore start -- test-infra: image pull requires Docker daemon with registry access @preserve */
+    let container: Docker.Container | undefined;
     try {
-      const pullOpts: Record<string, unknown> = { platform: 'linux/amd64' };
-      if (this.config.gcpSaKeyPath !== '' && fs.existsSync(this.config.gcpSaKeyPath)) {
-        const saKey = fs.readFileSync(this.config.gcpSaKeyPath, 'utf-8');
-        const registry = this.config.imageName.split('/')[0] ?? '';
-        pullOpts['authconfig'] = {
-          username: '_json_key',
-          password: saKey,
-          serveraddress: `https://${registry}`,
-        };
+      /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
+      if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
+        await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));
       }
-      const pullStream = await this.docker.pull(this.config.imageName, pullOpts);
-      await new Promise<void>((resolve, reject) => {
-        this.docker.modem.followProgress(pullStream, (err: Error | null) => {
-          if (err !== null) reject(err);
-          else resolve();
-        });
-      });
-      this.logger.debug({ taskId, image: this.config.imageName }, 'Image pulled');
-    } catch (err: unknown) {
-      this.logger.warn({ taskId, error: err }, 'Image pull failed — using cached image');
-    }
-    /* v8 ignore stop @preserve */
-
-    const container = await this.docker.createContainer({
-      Image: this.config.imageName,
-      name: `claude-worker-${taskId}`,
-      Env: env,
-      WorkingDir: '/repo',
-      User: '1001:1001',
-      Tty: false,
-      HostConfig: {
-        Binds: [
-          `${worktreePath}:/repo:rw`,
-          `${taskSecretsPath}:/secrets:ro`,
-          `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
-          `${taskSessionPath}:/home/claude/.claude:rw`,
-          /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
-          ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
-          /* v8 ignore stop @preserve */
-        ],
-        Memory: this.config.memoryLimitBytes,
-        NanoCpus: this.config.cpuCount * 1e9,
-        NetworkMode: this.config.networkName,
-        ReadonlyRootfs: false,
-        Tmpfs: {
-          '/tmp': 'rw,noexec,nosuid,size=2g',
-          '/home/claude': 'rw,noexec,nosuid,size=500m,uid=1001,gid=1001',
-          // Shadows the Mac host's node_modules (bind-mounted via /repo), giving the
-          // container an empty writable dir for Linux-native pnpm install.
-          '/repo/node_modules': 'rw,exec,nosuid,size=4g,uid=1001,gid=1001',
-        },
-        CapDrop: ['ALL'],
-        // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude
-        // uses to verify connectivity. Without it, Claude's network-test commands fail.
-        CapAdd: ['NET_RAW'],
-        SecurityOpt: ['no-new-privileges'],
-        AutoRemove: false,
-      },
-    });
-
-    await container.start();
-
-    // Capture logs via container.logs() (replaces attach stream)
-    /* v8 ignore start -- test-infra: log stream setup tested via mock, requires running container @preserve */
-    let logStream: NodeJS.ReadableStream | undefined;
-    if (config.onLog !== undefined) {
-      logStream = await container.logs({
-        follow: true,
-        stdout: true,
-        stderr: true,
-      });
-      logStream.on('data', (chunk: Buffer) => {
-        config.onLog?.(chunk.toString('utf-8'));
-      });
-    }
-    /* v8 ignore stop @preserve */
-
-    const handle: WorkerHandle = {
-      taskId,
-      containerId: container.id,
-      status: 'running',
-      startedAt: new Date(),
-    };
-
-    this.workers.set(taskId, {
-      containerId: container.id,
-      handle,
-      taskSecretsPath,
-      taskSessionPath,
-      attemptRunning: false,
-      attemptLogBuffer: '',
-      /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in running container @preserve */
-      ...(logStream !== undefined ? { logStream } : {}),
       /* v8 ignore stop @preserve */
-    });
 
-    /* v8 ignore start -- test-infra: managedAttemptsMode is always enabled in production and tests @preserve */
-    if (this.config.managedAttemptsMode) {
-      void this.runAttemptInContainer(taskId, config);
-    } else {
-      // In legacy mode, Claude exits naturally with the container process.
-      container
-        .wait()
-        .then(async (data) => {
-          const worker = this.workers.get(taskId);
-          if (worker !== undefined) {
-            worker.handle.status = data.StatusCode === 0 ? 'completed' : 'failed';
-          }
-          config.onComplete?.(data.StatusCode);
-        })
-        .catch((err: unknown) => {
-          this.logger.error({ taskId, error: err }, 'Container wait error');
+      const workerTypeConfig = (await import('./types.js')).WORKER_TYPES[workerType];
+      const apiKey = secrets[workerTypeConfig.apiKeyEnvVar];
+
+      /* v8 ignore start -- test-infra: tests always provide mock API keys @preserve */
+      if (apiKey === '') {
+        throw new Error(
+          `Worker type '${workerType}' requires ${workerTypeConfig.apiKeyEnvVar} but it is not configured`
+        );
+      }
+
+      const KEY_FORMAT: Record<string, string> = {
+        ANTHROPIC_API_KEY: 'sk-ant-',
+      };
+      const expectedPrefix = KEY_FORMAT[workerTypeConfig.apiKeyEnvVar];
+      if (expectedPrefix !== undefined && !apiKey.startsWith(expectedPrefix)) {
+        this.logger.error(
+          {
+            taskId,
+            workerType,
+            envVar: workerTypeConfig.apiKeyEnvVar,
+            keyPrefix: apiKey.slice(0, 6) + '...',
+          },
+          `API key does not match expected format (expected ${expectedPrefix}*) — task will likely fail with 401`
+        );
+      }
+      /* v8 ignore stop @preserve */
+
+      /* v8 ignore start -- test-infra: worker type configuration varies by test @preserve */
+      const env = [
+        `TASK_ID=${taskId}`,
+        `ANTHROPIC_API_KEY=${apiKey}`,
+        `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`,
+        `LINEAR_API_KEY=${secrets.LINEAR_API_KEY}`,
+        `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
+        `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
+        'CLAUDE_PROJECT_DIR=/repo',
+        'CLAUDE_WORKER_MODE=1',
+        `CLAUDE_MANAGED_MODE=${this.config.managedAttemptsMode ? '1' : '0'}`,
+        `CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
+      ];
+
+      if (workerTypeConfig.model !== undefined) {
+        env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
+      }
+      /* v8 ignore stop @preserve */
+
+      /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
+      const keySuffix = apiKey.length > 4 ? '...' + apiKey.slice(-4) : '****';
+      /* v8 ignore stop @preserve */
+      const requestedImage = this.config.imageName;
+      const resolvedImage = await this.pullAndResolveImage(taskId, requestedImage);
+      this.logger.info({ taskId }, 'Container creation started');
+      this.logger.info(
+        {},
+        `Creating worker container: taskId=${taskId} workerType=${workerType} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${workerTypeConfig.apiBaseUrl} worktreePath=${worktreePath}`
+      );
+
+      const pnpmStorePath = path.join(
+        path.dirname(this.config.secretsBasePath),
+        PNPM_STORE_DIR_NAME
+      );
+      fs.mkdirSync(pnpmStorePath, { recursive: true });
+
+      container = await this.docker.createContainer({
+        Image: resolvedImage,
+        name: `claude-worker-${taskId}`,
+        Env: env,
+        WorkingDir: '/repo',
+        User: '1001:1001',
+        Tty: false,
+        HostConfig: {
+          Binds: [
+            `${worktreePath}:/repo:rw`,
+            `${taskSecretsPath}:/secrets:ro`,
+            `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
+            `${taskSessionPath}:/home/claude/.claude:rw`,
+            /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
+            ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
+            /* v8 ignore stop @preserve */
+          ],
+          Memory: this.config.memoryLimitBytes,
+          NanoCpus: this.config.cpuCount * 1e9,
+          NetworkMode: this.config.networkName,
+          ReadonlyRootfs: false,
+          Tmpfs: {
+            '/tmp': 'rw,noexec,nosuid,size=2g',
+            '/home/claude': 'rw,noexec,nosuid,size=500m,uid=1001,gid=1001',
+            // Shadows the Mac host's node_modules (bind-mounted via /repo), giving the
+            // container an empty writable dir for Linux-native pnpm install.
+            '/repo/node_modules': 'rw,exec,nosuid,size=4g,uid=1001,gid=1001',
+          },
+          CapDrop: ['ALL'],
+          // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude
+          // uses to verify connectivity. Without it, Claude's network-test commands fail.
+          CapAdd: ['NET_RAW'],
+          SecurityOpt: ['no-new-privileges'],
+          AutoRemove: false,
+        },
+      });
+
+      await container.start();
+      this.logger.info({ taskId, containerId: container.id }, 'Container creation finished');
+
+      if (this.config.managedAttemptsMode) {
+        await this.assertManagedEntrypointSupport(taskId, container);
+        await this.waitForWorkerReady(taskId, container);
+      }
+
+      // Capture logs via container.logs() (replaces attach stream)
+      /* v8 ignore start -- test-infra: log stream setup tested via mock, requires running container @preserve */
+      let logStream: NodeJS.ReadableStream | undefined;
+      if (config.onLog !== undefined && !this.config.managedAttemptsMode) {
+        logStream = await container.logs({
+          follow: true,
+          stdout: true,
+          stderr: true,
         });
+        logStream.on('data', (chunk: Buffer) => {
+          config.onLog?.(chunk.toString('utf-8'));
+        });
+      }
+      /* v8 ignore stop @preserve */
+
+      const handle: WorkerHandle = {
+        taskId,
+        containerId: container.id,
+        status: 'running',
+        startedAt: new Date(),
+      };
+
+      this.workers.set(taskId, {
+        containerId: container.id,
+        handle,
+        taskSecretsPath,
+        taskSessionPath,
+        attemptRunning: false,
+        attemptLogBuffer: '',
+        /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in running container @preserve */
+        ...(logStream !== undefined ? { logStream } : {}),
+        /* v8 ignore stop @preserve */
+      });
+
+      /* v8 ignore start -- test-infra: managedAttemptsMode is always enabled in production and tests @preserve */
+      if (this.config.managedAttemptsMode) {
+        void this.runAttemptInContainer(taskId, config);
+      } else {
+        // In legacy mode, Claude exits naturally with the container process.
+        container
+          .wait()
+          .then(async (data) => {
+            const worker = this.workers.get(taskId);
+            if (worker !== undefined) {
+              worker.handle.status = data.StatusCode === 0 ? 'completed' : 'failed';
+            }
+            config.onComplete?.(data.StatusCode);
+          })
+          .catch((err: unknown) => {
+            this.logger.error({ taskId, error: err }, 'Container wait error');
+          });
+      }
+      /* v8 ignore stop @preserve */
+
+      this.logger.info(
+        {},
+        `Worker container started: taskId=${taskId} containerId=${container.id}`
+      );
+
+      return handle;
+    } catch (error) {
+      await fs.promises.rm(taskSecretsPath, { recursive: true, force: true }).catch(
+        /* v8 ignore start -- test-infra: cleanup error handling for edge cases @preserve */
+        (e: unknown) => {
+          this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove task secrets');
+        }
+        /* v8 ignore stop @preserve */
+      );
+      await fs.promises.rm(taskSessionPath, { recursive: true, force: true }).catch(
+        /* v8 ignore start -- test-infra: cleanup error handling for edge cases @preserve */
+        (e: unknown) => {
+          this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove task session');
+        }
+        /* v8 ignore stop @preserve */
+      );
+      if (container !== undefined) {
+        await container.remove({ force: true }).catch(
+          /* v8 ignore start -- test-infra: cleanup error handling for edge cases @preserve */
+          (e: unknown) => {
+            this.logger.warn({ taskId, error: e }, 'Cleanup: failed to remove container');
+          }
+          /* v8 ignore stop @preserve */
+        );
+      }
+      throw error;
     }
-    /* v8 ignore stop @preserve */
-
-    this.logger.info({ taskId, containerId: container.id }, 'Worker container started');
-
-    return handle;
   }
 
   async destroyWorker(taskId: string, forceKill = false): Promise<void> {
@@ -462,7 +491,8 @@ export class DockerProvider implements IsolationProvider {
       }
       /* v8 ignore stop @preserve */
       return `${containerLogs}\n${worker.attemptLogBuffer}`;
-    } catch {
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to retrieve container logs');
       return worker.attemptLogBuffer;
     }
   }
@@ -572,6 +602,168 @@ export class DockerProvider implements IsolationProvider {
     }
   }
 
+  async preserveWorker(taskId: string): Promise<void> {
+    const worker = this.workers.get(taskId);
+    if (worker === undefined) {
+      return;
+    }
+
+    this.preservedWorkers.set(taskId, {
+      containerId: worker.containerId,
+      taskId,
+      preservedAt: new Date().toISOString(),
+    });
+    this.workers.delete(taskId);
+
+    const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
+    try {
+      await fs.promises.rm(taskSecretsPath, { recursive: true, force: true });
+    } catch (err: unknown) {
+      this.logger.error(
+        { taskId, error: err, path: taskSecretsPath },
+        'Failed to remove task secrets directory during preservation'
+      );
+    }
+
+    this.logger.info({ taskId, containerId: worker.containerId }, 'Worker preserved for debugging');
+  }
+
+  async listPreservedWorkers(): Promise<
+    { containerId: string; taskId: string; preservedAt: string }[]
+  > {
+    return Array.from(this.preservedWorkers.values());
+  }
+
+  getImageInfo(): {
+    configuredRef: string;
+    lastResolvedDigest: string | null;
+    pullPolicy: string;
+    managedAttemptsMode: boolean;
+  } {
+    return {
+      configuredRef: this.config.imageName,
+      lastResolvedDigest: this.lastResolvedDigest,
+      pullPolicy: this.config.imagePullPolicy,
+      managedAttemptsMode: this.config.managedAttemptsMode,
+    };
+  }
+
+  private async pullAndResolveImage(taskId: string, imageName: string): Promise<string> {
+    if (this.config.imagePullPolicy !== 'always') {
+      return imageName;
+    }
+
+    const pullOpts: Record<string, unknown> = { platform: 'linux/amd64' };
+    if (this.config.gcpSaKeyPath !== '' && fs.existsSync(this.config.gcpSaKeyPath)) {
+      const saKey = fs.readFileSync(this.config.gcpSaKeyPath, 'utf-8');
+      const registry = imageName.split('/')[0] ?? '';
+      pullOpts['authconfig'] = {
+        username: '_json_key',
+        password: saKey,
+        serveraddress: `https://${registry}`,
+      };
+    }
+
+    const pullStart = Date.now();
+    try {
+      const pullStream = await this.docker.pull(imageName, pullOpts);
+      await new Promise<void>((resolve, reject) => {
+        this.docker.modem.followProgress(pullStream, (err: Error | null) => {
+          if (err !== null) reject(err);
+          else resolve();
+        });
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to pull worker image ${imageName}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    const pullDurationMs = Date.now() - pullStart;
+
+    try {
+      const imageInfo = await this.docker.getImage(imageName).inspect();
+      const repoDigests = Array.isArray(imageInfo.RepoDigests) ? imageInfo.RepoDigests : [];
+      const resolvedImage = repoDigests.find((digest) =>
+        digest.startsWith(imageName.split(':')[0] ?? '')
+      );
+      const finalImage = resolvedImage ?? repoDigests[0] ?? imageName;
+      this.lastResolvedDigest = finalImage;
+      this.logger.info(
+        { taskId, pullDurationMs },
+        `Worker image pulled: requested=${imageName} resolved=${finalImage}`
+      );
+      if (imageName.includes(':latest')) {
+        this.logger.warn(
+          { taskId, imageName },
+          'Worker image uses mutable tag :latest — consider pinning to digest for reproducibility'
+        );
+      }
+      return finalImage;
+    } catch (error) {
+      this.logger.warn(
+        { taskId, error },
+        'Failed to inspect pulled image digest; using configured image reference'
+      );
+      return imageName;
+    }
+  }
+
+  /* v8 ignore start -- test-infra: readiness polling requires running container with entrypoint @preserve */
+  private async waitForWorkerReady(taskId: string, container: Docker.Container): Promise<void> {
+    const timeoutMs = this.config.workerReadyTimeoutMs ?? 600_000;
+    const pollIntervalMs = 2_000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      const execInstance = await container.exec({
+        Cmd: ['test', '-f', '/tmp/worker-ready'],
+        AttachStdout: true,
+        AttachStderr: false,
+        WorkingDir: '/',
+      });
+      const execStream = await execInstance.start({ hijack: false, stdin: false });
+      await new Promise<void>((resolve) => {
+        execStream.on('end', resolve);
+        execStream.on('close', resolve);
+        execStream.resume();
+      });
+      const info = await execInstance.inspect();
+      if (info.ExitCode === 0) {
+        this.logger.info(
+          { taskId, elapsedMs: Date.now() - startTime },
+          'Worker readiness confirmed'
+        );
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new Error(`Worker readiness timeout after ${String(timeoutMs)}ms for task ${taskId}`);
+  }
+  /* v8 ignore stop @preserve */
+
+  private async assertManagedEntrypointSupport(
+    taskId: string,
+    container: Docker.Container
+  ): Promise<void> {
+    const execInstance = await container.exec({
+      Cmd: ['sh', '-lc', 'grep -q "run-attempt" /entrypoint.sh'],
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+      WorkingDir: '/',
+      User: '1001:1001',
+    });
+
+    const execStream = await execInstance.start({ hijack: false, stdin: false });
+    const exitCode = await this.waitForExecCompletion(taskId, execInstance, execStream);
+    if (exitCode !== 0) {
+      throw new Error(
+        'Worker image is incompatible: missing managed-attempt run-attempt entrypoint support'
+      );
+    }
+  }
+
   /* v8 ignore start -- test-infra: prompt file writes are covered indirectly by integration tests with real mounted secrets @preserve */
   private async writePromptFiles(
     taskSecretsPath: string,
@@ -611,7 +803,7 @@ export class DockerProvider implements IsolationProvider {
         AttachStdout: true,
         AttachStderr: true,
         Tty: false,
-        WorkingDir: '/repo',
+        WorkingDir: '/',
         User: '1001:1001',
         Env: [`CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`],
       });
@@ -651,6 +843,7 @@ export class DockerProvider implements IsolationProvider {
       execStream.on('error', (error: unknown) => {
         reject(error instanceof Error ? error : new Error(String(error)));
       });
+      execStream.resume();
     });
 
     try {

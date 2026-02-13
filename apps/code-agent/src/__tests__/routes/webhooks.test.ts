@@ -1890,6 +1890,8 @@ describe('POST /internal/logs', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.received).toBe(true);
+    expect(body.acknowledgedSequences).toEqual([1, 2]);
+    expect(body.count).toBe(2);
   });
 
   it('stores formatted log lines alongside raw chunks', async () => {
