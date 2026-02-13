@@ -119,6 +119,12 @@ jobs:
           gcloud auth activate-service-account --key-file="$HOME/.config/gcloud/sa-key.json"
           gcloud auth configure-docker europe-central2-docker.pkg.dev --quiet
 
+      - name: Setup Node.js (fnm)
+        run: |
+          export PATH="$HOME/.local/share/fnm:$PATH"
+          eval "$(fnm env)"
+          echo "$(dirname $(which node))" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -351,6 +357,12 @@ jobs:
         run: |
           gcloud auth activate-service-account --key-file="$HOME/.config/gcloud/sa-key.json"
           gcloud auth configure-docker europe-central2-docker.pkg.dev --quiet
+
+      - name: Setup Node.js (fnm)
+        run: |
+          export PATH="$HOME/.local/share/fnm:$PATH"
+          eval "$(fnm env)"
+          echo "$(dirname $(which node))" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
