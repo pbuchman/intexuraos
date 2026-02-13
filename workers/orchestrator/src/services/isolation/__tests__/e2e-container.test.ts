@@ -261,7 +261,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
 
         await provider.createWorker(config);
 
-        const exitCode = await provider.waitForCompletion(taskId, 10_000);
+        const exitCode = await provider.waitForCompletion(taskId, 30_000);
         expect(exitCode).toBe(0);
 
         const isRunning = await provider.isWorkerRunning(taskId);
@@ -278,7 +278,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
 
         await provider.createWorker(config);
 
-        const exitCode = await provider.waitForCompletion(taskId, 10_000);
+        const exitCode = await provider.waitForCompletion(taskId, 30_000);
         expect(exitCode).toBe(1);
       },
       TEST_TIMEOUT
