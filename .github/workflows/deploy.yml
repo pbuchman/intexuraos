@@ -107,7 +107,7 @@ jobs:
       FUNCTIONS_SOURCE_BUCKET: ${{ vars.FUNCTIONS_SOURCE_BUCKET }}
       WORKSPACE_ROOT: ${{ github.workspace }}
       DOCKER_BUILDKIT: '1'
-      GOOGLE_APPLICATION_CREDENTIALS: /home/pbuchman/.config/gcloud/sa-key.json
+      GOOGLE_APPLICATION_CREDENTIALS: ${{ vars.GCP_SA_KEY_PATH }}
 
     steps:
       - name: Checkout
@@ -347,7 +347,7 @@ jobs:
       FUNCTIONS_SOURCE_BUCKET: ${{ vars.FUNCTIONS_SOURCE_BUCKET }}
       WORKSPACE_ROOT: ${{ github.workspace }}
       DOCKER_BUILDKIT: '1'
-      GOOGLE_APPLICATION_CREDENTIALS: /home/pbuchman/.config/gcloud/sa-key.json
+      GOOGLE_APPLICATION_CREDENTIALS: ${{ vars.GCP_SA_KEY_PATH }}
 
     steps:
       - name: Checkout
