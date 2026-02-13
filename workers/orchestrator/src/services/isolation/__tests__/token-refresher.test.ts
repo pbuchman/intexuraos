@@ -299,6 +299,7 @@ describe('TokenRefresher', () => {
     it('calls OAuth getAccessToken during refresh cycle', async () => {
       const mockOAuth = {
         getAccessToken: vi.fn(async () => 'sk-ant-oat01-fresh'),
+        writeTaskCredentials: vi.fn(async () => undefined),
       } as unknown as AnthropicOAuthManager;
 
       refresher.setAnthropicOAuth(mockOAuth);
@@ -311,7 +312,56 @@ describe('TokenRefresher', () => {
       await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
 
       expect(mockOAuth.getAccessToken).toHaveBeenCalledTimes(1);
+      // 1 GitHub token write + 1 OAuth credentials write
       expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('propagates refreshed OAuth credentials to all active task sessions', async () => {
+      const mockOAuth = {
+        getAccessToken: vi.fn(async () => 'sk-ant-oat01-fresh'),
+        writeTaskCredentials: vi.fn(async () => undefined),
+      } as unknown as AnthropicOAuthManager;
+
+      refresher.setAnthropicOAuth(mockOAuth);
+      await refresher.registerTask('task-1');
+      await refresher.registerTask('task-2');
+
+      vi.mocked(mockOAuth.writeTaskCredentials).mockClear();
+
+      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
+
+      expect(mockOAuth.writeTaskCredentials).toHaveBeenCalledTimes(2);
+      expect(mockOAuth.writeTaskCredentials).toHaveBeenCalledWith(
+        '/tmp/claude-secrets/claude-session-task-1'
+      );
+      expect(mockOAuth.writeTaskCredentials).toHaveBeenCalledWith(
+        '/tmp/claude-secrets/claude-session-task-2'
+      );
+    });
+
+    it('continues propagation when one task session write fails', async () => {
+      const mockOAuth = {
+        getAccessToken: vi.fn(async () => 'sk-ant-oat01-fresh'),
+        writeTaskCredentials: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('ENOENT'))
+          .mockResolvedValueOnce(undefined),
+      } as unknown as AnthropicOAuthManager;
+
+      refresher.setAnthropicOAuth(mockOAuth);
+      await refresher.registerTask('task-1');
+      await refresher.registerTask('task-2');
+
+      vi.mocked(mockOAuth.writeTaskCredentials).mockClear();
+      vi.mocked(mockLogger.warn).mockClear();
+
+      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
+
+      expect(mockOAuth.writeTaskCredentials).toHaveBeenCalledTimes(2);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-1', error: expect.any(Error) }),
+        'Failed to propagate OAuth credentials to task'
+      );
     });
 
     it('does not break GitHub token refresh when OAuth fails', async () => {
@@ -319,6 +369,7 @@ describe('TokenRefresher', () => {
         getAccessToken: vi.fn(async () => {
           throw new Error('OAuth network error');
         }),
+        writeTaskCredentials: vi.fn(async () => undefined),
       } as unknown as AnthropicOAuthManager;
 
       refresher.setAnthropicOAuth(mockOAuth);
