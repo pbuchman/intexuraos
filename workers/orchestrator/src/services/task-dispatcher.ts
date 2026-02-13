@@ -800,6 +800,11 @@ export class TaskDispatcher {
       };
     }
     this.logForwarder.close(task.taskId);
+    const logStats = this.logForwarder.getDeliveryStats(task.taskId);
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Log delivery stats: produced=${String(logStats.produced)} acked=${String(logStats.acked)} pending=${String(logStats.pending)}`
+    );
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
