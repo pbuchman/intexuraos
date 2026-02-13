@@ -68,6 +68,10 @@ run_claude_attempt() {
 }
 
 if [ "${1:-}" = "run-attempt" ]; then
+    if [ ! -f "/tmp/worker-ready" ]; then
+        echo "[entrypoint] ERROR: Worker not ready — readiness marker missing" >&2
+        exit 1
+    fi
     run_claude_attempt
     exit $?
 fi
@@ -174,6 +178,9 @@ if [ -f "/repo/pnpm-lock.yaml" ]; then
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile --store-dir /home/claude/pnpm-store 2>&1
     echo "[entrypoint] Dependencies installed"
 fi
+
+echo "[entrypoint] Writing readiness marker"
+touch /tmp/worker-ready
 
 # ------------------------------------------------------------------------------
 # Managed mode: stay alive and wait for orchestrator to run attempts via docker exec
