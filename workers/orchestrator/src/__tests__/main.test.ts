@@ -1124,7 +1124,8 @@ describe('main.ts', () => {
         mockDispatcher,
         mockTokenService,
         mockConfig,
-        mockLogger
+        mockLogger,
+        undefined
       );
 
       // mockExit doesn't need restore - it's cleared in beforeEach

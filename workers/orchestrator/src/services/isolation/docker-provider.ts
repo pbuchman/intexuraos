@@ -59,6 +59,7 @@ export class DockerProvider implements IsolationProvider {
   private readonly logger: Logger;
   private readonly workers: Map<string, WorkerEntry>;
   private readonly preservedWorkers = new Map<string, PreservedWorkerEntry>();
+  private lastResolvedDigest: string | null = null;
 
   constructor(config: Partial<DockerProviderConfig>, logger: Logger) {
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
@@ -621,6 +622,20 @@ export class DockerProvider implements IsolationProvider {
     return Array.from(this.preservedWorkers.values());
   }
 
+  getImageInfo(): {
+    configuredRef: string;
+    lastResolvedDigest: string | null;
+    pullPolicy: string;
+    managedAttemptsMode: boolean;
+  } {
+    return {
+      configuredRef: this.config.imageName,
+      lastResolvedDigest: this.lastResolvedDigest,
+      pullPolicy: this.config.imagePullPolicy,
+      managedAttemptsMode: this.config.managedAttemptsMode,
+    };
+  }
+
   private async pullAndResolveImage(taskId: string, imageName: string): Promise<string> {
     if (this.config.imagePullPolicy !== 'always') {
       return imageName;
@@ -658,10 +673,17 @@ export class DockerProvider implements IsolationProvider {
         digest.startsWith(imageName.split(':')[0] ?? '')
       );
       const finalImage = resolvedImage ?? repoDigests[0] ?? imageName;
+      this.lastResolvedDigest = finalImage;
       this.logger.info(
         {},
         `Worker image pulled: taskId=${taskId} requested=${imageName} resolved=${finalImage}`
       );
+      if (imageName.includes(':latest')) {
+        this.logger.warn(
+          { taskId, imageName },
+          'Worker image uses mutable tag :latest — consider pinning to digest for reproducibility'
+        );
+      }
       return finalImage;
     } catch (error) {
       this.logger.warn(
