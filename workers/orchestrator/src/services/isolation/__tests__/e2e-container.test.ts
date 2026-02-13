@@ -106,6 +106,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
     provider = new DockerProvider(
       {
         imageName: TEST_IMAGE,
+        imagePullPolicy: 'if-not-present',
         networkName: TEST_NETWORK,
         maxConcurrent: 2,
         memoryLimitBytes: 512 * 1024 * 1024,
