@@ -16,7 +16,7 @@ for worker in "${WORKERS[@]}"; do
   pnpm --filter "@intexuraos/$worker" build
 
   # Generate production package.json
-  WORKER_DIR="/workspace/workers/${worker}"
+  WORKER_DIR="${WORKSPACE_ROOT:-/workspace}/workers/${worker}"
 
   if [[ ! -d "${WORKER_DIR}/dist" ]]; then
     log "ERROR: Build output not found: ${WORKER_DIR}/dist"
