@@ -345,6 +345,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
         const shortTimeoutProvider = new DockerProvider(
           {
             imageName: TEST_IMAGE,
+            imagePullPolicy: 'if-not-present',
             networkName: TEST_NETWORK,
             maxConcurrent: 1,
             memoryLimitBytes: 256 * 1024 * 1024,

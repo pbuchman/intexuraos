@@ -717,10 +717,16 @@ export class DockerProvider implements IsolationProvider {
     while (Date.now() - startTime < timeoutMs) {
       const execInstance = await container.exec({
         Cmd: ['test', '-f', '/tmp/worker-ready'],
-        AttachStdout: false,
+        AttachStdout: true,
         AttachStderr: false,
+        WorkingDir: '/',
       });
-      await execInstance.start({ hijack: false, stdin: false });
+      const execStream = await execInstance.start({ hijack: false, stdin: false });
+      await new Promise<void>((resolve) => {
+        execStream.on('end', resolve);
+        execStream.on('close', resolve);
+        execStream.resume();
+      });
       const info = await execInstance.inspect();
       if (info.ExitCode === 0) {
         this.logger.info(
@@ -745,7 +751,7 @@ export class DockerProvider implements IsolationProvider {
       AttachStdout: true,
       AttachStderr: true,
       Tty: false,
-      WorkingDir: '/repo',
+      WorkingDir: '/',
       User: '1001:1001',
     });
 
@@ -797,7 +803,7 @@ export class DockerProvider implements IsolationProvider {
         AttachStdout: true,
         AttachStderr: true,
         Tty: false,
-        WorkingDir: '/repo',
+        WorkingDir: '/',
         User: '1001:1001',
         Env: [`CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`],
       });
@@ -837,6 +843,7 @@ export class DockerProvider implements IsolationProvider {
       execStream.on('error', (error: unknown) => {
         reject(error instanceof Error ? error : new Error(String(error)));
       });
+      execStream.resume();
     });
 
     try {
