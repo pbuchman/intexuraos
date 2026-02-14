@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
 import { TerminalLogViewer } from '@/components/TerminalLogViewer.js';
-import { useCodeTask } from '@/hooks';
+import { useCodeTask, useWorkersStatus } from '@/hooks';
 import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus } from '@/types';
 
@@ -40,6 +40,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { task, loading, error, cancelTask, retryTask } = useCodeTask(id ?? '');
+  const { status: workersStatus } = useWorkersStatus();
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -129,7 +130,10 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   const StatusIcon = status.icon;
   const isRunning = task.status === 'running' || task.status === 'dispatched';
   const canCancel = isRunning;
-  const canRetry = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
+  const isRetryableStatus = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
+  const taskWorker = workersStatus?.workers.find((w) => w.name === task.workerLocation);
+  const isWorkerHealthy = taskWorker?.healthy === true;
+  const canRetry = isRetryableStatus && isWorkerHealthy;
 
   // Build links array - Linear and PR
   const links: { label: string; url: string | undefined; text: string; type?: string; status?: string }[] = [];
@@ -225,6 +229,11 @@ export function CodeTaskDetailPage(): React.JSX.Element {
                 <RotateCcw className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Retry Task</span>
               </Button>
+            ) : null}
+            {isRetryableStatus && !isWorkerHealthy ? (
+              <span className="text-sm text-amber-600 dark:text-amber-400">
+                Worker &quot;{task.workerLocation}&quot; is unavailable. Retry will be enabled when the worker is healthy.
+              </span>
             ) : null}
           </div>
         ) : null}
