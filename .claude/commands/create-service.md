@@ -97,6 +97,7 @@ Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/tod
     "typecheck": "tsc --noEmit",
     "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
+    "start:local": "node --experimental-strip-types src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
