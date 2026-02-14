@@ -12,6 +12,7 @@
     "lint:local": "eslint src --max-warnings 0",
     "test": "vitest run",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
