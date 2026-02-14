@@ -8,6 +8,7 @@
     "build": "node ../../scripts/build-service.mjs web-agent",
     "dev": "npx tsx watch src/index.ts",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "test": "pnpm run --filter @intexuraos/root test -- apps/web-agent",
     "typecheck": "tsc --noEmit",
     "lint:local": "eslint src --max-warnings 0"
