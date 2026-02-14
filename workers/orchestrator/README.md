@@ -112,7 +112,7 @@ curl http://localhost:8199/health
 
 ---
 
-## Running Stable Artifact (Production / LaunchAgent)
+## Running as a Service (Production)
 
 ### Build
 
@@ -120,12 +120,142 @@ curl http://localhost:8199/health
 pnpm --filter orchestrator build
 ```
 
-Creates `workers/orchestrator/dist/index.js` - bundled ESM with all workspace dependencies.
+Creates `workers/orchestrator/dist/index.js` — bundled ESM with all workspace dependencies.
 
-### Run
+### systemd Setup (Linux — home-dev VM)
+
+The orchestrator runs as a systemd template service. The service file lives at `/etc/systemd/system/intexuraos-orchestrator@.service` and uses `%i` for the username.
+
+**Key details:**
+- Runs `node dist/index.js` from a worktree (e.g., `~/personal/intexuraos-1/workers/orchestrator/`)
+- Env vars loaded from `~/.claude-orchestrator/env` (43 vars, extracted from Secret Manager)
+- Auto-restarts on failure (`Restart=on-failure`, `RestartSec=10`)
+- Rate-limited to 5 restarts per 5 minutes (`StartLimitBurst=5`, `StartLimitIntervalSec=300`)
+- Logs to journald (`journalctl -u intexuraos-orchestrator@pbuchman`)
+
+#### Service Operations
 
 ```bash
-node workers/orchestrator/dist/index.js
+# Check status
+sudo systemctl status intexuraos-orchestrator@pbuchman
+
+# View logs (live)
+journalctl -u intexuraos-orchestrator@pbuchman -f
+
+# View recent logs
+journalctl -u intexuraos-orchestrator@pbuchman --no-pager -n 50
+
+# Stop (prevents auto-restart)
+sudo systemctl stop intexuraos-orchestrator@pbuchman
+
+# Start
+sudo systemctl start intexuraos-orchestrator@pbuchman
+
+# Restart (after rebuild)
+sudo systemctl restart intexuraos-orchestrator@pbuchman
+
+# Health check
+curl -s http://localhost:8199/health | jq .
+```
+
+#### Rebuilding and Deploying Changes
+
+The systemd service runs from a built artifact — it does NOT auto-rebuild on code changes. After modifying orchestrator code:
+
+```bash
+# 1. Build new artifact
+cd ~/personal/intexuraos-1
+pnpm build   # builds shared packages
+pnpm --filter orchestrator build
+
+# 2. Restart the service (picks up new dist/index.js)
+sudo systemctl restart intexuraos-orchestrator@pbuchman
+
+# 3. Verify
+curl -s http://localhost:8199/health | jq .
+```
+
+#### Switching to Dev Mode (Local Development)
+
+To run the orchestrator with hot-reload for development:
+
+```bash
+# 1. Stop the systemd service (otherwise it auto-restarts on port 8199)
+sudo systemctl stop intexuraos-orchestrator@pbuchman
+
+# 2. Load env vars
+cd ~/personal/intexuraos-1
+set -a && source ~/.claude-orchestrator/env && set +a
+
+# 3. Run with tsx watch (hot-reload on source changes)
+pnpm --filter orchestrator dev
+
+# 4. When done, restore the service
+# Press Ctrl+C to stop dev mode, then:
+sudo systemctl start intexuraos-orchestrator@pbuchman
+```
+
+#### Updating Secrets (env file)
+
+The orchestrator's env file is NOT auto-synced. To update after secrets change in GCP:
+
+```bash
+# 1. Sync secrets to .envrc in any worktree
+cd ~/personal/intexuraos-1
+./scripts/sync-secrets.sh
+
+# 2. Re-extract orchestrator vars
+grep -E '^export INTEXURAOS_' .envrc | sed 's/^export //' > ~/.claude-orchestrator/env
+echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json" >> ~/.claude-orchestrator/env
+echo "PORT=8199" >> ~/.claude-orchestrator/env
+echo "INTEXURAOS_WORKER_CAPACITY=3" >> ~/.claude-orchestrator/env
+echo "INTEXURAOS_REPOSITORY_PATH=$HOME/.claude-orchestrator/repo" >> ~/.claude-orchestrator/env
+echo "LOG_LEVEL=info" >> ~/.claude-orchestrator/env
+echo "INTEXURAOS_CODE_AGENT_URL=http://localhost:8127" >> ~/.claude-orchestrator/env
+echo "INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman" >> ~/.claude-orchestrator/env
+chmod 600 ~/.claude-orchestrator/env
+
+# 3. Restart
+sudo systemctl restart intexuraos-orchestrator@pbuchman
+```
+
+#### Full Recovery (from scratch)
+
+If the orchestrator needs to be set up from zero on a new machine:
+
+```bash
+# 1. Create directories
+mkdir -p ~/.claude-orchestrator/secrets ~/.claude-orchestrator/logs
+mkdir -p ~/claude-workers/worktrees ~/claude-workers/pnpm-store
+
+# 2. Clone orchestrator repo
+git clone git@github.com:pbuchman/intexuraos.git ~/.claude-orchestrator/repo
+
+# 3. Build
+cd ~/personal/intexuraos-1
+pnpm install && pnpm build && pnpm --filter orchestrator build
+
+# 4. Set up Docker worker network
+bash scripts/setup-worker-network.sh
+sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP  # block cloud metadata
+
+# 5. Create env file (see "Updating Secrets" above)
+
+# 6. Install Claude Code and login (for Anthropic OAuth)
+curl -fsSL https://claude.ai/install.sh | bash
+# Use SSH reverse tunnel for headless login:
+# From workstation: ssh -R 8080:localhost:8080 user@vm
+# On VM: claude login
+
+# 7. Install systemd service
+sudo cp ~/personal/pbuchman-dev/machine-setup/config/intexuraos-orchestrator.service \
+     /etc/systemd/system/intexuraos-orchestrator@.service
+sudo systemctl daemon-reload
+sudo systemctl enable intexuraos-orchestrator@pbuchman
+sudo systemctl start intexuraos-orchestrator@pbuchman
+
+# 8. Verify
+curl -s http://localhost:8199/health | jq .
 ```
 
 ### LaunchAgent Setup (macOS Auto-start)
@@ -158,7 +288,7 @@ Create `~/Library/LaunchAgents/com.intexuraos.orchestrator.plist`:
 </plist>
 ```
 
-### Managing the Service
+### Managing the macOS Service
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.intexuraos.orchestrator.plist    # Start
