@@ -341,9 +341,10 @@ ${feedback.trim()}
   /* v8 ignore start -- upstream: dispatcher error handling covered by integration tests @preserve */
   if (!dispatchResult.ok) {
     /* v8 ignore stop @preserve */
-    // Update task with error
+    // Update task with error and mark as failed
     const dispatchError = dispatchResult.error;
     await codeTaskRepo.update(followUpTask.id, {
+      status: 'failed',
       error: {
         code: dispatchError.code,
         message: dispatchError.message,

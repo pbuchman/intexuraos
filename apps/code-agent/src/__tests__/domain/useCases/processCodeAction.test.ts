@@ -299,8 +299,9 @@ describe('processCodeAction', () => {
       expect(result.error.message).toBe('No workers available');
     }
 
-    // Verify task was updated with error
+    // Verify task was updated with error and failed status
     expect(codeTaskRepo.update).toHaveBeenCalledWith('new-task-123', {
+      status: 'failed',
       error: {
         code: 'worker_unavailable',
         message: 'No workers available',

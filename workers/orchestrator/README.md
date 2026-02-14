@@ -127,6 +127,7 @@ Creates `workers/orchestrator/dist/index.js` — bundled ESM with all workspace 
 The orchestrator runs as a systemd template service. The service file lives at `/etc/systemd/system/intexuraos-orchestrator@.service` and uses `%i` for the username.
 
 **Key details:**
+
 - Runs `node dist/index.js` from a worktree (e.g., `~/personal/intexuraos-1/workers/orchestrator/`)
 - Env vars loaded from `~/.claude-orchestrator/env` (43 vars, extracted from Secret Manager)
 - Auto-restarts on failure (`Restart=on-failure`, `RestartSec=10`)
