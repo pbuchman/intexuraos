@@ -156,7 +156,11 @@ export class AnthropicOAuthManager {
 
     const filePath = join(taskSessionPath, '.credentials.json');
     try {
-      const content = JSON.stringify({ claudeAiOauth: this.credentials }, null, 2);
+      const credentialsForContainer = {
+        ...this.credentials,
+        refreshToken: '', // Containers should not refresh — orchestrator handles it
+      };
+      const content = JSON.stringify({ claudeAiOauth: credentialsForContainer }, null, 2);
       await fs.promises.writeFile(filePath, content, { mode: 0o600 });
     } catch (error) {
       this.logger.error(
@@ -170,8 +174,15 @@ export class AnthropicOAuthManager {
   }
 
   private async doRefresh(): Promise<string | null> {
-    /* v8 ignore start -- module-init: null guard after loadCredentials check @preserve */
-    if (this.credentials === null) {
+    // Re-read credentials from disk in case CLI rotated the refresh token
+    if (!this.loadCredentials()) {
+      this.credentials = null;
+      return null;
+    }
+
+    const credentials = this.credentials;
+    /* v8 ignore start -- ts-type: null guard after loadCredentials success check @preserve */
+    if (credentials === null) {
       return null;
     }
     /* v8 ignore stop @preserve */
@@ -179,7 +190,7 @@ export class AnthropicOAuthManager {
     try {
       const body = new URLSearchParams({
         grant_type: 'refresh_token',
-        refresh_token: this.credentials.refreshToken,
+        refresh_token: credentials.refreshToken,
       });
 
       const resp = await fetch(OAUTH_TOKEN_URL, {
@@ -222,11 +233,11 @@ export class AnthropicOAuthManager {
         expires_in: number;
       };
 
-      this.credentials.accessToken = data.access_token;
+      credentials.accessToken = data.access_token;
       if (data.refresh_token !== undefined) {
-        this.credentials.refreshToken = data.refresh_token;
+        credentials.refreshToken = data.refresh_token;
       }
-      this.credentials.expiresAt = Date.now() + data.expires_in * 1000;
+      credentials.expiresAt = Date.now() + data.expires_in * 1000;
 
       try {
         await this.persistCredentials();

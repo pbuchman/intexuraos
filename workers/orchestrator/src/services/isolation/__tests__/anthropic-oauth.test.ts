@@ -362,6 +362,57 @@ describe('AnthropicOAuthManager', () => {
       );
     });
 
+    it('re-reads credentials from disk before attempting refresh', async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          claudeAiOauth: {
+            ...NEAR_EXPIRY_CREDENTIALS.claudeAiOauth,
+            refreshToken: 'old-refresh-token',
+          },
+        })
+      );
+      manager.loadCredentials();
+
+      // Simulate CLI having rotated the token — disk now has NEW refresh token
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          claudeAiOauth: {
+            ...NEAR_EXPIRY_CREDENTIALS.claudeAiOauth,
+            refreshToken: 'new-refresh-token-from-cli',
+          },
+        })
+      );
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          access_token: 'new-access',
+          refresh_token: 'rotated',
+          expires_in: 3600,
+        }),
+      });
+
+      await manager.getAccessToken();
+
+      const fetchBody = (mockFetch.mock.calls[0] as [string, { body: string }])[1].body;
+      expect(fetchBody).toContain('new-refresh-token-from-cli');
+      expect(fetchBody).not.toContain('old-refresh-token');
+    });
+
+    it('returns null if credentials file becomes invalid during refresh', async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(JSON.stringify(NEAR_EXPIRY_CREDENTIALS));
+      manager.loadCredentials();
+
+      // File is now corrupted
+      mockExistsSync.mockReturnValue(false);
+
+      const token = await manager.getAccessToken();
+      expect(token).toBeNull();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it('returns null when not configured', async () => {
       const token = await manager.getAccessToken();
       expect(token).toBeNull();
@@ -563,6 +614,22 @@ describe('AnthropicOAuthManager', () => {
       );
       expect(writtenContent).toHaveProperty('claudeAiOauth');
       expect(writtenContent.claudeAiOauth).toHaveProperty('accessToken');
+    });
+
+    it('writes credentials without refresh token to task session', async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(JSON.stringify(VALID_CREDENTIALS));
+      manager.loadCredentials();
+
+      await manager.writeTaskCredentials('/tmp/task-session');
+
+      const writtenContent = (mockWriteFile.mock.calls[0] as [string, string, object])[1] as string;
+      const parsed = JSON.parse(writtenContent) as {
+        claudeAiOauth: { accessToken: string; refreshToken: string; expiresAt: number };
+      };
+      expect(parsed.claudeAiOauth.accessToken).toBe(VALID_CREDENTIALS.claudeAiOauth.accessToken);
+      expect(parsed.claudeAiOauth.refreshToken).toBe('');
+      expect(parsed.claudeAiOauth.expiresAt).toBe(VALID_CREDENTIALS.claudeAiOauth.expiresAt);
     });
 
     it('logs error and re-throws when write fails', async () => {

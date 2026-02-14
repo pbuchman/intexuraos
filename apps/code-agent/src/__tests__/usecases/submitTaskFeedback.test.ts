@@ -621,5 +621,66 @@ describe('submitTaskFeedback use case', () => {
         expect.stringContaining('Failed to check for active tasks')
       );
     });
+
+    it('should mark follow-up task as failed when dispatch fails', async () => {
+      const mockTask = createMockTask();
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'https://worker.local',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'signing-secret',
+            },
+          ],
+        })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+        })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'worker_unavailable', message: 'No workers available' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+        })
+      );
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, {
+        originalTaskId,
+        userId,
+        feedback,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
+
+      // Verify task was updated with failed status and dispatch error
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'feedback-task-123',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({ code: 'worker_unavailable' }),
+        })
+      );
+    });
   });
 });

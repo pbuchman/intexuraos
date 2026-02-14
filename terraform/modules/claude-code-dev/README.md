@@ -75,11 +75,11 @@ gcloud projects describe <project-id>
 
 **IMPORTANT:** Service account keys are NOT managed by Terraform.
 
-| Item            | Location                                 |
-| --------------- | ---------------------------------------- |
-| Key file        | `~/.config/gcloud/sa-key.json` |
-| Version control | **NEVER** commit keys to the repository  |
-| Rotation        | Manually rotate keys via `gcloud` CLI    |
+| Item            | Location                                |
+| --------------- | --------------------------------------- |
+| Key file        | `~/.config/gcloud/sa-key.json`          |
+| Version control | **NEVER** commit keys to the repository |
+| Rotation        | Manually rotate keys via `gcloud` CLI   |
 
 ### Key Rotation
 
