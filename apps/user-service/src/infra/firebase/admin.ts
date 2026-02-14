@@ -12,7 +12,6 @@ let firebaseApp: App | null = null;
  * Get or initialize the Firebase Admin app.
  * Uses Application Default Credentials (ADC) for authentication.
  * In GCP environments (Cloud Run), ADC is automatically available.
- * For local development, uses Firebase Auth Emulator when FIREBASE_AUTH_EMULATOR_HOST is set.
  */
 export function getFirebaseAdmin(): App {
   if (firebaseApp !== null) {

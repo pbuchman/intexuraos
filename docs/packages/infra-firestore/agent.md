@@ -95,7 +95,6 @@ fakeDb.configure({ errorToThrow: new Error('Firestore unavailable') });
 ## Environment Variables
 
 - `INTEXURAOS_GCP_PROJECT_ID` (required)
-- `FIRESTORE_EMULATOR_HOST` (optional, local dev)
 
 ## FakeFirestore Capabilities
 

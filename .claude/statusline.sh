@@ -352,8 +352,8 @@ else
 fi
 
 # Docker services (from docker-compose.local.yaml)
-DOCKER_PORTS="8100 8101 8102 8103 8104 8105"
-DOCKER_TOTAL=6
+DOCKER_PORTS="8102 8105"
+DOCKER_TOTAL=2
 
 docker_up=0
 for port in $DOCKER_PORTS; do

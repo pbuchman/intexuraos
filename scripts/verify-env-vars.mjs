@@ -298,7 +298,6 @@ function isCommonServiceVar(varName) {
     'INTEXURAOS_AUTH0_CLIENT_ID',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
     'INTEXURAOS_GUEST_ZAI_API_KEY',
-    'FIREBASE_AUTH_EMULATOR_HOST',
     // Global infrastructure vars (set once, used by all services)
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_APP_URL',

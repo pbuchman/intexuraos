@@ -3,7 +3,7 @@
  * Development environment setup.
  *
  * Starts Docker emulators and validates environment.
- * Does NOT sync data - use sync-firestore.sh separately.
+ * Does NOT sync data.
  *
  * Usage:
  *   pnpm run dev:setup    # Start emulators (no sync)
@@ -66,7 +66,6 @@ const WEB_APP = { name: 'web', port: 3000 };
 const REQUIRED_ENV_VARS = [
   'GOOGLE_CLOUD_PROJECT',
   'INTEXURAOS_GCP_PROJECT_ID',
-  'FIRESTORE_EMULATOR_HOST',
   'INTEXURAOS_ENCRYPTION_KEY',
 ];
 
@@ -130,12 +129,8 @@ async function checkPortsAvailable() {
     ...SERVICES.map((s) => ({ name: s.name, port: s.port, type: 'service' })),
     { name: WEB_APP.name, port: WEB_APP.port, type: 'web' },
     { name: 'API Docs Hub', port: 8115, type: 'service' },
-    { name: 'Firestore Emulator', port: 8101, type: 'emulator' },
-    { name: 'GCS Emulator', port: 8103, type: 'emulator' },
-    { name: 'Firebase Auth Emulator', port: 8104, type: 'emulator' },
     { name: 'Pub/Sub UI', port: 8105, type: 'emulator' },
     { name: 'Log Server', port: 8106, type: 'emulator' },
-    { name: 'Firebase UI', port: 8100, type: 'emulator' },
   ];
 
   const conflicts = [];
@@ -220,7 +215,7 @@ async function startEmulators() {
 }
 
 async function verifyDockerServices(composeFile) {
-  const requiredServices = ['firebase-emulator', 'fake-gcs', 'pubsub-ui'];
+  const requiredServices = ['pubsub-ui'];
 
   try {
     const output = execSync(`docker compose -f "${composeFile}" ps --format json`, {
@@ -263,12 +258,7 @@ async function waitForEmulators() {
   const maxAttempts = 60;
   const delayMs = 1000;
 
-  const endpoints = [
-    { name: 'Firestore', url: 'http://localhost:8101' },
-    { name: 'GCS', url: 'http://localhost:8103/storage/v1/b' },
-    { name: 'Firebase Auth', url: 'http://localhost:8104' },
-    { name: 'Pub/Sub UI', url: 'http://localhost:8105/health' },
-  ];
+  const endpoints = [{ name: 'Pub/Sub UI', url: 'http://localhost:8105/health' }];
 
   for (const endpoint of endpoints) {
     let attempts = 0;
@@ -318,8 +308,7 @@ async function main() {
   console.log(`${BOLD}${GREEN}✓ Setup complete!${RESET}`);
   console.log('');
   console.log('Emulator endpoints:');
-  console.log('  Firebase UI:      http://localhost:8100');
-  console.log('  Firestore:        http://localhost:8101');
+  console.log('  Pub/Sub:          http://localhost:8102');
   console.log('  Pub/Sub UI:       http://localhost:8105');
   console.log('');
   console.log('Dev tools (start with PM2):');
