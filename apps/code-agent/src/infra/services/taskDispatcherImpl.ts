@@ -135,7 +135,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   }
 
   /**
-   * Attempt to dispatch to a worker, with fallback on 503.
+   * Attempt to dispatch to a worker, with fallback on 502/503/504.
    * Uses per-request worker credentials for user isolation.
    */
   private async dispatchToWorker(
@@ -195,7 +195,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           'Failed to dispatch to worker'
         );
 
-        if (error instanceof Error && error.message.includes('503')) {
+        if (error instanceof Error && /50[234]/.test(error.message)) {
           continue;
         }
 
@@ -255,9 +255,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         'Worker dispatch request failed'
       );
 
-      if (response.status === 503) {
+      if (response.status === 502 || response.status === 503 || response.status === 504) {
         const error = new Error(`HTTP ${String(response.status)}`) as Error & { code?: string };
-        error.code = '503';
+        error.code = String(response.status);
         throw error;
       }
 

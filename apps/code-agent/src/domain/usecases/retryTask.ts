@@ -354,6 +354,7 @@ ${additionalContext.trim()}
       'Dispatch failed for retry task, but task was created'
     );
     const updateWithErrorResult = await codeTaskRepo.update(retryTask.id, {
+      status: 'failed',
       error: {
         code: dispatchError.code,
         message: dispatchError.message,

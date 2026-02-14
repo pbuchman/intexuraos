@@ -301,9 +301,10 @@ export async function processCodeAction(
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
 
   if (!dispatchResult.ok) {
-    // Update task with error
+    // Update task with error and mark as failed
     const dispatchError = dispatchResult.error;
     await codeTaskRepo.update(task.id, {
+      status: 'failed',
       error: {
         code: dispatchError.code,
         message: dispatchError.message,
