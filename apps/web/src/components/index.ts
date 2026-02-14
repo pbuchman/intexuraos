@@ -25,5 +25,6 @@ export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS } from './ModelSe
 export { VegaChart } from './VegaChart.js';
 export { VersionInfoModal } from './VersionInfoModal.js';
 export { LinearIssueCombobox } from './LinearIssueCombobox.js';
+export { LinearIssueSelectorModal } from './LinearIssueSelectorModal.js';
 export * from './ui/index.js';
 export * from './Chat/index.js';

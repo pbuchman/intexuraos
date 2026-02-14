@@ -1,11 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Play, Link2, Sparkles } from 'lucide-react';
+import { AlertCircle, Play, Link2, Sparkles, Pencil } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
-import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal } from '@/components';
+import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal, LinearIssueSelectorModal } from '@/components';
 import type { ConflictReason } from '@/components';
-import { LinearIssueCombobox } from '@/components';
 import { useCodeTasks, useLinearIssueOptions, useWorkersStatus } from '@/hooks';
 import type { CodeTaskWorkerType } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
@@ -27,7 +26,7 @@ const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: R
 export function CodeTaskNewPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { submitTask } = useCodeTasks();
-  const { options, loading: linearLoading, error: linearError } = useLinearIssueOptions();
+  const { groupedOptions, loading: linearLoading, error: linearError } = useLinearIssueOptions();
 
   const [prompt, setPrompt] = useState('');
   const [workerType, setWorkerType] = useState<CodeTaskWorkerType>('auto');
@@ -39,6 +38,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [conflictInfo, setConflictInfo] = useState<{ taskId: string; reason: ConflictReason } | null>(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [taskError, setTaskError] = useState<ApiError | null>(null);
+  const [showIssueSelectorModal, setShowIssueSelectorModal] = useState(false);
 
   const { status: workersStatus, loading: workersLoading } = useWorkersStatus();
 
@@ -347,8 +347,13 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   key={mode.id}
                   type="button"
                   onClick={(): void => {
-                    setLinearMode(mode.id);
-                    setSelectedIssue(null);
+                    if (mode.id === 'link') {
+                      setLinearMode('link');
+                      setShowIssueSelectorModal(true);
+                    } else {
+                      setLinearMode(mode.id);
+                      setSelectedIssue(null);
+                    }
                   }}
                   disabled={submitting}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors flex items-center gap-2 ${
@@ -364,22 +369,34 @@ export function CodeTaskNewPage(): React.JSX.Element {
               ))}
             </div>
 
-            {linearMode === 'link' && (
-              <div className="space-y-3">
-                <LinearIssueCombobox
-                  options={options}
-                  loading={linearLoading}
-                  error={linearError}
-                  selected={selectedIssue}
-                  onSelect={setSelectedIssue}
+            {linearMode === 'link' && selectedIssue !== null && (
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                    {selectedIssue.identifier}
+                  </span>
+                  <span className="ml-2 text-sm text-slate-700 dark:text-slate-200">
+                    {selectedIssue.title}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(): void => {
+                    setShowIssueSelectorModal(true);
+                  }}
                   disabled={submitting}
-                  placeholder="Search or select an issue..."
-                  allowNone={false}
-                />
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Select an existing Linear issue to link this task for tracking and context.
-                </p>
+                  className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300 disabled:opacity-50"
+                  title="Change issue"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
               </div>
+            )}
+
+            {linearMode === 'link' && selectedIssue === null && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Click &quot;Link Existing&quot; to select a Linear issue.
+              </p>
             )}
 
             {linearMode === 'create' && (
@@ -457,6 +474,21 @@ export function CodeTaskNewPage(): React.JSX.Element {
         error={taskError}
         onClose={handleCloseErrorModal}
         onRetry={handleRetrySubmit}
+      />
+
+      <LinearIssueSelectorModal
+        isOpen={showIssueSelectorModal}
+        groupedOptions={groupedOptions}
+        loading={linearLoading}
+        error={linearError}
+        selected={selectedIssue}
+        onSelect={(option: LinearIssueOption): void => {
+          setSelectedIssue(option);
+          setShowIssueSelectorModal(false);
+        }}
+        onClose={(): void => {
+          setShowIssueSelectorModal(false);
+        }}
       />
     </Layout>
   );

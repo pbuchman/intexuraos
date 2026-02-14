@@ -17,8 +17,11 @@ export interface LinearIssueOption {
   priority: LinearIssue['priority'];
 }
 
+export type GroupedLinearIssueOptions = Record<string, LinearIssueOption[]>;
+
 interface UseLinearIssueOptionsResult {
   options: LinearIssueOption[];
+  groupedOptions: GroupedLinearIssueOptions;
   loading: boolean;
   error: string | null;
   validateIssue: (identifier: string) => Promise<LinearIssueOption | null>;
@@ -29,6 +32,7 @@ interface UseLinearIssueOptionsResult {
 export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
   const { getAccessToken, user } = useAuth();
   const [options, setOptions] = useState<LinearIssueOption[]>([]);
+  const [groupedOptions, setGroupedOptions] = useState<GroupedLinearIssueOptions>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,23 +46,31 @@ export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
 
       if (connection === null) {
         setOptions([]);
+        setGroupedOptions({});
         setLoading(false);
         return;
       }
 
       const data = await listLinearIssues(token);
 
-      const allOptions = Object.values(data.issues).flat();
+      const toOption = (issue: LinearIssue): LinearIssueOption => ({
+        identifier: issue.identifier,
+        title: issue.title,
+        url: issue.url,
+        state: issue.state,
+        priority: issue.priority,
+      });
 
-      setOptions(
-        allOptions.map((issue) => ({
-          identifier: issue.identifier,
-          title: issue.title,
-          url: issue.url,
-          state: issue.state,
-          priority: issue.priority,
-        }))
-      );
+      const grouped: GroupedLinearIssueOptions = {};
+      for (const [key, issues] of Object.entries(data.issues)) {
+        const mapped = issues.map(toOption);
+        if (mapped.length > 0) {
+          grouped[key] = mapped;
+        }
+      }
+
+      setGroupedOptions(grouped);
+      setOptions(Object.values(data.issues).flat().map(toOption));
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load Linear issues'));
     } finally {
@@ -103,6 +115,7 @@ export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
 
   return {
     options,
+    groupedOptions,
     loading,
     error,
     validateIssue,
