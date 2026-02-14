@@ -57,9 +57,6 @@ cloudbuild.dynamic.json
 
 speechmatics-js-sdk/
 
-# Local Firestore export data
-data/firestore-export/
-
 # Firestore rules (deployed via firebase deploy)
 # firestore.indexes.json - tracked in git for version control
 firestore.rules
