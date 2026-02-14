@@ -4,7 +4,7 @@ import { useAuth, useSyncQueue, useTheme } from '@/context';
 import { usePWA } from '@/context/pwa-context';
 import { useWorkersStatus } from '@/hooks';
 import { ChevronDown, LogOut, Moon, Sun, User, RefreshCw, RotateCcw, Server } from 'lucide-react';
-import { VersionInfoModal } from './VersionInfoModal';
+import { VersionInfoModal } from './VersionInfoModal.js';
 import type { WorkerStatus } from '@/types';
 
 /**
@@ -34,14 +34,14 @@ const getStatusDisplay = (worker: WorkerStatus): {
     if (worker.details?.reason === 'timeout') {
       return {
         text: 'Orchestrator not responding',
-        color: 'bg-yellow-500',
-        icon: '🟡',
+        color: 'bg-red-500',
+        icon: '🔴',
       };
     }
     return {
       text: `Orchestrator error ${worker.details?.code ?? ''}`,
-      color: 'bg-yellow-500',
-      icon: '🟡',
+      color: 'bg-red-500',
+      icon: '🔴',
     };
   }
 
