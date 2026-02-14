@@ -152,6 +152,7 @@ function createServiceConfig(name, port, options = {}) {
 
   const baseConfig = {
     name,
+    cwd: `./apps/${name}`,
     env: {
       ...process.env,
       ...COMMON_SERVICE_ENV,
@@ -162,7 +163,7 @@ function createServiceConfig(name, port, options = {}) {
     },
     autorestart: true,
     restart_delay: 5000,
-    watch: [`apps/${name}/src`, 'packages'],
+    watch: ['src', '../../packages'],
     watch_delay: 1000,
     ignore_watch: ['node_modules', '__tests__', '**/*.test.ts', '**/*.spec.ts', 'dist'],
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
