@@ -927,10 +927,11 @@ describe('retryTask use case', () => {
         expect(result.value.workerLocation).toBe('home-mac');
         expect(result.value.retriedFrom).toBe(originalTaskId);
       }
-      // Verify task was updated with dispatch error
+      // Verify task was updated with dispatch error and failed status
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
         retryTaskId,
         expect.objectContaining({
+          status: 'failed',
           error: {
             code: 'WORKER_UNAVAILABLE',
             message: 'No workers available',
