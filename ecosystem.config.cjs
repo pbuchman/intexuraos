@@ -152,7 +152,6 @@ function createServiceConfig(name, port, options = {}) {
 
   const baseConfig = {
     name,
-    cwd: `./apps/${name}`,
     env: {
       ...process.env,
       ...COMMON_SERVICE_ENV,
@@ -163,7 +162,7 @@ function createServiceConfig(name, port, options = {}) {
     },
     autorestart: true,
     restart_delay: 5000,
-    watch: ['src', '../../packages'],
+    watch: [`apps/${name}/src`, 'packages'],
     watch_delay: 1000,
     ignore_watch: ['node_modules', '__tests__', '**/*.test.ts', '**/*.spec.ts', 'dist'],
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
@@ -173,7 +172,7 @@ function createServiceConfig(name, port, options = {}) {
     return {
       ...baseConfig,
       script: 'bash',
-      args: ['-c', `sleep ${startupDelay} && pnpm exec tsx src/index.ts`],
+      args: ['-c', `sleep ${startupDelay} && pnpm --filter ${name} start:local`],
       interpreter: 'none',
     };
   }
@@ -181,7 +180,7 @@ function createServiceConfig(name, port, options = {}) {
   return {
     ...baseConfig,
     script: 'pnpm',
-    args: ['exec', 'tsx', 'src/index.ts'],
+    args: ['--filter', name, 'start:local'],
     interpreter: 'none',
   };
 }
@@ -217,8 +216,9 @@ module.exports = {
     {
       name: 'web',
       script: 'pnpm',
-      args: process.env.PREDEV_ENVIRONMENT === 'true' ? ['run', 'preview'] : ['run', 'dev'],
-      cwd: './apps/web',
+      args: process.env.PREDEV_ENVIRONMENT === 'true'
+        ? ['--filter', 'web', 'preview']
+        : ['--filter', 'web', 'dev'],
       interpreter: 'none',
       env: {
         ...process.env,
