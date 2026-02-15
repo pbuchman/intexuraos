@@ -225,7 +225,7 @@ module.exports = {
         ...COMMON_SERVICE_URLS,
         NODE_ENV: 'development',
         VITE_PM2_MODE: 'true',
-        INTEXURAOS_USE_FIREBASE_EMULATORS: process.env.INTEXURAOS_USE_FIREBASE_EMULATORS ?? 'true',
+        INTEXURAOS_USE_FIREBASE_EMULATORS: process.env.INTEXURAOS_USE_FIREBASE_EMULATORS ?? 'false',
       },
       autorestart: true,
       max_restarts: 5,

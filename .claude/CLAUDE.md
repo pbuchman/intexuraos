@@ -461,11 +461,35 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 
 ## Session Start Protocol (MANDATORY)
 
-**RULE:** At the start of every fresh session, build all packages:
+**RULE:** At the start of every fresh session, build all packages and verify environment:
 
 ```bash
 pnpm build
 ```
+
+Then verify critical environment variables are loaded:
+
+```bash
+node -e "
+  const vars = [
+    'INTEXURAOS_GCP_PROJECT_ID',
+    'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+    'INTEXURAOS_AUTH_JWKS_URL',
+    'INTEXURAOS_ZAI_API_KEY',
+    'INTEXURAOS_OPENAI_API_KEY',
+    'INTEXURAOS_SENTRY_DSN',
+  ];
+  const missing = vars.filter(v => !process.env[v]);
+  if (missing.length > 0) {
+    console.log('⚠ MISSING ENV VARS: ' + missing.join(', '));
+    console.log('Run: direnv allow');
+  } else {
+    console.log('✓ All critical env vars loaded');
+  }
+"
+```
+
+**Print the result to the user.** If vars are missing, `direnv allow` or source `.envrc` before proceeding.
 
 **Why:** Apps depend on packages. Without built `dist/` directories, apps fail typecheck.
 
