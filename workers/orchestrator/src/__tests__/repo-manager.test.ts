@@ -376,6 +376,58 @@ describe('RepoManager', () => {
     });
   });
 
+  describe('cleanWorktree', () => {
+    it('should run git reset --hard HEAD and git clean -df', async () => {
+      const { cleanWorktree } = await loadRepoManager();
+      const repoPath = join(tempDir, 'repo-to-clean');
+      mkdirSync(repoPath, { recursive: true });
+
+      const commands: string[][] = [];
+      mockExecFileAsyncImpl = async (
+        _file: string,
+        args: string[]
+      ): Promise<{ stdout: string; stderr: string }> => {
+        commands.push(args);
+        return { stdout: '', stderr: '' };
+      };
+
+      await cleanWorktree(repoPath, mockLogger);
+
+      expect(commands).toEqual([
+        ['reset', '--hard', 'HEAD'],
+        ['clean', '-df'],
+      ]);
+    });
+
+    it('should throw when git reset fails', async () => {
+      const { cleanWorktree } = await loadRepoManager();
+      const repoPath = join(tempDir, 'repo-clean-fail');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        throw new Error('reset failed');
+      };
+
+      await expect(cleanWorktree(repoPath, mockLogger)).rejects.toThrow(
+        'Failed to clean worktree'
+      );
+    });
+
+    it('should include stderr in error when available', async () => {
+      const { cleanWorktree } = await loadRepoManager();
+      const repoPath = join(tempDir, 'repo-clean-stderr');
+
+      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
+        const error = new Error('Command failed') as Error & { stderr: string };
+        error.stderr = 'fatal: not a git repository';
+        throw error;
+      };
+
+      await expect(cleanWorktree(repoPath, mockLogger)).rejects.toThrow(
+        'Git output: fatal: not a git repository'
+      );
+    });
+  });
+
   describe('ensureRepository', () => {
     it('should clone repository when path does not exist', async () => {
       const { ensureRepository } = await loadRepoManager();
@@ -397,17 +449,25 @@ describe('RepoManager', () => {
       expect(cloneCalled).toBe(true);
     });
 
-    it('should validate and fetch when path exists with correct repo', async () => {
+    it('should validate, clean, and fetch when path exists with correct repo', async () => {
       const { ensureRepository } = await loadRepoManager();
       const repoPath = join(tempDir, 'existing-repo');
       mkdirSync(join(repoPath, '.git'), { recursive: true });
       writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ name: 'intexuraos' }));
 
+      let resetCalled = false;
+      let cleanCalled = false;
       let fetchCalled = false;
       mockExecFileAsyncImpl = async (
         file: string,
         args: string[]
       ): Promise<{ stdout: string; stderr: string }> => {
+        if (file === 'git' && args[0] === 'reset') {
+          resetCalled = true;
+        }
+        if (file === 'git' && args[0] === 'clean') {
+          cleanCalled = true;
+        }
         if (file === 'git' && args[0] === 'fetch') {
           fetchCalled = true;
         }
@@ -419,6 +479,8 @@ describe('RepoManager', () => {
 
       await ensureRepository('https://github.com/pbuchman/intexuraos.git', repoPath, mockLogger);
 
+      expect(resetCalled).toBe(true);
+      expect(cleanCalled).toBe(true);
       expect(fetchCalled).toBe(true);
     });
 
