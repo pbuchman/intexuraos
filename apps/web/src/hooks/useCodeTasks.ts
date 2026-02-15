@@ -107,15 +107,17 @@ export function useCodeTask(id: string): {
     }
 
     let listenerFailed = false;
+    let listenerRetryAttempt = 0;
+    const MAX_LISTENER_RETRIES = 4;
 
     const setupListener = async (): Promise<void> => {
       try {
-        if (!firebaseAuthenticatedRef.current || !isFirebaseAuthenticated()) {
+        if (!isFirebaseAuthenticated()) {
           initializeFirebase();
           const token = await getAccessToken();
           await authenticateFirebase(token);
-          firebaseAuthenticatedRef.current = true;
         }
+        firebaseAuthenticatedRef.current = true;
 
         const db = getFirestoreClient();
         const taskRef = doc(db, 'code_tasks', id);
@@ -123,6 +125,9 @@ export function useCodeTask(id: string): {
         unsubscribeRef.current = onSnapshot(
           taskRef,
           (snapshot) => {
+            listenerFailed = false;
+            listenerRetryAttempt = 0;
+
             if (snapshot.exists()) {
               const data = snapshot.data();
               const newStatus = data['status'] as string | undefined;
@@ -147,6 +152,16 @@ export function useCodeTask(id: string): {
     const pollInterval = setInterval(() => {
       if (listenerFailed) {
         void refresh(false);
+
+        if (listenerRetryAttempt < MAX_LISTENER_RETRIES) {
+          listenerRetryAttempt++;
+          firebaseAuthenticatedRef.current = false;
+          if (unsubscribeRef.current !== null) {
+            unsubscribeRef.current();
+            unsubscribeRef.current = null;
+          }
+          void setupListener();
+        }
       }
     }, 5000);
 

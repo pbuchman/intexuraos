@@ -20,6 +20,7 @@ import {
 
 const MAX_TERMINAL_ROWS = 70;
 const INITIAL_ROWS = 5;
+const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
 
 interface LogLineDoc {
   sequence: number;
@@ -55,6 +56,9 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const isMountedRef = useRef(true);
   const isAutoScrollingRef = useRef(false);
   const lineCountRef = useRef(0);
+  const maxSequenceRef = useRef(-1);
+  const retryAttemptRef = useRef(0);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -180,12 +184,12 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   useEffect(() => {
     const setupListener = async (): Promise<void> => {
       try {
-        if (!firebaseAuthenticatedRef.current || !isFirebaseAuthenticated()) {
+        if (!isFirebaseAuthenticated()) {
           initializeFirebase();
           const token = await getAccessToken();
           await authenticateFirebase(token);
-          firebaseAuthenticatedRef.current = true;
         }
+        firebaseAuthenticatedRef.current = true;
 
         const db = getFirestoreClient();
         const linesRef = collection(db, 'code_tasks', taskId, 'log_lines');
@@ -201,7 +205,10 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
             const addedLines: LogLineDoc[] = [];
             for (const change of snapshot.docChanges()) {
               if (change.type === 'added') {
-                addedLines.push(change.doc.data() as LogLineDoc);
+                const line = change.doc.data() as LogLineDoc;
+                if (line.sequence > maxSequenceRef.current) {
+                  addedLines.push(line);
+                }
               }
             }
 
@@ -211,6 +218,8 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
             }
 
             addedLines.sort((a, b) => a.sequence - b.sequence);
+            maxSequenceRef.current = addedLines[addedLines.length - 1]!.sequence;
+
             for (const line of addedLines) {
               terminal.write(line.text + '\n');
             }
@@ -230,25 +239,51 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
             }
 
             setLogsLoading(false);
+            retryAttemptRef.current = 0;
+            setLogsError(null);
           },
           (err) => {
-            if (isMountedRef.current) {
-              setLogsError(err.message);
-              setLogsLoading(false);
-            }
+            if (!isMountedRef.current) return;
+            setLogsLoading(false);
+            scheduleRetry(err.message);
           }
         );
       } catch (err) {
-        if (isMountedRef.current) {
-          setLogsError(err instanceof Error ? err.message : 'Failed to load logs');
-          setLogsLoading(false);
-        }
+        if (!isMountedRef.current) return;
+        setLogsLoading(false);
+        scheduleRetry(err instanceof Error ? err.message : 'Failed to load logs');
       }
+    };
+
+    const scheduleRetry = (errorMessage: string): void => {
+      const attempt = retryAttemptRef.current;
+      if (attempt >= RECONNECT_DELAYS.length) {
+        setLogsError(errorMessage);
+        return;
+      }
+      const delay = RECONNECT_DELAYS[attempt]!;
+      retryAttemptRef.current = attempt + 1;
+
+      if (unsubscribeRef.current !== null) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+      firebaseAuthenticatedRef.current = false;
+
+      retryTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          void setupListener();
+        }
+      }, delay);
     };
 
     void setupListener();
 
     return (): void => {
+      if (retryTimeoutRef.current !== null) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
       if (unsubscribeRef.current !== null) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
