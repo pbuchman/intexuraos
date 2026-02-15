@@ -267,11 +267,6 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       missingCriteria.push(`Worker exit code ${String(input.workerExitCode)}`);
     }
 
-    if (input.rawLogs.includes('<tool_use_error>')) {
-      reasons.push('Detected <tool_use_error> marker in worker logs');
-      missingCriteria.push('Resolve tool_use_error before completing task');
-    }
-
     const lastAssistantMessage = extractLastAssistantMessage(input.rawLogs);
     if (lastAssistantMessage === null) {
       reasons.push('Missing assistant final message in worker logs');
@@ -378,7 +373,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       terminalExcerpt,
       '',
       'Hard rules for this decision:',
-      '- If deterministic signals show tool_use_error, explicit Claude error, non-zero worker exit, or missing required final contract lines, return passed=false.',
+      '- If deterministic signals show explicit Claude error, non-zero worker exit, or missing required final contract lines, return passed=false.',
       '- If you cannot verify all required items from provided evidence, return passed=false.',
       '',
       'Return PASS only if all required contract items are present with evidence.',
