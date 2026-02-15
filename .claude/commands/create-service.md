@@ -524,31 +524,11 @@ locals {
 }
 ```
 
-#### 8d. Add to Smart Dispatch
+#### 8d. Terraform Change Detection (Optional)
 
-Edit `.github/scripts/smart-dispatch.mjs`, add to `SERVICES` array:
+Smart dispatch (`.github/scripts/smart-dispatch.mjs`) and terraform change detection (`scripts/detect-tf-changes.sh`) **auto-discover** services from the filesystem — no manual registration needed. Your new service will be detected automatically because it has a `Dockerfile` in `apps/<service-name>/`.
 
-```javascript
-const SERVICES = [
-  // ... existing services ...
-  '<service-name>',
-];
-```
-
-#### 8e. Add to Terraform Change Detection
-
-Edit `scripts/detect-tf-changes.sh`, add to `ALL_SERVICES` array:
-
-```bash
-ALL_SERVICES=(
-  # ... existing services ...
-  "<service-name>"
-)
-```
-
-**Why:** This ensures the "Detect Terraform Affected Services" step in the deploy workflow correctly identifies your service when terraform changes affect it.
-
-**Optional:** If your service uses specific terraform modules, add it to `MODULE_TO_SERVICES` mapping:
+**Optional:** If your service uses specific terraform modules, add it to `MODULE_TO_SERVICES` mapping in `scripts/detect-tf-changes.sh`:
 
 ```bash
 # Example: if your service uses a custom Pub/Sub topic
@@ -999,8 +979,6 @@ terraform fmt -check -recursive && terraform validate
 - [ ] Per-service `apps/<service>/cloudbuild.yaml` created
 - [ ] Deploy script `cloudbuild/scripts/deploy-<service>.sh` created
 - [ ] Added to `docker_services` in `terraform/modules/cloud-build/main.tf`
-- [ ] Added to `SERVICES` in `.github/scripts/smart-dispatch.mjs`
-- [ ] Added to `ALL_SERVICES` in `scripts/detect-tf-changes.sh`
 - [ ] Registered in api-docs-hub
 - [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files
 - [ ] Added to `.envrc.local.example`

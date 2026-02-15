@@ -355,13 +355,8 @@ jobs:
           TARGET="${{ matrix.target }}"
           echo "Deploying target: $TARGET"
 
-          # Workers (Cloud Functions)
+          # Special targets with unique deploy logic
           case "$TARGET" in
-            vm-lifecycle|log-cleanup)
-              echo "Deploying worker: $TARGET"
-              bash cloudbuild/scripts/deploy-function.sh "$TARGET"
-              exit 0
-              ;;
             firestore)
               echo "Deploying Firestore"
               bash cloudbuild/scripts/deploy-firestore.sh
@@ -425,7 +420,23 @@ jobs:
               ;;
           esac
 
-          # Docker services (Cloud Run)
+          # Workers with Dockerfiles (build+push only, no Cloud Run deploy)
+          WORKER_DOCKERFILE="workers/$TARGET/Dockerfile"
+          if [[ -f "$WORKER_DOCKERFILE" ]]; then
+            echo "Building and pushing worker image: $TARGET"
+            bash cloudbuild/scripts/build-push-monitored.sh "$TARGET" "$WORKER_DOCKERFILE"
+            exit 0
+          fi
+
+          # Workers without Dockerfiles (Cloud Functions)
+          WORKER_DIR="workers/$TARGET"
+          if [[ -d "$WORKER_DIR" ]]; then
+            echo "Deploying Cloud Function: $TARGET"
+            bash cloudbuild/scripts/deploy-function.sh "$TARGET"
+            exit 0
+          fi
+
+          # Docker services (Cloud Run) — apps/<target>/Dockerfile
           DOCKERFILE="apps/$TARGET/Dockerfile"
           if [[ ! -f "$DOCKERFILE" ]]; then
             echo "ERROR: Dockerfile not found: $DOCKERFILE"
