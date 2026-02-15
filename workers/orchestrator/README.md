@@ -212,7 +212,7 @@ echo "PORT=8199" >> ~/.claude-orchestrator/env
 echo "INTEXURAOS_WORKER_CAPACITY=3" >> ~/.claude-orchestrator/env
 echo "INTEXURAOS_REPOSITORY_PATH=$HOME/.claude-orchestrator/repo" >> ~/.claude-orchestrator/env
 echo "LOG_LEVEL=info" >> ~/.claude-orchestrator/env
-echo "INTEXURAOS_CODE_AGENT_URL=http://localhost:8127" >> ~/.claude-orchestrator/env
+echo "INTEXURAOS_CODE_AGENT_URL=http://localhost:8128" >> ~/.claude-orchestrator/env
 echo "INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman" >> ~/.claude-orchestrator/env
 chmod 600 ~/.claude-orchestrator/env
 
