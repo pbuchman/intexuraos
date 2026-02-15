@@ -205,6 +205,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     pricingContext,
     logger: createAppLogger({ name: 'userServiceClient' }),
     platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
+    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
   const commandsAgentClient = createCommandsAgentHttpClient({
