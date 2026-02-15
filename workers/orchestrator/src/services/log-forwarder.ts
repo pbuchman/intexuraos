@@ -80,7 +80,8 @@ export class LogForwarder {
 
     // Flush any remaining partial line through formatter
     if (state.partialLine !== '') {
-      state.buffer += stripDockerHeaders(state.partialLine + '\n');
+      const cleaned = stripDockerHeaders(state.partialLine + '\n');
+      state.buffer += this.prefixTimestamps(cleaned);
       state.partialLine = '';
     }
 
@@ -179,7 +180,8 @@ export class LogForwarder {
 
     /* v8 ignore start -- test-infra: partialLine only set via appendChunk (Docker mode), stopForwarding tests use file-based mode @preserve */
     if (state.partialLine !== '') {
-      state.buffer += stripDockerHeaders(state.partialLine + '\n');
+      const cleaned = stripDockerHeaders(state.partialLine + '\n');
+      state.buffer += this.prefixTimestamps(cleaned);
       state.partialLine = '';
     }
     /* v8 ignore stop @preserve */
@@ -252,7 +254,8 @@ export class LogForwarder {
     const complete = combined.slice(0, lastNewline + 1);
     state.partialLine = combined.slice(lastNewline + 1);
 
-    state.buffer += stripDockerHeaders(complete);
+    const cleaned = stripDockerHeaders(complete);
+    state.buffer += this.prefixTimestamps(cleaned);
 
     // Flush if buffer exceeds max chunk size
     if (state.buffer.length >= MAX_CHUNK_SIZE) {
@@ -482,6 +485,26 @@ export class LogForwarder {
     return { success: false, acknowledgedSequences: [] };
   }
 
+  /**
+   * Prefix each non-empty line with a local timestamp (HH:MM:ss.mmm).
+   * Lines already prefixed by appendOrchestratorTaskLog are detected by the
+   * leading timestamp pattern and left unchanged.
+   */
+  private prefixTimestamps(text: string): string {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    const s = String(now.getSeconds()).padStart(2, '0');
+    const ms = String(now.getMilliseconds()).padStart(3, '0');
+    const ts = `${h}:${m}:${s}.${ms}`;
+
+    return text.replace(/^(.+)$/gm, (line) => {
+      // Already has a timestamp prefix (from orchestrator log) — skip
+      if (/^\d{2}:\d{2}:\d{2}\.\d{3} /.test(line)) return line;
+      return `${ts} ${line}`;
+    });
+  }
+
   private signPayload(payload: string, timestamp: number, secret: string): string {
     const message = `${String(timestamp)}.${payload}`;
     return createHmac('sha256', secret).update(message).digest('hex');
@@ -508,7 +531,8 @@ export class LogForwarder {
     if (state === undefined) return;
 
     if (state.partialLine !== '') {
-      state.buffer += stripDockerHeaders(state.partialLine + '\n');
+      const cleaned = stripDockerHeaders(state.partialLine + '\n');
+      state.buffer += this.prefixTimestamps(cleaned);
       state.partialLine = '';
     }
 
