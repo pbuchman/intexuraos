@@ -2,6 +2,7 @@
  * Tests for generateIssueTitle use case.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ok, err } from '@intexuraos/common-core';
 import {
   generateIssueTitle,
   type GenerateIssueTitleRequest,
@@ -179,8 +180,8 @@ describe('generateIssueTitle', () => {
     });
   });
 
-  describe('fallback title generation', () => {
-    it('uses fallback when LLM client fails to initialize', async () => {
+  describe('LLM client unavailable', () => {
+    it('returns error when LLM client fails to initialize', async () => {
       fakeUserServiceClient.setFailure(true, {
         code: 'API_ERROR',
         message: 'User service unavailable',
@@ -191,14 +192,14 @@ describe('generateIssueTitle', () => {
         { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
       );
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).toBe('Fix the bug in the login flow');
-        expect(result.value.issueType).toBe('feature');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_ERROR');
+        expect(result.error.message).toContain('Failed to get LLM client');
       }
     });
 
-    it('logs warning when LLM client fails', async () => {
+    it('logs error when LLM client fails', async () => {
       fakeUserServiceClient.setFailure(true, {
         code: 'API_ERROR',
         message: 'User service unavailable',
@@ -209,220 +210,127 @@ describe('generateIssueTitle', () => {
         logger: fakeLogger,
       });
 
-      expect(fakeLogger.warn).toHaveBeenCalledWith(
+      expect(fakeLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ userId: 'user-456' }),
-        'Failed to get LLM client, using fallback'
-      );
-    });
-
-    it('uses fallback when LLM generation fails', async () => {
-      fakeLlmClient.setFailure(true, { code: 'API_ERROR', message: 'LLM error' });
-
-      const result = await generateIssueTitle(
-        { description: 'Add new feature to dashboard', userId: 'user-456' },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).toBe('Add new feature to dashboard');
-      }
-    });
-
-    it('uses fallback when JSON parsing fails', async () => {
-      fakeLlmClient.setContent('This is not valid JSON');
-
-      const result = await generateIssueTitle(
-        { description: 'Improve performance of API', userId: 'user-456' },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).toBe('Improve performance of API');
-      }
-    });
-
-    it('logs warning when JSON parsing fails', async () => {
-      fakeLlmClient.setContent('Invalid JSON here');
-
-      await generateIssueTitle(defaultRequest, {
-        userServiceClient: fakeUserServiceClient,
-        logger: fakeLogger,
-      });
-
-      expect(fakeLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ parseError: expect.any(String) }),
-        'Failed to parse LLM response as JSON, using fallback'
-      );
-    });
-
-    it('uses fallback when schema validation fails', async () => {
-      fakeLlmClient.setContent('{"title": "", "issueType": "invalid"}');
-
-      const result = await generateIssueTitle(
-        { description: 'Update documentation', userId: 'user-456' },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).toBe('Update documentation');
-      }
-    });
-
-    it('logs warning when schema validation fails', async () => {
-      fakeLlmClient.setContent('{"title": "Valid", "issueType": "unknown_type"}');
-
-      await generateIssueTitle(defaultRequest, {
-        userServiceClient: fakeUserServiceClient,
-        logger: fakeLogger,
-      });
-
-      expect(fakeLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ zodErrors: expect.any(String) }),
-        'LLM returned invalid response format, using fallback'
+        expect.stringContaining('Failed to get LLM client')
       );
     });
   });
 
-  describe('fallback title formatting', () => {
-    it('extracts first sentence from description', async () => {
-      fakeUserServiceClient.setFailure(true, { code: 'API_ERROR', message: 'Unavailable' });
+  describe('retry behavior', () => {
+    it('retries once on LLM generation failure and succeeds', async () => {
+      const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 };
+      fakeLlmClient.setResponseSequence([
+        err({ code: 'API_ERROR', message: 'Temporary failure' }),
+        ok({ content: '{"title": "Retry succeeded", "issueType": "bug"}', usage }),
+      ]);
 
-      const result = await generateIssueTitle(
-        {
-          description: 'First sentence here. Second sentence with more details.',
-          userId: 'user-456',
-        },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
+      const result = await generateIssueTitle(defaultRequest, {
+        userServiceClient: fakeUserServiceClient,
+        logger: fakeLogger,
+      });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.title).toBe('First sentence here');
+        expect(result.value.title).toBe('Retry succeeded');
+        expect(result.value.issueType).toBe('bug');
+      }
+      expect(fakeLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ attempt: 1 }),
+        expect.stringContaining('retrying')
+      );
+    });
+
+    it('returns error after two LLM generation failures', async () => {
+      fakeLlmClient.setResponseSequence([
+        err({ code: 'API_ERROR', message: 'First failure' }),
+        err({ code: 'API_ERROR', message: 'Second failure' }),
+      ]);
+
+      const result = await generateIssueTitle(defaultRequest, {
+        userServiceClient: fakeUserServiceClient,
+        logger: fakeLogger,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_ERROR');
+      }
+      expect(fakeLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ attempt: 2 }),
+        expect.stringContaining('failed after 2 attempts')
+      );
+    });
+
+    it('retries once on JSON parse failure and succeeds', async () => {
+      const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 };
+      fakeLlmClient.setResponseSequence([
+        ok({ content: 'not valid json', usage }),
+        ok({ content: '{"title": "Parse retry succeeded", "issueType": "feature"}', usage }),
+      ]);
+
+      const result = await generateIssueTitle(defaultRequest, {
+        userServiceClient: fakeUserServiceClient,
+        logger: fakeLogger,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.title).toBe('Parse retry succeeded');
       }
     });
 
-    it('extracts first line from multi-line description', async () => {
-      fakeUserServiceClient.setFailure(true, { code: 'API_ERROR', message: 'Unavailable' });
+    it('returns error after two JSON parse failures', async () => {
+      const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 };
+      fakeLlmClient.setResponseSequence([
+        ok({ content: 'not json 1', usage }),
+        ok({ content: 'not json 2', usage }),
+      ]);
 
-      const result = await generateIssueTitle(
-        {
-          description: 'First line\nSecond line\nThird line',
-          userId: 'user-456',
-        },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
+      const result = await generateIssueTitle(defaultRequest, {
+        userServiceClient: fakeUserServiceClient,
+        logger: fakeLogger,
+      });
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).toBe('First line');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PARSE_ERROR');
       }
     });
 
-    it('truncates long titles to 80 characters with ellipsis', async () => {
-      fakeUserServiceClient.setFailure(true, { code: 'API_ERROR', message: 'Unavailable' });
+    it('retries once on schema validation failure and succeeds', async () => {
+      const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 };
+      fakeLlmClient.setResponseSequence([
+        ok({ content: '{"title": "", "issueType": "invalid"}', usage }),
+        ok({ content: '{"title": "Valid title", "issueType": "feature"}', usage }),
+      ]);
 
-      const longDescription =
-        'This is a very long description that exceeds the maximum title length of eighty characters significantly';
-
-      const result = await generateIssueTitle(
-        { description: longDescription, userId: 'user-456' },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
+      const result = await generateIssueTitle(defaultRequest, {
+        userServiceClient: fakeUserServiceClient,
+        logger: fakeLogger,
+      });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.title.length).toBe(80);
-        expect(result.value.title.endsWith('...')).toBe(true);
+        expect(result.value.title).toBe('Valid title');
       }
     });
 
-    it('removes code blocks from fallback title', async () => {
-      fakeUserServiceClient.setFailure(true, { code: 'API_ERROR', message: 'Unavailable' });
+    it('returns error after two schema validation failures', async () => {
+      const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 };
+      fakeLlmClient.setResponseSequence([
+        ok({ content: '{"title": "", "issueType": "invalid"}', usage }),
+        ok({ content: '{"title": "", "issueType": "also-invalid"}', usage }),
+      ]);
 
-      const result = await generateIssueTitle(
-        {
-          description: 'Fix this bug ```js\nconst x = 1;\n``` in the code',
-          userId: 'user-456',
-        },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
+      const result = await generateIssueTitle(defaultRequest, {
+        userServiceClient: fakeUserServiceClient,
+        logger: fakeLogger,
+      });
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).not.toContain('```');
-        expect(result.value.title).not.toContain('const x');
-      }
-    });
-
-    it('removes inline code from fallback title', async () => {
-      fakeUserServiceClient.setFailure(true, { code: 'API_ERROR', message: 'Unavailable' });
-
-      const result = await generateIssueTitle(
-        {
-          description: 'Fix the `handleClick` function issue',
-          userId: 'user-456',
-        },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).not.toContain('`');
-      }
-    });
-
-    it('removes URLs from fallback title', async () => {
-      fakeUserServiceClient.setFailure(true, { code: 'API_ERROR', message: 'Unavailable' });
-
-      const result = await generateIssueTitle(
-        {
-          description: 'Check the bug at https://example.com/issue/123 please',
-          userId: 'user-456',
-        },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).not.toContain('https://');
-      }
-    });
-
-    it('removes markdown formatting from fallback title', async () => {
-      fakeUserServiceClient.setFailure(true, { code: 'API_ERROR', message: 'Unavailable' });
-
-      const result = await generateIssueTitle(
-        {
-          description: 'Fix the **bold** and _italic_ text',
-          userId: 'user-456',
-        },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).not.toContain('*');
-        expect(result.value.title).not.toContain('_');
-      }
-    });
-
-    it('returns Code task when description becomes empty after cleaning', async () => {
-      fakeUserServiceClient.setFailure(true, { code: 'API_ERROR', message: 'Unavailable' });
-
-      const result = await generateIssueTitle(
-        {
-          description: '```code only```',
-          userId: 'user-456',
-        },
-        { userServiceClient: fakeUserServiceClient, logger: fakeLogger }
-      );
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).toBe('Code task');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PARSE_ERROR');
       }
     });
   });

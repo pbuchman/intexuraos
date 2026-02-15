@@ -644,8 +644,15 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
   private content = '{"title": "Generated title", "issueType": "feature"}';
   private shouldFail = false;
   private failError: LLMError = { code: 'API_ERROR', message: 'LLM error' };
+  private responseSequence: Result<GenerateResult, LLMError>[] | null = null;
+  private sequenceIndex = 0;
 
   async generate(_prompt: string): Promise<Result<GenerateResult, LLMError>> {
+    if (this.responseSequence !== null) {
+      const index = Math.min(this.sequenceIndex, this.responseSequence.length - 1);
+      this.sequenceIndex++;
+      return this.responseSequence[index] as Result<GenerateResult, LLMError>;
+    }
     if (this.shouldFail) return err(this.failError);
     return ok({
       content: this.content,
@@ -664,9 +671,16 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
     }
   }
 
+  setResponseSequence(responses: Result<GenerateResult, LLMError>[]): void {
+    this.responseSequence = responses;
+    this.sequenceIndex = 0;
+  }
+
   reset(): void {
     this.content = '{"title": "Generated title", "issueType": "feature"}';
     this.shouldFail = false;
+    this.responseSequence = null;
+    this.sequenceIndex = 0;
   }
 }
 
