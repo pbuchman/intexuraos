@@ -182,16 +182,47 @@ export async function fetchRemote(path: string, logger: Logger): Promise<void> {
 }
 
 /**
+ * Reset repository to a clean state by discarding all local changes.
+ * Runs: git reset --hard HEAD && git clean -df
+ */
+export async function cleanWorktree(path: string, logger: Logger): Promise<void> {
+  logger.info({ path }, 'Cleaning worktree: git reset --hard HEAD && git clean -df');
+
+  try {
+    await execFileAsync('git', ['reset', '--hard', 'HEAD'], { cwd: path });
+    await execFileAsync('git', ['clean', '-df'], { cwd: path });
+    logger.info({ path }, 'Worktree cleaned successfully');
+  } catch (error: unknown) {
+    const execError = error as { message?: string; stderr?: string; code?: number };
+    logger.error(
+      {
+        error,
+        stderr: execError.stderr,
+        exitCode: execError.code,
+        path,
+      },
+      'Failed to clean worktree'
+    );
+    /* v8 ignore start -- ts-type: ternary for non-Error objects never reached in tests @preserve */
+    const message = execError.message ?? 'Unknown error';
+    /* v8 ignore stop @preserve */
+    const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
+    throw new Error(`Failed to clean worktree: ${message}${stderrInfo}`);
+  }
+}
+
+/**
  * Ensure the repository exists and is valid.
  *
  * If path doesn't exist: clone the repository
- * If path exists: validate it's the correct repo and fetch latest
+ * If path exists: validate it's the correct repo, clean, and fetch latest
  */
 export async function ensureRepository(url: string, path: string, logger: Logger): Promise<void> {
   if (existsSync(path)) {
     logger.info({ path }, 'Repository path exists, validating...');
     try {
       await validateRepository(path, url, logger);
+      await cleanWorktree(path, logger);
       await fetchRemote(path, logger);
     } catch (error) {
       logger.error({ error, path, url }, 'Repository validation or fetch failed');
