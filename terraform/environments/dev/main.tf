@@ -470,8 +470,7 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
     # Speechmatics API secrets
-    "INTEXURAOS_SPEECHMATICS_API_KEY"     = "Speechmatics Batch API key for speech transcription (deprecated, use APP variant)"
-    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for whatsapp-service (renamed from SPEECHMATICS)"
+    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for whatsapp-service"
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Firebase configuration for web app
@@ -488,15 +487,11 @@ module "secret_manager" {
     "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
     # Crawl4AI Cloud API
-    "INTEXURAOS_CRAWL4AI_API_KEY"     = "Crawl4AI Cloud API key for web page content extraction (deprecated, use APP variant)"
-    "INTEXURAOS_CRAWL4AI_APP_API_KEY" = "Crawl4AI Cloud API key for web-agent (renamed from CRAWL4AI)"
+    "INTEXURAOS_CRAWL4AI_APP_API_KEY" = "Crawl4AI Cloud API key for web-agent"
     # LLM API keys
-    "INTEXURAOS_OPENAI_API_KEY"     = "OpenAI API key for chat-agent LLM features (deprecated, use APP variant)"
-    "INTEXURAOS_OPENAI_APP_API_KEY" = "OpenAI API key for chat-agent (renamed from OPENAI)"
-    "INTEXURAOS_ZAI_API_KEY"        = "ZAI API key for Claude worker containers (deprecated, use APP variant)"
-    "INTEXURAOS_ZAI_APP_API_KEY"    = "Platform ZAI API key (renamed from GUEST_ZAI + ZAI)"
+    "INTEXURAOS_OPENAI_APP_API_KEY" = "OpenAI API key for chat-agent"
+    "INTEXURAOS_ZAI_APP_API_KEY"    = "Platform ZAI API key for all services"
     "INTEXURAOS_GEMINI_APP_API_KEY" = "Gemini API key for orchestrator completion verifier"
-    "INTEXURAOS_GUEST_ZAI_API_KEY"  = "ZAI API key for guest chat sessions (deprecated, use ZAI_APP)"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to Claude worker containers"
     "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to Claude worker containers"
