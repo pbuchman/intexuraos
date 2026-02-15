@@ -269,8 +269,8 @@ ${feedback.trim()}
     const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
     const commentBody = `🔄 **Follow-up task created** based on user feedback
 
-**Original task:** [${originalTask.id}](${webUrl}/tasks/${originalTask.id})
-**Follow-up task:** [${followUpTask.id}](${webUrl}/tasks/${followUpTask.id})
+**Original task:** [${originalTask.id}](${webUrl}/#/code-tasks/${originalTask.id})
+**Follow-up task:** [${followUpTask.id}](${webUrl}/#/code-tasks/${followUpTask.id})
 
 **Feedback:**
 > ${feedback.trim().split('\n').join('\n> ')}`;
