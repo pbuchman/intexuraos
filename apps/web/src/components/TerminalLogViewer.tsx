@@ -19,6 +19,7 @@ import {
 } from '@/services/firebase';
 
 const MAX_TERMINAL_ROWS = 70;
+const INITIAL_ROWS = 5;
 
 interface LogLineDoc {
   sequence: number;
@@ -82,29 +83,6 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const isFullscreen = isMobileViewport && isOverlayOpen;
 
   useEffect(() => {
-    const wrapper = terminalWrapperRef.current;
-    const body = terminalBodyRef.current;
-    if (wrapper === null || body === null || isFullscreen) {
-      if (body !== null) body.style.maxHeight = '';
-      return;
-    }
-
-    const updateMaxHeight = (): void => {
-      const rect = wrapper.getBoundingClientRect();
-      const headerHeight = 44;
-      const bottomPadding = 24;
-      const available = window.innerHeight - rect.top - headerHeight - bottomPadding;
-      body.style.maxHeight = `${String(Math.max(200, available))}px`;
-    };
-
-    updateMaxHeight();
-    window.addEventListener('resize', updateMaxHeight);
-    return (): void => {
-      window.removeEventListener('resize', updateMaxHeight);
-    };
-  }, [isFullscreen]);
-
-  useEffect(() => {
     if (!isFullscreen) return;
     const previousOverflow = document.body.style.overflow;
     const previousPosition = document.body.style.position;
@@ -147,7 +125,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
     requestAnimationFrame(() => {
       fitAddon.fit();
-      terminal.resize(terminal.cols, MAX_TERMINAL_ROWS);
+      terminal.resize(terminal.cols, INITIAL_ROWS);
     });
 
     terminalRef.current = terminal;
@@ -234,7 +212,13 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
               terminal.write(line.text + '\n');
             }
 
-            setLineCount((prev) => prev + addedLines.length);
+            setLineCount((prev) => {
+              const desiredRows = Math.min(prev + addedLines.length + 1, MAX_TERMINAL_ROWS);
+              if (desiredRows > terminal.rows) {
+                terminal.resize(terminal.cols, desiredRows);
+              }
+              return prev + addedLines.length;
+            });
             if (followLogsRef.current) {
               isAutoScrollingRef.current = true;
               terminal.scrollToBottom();
@@ -390,7 +374,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
       <div
         ref={terminalBodyRef}
-        className={`terminal-flow relative bg-slate-900 ${isFullscreen ? 'flex-1 min-h-0 overflow-hidden' : 'rounded-b-lg min-h-[200px] overflow-y-auto'}`}
+        className={`terminal-flow relative bg-slate-900 ${isFullscreen ? 'flex-1 min-h-0 overflow-hidden' : 'rounded-b-lg overflow-y-auto max-h-[80vh]'}`}
         onClick={isMobileViewport && !isFullscreen ? handleOpenOverlay : undefined}
       >
         <div
