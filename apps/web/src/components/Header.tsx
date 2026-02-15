@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth, useSyncQueue, useTheme } from '@/context';
+import { signOutFirebase } from '@/services/firebase';
 import { usePWA } from '@/context/pwa-context';
 import { useWorkersStatus } from '@/hooks';
 import { ChevronDown, LogOut, Moon, Sun, User, RefreshCw, RotateCcw, Server } from 'lucide-react';
@@ -327,6 +328,7 @@ export function Header(): React.JSX.Element {
               )}
               <button
                 onClick={(): void => {
+                  void signOutFirebase().catch(() => { /* best-effort */ });
                   logout();
                   setIsMenuOpen(false);
                 }}
