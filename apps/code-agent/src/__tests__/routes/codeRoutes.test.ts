@@ -2571,13 +2571,13 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
     });
 
     it('should return 400 with retryAfterMs when task failed too recently', async () => {
-      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+      const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
       mockFindByIdForUser.mockResolvedValue(
         ok({
           id: taskId,
           userId: 'test-user-id',
           status: 'failed',
-          completedAt: twoMinutesAgo,
+          completedAt: thirtySecondsAgo,
           prompt: 'Original prompt',
           sanitizedPrompt: 'Original prompt',
           systemPromptHash: 'hash-123',
@@ -2588,8 +2588,8 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           traceId: 'trace-123',
           dedupKey: 'dedup-123',
           callbackReceived: true,
-          createdAt: twoMinutesAgo,
-          updatedAt: twoMinutesAgo,
+          createdAt: thirtySecondsAgo,
+          updatedAt: thirtySecondsAgo,
           error: { code: 'WORKER_ERROR', message: 'Task failed' },
         } as never)
       );
