@@ -1949,7 +1949,7 @@ describe('POST /internal/logs', () => {
     const storedEntries = entryStoreSpy.mock.calls[0]?.[1];
     expect(storedEntries).toHaveLength(2);
     expect(storedEntries?.[0]?.text).toBe('[init] Model: claude-opus-4-6 | Tools: 2');
-    expect(storedEntries?.[1]?.text).toBe('Hello');
+    expect(storedEntries?.[1]?.text).toBe('[claude] Hello');
   });
 
   it('validates HMAC signature', async () => {

@@ -3025,40 +3025,23 @@ describe('TaskDispatcher', () => {
       expect(formatted).toContain('mode=plan');
     });
 
-    it('should format assistant messages with text truncation', async () => {
+    it('should pass through assistant JSON unchanged', async () => {
       const onLog = await submitAndGetOnLog();
-      const longText = 'A'.repeat(250);
       const assistantJson = JSON.stringify({
         type: 'assistant',
         message: {
           id: 'msg-1',
-          content: [{ type: 'text', text: longText }],
-        },
-      });
-
-      onLog(assistantJson + '\n');
-
-      const formatted = findFormattedChunk('[claude] Assistant');
-      expect(formatted).toContain('[claude] Assistant: ' + 'A'.repeat(200) + '...');
-    });
-
-    it('should format assistant messages without truncation for short text', async () => {
-      const onLog = await submitAndGetOnLog();
-      const assistantJson = JSON.stringify({
-        type: 'assistant',
-        message: {
-          id: 'msg-2',
           content: [{ type: 'text', text: 'Hello world' }],
         },
       });
 
       onLog(assistantJson + '\n');
 
-      const formatted = findFormattedChunk('[claude] Assistant');
-      expect(formatted).toBe('[claude] Assistant: Hello world\n');
+      const formatted = findFormattedChunk('"type":"assistant"');
+      expect(formatted).toContain(assistantJson);
     });
 
-    it('should format result messages', async () => {
+    it('should pass through result JSON unchanged', async () => {
       const onLog = await submitAndGetOnLog();
       const resultJson = JSON.stringify({
         type: 'result',
@@ -3072,50 +3055,8 @@ describe('TaskDispatcher', () => {
 
       onLog(resultJson + '\n');
 
-      const formatted = findFormattedChunk('[claude] Result');
-      expect(formatted).toContain('error=true');
-      expect(formatted).toContain('turns=3');
-      expect(formatted).toContain('duration=204s');
-      expect(formatted).toContain('cost=$0.15');
-      expect(formatted).toContain('| API Error: 429 rate limited');
-    });
-
-    it('should format result messages with truncated result text', async () => {
-      const onLog = await submitAndGetOnLog();
-      const longResult = 'B'.repeat(250);
-      const resultJson = JSON.stringify({
-        type: 'result',
-        subtype: 'success',
-        is_error: false,
-        num_turns: 1,
-        duration_ms: 5000,
-        total_cost_usd: 0,
-        result: longResult,
-      });
-
-      onLog(resultJson + '\n');
-
-      const formatted = findFormattedChunk('[claude] Result');
-      expect(formatted).toContain('error=false');
-      expect(formatted).toContain('| ' + 'B'.repeat(200) + '...');
-    });
-
-    it('should format result messages without result text', async () => {
-      const onLog = await submitAndGetOnLog();
-      const resultJson = JSON.stringify({
-        type: 'result',
-        subtype: 'success',
-        is_error: false,
-        num_turns: 0,
-        duration_ms: 0,
-        total_cost_usd: 0,
-      });
-
-      onLog(resultJson + '\n');
-
-      const formatted = findFormattedChunk('[claude] Result');
-      expect(formatted).not.toContain('|');
-      expect(formatted).toContain('cost=$0.00');
+      const formatted = findFormattedChunk('"type":"result"');
+      expect(formatted).toContain(resultJson);
     });
 
     it('should pass through non-JSON lines unchanged', async () => {
@@ -3136,7 +3077,7 @@ describe('TaskDispatcher', () => {
       findFormattedChunk('"type":"unknown"');
     });
 
-    it('should handle assistant messages with no text content blocks', async () => {
+    it('should pass through assistant tool_use JSON unchanged', async () => {
       const onLog = await submitAndGetOnLog();
       const assistantJson = JSON.stringify({
         type: 'assistant',
@@ -3148,8 +3089,8 @@ describe('TaskDispatcher', () => {
 
       onLog(assistantJson + '\n');
 
-      const formatted = findFormattedChunk('[claude] Assistant:');
-      expect(formatted).toBe('[claude] Assistant: \n');
+      const formatted = findFormattedChunk('"type":"assistant"');
+      expect(formatted).toContain(assistantJson);
     });
 
     it('should format init message with missing optional fields', async () => {

@@ -157,7 +157,7 @@ function formatAssistant(obj: StreamJsonMessage): string {
 
   for (const block of content) {
     if (block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') {
-      parts.push(block.text);
+      parts.push(`[claude] ${block.text}`);
     } else if (block.type === 'tool_use' && typeof block.name === 'string') {
       const ctx = extractToolContext(block.input);
       parts.push(`[tool] ${block.name}${ctx !== undefined ? `: ${ctx}` : ''}`);
@@ -226,8 +226,10 @@ function formatResult(obj: StreamJsonMessage): string {
   if (typeof obj.num_turns === 'number') parts.push(`${String(obj.num_turns)} turns`);
   if (typeof obj.total_cost_usd === 'number') parts.push(`$${obj.total_cost_usd.toFixed(3)}`);
 
-  if (parts.length === 0) return '[done] Completed';
-  return `[done] ${parts.join(', ')}`;
+  const summary = parts.length > 0 ? parts.join(', ') : 'Completed';
+  const resultText =
+    typeof obj.result === 'string' && obj.result.trim() !== '' ? `\n${obj.result}` : '';
+  return `[done] ${summary}${resultText}`;
 }
 
 function collapseOutput(output: string): string {

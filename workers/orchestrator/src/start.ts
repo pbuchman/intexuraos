@@ -139,13 +139,14 @@ async function validateWorkerApiKeys(
     const token = await anthropicOAuth.getAccessToken();
     if (token !== null) {
       logger.info(
-        { expiresInMinutes: oauthState.expiresInMinutes, subscriptionType: oauthState.subscriptionType },
+        {
+          expiresInMinutes: oauthState.expiresInMinutes,
+          subscriptionType: oauthState.subscriptionType,
+        },
         'Anthropic OAuth validated — token active, opus/auto tasks ready'
       );
     } else {
-      logger.error(
-        'Anthropic OAuth token refresh failed — opus/auto tasks will fail'
-      );
+      logger.error('Anthropic OAuth token refresh failed — opus/auto tasks will fail');
     }
   } else if (oauthState.status === 'expired') {
     const token = await anthropicOAuth.getAccessToken();
