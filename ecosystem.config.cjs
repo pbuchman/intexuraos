@@ -21,6 +21,7 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_GCP_PROJECT_ID: process.env.INTEXURAOS_GCP_PROJECT_ID,
   INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   INTEXURAOS_GUEST_ZAI_API_KEY: process.env.INTEXURAOS_GUEST_ZAI_API_KEY,
+  INTEXURAOS_GEMINI_APP_API_KEY: process.env.INTEXURAOS_GEMINI_APP_API_KEY,
 };
 
 // All service URLs - mirrors Terraform local.common_service_env_vars

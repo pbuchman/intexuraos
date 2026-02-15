@@ -12,6 +12,7 @@ export interface UserServiceConfig {
   pricingContext: IPricingContext;
   logger: Logger;
   platformZaiApiKey?: string | undefined;
+  platformGeminiApiKey?: string | undefined;
 }
 
 /**

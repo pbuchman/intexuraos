@@ -156,7 +156,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         };
 
         // Step 2: Determine model (use user's preference or default)
-        const rawModel = settingsBody.data.llmPreferences?.defaultModel ?? LlmModels.Glm47Flash;
+        const rawModel = settingsBody.data.llmPreferences?.defaultModel ?? LlmModels.Gemini25Flash;
 
         // Validate that the model is supported
         if (!isValidModel(rawModel)) {
@@ -198,6 +198,29 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         const apiKey = keysBody.data[keyField];
 
         if (apiKey === null || apiKey === undefined) {
+          if (config.platformGeminiApiKey !== undefined) {
+            logger.warn(
+              { userId, provider, requestedModel: defaultModel },
+              'No API key for provider, falling back to platform Gemini25Flash'
+            );
+            const fallbackModel = LlmModels.Gemini25Flash;
+            const fallbackPricing = config.pricingContext.getPricing(fallbackModel);
+            const fallbackClient = createLlmClient({
+              apiKey: config.platformGeminiApiKey,
+              model: fallbackModel,
+              userId,
+              pricing: fallbackPricing,
+              logger: config.logger,
+            });
+
+            logger.info(
+              { userId, model: fallbackModel, provider: LlmProviders.Google },
+              'LLM client created successfully'
+            );
+
+            return ok(fallbackClient);
+          }
+
           if (config.platformZaiApiKey !== undefined) {
             logger.warn(
               { userId, provider, requestedModel: defaultModel },

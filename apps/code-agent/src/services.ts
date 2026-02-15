@@ -180,7 +180,7 @@ export function initServices(config: ServiceConfig): void {
     : createLinearAgentHttpClient({
         baseUrl: config.linearAgentUrl,
         internalAuthToken: config.internalAuthToken,
-        timeoutMs: 10000,
+        timeoutMs: 30000,
       }, logger);
 
   const linearIssueService = createLinearIssueService({
