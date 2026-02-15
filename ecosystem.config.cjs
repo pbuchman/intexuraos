@@ -148,7 +148,7 @@ const SERVICE_ENV_MAPPINGS = {
  * causing PM2 to report "online" for dead services.
  */
 function createServiceConfig(name, port, options = {}) {
-  const { startupDelay = 0 } = options;
+  const { waitForService } = options;
 
   const baseConfig = {
     name,
@@ -169,11 +169,14 @@ function createServiceConfig(name, port, options = {}) {
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
   };
 
-  if (startupDelay > 0) {
+  if (waitForService) {
     return {
       ...baseConfig,
       script: 'bash',
-      args: ['-c', `sleep ${startupDelay} && pnpm --filter ${name} start:local`],
+      args: [
+        '-c',
+        `n=0; until curl -sf ${waitForService} > /dev/null 2>&1 || [ $n -ge 30 ]; do sleep 1; n=$((n+1)); done && pnpm --filter ${name} start:local`,
+      ],
       interpreter: 'none',
     };
   }
@@ -201,21 +204,22 @@ module.exports = {
     createServiceConfig('code-agent', 8128),
 
     // Services that depend on app-settings-service (fetch pricing at startup)
-    // Startup delay allows app-settings-service to be ready
-    createServiceConfig('user-service', 8110, { startupDelay: 5 }),
-    createServiceConfig('research-agent', 8116, { startupDelay: 5 }),
-    createServiceConfig('data-insights-agent', 8119, { startupDelay: 5 }),
-    createServiceConfig('image-service', 8120, { startupDelay: 5 }),
-    createServiceConfig('calendar-agent', 8125, { startupDelay: 5 }),
-    createServiceConfig('linear-agent', 8126, { startupDelay: 5 }),
-    createServiceConfig('chat-agent', 8129, { startupDelay: 5 }),
-    createServiceConfig('web-agent', 8127, { startupDelay: 5 }),
+    // Poll health endpoint until app-settings-service is ready (max 30s)
+    createServiceConfig('user-service', 8110, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('research-agent', 8116, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('data-insights-agent', 8119, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('image-service', 8120, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('calendar-agent', 8125, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('linear-agent', 8126, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('chat-agent', 8129, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('web-agent', 8127, { waitForService: 'http://localhost:8122/health' }),
 
     // Web app (Vite dev server or preview mode for predev)
     // Predev uses preview mode (production build without HMR/WebSocket)
     // because Cloud Functions gateway doesn't support WebSocket
     {
       name: 'web',
+      cwd: './apps/web',
       script: 'pnpm',
       args:
         process.env.PREDEV_ENVIRONMENT === 'true'
@@ -235,7 +239,9 @@ module.exports = {
       autorestart: true,
       max_restarts: 5,
       restart_delay: 2000,
-      watch: false,
+      watch: ['src', '../../packages'],
+      watch_delay: 1000,
+      ignore_watch: ['node_modules', '__tests__', '**/*.test.ts', '**/*.spec.ts', 'dist'],
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
 
