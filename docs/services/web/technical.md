@@ -83,7 +83,7 @@ apps/web/src/
 │   ├── Chat/           # Chat system (FAB, Panel, BottomSheet, Message, Input)
 │   ├── devbar/         # DevBar sub-components (tabs, filters, resize)
 │   ├── ActionItem.tsx  # Single action display with buttons
-│   ├── DevBar.tsx      # Developer toolbar (local/predev only)
+│   ├── DevBar.tsx      # Developer toolbar (dev only)
 │   ├── Layout.tsx      # Main app layout with sidebar
 │   ├── Header.tsx      # Top navigation bar with theme toggle
 │   ├── TerminalLogViewer.tsx # xterm.js-based log viewer for code tasks
@@ -260,7 +260,6 @@ Environment variables (prefixed with `INTEXURAOS_`):
 | `INTEXURAOS_COMMIT_SHA`                       | Git commit SHA for version modal | No       |
 | `INTEXURAOS_COMMIT_MESSAGE`                   | Git commit message               | No       |
 | `INTEXURAOS_BUILD_DATE`                       | Build timestamp                  | No       |
-| `INTEXURAOS_PREDEV_MODE`                      | Enable local reverse proxy mode  | No       |
 
 ## PWA Configuration
 
@@ -334,8 +333,8 @@ The `actionConfigLoader` reads this at runtime and `ActionItem` renders buttons 
 - **CostGuard markers:** Comments marked with `#CostGuard` indicate cost optimization patterns (batching, debouncing, conditional listeners)
 - **Vega bundle size:** Chart library is large; maximum file size for service worker caching is 4MB
 - **Deep linking:** URL query parameters work with hash routing (`/#/inbox?action=xyz`)
-- **Predev mode:** When `INTEXURAOS_PREDEV_MODE=true`, service URLs use relative API paths (e.g., `/api/code`) routed through a local reverse proxy instead of absolute service URLs
-- **DevBar visibility:** Only renders in local development (`localhost`) environments, never in production
+- **Dev mode:** When `import.meta.env.DEV` is true (Vite dev server), service URLs use relative API paths (e.g., `/api/code`) proxied by Vite instead of absolute service URLs
+- **DevBar visibility:** Only renders in dev environments (`import.meta.env.DEV`), never in production
 - **Chat guest sessions:** Unauthenticated users can use the chat with rate limiting via `X-Guest-Session` header; session ID persists in localStorage
 - **xterm.js terminal:** Code task logs use xterm.js for ANSI color rendering; the terminal component subscribes to Firestore for real-time log chunks
 

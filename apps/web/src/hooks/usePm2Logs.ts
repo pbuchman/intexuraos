@@ -27,23 +27,9 @@ interface SSEMessage {
 const MAX_LOGS = 500;
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
 
-// Detect environment and return appropriate log server URL
+// Return log server URL in dev environments (local and dev machine both run log-server on localhost)
 function getLogServerUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  const hostname = window.location.hostname;
-
-  // Local development
-  if (import.meta.env.DEV && hostname === 'localhost') {
-    return 'http://localhost:8106';
-  }
-
-  // Pre-dev environment (Cloud Function gateway)
-  if (hostname.includes('cloudfunctions.net')) {
-    return `${window.location.origin}/devbar`;
-  }
-
-  // Production - no log server
+  if (import.meta.env.DEV) return 'http://localhost:8106';
   return null;
 }
 

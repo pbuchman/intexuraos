@@ -18,23 +18,9 @@ interface SSEMessage {
 const MAX_EVENTS = 100;
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
 
-// Detect environment and return appropriate PubSub UI URL
+// Return PubSub UI URL in dev environments (local and dev machine both run pubsub-ui on localhost)
 function getPubSubUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  const hostname = window.location.hostname;
-
-  // Local development
-  if (import.meta.env.DEV && hostname === 'localhost') {
-    return 'http://localhost:8105';
-  }
-
-  // Pre-dev environment (Cloud Function gateway)
-  if (hostname.includes('cloudfunctions.net')) {
-    return `${window.location.origin}/devbar`;
-  }
-
-  // Production - no PubSub UI
+  if (import.meta.env.DEV) return 'http://localhost:8105';
   return null;
 }
 

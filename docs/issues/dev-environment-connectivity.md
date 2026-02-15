@@ -53,9 +53,9 @@ INTEXURAOS_CHAT_AGENT_URL=http://localhost:8129
 
 These are baked into the Vite build at compile time via `import.meta.env`.
 
-### Predev mode exists but is not the answer
+### Dev mode (import.meta.env.DEV) is the solution
 
-`apps/web/src/config.ts` has a `INTEXURAOS_PREDEV_MODE` flag. When `true`, service URLs become relative paths (`/api/user`, `/api/whatsapp`, etc.) instead of absolute localhost URLs. This is designed for when a reverse proxy (Caddy) routes `/api/*` to the correct backend. This could be one solution path.
+`apps/web/src/config.ts` uses `import.meta.env.DEV` (Vite built-in). When `true` (during `pnpm dev`), service URLs become relative paths (`/api/user`, `/api/whatsapp`, etc.) proxied by Vite to localhost backend services. This works on both local and dev machine since Vite runs on the same machine as the backend services.
 
 ### Services are running and healthy on home-dev
 
@@ -63,13 +63,13 @@ All 20 services run via PM2 on ports 8110-8129. They work fine when accessed dir
 
 ## Possible Solutions to Brainstorm
 
-### Option A: Predev mode + Caddy proxy routes
+### Option A: Vite dev server proxy (IMPLEMENTED)
 
-- Set `INTEXURAOS_PREDEV_MODE=true` when building the frontend
-- Configure Caddy to proxy `/api/user/*` → `localhost:8110`, `/api/whatsapp/*` → `localhost:8113`, etc.
-- Frontend uses relative paths, Caddy handles routing
-- Pro: Clean, no CORS issues, works from any browser
-- Con: Caddy config gets complex with 20 proxy routes
+- `pnpm dev` runs Vite with `import.meta.env.DEV=true`, service URLs become relative `/api/*` paths
+- Vite proxies `/api/user/*` → `localhost:8110`, `/api/whatsapp/*` → `localhost:8113`, etc.
+- Frontend uses relative paths, Vite handles routing
+- Pro: Clean, no CORS issues, no external proxy needed, works from any browser via CF tunnel
+- Con: None — Vite runs on the same machine as services in both local and dev environments
 
 ### Option B: Build with home-dev IP/hostname URLs
 

@@ -207,34 +207,29 @@ module.exports = {
     // Poll health endpoint until app-settings-service is ready (max 30s)
     createServiceConfig('user-service', 8110, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('research-agent', 8116, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('data-insights-agent', 8119, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('data-insights-agent', 8119, {
+      waitForService: 'http://localhost:8122/health',
+    }),
     createServiceConfig('image-service', 8120, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('calendar-agent', 8125, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('linear-agent', 8126, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('chat-agent', 8129, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('web-agent', 8127, { waitForService: 'http://localhost:8122/health' }),
 
-    // Web app (Vite dev server or preview mode for predev)
-    // Predev uses preview mode (production build without HMR/WebSocket)
-    // because Cloud Functions gateway doesn't support WebSocket
+    // Web app (Vite dev server — uses proxy for /api/* routes in dev environment)
     {
       name: 'web',
       cwd: './apps/web',
       script: 'pnpm',
-      args:
-        process.env.PREDEV_ENVIRONMENT === 'true'
-          ? ['--filter', 'web', 'preview']
-          : ['--filter', 'web', 'dev'],
+      args: ['--filter', 'web', 'dev'],
       interpreter: 'none',
       env: {
         ...process.env,
         ...COMMON_SERVICE_ENV,
         ...COMMON_SERVICE_URLS,
-        NODE_ENV: process.env.PREDEV_ENVIRONMENT === 'true' ? 'production' : 'development',
+        NODE_ENV: 'development',
         VITE_PM2_MODE: 'true',
-        ...(process.env.PREDEV_ENVIRONMENT !== 'true' && {
-          INTEXURAOS_USE_FIREBASE_EMULATORS: 'true',
-        }),
+        INTEXURAOS_USE_FIREBASE_EMULATORS: process.env.INTEXURAOS_USE_FIREBASE_EMULATORS ?? 'true',
       },
       autorestart: true,
       max_restarts: 5,

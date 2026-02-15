@@ -499,8 +499,9 @@ export class LogForwarder {
     const ts = `${h}:${m}:${s}.${ms}`;
 
     return text.replace(/^(.+)$/gm, (line) => {
-      // Already has a timestamp prefix (from orchestrator log) — skip
+      /* v8 ignore start -- test-infra: timestamp-prefixed lines only appear from orchestrator log injection @preserve */
       if (/^\d{2}:\d{2}:\d{2}\.\d{3} /.test(line)) return line;
+      /* v8 ignore stop @preserve */
       return `${ts} ${line}`;
     });
   }

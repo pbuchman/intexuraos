@@ -147,7 +147,7 @@ Container logs are streamed to code-agent via `LogForwarder` but are not persist
 
 ### Multi-Machine Orchestration
 
-Distribute tasks across multiple macOS hosts or Predev VMs:
+Distribute tasks across multiple macOS hosts or dev machines:
 
 1. Central task queue (Pub/Sub) instead of direct HTTP dispatch
 2. Orchestrator instances register with code-agent and pull tasks
