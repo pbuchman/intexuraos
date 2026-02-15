@@ -4,6 +4,7 @@
  */
 export function stripMarkdown(text: string): string {
   return text
+    .replace(/\\([[\]*#~>_!`()\\])/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove markdown links, keep text
     .replace(/\*\*/g, '') // Remove bold markers
     .replace(/__/g, '') // Remove bold (underscore)
