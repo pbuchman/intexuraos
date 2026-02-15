@@ -369,12 +369,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       );
 
-      /* v8 ignore start -- ts-type: generateIssueTitle always returns ok() with fallback @preserve */
       if (!result.ok) {
         reply.status(500);
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
-      /* v8 ignore stop @preserve */
 
       request.log.info(
         { title: result.value.title, issueType: result.value.issueType },

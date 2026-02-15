@@ -282,7 +282,7 @@ describe('linearIssueService', () => {
       expect(result.linearIssueType).toBe('research');
     });
 
-    it('should use fallback title when LLM generation fails', async () => {
+    it('should use truncated prompt as title when LLM generation fails', async () => {
       mockGenerateTitle = vi.fn().mockResolvedValue(
         err({
           code: 'UNAVAILABLE',
@@ -306,17 +306,79 @@ describe('linearIssueService', () => {
         taskPrompt: 'Fix the bug in auth module',
       });
 
-      expect(result.linearIssueType).toBe('feature'); // default for fallback
+      expect(result.linearIssueType).toBe('feature');
       expect(mockCreateIssue).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'Fix the bug in auth module',
         })
       );
 
-      expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         { error: { code: 'UNAVAILABLE', message: 'LLM service down' } },
-        'LLM title generation failed, using fallback'
+        'LLM title generation failed, using raw prompt'
       );
+    });
+
+    it('should truncate long prompt to 80 chars when LLM generation fails', async () => {
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        err({ code: 'UNAVAILABLE', message: 'LLM service down' })
+      );
+
+      const longPrompt = 'This is a very long description that exceeds the maximum title length of eighty characters significantly';
+
+      mockCreateIssue = vi.fn().mockResolvedValue(
+        ok({
+          issueId: 'fallback-2',
+          issueIdentifier: 'INT-601',
+          issueTitle: longPrompt.slice(0, 77) + '...',
+          issueUrl: 'https://linear.app/intexuraos/INT-601',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        taskPrompt: longPrompt,
+      });
+
+      expect(result.linearIssueType).toBe('feature');
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringMatching(/\.\.\.$/),
+        })
+      );
+      const firstCall = mockCreateIssue.mock.calls[0] as [{ title: string }];
+      expect(firstCall[0].title.length).toBe(80);
+    });
+
+    it('should use Code task when prompt is empty and LLM generation fails', async () => {
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        err({ code: 'UNAVAILABLE', message: 'LLM service down' })
+      );
+
+      mockCreateIssue = vi.fn().mockResolvedValue(
+        ok({
+          issueId: 'fallback-3',
+          issueIdentifier: 'INT-602',
+          issueTitle: 'Code task',
+          issueUrl: 'https://linear.app/intexuraos/INT-602',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        taskPrompt: '',
+      });
+
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Code task',
+        })
+      );
+      expect(result.linearIssueType).toBe('feature');
     });
 
     it('should use fallback mode when issue creation fails', async () => {

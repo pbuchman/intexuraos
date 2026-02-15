@@ -205,7 +205,9 @@ module.exports = {
     createServiceConfig('actions-agent', 8118, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('research-agent', 8116, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('todos-agent', 8123, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('data-insights-agent', 8119, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('data-insights-agent', 8119, {
+      waitForService: 'http://localhost:8122/health',
+    }),
     createServiceConfig('image-service', 8120, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('calendar-agent', 8125, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('linear-agent', 8126, { waitForService: 'http://localhost:8122/health' }),
