@@ -38,7 +38,7 @@ interface StreamJsonMessage {
 
 interface FormatterState {
   toolCallsById: Map<string, string>;
-  lastToolName: string | undefined;
+  lastToolName: string | undefined; // @allow-undefined-type -- mutable state field, always present but nullable
 }
 
 const SYSTEM_REMINDER_BLOCK = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
@@ -59,10 +59,22 @@ export function formatLogChunk(raw: string, startSequence: number, timestamp: Ti
     if (trimmed === '') continue;
 
     let text: string;
+    const tsRegex = /^(\d{2}:\d{2}:\d{2}\.\d{3}) ([\s\S]*)$/;
+    const tsMatch = tsRegex.exec(trimmed);
+    let prefix = '';
+    let body = trimmed;
+    if (tsMatch !== null) {
+      prefix = `${String(tsMatch[1])} `;
+      /* v8 ignore start -- regex: capture group 2 always exists when regex matches @preserve */
+      body = tsMatch[2] ?? trimmed;
+      /* v8 ignore stop @preserve */
+    }
+
     try {
-      const obj = JSON.parse(trimmed) as StreamJsonMessage;
+      const obj = JSON.parse(body) as StreamJsonMessage;
       registerToolContext(obj, state);
-      text = formatJsonMessage(obj, state);
+      const formatted = formatJsonMessage(obj, state);
+      text = formatted !== '' && prefix !== '' ? `${prefix}${formatted}` : formatted;
     } catch {
       text = trimmed;
     }

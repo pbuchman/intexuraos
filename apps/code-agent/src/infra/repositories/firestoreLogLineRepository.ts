@@ -35,7 +35,7 @@ export class FirestoreLogLineRepository implements LogLineRepository {
             .collection('code_tasks')
             .doc(taskId)
             .collection('log_lines')
-            .doc();
+            .doc(String(line.sequence).padStart(12, '0'));
 
           batch.set(docRef, {
             sequence: line.sequence,
