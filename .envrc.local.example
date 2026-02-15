@@ -10,11 +10,12 @@
 #   pnpm run dev
 
 # =============================================================================
-# FIREBASE EMULATORS (local dev only — dev machine uses real GCP)
+# FIREBASE EMULATORS (local macOS only — dev machine uses real GCP)
 # =============================================================================
-# On the dev machine, emulators don't run so this defaults to 'false' in
-# ecosystem.config.cjs. Enable here for local macOS development with emulators.
-export INTEXURAOS_USE_FIREBASE_EMULATORS=true
+# Default: false. The dev machine does NOT run Firebase Auth/Firestore emulators
+# (only Pub/Sub emulator on 8102/8105), so this must stay false there.
+# Set to 'true' ONLY on local macOS where Firebase emulators are running.
+export INTEXURAOS_USE_FIREBASE_EMULATORS=false
 
 # =============================================================================
 # AUTH (backend services require non-prefixed names)
