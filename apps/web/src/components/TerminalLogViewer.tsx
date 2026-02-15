@@ -54,6 +54,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   const firebaseAuthenticatedRef = useRef(false);
   const isMountedRef = useRef(true);
   const isAutoScrollingRef = useRef(false);
+  const lineCountRef = useRef(0);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -125,7 +126,9 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
 
     requestAnimationFrame(() => {
       fitAddon.fit();
-      terminal.resize(terminal.cols, INITIAL_ROWS);
+      if (lineCountRef.current === 0) {
+        terminal.resize(terminal.cols, INITIAL_ROWS);
+      }
     });
 
     terminalRef.current = terminal;
@@ -212,13 +215,12 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
               terminal.write(line.text + '\n');
             }
 
-            setLineCount((prev) => {
-              const desiredRows = Math.min(prev + addedLines.length + 1, MAX_TERMINAL_ROWS);
-              if (desiredRows > terminal.rows) {
-                terminal.resize(terminal.cols, desiredRows);
-              }
-              return prev + addedLines.length;
-            });
+            lineCountRef.current += addedLines.length;
+            const desiredRows = Math.min(Math.max(lineCountRef.current + 1, terminal.buffer.active.length), MAX_TERMINAL_ROWS);
+            if (desiredRows > terminal.rows) {
+              terminal.resize(terminal.cols, desiredRows);
+            }
+            setLineCount(lineCountRef.current);
             if (followLogsRef.current) {
               isAutoScrollingRef.current = true;
               terminal.scrollToBottom();
