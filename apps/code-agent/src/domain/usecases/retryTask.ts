@@ -19,9 +19,9 @@ import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomBytes } from 'node:crypto';
 
 /**
- * Cool-off period before retry is allowed (5 minutes).
+ * Cool-off period before retry is allowed (1 minute).
  */
-const RETRY_COOL_OFF_MS = 5 * 60 * 1000;
+const RETRY_COOL_OFF_MS = 1 * 60 * 1000;
 
 /**
  * Generate a webhook secret for a task.
@@ -98,7 +98,7 @@ export interface RetryTaskDeps {
  * Workflow:
  * 1. Fetch original task and validate it belongs to user
  * 2. Validate status is 'failed', 'cancelled', or 'interrupted'
- * 3. Validate cool-off period has elapsed (5 minutes)
+ * 3. Validate cool-off period has elapsed (1 minute)
  * 4. Check for active tasks on same Linear issue
  * 5. Reconstruct prompt with additional context if provided
  * 6. Create new task with retriedFrom set
