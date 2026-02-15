@@ -727,9 +727,14 @@ export class TaskDispatcher {
       task.taskId,
       `Starting worker attempt: continueSession=${String(params.continueSession)} hasChildren=${String(params.hasChildren)}`
     );
+    const workerTypeConfig = WORKER_TYPES[task.workerType];
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Container config: workerType=${task.workerType} worktree=${task.worktreePath} baseBranch=${task.baseBranch}`
+      `Worker config: type=${task.workerType} model=${workerTypeConfig.model ?? 'default'} apiUrl=${workerTypeConfig.apiBaseUrl}`
+    );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Container config: worktree=${task.worktreePath} baseBranch=${task.baseBranch}`
     );
     if (params.continueSession) {
       this.appendOrchestratorTaskLog(
@@ -764,7 +769,8 @@ export class TaskDispatcher {
       continueSession: params.continueSession,
       onLog: (chunk) => {
         const cleaned = stripDockerHeaders(chunk);
-        this.logForwarder.appendChunk(task.taskId, cleaned);
+        const formatted = this.formatClaudeSystemMessages(cleaned);
+        this.logForwarder.appendChunk(task.taskId, formatted);
         this.detectClaudeError(task.taskId, cleaned);
       },
       onComplete: (exitCode) => {
@@ -1045,6 +1051,39 @@ export class TaskDispatcher {
     } catch {
       // Ignore non-JSON stream lines.
     }
+  }
+
+  /**
+   * Convert Claude Code JSON system messages into readable log lines.
+   * Replaces hook_started/hook_response JSON blobs with concise summaries.
+   * Non-JSON lines pass through unchanged.
+   */
+  private formatClaudeSystemMessages(text: string): string {
+    return text.replace(/^(\{.+\})$/gm, (jsonLine) => {
+      try {
+        const obj = JSON.parse(jsonLine) as {
+          type?: string;
+          subtype?: string;
+          hook_name?: string;
+          output?: string;
+          session_id?: string;
+        };
+        if (obj.type !== 'system') return jsonLine;
+
+        if (obj.subtype === 'hook_started') {
+          return `[hook] ${obj.hook_name ?? 'unknown'} started`;
+        }
+        if (obj.subtype === 'hook_response') {
+          const output = obj.output ?? '';
+          const lineCount = output.split('\n').filter((l) => l.trim() !== '').length;
+          return `[hook] ${obj.hook_name ?? 'unknown'} completed (${String(lineCount)} lines)`;
+        }
+        // Other system messages (e.g. init) — suppress session_id noise
+        return jsonLine;
+      } catch {
+        return jsonLine;
+      }
+    });
   }
 
   private formatLocalTime(date: Date): string {
