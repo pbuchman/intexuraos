@@ -470,7 +470,8 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
     # Speechmatics API secrets
-    "INTEXURAOS_SPEECHMATICS_API_KEY" = "Speechmatics Batch API key for speech transcription"
+    "INTEXURAOS_SPEECHMATICS_API_KEY"     = "Speechmatics Batch API key for speech transcription (deprecated, use APP variant)"
+    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for whatsapp-service (renamed from SPEECHMATICS)"
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Firebase configuration for web app
@@ -487,12 +488,15 @@ module "secret_manager" {
     "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
     # Crawl4AI Cloud API
-    "INTEXURAOS_CRAWL4AI_API_KEY" = "Crawl4AI Cloud API key for web page content extraction"
+    "INTEXURAOS_CRAWL4AI_API_KEY"     = "Crawl4AI Cloud API key for web page content extraction (deprecated, use APP variant)"
+    "INTEXURAOS_CRAWL4AI_APP_API_KEY" = "Crawl4AI Cloud API key for web-agent (renamed from CRAWL4AI)"
     # LLM API keys
-    "INTEXURAOS_OPENAI_API_KEY"     = "OpenAI API key for chat-agent LLM features"
-    "INTEXURAOS_ZAI_API_KEY"        = "ZAI API key for Claude worker containers (Z.ai provider)"
+    "INTEXURAOS_OPENAI_API_KEY"     = "OpenAI API key for chat-agent LLM features (deprecated, use APP variant)"
+    "INTEXURAOS_OPENAI_APP_API_KEY" = "OpenAI API key for chat-agent (renamed from OPENAI)"
+    "INTEXURAOS_ZAI_API_KEY"        = "ZAI API key for Claude worker containers (deprecated, use APP variant)"
+    "INTEXURAOS_ZAI_APP_API_KEY"    = "Platform ZAI API key (renamed from GUEST_ZAI + ZAI)"
     "INTEXURAOS_GEMINI_APP_API_KEY" = "Gemini API key for orchestrator completion verifier"
-    "INTEXURAOS_GUEST_ZAI_API_KEY"  = "ZAI API key for guest chat sessions (GLM-4.7-Flash)"
+    "INTEXURAOS_GUEST_ZAI_API_KEY"  = "ZAI API key for guest chat sessions (deprecated, use ZAI_APP)"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to Claude worker containers"
     "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to Claude worker containers"
@@ -554,7 +558,7 @@ locals {
     INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
     INTEXURAOS_SENTRY_DSN          = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-    INTEXURAOS_GUEST_ZAI_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_GUEST_ZAI_API_KEY"]
+    INTEXURAOS_ZAI_APP_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_ZAI_APP_API_KEY"]
     INTEXURAOS_GEMINI_APP_API_KEY  = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
   }
 }
@@ -903,7 +907,7 @@ module "whatsapp_service" {
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
     INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
     INTEXURAOS_WHATSAPP_WABA_ID         = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_WABA_ID"]
-    INTEXURAOS_SPEECHMATICS_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_API_KEY"]
+    INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
@@ -1536,7 +1540,7 @@ module "chat_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/chat-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_OPENAI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_API_KEY"]
+    INTEXURAOS_OPENAI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
   })
   env_vars = local.common_service_env_vars
 
@@ -1564,7 +1568,7 @@ module "web_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/web-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_CRAWL4AI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_CRAWL4AI_API_KEY"]
+    INTEXURAOS_CRAWL4AI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_CRAWL4AI_APP_API_KEY"]
   })
   env_vars = local.common_service_env_vars
 

@@ -39,11 +39,11 @@ Generated: 2026-02-08
 | `INTEXURAOS_AUTH_JWKS_URL`            | Yes             | Yes (common secret)  | Yes (common) |
 | `INTEXURAOS_AUTH_ISSUER`              | Yes             | Yes (common secret)  | Yes (common) |
 | `INTEXURAOS_AUTH_AUDIENCE`            | Yes             | Yes (common secret)  | Yes (common) |
-| `INTEXURAOS_OPENAI_API_KEY`           | Yes             | Yes (service secret) | Yes          |
+| `INTEXURAOS_OPENAI_APP_API_KEY`       | Yes             | Yes (service secret) | Yes          |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes             | Yes (common)         | Yes (common) |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes             | Yes (common secret)  | Yes (common) |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes             | Yes (common)         | Yes (common) |
-| `INTEXURAOS_GUEST_ZAI_API_KEY`        | Yes             | Yes (service secret) | Yes          |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | Yes             | Yes (service secret) | Yes          |
 
 **Verdict:** Clean. All three sources aligned.
 
@@ -99,7 +99,7 @@ Generated: 2026-02-08
 | `GOOGLE_APPLICATION_CREDENTIALS`    | Yes (required)           | N/A          | N/A          |
 | `INTEXURAOS_REPOSITORY_PATH`        | Yes (optional)           | N/A          | N/A          |
 | `INTEXURAOS_ANTHROPIC_API_KEY`      | Yes (optional)           | Secret Mgr   | N/A          |
-| `INTEXURAOS_ZAI_API_KEY`            | Yes (optional)           | Secret Mgr   | N/A          |
+| `INTEXURAOS_ZAI_APP_API_KEY`        | Yes (optional)           | Secret Mgr   | N/A          |
 | `INTEXURAOS_WORKER_CAPACITY`        | Yes (optional)           | N/A          | N/A          |
 | `PORT`                              | Yes (optional)           | N/A          | N/A          |
 | `LOG_LEVEL`                         | Yes (optional)           | N/A          | N/A          |
@@ -214,7 +214,7 @@ The docs use **different env var names** than the code. This is a significant do
 
 2. **ISSUE: Docs missing `INTEXURAOS_AUTH_JWKS_URL`, `INTEXURAOS_AUTH_ISSUER`, `INTEXURAOS_AUTH_AUDIENCE`** -- present in REQUIRED_ENV.
 
-3. **ISSUE: Docs missing `INTEXURAOS_SPEECHMATICS_API_KEY`** -- present in REQUIRED_ENV.
+3. **ISSUE: Docs missing `INTEXURAOS_SPEECHMATICS_APP_API_KEY`** -- present in REQUIRED_ENV.
 
 4. **ISSUE: Docs missing `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`** -- present in REQUIRED_ENV.
 

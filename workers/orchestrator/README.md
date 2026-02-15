@@ -49,7 +49,7 @@ All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | `.envrc`       | Service-to-service auth                           |
 | `INTEXURAOS_LINEAR_API_KEY`         | `.envrc`       | Linear API key (passed to workers)                |
 | `INTEXURAOS_SENTRY_AUTH_TOKEN`      | `.envrc`       | Sentry auth (passed to workers)                   |
-| `INTEXURAOS_ZAI_API_KEY`            | `.envrc`       | ZAI API key (passed to workers)                   |
+| `INTEXURAOS_ZAI_APP_API_KEY`        | `.envrc`       | ZAI API key (passed to workers)                   |
 | `INTEXURAOS_GEMINI_APP_API_KEY`     | `.envrc`       | Gemini API key (required for completion verifier) |
 | `GOOGLE_APPLICATION_CREDENTIALS`    | `.envrc.local` | GCP SA key path                                   |
 

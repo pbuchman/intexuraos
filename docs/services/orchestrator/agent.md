@@ -272,7 +272,7 @@ On startup, the orchestrator:
 | `GOOGLE_APPLICATION_CREDENTIALS`    | Yes      | -                             |
 | `INTEXURAOS_REPOSITORY_PATH`        | No       | `~/.claude-orchestrator/repo` |
 | `INTEXURAOS_ANTHROPIC_API_KEY`      | No       | `""`                          |
-| `INTEXURAOS_ZAI_API_KEY`            | No       | `""`                          |
+| `INTEXURAOS_ZAI_APP_API_KEY`        | No       | `""`                          |
 | `INTEXURAOS_WORKER_CAPACITY`        | No       | `2`                           |
 | `PORT`                              | No       | `8199`                        |
 | `LOG_LEVEL`                         | No       | `info`                        |

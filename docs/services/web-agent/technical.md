@@ -301,7 +301,7 @@ Fetches and parses OpenGraph metadata.
 | Variable                              | Purpose                | Required |
 | ------------------------------------- | ---------------------- | -------- |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth  | Yes      |
-| `INTEXURAOS_CRAWL4AI_API_KEY`         | Crawl4AI Cloud API key | Yes      |
+| `INTEXURAOS_CRAWL4AI_APP_API_KEY`     | Crawl4AI Cloud API key | Yes      |
 | `INTEXURAOS_USER_SERVICE_URL`         | User service base URL  | Yes      |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup         | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Error tracking         | Yes      |

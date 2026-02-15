@@ -256,11 +256,11 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS URL for JWT validation                         |
 | `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer for token validation                     |
 | `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for token validation                   |
-| `INTEXURAOS_OPENAI_API_KEY`           | Yes      | OpenAI API key for embeddings                       |
+| `INTEXURAOS_OPENAI_APP_API_KEY`       | Yes      | OpenAI API key for embeddings                       |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | URL for user-service                                |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Token for internal service-to-service calls         |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | URL for app-settings-service (pricing data)         |
-| `INTEXURAOS_GUEST_ZAI_API_KEY`        | Yes      | ZAI API key for guest chat sessions (GLM-4.7-Flash) |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | Yes      | ZAI API key for guest chat sessions (GLM-4.7-Flash) |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                       |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (defaults to `development`)        |
 | `PORT`                                | No       | Server port (defaults to `8080`)                    |
@@ -269,11 +269,11 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 
 ### Terraform
 
-Deployed as `intexuraos-chat-agent` via Cloud Run module. Secrets `INTEXURAOS_OPENAI_API_KEY` and `INTEXURAOS_GUEST_ZAI_API_KEY` injected from Secret Manager. Common service env vars inherited. Scales from 0 to 1 instance.
+Deployed as `intexuraos-chat-agent` via Cloud Run module. Secrets `INTEXURAOS_OPENAI_APP_API_KEY` and `INTEXURAOS_ZAI_APP_API_KEY` injected from Secret Manager. Common service env vars inherited. Scales from 0 to 1 instance.
 
 ### Local Development
 
-Port `8129` in `ecosystem.config.cjs`. Requires `INTEXURAOS_OPENAI_API_KEY` and `INTEXURAOS_GUEST_ZAI_API_KEY` in `.envrc`.
+Port `8129` in `ecosystem.config.cjs`. Requires `INTEXURAOS_OPENAI_APP_API_KEY` and `INTEXURAOS_ZAI_APP_API_KEY` in `.envrc`.
 
 ## Gotchas
 

@@ -23,7 +23,7 @@ const SERVICE_NAME = 'chat-agent';
 const SERVICE_VERSION = '0.1.0';
 
 const REQUIRED_SECRETS: string[] = [
-  'INTEXURAOS_OPENAI_API_KEY',
+  'INTEXURAOS_OPENAI_APP_API_KEY',
 ];
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {

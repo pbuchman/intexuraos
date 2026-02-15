@@ -577,10 +577,10 @@ Errors appear as inline chat messages from Intex:
 
 **chat-agent:**
 
-| Variable                       | Description                      |
-| ------------------------------ | -------------------------------- |
-| `INTEXURAOS_OPENAI_API_KEY`    | For embedding queries at runtime |
-| `INTEXURAOS_FIRESTORE_PROJECT` | Firestore project ID             |
+| Variable                        | Description                      |
+| ------------------------------- | -------------------------------- |
+| `INTEXURAOS_OPENAI_APP_API_KEY` | For embedding queries at runtime |
+| `INTEXURAOS_FIRESTORE_PROJECT`  | Firestore project ID             |
 
 **Note:** Generation uses user's configured API key (fetched from user settings).
 

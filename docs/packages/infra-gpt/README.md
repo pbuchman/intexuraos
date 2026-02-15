@@ -84,9 +84,9 @@ interface GptConfig {
 
 ### Environment Variables
 
-| Variable                    | Description    | Required |
-| --------------------------- | -------------- | -------- |
-| `INTEXURAOS_OPENAI_API_KEY` | OpenAI API key | Yes      |
+| Variable                        | Description    | Required |
+| ------------------------------- | -------------- | -------- |
+| `INTEXURAOS_OPENAI_APP_API_KEY` | OpenAI API key | Yes      |
 
 ### Pricing Fields
 
