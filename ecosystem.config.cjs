@@ -217,9 +217,10 @@ module.exports = {
     {
       name: 'web',
       script: 'pnpm',
-      args: process.env.PREDEV_ENVIRONMENT === 'true'
-        ? ['--filter', 'web', 'preview']
-        : ['--filter', 'web', 'dev'],
+      args:
+        process.env.PREDEV_ENVIRONMENT === 'true'
+          ? ['--filter', 'web', 'preview']
+          : ['--filter', 'web', 'dev'],
       interpreter: 'none',
       env: {
         ...process.env,

@@ -191,6 +191,7 @@ export class AnthropicOAuthManager {
       const body = new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: credentials.refreshToken,
+        client_id: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
       });
 
       const resp = await fetch(OAUTH_TOKEN_URL, {
