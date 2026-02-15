@@ -329,7 +329,7 @@ async function bootstrap(): Promise<void> {
           options: {
             colorize: true,
             singleLine: true,
-            translateTime: 'HH:MM:ss.l',
+            translateTime: 'SYS:HH:MM:ss.l',
             ignore: 'pid,hostname',
           },
           level: logLevel,
