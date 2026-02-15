@@ -390,7 +390,7 @@ describe('internalRoutes', () => {
       expect(body.data.issueType).toBe('feature');
     });
 
-    it('uses fallback when LLM client fails to initialize', async () => {
+    it('returns 500 when LLM client fails to initialize', async () => {
       fakeUserServiceClient.setFailure(true, {
         code: 'API_ERROR',
         message: 'User service unavailable',
@@ -409,14 +409,13 @@ describe('internalRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
       const body = response.json();
-      expect(body.success).toBe(true);
-      expect(body.data.title).toBe('Fix the bug in the login flow');
-      expect(body.data.issueType).toBe('feature');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('uses fallback when LLM generation fails', async () => {
+    it('returns 500 when LLM generation fails after retries', async () => {
       fakeLlmClient.setFailure(true, { code: 'API_ERROR', message: 'LLM error' });
 
       const response = await app.inject({
@@ -432,14 +431,13 @@ describe('internalRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
       const body = response.json();
-      expect(body.success).toBe(true);
-      expect(body.data.title).toBe('Add new feature to dashboard');
-      expect(body.data.issueType).toBe('feature');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('uses fallback when JSON parsing fails', async () => {
+    it('returns 500 when JSON parsing fails after retries', async () => {
       fakeLlmClient.setContent('This is not valid JSON');
 
       const response = await app.inject({
@@ -455,11 +453,37 @@ describe('internalRoutes', () => {
         },
       });
 
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('succeeds after retry on first LLM failure', async () => {
+      const { ok, err } = await import('@intexuraos/common-core');
+      const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 };
+      fakeLlmClient.setResponseSequence([
+        err({ code: 'API_ERROR', message: 'Temporary failure' }),
+        ok({ content: '{"title": "Retry worked", "issueType": "feature"}', usage }),
+      ]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: 'Some task description',
+          userId: 'user-456',
+        },
+      });
+
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body.success).toBe(true);
-      expect(body.data.title).toBe('Improve performance of API');
-      expect(body.data.issueType).toBe('feature');
+      expect(body.data.title).toBe('Retry worked');
     });
 
     it('handles markdown code blocks in LLM response', async () => {

@@ -1,6 +1,6 @@
 /**
  * Service for managing Linear issues associated with code tasks.
- * Handles issue validation, creation with LLM titles, state transitions, and fallback behavior.
+ * Handles issue validation, creation with LLM titles, and state transitions.
  *
  * Design doc: docs/designs/INT-156-code-action-type.md (lines 207-308, 1901-1919)
  */
@@ -110,8 +110,11 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
       let issueType: LinearIssueType;
 
       if (!titleResult.ok) {
-        logger.warn({ error: titleResult.error }, 'LLM title generation failed, using fallback');
-        title = generateFallbackTitle(taskPrompt);
+        logger.error({ error: titleResult.error }, 'LLM title generation failed, using raw prompt');
+        const trimmed = taskPrompt.trim();
+        title = trimmed.length > 80
+          ? trimmed.slice(0, 77) + '...'
+          : (trimmed || 'Code task');
         issueType = 'feature';
       } else {
         title = titleResult.value.title;
@@ -188,32 +191,3 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
   };
 }
 
-/**
- * Fallback title generation using regex (no LLM).
- * Used when LLM title generation fails.
- */
-function generateFallbackTitle(prompt: string): string {
-  let clean = prompt;
-
-  // Remove code blocks
-  clean = clean.replace(/```[\s\S]*?```/g, '');
-
-  // Remove inline code
-  clean = clean.replace(/`[^`]+`/g, '');
-
-  // Remove URLs
-  clean = clean.replace(/https?:\/\/\S+/g, '');
-
-  // Remove markdown formatting
-  clean = clean.replace(/[#*_~]/g, '');
-
-  // Get first line or sentence
-  /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
-  const firstLine = clean.split(/[.\n]/)[0]?.trim() ?? 'Code task';
-  /* v8 ignore stop @preserve */
-
-  // Truncate to 80 chars
-  /* v8 ignore start -- ts-type: ternary creates branch for length check @preserve */
-  return firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;
-  /* v8 ignore stop @preserve */
-}

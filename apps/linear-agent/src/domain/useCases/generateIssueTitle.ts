@@ -3,10 +3,11 @@
  *
  * Generates a concise issue title from a task description using LLM.
  * Uses the shared linearIssueTitlePrompt from @intexuraos/llm-prompts.
+ * Retries once on failure. Returns an error instead of silently degrading.
  */
 
 import type { Result, Logger } from '@intexuraos/common-core';
-import { ok, getErrorMessage } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import {
   linearIssueTitlePrompt,
   LinearIssueTitleSchema,
@@ -35,6 +36,8 @@ export interface GenerateTitleError {
   message: string;
 }
 
+const MAX_ATTEMPTS = 2;
+
 export async function generateIssueTitle(
   request: GenerateIssueTitleRequest,
   deps: GenerateIssueTitleDeps
@@ -48,82 +51,83 @@ export async function generateIssueTitle(
 
   const clientResult = await userServiceClient.getLlmClient(userId);
   if (!clientResult.ok) {
-    logger.warn({ userId, error: clientResult.error }, 'Failed to get LLM client, using fallback');
-    return ok({
-      title: generateFallbackTitle(description),
-      issueType: 'feature',
-    });
+    logger.error({ userId, error: clientResult.error }, 'Failed to get LLM client');
+    return err({ code: 'LLM_ERROR', message: 'Failed to get LLM client' });
   }
 
   const llmClient = clientResult.value;
-
   const prompt = linearIssueTitlePrompt.build({ description }, { maxLength: 80 });
 
   logger.info({ userId, descriptionLength: description.length }, 'Generating issue title via LLM');
 
-  const result = await llmClient.generate(prompt);
+  let lastError: GenerateTitleError = { code: 'LLM_ERROR', message: 'Title generation failed' };
 
-  if (!result.ok) {
-    logger.warn({ error: result.error }, 'LLM title generation failed, using fallback');
-    return ok({
-      title: generateFallbackTitle(description),
-      issueType: 'feature',
-    });
-  }
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const isLastAttempt = attempt === MAX_ATTEMPTS;
 
-  let cleaned = result.value.content.trim();
-  const codeBlockRegex = /^```(?:json)?\s*\n([\s\S]*?)\n```$/;
-  const codeBlockMatch = codeBlockRegex.exec(cleaned);
-  if (codeBlockMatch?.[1] !== undefined) {
-    cleaned = codeBlockMatch[1].trim();
-  }
+    const result = await llmClient.generate(prompt);
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (e) {
-    logger.warn(
-      { parseError: getErrorMessage(e), responsePreview: cleaned.slice(0, 200) },
-      'Failed to parse LLM response as JSON, using fallback'
+    if (!result.ok) {
+      if (isLastAttempt) {
+        logger.error({ attempt, error: result.error }, 'LLM title generation failed after 2 attempts');
+      } else {
+        logger.warn({ attempt, error: result.error }, 'LLM title generation failed, retrying');
+      }
+      lastError = { code: 'LLM_ERROR', message: `LLM title generation failed after ${String(attempt)} attempts` };
+      continue;
+    }
+
+    let cleaned = result.value.content.trim();
+    const codeBlockRegex = /^```(?:json)?\s*\n([\s\S]*?)\n```$/;
+    const codeBlockMatch = codeBlockRegex.exec(cleaned);
+    if (codeBlockMatch?.[1] !== undefined) {
+      cleaned = codeBlockMatch[1].trim();
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      if (isLastAttempt) {
+        logger.error(
+          { attempt, parseError: getErrorMessage(e), responsePreview: cleaned.slice(0, 200) },
+          'Failed to parse LLM response as JSON after 2 attempts'
+        );
+      } else {
+        logger.warn(
+          { attempt, parseError: getErrorMessage(e), responsePreview: cleaned.slice(0, 200) },
+          'Failed to parse LLM response as JSON, retrying'
+        );
+      }
+      lastError = { code: 'PARSE_ERROR', message: `Failed to parse LLM response after ${String(attempt)} attempts` };
+      continue;
+    }
+
+    const validationResult = LinearIssueTitleSchema.safeParse(parsed);
+    if (!validationResult.success) {
+      const zodErrors = formatZodErrors(validationResult.error);
+      if (isLastAttempt) {
+        logger.error(
+          { attempt, zodErrors, responsePreview: cleaned.slice(0, 200) },
+          'LLM returned invalid response format after 2 attempts'
+        );
+      } else {
+        logger.warn(
+          { attempt, zodErrors, responsePreview: cleaned.slice(0, 200) },
+          'LLM returned invalid response format, retrying'
+        );
+      }
+      lastError = { code: 'PARSE_ERROR', message: `LLM returned invalid format after ${String(attempt)} attempts` };
+      continue;
+    }
+
+    logger.info(
+      { title: validationResult.data.title, issueType: validationResult.data.issueType },
+      'Generated issue title'
     );
-    return ok({
-      title: generateFallbackTitle(description),
-      issueType: 'feature',
-    });
+
+    return ok(validationResult.data);
   }
 
-  const validationResult = LinearIssueTitleSchema.safeParse(parsed);
-  if (!validationResult.success) {
-    const zodErrors = formatZodErrors(validationResult.error);
-    logger.warn(
-      { zodErrors, responsePreview: cleaned.slice(0, 200) },
-      'LLM returned invalid response format, using fallback'
-    );
-    return ok({
-      title: generateFallbackTitle(description),
-      issueType: 'feature',
-    });
-  }
-
-  logger.info(
-    { title: validationResult.data.title, issueType: validationResult.data.issueType },
-    'Generated issue title'
-  );
-
-  return ok(validationResult.data);
-}
-
-/**
- * Fallback title generation using regex (no LLM).
- */
-function generateFallbackTitle(description: string): string {
-  let clean = description;
-  clean = clean.replace(/```[\s\S]*?```/g, '');
-  clean = clean.replace(/`[^`]+`/g, '');
-  clean = clean.replace(/https?:\/\/\S+/g, '');
-  clean = clean.replace(/[#*_~]/g, '');
-
-  const extracted = clean.split(/[.\n]/)[0]?.trim();
-  const firstLine = extracted !== undefined && extracted !== '' ? extracted : 'Code task';
-  return firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;
+  return err(lastError);
 }
