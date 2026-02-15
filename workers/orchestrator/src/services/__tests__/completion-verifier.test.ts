@@ -230,6 +230,33 @@ describe('completion-verifier', () => {
     expect(generate.mock.calls[0]?.[0]).toContain('hasToolUseError=true');
   });
 
+  it('does not deterministically fail when tool_use_error is present without other errors', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":true,"confidence":0.90,"reasons":["task completed despite sibling tool error"],"missingCriteria":[],"resumeInstruction":"No action needed"}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-tool-use-error-only',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'phase1',
+      originalPrompt: 'Analyze issue',
+      rawLogs: `<tool_use_error>Sibling tool call errored</tool_use_error>\n${assistantLog(validPhase1Final)}`,
+      linearIssueLabels: [],
+    });
+
+    expect(verdict.passed).toBe(true);
+    expect(verdict.usedLlm).toBe(true);
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate.mock.calls[0]?.[0]).toContain('hasToolUseError=true');
+  });
+
   it('still invokes Gemini when assistant final message is missing', async () => {
     const generate = vi.fn().mockResolvedValue({
       ok: true,
