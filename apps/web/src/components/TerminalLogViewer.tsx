@@ -218,7 +218,10 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
             }
 
             addedLines.sort((a, b) => a.sequence - b.sequence);
-            maxSequenceRef.current = addedLines[addedLines.length - 1]!.sequence;
+            const lastLine = addedLines[addedLines.length - 1];
+            if (lastLine !== undefined) {
+              maxSequenceRef.current = lastLine.sequence;
+            }
 
             for (const line of addedLines) {
               terminal.write(line.text + '\n');
@@ -261,7 +264,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
         setLogsError(errorMessage);
         return;
       }
-      const delay = RECONNECT_DELAYS[attempt]!;
+      const delay = RECONNECT_DELAYS[attempt] ?? RECONNECT_DELAYS[RECONNECT_DELAYS.length - 1] ?? 10000;
       retryAttemptRef.current = attempt + 1;
 
       if (unsubscribeRef.current !== null) {
