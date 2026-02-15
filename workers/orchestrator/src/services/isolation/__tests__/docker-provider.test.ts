@@ -745,6 +745,93 @@ describe('DockerProvider', () => {
     });
   });
 
+  describe('OAuth credential passthrough', () => {
+    it('does not set ANTHROPIC_API_KEY env var when anthropicOAuth is configured for auto worker', async () => {
+      const mockOAuth = {
+        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
+      };
+      provider.setAnthropicOAuth(mockOAuth as never);
+
+      const config = createTestConfig({ workerType: 'auto' });
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBeUndefined();
+    });
+
+    it('does not set ANTHROPIC_API_KEY env var when anthropicOAuth is configured for opus worker', async () => {
+      const mockOAuth = {
+        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
+      };
+      provider.setAnthropicOAuth(mockOAuth as never);
+
+      const config = createTestConfig({ workerType: 'opus' });
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBeUndefined();
+    });
+
+    it('sets ANTHROPIC_API_KEY env var for glm worker even with anthropicOAuth configured', async () => {
+      const mockOAuth = {
+        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
+      };
+      provider.setAnthropicOAuth(mockOAuth as never);
+
+      const config = createTestConfig({ workerType: 'glm' });
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-zai-key');
+    });
+
+    it('does not set ANTHROPIC_BASE_URL env var when anthropicOAuth is configured for auto worker', async () => {
+      const mockOAuth = {
+        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
+      };
+      provider.setAnthropicOAuth(mockOAuth as never);
+
+      const config = createTestConfig({ workerType: 'auto' });
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
+      expect(baseUrlEntry).toBeUndefined();
+    });
+
+    it('sets ANTHROPIC_BASE_URL env var for glm worker even with anthropicOAuth configured', async () => {
+      const mockOAuth = {
+        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
+      };
+      provider.setAnthropicOAuth(mockOAuth as never);
+
+      const config = createTestConfig({ workerType: 'glm' });
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
+      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic');
+    });
+
+    it('sets ANTHROPIC_API_KEY env var when anthropicOAuth is NOT configured', async () => {
+      const config = createTestConfig({ workerType: 'auto' });
+      await provider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-anthropic-key');
+    });
+  });
+
   describe('getImageInfo', () => {
     it('returns configured image info with null digest before any pull', () => {
       const info = provider.getImageInfo();

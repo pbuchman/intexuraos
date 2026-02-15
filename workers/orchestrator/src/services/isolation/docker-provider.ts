@@ -240,11 +240,16 @@ export class DockerProvider implements IsolationProvider {
       }
       /* v8 ignore stop @preserve */
 
+      // When OAuth is configured for opus/auto workers, Claude CLI reads credentials from
+      // the mounted .credentials.json file. Setting ANTHROPIC_API_KEY with an OAuth token
+      // causes Claude CLI to use it as a regular API key via x-api-key header, which fails.
+      const useOAuthCredentials =
+        this.anthropicOAuth !== undefined && workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY';
+
       /* v8 ignore start -- test-infra: worker type configuration varies by test @preserve */
       const env = [
         `TASK_ID=${taskId}`,
-        `ANTHROPIC_API_KEY=${apiKey}`,
-        `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`,
+        ...(useOAuthCredentials ? [] : [`ANTHROPIC_API_KEY=${apiKey}`, `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`]),
         `LINEAR_API_KEY=${secrets.LINEAR_API_KEY}`,
         `SENTRY_AUTH_TOKEN=${secrets.SENTRY_AUTH_TOKEN}`,
         `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
@@ -260,7 +265,9 @@ export class DockerProvider implements IsolationProvider {
       /* v8 ignore stop @preserve */
 
       /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
-      const keySuffix = apiKey.length > 4 ? '...' + apiKey.slice(-4) : '****';
+      const keySuffix = useOAuthCredentials
+        ? 'OAuth (.credentials.json)'
+        : apiKey.length > 4 ? '...' + apiKey.slice(-4) : '****';
       /* v8 ignore stop @preserve */
       const requestedImage = this.config.imageName;
       const resolvedImage = await this.pullAndResolveImage(taskId, requestedImage);
