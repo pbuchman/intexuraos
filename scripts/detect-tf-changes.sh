@@ -10,27 +10,16 @@ set -euo pipefail
 BASE_SHA="${1:-HEAD~1}"
 HEAD_SHA="${2:-HEAD}"
 
-# All services in the monorepo
-ALL_SERVICES=(
-  "user-service"
-  "notion-service"
-  "whatsapp-service"
-  "mobile-notifications-service"
-  "api-docs-hub"
-  "research-agent"
-  "commands-agent"
-  "actions-agent"
-  "data-insights-agent"
-  "image-service"
-  "notes-agent"
-  "todos-agent"
-  "bookmarks-agent"
-  "app-settings-service"
-  "calendar-agent"
-  "linear-agent"
-  "web-agent"
-  "web"
-)
+# Auto-discover services from apps/ directory (those with Dockerfiles = Cloud Run services)
+ALL_SERVICES=()
+for dir in apps/*/; do
+  name=$(basename "$dir")
+  if [[ -f "$dir/Dockerfile" ]]; then
+    ALL_SERVICES+=("$name")
+  fi
+done
+# web app (no Dockerfile, deployed via GCS bucket)
+ALL_SERVICES+=("web")
 
 # Terraform modules that affect ALL services
 GLOBAL_MODULES=(

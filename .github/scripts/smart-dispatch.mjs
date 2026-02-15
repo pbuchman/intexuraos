@@ -15,28 +15,22 @@ import { join } from 'node:path';
 // CONFIGURATION
 // =============================================================================
 
-const SERVICES = [
-  'user-service',
-  'notion-service',
-  'whatsapp-service',
-  'api-docs-hub',
-  'mobile-notifications-service',
-  'research-agent',
-  'commands-agent',
-  'actions-agent',
-  'data-insights-agent',
-  'image-service',
-  'notes-agent',
-  'todos-agent',
-  'bookmarks-agent',
-  'app-settings-service',
-  'calendar-agent',
-  'linear-agent',
-  'web-agent',
-  'code-agent',
-];
+// Auto-discover services: apps/<name>/Dockerfile exists AND name !== 'web'
+const SERVICES = readdirSync(join(process.cwd(), 'apps')).filter((d) => {
+  const fullPath = join(process.cwd(), 'apps', d);
+  return (
+    statSync(fullPath).isDirectory() && d !== 'web' && existsSync(join(fullPath, 'Dockerfile'))
+  );
+});
 
-const WORKERS = ['vm-lifecycle', 'log-cleanup'];
+// Auto-discover workers: workers/<name> with package.json or Dockerfile
+const WORKERS = readdirSync(join(process.cwd(), 'workers')).filter((d) => {
+  const fullPath = join(process.cwd(), 'workers', d);
+  return (
+    statSync(fullPath).isDirectory() &&
+    (existsSync(join(fullPath, 'package.json')) || existsSync(join(fullPath, 'Dockerfile')))
+  );
+});
 
 const SPECIAL_TARGETS = ['web', 'firestore'];
 
