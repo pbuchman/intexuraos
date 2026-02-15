@@ -498,6 +498,33 @@ describe('internalRoutes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
 
+    it('accepts OIDC Bearer token from Cloud Scheduler', async () => {
+      const conn: LinearConnection = {
+        userId: 'user-1',
+        apiKey: 'key-1',
+        teamId: 'team-1',
+        teamName: 'Team 1',
+        webhookSecret: null,
+        connected: true,
+        createdAt: '2025-01-15T00:00:00Z',
+        updatedAt: '2025-01-15T00:00:00Z',
+      };
+      fakeConnectionRepo.seedConnection(conn);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/sync-all',
+        headers: {
+          authorization: 'Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.fake-oidc-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.userCount).toBe(1);
+    });
+
     it('syncs all connected users successfully', async () => {
       // Seed two connected users
       const conn1: LinearConnection = {
