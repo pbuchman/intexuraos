@@ -1083,14 +1083,6 @@ export class TaskDispatcher {
           return jsonLine;
         }
 
-        if (type === 'assistant') {
-          return this.formatAssistantMessage(obj);
-        }
-
-        if (type === 'result') {
-          return this.formatResultMessage(obj);
-        }
-
         return jsonLine;
       } catch {
         return jsonLine;
@@ -1116,29 +1108,6 @@ export class TaskDispatcher {
 
     const mcpPart = mcpServers !== '' ? ` mcp=[${mcpServers}]` : '';
     return `[claude] Session init: model=${model} tools=${String(tools)}${mcpPart} mode=${mode} v${version}`;
-  }
-
-  private formatAssistantMessage(obj: Record<string, unknown>): string {
-    const message = obj['message'] as Record<string, unknown> | undefined;
-    const content = Array.isArray(message?.['content'])
-      ? (message['content'] as Record<string, unknown>[])
-      : [];
-    const textBlock = content.find((c) => c['type'] === 'text');
-    const text = (textBlock?.['text'] as string | undefined) ?? '';
-    const truncated = text.length > 200 ? text.slice(0, 200) + '...' : text;
-    return `[claude] Assistant: ${truncated}`;
-  }
-
-  private formatResultMessage(obj: Record<string, unknown>): string {
-    const isError = obj['is_error'] === true ? 'true' : 'false';
-    const turns = String((obj['num_turns'] as number | undefined) ?? 0);
-    const durationMs = (obj['duration_ms'] as number | undefined) ?? 0;
-    const durationSec = Math.round(durationMs / 1000);
-    const cost = (obj['total_cost_usd'] as number | undefined) ?? 0;
-    const result = (obj['result'] as string | undefined) ?? '';
-    const truncated = result.length > 200 ? result.slice(0, 200) + '...' : result;
-    const resultPart = truncated !== '' ? ` | ${truncated}` : '';
-    return `[claude] Result: error=${isError} turns=${turns} duration=${String(durationSec)}s cost=$${cost.toFixed(2)}${resultPart}`;
   }
 
   private formatLocalTime(date: Date): string {

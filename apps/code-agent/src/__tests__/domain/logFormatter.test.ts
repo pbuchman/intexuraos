@@ -193,7 +193,7 @@ describe('formatLogChunk', () => {
         }
       });
       const result = formatLogChunk(json, 0, ts());
-      expect(result[0]?.text).toBe('Let me read the file.');
+      expect(result[0]?.text).toBe('[claude] Let me read the file.');
     });
 
     it('tool_use content', () => {
@@ -224,7 +224,7 @@ describe('formatLogChunk', () => {
         }
       });
       const result = formatLogChunk(json, 0, ts());
-      expect(result[0]?.text).toBe('Let me check the file.\n[tool] Read: /repo/src/index.ts');
+      expect(result[0]?.text).toBe('[claude] Let me check the file.\n[tool] Read: /repo/src/index.ts');
     });
 
     it('empty text blocks are skipped', () => {
@@ -240,7 +240,7 @@ describe('formatLogChunk', () => {
         }
       });
       const result = formatLogChunk(json, 0, ts());
-      expect(result[0]?.text).toBe('Valid text');
+      expect(result[0]?.text).toBe('[claude] Valid text');
     });
 
     it('assistant with no content', () => {
@@ -614,6 +614,39 @@ describe('formatLogChunk', () => {
       const result = formatLogChunk(json, 0, ts());
       expect(result[0]?.text).toBe('[error] Task failed');
     });
+
+    it('success with result text (no truncation)', () => {
+      const longText = 'C'.repeat(350);
+      const json = JSON.stringify({
+        type: 'result',
+        duration_ms: 5000,
+        num_turns: 2,
+        total_cost_usd: 0.5,
+        result: longText
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe(`[done] 5.0s, 2 turns, $0.500\n${longText}`);
+    });
+
+    it('success with empty result text', () => {
+      const json = JSON.stringify({
+        type: 'result',
+        duration_ms: 1000,
+        result: ''
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('[done] 1.0s');
+    });
+
+    it('success with whitespace-only result text', () => {
+      const json = JSON.stringify({
+        type: 'result',
+        duration_ms: 1000,
+        result: '   \n\t  '
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('[done] 1.0s');
+    });
   });
 
   describe('unknown JSON types', () => {
@@ -642,6 +675,7 @@ describe('formatLogChunk', () => {
       const json2 = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'hello' }] } });
       const result = formatLogChunk(`${json1}\n${json2}`, 0, ts());
       expect(result[0]?.sequence).toBe(0);
+      expect(result[1]?.text).toBe('[claude] hello');
       expect(result[1]?.sequence).toBe(1);
     });
 
@@ -670,7 +704,7 @@ describe('formatLogChunk', () => {
       const raw = `09:15:30.001 ${json}`;
       const result = formatLogChunk(raw, 0, ts());
       expect(result).toHaveLength(1);
-      expect(result[0]?.text).toBe('09:15:30.001 Starting task');
+      expect(result[0]?.text).toBe('09:15:30.001 [claude] Starting task');
     });
 
     it('parses result message with timestamp prefix', () => {
@@ -719,7 +753,7 @@ describe('formatLogChunk', () => {
       const result = formatLogChunk(chunk, 0, ts());
       expect(result).toHaveLength(4);
       expect(result[0]?.text).toBe('[init] Model: opus');
-      expect(result[1]?.text).toBe('Starting task');
+      expect(result[1]?.text).toBe('[claude] Starting task');
       expect(result[2]?.text).toBe('[tool] Read: /test.ts');
       expect(result[3]?.text).toBe('[done] 1.5s, 1 turns');
     });
