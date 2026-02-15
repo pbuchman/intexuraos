@@ -175,7 +175,7 @@ pnpm config set store-dir /home/claude/pnpm-store --global
 if [ -f "/repo/pnpm-lock.yaml" ]; then
     echo "[entrypoint] Installing dependencies..."
     cd /repo
-    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile --store-dir /home/claude/pnpm-store 2>&1
+    CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile --store-dir /home/claude/pnpm-store 2>&1
     echo "[entrypoint] Dependencies installed"
 fi
 
