@@ -2367,7 +2367,7 @@ describe('HandleApprovalReplyUseCase', () => {
 
       const messages = whatsappPublisher.getSentMessages();
       expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/tasks/task-abc');
+      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/code-tasks/task-abc');
     });
   });
 
@@ -2387,7 +2387,7 @@ describe('HandleApprovalReplyUseCase', () => {
 
       const messages = whatsappPublisher.getSentMessages();
       expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/tasks/');
+      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/code-tasks/');
     });
   });
 
@@ -2487,7 +2487,7 @@ describe('HandleApprovalReplyUseCase', () => {
 
       const messages = whatsappPublisher.getSentMessages();
       expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/tasks/');
+      expect(messages[0]?.message).toContain('https://test.intexuraos.cloud/#/code-tasks/');
     });
   });
 
