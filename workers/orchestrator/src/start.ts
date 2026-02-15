@@ -121,39 +121,44 @@ function validatePortAvailable(port: number): void {
 /* v8 ignore stop @preserve */
 
 /**
- * Validate worker API keys by calling the Anthropic /v1/models endpoint.
- * Warns (does not exit) so GLM tasks can still run with an invalid Anthropic key.
+ * Validate worker API keys at startup.
+ * Validates Anthropic OAuth credentials and ZAI API key.
+ * Warns (does not exit) so tasks of one type can still run if the other fails.
  */
 /* v8 ignore start -- test-infra: startup validation with network call @preserve */
 async function validateWorkerApiKeys(
-  anthropicKey: string,
+  anthropicOAuth: AnthropicOAuthManager,
   zaiKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
 
-  if (anthropicKey !== '') {
-    const keySuffix = suffix(anthropicKey);
-    try {
-      const resp = await fetch('https://api.anthropic.com/v1/models', {
-        method: 'GET',
-        headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01' },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (resp.ok) {
-        logger.info({ apiKey: keySuffix }, 'ANTHROPIC_API_KEY validated successfully');
-      } else {
-        logger.error(
-          { status: resp.status, apiKey: keySuffix },
-          'ANTHROPIC_API_KEY validation failed — opus/auto tasks will fail'
-        );
-      }
-    } catch (error) {
-      logger.warn(
-        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
-        'ANTHROPIC_API_KEY validation request failed (network issue) — key may still be valid'
+  // Validate Anthropic OAuth by checking token availability
+  const oauthState = anthropicOAuth.getState();
+  if (oauthState.status === 'active') {
+    const token = await anthropicOAuth.getAccessToken();
+    if (token !== null) {
+      logger.info(
+        { expiresInMinutes: oauthState.expiresInMinutes, subscriptionType: oauthState.subscriptionType },
+        'Anthropic OAuth validated — token active, opus/auto tasks ready'
+      );
+    } else {
+      logger.error(
+        'Anthropic OAuth token refresh failed — opus/auto tasks will fail'
       );
     }
+  } else if (oauthState.status === 'expired') {
+    const token = await anthropicOAuth.getAccessToken();
+    if (token !== null) {
+      logger.info('Anthropic OAuth token was expired but refreshed successfully');
+    } else {
+      logger.error('Anthropic OAuth token expired and refresh failed — opus/auto tasks will fail');
+    }
+  } else {
+    logger.error(
+      { message: oauthState.message },
+      'Anthropic OAuth not configured — opus/auto tasks will fail'
+    );
   }
 
   if (zaiKey !== '') {
@@ -470,7 +475,7 @@ async function bootstrap(): Promise<void> {
   };
 
   // Validate API keys asynchronously (non-blocking, warns on failure)
-  void validateWorkerApiKeys('', isolationConfig.getSecrets().ZAI_API_KEY, logger);
+  void validateWorkerApiKeys(anthropicOAuth, isolationConfig.getSecrets().ZAI_API_KEY, logger);
 
   const completionMaxAttemptsRaw = parseInt(
     getOptionalEnv('INTEXURAOS_COMPLETION_MAX_ATTEMPTS', String(DEFAULT_COMPLETION_MAX_ATTEMPTS)),
