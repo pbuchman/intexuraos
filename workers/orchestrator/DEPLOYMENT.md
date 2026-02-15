@@ -8,7 +8,7 @@ Consolidated reference for building, deploying, and managing the orchestrator an
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ macOS Host (or Predev VM)                                   │
+│ macOS Host (or Dev Machine)                                  │
 │                                                             │
 │  orchestrator (Node.js process via LaunchAgent)             │
 │  ├── Fastify HTTP server on :8199                           │

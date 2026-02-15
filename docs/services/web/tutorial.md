@@ -74,10 +74,10 @@ The app will be available at `http://localhost:3000`
 
 The web app can connect to either:
 
-| Option         | When to Use         | How                               |
-| -------------- | ------------------- | --------------------------------- |
-| Cloud services | Default integration | No config needed (uses env vars)  |
-| Predev mode    | Local reverse proxy | Set `INTEXURAOS_PREDEV_MODE=true` |
+| Option         | When to Use       | How                                             |
+| -------------- | ----------------- | ----------------------------------------------- |
+| Cloud services | Production build  | `pnpm build` — uses absolute service URLs       |
+| Dev mode       | Local development | `pnpm dev` — Vite proxy routes `/api/*` locally |
 
 ### Step 2.2: Service URLs
 
@@ -96,7 +96,7 @@ INTEXURAOS_USER_SERVICE_URL=http://localhost:8001
 INTEXURAOS_COMMANDS_AGENT_URL=http://localhost:8002
 ```
 
-**Note:** In predev mode (`INTEXURAOS_PREDEV_MODE=true`), service URLs are ignored and requests go through a local reverse proxy using relative API paths (e.g., `/api/code`).
+**Note:** In dev mode (`pnpm dev`), service URLs are ignored and requests go through Vite's proxy using relative API paths (e.g., `/api/code`).
 
 ### Step 2.3: Firebase Configuration
 
@@ -234,7 +234,7 @@ Serves the production build locally at `http://localhost:3000`
 | "CORS errors"                           | Ensure backend service allows requests from localhost                                      |
 | "Service worker not registering"        | Clear site data and reload in DevTools Application tab                                     |
 | "Vite HMR not working"                  | Check port 3000 is not already in use                                                      |
-| DevBar not showing                      | Only visible on `localhost` or `cloudfunctions.net` hostnames                              |
+| DevBar not showing                      | Only visible in dev mode (`pnpm dev`), not in production builds                            |
 | Chat not working as guest               | Guest sessions are rate-limited; clear `intex-guest-session-id` from localStorage to reset |
 | Dark mode not persisting                | Ensure localStorage is available (not in strict private mode)                              |
 

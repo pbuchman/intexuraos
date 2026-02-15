@@ -9,7 +9,7 @@ function getEnvVar(key: string): string {
 }
 
 function getServiceUrl(envVar: string, apiPath: string): string {
-  if (import.meta.env['INTEXURAOS_PREDEV_MODE'] === 'true') {
+  if (import.meta.env.DEV) {
     return apiPath;
   }
   return getEnvVar(envVar);

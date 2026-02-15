@@ -58,7 +58,7 @@ Switch between light, dark, and system-following themes. The preference persists
 
 ### Developer Toolbar (DevBar)
 
-Available in local and predev environments, the DevBar provides tabs for running commands against backend services, viewing real-time PM2 logs via SSE, and monitoring Pub/Sub events. State and logs persist across page reloads.
+Available in dev environments (local and dev machine), the DevBar provides tabs for running commands against backend services, viewing real-time PM2 logs via SSE, and monitoring Pub/Sub events. State and logs persist across page reloads.
 
 **Example:** While developing locally, you expand the DevBar to see real-time logs from all backend services, filter to just calendar-agent, and spot a payload parsing error.
 

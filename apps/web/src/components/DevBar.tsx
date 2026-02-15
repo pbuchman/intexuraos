@@ -13,19 +13,8 @@ import {
   ResizeHandle,
 } from './devbar/index.js';
 
-function getEnvironment(): 'LOCAL' | 'PRE-DEV' | null {
-  if (typeof window === 'undefined') return null;
-
-  const hostname = window.location.hostname;
-
-  if (import.meta.env.DEV && hostname === 'localhost') {
-    return 'LOCAL';
-  }
-
-  if (hostname.includes('cloudfunctions.net')) {
-    return 'PRE-DEV';
-  }
-
+function getEnvironment(): 'DEV' | null {
+  if (import.meta.env.DEV) return 'DEV';
   return null;
 }
 
@@ -335,13 +324,7 @@ export function DevBar(): React.JSX.Element | null {
           <span className="text-xs text-slate-500">
             {isAuthenticated ? (user?.email ?? 'Auth') : 'No auth'}
           </span>
-          <span
-            className={`rounded px-2 py-0.5 text-xs ${
-              environment === 'PRE-DEV'
-                ? 'bg-purple-800 text-purple-300'
-                : 'bg-slate-800 text-slate-400'
-            }`}
-          >
+          <span className="rounded px-2 py-0.5 text-xs bg-slate-800 text-slate-400">
             {environment}
           </span>
           <button

@@ -145,7 +145,7 @@ None identified.
 | 2026-02-08 | Text log viewer lacked ANSI color support          | Replaced with xterm.js terminal (`340971a8`)         |
 | 2026-02-07 | RefreshIndicator caused layout shifts              | Removed; replaced with inline RefreshCw (`1bc3c44f`) |
 | 2026-02-07 | UI inconsistencies in Linear issues and code tasks | Fixed in commit `c6ed05c3`                           |
-| 2026-02-06 | Missing redirect when predev VM is ready           | Fixed in INT-511 (`65c26987`)                        |
+| 2026-02-06 | Missing redirect when dev environment is ready     | Fixed in INT-511 (`65c26987`)                        |
 | 2026-02-05 | Firestore Timestamp bug in PR events               | Fixed in commit `a31578d7`                           |
 | 2026-02-04 | Invalid Date display in log viewer                 | Fixed in commit `c2dd8db2`                           |
 | 2026-02-04 | Code task 409 conflict not handled in UI           | Added conflict modal in INT-498 (`a29e301b`)         |

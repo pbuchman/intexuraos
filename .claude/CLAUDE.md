@@ -288,6 +288,19 @@ terraform validate
 
 ---
 
+## Environments
+
+| Environment | Domain               | Infra                 | Machine  | Deploy Target            |
+| ----------- | -------------------- | --------------------- | -------- | ------------------------ |
+| **dev**     | dev.intexuraos.cloud | PM2, GCP              | home-dev | `~/deploy/intexuraos`    |
+| **prod**    | intexuraos.cloud     | Cloud Run / Functions | GCloud   | CI/CD via GitHub Actions |
+| **local**   | localhost:3000       | PM2                   | macOS    | Direct                   |
+
+**Dev** and **local** both use `pnpm dev` (Vite dev server with proxy). Service URLs are `/api/*` relative paths proxied by Vite.
+**Prod** uses `pnpm build` (static bundle on CDN). Service URLs are absolute Cloud Run URLs baked at build time.
+
+---
+
 ## Architecture
 
 ```

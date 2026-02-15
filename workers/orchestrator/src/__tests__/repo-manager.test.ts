@@ -407,9 +407,7 @@ describe('RepoManager', () => {
         throw new Error('reset failed');
       };
 
-      await expect(cleanWorktree(repoPath, mockLogger)).rejects.toThrow(
-        'Failed to clean worktree'
-      );
+      await expect(cleanWorktree(repoPath, mockLogger)).rejects.toThrow('Failed to clean worktree');
     });
 
     it('should include stderr in error when available', async () => {
