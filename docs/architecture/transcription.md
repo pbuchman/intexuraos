@@ -129,9 +129,9 @@ Orphaned transcriptions (stuck in 'pending' or 'processing') can be recovered by
 
 ### Environment Variables
 
-| Variable                          | Description                            |
-| --------------------------------- | -------------------------------------- |
-| `INTEXURAOS_SPEECHMATICS_API_KEY` | Speechmatics Batch API key (EU region) |
+| Variable                              | Description                            |
+| ------------------------------------- | -------------------------------------- |
+| `INTEXURAOS_SPEECHMATICS_APP_API_KEY` | Speechmatics Batch API key (EU region) |
 
 ### Polling Configuration
 
