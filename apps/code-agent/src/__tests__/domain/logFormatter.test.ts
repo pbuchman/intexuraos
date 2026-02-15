@@ -653,6 +653,59 @@ describe('formatLogChunk', () => {
     });
   });
 
+  describe('timestamp-prefixed JSON lines', () => {
+    it('parses JSON with HH:MM:ss.mmm prefix and re-adds timestamp', () => {
+      const json = JSON.stringify({ type: 'system', subtype: 'init', model: 'opus' });
+      const raw = `16:42:02.563 ${json}`;
+      const result = formatLogChunk(raw, 0, ts());
+      expect(result).toHaveLength(1);
+      expect(result[0]?.text).toBe('16:42:02.563 [init] Model: opus');
+    });
+
+    it('parses assistant message with timestamp prefix', () => {
+      const json = JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'Starting task' }] },
+      });
+      const raw = `09:15:30.001 ${json}`;
+      const result = formatLogChunk(raw, 0, ts());
+      expect(result).toHaveLength(1);
+      expect(result[0]?.text).toBe('09:15:30.001 Starting task');
+    });
+
+    it('parses result message with timestamp prefix', () => {
+      const json = JSON.stringify({ type: 'result', duration_ms: 3000, num_turns: 2 });
+      const raw = `23:59:59.999 ${json}`;
+      const result = formatLogChunk(raw, 0, ts());
+      expect(result).toHaveLength(1);
+      expect(result[0]?.text).toBe('23:59:59.999 [done] 3.0s, 2 turns');
+    });
+
+    it('does not add prefix when formatted output is empty', () => {
+      const json = JSON.stringify({ type: 'assistant', message: { role: 'assistant' } });
+      const raw = `10:00:00.000 ${json}`;
+      const result = formatLogChunk(raw, 0, ts());
+      expect(result).toEqual([]);
+    });
+
+    it('handles mixed timestamped and non-timestamped lines', () => {
+      const json1 = JSON.stringify({ type: 'system', subtype: 'init', model: 'opus' });
+      const json2 = JSON.stringify({ type: 'result', duration_ms: 1000 });
+      const raw = `16:42:02.563 ${json1}\n${json2}`;
+      const result = formatLogChunk(raw, 0, ts());
+      expect(result).toHaveLength(2);
+      expect(result[0]?.text).toBe('16:42:02.563 [init] Model: opus');
+      expect(result[1]?.text).toBe('[done] 1.0s');
+    });
+
+    it('passes through non-JSON timestamped lines unchanged', () => {
+      const raw = '16:42:02.563 [orchestrator] Task started...';
+      const result = formatLogChunk(raw, 0, ts());
+      expect(result).toHaveLength(1);
+      expect(result[0]?.text).toBe('16:42:02.563 [orchestrator] Task started...');
+    });
+  });
+
   describe('mixed content', () => {
     it('real-world multi-line chunk with different types', () => {
       const chunk = [

@@ -80,16 +80,16 @@ describe('firestoreLogLineRepository', () => {
       expect(mockFirestore.batch).not.toHaveBeenCalled();
     });
 
-    it('stores lines in correct subcollection path', async () => {
+    it('stores lines in correct subcollection path with sequence-based doc ID', async () => {
       const repo = createFirestoreLogLineRepository({ firestore: mockFirestore, logger });
-      const line = createLine();
+      const line = createLine({ sequence: 5 });
 
       await repo.storeBatch('task-1', [line]);
 
       expect(mockFirestore.collection).toHaveBeenCalledWith('code_tasks');
       expect(mockTasksCollection.doc).toHaveBeenCalledWith('task-1');
       expect(mockTaskDoc.collection).toHaveBeenCalledWith('log_lines');
-      expect(mockLinesCollection.doc).toHaveBeenCalled();
+      expect(mockLinesCollection.doc).toHaveBeenCalledWith('000000000005');
     });
 
     it('stores correct fields', async () => {
