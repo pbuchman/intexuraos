@@ -25,7 +25,7 @@ vi.mock('@intexuraos/internal-clients', () => ({
 
 describe('chat-agent services', () => {
   beforeEach(() => {
-    process.env['INTEXURAOS_OPENAI_API_KEY'] = 'test-key';
+    process.env['INTEXURAOS_OPENAI_APP_API_KEY'] = 'test-key';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://localhost:8080';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-token';
@@ -35,7 +35,7 @@ describe('chat-agent services', () => {
   afterEach(() => {
     resetServices();
     resetFirestore();
-    delete process.env['INTEXURAOS_OPENAI_API_KEY'];
+    delete process.env['INTEXURAOS_OPENAI_APP_API_KEY'];
     delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
     delete process.env['INTEXURAOS_USER_SERVICE_URL'];
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];

@@ -443,7 +443,7 @@ async function bootstrap(): Promise<void> {
     ANTHROPIC_API_KEY: anthropicToken,
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
-    ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_API_KEY'),
+    ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_APP_API_KEY'),
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);

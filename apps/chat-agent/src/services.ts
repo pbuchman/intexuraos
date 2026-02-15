@@ -76,14 +76,14 @@ export function resetServices(): void {
  * Fetches pricing data from app-settings-service at startup.
  */
 export async function initializeServices(): Promise<void> {
-  const openaiApiKey = process.env['INTEXURAOS_OPENAI_API_KEY'];
+  const openaiApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'];
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   const appSettingsServiceUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
-  const guestZaiApiKey = process.env['INTEXURAOS_GUEST_ZAI_API_KEY'];
+  const guestZaiApiKey = process.env['INTEXURAOS_ZAI_APP_API_KEY'];
 
   if (openaiApiKey === undefined || openaiApiKey.length === 0) {
-    throw new Error('INTEXURAOS_OPENAI_API_KEY environment variable is required');
+    throw new Error('INTEXURAOS_OPENAI_APP_API_KEY environment variable is required');
   }
 
   if (userServiceUrl === undefined || userServiceUrl.length === 0) {
@@ -99,7 +99,7 @@ export async function initializeServices(): Promise<void> {
   }
 
   if (guestZaiApiKey === undefined || guestZaiApiKey.length === 0) {
-    throw new Error('INTEXURAOS_GUEST_ZAI_API_KEY environment variable is required');
+    throw new Error('INTEXURAOS_ZAI_APP_API_KEY environment variable is required');
   }
 
   const logger = createAppLogger({
@@ -143,7 +143,7 @@ export async function initializeServices(): Promise<void> {
       internalAuthToken,
       pricingContext,
       logger,
-      platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
+      platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
       platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
     }),
     logger,

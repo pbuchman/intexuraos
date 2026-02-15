@@ -63,7 +63,7 @@ type GptError = { code: LLMErrorCode; message: string };
 import { createGptClient } from '@intexuraos/infra-gpt';
 
 const client = createGptClient({
-  apiKey: env.INTEXURAOS_OPENAI_API_KEY,
+  apiKey: env.INTEXURAOS_OPENAI_APP_API_KEY,
   model: 'gpt-4.1',
   userId,
   pricing: { inputPricePerMillion: 2.5, outputPricePerMillion: 10.0 },

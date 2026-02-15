@@ -362,7 +362,7 @@ Ensures the orchestrator has a valid local repository clone:
 | ------------------------------ | ----------------------------- | -------------------------- |
 | `INTEXURAOS_REPOSITORY_PATH`   | `~/.claude-orchestrator/repo` | Local repo clone path      |
 | `INTEXURAOS_ANTHROPIC_API_KEY` | `""`                          | Claude API key for workers |
-| `INTEXURAOS_ZAI_API_KEY`       | `""`                          | ZAI API key for workers    |
+| `INTEXURAOS_ZAI_APP_API_KEY`   | `""`                          | ZAI API key for workers    |
 | `INTEXURAOS_WORKER_CAPACITY`   | `2`                           | Max concurrent tasks       |
 | `PORT`                         | `8199`                        | HTTP server port           |
 | `LOG_LEVEL`                    | `info`                        | Pino log level             |

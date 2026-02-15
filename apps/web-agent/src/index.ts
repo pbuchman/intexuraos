@@ -8,7 +8,7 @@ import { initServices } from './services.js';
 
 const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_CRAWL4AI_API_KEY',
+  'INTEXURAOS_CRAWL4AI_APP_API_KEY',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
 ];
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   process.stdout.write(`Loaded pricing for ${String(REQUIRED_MODELS.length)} models\n`);
 
   initServices({
-    crawl4aiApiKey: process.env['INTEXURAOS_CRAWL4AI_API_KEY'] ?? '',
+    crawl4aiApiKey: process.env['INTEXURAOS_CRAWL4AI_APP_API_KEY'] ?? '',
     userServiceUrl: USER_SERVICE_URL,
     internalAuthToken: INTERNAL_AUTH_TOKEN,
     pricingContext,

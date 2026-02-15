@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger,
-    platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
+    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
