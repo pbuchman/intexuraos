@@ -227,6 +227,14 @@ export class TaskDispatcher {
         taskId,
         `Task started: id=${taskId} attempt=1/${String(this.completionMaxAttempts)} workerType=${task.workerType}`
       );
+      if (task.linearIssueId !== undefined) {
+        this.appendOrchestratorTaskLog(
+          taskId,
+          `Linear issue: ${task.linearIssueId}${task.linearIssueTitle !== undefined ? ` — ${task.linearIssueTitle}` : ''}`
+        );
+      }
+      const promptPreview = task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
+      this.appendOrchestratorTaskLog(taskId, `Prompt: ${promptPreview}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
       /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
@@ -534,8 +542,22 @@ export class TaskDispatcher {
     });
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Gemini verifier verdict: passed=${String(verification.passed)} confidence=${verification.confidence.toFixed(2)} reasons=${verification.reasons.join(' | ') || 'none'} missing=${verification.missingCriteria.join(' | ') || 'none'} resumeInstruction=${verification.resumeInstruction}`
+      `━━━ Verification Result ━━━`
     );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `  Passed: ${String(verification.passed)} | Confidence: ${verification.confidence.toFixed(2)}`
+    );
+    if (verification.reasons.length > 0) {
+      this.appendOrchestratorTaskLog(task.taskId, `  Reasons: ${verification.reasons.join(' | ')}`);
+    }
+    if (verification.missingCriteria.length > 0) {
+      this.appendOrchestratorTaskLog(task.taskId, `  Missing: ${verification.missingCriteria.join(' | ')}`);
+    }
+    if (verification.resumeInstruction.length > 0) {
+      this.appendOrchestratorTaskLog(task.taskId, `  Resume: ${verification.resumeInstruction}`);
+    }
+    this.appendOrchestratorTaskLog(task.taskId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     if (typeof exitCode === 'number') {
       task.lastExitCode = exitCode;
@@ -586,6 +608,7 @@ export class TaskDispatcher {
     }
 
     if (!verification.passed && attempt < maxAttempts) {
+      this.logForwarder.appendChunk(task.taskId, '\n\n');
       this.appendOrchestratorTaskLog(
         task.taskId,
         `Verification failed; continuing with next attempt (${String(attempt + 1)}/${String(maxAttempts)})`
@@ -704,6 +727,22 @@ export class TaskDispatcher {
       task.taskId,
       `Starting worker attempt: continueSession=${String(params.continueSession)} hasChildren=${String(params.hasChildren)}`
     );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Container config: workerType=${task.workerType} worktree=${task.worktreePath} baseBranch=${task.baseBranch}`
+    );
+    if (params.continueSession) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Exec command: /entrypoint.sh run-attempt (reusing existing container)`
+      );
+    } else {
+      const imageInfo = this.isolation.provider.getImageInfo?.();
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Creating new container: image=${imageInfo?.configuredRef ?? 'configured'} cmd=/entrypoint.sh`
+      );
+    }
 
     const workerConfig: WorkerConfig = {
       taskId: task.taskId,
@@ -1008,10 +1047,18 @@ export class TaskDispatcher {
     }
   }
 
+  private formatLocalTime(date: Date): string {
+    const h = String(date.getHours()).padStart(2, '0');
+    const m = String(date.getMinutes()).padStart(2, '0');
+    const s = String(date.getSeconds()).padStart(2, '0');
+    const ms = String(date.getMilliseconds()).padStart(3, '0');
+    return `${h}:${m}:${s}.${ms}`;
+  }
+
   private appendOrchestratorTaskLog(taskId: string, message: string): void {
     this.logForwarder.appendChunk(
       taskId,
-      `[orchestrator] ${new Date().toISOString()} ${message}\n`
+      `${this.formatLocalTime(new Date())} [orchestrator] ${message}\n`
     );
   }
 

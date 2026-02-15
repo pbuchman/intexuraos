@@ -2147,9 +2147,11 @@ describe('TaskDispatcher', () => {
       expect(task?.status).toBe('completed');
       expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
         'empty-verifier-reasons-task',
-        expect.stringContaining(
-          'Gemini verifier verdict: passed=true confidence=1.00 reasons=none missing=none resumeInstruction=done'
-        )
+        expect.stringContaining('Passed: true | Confidence: 1.00')
+      );
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        'empty-verifier-reasons-task',
+        expect.stringContaining('Resume: done')
       );
       vi.useRealTimers();
     });

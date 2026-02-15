@@ -4,7 +4,7 @@
  * Test Requirements from INT-520:
  * 1. Returns error when original task not found
  * 2. Returns error when task status is not 'failed', 'cancelled', or 'interrupted'
- * 3. Returns error when task failed less than 5 minutes ago (cool-off period)
+ * 3. Returns error when task failed less than 1 minute ago (cool-off period)
  * 4. Successfully creates retry task with retriedFrom set
  * 5. Updates Linear issue state to In Progress
  * 6. Adds comment to Linear issue with retry details
@@ -207,9 +207,9 @@ describe('retryTask use case', () => {
       }
     });
 
-    it('should return error when task failed less than 5 minutes ago (cool-off period)', async () => {
-      // Task completed 2 minutes ago
-      const twoMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 2 * 60 * 1000));
+    it('should return error when task failed less than 1 minute ago (cool-off period)', async () => {
+      // Task completed 30 seconds ago
+      const twoMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 30 * 1000));
       const mockTask = createMockTask({ completedAt: twoMinutesAgo });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
 
