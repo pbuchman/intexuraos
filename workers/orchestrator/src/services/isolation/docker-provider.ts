@@ -1,5 +1,6 @@
 import Docker from 'dockerode';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type { Logger } from '@intexuraos/common-core';
 import type { IsolationProvider, WorkerConfig, WorkerHandle, ResourceUsage } from './types.js';
@@ -53,6 +54,12 @@ interface PreservedWorkerEntry {
 
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
 const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
+
+// Container must run as the host user so bind-mounted files (worktrees, secrets,
+// pnpm store) are accessible without permission hacks.
+const HOST_UID = os.userInfo().uid;
+const HOST_GID = os.userInfo().gid;
+const HOST_USER_STRING = `${String(HOST_UID)}:${String(HOST_GID)}`;
 
 export class DockerProvider implements IsolationProvider {
   private readonly docker: Docker;
@@ -274,7 +281,7 @@ export class DockerProvider implements IsolationProvider {
         name: `claude-worker-${taskId}`,
         Env: env,
         WorkingDir: '/repo',
-        User: '1001:1001',
+        User: HOST_USER_STRING,
         Tty: false,
         HostConfig: {
           Binds: [
@@ -292,10 +299,10 @@ export class DockerProvider implements IsolationProvider {
           ReadonlyRootfs: false,
           Tmpfs: {
             '/tmp': 'rw,noexec,nosuid,size=2g',
-            '/home/claude': 'rw,noexec,nosuid,size=500m,uid=1001,gid=1001',
+            '/home/claude': `rw,noexec,nosuid,size=500m,uid=${String(HOST_UID)},gid=${String(HOST_GID)}`,
             // Shadows the Mac host's node_modules (bind-mounted via /repo), giving the
             // container an empty writable dir for Linux-native pnpm install.
-            '/repo/node_modules': 'rw,exec,nosuid,size=4g,uid=1001,gid=1001',
+            '/repo/node_modules': `rw,exec,nosuid,size=4g,uid=${String(HOST_UID)},gid=${String(HOST_GID)}`,
           },
           CapDrop: ['ALL'],
           // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude
@@ -761,7 +768,7 @@ export class DockerProvider implements IsolationProvider {
       AttachStderr: true,
       Tty: false,
       WorkingDir: '/',
-      User: '1001:1001',
+      User: HOST_USER_STRING,
     });
 
     const execStream = await execInstance.start({ hijack: false, stdin: false });
@@ -813,7 +820,7 @@ export class DockerProvider implements IsolationProvider {
         AttachStderr: true,
         Tty: false,
         WorkingDir: '/',
-        User: '1001:1001',
+        User: HOST_USER_STRING,
         Env: [`CLAUDE_CONTINUE=${config.continueSession === true ? '1' : '0'}`],
       });
 

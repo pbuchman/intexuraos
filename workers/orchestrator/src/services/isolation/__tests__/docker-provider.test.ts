@@ -320,7 +320,7 @@ describe('DockerProvider', () => {
         expect.stringContaining('pnpm-store:/home/claude/pnpm-store:rw')
       );
       const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
-      expect(tmpfs['/repo/node_modules']).toContain('uid=1001');
+      expect(tmpfs['/repo/node_modules']).toContain(`uid=${String(process.getuid?.() ?? 1000)}`);
     });
 
     it('sets CLAUDE_WORKER_MODE env var', async () => {
