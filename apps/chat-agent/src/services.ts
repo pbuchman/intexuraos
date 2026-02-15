@@ -144,6 +144,7 @@ export async function initializeServices(): Promise<void> {
       pricingContext,
       logger,
       platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
+      platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
     }),
     logger,
     guestRateLimiter: createGuestRateLimiter(),

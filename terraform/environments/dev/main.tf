@@ -555,6 +555,7 @@ locals {
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
     INTEXURAOS_SENTRY_DSN          = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
     INTEXURAOS_GUEST_ZAI_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_GUEST_ZAI_API_KEY"]
+    INTEXURAOS_GEMINI_APP_API_KEY  = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
   }
 }
 

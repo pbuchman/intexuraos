@@ -52,6 +52,7 @@ export function initServices(config: ServiceConfig): void {
     pricingContext: config.pricingContext,
     logger: logger,
     platformZaiApiKey: process.env['INTEXURAOS_GUEST_ZAI_API_KEY'],
+    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
   const extractionService = createLinearActionExtractionService(userServiceClient, logger);
