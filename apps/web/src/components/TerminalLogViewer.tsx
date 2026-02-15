@@ -216,7 +216,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
             }
 
             lineCountRef.current += addedLines.length;
-            const desiredRows = Math.min(lineCountRef.current + 1, MAX_TERMINAL_ROWS);
+            const desiredRows = Math.min(terminal.buffer.active.length, MAX_TERMINAL_ROWS);
             if (desiredRows > terminal.rows) {
               terminal.resize(terminal.cols, desiredRows);
             }
