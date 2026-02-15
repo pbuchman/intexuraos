@@ -731,7 +731,7 @@ async function handleViewTaskButton(
 
   await whatsappPublisher.publishSendMessage({
     userId,
-    message: `View task details at: ${webAppUrl}/#/tasks/${taskId}`,
+    message: `View task details at: ${webAppUrl}/#/code-tasks/${taskId}`,
     correlationId: `view-task-${taskId}`,
   });
 
