@@ -1064,29 +1064,81 @@ export class TaskDispatcher {
   private formatClaudeSystemMessages(text: string): string {
     return text.replace(/^(\{.+\})$/gm, (jsonLine) => {
       try {
-        const obj = JSON.parse(jsonLine) as {
-          type?: string;
-          subtype?: string;
-          hook_name?: string;
-          output?: string;
-          session_id?: string;
-        };
-        if (obj.type !== 'system') return jsonLine;
+        const obj = JSON.parse(jsonLine) as Record<string, unknown>;
+        const type = obj['type'] as string | undefined;
 
-        if (obj.subtype === 'hook_started') {
-          return `[hook] ${obj.hook_name ?? 'unknown'} started`;
+        if (type === 'system') {
+          const subtype = obj['subtype'] as string | undefined;
+          if (subtype === 'hook_started') {
+            return `[hook] ${(obj['hook_name'] as string | undefined) ?? 'unknown'} started`;
+          }
+          if (subtype === 'hook_response') {
+            const output = (obj['output'] as string | undefined) ?? '';
+            const lineCount = output.split('\n').filter((l) => l.trim() !== '').length;
+            return `[hook] ${(obj['hook_name'] as string | undefined) ?? 'unknown'} completed (${String(lineCount)} lines)`;
+          }
+          if (subtype === 'init') {
+            return this.formatInitMessage(obj);
+          }
+          return jsonLine;
         }
-        if (obj.subtype === 'hook_response') {
-          const output = obj.output ?? '';
-          const lineCount = output.split('\n').filter((l) => l.trim() !== '').length;
-          return `[hook] ${obj.hook_name ?? 'unknown'} completed (${String(lineCount)} lines)`;
+
+        if (type === 'assistant') {
+          return this.formatAssistantMessage(obj);
         }
-        // Other system messages (e.g. init) — suppress session_id noise
+
+        if (type === 'result') {
+          return this.formatResultMessage(obj);
+        }
+
         return jsonLine;
       } catch {
         return jsonLine;
       }
     });
+  }
+
+  private formatInitMessage(obj: Record<string, unknown>): string {
+    const model = (obj['model'] as string | undefined) ?? 'unknown';
+    const tools = Array.isArray(obj['tools']) ? obj['tools'].length : 0;
+    const mode = (obj['permissionMode'] as string | undefined) ?? 'unknown';
+    const version = (obj['version'] as string | undefined) ?? '?';
+
+    const mcpServers = Array.isArray(obj['mcp_servers'])
+      ? (obj['mcp_servers'] as Record<string, unknown>[])
+          .map((s) => {
+            const name = (s['name'] as string | undefined) ?? '?';
+            const status = (s['status'] as string | undefined) === 'connected' ? 'ok' : 'fail';
+            return `${name}:${status}`;
+          })
+          .join(', ')
+      : '';
+
+    const mcpPart = mcpServers !== '' ? ` mcp=[${mcpServers}]` : '';
+    return `[claude] Session init: model=${model} tools=${String(tools)}${mcpPart} mode=${mode} v${version}`;
+  }
+
+  private formatAssistantMessage(obj: Record<string, unknown>): string {
+    const message = obj['message'] as Record<string, unknown> | undefined;
+    const content = Array.isArray(message?.['content'])
+      ? (message['content'] as Record<string, unknown>[])
+      : [];
+    const textBlock = content.find((c) => c['type'] === 'text');
+    const text = (textBlock?.['text'] as string | undefined) ?? '';
+    const truncated = text.length > 200 ? text.slice(0, 200) + '...' : text;
+    return `[claude] Assistant: ${truncated}`;
+  }
+
+  private formatResultMessage(obj: Record<string, unknown>): string {
+    const isError = obj['is_error'] === true ? 'true' : 'false';
+    const turns = String((obj['num_turns'] as number | undefined) ?? 0);
+    const durationMs = (obj['duration_ms'] as number | undefined) ?? 0;
+    const durationSec = Math.round(durationMs / 1000);
+    const cost = (obj['total_cost_usd'] as number | undefined) ?? 0;
+    const result = (obj['result'] as string | undefined) ?? '';
+    const truncated = result.length > 200 ? result.slice(0, 200) + '...' : result;
+    const resultPart = truncated !== '' ? ` | ${truncated}` : '';
+    return `[claude] Result: error=${isError} turns=${turns} duration=${String(durationSec)}s cost=$${cost.toFixed(2)}${resultPart}`;
   }
 
   private formatLocalTime(date: Date): string {

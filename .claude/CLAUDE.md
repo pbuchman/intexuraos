@@ -489,7 +489,9 @@ node -e "
 "
 ```
 
-**Print the result to the user.** If vars are missing, `direnv allow` or source `.envrc` before proceeding.
+**Print the result to the user.** If vars are missing, run `direnv allow` before proceeding.
+
+**Environment variables require `direnv`.** The `.envrc` file loads all `INTEXURAOS_*` vars. `direnv` hooks into the shell automatically on `cd`, but Claude Code shell commands may not trigger it. **Always run `direnv allow` at session start**, and again before any shell command that depends on env vars if there is any possibility `direnv` was not automatically executed (e.g. after a shell restart, background task, or subshell).
 
 **Why:** Apps depend on packages. Without built `dist/` directories, apps fail typecheck.
 

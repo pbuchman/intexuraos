@@ -2948,4 +2948,224 @@ describe('TaskDispatcher', () => {
       expect(terminalPayload.error).toEqual(originalError);
     });
   });
+
+  describe('formatClaudeSystemMessages via onLog', () => {
+    const submitAndGetOnLog = async (): Promise<(chunk: string) => void> => {
+      vi.useFakeTimers();
+      const request: CreateTaskRequest = {
+        taskId: 'format-test',
+        workerType: 'auto',
+        prompt: 'Test formatting',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      const call = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = call?.[0]?.onLog;
+      if (onLog === undefined) throw new Error('Expected onLog callback');
+      vi.useRealTimers();
+      return onLog;
+    };
+
+    const findFormattedChunk = (marker: string): string => {
+      const appendCall = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.find((c) => typeof c[1] === 'string' && c[1].includes(marker));
+      if (appendCall === undefined)
+        throw new Error(`Expected appendChunk call containing "${marker}"`);
+      return appendCall[1] as string;
+    };
+
+    it('should format system init messages', async () => {
+      const onLog = await submitAndGetOnLog();
+      const initJson = JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        model: 'claude-sonnet-4-5-20250929',
+        tools: ['Task', 'Bash', 'Glob'],
+        mcp_servers: [
+          { name: 'linear', status: 'connected' },
+          { name: 'sentry', status: 'failed' },
+        ],
+        permissionMode: 'bypassPermissions',
+        version: '2.1.41',
+        session_id: 'abc123',
+        cwd: '/repo',
+      });
+
+      onLog(initJson + '\n');
+
+      const formatted = findFormattedChunk('[claude] Session init');
+      expect(formatted).toContain('model=claude-sonnet-4-5-20250929');
+      expect(formatted).toContain('tools=3');
+      expect(formatted).toContain('mcp=[linear:ok, sentry:fail]');
+      expect(formatted).toContain('mode=bypassPermissions');
+      expect(formatted).toContain('v2.1.41');
+    });
+
+    it('should format init message without mcp_servers', async () => {
+      const onLog = await submitAndGetOnLog();
+      const initJson = JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        model: 'claude-sonnet-4-5-20250929',
+        tools: [],
+        permissionMode: 'plan',
+        version: '2.0.0',
+      });
+
+      onLog(initJson + '\n');
+
+      const formatted = findFormattedChunk('[claude] Session init');
+      expect(formatted).toContain('tools=0');
+      expect(formatted).not.toContain('mcp=');
+      expect(formatted).toContain('mode=plan');
+    });
+
+    it('should format assistant messages with text truncation', async () => {
+      const onLog = await submitAndGetOnLog();
+      const longText = 'A'.repeat(250);
+      const assistantJson = JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg-1',
+          content: [{ type: 'text', text: longText }],
+        },
+      });
+
+      onLog(assistantJson + '\n');
+
+      const formatted = findFormattedChunk('[claude] Assistant');
+      expect(formatted).toContain('[claude] Assistant: ' + 'A'.repeat(200) + '...');
+    });
+
+    it('should format assistant messages without truncation for short text', async () => {
+      const onLog = await submitAndGetOnLog();
+      const assistantJson = JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg-2',
+          content: [{ type: 'text', text: 'Hello world' }],
+        },
+      });
+
+      onLog(assistantJson + '\n');
+
+      const formatted = findFormattedChunk('[claude] Assistant');
+      expect(formatted).toBe('[claude] Assistant: Hello world\n');
+    });
+
+    it('should format result messages', async () => {
+      const onLog = await submitAndGetOnLog();
+      const resultJson = JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: true,
+        num_turns: 3,
+        duration_ms: 204353,
+        total_cost_usd: 0.15,
+        result: 'API Error: 429 rate limited',
+      });
+
+      onLog(resultJson + '\n');
+
+      const formatted = findFormattedChunk('[claude] Result');
+      expect(formatted).toContain('error=true');
+      expect(formatted).toContain('turns=3');
+      expect(formatted).toContain('duration=204s');
+      expect(formatted).toContain('cost=$0.15');
+      expect(formatted).toContain('| API Error: 429 rate limited');
+    });
+
+    it('should format result messages with truncated result text', async () => {
+      const onLog = await submitAndGetOnLog();
+      const longResult = 'B'.repeat(250);
+      const resultJson = JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 1,
+        duration_ms: 5000,
+        total_cost_usd: 0,
+        result: longResult,
+      });
+
+      onLog(resultJson + '\n');
+
+      const formatted = findFormattedChunk('[claude] Result');
+      expect(formatted).toContain('error=false');
+      expect(formatted).toContain('| ' + 'B'.repeat(200) + '...');
+    });
+
+    it('should format result messages without result text', async () => {
+      const onLog = await submitAndGetOnLog();
+      const resultJson = JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        num_turns: 0,
+        duration_ms: 0,
+        total_cost_usd: 0,
+      });
+
+      onLog(resultJson + '\n');
+
+      const formatted = findFormattedChunk('[claude] Result');
+      expect(formatted).not.toContain('|');
+      expect(formatted).toContain('cost=$0.00');
+    });
+
+    it('should pass through non-JSON lines unchanged', async () => {
+      const onLog = await submitAndGetOnLog();
+
+      onLog('Plain text log line\n');
+
+      const formatted = findFormattedChunk('Plain text log line');
+      expect(formatted).toBe('Plain text log line\n');
+    });
+
+    it('should pass through unknown JSON types unchanged', async () => {
+      const onLog = await submitAndGetOnLog();
+      const unknownJson = JSON.stringify({ type: 'unknown', data: 'something' });
+
+      onLog(unknownJson + '\n');
+
+      findFormattedChunk('"type":"unknown"');
+    });
+
+    it('should handle assistant messages with no text content blocks', async () => {
+      const onLog = await submitAndGetOnLog();
+      const assistantJson = JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg-3',
+          content: [{ type: 'tool_use', name: 'Bash' }],
+        },
+      });
+
+      onLog(assistantJson + '\n');
+
+      const formatted = findFormattedChunk('[claude] Assistant:');
+      expect(formatted).toBe('[claude] Assistant: \n');
+    });
+
+    it('should format init message with missing optional fields', async () => {
+      const onLog = await submitAndGetOnLog();
+      const initJson = JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+      });
+
+      onLog(initJson + '\n');
+
+      const formatted = findFormattedChunk('[claude] Session init');
+      expect(formatted).toContain('model=unknown');
+      expect(formatted).toContain('tools=0');
+      expect(formatted).toContain('mode=unknown');
+      expect(formatted).toContain('v?');
+    });
+  });
 });
