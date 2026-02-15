@@ -76,4 +76,14 @@ describe('stripMarkdown', () => {
     const result = stripMarkdown('# First line\n## Second line\nThird line');
     expect(result).toBe('First line\nSecond line\nThird line');
   });
+
+  it('strips backslash-escaped brackets', () => {
+    const result = stripMarkdown('\\[WORKER-MODE\\] \\[PHASE:2\\] Add text');
+    expect(result).toBe('[WORKER-MODE] [PHASE:2] Add text');
+  });
+
+  it('strips backslash escapes from other markdown special characters', () => {
+    const result = stripMarkdown('Task \\[PHASE:1\\] with \\#tag');
+    expect(result).toBe('Task [PHASE:1] with #tag');
+  });
 });
