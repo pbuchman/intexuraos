@@ -435,10 +435,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request);
 
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        reply.status(401);
-        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      // Cloud Scheduler uses OIDC tokens validated by Cloud Run at infrastructure level.
+      // Direct service calls use x-internal-auth header.
+      const authHeader = request.headers.authorization;
+      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+
+      if (isOidcAuth) {
+        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          reply.status(401);
+          return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+        }
       }
 
       const services = getServices();
