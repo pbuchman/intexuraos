@@ -196,20 +196,18 @@ module.exports = {
     createServiceConfig('notion-service', 8112),
     createServiceConfig('whatsapp-service', 8113),
     createServiceConfig('mobile-notifications-service', 8114),
-    createServiceConfig('commands-agent', 8117),
-    createServiceConfig('actions-agent', 8118),
     createServiceConfig('notes-agent', 8121),
-    createServiceConfig('todos-agent', 8123),
     createServiceConfig('bookmarks-agent', 8124),
     createServiceConfig('code-agent', 8128),
 
     // Services that depend on app-settings-service (fetch pricing at startup)
     // Poll health endpoint until app-settings-service is ready (max 30s)
     createServiceConfig('user-service', 8110, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('commands-agent', 8117, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('actions-agent', 8118, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('research-agent', 8116, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('data-insights-agent', 8119, {
-      waitForService: 'http://localhost:8122/health',
-    }),
+    createServiceConfig('todos-agent', 8123, { waitForService: 'http://localhost:8122/health' }),
+    createServiceConfig('data-insights-agent', 8119, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('image-service', 8120, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('calendar-agent', 8125, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('linear-agent', 8126, { waitForService: 'http://localhost:8122/health' }),
