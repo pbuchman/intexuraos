@@ -569,6 +569,33 @@ describe('completion-verifier', () => {
     );
   });
 
+  it('accepts empty resumeInstruction when Gemini returns passed verdict', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":true,"confidence":0.97,"reasons":["all criteria met"],"missingCriteria":[],"resumeInstruction":""}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-empty-resume',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'phase1',
+      originalPrompt: 'Prepare issue',
+      rawLogs: assistantLog(validPhase1Final),
+      linearIssueLabels: [],
+    });
+
+    expect(verdict.passed).toBe(true);
+    expect(verdict.resumeInstruction).toBe('');
+    expect(verdict.verifierFailure).toBe(false);
+    expect(verdict.usedLlm).toBe(true);
+  });
+
   it('throws when model is not gemini-2.5-flash', () => {
     expect(() => createVerifier({ model: 'unsupported-model' })).toThrow(
       'Completion verifier must use model gemini-2.5-flash'
