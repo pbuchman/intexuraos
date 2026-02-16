@@ -67,7 +67,7 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
       /* v8 ignore start -- test-infra: requires mock fetch for non-OK responses @preserve */
       if (!response.ok) {
         if (response.status >= 500) {
-          this.logger.warn(
+          this.logger.info(
             { worker: worker.name, status: response.status },
             'Orchestrator returned server error'
           );
