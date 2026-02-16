@@ -63,22 +63,22 @@ packages/infra-otel/
 
 ### Auto-instrumentations
 
-| Package                                     | What it captures                            |
-| ------------------------------------------- | ------------------------------------------- |
-| `@opentelemetry/instrumentation-http`       | All HTTP client/server spans                |
-| `@opentelemetry/instrumentation-fastify`    | Route-level spans with path/method          |
-| `@opentelemetry/instrumentation-pino`       | Injects trace_id/span_id into log records   |
-| `@opentelemetry/instrumentation-undici`     | Outbound fetch() calls (service-to-service) |
-| `@opentelemetry/instrumentation-dns`        | DNS resolution timing                       |
-| `@opentelemetry/instrumentation-net`        | TCP connection timing                       |
+| Package                                  | What it captures                            |
+| ---------------------------------------- | ------------------------------------------- |
+| `@opentelemetry/instrumentation-http`    | All HTTP client/server spans                |
+| `@opentelemetry/instrumentation-fastify` | Route-level spans with path/method          |
+| `@opentelemetry/instrumentation-pino`    | Injects trace_id/span_id into log records   |
+| `@opentelemetry/instrumentation-undici`  | Outbound fetch() calls (service-to-service) |
+| `@opentelemetry/instrumentation-dns`     | DNS resolution timing                       |
+| `@opentelemetry/instrumentation-net`     | TCP connection timing                       |
 
 ### Environment Variables
 
-| Variable                           | Purpose                        | Example                        |
-| ---------------------------------- | ------------------------------ | ------------------------------ |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`  | Dash0 OTLP HTTP endpoint      | `https://ingress.eu1.dash0.com` |
-| `INTEXURAOS_DASH0_AUTH_TOKEN`      | Dash0 API auth token           | `dash0-auth-...`               |
-| `INTEXURAOS_ENVIRONMENT`           | Reused for deployment.environment | `dev` / `production`        |
+| Variable                         | Purpose                           | Example                         |
+| -------------------------------- | --------------------------------- | ------------------------------- |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT` | Dash0 OTLP HTTP endpoint          | `https://ingress.eu1.dash0.com` |
+| `INTEXURAOS_DASH0_AUTH_TOKEN`    | Dash0 API auth token              | `dash0-auth-...`                |
+| `INTEXURAOS_ENVIRONMENT`         | Reused for deployment.environment | `dev` / `production`            |
 
 No-op behavior: if `INTEXURAOS_DASH0_OTLP_ENDPOINT` is undefined, the register module exits immediately.
 
@@ -112,10 +112,10 @@ CMD ["node", "--import", "./dist/otel-register.js", "dist/index.js"]
 
 ### New Secrets in Secret Manager
 
-| Secret Name                        | Value                     |
-| ---------------------------------- | ------------------------- |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`  | Dash0 OTLP ingress URL   |
-| `INTEXURAOS_DASH0_AUTH_TOKEN`      | Dash0 Bearer auth token   |
+| Secret Name                      | Value                   |
+| -------------------------------- | ----------------------- |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT` | Dash0 OTLP ingress URL  |
+| `INTEXURAOS_DASH0_AUTH_TOKEN`    | Dash0 Bearer auth token |
 
 ### Terraform Changes (`terraform/environments/dev/main.tf`)
 
@@ -178,13 +178,13 @@ export INTEXURAOS_DASH0_AUTH_TOKEN="<token>"
 
 ## What Stays Unchanged
 
-| Component            | Status    |
-| -------------------- | --------- |
+| Component             | Status    |
+| --------------------- | --------- |
 | Sentry (infra-sentry) | Unchanged |
-| Pino logging         | Unchanged |
-| Cloud Logging        | Unchanged |
-| Application code     | Unchanged |
-| Existing tests       | Unchanged |
+| Pino logging          | Unchanged |
+| Cloud Logging         | Unchanged |
+| Application code      | Unchanged |
+| Existing tests        | Unchanged |
 
 ---
 

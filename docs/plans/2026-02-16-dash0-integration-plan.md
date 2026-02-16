@@ -15,6 +15,7 @@
 ## Task 1: Create `packages/infra-otel` Package Scaffolding
 
 **Files:**
+
 - Create: `packages/infra-otel/package.json`
 - Create: `packages/infra-otel/tsconfig.json`
 - Create: `packages/infra-otel/tsconfig.test.json`
@@ -141,6 +142,7 @@ git commit -m "feat(infra-otel): scaffold infra-otel package"
 ## Task 2: Implement `config.ts` (with TDD)
 
 **Files:**
+
 - Create: `packages/infra-otel/src/config.ts`
 - Create: `packages/infra-otel/src/__tests__/config.test.ts`
 
@@ -260,6 +262,7 @@ git commit -m "feat(infra-otel): add config.ts with env var parsing"
 ## Task 3: Implement `instrumentations.ts` (with TDD)
 
 **Files:**
+
 - Create: `packages/infra-otel/src/instrumentations.ts`
 - Create: `packages/infra-otel/src/__tests__/instrumentations.test.ts`
 
@@ -353,10 +356,12 @@ git commit -m "feat(infra-otel): add instrumentations.ts with auto-instrumentati
 ## Task 4: Implement `register.ts`
 
 **Files:**
+
 - Create: `packages/infra-otel/src/register.ts`
 - Create: `packages/infra-otel/src/__tests__/register.test.ts`
 
 This is the preload module. It must be a self-contained entry point that:
+
 1. Reads env vars via `buildOtelConfig()`
 2. If no config → exit silently (no-op)
 3. If config → start the OTel NodeSDK with exporters and instrumentations
@@ -461,6 +466,7 @@ if (config !== undefined) {
 ```
 
 > **Important notes for the implementer:**
+>
 > - `ATTR_SERVICE_NAME` etc. may be under `@opentelemetry/semantic-conventions/incubating` depending on the version. Check the package exports.
 > - `npm_package_name` and `npm_package_version` are set automatically by Node.js when running via `npm`/`pnpm` scripts. In Docker production, these won't be set — read `service.name` from the package.json at build time instead, or pass `OTEL_SERVICE_NAME` env var. Consider adding `OTEL_SERVICE_NAME` to each service's Dockerfile as an `ENV` line (e.g., `ENV OTEL_SERVICE_NAME=research-agent`). The OTel SDK reads this automatically as a fallback.
 > - The `v8 ignore module-init` comment on the first line exempts the entire module from coverage since the SDK-start branch requires a live OTLP collector.
@@ -495,6 +501,7 @@ git commit -m "feat(infra-otel): add register.ts preload module"
 The package needs a `tsconfig.build.json` that emits `.js` files to `dist/` so the preload module can be referenced as `@intexuraos/infra-otel/dist/register.js` from PM2's `NODE_OPTIONS`.
 
 **Files:**
+
 - Create: `packages/infra-otel/tsconfig.build.json`
 
 **Step 1: Create `tsconfig.build.json`**
@@ -541,6 +548,7 @@ git commit -m "feat(infra-otel): add build config for dist output"
 ## Task 6: Modify Build Script for OTel Preload
 
 **Files:**
+
 - Modify: `scripts/build-service.mjs`
 
 The build script must produce a second esbuild output: `dist/otel-register.js`, bundled from `packages/infra-otel/src/register.ts`. This file is loaded via `--import` in Docker before `dist/index.js`.
@@ -613,6 +621,7 @@ git commit -m "feat(build): add OTel preload as second esbuild entry point"
 ## Task 7: Add `infra-otel` Dependency to All Services
 
 **Files:**
+
 - Modify: `apps/*/package.json` (all 19 services)
 
 Add `"@intexuraos/infra-otel": "workspace:*"` to the `dependencies` of every service `package.json`.
@@ -622,6 +631,7 @@ Add `"@intexuraos/infra-otel": "workspace:*"` to the `dependencies` of every ser
 **Step 1: Add dependency to all services**
 
 For each service in `apps/`:
+
 ```bash
 pnpm --filter @intexuraos/research-agent add @intexuraos/infra-otel@workspace:*
 pnpm --filter @intexuraos/user-service add @intexuraos/infra-otel@workspace:*
@@ -629,6 +639,7 @@ pnpm --filter @intexuraos/user-service add @intexuraos/infra-otel@workspace:*
 ```
 
 Or use a one-liner:
+
 ```bash
 for dir in apps/*/; do
   name=$(node -e "console.log(JSON.parse(require('fs').readFileSync('${dir}package.json','utf8')).name)")
@@ -657,6 +668,7 @@ git commit -m "feat: add infra-otel dependency to all services"
 ## Task 8: Update All 19 Dockerfiles
 
 **Files:**
+
 - Modify: `apps/*/Dockerfile` (19 files)
 
 Two changes per Dockerfile:
@@ -705,6 +717,7 @@ git commit -m "feat: add OTel preload to all Dockerfiles"
 ## Task 9: Update `ecosystem.config.cjs` for Dev
 
 **Files:**
+
 - Modify: `ecosystem.config.cjs`
 
 **Step 1: Add Dash0 env vars to `COMMON_SERVICE_ENV`**
@@ -746,6 +759,7 @@ git commit -m "feat: add Dash0 OTel config to PM2 ecosystem"
 ## Task 10: Update Env Var Verification Script
 
 **Files:**
+
 - Modify: `scripts/verify-env-vars.mjs`
 
 The Dash0 env vars are optional (services work without them — OTel is a no-op). Add them to `COMMON_OPTIONAL_ENV` so the verification script doesn't flag them.
@@ -780,6 +794,7 @@ git commit -m "feat: add Dash0 env vars to optional list in verify script"
 ## Task 11: Terraform — Add Secrets to Secret Manager
 
 **Files:**
+
 - Modify: `terraform/environments/dev/main.tf`
 
 **Step 1: Add secrets to the `module "secret_manager"` block**
@@ -891,6 +906,7 @@ pnpm run ci:tracked
 ```
 
 Expected: PASS. If failures:
+
 - OTel import issues → check `package.json` versions compatibility
 - Typecheck errors → check `tsconfig.json` includes are correct
 - Env var verification → ensure vars added to `COMMON_OPTIONAL_ENV`
