@@ -106,6 +106,9 @@ export function useCodeTask(id: string): {
       return;
     }
 
+    // Cancellation guard: prevents orphaned onSnapshot listeners when the effect
+    // re-runs before the async setupListener completes.
+    let cancelled = false;
     let listenerFailed = false;
     let listenerRetryAttempt = 0;
     const MAX_LISTENER_RETRIES = 4;
@@ -115,16 +118,21 @@ export function useCodeTask(id: string): {
         if (!isFirebaseAuthenticated()) {
           initializeFirebase();
           const token = await getAccessToken();
+          if (cancelled) return;
           await authenticateFirebase(token);
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated by cleanup closure after await yields
+          if (cancelled) return;
         }
+        if (cancelled) return;
         firebaseAuthenticatedRef.current = true;
 
         const db = getFirestoreClient();
         const taskRef = doc(db, 'code_tasks', id);
 
-        unsubscribeRef.current = onSnapshot(
+        const unsub = onSnapshot(
           taskRef,
           (snapshot) => {
+            if (cancelled) return;
             listenerFailed = false;
             listenerRetryAttempt = 0;
 
@@ -139,10 +147,19 @@ export function useCodeTask(id: string): {
             }
           },
           () => {
+            if (cancelled) return;
             listenerFailed = true;
           }
         );
+
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated by cleanup closure after await yields
+        if (cancelled) {
+          unsub();
+          return;
+        }
+        unsubscribeRef.current = unsub;
       } catch {
+        if (cancelled) return;
         listenerFailed = true;
       }
     };
@@ -150,6 +167,7 @@ export function useCodeTask(id: string): {
     void setupListener();
 
     const pollInterval = setInterval(() => {
+      if (cancelled) return;
       if (listenerFailed) {
         void refresh(false);
 
@@ -166,6 +184,7 @@ export function useCodeTask(id: string): {
     }, 5000);
 
     return (): void => {
+      cancelled = true;
       clearInterval(pollInterval);
       if (unsubscribeRef.current !== null) {
         unsubscribeRef.current();
