@@ -1,10 +1,29 @@
 # Ownership Mindset Reference
 
-Detailed examples and forbidden language patterns for the ownership mindset principle.
+From task acceptance until successful CI, you own everything. No bad teams — only unowned problems.
 
 ---
 
-## Forbidden Language Table
+## Scope
+
+- **Start:** Task assigned or accepted
+- **End:** `pnpm run ci:tracked` passes AND PR ready for review
+- **Everything in between:** YOUR responsibility
+
+If CI fails due to a "pre-existing" issue, that issue is now YOURS.
+
+---
+
+## Ownership Standard
+
+1. **No excuses** — own problems completely
+2. **No blame** — don't point at "previous state"
+3. **Proactive** — see problem, fix problem
+4. **Cover and move** — fix issues outside your scope if they block success
+
+---
+
+## Forbidden Language
 
 | Forbidden                          | Why                            |
 | ---------------------------------- | ------------------------------ |
@@ -24,12 +43,12 @@ Catch yourself using these? Stop. Reframe: "How do I fix this?"
 ## Real Violation Example
 
 ```
-❌ ACTUAL VIOLATION:
+ACTUAL VIOLATION:
    "All code-agent checks pass. The global CI fails on OTHER services,
     not the INT-252 changes. Let me commit..."
    [Agent commits despite CI failure]
 
-✅ CORRECT:
+CORRECT:
    "CI failed with coverage threshold error.
     Fix gaps here or handle separately?"
    [Wait for instruction before ANY commit]
@@ -38,3 +57,14 @@ Catch yourself using these? Stop. Reframe: "How do I fix this?"
 **Why violated:** Used "OTHER services", used "not the INT-252 changes", committed despite failure.
 
 **Correct behavior:** CI fails → STOP → Ask or fix → Never commit until CI passes.
+
+---
+
+## The Only Exception
+
+May acknowledge pre-existing state ONLY when user EXPLICITLY instructs:
+
+- "Ignore the type errors in legacy/, focus only on new code"
+- "This is a known issue, skip it for now"
+
+Without explicit instruction, assume responsibility for everything encountered.
