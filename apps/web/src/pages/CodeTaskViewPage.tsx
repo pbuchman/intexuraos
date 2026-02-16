@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Send,
   StopCircle,
+  WifiOff,
   XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
@@ -454,7 +455,7 @@ interface LogStreamProps {
   taskStatus: CodeTaskStatus;
   onSendMessage: (message: string) => Promise<void>;
   sending: boolean;
-  sendError: string | null;
+  sendError: { code: string; message: string } | null;
   messageStatus: MessageStatus;
 }
 
@@ -592,7 +593,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
 function MessageInput({ onSendMessage, sending, sendError, messageStatus }: {
   onSendMessage: (message: string) => Promise<void>;
   sending: boolean;
-  sendError: string | null;
+  sendError: { code: string; message: string } | null;
   messageStatus: MessageStatus;
 }): React.JSX.Element {
   const [message, setMessage] = useState('');
@@ -671,7 +672,14 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus }: {
         </p>
       ) : null}
       {sendError !== null ? (
-        <p className="mt-1 text-xs text-red-400">{sendError}</p>
+        sendError.code === 'WORKER_UNAVAILABLE' ? (
+          <div className="mt-2 flex items-center gap-2 rounded bg-amber-900/30 border border-amber-800/50 px-2.5 py-1.5 text-xs text-amber-300">
+            <WifiOff className="h-3.5 w-3.5 shrink-0" />
+            <span>Worker is offline — task can only be continued when the worker is back online</span>
+          </div>
+        ) : (
+          <p className="mt-1 text-xs text-red-400">{sendError.message}</p>
+        )
       ) : null}
     </div>
   );

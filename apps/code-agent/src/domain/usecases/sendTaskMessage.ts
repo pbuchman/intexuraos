@@ -27,6 +27,7 @@ export type SendTaskMessageErrorCode =
   | 'task_not_found'
   | 'invalid_status'
   | 'worker_not_configured'
+  | 'worker_unavailable'
   | 'worker_error'
   | 'internal_error';
 
@@ -125,9 +126,10 @@ export async function sendTaskMessage(
   });
 
   if (!forwardResult.ok) {
+    const errorCode = forwardResult.error.code === 'worker_unavailable' ? 'worker_unavailable' : 'worker_error';
     logger.error({ taskId, error: forwardResult.error }, 'Failed to forward message to worker');
     return err({
-      code: 'worker_error',
+      code: errorCode,
       message: forwardResult.error.message,
     });
   }

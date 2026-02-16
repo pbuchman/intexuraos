@@ -348,6 +348,12 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
       /* v8 ignore start -- test-infra: requires worker HTTP endpoint to return error response @preserve */
       if (!response.ok) {
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          return err({
+            code: 'worker_unavailable',
+            message: `Worker is unreachable (HTTP ${String(response.status)})`,
+          });
+        }
         const errorText = await response.text().catch(() => 'Unknown error');
         return err({
           code: 'worker_error',

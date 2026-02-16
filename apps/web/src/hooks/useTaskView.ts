@@ -16,6 +16,7 @@ import {
   retryCodeTask as retryCodeTaskApi,
   sendTaskMessage as sendTaskMessageApi,
 } from '@/services/codeAgentApi';
+import { ApiError } from '@/services/apiClient';
 import type { CodeTask, CodeTaskStatus } from '@/types';
 import {
   getFirestoreClient,
@@ -42,7 +43,7 @@ export interface TaskViewState {
   retrying: boolean;
   retryError: string | null;
   sending: boolean;
-  sendError: string | null;
+  sendError: { code: string; message: string } | null;
   messageStatus: MessageStatus;
   cancelTask: () => Promise<void>;
   retryTask: (additionalContext?: string) => Promise<string>;
@@ -70,7 +71,7 @@ export function useTaskView(taskId: string): TaskViewState {
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<{ code: string; message: string } | null>(null);
   const [messageStatus, setMessageStatus] = useState<MessageStatus>('idle');
   const [listenerHealthy, setListenerHealthy] = useState(false);
 
@@ -315,7 +316,8 @@ export function useTaskView(taskId: string): TaskViewState {
       }
     } catch (err) {
       if (isMountedRef.current) {
-        setSendError(getErrorMessage(err, 'Failed to send message'));
+        const code = err instanceof ApiError ? err.code : 'UNKNOWN';
+        setSendError({ code, message: getErrorMessage(err, 'Failed to send message') });
       }
     } finally {
       if (isMountedRef.current) {

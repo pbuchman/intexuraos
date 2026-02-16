@@ -3261,11 +3261,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         if (error.code === 'worker_not_configured') {
           return reply.fail('MISCONFIGURED' as ErrorCode, error.message);
         }
+        if (error.code === 'worker_unavailable') {
+          return reply.fail('WORKER_UNAVAILABLE', error.message);
+        }
         return reply.fail('INTERNAL_ERROR' as ErrorCode, error.message);
       }
       /* v8 ignore stop @preserve */
 
-      return reply.ok(result.value);
+      return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }
   );
 
