@@ -36,23 +36,32 @@ interface StreamJsonMessage {
   mcp_servers?: { name: string; status: string }[];
 }
 
-interface FormatterState {
+export interface FormatterState {
   toolCallsById: Map<string, string>;
   lastToolName: string | undefined; // @allow-undefined-type -- mutable state field, always present but nullable
 }
 
+export function createFormatterState(): FormatterState {
+  return {
+    toolCallsById: new Map<string, string>(),
+    lastToolName: undefined,
+  };
+}
+
 const SYSTEM_REMINDER_BLOCK = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
 
-export function formatLogChunk(raw: string, startSequence: number, timestamp: Timestamp): FormattedLogLine[] {
+export function formatLogChunk(
+  raw: string,
+  startSequence: number,
+  timestamp: Timestamp,
+  state?: FormatterState,
+): FormattedLogLine[] {
   if (raw === '') return [];
 
   const lines = raw.split('\n');
   const result: FormattedLogLine[] = [];
   let seq = startSequence * 1000;
-  const state: FormatterState = {
-    toolCallsById: new Map<string, string>(),
-    lastToolName: undefined,
-  };
+  const s = state ?? createFormatterState();
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -72,8 +81,8 @@ export function formatLogChunk(raw: string, startSequence: number, timestamp: Ti
 
     try {
       const obj = JSON.parse(body) as StreamJsonMessage;
-      registerToolContext(obj, state);
-      const formatted = formatJsonMessage(obj, state);
+      registerToolContext(obj, s);
+      const formatted = formatJsonMessage(obj, s);
       text = formatted !== '' && prefix !== '' ? `${prefix}${formatted}` : formatted;
     } catch {
       text = trimmed;
@@ -291,6 +300,17 @@ function extractToolContext(input: Record<string, unknown> | undefined): string 
   if (typeof input['query'] === 'string') {
     const q = input['query'];
     return q.length > 60 ? q.slice(0, 57) + '...' : q;
+  }
+  if (typeof input['description'] === 'string') {
+    const d = input['description'];
+    return d.length > 60 ? d.slice(0, 57) + '...' : d;
+  }
+  if (typeof input['url'] === 'string') {
+    const u = input['url'];
+    return u.length > 80 ? u.slice(0, 77) + '...' : u;
+  }
+  if (typeof input['skill'] === 'string') {
+    return input['skill'];
   }
   return undefined;
 }

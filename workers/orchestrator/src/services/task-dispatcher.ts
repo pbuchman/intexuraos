@@ -1031,7 +1031,10 @@ export class TaskDispatcher {
     if (trimmed === '') return;
 
     if (trimmed.includes('<tool_use_error>')) {
-      this.logger.warn({ taskId }, 'Claude tool_use_error in stream (non-fatal sibling call failure)');
+      this.logger.warn(
+        { taskId },
+        'Claude tool_use_error in stream (non-fatal sibling call failure)'
+      );
       return;
     }
 
