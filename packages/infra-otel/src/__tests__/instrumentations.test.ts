@@ -22,11 +22,4 @@ describe('getInstrumentations', () => {
 
     expect(names).toContain('@opentelemetry/instrumentation-fastify');
   });
-
-  it('includes Pino instrumentation', () => {
-    const instrumentations = getInstrumentations();
-    const names = instrumentations.map((i) => i.instrumentationName);
-
-    expect(names).toContain('@opentelemetry/instrumentation-pino');
-  });
 });
