@@ -117,6 +117,8 @@ export function CodeTaskViewPage(): React.JSX.Element {
   const isActive = task.status === 'running' || task.status === 'dispatched';
   const isRetryable = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
   const hasHealthyWorker = workersStatus?.workers.some((w) => w.healthy && w.priority > 0) === true;
+  const taskWorker = workersStatus?.workers.find((w) => w.name === task.workerLocation);
+  const isTaskWorkerOnline = taskWorker?.healthy === true;
 
   return (
     <Layout>
@@ -151,6 +153,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
         sending={sending}
         sendError={sendError}
         messageStatus={messageStatus}
+        workerOnline={isTaskWorkerOnline}
       />
     </Layout>
   );
@@ -457,9 +460,10 @@ interface LogStreamProps {
   sending: boolean;
   sendError: { code: string; message: string } | null;
   messageStatus: MessageStatus;
+  workerOnline: boolean;
 }
 
-function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage, sending, sendError, messageStatus }: LogStreamProps): React.JSX.Element {
+function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage, sending, sendError, messageStatus, workerOnline }: LogStreamProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [followLogs, setFollowLogs] = useState(true);
@@ -584,17 +588,19 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
           sending={sending}
           sendError={sendError}
           messageStatus={messageStatus}
+          workerOnline={workerOnline}
         />
       ) : null}
     </div>
   );
 }
 
-function MessageInput({ onSendMessage, sending, sendError, messageStatus }: {
+function MessageInput({ onSendMessage, sending, sendError, messageStatus, workerOnline }: {
   onSendMessage: (message: string) => Promise<void>;
   sending: boolean;
   sendError: { code: string; message: string } | null;
   messageStatus: MessageStatus;
+  workerOnline: boolean;
 }): React.JSX.Element {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -626,6 +632,17 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus }: {
   }, []);
 
   const hasText = message.trim().length > 0;
+
+  if (!workerOnline) {
+    return (
+      <div className="rounded-b-lg border-t border-slate-700 bg-slate-800/90 px-3 py-2">
+        <div className="flex items-center gap-2 rounded bg-amber-900/30 border border-amber-800/50 px-2.5 py-1.5 text-xs text-amber-300">
+          <WifiOff className="h-3.5 w-3.5 shrink-0" />
+          <span>Worker is offline — task can only be continued when the worker is back online</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-b-lg border-t border-slate-700 bg-slate-800/90 px-3 py-2">
