@@ -2,7 +2,7 @@
  * Dev-mode formatted log output for PM2.
  *
  * Parses pino JSON log lines and writes formatted, colorized output:
- * service-name | HH:mm:ss | LEVEL | message | {extras}
+ * HH:mm:ss | LEVEL | service-name | message | key=val key=val
  *
  * Used only in NODE_ENV=development. Production keeps raw JSON for Cloud Logging.
  */
@@ -28,8 +28,22 @@ const LEVEL_MAP: Record<number, { label: string; color: string }> = {
   60: { label: 'FATAL', color: MAGENTA },
 };
 
-/** Fields excluded from the trailing extras JSON */
-const EXCLUDED_FIELDS = new Set(['level', 'time', 'msg', 'name', 'pid', 'hostname']);
+/** Fields excluded from key=val extras (handled as dedicated columns or noise) */
+const EXCLUDED_FIELDS = new Set([
+  'level',
+  'time',
+  'msg',
+  'name',
+  'pid',
+  'hostname',
+  'reqId', // Fastify auto-generated, noise in dev
+  'req', // handled specially — inlined as METHOD /path
+  'res', // handled specially — inlined as status code
+  'responseTime', // handled specially — inlined as Xms
+]);
+
+/** Threshold for truncating long string values */
+const TRUNCATE_LEN = 32;
 
 function getLevelInfo(level: number): { label: string; color: string } {
   return LEVEL_MAP[level] ?? { label: `LVL${String(level)}`, color: GREY };
@@ -41,6 +55,61 @@ function formatTime(epoch: number): string {
   const m = String(d.getMinutes()).padStart(2, '0');
   const s = String(d.getSeconds()).padStart(2, '0');
   return `${h}:${m}:${s}`;
+}
+
+/** Truncate long strings (UUIDs, tokens, etc.) preserving start and end */
+function truncateValue(str: string): string {
+  if (str.length <= TRUNCATE_LEN) return str;
+  return `${str.slice(0, 8)}…${str.slice(-4)}`;
+}
+
+/** Format a single extra value as a human-readable string */
+function formatValue(value: unknown): string {
+  if (typeof value === 'string') return truncateValue(value);
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value === null || value === undefined) return 'null';
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    const json = JSON.stringify(value);
+    return json.length <= TRUNCATE_LEN ? json : `[${String(value.length)} items]`;
+  }
+  // Nested object — compact JSON, truncated
+  const json = JSON.stringify(value);
+  return json.length <= TRUNCATE_LEN ? json : `${json.slice(0, TRUNCATE_LEN)}…`;
+}
+
+/** Format extras as key=val pairs with special handling for Fastify req/res */
+function formatExtras(parsed: Record<string, unknown>): string {
+  const parts: string[] = [];
+
+  // Special: res.statusCode as bare number
+  const res = parsed['res'];
+  if (typeof res === 'object' && res !== null && 'statusCode' in (res as Record<string, unknown>)) {
+    parts.push(String((res as Record<string, unknown>)['statusCode']));
+  }
+
+  // Special: responseTime as Xms
+  const rt = parsed['responseTime'];
+  if (typeof rt === 'number') {
+    parts.push(`${String(Math.round(rt))}ms`);
+  }
+
+  // Special: req as METHOD /path
+  const req = parsed['req'];
+  if (typeof req === 'object' && req !== null) {
+    const r = req as Record<string, unknown>;
+    if ('method' in r && 'url' in r) {
+      parts.push(`${String(r['method'])} ${String(r['url'])}`);
+    }
+  }
+
+  // Everything else as key=val
+  for (const key of Object.keys(parsed)) {
+    if (EXCLUDED_FIELDS.has(key)) continue;
+    parts.push(`${key}=${formatValue(parsed[key])}`);
+  }
+
+  return parts.join(' ');
 }
 
 function formatLogLine(data: string): string {
@@ -56,25 +125,17 @@ function formatLogLine(data: string): string {
   const nameStr = name ?? '???';
   const msgStr = msg ?? '';
 
-  // Build extras object (everything not in EXCLUDED_FIELDS)
-  const extras: Record<string, unknown> = {};
-  let hasExtras = false;
-  for (const key of Object.keys(parsed)) {
-    if (!EXCLUDED_FIELDS.has(key)) {
-      extras[key] = parsed[key];
-      hasExtras = true;
-    }
-  }
+  const extrasStr = formatExtras(parsed);
 
   const parts = [
-    `${CYAN}${nameStr}${RESET}`,
     `${GREY}${timeStr}${RESET}`,
     `${color}${label}${RESET}`,
+    `${CYAN}${nameStr}${RESET}`,
     msgStr,
   ];
 
-  if (hasExtras) {
-    parts.push(`${GREY}${JSON.stringify(extras)}${RESET}`);
+  if (extrasStr !== '') {
+    parts.push(`${GREY}${extrasStr}${RESET}`);
   }
 
   return parts.join(' | ');
