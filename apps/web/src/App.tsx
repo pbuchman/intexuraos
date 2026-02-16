@@ -20,7 +20,7 @@ import {
   ApiKeysSettingsPage,
   BookmarksListPage,
   CalendarPage,
-  CodeTaskDetailPage,
+  CodeTaskViewPage,
   CodeTaskNewPage,
   CodeTasksPage,
   CompositeFeedFormPage,
@@ -121,9 +121,9 @@ function BookmarkDetailRedirect(): React.JSX.Element {
   return <Navigate to={`/my-bookmarks?id=${id ?? ''}`} replace />;
 }
 
-function CodeTaskDetailPageKeyed(): React.JSX.Element {
+function CodeTaskViewPageKeyed(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  return <CodeTaskDetailPage key={id} />;
+  return <CodeTaskViewPage key={id} />;
 }
 
 function AppRoutes(): React.JSX.Element {
@@ -240,7 +240,7 @@ function AppRoutes(): React.JSX.Element {
         path="/code-tasks/:id"
         element={
           <ProtectedRoute>
-            <CodeTaskDetailPageKeyed />
+            <CodeTaskViewPageKeyed />
           </ProtectedRoute>
         }
       />
