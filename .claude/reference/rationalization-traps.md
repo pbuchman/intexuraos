@@ -34,9 +34,9 @@ Common thought patterns that precede rule violations. When you catch yourself th
 
 ## Evidence Traps
 
-| Your Thought                              | Reality                                     |
-| ----------------------------------------- | ------------------------------------------- |
-| "This should work now"                    | Run it. Show output. Then claim.            |
-| "I added the import so it will resolve"   | Run typecheck. Show zero errors. Then claim. |
-| "This was likely caused by X"             | Show stack trace or reproduction. Then claim.|
-| "Based on my understanding, this fixes it"| Understanding is not evidence. Run it.       |
+| Your Thought                               | Reality                                       |
+| ------------------------------------------ | --------------------------------------------- |
+| "This should work now"                     | Run it. Show output. Then claim.              |
+| "I added the import so it will resolve"    | Run typecheck. Show zero errors. Then claim.  |
+| "This was likely caused by X"              | Show stack trace or reproduction. Then claim. |
+| "Based on my understanding, this fixes it" | Understanding is not evidence. Run it.        |

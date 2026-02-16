@@ -18,6 +18,7 @@ import pino, { type Logger } from 'pino';
 import { getLogLevel, serializeError } from '@intexuraos/common-core';
 import { createSentryStream, isSentryConfigured } from './transport.js';
 import { createDevOutputStream } from './devStream.js';
+import { getOtelTransport } from './otelTransport.js';
 
 /**
  * Pino serializers for automatic error serialization.
@@ -63,12 +64,15 @@ export function createAppLogger(config: AppLoggerConfig): Logger {
   const isDev = process.env['NODE_ENV'] === 'development';
   const destination = isDev ? createDevOutputStream() : pino.destination({ dest: 1, sync: false });
 
-  if (!isSentryConfigured()) {
-    return pino({ name: config.name, level, serializers: errorSerializers }, destination);
+  const streams: pino.StreamEntry[] = [{ stream: destination, level: 'trace' as const }];
+
+  const otelTransport = getOtelTransport();
+  if (otelTransport !== undefined) {
+    streams.push({ stream: otelTransport, level: 'trace' as const });
   }
 
-  return pino(
-    { name: config.name, level, serializers: errorSerializers },
-    createSentryStream(pino.multistream([{ stream: destination, level: 'trace' as const }]))
-  );
+  const multistream = pino.multistream(streams);
+  const output = isSentryConfigured() ? createSentryStream(multistream) : multistream;
+
+  return pino({ name: config.name, level, serializers: errorSerializers }, output);
 }
