@@ -39,5 +39,20 @@ export const CreateTaskRequestSchema = z.object({
   actionId: z.string().optional(),
 });
 
+// POST /tasks/:id/message request schema
+export const SendMessageRequestSchema = z.object({
+  message: z.string().min(1).max(10000),
+});
+
 // Type inference from schema
 export type CreateTaskRequestInput = z.infer<typeof CreateTaskRequestSchema>;
+
+// Send message result types
+export interface SendMessageResult {
+  action: 'queued' | 'resumed';
+}
+
+export interface SendMessageError {
+  type: 'not_found' | 'invalid_status' | 'service_error';
+  message: string;
+}

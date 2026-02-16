@@ -14,6 +14,7 @@ import {
   getCodeTask as getCodeTaskApi,
   cancelCodeTask as cancelCodeTaskApi,
   retryCodeTask as retryCodeTaskApi,
+  sendTaskMessage as sendTaskMessageApi,
 } from '@/services/codeAgentApi';
 import type { CodeTask, CodeTaskStatus } from '@/types';
 import {
@@ -28,6 +29,8 @@ export interface LogLine {
   text: string;
 }
 
+export type MessageStatus = 'idle' | 'queued' | 'delivered';
+
 export interface TaskViewState {
   task: CodeTask | null;
   logs: LogLine[];
@@ -38,8 +41,12 @@ export interface TaskViewState {
   cancelError: string | null;
   retrying: boolean;
   retryError: string | null;
+  sending: boolean;
+  sendError: string | null;
+  messageStatus: MessageStatus;
   cancelTask: () => Promise<void>;
   retryTask: (additionalContext?: string) => Promise<string>;
+  sendMessage: (message: string) => Promise<void>;
 }
 
 const ACTIVE_STATUSES: CodeTaskStatus[] = ['dispatched', 'running'];
@@ -62,6 +69,9 @@ export function useTaskView(taskId: string): TaskViewState {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [messageStatus, setMessageStatus] = useState<MessageStatus>('idle');
   const [listenerHealthy, setListenerHealthy] = useState(false);
 
   const isMountedRef = useRef(true);
@@ -286,6 +296,34 @@ export function useTaskView(taskId: string): TaskViewState {
     }
   }, [task]);
 
+  const sendMessage = useCallback(async (message: string): Promise<void> => {
+    if (task === null) return;
+    setSending(true);
+    setSendError(null);
+    setMessageStatus('idle');
+    try {
+      const token = await getAccessTokenRef.current();
+      const result = await sendTaskMessageApi(token, task.id, { message });
+      if (isMountedRef.current) {
+        setMessageStatus(result.action === 'queued' ? 'queued' : 'delivered');
+        // Reset status after 3 seconds so user can send another message
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            setMessageStatus('idle');
+          }
+        }, 3000);
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setSendError(getErrorMessage(err, 'Failed to send message'));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setSending(false);
+      }
+    }
+  }, [task]);
+
   return {
     task,
     logs,
@@ -296,7 +334,11 @@ export function useTaskView(taskId: string): TaskViewState {
     cancelError,
     retrying,
     retryError,
+    sending,
+    sendError,
+    messageStatus,
     cancelTask,
     retryTask,
+    sendMessage,
   };
 }
