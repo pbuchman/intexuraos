@@ -5,14 +5,14 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { useCodeTask, useCodeTasks, useWorkersStatus } from '../useCodeTasks';
-import type { CodeTask, WorkersStatusResponse } from '../../types';
+import { useCodeTasks, useWorkersStatus } from '../useCodeTasks.js';
+import type { CodeTask, WorkersStatusResponse } from '../../types/index.js';
 
 const mockGetAccessToken = vi.fn();
 const mockIsAuthenticated = true;
 const mockUser = { sub: 'user-123' };
 
-vi.mock('../../context', () => ({
+vi.mock('../../context/index.js', () => ({
   useAuth: (): {
     getAccessToken: typeof mockGetAccessToken;
     isAuthenticated: boolean;
@@ -25,32 +25,13 @@ vi.mock('../../context', () => ({
 }));
 
 const mockListCodeTasks = vi.fn();
-const mockGetCodeTask = vi.fn();
 const mockSubmitCodeTask = vi.fn();
-const mockCancelCodeTask = vi.fn();
 const mockGetWorkersStatus = vi.fn();
 
-vi.mock('../../services/codeAgentApi', () => ({
+vi.mock('../../services/codeAgentApi.js', () => ({
   listCodeTasks: (...args: unknown[]): unknown => mockListCodeTasks(...args),
-  getCodeTask: (...args: unknown[]): unknown => mockGetCodeTask(...args),
   submitCodeTask: (...args: unknown[]): unknown => mockSubmitCodeTask(...args),
-  cancelCodeTask: (...args: unknown[]): unknown => mockCancelCodeTask(...args),
   getWorkersStatus: (...args: unknown[]): unknown => mockGetWorkersStatus(...args),
-}));
-
-const mockOnSnapshot = vi.fn();
-const mockDoc = vi.fn();
-
-vi.mock('firebase/firestore', () => ({
-  doc: (...args: unknown[]): unknown => mockDoc(...args),
-  onSnapshot: (...args: unknown[]): unknown => mockOnSnapshot(...args),
-}));
-
-vi.mock('../../services/firebase', () => ({
-  getFirestoreClient: vi.fn(() => ({})),
-  authenticateFirebase: vi.fn(),
-  isFirebaseAuthenticated: vi.fn(() => false),
-  initializeFirebase: vi.fn(),
 }));
 
 describe('useCodeTasks hooks', () => {
@@ -72,117 +53,13 @@ describe('useCodeTasks hooks', () => {
     updatedAt: '2024-01-01T00:00:00Z',
   };
 
-  const mockCompletedTask: CodeTask = {
-    ...mockTask,
-    status: 'completed',
-    result: {
-      branch: 'feature/fix',
-      commits: 3,
-      summary: 'Fixed the bug',
-    },
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAccessToken.mockResolvedValue('test-token');
-    mockOnSnapshot.mockReturnValue(vi.fn());
   });
 
   afterEach(() => {
     vi.useRealTimers();
-  });
-
-  describe('useCodeTask', () => {
-    it('fetches task on mount', async () => {
-      mockGetCodeTask.mockResolvedValue(mockTask);
-
-      const { result } = renderHook(() => useCodeTask('task-123'));
-
-      expect(result.current.loading).toBe(true);
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      expect(mockGetCodeTask).toHaveBeenCalledWith('test-token', 'task-123');
-      expect(result.current.task).toEqual(mockTask);
-      expect(result.current.error).toBeNull();
-    });
-
-    it('handles empty id', async () => {
-      const { result } = renderHook(() => useCodeTask(''));
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      expect(mockGetCodeTask).not.toHaveBeenCalled();
-      expect(result.current.task).toBeNull();
-    });
-
-    it('handles fetch error', async () => {
-      mockGetCodeTask.mockRejectedValue(new Error('Network error'));
-
-      const { result } = renderHook(() => useCodeTask('task-123'));
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      expect(result.current.error).toBe('Network error');
-      expect(result.current.task).toBeNull();
-    });
-
-    it('refreshes task data', async () => {
-      mockGetCodeTask.mockResolvedValue(mockTask);
-
-      const { result } = renderHook(() => useCodeTask('task-123'));
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      mockGetCodeTask.mockClear();
-      mockGetCodeTask.mockResolvedValue(mockCompletedTask);
-
-      await act(async () => {
-        await result.current.refresh(false);
-      });
-
-      expect(mockGetCodeTask).toHaveBeenCalledTimes(1);
-      expect(result.current.task?.status).toBe('completed');
-    });
-
-    it('cancels task', async () => {
-      mockGetCodeTask.mockResolvedValue(mockTask);
-      mockCancelCodeTask.mockResolvedValue({ status: 'cancelled' });
-
-      const { result } = renderHook(() => useCodeTask('task-123'));
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      mockGetCodeTask.mockResolvedValue({ ...mockTask, status: 'cancelled' });
-
-      await act(async () => {
-        await result.current.cancelTask();
-      });
-
-      expect(mockCancelCodeTask).toHaveBeenCalledWith('test-token', 'task-123');
-    });
-
-    it('does not set up Firestore listener for completed tasks', async () => {
-      mockGetCodeTask.mockResolvedValue(mockCompletedTask);
-
-      renderHook(() => useCodeTask('task-123'));
-
-      await waitFor(() => {
-        expect(mockGetCodeTask).toHaveBeenCalled();
-      });
-
-      expect(mockOnSnapshot).not.toHaveBeenCalled();
-    });
   });
 
   describe('useCodeTasks', () => {

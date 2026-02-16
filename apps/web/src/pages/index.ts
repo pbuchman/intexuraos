@@ -28,7 +28,6 @@ export { TodosListPage } from './TodosListPage.js';
 export { LlmPricingPage } from './LlmPricingPage.js';
 export { LlmCostsPage } from './LlmCostsPage.js';
 export { CodeTasksPage } from './CodeTasksPage.js';
-export { CodeTaskDetailPage } from './CodeTaskDetailPage.js';
 export { CodeTaskViewPage } from './CodeTaskViewPage.js';
 export { CodeTaskNewPage } from './CodeTaskNewPage.js';
 export { WorkerSettingsPage } from './WorkerSettingsPage.js';
