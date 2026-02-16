@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -15,7 +15,7 @@ import {
 import { Button, Card, Layout } from '@/components';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import type { LogLine } from '@/hooks';
-import { formatDateTime, formatRelative } from '@/utils/dateFormat';
+import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus } from '@/types';
 
 // --- Status badge config ---
@@ -35,6 +35,23 @@ const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
   interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted', icon: AlertCircle },
   cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled', icon: XCircle },
 };
+
+// --- Badge style lookup maps ---
+
+const ISSUE_TYPE_STYLES: Record<string, string> = {
+  feature: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
+  bug: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+  refactor: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+};
+
+const LINEAR_STATE_STYLES: Record<string, string> = {
+  completed: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300',
+  started: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+};
+
+const DEFAULT_BADGE_STYLE = 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
+const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
 
 // --- Log line color mapping ---
 
@@ -58,10 +75,20 @@ export function CodeTaskViewPage(): React.JSX.Element {
   const navigate = useNavigate();
   const {
     task, logs, loading, error,
+    listenerHealthy,
     cancelling, cancelError, retrying, retryError,
     cancelTask, retryTask,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
+
+  const handleRetry = useCallback(async () => {
+    try {
+      const newId = await retryTask();
+      void navigate(`/code-tasks/${newId}`);
+    } catch {
+      // retryTask already sets retryError state
+    }
+  }, [retryTask, navigate]);
 
   if (loading) {
     return (
@@ -89,9 +116,9 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <TaskHeader task={task} />
+      <MemoTaskHeader task={task} />
 
-      <TaskActions
+      <MemoTaskActions
         task={task}
         isActive={isActive}
         isRetryable={isRetryable}
@@ -101,18 +128,20 @@ export function CodeTaskViewPage(): React.JSX.Element {
         retrying={retrying}
         retryError={retryError}
         onCancel={cancelTask}
-        onRetry={async () => {
-          const newId = await retryTask();
-          void navigate(`/code-tasks/${newId}`);
-        }}
+        onRetry={handleRetry}
       />
 
-      <TaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
+      <MemoActiveProgress task={task} />
 
-      {task.result !== undefined ? <TaskResult task={task} /> : null}
-      {task.error !== undefined ? <TaskError task={task} /> : null}
+      <MemoTaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
 
-      <LogStream logs={logs} isActive={isActive} />
+      {task.result !== undefined ? <MemoTaskResult task={task} /> : null}
+      {task.error !== undefined ? <MemoTaskError task={task} /> : null}
+
+      <MemoLogStream logs={logs} isActive={isActive} listenerHealthy={listenerHealthy} />
+
+      {/* Reserved for future comment textarea */}
+      <div className="mt-3 mb-6" />
     </Layout>
   );
 }
@@ -125,7 +154,7 @@ function TaskHeader({ task }: { task: CodeTask }): React.JSX.Element {
 
   return (
     <div className="mb-6">
-      <div className="mt-1 flex flex-wrap items-center gap-2">
+      <div className="min-h-[2.5rem] mt-1 flex flex-wrap items-center gap-2">
         {task.linearIssueId !== undefined ? (
           <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
             {task.linearIssue?.identifier ?? task.linearIssueId}
@@ -140,7 +169,7 @@ function TaskHeader({ task }: { task: CodeTask }): React.JSX.Element {
         </span>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+      <div className="min-h-[1.75rem] mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
         <span>Created: {formatDateTime(task.createdAt)}</span>
         {!isActiveStatus(task.status) ? (
           <span>Updated: {formatRelative(task.updatedAt)}</span>
@@ -148,6 +177,34 @@ function TaskHeader({ task }: { task: CodeTask }): React.JSX.Element {
         <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
           {task.workerType}
         </span>
+        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
+          {task.workerLocation}
+        </span>
+
+        {task.linearIssueType !== undefined ? (
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+            ISSUE_TYPE_STYLES[task.linearIssueType] ?? DEFAULT_BADGE_STYLE
+          }`}>
+            {task.linearIssueType}
+          </span>
+        ) : null}
+        {task.linearIssue?.state !== undefined ? (
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+            LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE
+          }`}>
+            {task.linearIssue.state.name}
+          </span>
+        ) : null}
+        {task.linearIssue?.assignee !== undefined && task.linearIssue.assignee !== null ? (
+          <span className="text-xs text-green-600 dark:text-green-400">
+            {task.linearIssue.assignee.name}
+          </span>
+        ) : null}
+        {task.linearIssue !== undefined && task.linearIssue.commentCount > 0 ? (
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {String(task.linearIssue.commentCount)} comments
+          </span>
+        ) : null}
 
         {task.linearIssue?.url !== undefined ? (
           <a
@@ -173,6 +230,8 @@ function TaskHeader({ task }: { task: CodeTask }): React.JSX.Element {
     </div>
   );
 }
+
+const MemoTaskHeader = memo(TaskHeader);
 
 function isActiveStatus(status: CodeTaskStatus): boolean {
   return status === 'dispatched' || status === 'running';
@@ -242,6 +301,48 @@ function TaskActions({
   );
 }
 
+const MemoTaskActions = memo(TaskActions);
+
+// --- Elapsed timer (self-contained interval, only re-renders itself) ---
+
+function ElapsedTimer({ createdAt }: { createdAt: string }): React.JSX.Element {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const start = new Date(createdAt).getTime();
+    if (Number.isNaN(start)) return;
+    const tick = (): void => { setElapsed(Math.floor((Date.now() - start) / 1000)); };
+    tick();
+    const id = setInterval(tick, 1000);
+    return (): void => { clearInterval(id); };
+  }, [createdAt]);
+
+  return (
+    <span className="text-sm text-blue-700 dark:text-blue-300">
+      {elapsed > 0 ? formatElapsedTime(elapsed) : 'Starting...'}
+    </span>
+  );
+}
+
+const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTask }): React.JSX.Element | null {
+  if (!isActiveStatus(task.status)) return null;
+  if (task.error !== undefined) return null;
+
+  return (
+    <Card className="mb-6 border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/30">
+      <div className="flex items-center gap-3">
+        <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
+        <div className="flex-1">
+          <p className="font-medium text-blue-900 dark:text-blue-200">
+            {task.status === 'dispatched' ? 'Task queued...' : 'Working on your task...'}
+          </p>
+          <ElapsedTimer createdAt={task.createdAt} />
+        </div>
+      </div>
+    </Card>
+  );
+}, (prev, next) => prev.task.status === next.task.status && prev.task.error === next.task.error && prev.task.createdAt === next.task.createdAt);
+
 function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedPrompt: string }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
 
@@ -249,7 +350,7 @@ function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedProm
     void navigator.clipboard.writeText(prompt).then(() => {
       setCopied(true);
       setTimeout(() => { setCopied(false); }, 2000);
-    });
+    }).catch(() => { /* clipboard unavailable */ });
   }, [prompt]);
 
   return (
@@ -282,6 +383,8 @@ function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedProm
   );
 }
 
+const MemoTaskPrompt = memo(TaskPrompt);
+
 function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
   const result = task.result;
   if (result === undefined) return null;
@@ -310,6 +413,10 @@ function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
   );
 }
 
+const MemoTaskResult = memo(TaskResult, (prev, next) =>
+  prev.task.result === next.task.result
+);
+
 function TaskError({ task }: { task: CodeTask }): React.JSX.Element | null {
   const err = task.error;
   if (err === undefined) return null;
@@ -327,10 +434,15 @@ function TaskError({ task }: { task: CodeTask }): React.JSX.Element | null {
   );
 }
 
-function LogStream({ logs, isActive }: { logs: LogLine[]; isActive: boolean }): React.JSX.Element {
+const MemoTaskError = memo(TaskError, (prev, next) =>
+  prev.task.error === next.task.error
+);
+
+function LogStream({ logs, isActive, listenerHealthy }: { logs: LogLine[]; isActive: boolean; listenerHealthy: boolean }): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [followLogs, setFollowLogs] = useState(true);
+  const [copied, setCopied] = useState(false);
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
 
@@ -368,6 +480,14 @@ function LogStream({ logs, isActive }: { logs: LogLine[]; isActive: boolean }): 
     }
   };
 
+  const copyAllLogs = useCallback((): void => {
+    const text = logs.map((l) => l.text).join('\n');
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => { setCopied(false); }, 2000);
+    }).catch(() => { /* clipboard unavailable */ });
+  }, [logs]);
+
   return (
     <div className="mt-6 mb-6">
       {/* Terminal header */}
@@ -379,7 +499,7 @@ function LogStream({ logs, isActive }: { logs: LogLine[]; isActive: boolean }): 
             <span className="h-3 w-3 rounded-full bg-green-500/70" />
           </div>
           <span className="text-sm font-medium text-slate-300">Execution Logs</span>
-          {isActive ? (
+          {isActive && listenerHealthy ? (
             <span className="flex items-center gap-1.5 rounded-full bg-green-900/50 px-2 py-0.5 text-xs text-green-300">
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
               Live
@@ -391,17 +511,27 @@ function LogStream({ logs, isActive }: { logs: LogLine[]; isActive: boolean }): 
             {String(logs.length)} line{logs.length !== 1 ? 's' : ''}
           </span>
           {logs.length > 0 ? (
-            <button
-              type="button"
-              onClick={toggleFollow}
-              className={`rounded px-2 py-1 text-xs transition-colors ${
-                followLogs
-                  ? 'text-blue-400 bg-blue-900/30 hover:text-blue-300'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
-              }`}
-            >
-              {followLogs ? 'Following' : 'Follow'}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={toggleFollow}
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  followLogs
+                    ? 'text-blue-400 bg-blue-900/30 hover:text-blue-300'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                }`}
+              >
+                {followLogs ? 'Following' : 'Follow'}
+              </button>
+              <button
+                type="button"
+                onClick={copyAllLogs}
+                className="rounded p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
+                title={copied ? 'Copied!' : 'Copy all logs'}
+              >
+                {copied ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </>
           ) : null}
         </div>
       </div>
@@ -409,7 +539,7 @@ function LogStream({ logs, isActive }: { logs: LogLine[]; isActive: boolean }): 
       {/* Log lines */}
       <div
         ref={containerRef}
-        className="max-h-[70vh] overflow-y-auto rounded-b-lg bg-slate-900 p-3 font-mono text-sm leading-relaxed"
+        className="max-h-[80vh] overflow-y-auto rounded-b-lg bg-slate-900 p-3 font-mono text-sm leading-relaxed"
       >
         {logs.length === 0 && isActive ? (
           <div className="flex items-center gap-2 text-slate-400">
@@ -421,7 +551,7 @@ function LogStream({ logs, isActive }: { logs: LogLine[]; isActive: boolean }): 
           <p className="text-slate-500">No logs available.</p>
         ) : null}
         {logs.map((line) => (
-          <LogLineRow key={line.sequence} line={line} />
+          <MemoLogLineRow key={line.sequence} line={line} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -429,10 +559,12 @@ function LogStream({ logs, isActive }: { logs: LogLine[]; isActive: boolean }): 
   );
 }
 
-function LogLineRow({ line }: { line: LogLine }): React.JSX.Element {
+const MemoLogStream = memo(LogStream);
+
+const MemoLogLineRow = memo(function LogLineRow({ line }: { line: LogLine }): React.JSX.Element {
   return (
     <div className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}`}>
       {line.text}
     </div>
   );
-}
+});

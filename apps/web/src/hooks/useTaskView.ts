@@ -33,6 +33,7 @@ export interface TaskViewState {
   logs: LogLine[];
   loading: boolean;
   error: string | null;
+  listenerHealthy: boolean;
   cancelling: boolean;
   cancelError: string | null;
   retrying: boolean;
@@ -61,6 +62,7 @@ export function useTaskView(taskId: string): TaskViewState {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [listenerHealthy, setListenerHealthy] = useState(false);
 
   const isMountedRef = useRef(true);
   const getAccessTokenRef = useRef(getAccessToken);
@@ -148,12 +150,18 @@ export function useTaskView(taskId: string): TaskViewState {
                     if (!cancelled && data !== null) {
                       setTask(data);
                     }
+                  }).catch((err: unknown) => {
+                    if (!cancelled) {
+                      setError(getErrorMessage(err, 'Failed to refresh task'));
+                    }
                   });
                 }
               }
             },
             () => {
-              // Silently ignore task doc listener errors
+              if (!cancelled) {
+                setListenerHealthy(false);
+              }
             }
           );
           if (cancelled) {
@@ -186,7 +194,9 @@ export function useTaskView(taskId: string): TaskViewState {
               }
             },
             () => {
-              // Silently ignore log listener errors
+              if (!cancelled) {
+                setListenerHealthy(false);
+              }
             }
           );
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- guard for cleanup during synchronous listener setup
@@ -195,6 +205,8 @@ export function useTaskView(taskId: string): TaskViewState {
             return;
           }
           unsubs.push(logsUnsub);
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated by cleanup closure after await yields
+          if (!cancelled) setListenerHealthy(true);
         } else {
           // Terminal: one-time fetch of log lines
           const linesRef = collection(db, 'code_tasks', taskId, 'log_lines');
@@ -209,7 +221,9 @@ export function useTaskView(taskId: string): TaskViewState {
           setLogs(lines);
         }
       } catch {
-        // Firebase errors are non-fatal; task data is already loaded via HTTP
+        if (!cancelled) {
+          setListenerHealthy(false);
+        }
       }
     };
 
@@ -217,6 +231,7 @@ export function useTaskView(taskId: string): TaskViewState {
 
     return (): void => {
       cancelled = true;
+      setListenerHealthy(false);
       for (const unsub of unsubs) {
         unsub();
       }
@@ -276,6 +291,7 @@ export function useTaskView(taskId: string): TaskViewState {
     logs,
     loading,
     error,
+    listenerHealthy,
     cancelling,
     cancelError,
     retrying,
