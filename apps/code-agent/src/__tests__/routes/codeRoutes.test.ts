@@ -118,6 +118,9 @@ describe('codeRoutes', () => {
       async cancelOnWorker(): Promise<void> {
         return;
       },
+      async sendMessageToWorker(): Promise<Result<{ action: 'queued' | 'resumed' }, { code: string; message: string }>> {
+        return ok({ action: 'queued' });
+      },
     };
     const whatsappNotifier = createWhatsAppNotifier({
       whatsappPublisher: {
@@ -1278,6 +1281,9 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         },
         async cancelOnWorker(): Promise<void> {
           // No-op for test
+        },
+        async sendMessageToWorker(): Promise<Result<{ action: 'queued' | 'resumed' }, { code: string; message: string }>> {
+          return ok({ action: 'queued' });
         },
       } satisfies TaskDispatcherService;
 
@@ -2689,6 +2695,112 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
 
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+  });
+
+  describe('POST /code/tasks/:taskId/messages', () => {
+    it('returns 401 without JWT token', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/messages',
+        payload: {
+          message: 'Hello task',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 400 with empty message body', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/messages',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          message: '',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 404 when task not found', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/non-existent-task/messages',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          message: 'Hello task',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('successfully queues message for a running task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task owned by the test user
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix login bug',
+        sanitizedPrompt: 'fix login bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'home-mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Set task to running status
+      await repo.update(created.value.id, { status: 'running' });
+
+      // Override taskDispatcher with sendMessageToWorker mock
+      const mockTaskDispatcher: TaskDispatcherService = {
+        async dispatch(): Promise<Result<DispatchResult, DispatchError>> {
+          return ok({ dispatched: true, workerLocation: 'home-mac' });
+        },
+        async cancelOnWorker(): Promise<void> {
+          return;
+        },
+        async sendMessageToWorker(): Promise<Result<{ action: 'queued' | 'resumed' }, { code: string; message: string }>> {
+          return ok({ action: 'queued' });
+        },
+      };
+
+      setServices({
+        ...getServices(),
+        taskDispatcher: mockTaskDispatcher,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/code/tasks/${created.value.id}/messages`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          message: 'Please also fix the logout bug',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('queued');
     });
   });
 });

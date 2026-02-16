@@ -99,6 +99,9 @@ describe('GET /code/github-pr-events', () => {
       async cancelOnWorker(): Promise<void> {
         return;
       },
+      async sendMessageToWorker(): Promise<ReturnType<typeof ok<{ action: 'queued' | 'resumed' }>>> {
+        return ok({ action: 'queued' as const });
+      },
     };
 
     const whatsappNotifier = createWhatsAppNotifier({

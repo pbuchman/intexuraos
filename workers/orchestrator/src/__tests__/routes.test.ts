@@ -48,6 +48,7 @@ describe('Routes', () => {
     dispatcher = {
       submitTask: vi.fn(async () => ({ ok: true, value: undefined })),
       cancelTask: vi.fn(async () => ({ ok: true, value: undefined })),
+      sendMessage: vi.fn(async () => ({ ok: true, value: { action: 'queued' } })),
       getTask: vi.fn(async () => null),
       getRunningCount: vi.fn(() => 0),
       getCapacity: vi.fn(() => 5),
@@ -844,6 +845,140 @@ describe('Routes', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({ error: 'Image info not available' });
+    });
+  });
+
+  describe('POST /tasks/:id/message', () => {
+    it('should queue message for running task', async () => {
+      vi.mocked(dispatcher.sendMessage).mockResolvedValueOnce({
+        ok: true,
+        value: { action: 'queued' },
+      });
+
+      const { headers, body } = createSignedRequest({ message: 'Please fix the tests too' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/test-task/message',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ action: 'queued' });
+      expect(dispatcher.sendMessage).toHaveBeenCalledWith('test-task', 'Please fix the tests too');
+    });
+
+    it('should resume completed task with message', async () => {
+      vi.mocked(dispatcher.sendMessage).mockResolvedValueOnce({
+        ok: true,
+        value: { action: 'resumed' },
+      });
+
+      const { headers, body } = createSignedRequest({ message: 'Add more tests' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/done-task/message',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ action: 'resumed' });
+    });
+
+    it('should return 404 for non-existent task', async () => {
+      vi.mocked(dispatcher.sendMessage).mockResolvedValueOnce({
+        ok: false,
+        error: { type: 'not_found', message: 'Task not found' },
+      });
+
+      const { headers, body } = createSignedRequest({ message: 'Hello' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/missing/message',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('should return 409 for invalid status', async () => {
+      vi.mocked(dispatcher.sendMessage).mockResolvedValueOnce({
+        ok: false,
+        error: {
+          type: 'invalid_status',
+          message: 'Cannot send message to task with status "cancelled"',
+        },
+      });
+
+      const { headers, body } = createSignedRequest({ message: 'Hello' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/cancelled-task/message',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(409);
+    });
+
+    it('should return 500 for service errors', async () => {
+      vi.mocked(dispatcher.sendMessage).mockResolvedValueOnce({
+        ok: false,
+        error: { type: 'service_error', message: 'Failed to resume task' },
+      });
+
+      const { headers, body } = createSignedRequest({ message: 'Hello' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/error-task/message',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('should reject empty message', async () => {
+      const { headers, body } = createSignedRequest({ message: '' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/test-task/message',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should reject missing message field', async () => {
+      const { headers, body } = createSignedRequest({});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/test-task/message',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should require authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/test-task/message',
+        payload: { message: 'Hello' },
+      });
+
+      expect(response.statusCode).toBe(401);
     });
   });
 

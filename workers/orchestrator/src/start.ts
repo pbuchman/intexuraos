@@ -360,6 +360,13 @@ async function bootstrap(): Promise<void> {
       repositoryPath: repoPath,
       worktreeBasePath: config.worktreeBasePath,
       mcpConfigTemplatePath: join(repoPath, '.mcp.json'),
+      settingsLocalTemplatePath: join(
+        repoPath,
+        'workers',
+        'claude-worker',
+        'config-defaults',
+        'settings.local.json'
+      ),
     },
     logger
   );
