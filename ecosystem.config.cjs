@@ -12,6 +12,7 @@
 // Common auth secrets for all services (mirrors Terraform local.common_service_secrets)
 const COMMON_SERVICE_ENV = {
   HOME: process.env.HOME ?? '/root',
+  PUBSUB_EMULATOR_HOST: 'localhost:8102',
   INTEXURAOS_AUTH_JWKS_URL: process.env.INTEXURAOS_AUTH_JWKS_URL,
   INTEXURAOS_AUTH_ISSUER: process.env.INTEXURAOS_AUTH_ISSUER,
   INTEXURAOS_AUTH_AUDIENCE: process.env.INTEXURAOS_AUTH_AUDIENCE,
