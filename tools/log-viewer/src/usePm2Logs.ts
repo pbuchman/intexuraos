@@ -25,7 +25,7 @@ interface SSEMessage {
   };
 }
 
-const LOG_SERVER_URL = 'http://localhost:8106';
+const LOG_STREAM_URL = 'http://localhost:8106/stream';
 const MAX_LOGS = 2000;
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
 
@@ -188,7 +188,7 @@ export function usePm2Logs(): {
         eventSourceRef.current.close();
       }
 
-      const eventSource = new EventSource(`${LOG_SERVER_URL}/logs`);
+      const eventSource = new EventSource(LOG_STREAM_URL);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = (): void => {

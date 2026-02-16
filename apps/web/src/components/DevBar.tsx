@@ -14,8 +14,8 @@ import {
 } from './devbar/index.js';
 
 function getEnvironment(): 'DEV' | null {
-  if (import.meta.env.DEV) return 'DEV';
   if (import.meta.env['INTEXURAOS_ENVIRONMENT'] === 'development') return 'DEV';
+  if (import.meta.env.DEV) return 'DEV';
   return null;
 }
 
