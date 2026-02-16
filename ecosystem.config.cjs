@@ -169,7 +169,6 @@ function createServiceConfig(name, port, options = {}) {
     watch: ['src', '../../packages'],
     watch_delay: 1000,
     ignore_watch: ['node_modules', '__tests__', '**/*.test.ts', '**/*.spec.ts', 'dist'],
-    log_date_format: 'YYYY-MM-DD HH:mm:ss',
   };
 
   if (waitForService) {
@@ -240,7 +239,6 @@ module.exports = {
       watch: ['src', '../../packages'],
       watch_delay: 1000,
       ignore_watch: ['node_modules', '__tests__', '**/*.test.ts', '**/*.spec.ts', 'dist'],
-      log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
   ],
 };

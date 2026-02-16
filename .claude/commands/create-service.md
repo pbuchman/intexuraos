@@ -998,14 +998,14 @@ terraform fmt -check -recursive && terraform validate
 
 ## Common Dependencies
 
-| Feature        | Package                       |
-| -------------- | ----------------------------- |
-| Firestore      | `@intexuraos/infra-firestore` |
-| PubSub         | `@google-cloud/pubsub`        |
-| Cloud Storage  | `@google-cloud/storage`       |
-| HTTP client    | `@intexuraos/common-http`     |
-| Auth/JWT       | `@intexuraos/common-core`     |
-| OpenTelemetry  | `@intexuraos/infra-otel`      |
+| Feature       | Package                       |
+| ------------- | ----------------------------- |
+| Firestore     | `@intexuraos/infra-firestore` |
+| PubSub        | `@google-cloud/pubsub`        |
+| Cloud Storage | `@google-cloud/storage`       |
+| HTTP client   | `@intexuraos/common-http`     |
+| Auth/JWT      | `@intexuraos/common-core`     |
+| OpenTelemetry | `@intexuraos/infra-otel`      |
 
 ---
 
