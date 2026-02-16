@@ -359,7 +359,6 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       '',
       'Deterministic signals:',
       `- workerExitCode=${String(input.workerExitCode ?? 'none')}`,
-      `- hasToolUseError=${String(input.rawLogs.includes('<tool_use_error>'))}`,
       `- detectedPrUrl=${input.taskResult?.prUrl ?? 'null'}`,
       `- detectedCiTrackedSuccess=${String(input.taskResult?.ciFailed === false)}`,
       `- deterministicPassed=${String(deterministic.ok)}`,
