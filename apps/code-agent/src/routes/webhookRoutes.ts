@@ -5,9 +5,13 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { validateWebhookSignature } from '../infra/webhookValidation.js';
-import { formatLogChunk } from '../domain/services/logFormatter.js';
+import { formatLogChunk, createFormatterState, type FormatterState } from '../domain/services/logFormatter.js';
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+  // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
+  // so Read suppression works even when assistant + tool_result land in different log chunks
+  const taskFormatterStates = new Map<string, FormatterState>();
+
   // ============================================================
   // INTERNAL WEBHOOK ROUTES (X-Internal-Auth + HMAC Signature)
   // ============================================================
@@ -581,10 +585,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
+      const state = taskFormatterStates.get(taskId) ?? createFormatterState();
       const allLines = chunks.flatMap((chunk) => {
         const chunkTimestamp = Timestamp.fromDate(new Date(chunk.timestamp));
-        return formatLogChunk(chunk.content, chunk.sequence, chunkTimestamp);
+        return formatLogChunk(chunk.content, chunk.sequence, chunkTimestamp, state);
       });
+      taskFormatterStates.set(taskId, state);
 
       if (allLines.length > 0) {
         const lineResult = await logLineRepo.storeBatch(taskId, allLines);

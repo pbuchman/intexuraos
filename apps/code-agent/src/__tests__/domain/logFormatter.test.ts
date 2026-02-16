@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Timestamp } from '@google-cloud/firestore';
-import { formatLogChunk } from '../../domain/services/logFormatter.js';
+import { formatLogChunk, createFormatterState } from '../../domain/services/logFormatter.js';
 
 function ts(): Timestamp {
   return Timestamp.now();
@@ -823,6 +823,215 @@ describe('formatLogChunk', () => {
       expect(result).toHaveLength(2);
       expect(result[0]?.text).toBe('before');
       expect(result[1]?.text).toBe('after');
+    });
+  });
+
+  describe('cross-chunk state persistence', () => {
+    it('suppresses Read tool result when assistant and user land in separate chunks', () => {
+      const state = createFormatterState();
+
+      const chunk1 = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{
+            type: 'tool_use',
+            id: 'call_read_1',
+            name: 'Read',
+            input: { file_path: '/repo/src/server.ts' },
+          }],
+        },
+      });
+
+      const chunk2 = JSON.stringify({
+        type: 'user',
+        message: {
+          content: [{
+            type: 'tool_result',
+            tool_use_id: 'call_read_1',
+            content: '1→import express from "express";\n2→const app = express();',
+          }],
+        },
+      });
+
+      const result1 = formatLogChunk(chunk1, 0, ts(), state);
+      expect(result1).toHaveLength(1);
+      expect(result1[0]?.text).toBe('[tool] Read: /repo/src/server.ts');
+
+      const result2 = formatLogChunk(chunk2, 1, ts(), state);
+      expect(result2).toHaveLength(0);
+    });
+
+    it('shows non-Read tool result across chunks with correct prefix', () => {
+      const state = createFormatterState();
+
+      const chunk1 = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{
+            type: 'tool_use',
+            id: 'call_bash_1',
+            name: 'Bash',
+            input: { command: 'git status' },
+          }],
+        },
+      });
+
+      const chunk2 = JSON.stringify({
+        type: 'user',
+        message: {
+          content: [{
+            type: 'tool_result',
+            tool_use_id: 'call_bash_1',
+            content: 'On branch main\nnothing to commit',
+          }],
+        },
+      });
+
+      formatLogChunk(chunk1, 0, ts(), state);
+      const result2 = formatLogChunk(chunk2, 1, ts(), state);
+      expect(result2).toHaveLength(1);
+      expect(result2[0]?.text).toBe('  → On branch main\n    nothing to commit');
+    });
+
+    it('correlates tool_use_id across chunks for correct suppression', () => {
+      const state = createFormatterState();
+
+      // Chunk 1: two tool_use blocks — Read and Bash
+      const chunk1 = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', id: 'call_1', name: 'Read', input: { file_path: '/a.ts' } },
+            { type: 'tool_use', id: 'call_2', name: 'Bash', input: { command: 'ls' } },
+          ],
+        },
+      });
+
+      // Chunk 2: tool_result for call_1 (Read) — should be suppressed
+      const chunk2Read = JSON.stringify({
+        type: 'user',
+        message: {
+          content: [{
+            type: 'tool_result',
+            tool_use_id: 'call_1',
+            content: 'file contents',
+          }],
+        },
+      });
+
+      // Chunk 3: tool_result for call_2 (Bash) — should show
+      const chunk3Bash = JSON.stringify({
+        type: 'user',
+        message: {
+          content: [{
+            type: 'tool_result',
+            tool_use_id: 'call_2',
+            content: 'a.ts  b.ts',
+          }],
+        },
+      });
+
+      formatLogChunk(chunk1, 0, ts(), state);
+      const readResult = formatLogChunk(chunk2Read, 1, ts(), state);
+      const bashResult = formatLogChunk(chunk3Bash, 2, ts(), state);
+
+      expect(readResult).toHaveLength(0);
+      expect(bashResult).toHaveLength(1);
+      expect(bashResult[0]?.text).toBe('  → a.ts  b.ts');
+    });
+  });
+
+  describe('extractToolContext additional keys', () => {
+    it('Task tool shows description', () => {
+      const json = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{
+            type: 'tool_use',
+            name: 'Task',
+            input: { description: 'Find authentication files', prompt: 'Search for auth', subagent_type: 'Explore' },
+          }],
+        },
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('[tool] Task: Find authentication files');
+    });
+
+    it('long description truncated at 60 chars', () => {
+      const longDesc = 'a'.repeat(100);
+      const json = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{
+            type: 'tool_use',
+            name: 'Task',
+            input: { description: longDesc, prompt: 'do stuff', subagent_type: 'Explore' },
+          }],
+        },
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('[tool] Task: ' + 'a'.repeat(57) + '...');
+    });
+
+    it('WebFetch shows url', () => {
+      const json = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{
+            type: 'tool_use',
+            name: 'WebFetch',
+            input: { url: 'https://example.com/api', prompt: 'Extract data' },
+          }],
+        },
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('[tool] WebFetch: https://example.com/api');
+    });
+
+    it('long URL truncated at 80 chars', () => {
+      const longUrl = 'https://example.com/' + 'a'.repeat(100);
+      const json = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{
+            type: 'tool_use',
+            name: 'WebFetch',
+            input: { url: longUrl, prompt: 'Extract data' },
+          }],
+        },
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('[tool] WebFetch: ' + longUrl.slice(0, 77) + '...');
+    });
+
+    it('Skill shows skill name', () => {
+      const json = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{
+            type: 'tool_use',
+            name: 'Skill',
+            input: { skill: 'commit' },
+          }],
+        },
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('[tool] Skill: commit');
+    });
+
+    it('description does not override command (priority order)', () => {
+      const json = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{
+            type: 'tool_use',
+            name: 'Bash',
+            input: { command: 'npm test', description: 'Run tests' },
+          }],
+        },
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('[tool] Bash: npm test');
     });
   });
 });
