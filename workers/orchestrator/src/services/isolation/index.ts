@@ -75,4 +75,5 @@ export { WORKER_TYPES } from './types.js';
 // Re-export implementations
 export { DockerProvider, type DockerProviderConfig } from './docker-provider.js';
 export { TokenRefresher, type TokenRefresherConfig } from './token-refresher.js';
-export { AnthropicOAuthManager, type AnthropicOAuthManagerConfig } from './anthropic-oauth.js';
+export { CredentialMonitor, type CredentialMonitorConfig } from './credential-monitor.js';
+export { CredentialRefresher, type CredentialRefresherConfig } from './credential-refresher.js';

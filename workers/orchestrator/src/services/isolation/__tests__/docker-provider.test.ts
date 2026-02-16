@@ -745,15 +745,20 @@ describe('DockerProvider', () => {
     });
   });
 
-  describe('OAuth credential passthrough', () => {
-    it('does not set ANTHROPIC_API_KEY env var when anthropicOAuth is configured for auto worker', async () => {
-      const mockOAuth = {
-        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
-      };
-      provider.setAnthropicOAuth(mockOAuth as never);
+  describe('Shared credentials passthrough', () => {
+    let sharedCredsProvider: TestableDockerProvider;
 
+    beforeEach(() => {
+      sharedCredsProvider = new TestableDockerProvider(
+        { sharedCredsPath: '/shared/claude-creds' },
+        mockLogger,
+        mocks.mockDocker
+      );
+    });
+
+    it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for auto worker', async () => {
       const config = createTestConfig({ workerType: 'auto' });
-      await provider.createWorker(config);
+      await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
@@ -761,14 +766,9 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBeUndefined();
     });
 
-    it('does not set ANTHROPIC_API_KEY env var when anthropicOAuth is configured for opus worker', async () => {
-      const mockOAuth = {
-        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
-      };
-      provider.setAnthropicOAuth(mockOAuth as never);
-
+    it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for opus worker', async () => {
       const config = createTestConfig({ workerType: 'opus' });
-      await provider.createWorker(config);
+      await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
@@ -776,14 +776,9 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBeUndefined();
     });
 
-    it('sets ANTHROPIC_API_KEY env var for glm worker even with anthropicOAuth configured', async () => {
-      const mockOAuth = {
-        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
-      };
-      provider.setAnthropicOAuth(mockOAuth as never);
-
+    it('sets ANTHROPIC_API_KEY env var for glm worker even with sharedCredsPath configured', async () => {
       const config = createTestConfig({ workerType: 'glm' });
-      await provider.createWorker(config);
+      await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
@@ -791,14 +786,9 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-zai-key');
     });
 
-    it('does not set ANTHROPIC_BASE_URL env var when anthropicOAuth is configured for auto worker', async () => {
-      const mockOAuth = {
-        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
-      };
-      provider.setAnthropicOAuth(mockOAuth as never);
-
+    it('does not set ANTHROPIC_BASE_URL env var when sharedCredsPath is configured for auto worker', async () => {
       const config = createTestConfig({ workerType: 'auto' });
-      await provider.createWorker(config);
+      await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
@@ -806,14 +796,9 @@ describe('DockerProvider', () => {
       expect(baseUrlEntry).toBeUndefined();
     });
 
-    it('sets ANTHROPIC_BASE_URL env var for glm worker even with anthropicOAuth configured', async () => {
-      const mockOAuth = {
-        writeTaskCredentials: vi.fn().mockResolvedValue(undefined),
-      };
-      provider.setAnthropicOAuth(mockOAuth as never);
-
+    it('sets ANTHROPIC_BASE_URL env var for glm worker even with sharedCredsPath configured', async () => {
       const config = createTestConfig({ workerType: 'glm' });
-      await provider.createWorker(config);
+      await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
@@ -821,7 +806,7 @@ describe('DockerProvider', () => {
       expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic');
     });
 
-    it('sets ANTHROPIC_API_KEY env var when anthropicOAuth is NOT configured', async () => {
+    it('sets ANTHROPIC_API_KEY env var when sharedCredsPath is NOT configured', async () => {
       const config = createTestConfig({ workerType: 'auto' });
       await provider.createWorker(config);
 
@@ -829,6 +814,27 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
       expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-anthropic-key');
+    });
+
+    it('mounts shared creds dir for auto workers instead of per-task session', async () => {
+      const config = createTestConfig({ workerType: 'auto' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
+      expect(binds.join(',')).not.toContain('claude-session');
+    });
+
+    it('mounts per-task session for glm workers even with sharedCredsPath', async () => {
+      const config = createTestConfig({ workerType: 'glm' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
     });
   });
 
