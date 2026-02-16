@@ -95,7 +95,11 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
 }
 
 // Collect all external pnpm deps (including transitive from workspace packages)
-const externalPackages = [...collectExternalDeps(`@intexuraos/${service}`)];
+const serviceDeps = collectExternalDeps(`@intexuraos/${service}`);
+// Always include infra-otel's deps (OTel preload is built separately for all services)
+const otelDeps = collectExternalDeps('@intexuraos/infra-otel');
+otelDeps.forEach((dep) => serviceDeps.add(dep));
+const externalPackages = [...serviceDeps];
 
 // Detect service directory (apps, workers, or packages)
 let serviceDir;
@@ -148,6 +152,9 @@ if (bundledNpmPackages.size > 0) {
 
 // Generate production package.json with all pnpm dependencies (including transitive)
 const depsWithVersions = collectExternalDepsWithVersions(`@intexuraos/${service}`);
+// Always include infra-otel's deps for the OTel preload module
+const otelDepsWithVersions = collectExternalDepsWithVersions('@intexuraos/infra-otel');
+otelDepsWithVersions.forEach((v, k) => depsWithVersions.set(k, v));
 const prodPackageJson = {
   name: `@intexuraos/${service}-prod`,
   version: '1.0.0',
@@ -159,6 +166,25 @@ writeFileSync(
   resolve(rootDir, `${serviceDir}/dist/package.json`),
   JSON.stringify(prodPackageJson, null, 2)
 );
+
+// Build OTel preload module (separate entry point for --import flag)
+const otelRegisterPath = resolve(rootDir, 'packages/infra-otel/src/register.ts');
+if (existsSync(otelRegisterPath)) {
+  await esbuild.build({
+    entryPoints: [otelRegisterPath],
+    bundle: true,
+    platform: 'node',
+    target: 'node22',
+    format: 'esm',
+    outfile: resolve(rootDir, `${serviceDir}/dist/otel-register.js`),
+    external: externalPackages,
+    sourcemap: true,
+    mainFields: ['module', 'main'],
+    conditions: ['import', 'node'],
+    absWorkingDir: rootDir,
+  });
+  console.log('Built OTel preload: dist/otel-register.js');
+}
 
 console.log(`Built ${service}`);
 console.log(
