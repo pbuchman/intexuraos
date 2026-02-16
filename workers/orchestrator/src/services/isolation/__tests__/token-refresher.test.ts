@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import * as fs from 'node:fs';
 import { TokenRefresher, type TokenRefresherConfig } from '../token-refresher.js';
-import type { AnthropicOAuthManager } from '../anthropic-oauth.js';
 
 // Mock fs at module level
 vi.mock('node:fs', async (importOriginal) => {
@@ -292,111 +291,6 @@ describe('TokenRefresher', () => {
         expect.any(String),
         expect.any(Object)
       );
-    });
-  });
-
-  describe('Anthropic OAuth integration', () => {
-    it('calls OAuth getAccessToken during refresh cycle', async () => {
-      const mockOAuth = {
-        getAccessToken: vi.fn(async () => 'sk-ant-oat01-fresh'),
-        writeTaskCredentials: vi.fn(async () => undefined),
-      } as unknown as AnthropicOAuthManager;
-
-      refresher.setAnthropicOAuth(mockOAuth);
-      await refresher.registerTask('task-1');
-
-      // Clear initial calls
-      mockWriteFile.mockClear();
-      vi.mocked(mockOAuth.getAccessToken).mockClear();
-
-      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
-
-      expect(mockOAuth.getAccessToken).toHaveBeenCalledTimes(1);
-      // 1 GitHub token write + 1 OAuth credentials write
-      expect(mockWriteFile).toHaveBeenCalledTimes(1);
-    });
-
-    it('propagates refreshed OAuth credentials to all active task sessions', async () => {
-      const mockOAuth = {
-        getAccessToken: vi.fn(async () => 'sk-ant-oat01-fresh'),
-        writeTaskCredentials: vi.fn(async () => undefined),
-      } as unknown as AnthropicOAuthManager;
-
-      refresher.setAnthropicOAuth(mockOAuth);
-      await refresher.registerTask('task-1');
-      await refresher.registerTask('task-2');
-
-      vi.mocked(mockOAuth.writeTaskCredentials).mockClear();
-
-      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
-
-      expect(mockOAuth.writeTaskCredentials).toHaveBeenCalledTimes(2);
-      expect(mockOAuth.writeTaskCredentials).toHaveBeenCalledWith(
-        '/tmp/claude-secrets/claude-session-task-1'
-      );
-      expect(mockOAuth.writeTaskCredentials).toHaveBeenCalledWith(
-        '/tmp/claude-secrets/claude-session-task-2'
-      );
-    });
-
-    it('continues propagation when one task session write fails', async () => {
-      const mockOAuth = {
-        getAccessToken: vi.fn(async () => 'sk-ant-oat01-fresh'),
-        writeTaskCredentials: vi
-          .fn()
-          .mockRejectedValueOnce(new Error('ENOENT'))
-          .mockResolvedValueOnce(undefined),
-      } as unknown as AnthropicOAuthManager;
-
-      refresher.setAnthropicOAuth(mockOAuth);
-      await refresher.registerTask('task-1');
-      await refresher.registerTask('task-2');
-
-      vi.mocked(mockOAuth.writeTaskCredentials).mockClear();
-      vi.mocked(mockLogger.warn).mockClear();
-
-      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
-
-      expect(mockOAuth.writeTaskCredentials).toHaveBeenCalledTimes(2);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task-1', error: expect.any(Error) }),
-        'Failed to propagate OAuth credentials to task'
-      );
-    });
-
-    it('does not break GitHub token refresh when OAuth fails', async () => {
-      const mockOAuth = {
-        getAccessToken: vi.fn(async () => {
-          throw new Error('OAuth network error');
-        }),
-        writeTaskCredentials: vi.fn(async () => undefined),
-      } as unknown as AnthropicOAuthManager;
-
-      refresher.setAnthropicOAuth(mockOAuth);
-      await refresher.registerTask('task-1');
-
-      mockWriteFile.mockClear();
-      vi.mocked(mockLogger.error).mockClear();
-
-      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.any(Error) }),
-        'Anthropic OAuth refresh failed during token cycle'
-      );
-      // GitHub tokens still refreshed
-      expect(mockWriteFile).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not call OAuth when not set', async () => {
-      await refresher.registerTask('task-1');
-
-      mockWriteFile.mockClear();
-
-      await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
-
-      // Only GitHub token refresh, no OAuth calls
-      expect(mockWriteFile).toHaveBeenCalledTimes(1);
     });
   });
 });

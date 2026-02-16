@@ -4,7 +4,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { Logger } from '@intexuraos/common-core';
 import type { IsolationProvider, WorkerConfig, WorkerHandle, ResourceUsage } from './types.js';
-import type { AnthropicOAuthManager } from './anthropic-oauth.js';
 
 export interface DockerProviderConfig {
   imageName: string;
@@ -19,6 +18,7 @@ export interface DockerProviderConfig {
   keepContainersAlive: boolean;
   managedAttemptsMode: boolean;
   workerReadyTimeoutMs?: number;
+  sharedCredsPath?: string;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -66,7 +66,6 @@ export class DockerProvider implements IsolationProvider {
   private readonly config: DockerProviderConfig;
   private readonly logger: Logger;
   private readonly workers: Map<string, WorkerEntry>;
-  private anthropicOAuth?: AnthropicOAuthManager | undefined;
   private readonly preservedWorkers = new Map<string, PreservedWorkerEntry>();
   private lastResolvedDigest: string | null = null;
 
@@ -75,10 +74,6 @@ export class DockerProvider implements IsolationProvider {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.logger = logger;
     this.workers = new Map();
-  }
-
-  setAnthropicOAuth(manager: AnthropicOAuthManager): void {
-    this.anthropicOAuth = manager;
   }
 
   /**
@@ -150,11 +145,6 @@ export class DockerProvider implements IsolationProvider {
       /* v8 ignore stop @preserve */
 
       await this.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
-      /* v8 ignore start -- test-infra: anthropicOAuth not injected in unit tests @preserve */
-      if (this.anthropicOAuth !== undefined) {
-        await this.anthropicOAuth.writeTaskCredentials(existingWorker.taskSessionPath);
-      }
-      /* v8 ignore stop @preserve */
       void this.runAttemptInContainer(taskId, config);
       return existingWorker.handle;
     }
@@ -195,12 +185,6 @@ export class DockerProvider implements IsolationProvider {
     await fs.promises.mkdir(taskSessionPath, { recursive: true, mode: 0o700 });
     await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
 
-    /* v8 ignore start -- test-infra: anthropicOAuth not injected in unit tests @preserve */
-    if (this.anthropicOAuth !== undefined) {
-      await this.anthropicOAuth.writeTaskCredentials(taskSessionPath);
-    }
-    /* v8 ignore stop @preserve */
-
     let container: Docker.Container | undefined;
     try {
       /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
@@ -219,37 +203,18 @@ export class DockerProvider implements IsolationProvider {
         );
       }
 
-      const KEY_FORMAT: Record<string, string> = {
-        ANTHROPIC_API_KEY: 'sk-ant-',
-      };
-      const expectedPrefix = KEY_FORMAT[workerTypeConfig.apiKeyEnvVar];
-      if (
-        expectedPrefix !== undefined &&
-        !apiKey.startsWith(expectedPrefix) &&
-        this.anthropicOAuth === undefined
-      ) {
-        this.logger.error(
-          {
-            taskId,
-            workerType,
-            envVar: workerTypeConfig.apiKeyEnvVar,
-            keyPrefix: apiKey.slice(0, 6) + '...',
-          },
-          `API key does not match expected format (expected ${expectedPrefix}*) — task will likely fail with 401`
-        );
-      }
       /* v8 ignore stop @preserve */
 
-      // When OAuth is configured for opus/auto workers, Claude CLI reads credentials from
-      // the mounted .credentials.json file. Setting ANTHROPIC_API_KEY with an OAuth token
-      // causes Claude CLI to use it as a regular API key via x-api-key header, which fails.
-      const useOAuthCredentials =
-        this.anthropicOAuth !== undefined && workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY';
+      // When shared credentials are configured for opus/auto workers, Claude CLI reads
+      // credentials from the mounted .credentials.json file. No ANTHROPIC_API_KEY needed.
+      const useSharedCreds =
+        this.config.sharedCredsPath !== undefined &&
+        workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY';
 
       /* v8 ignore start -- test-infra: worker type configuration varies by test @preserve */
       const env = [
         `TASK_ID=${taskId}`,
-        ...(useOAuthCredentials
+        ...(useSharedCreds
           ? []
           : [`ANTHROPIC_API_KEY=${apiKey}`, `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`]),
         `LINEAR_API_KEY=${secrets.LINEAR_API_KEY}`,
@@ -267,8 +232,8 @@ export class DockerProvider implements IsolationProvider {
       /* v8 ignore stop @preserve */
 
       /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
-      const keySuffix = useOAuthCredentials
-        ? 'OAuth (.credentials.json)'
+      const keySuffix = useSharedCreds
+        ? 'shared-creds (.credentials.json)'
         : apiKey.length > 4
           ? '...' + apiKey.slice(-4)
           : '****';
@@ -299,7 +264,9 @@ export class DockerProvider implements IsolationProvider {
             `${worktreePath}:/repo:rw`,
             `${taskSecretsPath}:/secrets:ro`,
             `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
-            `${taskSessionPath}:/home/claude/.claude:rw`,
+            /* v8 ignore start -- ts-type: nullish coalescing fallback unreachable; useSharedCreds guards sharedCredsPath ?? @preserve */
+            `${useSharedCreds ? (this.config.sharedCredsPath ?? taskSessionPath) : taskSessionPath}:/home/claude/.claude:rw`,
+            /* v8 ignore stop @preserve */
             /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
             ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
             /* v8 ignore stop @preserve */

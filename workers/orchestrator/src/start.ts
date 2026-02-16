@@ -25,7 +25,9 @@ import { WorktreeManager } from './services/worktree-manager.js';
 import { LogForwarder } from './services/log-forwarder.js';
 import { createHeartbeatManager } from './heartbeat.js';
 import { createIsolationProvider, TokenRefresher } from './services/isolation/index.js';
-import { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
+import { CredentialMonitor } from './services/isolation/credential-monitor.js';
+import { CredentialRefresher } from './services/isolation/credential-refresher.js';
+import Docker from 'dockerode';
 import { ApiKeyValidator } from './services/api-key-validator.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
@@ -127,38 +129,28 @@ function validatePortAvailable(port: number): void {
  */
 /* v8 ignore start -- test-infra: startup validation with network call @preserve */
 async function validateWorkerApiKeys(
-  anthropicOAuth: AnthropicOAuthManager,
+  credentialMonitor: CredentialMonitor,
   zaiKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
 
-  // Validate Anthropic OAuth by checking token availability
-  const oauthState = anthropicOAuth.getState();
-  if (oauthState.status === 'active') {
-    const token = await anthropicOAuth.getAccessToken();
-    if (token !== null) {
-      logger.info(
-        {
-          expiresInMinutes: oauthState.expiresInMinutes,
-          subscriptionType: oauthState.subscriptionType,
-        },
-        'Anthropic OAuth validated — token active, opus/auto tasks ready'
-      );
-    } else {
-      logger.error('Anthropic OAuth token refresh failed — opus/auto tasks will fail');
-    }
-  } else if (oauthState.status === 'expired') {
-    const token = await anthropicOAuth.getAccessToken();
-    if (token !== null) {
-      logger.info('Anthropic OAuth token was expired but refreshed successfully');
-    } else {
-      logger.error('Anthropic OAuth token expired and refresh failed — opus/auto tasks will fail');
-    }
+  // Validate orchestrator credentials by checking monitor state
+  const credState = credentialMonitor.getState();
+  if (credState.status === 'active') {
+    logger.info(
+      {
+        expiresInMinutes: credState.expiresInMinutes,
+        subscriptionType: credState.subscriptionType,
+      },
+      'Orchestrator credentials validated — token active, opus/auto tasks ready'
+    );
+  } else if (credState.status === 'expired') {
+    logger.warn('Orchestrator credentials expired — workers will refresh on first use');
   } else {
     logger.error(
-      { message: oauthState.message },
-      'Anthropic OAuth not configured — opus/auto tasks will fail'
+      { message: credState.message },
+      'Orchestrator credentials not configured — opus/auto tasks will fail'
     );
   }
 
@@ -391,12 +383,16 @@ async function bootstrap(): Promise<void> {
   }
   const preserveFailedContainers =
     getOptionalEnv('INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS', '1') !== '0';
+  const sharedCredsPath = join(orchestratorDir, 'claude-creds');
+  ensureDirectoryExists(sharedCredsPath);
+
   const isolationProvider = await createIsolationProvider(
     {
       secretsBasePath,
       gcpSaKeyPath,
       keepContainersAlive,
       imageName: workerImage,
+      sharedCredsPath,
     },
     logger
   );
@@ -411,57 +407,47 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  // Anthropic OAuth credential management
-  const credentialsPath = join(home, '.claude', '.credentials.json');
-  const anthropicOAuth = new AnthropicOAuthManager(
-    {
-      credentialsPath,
-      codeAgentUrl: config.codeAgentUrl,
-      internalAuthToken: internalAuthToken,
-    },
+  const credentialsPath = join(sharedCredsPath, '.credentials.json');
+
+  // Credential monitor (read-only watcher)
+  const credentialMonitor = new CredentialMonitor(
+    { credentialsPath, reloadIntervalMs: 60_000 },
     logger
   );
 
-  const oauthLoaded = anthropicOAuth.loadCredentials();
-  if (!oauthLoaded) {
-    process.stderr.write(
-      `\n❌ PRECONDITION FAILED: Anthropic OAuth credentials not found at ${credentialsPath}\n`
-    );
-    process.stderr.write(`   Run \`claude login\` on this machine first.\n`);
-    process.stderr.write(
-      `   For headless VMs: ssh -R 8080:localhost:8080 user@vm && claude login\n\n`
-    );
+  const monitorLoaded = credentialMonitor.loadCredentials();
+  if (!monitorLoaded) {
+    process.stderr.write(`\n❌ Orchestrator credentials not found at ${credentialsPath}\n`);
+    process.stderr.write(`   Run: ./workers/orchestrator/scripts/claude-login.sh\n\n`);
     process.exit(1);
   }
-  anthropicOAuth.logStartupStatus();
+  credentialMonitor.logStartupStatus();
+  credentialMonitor.startMonitoring();
 
-  // Get initial access token from OAuth
-  const anthropicToken = await anthropicOAuth.getAccessToken();
-  if (anthropicToken === null) {
-    process.stderr.write(
-      `\n❌ PRECONDITION FAILED: Failed to obtain Anthropic access token (may need refresh)\n\n`
-    );
+  // Credential refresher (Docker-based, for when no workers running)
+  const credentialRefresher = new CredentialRefresher(
+    { sharedCredsPath, imageName: workerImage, networkName: 'claude-worker-net' },
+    new Docker({ socketPath: '/var/run/docker.sock' }),
+    logger
+  );
+
+  // Get initial access token for non-OAuth workers (glm)
+  const currentToken = credentialMonitor.getCurrentAccessToken();
+  if (currentToken === null) {
+    process.stderr.write(`\n❌ Credentials expired. Run claude-login.sh again.\n\n`);
     process.exit(1);
   }
 
   // Get API keys for workers
   const apiKeySecrets = {
-    ANTHROPIC_API_KEY: anthropicToken,
+    ANTHROPIC_API_KEY: currentToken,
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_APP_API_KEY'),
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
-  apiKeyValidator.setAnthropicOAuth(anthropicOAuth);
-
-  // Wire OAuth manager into token refresher and isolation provider
-  tokenRefresher.setAnthropicOAuth(anthropicOAuth);
-  if ('setAnthropicOAuth' in isolationProvider) {
-    (isolationProvider as { setAnthropicOAuth(m: AnthropicOAuthManager): void }).setAnthropicOAuth(
-      anthropicOAuth
-    );
-  }
+  apiKeyValidator.setCredentialMonitor(credentialMonitor);
 
   const isolationConfig: IsolationConfig = {
     provider: isolationProvider,
@@ -469,14 +455,15 @@ async function bootstrap(): Promise<void> {
     apiKeyValidator,
     getSecrets: () => ({
       ...apiKeySecrets,
-      ANTHROPIC_API_KEY: anthropicOAuth.getCurrentAccessToken() ?? apiKeySecrets.ANTHROPIC_API_KEY,
+      ANTHROPIC_API_KEY:
+        credentialMonitor.getCurrentAccessToken() ?? apiKeySecrets.ANTHROPIC_API_KEY,
     }),
     gcpSaKeyPath,
     githubAppKeyPath: config.githubAppPrivateKeyPath,
   };
 
   // Validate API keys asynchronously (non-blocking, warns on failure)
-  void validateWorkerApiKeys(anthropicOAuth, isolationConfig.getSecrets().ZAI_API_KEY, logger);
+  void validateWorkerApiKeys(credentialMonitor, isolationConfig.getSecrets().ZAI_API_KEY, logger);
 
   const completionMaxAttemptsRaw = parseInt(
     getOptionalEnv('INTEXURAOS_COMPLETION_MAX_ATTEMPTS', String(DEFAULT_COMPLETION_MAX_ATTEMPTS)),
@@ -535,6 +522,25 @@ async function bootstrap(): Promise<void> {
     completionControl
   );
 
+  // Credential monitoring loop — trigger Docker-based refresh when near expiry
+  const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+  setInterval(() => {
+    if (credentialMonitor.isExpiringSoon(REFRESH_BUFFER_MS)) {
+      const runningTasks = dispatcher.getRunningTaskIds();
+      if (runningTasks.length === 0) {
+        logger.info('Credentials expiring soon, no active workers — triggering refresh');
+        void credentialRefresher.refresh().catch((err: unknown) => {
+          logger.error({ error: err }, 'Credential refresh failed');
+        });
+      } else {
+        logger.debug(
+          { runningCount: runningTasks.length },
+          'Credentials expiring soon but workers running — they will refresh naturally'
+        );
+      }
+    }
+  }, 60_000);
+
   // Create heartbeat manager
   const heartbeatManager = createHeartbeatManager(
     {
@@ -555,7 +561,7 @@ async function bootstrap(): Promise<void> {
     webhookClient,
     heartbeatManager,
     logger,
-    anthropicOAuth,
+    credentialMonitor,
     isolationProvider
   );
 }

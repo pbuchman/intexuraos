@@ -2,7 +2,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import type { Logger } from '@intexuraos/common-core';
-import type { AnthropicOAuthManager } from './anthropic-oauth.js';
 
 export interface TokenRefresherConfig {
   secretsBasePath: string;
@@ -17,16 +16,11 @@ export class TokenRefresher {
   private readonly logger: Logger;
   private readonly activeTaskIds: Set<string>;
   private intervalHandle?: NodeJS.Timeout | undefined;
-  private anthropicOAuth?: AnthropicOAuthManager | undefined;
 
   constructor(config: TokenRefresherConfig, logger: Logger) {
     this.config = config;
     this.logger = logger;
     this.activeTaskIds = new Set();
-  }
-
-  setAnthropicOAuth(manager: AnthropicOAuthManager): void {
-    this.anthropicOAuth = manager;
   }
 
   /**
@@ -125,25 +119,6 @@ export class TokenRefresher {
   }
 
   private async refreshAllTokens(): Promise<void> {
-    if (this.anthropicOAuth !== undefined) {
-      try {
-        await this.anthropicOAuth.getAccessToken();
-        for (const taskId of this.activeTaskIds) {
-          const sessionPath = path.join(this.config.secretsBasePath, `claude-session-${taskId}`);
-          try {
-            await this.anthropicOAuth.writeTaskCredentials(sessionPath);
-          } catch (err) {
-            this.logger.warn(
-              { taskId, error: err },
-              'Failed to propagate OAuth credentials to task'
-            );
-          }
-        }
-      } catch (error) {
-        this.logger.error({ error }, 'Anthropic OAuth refresh failed during token cycle');
-      }
-    }
-
     for (const taskId of this.activeTaskIds) {
       await this.refreshTokenForTask(taskId);
     }

@@ -1,5 +1,5 @@
 import type { Logger } from '@intexuraos/common-core';
-import type { AnthropicOAuthManager } from './isolation/anthropic-oauth.js';
+import type { CredentialMonitor } from './isolation/credential-monitor.js';
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -17,15 +17,15 @@ interface CacheEntry {
 export class ApiKeyValidator {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly inFlight = new Map<string, Promise<ApiKeyValidationResult>>();
-  private anthropicOAuth?: AnthropicOAuthManager | undefined;
+  private credentialMonitor?: CredentialMonitor | undefined;
 
   constructor(
     private readonly secrets: { ANTHROPIC_API_KEY: string },
     private readonly logger: Logger
   ) {}
 
-  setAnthropicOAuth(manager: AnthropicOAuthManager): void {
-    this.anthropicOAuth = manager;
+  setCredentialMonitor(monitor: CredentialMonitor): void {
+    this.credentialMonitor = monitor;
   }
 
   async validate(keyType: 'anthropic'): Promise<ApiKeyValidationResult> {
@@ -49,16 +49,17 @@ export class ApiKeyValidator {
   }
 
   private async doValidate(keyType: 'anthropic'): Promise<ApiKeyValidationResult> {
-    if (this.anthropicOAuth !== undefined) {
-      const token = await this.anthropicOAuth.getAccessToken();
-      if (token !== null) {
+    if (this.credentialMonitor !== undefined) {
+      const token = this.credentialMonitor.getCurrentAccessToken();
+      const state = this.credentialMonitor.getState();
+      if (token !== null && state.status !== 'expired') {
         const result: ApiKeyValidationResult = { valid: true };
         this.setCache(keyType, result);
         return result;
       }
       const result: ApiKeyValidationResult = {
         valid: false,
-        errorMessage: 'Anthropic OAuth credentials expired or unavailable',
+        errorMessage: 'Orchestrator credentials expired or unavailable',
       };
       this.setCache(keyType, result);
       return result;
