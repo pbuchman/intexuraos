@@ -56,7 +56,7 @@ const LLM_VERDICT_SCHEMA = z.object({
   confidence: z.number().min(0).max(1),
   reasons: z.array(z.string()),
   missingCriteria: z.array(z.string()),
-  resumeInstruction: z.string().min(1),
+  resumeInstruction: z.string(),
 });
 
 type LlmVerdict = z.infer<typeof LLM_VERDICT_SCHEMA>;
