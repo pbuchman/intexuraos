@@ -34,12 +34,12 @@ Catch yourself rationalizing? See `.claude/reference/rationalization-traps.md`.
 
 **RULE: The user controls, Claude executes. Never assume permission to act.**
 
-| User Says                         | User Wants         | Claude Does                          |
-| --------------------------------- | ------------------ | ------------------------------------ |
-| "What went wrong?"                | Analysis           | Explain the issue, wait for decision |
-| "What can be improved?"           | Suggestions        | List options, wait for selection     |
-| "Look at X — what do you think?"  | Opinion/assessment | Provide assessment, wait             |
-| "Why did this fail?"              | Diagnosis          | Diagnose, wait for next instruction  |
+| User Says                        | User Wants         | Claude Does                          |
+| -------------------------------- | ------------------ | ------------------------------------ |
+| "What went wrong?"               | Analysis           | Explain the issue, wait for decision |
+| "What can be improved?"          | Suggestions        | List options, wait for selection     |
+| "Look at X — what do you think?" | Opinion/assessment | Provide assessment, wait             |
+| "Why did this fail?"             | Diagnosis          | Diagnose, wait for next instruction  |
 | "Implement X" / "Fix X" / "Do X" | Action             | Execute the task                     |
 
 **Forbidden auto-actions** (NEVER without explicit instruction):
@@ -61,13 +61,13 @@ Catch yourself rationalizing? See `.claude/reference/rationalization-traps.md`.
 
 Every assertion about code behavior MUST be backed by evidence:
 
-| Assertion Type           | Required Evidence                         |
-| ------------------------ | ----------------------------------------- |
-| "This will work"         | Test output showing it passes             |
-| "This fixes the bug"     | Before/after test or reproduction         |
-| "This import resolves X" | Ran typecheck, showed zero errors         |
-| "This was caused by X"   | Stack trace, log, or reproduction         |
-| "The service is running" | Health check response or process list     |
+| Assertion Type           | Required Evidence                     |
+| ------------------------ | ------------------------------------- |
+| "This will work"         | Test output showing it passes         |
+| "This fixes the bug"     | Before/after test or reproduction     |
+| "This import resolves X" | Ran typecheck, showed zero errors     |
+| "This was caused by X"   | Stack trace, log, or reproduction     |
+| "The service is running" | Health check response or process list |
 
 **What counts:** Command output, file content showing expected state, error message confirming diagnosis.
 
@@ -88,12 +88,12 @@ Rationalizing? See `.claude/reference/rationalization-traps.md` > Evidence Traps
 
 **Hook-enforced** by `validate-linear-state.sh`. Max agent state: **In Review**.
 
-| Transition                 | Allowed?                |
-| -------------------------- | ----------------------- |
-| Backlog/Todo → In Progress | Yes                     |
-| In Progress → In Review    | Yes (maximum)           |
-| Any → QA                   | **BLOCKED BY HOOK**     |
-| Any → Done                 | **BLOCKED BY HOOK**     |
+| Transition                 | Allowed?            |
+| -------------------------- | ------------------- |
+| Backlog/Todo → In Progress | Yes                 |
+| In Progress → In Review    | Yes (maximum)       |
+| Any → QA                   | **BLOCKED BY HOOK** |
+| Any → Done                 | **BLOCKED BY HOOK** |
 
 QA and Done = business decisions. User confirms, not agent.
 
@@ -350,14 +350,14 @@ const logger = createAppLogger({ name: 'my-service' });
 
 ## Apps & Packages
 
-**Apps (`apps/**`):**
+**Apps (`apps/**`):\*\*
 
 - Use `getServices()` for deps, `getFirestore()` singleton for DB
 - Env vars: `INTEXURAOS_*` prefix (except `NODE_ENV`, `PORT`, emulators)
 - Fail-fast: `validateRequiredEnv()` at startup
 - New service: Use `/create-service` command
 
-**Packages (`packages/**`):**
+**Packages (`packages/**`):\*\*
 
 - `common-*` are leaf packages (no deps)
 - `infra-*` wrap external services

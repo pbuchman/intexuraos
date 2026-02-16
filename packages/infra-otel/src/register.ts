@@ -1,9 +1,7 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { Resource } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { ATTR_DEPLOYMENT_ENVIRONMENT_NAME } from '@opentelemetry/semantic-conventions/incubating';
@@ -29,11 +27,6 @@ if (config !== undefined) {
     headers,
   });
 
-  const logExporter = new OTLPLogExporter({
-    url: `${config.endpoint}/v1/logs`,
-    headers,
-  });
-
   const sdk = new NodeSDK({
     resource: new Resource({
       [ATTR_SERVICE_NAME]:
@@ -46,7 +39,6 @@ if (config !== undefined) {
       exporter: metricExporter,
       exportIntervalMillis: 30_000,
     }),
-    logRecordProcessor: new BatchLogRecordProcessor(logExporter),
     instrumentations: getInstrumentations(),
   });
 
