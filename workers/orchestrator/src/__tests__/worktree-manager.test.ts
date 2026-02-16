@@ -152,6 +152,68 @@ describe('WorktreeManager', () => {
       expect(config.sentry.authToken).toBe('');
     });
 
+    it('should copy settings.local.json template into worktree', async () => {
+      const settingsTemplatePath = join(tempDir, 'settings.local.json');
+      writeFileSync(
+        settingsTemplatePath,
+        JSON.stringify({ preferredNotifChannel: 'terminal_bell', outputStyle: 'Explanatory' }),
+        'utf-8'
+      );
+
+      const WM = await loadWorktreeManager();
+      const manager = new WM(
+        { ...mockConfig, settingsLocalTemplatePath: settingsTemplatePath },
+        mockLogger
+      );
+
+      await manager.createWorktree('task-settings', 'feature-branch');
+
+      const settingsPath = join(
+        worktreeBasePath,
+        'task-settings',
+        '.claude',
+        'settings.local.json'
+      );
+      expect(existsSync(settingsPath)).toBe(true);
+
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+      expect(settings.preferredNotifChannel).toBe('terminal_bell');
+      expect(settings.outputStyle).toBe('Explanatory');
+    });
+
+    it('should skip settings.local.json if template path not configured', async () => {
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.createWorktree('task-no-settings', 'feature-branch');
+
+      const settingsPath = join(
+        worktreeBasePath,
+        'task-no-settings',
+        '.claude',
+        'settings.local.json'
+      );
+      expect(existsSync(settingsPath)).toBe(false);
+    });
+
+    it('should skip settings.local.json if template file does not exist', async () => {
+      const WM = await loadWorktreeManager();
+      const manager = new WM(
+        { ...mockConfig, settingsLocalTemplatePath: join(tempDir, 'missing.json') },
+        mockLogger
+      );
+
+      await manager.createWorktree('task-missing-settings', 'feature-branch');
+
+      const settingsPath = join(
+        worktreeBasePath,
+        'task-missing-settings',
+        '.claude',
+        'settings.local.json'
+      );
+      expect(existsSync(settingsPath)).toBe(false);
+    });
+
     it('should skip MCP config if template does not exist', async () => {
       const WM = await loadWorktreeManager();
       const manager = new WM(
