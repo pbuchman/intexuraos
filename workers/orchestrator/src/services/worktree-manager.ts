@@ -11,6 +11,7 @@ export interface WorktreeManagerConfig {
   repositoryPath: string;
   worktreeBasePath: string;
   mcpConfigTemplatePath: string;
+  settingsLocalTemplatePath?: string;
 }
 
 export class WorktreeManager {
@@ -51,6 +52,14 @@ export class WorktreeManager {
       // Copy MCP config template if provided
       if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
         await this.copyMcpConfig(worktreePath);
+      }
+
+      // Copy settings.local.json template if provided
+      if (
+        this.config.settingsLocalTemplatePath !== undefined &&
+        existsSync(this.config.settingsLocalTemplatePath)
+      ) {
+        await this.copySettingsLocal(worktreePath);
       }
 
       // Install dependencies with timeout
@@ -165,6 +174,21 @@ export class WorktreeManager {
       /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       throw new Error(`Failed to copy MCP config: ${message}`);
       /* v8 ignore stop @preserve */
+    }
+  }
+
+  private async copySettingsLocal(worktreePath: string): Promise<void> {
+    const targetPath = join(worktreePath, '.claude', 'settings.local.json');
+
+    try {
+      const content = await readFile(this.config.settingsLocalTemplatePath as string, 'utf-8');
+      await mkdir(dirname(targetPath), { recursive: true });
+      await writeFile(targetPath, content, 'utf-8');
+    } catch (error: unknown) {
+      /* v8 ignore start -- ts-type: catch block error handling @preserve */
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
+      throw new Error(`Failed to copy settings.local.json: ${message}`);
     }
   }
 
