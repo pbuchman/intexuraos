@@ -13,6 +13,7 @@
 ## Scope
 
 **Files modified:**
+
 - `.claude/CLAUDE.md` — main file, major restructure
 - `.claude/reference/ownership-mindset.md` — absorbs consolidated ownership content
 - `.claude/reference/common-mistakes.md` — no changes (already clean)
@@ -20,6 +21,7 @@
 - `.claude/reference/env-vars-patterns.md` — no changes (already clean)
 
 **Files NOT modified:**
+
 - `.claude/settings.json` — hooks unchanged
 - `.claude/hooks/*` — enforcement layer unchanged
 - `~/.claude/CLAUDE.md` — global config unchanged
@@ -34,46 +36,46 @@ These are the exact locations of redundant content that will be deduplicated:
 
 ### Duplication 1: Rationalization Trap Tables (3 instances)
 
-| Instance | Location | Lines | Content |
-|----------|----------|-------|---------|
-| Commit Gate | L25-33 | 9 lines | "CI failed but my code passes" table |
-| Linear Gate | L103-110 | 8 lines | "PR is merged, so it's done" table |
-| CI Failure | L200-207 | 8 lines | "Other services fail" anti-pattern |
+| Instance    | Location | Lines   | Content                              |
+| ----------- | -------- | ------- | ------------------------------------ |
+| Commit Gate | L25-33   | 9 lines | "CI failed but my code passes" table |
+| Linear Gate | L103-110 | 8 lines | "PR is merged, so it's done" table   |
+| CI Failure  | L200-207 | 8 lines | "Other services fail" anti-pattern   |
 
 **Action:** Merge into ONE "Rationalization Traps" section. Each gate references it.
 
 ### Duplication 2: "Never commit without CI" (6 instances)
 
-| Instance | Location | Line |
-|----------|----------|------|
-| "Wrong answer = NO COMMIT" | Commit Gate | L23 |
-| "No partial pass" | Commit Gate | L34 |
-| "NEVER COMMIT UNTIL ALL FAILURES RESOLVED" | CI Failure | L190 |
-| "CI passes or you don't commit" | CI Failure | L207 |
-| "NEVER commit without ci:tracked" | Git Workflow | L689 |
+| Instance                                     | Location     | Line |
+| -------------------------------------------- | ------------ | ---- |
+| "Wrong answer = NO COMMIT"                   | Commit Gate  | L23  |
+| "No partial pass"                            | Commit Gate  | L34  |
+| "NEVER COMMIT UNTIL ALL FAILURES RESOLVED"   | CI Failure   | L190 |
+| "CI passes or you don't commit"              | CI Failure   | L207 |
+| "NEVER commit without ci:tracked"            | Git Workflow | L689 |
 | "only acceptable verification is ci:tracked" | Git Workflow | L701 |
 
 **Action:** Keep L23 + L34 as canonical. Other 4 become back-references: "See [Commit Gate]."
 
 ### Duplication 3: Ownership Cross-References (5 instances)
 
-| Instance | Location | Line |
-|----------|----------|------|
-| Main section (33 lines) | Ownership Mindset | L124-157 |
-| "See ownership-mindset.md" | Ownership Mindset | L138 |
-| "= ownership violation" | CI Failure Protocol | L163-164 |
-| "See Forbidden Language" | CI Failure Protocol | L194 |
-| "See Ownership Mindset" | Verification | L271 |
-| "See Ownership Mindset" | Git Workflow | L699 |
+| Instance                   | Location            | Line     |
+| -------------------------- | ------------------- | -------- |
+| Main section (33 lines)    | Ownership Mindset   | L124-157 |
+| "See ownership-mindset.md" | Ownership Mindset   | L138     |
+| "= ownership violation"    | CI Failure Protocol | L163-164 |
+| "See Forbidden Language"   | CI Failure Protocol | L194     |
+| "See Ownership Mindset"    | Verification        | L271     |
+| "See Ownership Mindset"    | Git Workflow        | L699     |
 
 **Action:** Consolidate into reference file. Main doc keeps 5-line summary + link.
 
 ### Duplication 4: Hook-Enforced Verbose Explanations
 
-| Section | Lines | Hook? | Current Size | Can Compress To |
-|---------|-------|-------|--------------|-----------------|
-| Linear State Gate | L90-121 | Yes, validate-linear-state.sh | 31 lines | 8 lines |
-| Token Efficiency | L564-579 | Yes, validate-polling.sh | 16 lines | 6 lines |
+| Section           | Lines    | Hook?                         | Current Size | Can Compress To |
+| ----------------- | -------- | ----------------------------- | ------------ | --------------- |
+| Linear State Gate | L90-121  | Yes, validate-linear-state.sh | 31 lines     | 8 lines         |
+| Token Efficiency  | L564-579 | Yes, validate-polling.sh      | 16 lines     | 6 lines         |
 
 **Action:** Reduce to: rule statement + "Enforced by hook" + correct behavior example.
 
@@ -86,11 +88,13 @@ These are the exact locations of redundant content that will be deduplicated:
 **Purpose:** Create a machine-diffable list of every rule so we can verify zero loss after restructure.
 
 **Files:**
+
 - Create: `/tmp/claude-md-rules-before.txt`
 
 **Step 1: Extract all rules from current CLAUDE.md**
 
 Run:
+
 ```bash
 grep -n "RULE\|NEVER\|MUST\|FORBIDDEN\|MANDATORY\|CRITICAL\|ALWAYS\|BLOCKED" .claude/CLAUDE.md | sort > /tmp/claude-md-rules-before.txt
 ```
@@ -98,6 +102,7 @@ grep -n "RULE\|NEVER\|MUST\|FORBIDDEN\|MANDATORY\|CRITICAL\|ALWAYS\|BLOCKED" .cl
 **Step 2: Count rules**
 
 Run:
+
 ```bash
 wc -l /tmp/claude-md-rules-before.txt
 ```
@@ -107,6 +112,7 @@ Expected: ~35-45 rules extracted
 **Step 3: Save section headers**
 
 Run:
+
 ```bash
 grep -n "^## " .claude/CLAUDE.md > /tmp/claude-md-sections-before.txt
 ```
@@ -118,6 +124,7 @@ grep -n "^## " .claude/CLAUDE.md > /tmp/claude-md-sections-before.txt
 **Purpose:** Single source for all "your thought vs reality" tables. Currently repeated 3 times.
 
 **Files:**
+
 - Create: `.claude/reference/rationalization-traps.md`
 
 **Step 1: Write the unified reference file**
@@ -133,38 +140,39 @@ Common thought patterns that precede rule violations. When you catch yourself th
 
 ## Commit & CI Traps
 
-| Your Thought | Reality |
-|---|---|
-| "CI failed but my code passes" | CI failed. No commit. |
-| "The failure is in OTHER services" | OTHER = forbidden. You own it. |
-| "Global CI fails, but X-specific checks pass" | This phrase has caused violations. |
-| "Let me commit anyway and note the CI status" | NO. Fix first, then commit. |
-| "Other services fail, my code passes" | Same trap, different words. No commit. |
+| Your Thought                                  | Reality                                |
+| --------------------------------------------- | -------------------------------------- |
+| "CI failed but my code passes"                | CI failed. No commit.                  |
+| "The failure is in OTHER services"            | OTHER = forbidden. You own it.         |
+| "Global CI fails, but X-specific checks pass" | This phrase has caused violations.     |
+| "Let me commit anyway and note the CI status" | NO. Fix first, then commit.            |
+| "Other services fail, my code passes"         | Same trap, different words. No commit. |
 
 ## Linear State Traps
 
-| Your Thought | Reality |
-|---|---|
-| "The PR is merged, so it's obviously done" | Merged ≠ Done. Hook blocks it. |
-| "All child issues are complete" | Complete ≠ Done. User confirms. |
-| "This is just bookkeeping, I'll mark it done" | Bookkeeping requires permission. |
-| "Ready for QA, let me move it there" | QA is beyond agent scope. Hook blocks. |
+| Your Thought                                  | Reality                                |
+| --------------------------------------------- | -------------------------------------- |
+| "The PR is merged, so it's obviously done"    | Merged ≠ Done. Hook blocks it.         |
+| "All child issues are complete"               | Complete ≠ Done. User confirms.        |
+| "This is just bookkeeping, I'll mark it done" | Bookkeeping requires permission.       |
+| "Ready for QA, let me move it there"          | QA is beyond agent scope. Hook blocks. |
 
 ## Ownership Traps
 
-| Your Thought | Reality |
-|---|---|
-| "pre-existing issue/bug" | Discovery = ownership |
+| Your Thought                  | Reality                        |
+| ----------------------------- | ------------------------------ |
+| "pre-existing issue/bug"      | Discovery = ownership          |
 | "not my fault/responsibility" | Fault irrelevant; fix is yours |
-| "unrelated to my changes" | Blocks CI = related |
-| "was already broken" | Now yours to fix |
-| "legacy issue" | Legacy = code awaiting owner |
-| "my code/part passes" | CI passes or doesn't |
+| "unrelated to my changes"     | Blocks CI = related            |
+| "was already broken"          | Now yours to fix               |
+| "legacy issue"                | Legacy = code awaiting owner   |
+| "my code/part passes"         | CI passes or doesn't           |
 ```
 
 **Step 2: Verify file created**
 
 Run:
+
 ```bash
 cat .claude/reference/rationalization-traps.md | head -5
 ```
@@ -178,6 +186,7 @@ Expected: Shows "# Rationalization Traps Reference"
 **Purpose:** The ownership rules exist in 3 places. Make the reference file canonical.
 
 **Files:**
+
 - Modify: `.claude/reference/ownership-mindset.md` (currently 40 lines, expand to ~55 lines)
 
 **Step 1: Rewrite ownership-mindset.md**
@@ -212,16 +221,16 @@ If CI fails due to a "pre-existing" issue, that issue is now YOURS.
 
 ## Forbidden Language
 
-| Forbidden | Why |
-|---|---|
-| "pre-existing issue/bug" | Discovery = ownership |
-| "not my fault/responsibility" | Fault irrelevant; fix is yours |
-| "unrelated to my changes" | Blocks CI = related |
-| "was already broken" | Now yours to fix |
-| "legacy issue" | Legacy = code awaiting owner |
-| **"OTHER services/workspaces"** | No "other" in CI |
-| **"my code/part passes"** | CI passes or doesn't |
-| **"global CI fails but X passes"** | This phrase = violation |
+| Forbidden                          | Why                            |
+| ---------------------------------- | ------------------------------ |
+| "pre-existing issue/bug"           | Discovery = ownership          |
+| "not my fault/responsibility"      | Fault irrelevant; fix is yours |
+| "unrelated to my changes"          | Blocks CI = related            |
+| "was already broken"               | Now yours to fix               |
+| "legacy issue"                     | Legacy = code awaiting owner   |
+| **"OTHER services/workspaces"**    | No "other" in CI               |
+| **"my code/part passes"**          | CI passes or doesn't           |
+| **"global CI fails but X passes"** | This phrase = violation        |
 
 ---
 
@@ -242,6 +251,7 @@ Without explicit instruction, assume responsibility for everything encountered.
 **Purpose:** Rewrite lines 1-157 (header + commit gate + user control + linear gate + ownership). Add GCAWR tier markers. Compress linear gate. Replace ownership with link.
 
 **Files:**
+
 - Modify: `.claude/CLAUDE.md` lines 1-157
 
 **Step 1: Replace lines 1-157 with the following**
@@ -265,13 +275,13 @@ These rules are checked on EVERY action. No exceptions.
 
 ## ⛔ Commit Gate
 
-| Question | Required Answer |
-|---|---|
-| Did `pnpm run ci:tracked` pass? | YES |
-| Did it pass completely, not "my part passed"? | YES |
-| Am I about to say "other services/workspaces"? | NO |
-| Am I about to say "unrelated to my changes"? | NO |
-| Am I about to say "not caused by my code"? | NO |
+| Question                                       | Required Answer |
+| ---------------------------------------------- | --------------- |
+| Did `pnpm run ci:tracked` pass?                | YES             |
+| Did it pass completely, not "my part passed"?  | YES             |
+| Am I about to say "other services/workspaces"? | NO              |
+| Am I about to say "unrelated to my changes"?   | NO              |
+| Am I about to say "not caused by my code"?     | NO              |
 
 **Wrong answer = NO COMMIT. No partial pass.**
 
@@ -283,15 +293,16 @@ Catch yourself rationalizing? See `.claude/reference/rationalization-traps.md`.
 
 **RULE: The user controls, Claude executes. Never assume permission to act.**
 
-| User Says | User Wants | Claude Does |
-|---|---|---|
-| "What went wrong?" | Analysis | Explain the issue, wait for decision |
-| "What can be improved?" | Suggestions | List options, wait for selection |
-| "Look at X — what do you think?" | Opinion/assessment | Provide assessment, wait |
-| "Why did this fail?" | Diagnosis | Diagnose, wait for next instruction |
-| "Implement X" / "Fix X" / "Do X" | Action | Execute the task |
+| User Says                        | User Wants         | Claude Does                          |
+| -------------------------------- | ------------------ | ------------------------------------ |
+| "What went wrong?"               | Analysis           | Explain the issue, wait for decision |
+| "What can be improved?"          | Suggestions        | List options, wait for selection     |
+| "Look at X — what do you think?" | Opinion/assessment | Provide assessment, wait             |
+| "Why did this fail?"             | Diagnosis          | Diagnose, wait for next instruction  |
+| "Implement X" / "Fix X" / "Do X" | Action             | Execute the task                     |
 
 **Forbidden auto-actions** (NEVER without explicit instruction):
+
 - Start implementing after analyzing
 - Create branches or commits after reviewing
 - Fix issues discovered during investigation
@@ -307,12 +318,12 @@ Catch yourself rationalizing? See `.claude/reference/rationalization-traps.md`.
 
 **Hook-enforced** by `validate-linear-state.sh`. Max agent state: **In Review**.
 
-| Transition | Allowed? |
-|---|---|
-| Backlog/Todo → In Progress | Yes |
-| In Progress → In Review | Yes (maximum) |
-| Any → QA | **BLOCKED BY HOOK** |
-| Any → Done | **BLOCKED BY HOOK** |
+| Transition                 | Allowed?            |
+| -------------------------- | ------------------- |
+| Backlog/Todo → In Progress | Yes                 |
+| In Progress → In Review    | Yes (maximum)       |
+| Any → QA                   | **BLOCKED BY HOOK** |
+| Any → Done                 | **BLOCKED BY HOOK** |
 
 Rationalizing? See `.claude/reference/rationalization-traps.md` > Linear State Traps.
 
@@ -330,6 +341,7 @@ You own EVERYTHING from task acceptance until CI passes. No exceptions.
 ```
 
 **What changed:**
+
 - Commit gate: Removed inline rationalization trap table (→ reference file). Saved ~9 lines.
 - User control: Removed "Practical Examples" block (redundant with table). Saved ~10 lines.
 - Linear gate: Compressed from 31 lines to 8 lines. Hook enforcement means verbose explanation is unnecessary. Saved ~23 lines.
@@ -337,6 +349,7 @@ You own EVERYTHING from task acceptance until CI passes. No exceptions.
 - Added GCAWR tier header.
 
 **What was NOT removed:**
+
 - Every rule from the question table is preserved
 - Every forbidden auto-action is preserved
 - Every Linear transition rule is preserved
@@ -349,15 +362,14 @@ You own EVERYTHING from task acceptance until CI passes. No exceptions.
 **Purpose:** Rewrite lines 158-301 (CI Failure Protocol, Verification, Infrastructure, Environments). Deduplicate ownership references. Remove redundant "never commit" repetitions.
 
 **Files:**
+
 - Modify: `.claude/CLAUDE.md` lines 158-301
 
 **Step 1: Replace lines 158-301 with the following**
 
-```markdown
+````markdown
 ---
-
 # [W] WORKFLOW — Git, CI, Deploy
-
 ---
 
 ## CI Failure Protocol
@@ -370,16 +382,17 @@ When `pnpm run ci:tracked` fails:
 BRANCH=$(git branch --show-current | sed 's/\//-/g')
 pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).txt
 ```
+````
 
 ### Step 2: Fix or Ask
 
-| Failure Location | Action |
-|---|---|
-| Workspace I touched | Fix immediately |
+| Failure Location    | Action                                                                     |
+| ------------------- | -------------------------------------------------------------------------- |
+| Workspace I touched | Fix immediately                                                            |
 | Any other workspace | Fix immediately OR ask: "Found X errors in Y. Fix here or separate issue?" |
-| Flaky test | Stabilize it |
-| Type/lint error | Fix it |
-| Coverage threshold | Write tests OR ask about scope |
+| Flaky test          | Stabilize it                                                               |
+| Type/lint error     | Fix it                                                                     |
+| Coverage threshold  | Write tests OR ask about scope                                             |
 
 **Do not commit until ALL failures are resolved.** See [Commit Gate](#-commit-gate).
 
@@ -396,9 +409,11 @@ pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).t
 **Step 3:** `pnpm run ci:tracked` (MUST pass before task completion)
 
 **Step 4: Terraform** — Never assume terraform didn't change:
+
 ```bash
 git diff --name-only HEAD~1 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" || echo "No terraform changes"
 ```
+
 If changed: run `terraform fmt -check -recursive` and `terraform validate` (with emulator env vars cleared + SA credentials).
 
 **Step 5:** Document result: "Verified: No terraform changes" or "Terraform validated."
@@ -425,13 +440,13 @@ gh pr create --base development
 
 ## Cross-Linking Protocol
 
-| From | To | Method |
-|---|---|---|
-| Linear | GitHub | PR title contains `INT-XXX` |
-| GitHub | Linear | `Fixes INT-XXX` in PR body |
+| From   | To     | Method                                          |
+| ------ | ------ | ----------------------------------------------- |
+| Linear | GitHub | PR title contains `INT-XXX`                     |
+| GitHub | Linear | `Fixes INT-XXX` in PR body                      |
 | Sentry | Linear | `[sentry] <title>` prefix + link in description |
-| Linear | Sentry | Comment on Sentry issue with Linear link |
-| PR | Sentry | Sentry link in PR description |
+| Linear | Sentry | Comment on Sentry issue with Linear link        |
+| PR     | Sentry | Sentry link in PR description                   |
 
 ---
 
@@ -442,6 +457,7 @@ gh pr create --base development
 **Full reference:** `.claude/reference/infrastructure.md`
 
 **Quick commands:**
+
 - GCloud: `gcloud auth activate-service-account --key-file=$HOME/.config/gcloud/sa-key.json`
 - Terraform: Clear emulator vars + set GOOGLE_APPLICATION_CREDENTIALS (see reference)
 - New service image: `./scripts/push-missing-images.sh`
@@ -452,11 +468,11 @@ gh pr create --base development
 
 ## Environments
 
-| Environment | Domain | Infra | Deploy Target |
-|---|---|---|---|
-| **dev** | dev.intexuraos.cloud | PM2, GCP | `~/deploy/intexuraos` |
-| **prod** | intexuraos.cloud | Cloud Run / Functions | CI/CD via GitHub Actions |
-| **local** | localhost:3000 | PM2 | Direct |
+| Environment | Domain               | Infra                 | Deploy Target            |
+| ----------- | -------------------- | --------------------- | ------------------------ |
+| **dev**     | dev.intexuraos.cloud | PM2, GCP              | `~/deploy/intexuraos`    |
+| **prod**    | intexuraos.cloud     | Cloud Run / Functions | CI/CD via GitHub Actions |
+| **local**   | localhost:3000       | PM2                   | Direct                   |
 
 Dev/local: `pnpm dev` (Vite proxy, `/api/*` relative paths).
 Prod: `pnpm build` (static CDN, absolute Cloud Run URLs).
@@ -471,7 +487,8 @@ Prod: `pnpm build` (static CDN, absolute Cloud Run URLs).
 # Use: gh pr checks 682 --watch / gh run watch 12345
 # Not: sleep 60 && gh pr checks 682
 ```
-```
+
+````
 
 **What changed:**
 - CI Failure Protocol: Removed 4 redundant "never commit" lines + ownership cross-references + anti-pattern block. 50→28 lines.
@@ -568,7 +585,7 @@ Use `arr[0] ?? fallback`, explicit `=== true` checks, `String()` for template nu
 // BAD: list_issues({ query: 'fix', limit: 50 })
 // GOOD: list_issues({ query: 'INT-445', limit: 10 })
 // Children: list_issues({ parentId: '<uuid>', limit: 20 }) — NOT includeRelations
-```
+````
 
 ---
 
@@ -601,11 +618,11 @@ packages/
 terraform/    → Infrastructure as code
 ```
 
-| Aspect | Apps (Cloud Run) | Workers (Cloud Functions) |
-|---|---|---|
-| Framework | Fastify | Cloud Functions Framework |
-| Entry Point | `server.ts` | `index.ts` with `functions.cloudEvent()` |
-| DI Pattern | Full `services.ts` | Lightweight, direct injection |
+| Aspect      | Apps (Cloud Run)   | Workers (Cloud Functions)                |
+| ----------- | ------------------ | ---------------------------------------- |
+| Framework   | Fastify            | Cloud Functions Framework                |
+| Entry Point | `server.ts`        | `index.ts` with `functions.cloudEvent()` |
+| DI Pattern  | Full `services.ts` | Lightweight, direct injection            |
 
 ---
 
@@ -632,11 +649,11 @@ terraform/    → Infrastructure as code
 
 Adding a new env var requires THREE locations:
 
-| Location | What |
-|---|---|
-| `apps/<service>/src/index.ts` | `REQUIRED_ENV` array |
-| `terraform/environments/dev/main.tf` | `env_vars` or `secrets` |
-| `ecosystem.config.cjs` | `COMMON_SERVICE_ENV` / `URLS` / `MAPPINGS` |
+| Location                             | What                                       |
+| ------------------------------------ | ------------------------------------------ |
+| `apps/<service>/src/index.ts`        | `REQUIRED_ENV` array                       |
+| `terraform/environments/dev/main.tf` | `env_vars` or `secrets`                    |
+| `ecosystem.config.cjs`               | `COMMON_SERVICE_ENV` / `URLS` / `MAPPINGS` |
 
 Missing any → startup probe failure (22% of build failures), broken local dev, or runtime crash.
 
@@ -655,7 +672,8 @@ Missing any → startup probe failure (22% of build failures), broken local dev,
 ## Web App (`apps/web/**`)
 
 **CRITICAL:** Hash routing only (`/#/path`). TailwindCSS only, `@auth0/auth0-react` for auth, `useApiClient` for API calls, split at ~150 lines, `import.meta.env.INTEXURAOS_*`.
-```
+
+````
 
 ---
 
@@ -698,7 +716,7 @@ Docs: `.claude/skills/<name>/SKILL.md`. Multi-step tasks: `/linear` with auto-sp
 All tables: proper column alignment. Fix: `pnpm run format:docs-tables`.
 
 Plans with endpoints MUST include "Endpoint Changes" section (Modified, Created, Removed, Unchanged tables).
-```
+````
 
 ---
 
@@ -709,6 +727,7 @@ Plans with endpoints MUST include "Endpoint Changes" section (Modified, Created,
 **Step 1: Extract rules from new CLAUDE.md**
 
 Run:
+
 ```bash
 grep -n "RULE\|NEVER\|MUST\|FORBIDDEN\|MANDATORY\|CRITICAL\|ALWAYS\|BLOCKED" .claude/CLAUDE.md | sort > /tmp/claude-md-rules-after.txt
 ```
@@ -716,6 +735,7 @@ grep -n "RULE\|NEVER\|MUST\|FORBIDDEN\|MANDATORY\|CRITICAL\|ALWAYS\|BLOCKED" .cl
 **Step 2: Compare counts**
 
 Run:
+
 ```bash
 echo "Before: $(wc -l < /tmp/claude-md-rules-before.txt) rules"
 echo "After:  $(wc -l < /tmp/claude-md-rules-after.txt) rules"
@@ -743,6 +763,7 @@ grep -c "rationalization-traps" .claude/CLAUDE.md  # Expected: >= 2 (references)
 **Step 4: Count final size**
 
 Run:
+
 ```bash
 wc -l .claude/CLAUDE.md && wc -w .claude/CLAUDE.md
 ```
@@ -756,6 +777,7 @@ Expected: ~480-550 lines, ~2,200-2,600 words (down from 765 lines / 3,552 words)
 **Step 1: Run CI to verify nothing broke**
 
 The CLAUDE.md is not checked by CI directly, but reference files should be valid markdown:
+
 ```bash
 cat .claude/reference/rationalization-traps.md | head -1
 cat .claude/reference/ownership-mindset.md | head -1
@@ -780,14 +802,14 @@ Zero rules removed. All enforcement hooks unchanged."
 
 ## Expected Outcome
 
-| Metric | Before | After | Change |
-|---|---|---|---|
-| CLAUDE.md lines | 765 | ~520 | -32% |
-| CLAUDE.md words | 3,552 | ~2,400 | -32% |
-| Rationalization tables | 3 | 1 (reference) | -2 |
-| "Never commit" repetitions | 6 | 1 + back-refs | -5 |
-| Ownership locations | 3 | 1 (reference) | -2 |
-| Priority hierarchy | none | GCAWR (5 tiers) | new |
-| Hook enforcement | 21 hooks | 21 hooks | unchanged |
-| Total rules | ~40 | ~40 | zero loss |
-| Reference files | 4 | 5 (+rationalization-traps) | +1 |
+| Metric                     | Before   | After                      | Change    |
+| -------------------------- | -------- | -------------------------- | --------- |
+| CLAUDE.md lines            | 765      | ~520                       | -32%      |
+| CLAUDE.md words            | 3,552    | ~2,400                     | -32%      |
+| Rationalization tables     | 3        | 1 (reference)              | -2        |
+| "Never commit" repetitions | 6        | 1 + back-refs              | -5        |
+| Ownership locations        | 3        | 1 (reference)              | -2        |
+| Priority hierarchy         | none     | GCAWR (5 tiers)            | new       |
+| Hook enforcement           | 21 hooks | 21 hooks                   | unchanged |
+| Total rules                | ~40      | ~40                        | zero loss |
+| Reference files            | 4        | 5 (+rationalization-traps) | +1        |

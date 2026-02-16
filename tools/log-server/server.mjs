@@ -16,7 +16,7 @@ app.use((req, res, next) => {
 
 const clients = new Set();
 
-app.get('/logs', (req, res) => {
+app.get('/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -72,5 +72,5 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`[Log Server] Running on http://localhost:${PORT}`);
-  console.log(`[Log Server] SSE endpoint: http://localhost:${PORT}/logs`);
+  console.log(`[Log Server] SSE endpoint: http://localhost:${PORT}/stream`);
 });
