@@ -1,9 +1,15 @@
 /**
  * Tests for createDevOutputStream - dev-mode formatted log output.
+ *
+ * Output format: HH:mm:ss | LEVEL | service-name | message | key=val key=val
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createDevOutputStream } from '../devStream.js';
+
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[\d+m/g;
+const stripAnsi = (s: string): string => s.replace(ANSI_RE, '');
 
 describe('createDevOutputStream', () => {
   let output: string[];
@@ -16,8 +22,8 @@ describe('createDevOutputStream', () => {
     });
   });
 
-  describe('JSON parsing and formatting', () => {
-    it('formats a standard pino log line', () => {
+  describe('column ordering', () => {
+    it('formats as time | level | name | message | extras', () => {
       const log = JSON.stringify({
         level: 30,
         time: new Date('2025-01-15T17:30:02.000Z').getTime(),
@@ -32,17 +38,21 @@ describe('createDevOutputStream', () => {
 
       expect(output).toHaveLength(1);
       const line = output[0] as string;
-      expect(line).toContain('user-service');
-      expect(line).toContain('INFO');
-      expect(line).toContain('User logged in');
-      expect(line).toContain('"userId":"abc"');
-      // Excluded fields should NOT be in the extras JSON
-      expect(line).not.toContain('"level"');
-      expect(line).not.toContain('"pid"');
-      expect(line).not.toContain('"hostname"');
+
+      // Strip ANSI codes for order checking
+      const stripped = stripAnsi(line);
+      const segments = stripped.split(' | ');
+
+      // time | LEVEL | name | message | extras
+      expect(segments).toHaveLength(5);
+      expect(segments[0]).toMatch(/\d{2}:\d{2}:\d{2}/);
+      expect(segments[1]).toContain('INFO');
+      expect(segments[2]).toBe('user-service');
+      expect(segments[3]).toBe('User logged in');
+      expect(segments[4]).toContain('userId=abc');
     });
 
-    it('formats with pipe separators', () => {
+    it('uses pipe separators', () => {
       const log = JSON.stringify({
         level: 30,
         time: Date.now(),
@@ -53,8 +63,311 @@ describe('createDevOutputStream', () => {
       stream.write(log);
 
       const line = output[0] as string;
-      // Should have pipe separators between sections
       expect(line).toContain(' | ');
+    });
+  });
+
+  describe('extras as key=val', () => {
+    it('formats extras as key=value pairs instead of JSON', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        taskId: 'abc123',
+        status: 'completed',
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('taskId=abc123');
+      expect(line).toContain('status=completed');
+      // Should NOT have JSON braces
+      expect(line).not.toMatch(/"taskId"/);
+    });
+
+    it('excludes reqId from extras (noise)', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'request completed',
+        name: 'svc',
+        reqId: 'req-6',
+        extra: 'kept',
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).not.toContain('reqId');
+      expect(line).toContain('extra=kept');
+    });
+
+    it('excludes standard pino fields from extras', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        pid: 9999,
+        hostname: 'host',
+        extra: 'value',
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('extra=value');
+      expect(line).not.toContain('pid');
+      expect(line).not.toContain('hostname');
+    });
+
+    it('omits extras section when no extra fields remain', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'bare message',
+        name: 'svc',
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      // Strip ANSI and check segment count
+      const stripped = stripAnsi(line);
+      const segments = stripped.split(' | ');
+      expect(segments).toHaveLength(4); // time | level | name | message (no extras)
+    });
+  });
+
+  describe('Fastify req/res special handling', () => {
+    it('inlines res.statusCode as bare number', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'request completed',
+        name: 'svc',
+        res: { statusCode: 200 },
+        responseTime: 150.458,
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('200');
+      expect(line).not.toContain('statusCode');
+    });
+
+    it('inlines responseTime as rounded ms', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'request completed',
+        name: 'svc',
+        responseTime: 150.458,
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('150ms');
+      expect(line).not.toContain('responseTime');
+    });
+
+    it('inlines req as METHOD /path', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'incoming request',
+        name: 'svc',
+        req: { method: 'POST', url: '/auth/firebase-token', host: 'dev.intexuraos.cloud' },
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('POST /auth/firebase-token');
+      expect(line).not.toContain('host');
+    });
+
+    it('ignores req object without method/url', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        req: { something: 'else' },
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      // req without method/url should not produce METHOD /path output
+      expect(line).not.toContain('something');
+      expect(line).not.toContain('/');
+    });
+
+    it('combines res + responseTime + extras cleanly', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'request completed',
+        name: 'svc',
+        reqId: 'req-3',
+        res: { statusCode: 200 },
+        responseTime: 86.729,
+      });
+
+      stream.write(log);
+
+      const stripped = stripAnsi(output[0] as string);
+      // Should have: 200 87ms (no reqId, no JSON objects)
+      expect(stripped).toContain('200 87ms');
+      expect(stripped).not.toContain('reqId');
+    });
+  });
+
+  describe('value truncation', () => {
+    it('truncates strings longer than 32 chars', () => {
+      const longId = 'task_5d3fad2b-707d-4f4c-85c8-6b749a1af7ce';
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        taskId: longId,
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('taskId=task_5d3…f7ce');
+      expect(line).not.toContain(longId);
+    });
+
+    it('keeps short strings intact', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        status: 'completed',
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('status=completed');
+    });
+
+    it('formats booleans as-is', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        hasResult: false,
+        hasLinearIssue: true,
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('hasResult=false');
+      expect(line).toContain('hasLinearIssue=true');
+    });
+
+    it('formats empty arrays as []', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        resultKeys: [],
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('resultKeys=[]');
+    });
+
+    it('formats short arrays inline', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        tags: ['a', 'b'],
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('tags=["a","b"]');
+    });
+
+    it('summarizes long arrays', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        items: ['aaa', 'bbb', 'ccc', 'ddd', 'eee', 'fff', 'ggg'],
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('items=[7 items]');
+    });
+
+    it('formats null values', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        result: null,
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('result=null');
+    });
+
+    it('truncates long nested objects', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        error: { message: 'Something went very wrong with the connection to the database server' },
+      });
+
+      stream.write(log);
+
+      const stripped = stripAnsi(output[0] as string);
+      // Should be truncated (the JSON is > 32 chars)
+      expect(stripped).toContain('error=');
+      expect(stripped).toContain('…');
+    });
+
+    it('keeps short nested objects as JSON', () => {
+      const log = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'test',
+        name: 'svc',
+        data: { ok: true },
+      });
+
+      stream.write(log);
+
+      const line = output[0] as string;
+      expect(line).toContain('data={"ok":true}');
     });
   });
 
@@ -102,42 +415,6 @@ describe('createDevOutputStream', () => {
     });
   });
 
-  describe('excluded fields removal', () => {
-    it('excludes level, time, msg, name, pid, hostname from extras', () => {
-      const log = JSON.stringify({
-        level: 30,
-        time: Date.now(),
-        msg: 'test',
-        name: 'svc',
-        pid: 9999,
-        hostname: 'host',
-        extra: 'value',
-      });
-
-      stream.write(log);
-
-      const line = output[0] as string;
-      expect(line).toContain('"extra":"value"');
-      expect(line).not.toContain('"time"');
-      expect(line).not.toContain('"name":"svc"');
-    });
-
-    it('omits extras section when no extra fields remain', () => {
-      const log = JSON.stringify({
-        level: 30,
-        time: Date.now(),
-        msg: 'bare message',
-        name: 'svc',
-      });
-
-      stream.write(log);
-
-      const line = output[0] as string;
-      // Should not have trailing JSON
-      expect(line).not.toContain('{');
-    });
-  });
-
   describe('non-JSON passthrough', () => {
     it('passes through non-JSON lines as-is', () => {
       stream.write('plain text log line');
@@ -182,7 +459,7 @@ describe('createDevOutputStream', () => {
 
       const line = output[0] as string;
       expect(line).toContain('hello');
-      expect(line).toContain('INFO');
+      expect(line).toContain('???');
     });
 
     it('handles missing time gracefully', () => {
@@ -191,19 +468,17 @@ describe('createDevOutputStream', () => {
       stream.write(log);
 
       const line = output[0] as string;
-      expect(line).toContain('svc');
+      expect(line).toContain('--:--:--');
       expect(line).toContain('hello');
     });
   });
 
   describe('time formatting', () => {
     it('formats time as HH:mm:ss', () => {
-      // Use a known timestamp
       const time = new Date('2025-06-15T14:30:45.123Z').getTime();
       stream.write(JSON.stringify({ level: 30, time, msg: 'test', name: 'svc' }));
 
       const line = output[0] as string;
-      // Should contain the time portion (exact value depends on timezone, so just check format)
       expect(line).toMatch(/\d{2}:\d{2}:\d{2}/);
     });
   });
