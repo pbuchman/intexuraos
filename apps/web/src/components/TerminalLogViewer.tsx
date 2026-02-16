@@ -182,12 +182,20 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
   }, [isFullscreen]);
 
   useEffect(() => {
+    // Cancellation guard: prevents orphaned onSnapshot listeners when the effect
+    // re-runs (React StrictMode double-invocation, or getAccessToken ref change)
+    // before the async setupListener completes.
+    let cancelled = false;
+
     const setupListener = async (): Promise<void> => {
       try {
         if (!isFirebaseAuthenticated()) {
           initializeFirebase();
           const token = await getAccessToken();
+          if (cancelled) return;
           await authenticateFirebase(token);
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated by cleanup closure after await yields
+          if (cancelled) return;
         }
         firebaseAuthenticatedRef.current = true;
 
@@ -195,10 +203,10 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
         const linesRef = collection(db, 'code_tasks', taskId, 'log_lines');
         const linesQuery = query(linesRef, orderBy('sequence', 'asc'));
 
-        unsubscribeRef.current = onSnapshot(
+        const unsub = onSnapshot(
           linesQuery,
           (snapshot) => {
-            if (!isMountedRef.current) return;
+            if (cancelled || !isMountedRef.current) return;
             const terminal = terminalRef.current;
             if (terminal === null) return;
 
@@ -246,19 +254,27 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
             setLogsError(null);
           },
           (err) => {
-            if (!isMountedRef.current) return;
+            if (cancelled || !isMountedRef.current) return;
             setLogsLoading(false);
             scheduleRetry(err.message);
           }
         );
+
+        // If effect was cleaned up while onSnapshot was being created, tear down immediately
+        if (cancelled) {
+          unsub();
+          return;
+        }
+        unsubscribeRef.current = unsub;
       } catch (err) {
-        if (!isMountedRef.current) return;
+        if (cancelled || !isMountedRef.current) return;
         setLogsLoading(false);
         scheduleRetry(err instanceof Error ? err.message : 'Failed to load logs');
       }
     };
 
     const scheduleRetry = (errorMessage: string): void => {
+      if (cancelled) return;
       const attempt = retryAttemptRef.current;
       if (attempt >= RECONNECT_DELAYS.length) {
         setLogsError(errorMessage);
@@ -274,7 +290,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
       firebaseAuthenticatedRef.current = false;
 
       retryTimeoutRef.current = setTimeout(() => {
-        if (isMountedRef.current) {
+        if (!cancelled && isMountedRef.current) {
           void setupListener();
         }
       }, delay);
@@ -283,6 +299,7 @@ export const TerminalLogViewer = memo(function TerminalLogViewer({
     void setupListener();
 
     return (): void => {
+      cancelled = true;
       if (retryTimeoutRef.current !== null) {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
