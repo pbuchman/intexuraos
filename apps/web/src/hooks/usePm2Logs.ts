@@ -27,9 +27,12 @@ interface SSEMessage {
 const MAX_LOGS = 500;
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
 
-// Return log server URL in dev environments (local and dev machine both run log-server on localhost)
+// Return log server URL in dev environments
 function getLogServerUrl(): string | null {
+  // Vite dev server: direct localhost access
   if (import.meta.env.DEV) return 'http://localhost:8106';
+  // Dev machine preview mode: relative URL through Caddy (/logs/* → localhost:8106)
+  if (import.meta.env['INTEXURAOS_ENVIRONMENT'] === 'development') return '/logs';
   return null;
 }
 

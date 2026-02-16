@@ -15,6 +15,7 @@ import {
 
 function getEnvironment(): 'DEV' | null {
   if (import.meta.env.DEV) return 'DEV';
+  if (import.meta.env['INTEXURAOS_ENVIRONMENT'] === 'development') return 'DEV';
   return null;
 }
 
