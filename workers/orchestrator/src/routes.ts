@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createHmac } from 'node:crypto';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
-import type { AnthropicOAuthManager } from './services/isolation/anthropic-oauth.js';
+import type { CredentialMonitor } from './services/isolation/credential-monitor.js';
 import type { IsolationProvider } from './services/isolation/types.js';
 import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
@@ -56,7 +56,7 @@ export function registerRoutes(
   config: { orchestratorSecret: string },
   logger: Logger,
   getStatus?: () => OrchestratorStatus,
-  anthropicOAuth?: AnthropicOAuthManager,
+  credentialMonitor?: CredentialMonitor,
   isolationProvider?: IsolationProvider
 ): void {
   const nonceCache: NonceCache = {};
@@ -238,9 +238,9 @@ export function registerRoutes(
     const running = dispatcher.getRunningCount();
     const capacity = dispatcher.getCapacity();
     const tokenExpiry = tokenService.getExpiresAt();
-    const oauthState = anthropicOAuth?.getState() ?? {
+    const oauthState = credentialMonitor?.getState() ?? {
       status: 'not_configured' as const,
-      message: 'OAuth manager not initialized',
+      message: 'Credential monitor not initialized',
     };
 
     reply.send({

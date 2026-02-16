@@ -4,14 +4,14 @@ import { createHmac } from 'node:crypto';
 import { registerRoutes, cleanUpExpiredNonces } from '../routes.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
-import type { AnthropicOAuthManager } from '../services/isolation/anthropic-oauth.js';
+import type { CredentialMonitor } from '../services/isolation/credential-monitor.js';
 import type { Logger } from '@intexuraos/common-core';
 
 describe('Routes', () => {
   let app: FastifyInstance;
   let dispatcher: TaskDispatcher;
   let tokenService: GitHubTokenService;
-  let anthropicOAuth: AnthropicOAuthManager;
+  let credentialMonitor: CredentialMonitor;
 
   const mockLogger: Logger = {
     info: () => undefined,
@@ -59,18 +59,17 @@ describe('Routes', () => {
       refreshToken: vi.fn(async () => ({ ok: true, value: 'new-token' })),
     } as unknown as GitHubTokenService;
 
-    anthropicOAuth = {
+    credentialMonitor = {
       getState: vi.fn(() => ({
         status: 'active',
         expiresAt: new Date(Date.now() + 4 * 3600000).toISOString(),
         expiresInMinutes: 240,
         subscriptionType: 'max',
       })),
-      getAccessToken: vi.fn(async () => 'sk-ant-oat01-mock'),
+      getCurrentAccessToken: vi.fn(() => 'sk-ant-oat01-mock'),
       loadCredentials: vi.fn(() => true),
       logStartupStatus: vi.fn(),
-      writeTaskCredentials: vi.fn(async () => undefined),
-    } as unknown as AnthropicOAuthManager;
+    } as unknown as CredentialMonitor;
 
     registerRoutes(
       app,
@@ -79,7 +78,7 @@ describe('Routes', () => {
       { orchestratorSecret },
       mockLogger,
       undefined,
-      anthropicOAuth
+      credentialMonitor
     );
     await app.ready();
   });
@@ -392,7 +391,7 @@ describe('Routes', () => {
     });
 
     it('should return expired anthropicOAuth status', async () => {
-      vi.mocked(anthropicOAuth.getState).mockReturnValueOnce({
+      vi.mocked(credentialMonitor.getState).mockReturnValueOnce({
         status: 'expired',
         message: 'Access token expired',
       });
@@ -408,7 +407,7 @@ describe('Routes', () => {
     });
 
     it('should return not_configured anthropicOAuth status', async () => {
-      vi.mocked(anthropicOAuth.getState).mockReturnValueOnce({
+      vi.mocked(credentialMonitor.getState).mockReturnValueOnce({
         status: 'not_configured',
         message: 'OAuth credentials not found',
       });
