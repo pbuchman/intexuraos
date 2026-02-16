@@ -57,7 +57,6 @@ RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gclou
 # /home/claude is tmpfs so image contents are wiped — entrypoint.sh copies these at startup
 # NOTE: Build context is workspace root (.), so paths are root-relative
 COPY --chown=claude:claude workers/claude-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
-COPY --chown=claude:claude workers/claude-worker/config-defaults/settings.json /opt/claude-defaults/.claude/settings.json
 
 # Copy entrypoint
 COPY --chown=claude:claude workers/claude-worker/entrypoint.sh /entrypoint.sh
