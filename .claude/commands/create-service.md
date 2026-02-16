@@ -108,6 +108,7 @@ Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/tod
     "@intexuraos/common-http": "*",
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
+    "@intexuraos/infra-otel": "workspace:*",
     "fastify": "^5.1.0",
     "pino": "^10.1.0",
     "zod": "^3.24.1"
@@ -166,22 +167,24 @@ COPY pnpm-lock.yaml ./
 COPY --from=builder /app/apps/<service-name>/dist/package.json ./
 RUN CI=true pnpm install --prod --no-frozen-lockfile
 
-# Copy built file
+# Copy built files
 COPY --from=builder /app/apps/<service-name>/dist/index.js ./dist/
 COPY --from=builder /app/apps/<service-name>/dist/index.js.map ./dist/
+COPY --from=builder /app/apps/<service-name>/dist/otel-register.js ./dist/
 
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV OTEL_SERVICE_NAME=<service-name>
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "--import", "./dist/otel-register.js", "dist/index.js"]
 ```
 
-Note: The build script auto-generates `dist/package.json` with all transitive dependencies.
+Note: The build script auto-generates `dist/package.json` with all transitive dependencies. The `otel-register.js` preload bootstraps OpenTelemetry instrumentation before any app code runs (no-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset).
 
 ### 4. Create src/index.ts
 
@@ -971,6 +974,8 @@ terraform fmt -check -recursive && terraform validate
 - [ ] Swagger UI at `/docs`
 - [ ] Health endpoint at `/health`
 - [ ] CORS enabled
+- [ ] `@intexuraos/infra-otel` in package.json dependencies
+- [ ] Dockerfile includes `COPY otel-register.js`, `ENV OTEL_SERVICE_NAME`, and `--import` in CMD
 - [ ] Added to `local.services` map in Terraform
 - [ ] Added service URL to `local.common_service_env_vars` in Terraform
 - [ ] Terraform module created with `local.common_service_secrets` and `local.common_service_env_vars`
@@ -993,13 +998,14 @@ terraform fmt -check -recursive && terraform validate
 
 ## Common Dependencies
 
-| Feature       | Package                       |
-| ------------- | ----------------------------- |
-| Firestore     | `@intexuraos/infra-firestore` |
-| PubSub        | `@google-cloud/pubsub`        |
-| Cloud Storage | `@google-cloud/storage`       |
-| HTTP client   | `@intexuraos/common-http`     |
-| Auth/JWT      | `@intexuraos/common-core`     |
+| Feature        | Package                       |
+| -------------- | ----------------------------- |
+| Firestore      | `@intexuraos/infra-firestore` |
+| PubSub         | `@google-cloud/pubsub`        |
+| Cloud Storage  | `@google-cloud/storage`       |
+| HTTP client    | `@intexuraos/common-http`     |
+| Auth/JWT       | `@intexuraos/common-core`     |
+| OpenTelemetry  | `@intexuraos/infra-otel`      |
 
 ---
 

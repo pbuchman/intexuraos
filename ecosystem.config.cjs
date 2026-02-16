@@ -22,6 +22,9 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   INTEXURAOS_ZAI_APP_API_KEY: process.env.INTEXURAOS_ZAI_APP_API_KEY,
   INTEXURAOS_GEMINI_APP_API_KEY: process.env.INTEXURAOS_GEMINI_APP_API_KEY,
+  INTEXURAOS_ENVIRONMENT: process.env.INTEXURAOS_ENVIRONMENT ?? 'dev',
+  INTEXURAOS_DASH0_OTLP_ENDPOINT: process.env.INTEXURAOS_DASH0_OTLP_ENDPOINT,
+  INTEXURAOS_DASH0_AUTH_TOKEN: process.env.INTEXURAOS_DASH0_AUTH_TOKEN,
 };
 
 // All service URLs - mirrors Terraform local.common_service_env_vars
@@ -159,6 +162,7 @@ function createServiceConfig(name, port, options = {}) {
       ...(SERVICE_ENV_MAPPINGS[name] ?? {}),
       PORT: String(port),
       NODE_ENV: 'development',
+      NODE_OPTIONS: '--import @intexuraos/infra-otel/register',
     },
     autorestart: true,
     restart_delay: 5000,
