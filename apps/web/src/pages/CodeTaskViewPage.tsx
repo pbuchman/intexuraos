@@ -9,12 +9,13 @@ import {
   GitCommit,
   Loader2,
   RotateCcw,
+  Send,
   StopCircle,
   XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
 import { useTaskView, useWorkersStatus } from '@/hooks';
-import type { LogLine } from '@/hooks';
+import type { LogLine, MessageStatus } from '@/hooks';
 import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus } from '@/types';
 
@@ -56,6 +57,7 @@ const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:tex
 // --- Log line color mapping ---
 
 function getLogLineClass(text: string): string {
+  if (text.startsWith('[user]')) return 'text-cyan-400';
   if (text.startsWith('[claude]')) return 'text-blue-300';
   if (text.startsWith('[tool]')) return 'text-yellow-300';
   if (text.startsWith('[error]')) return 'text-red-400';
@@ -77,7 +79,8 @@ export function CodeTaskViewPage(): React.JSX.Element {
     task, logs, loading, error,
     listenerHealthy,
     cancelling, cancelError, retrying, retryError,
-    cancelTask, retryTask,
+    sending, sendError, messageStatus,
+    cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
 
@@ -138,10 +141,16 @@ export function CodeTaskViewPage(): React.JSX.Element {
       {task.result !== undefined ? <MemoTaskResult task={task} /> : null}
       {task.error !== undefined ? <MemoTaskError task={task} /> : null}
 
-      <MemoLogStream logs={logs} isActive={isActive} listenerHealthy={listenerHealthy} />
-
-      {/* Reserved for future comment textarea */}
-      <div className="mt-3 mb-6" />
+      <MemoLogStream
+        logs={logs}
+        isActive={isActive}
+        listenerHealthy={listenerHealthy}
+        taskStatus={task.status}
+        onSendMessage={sendMessage}
+        sending={sending}
+        sendError={sendError}
+        messageStatus={messageStatus}
+      />
     </Layout>
   );
 }
@@ -438,7 +447,18 @@ const MemoTaskError = memo(TaskError, (prev, next) =>
   prev.task.error === next.task.error
 );
 
-function LogStream({ logs, isActive, listenerHealthy }: { logs: LogLine[]; isActive: boolean; listenerHealthy: boolean }): React.JSX.Element {
+interface LogStreamProps {
+  logs: LogLine[];
+  isActive: boolean;
+  listenerHealthy: boolean;
+  taskStatus: CodeTaskStatus;
+  onSendMessage: (message: string) => Promise<void>;
+  sending: boolean;
+  sendError: string | null;
+  messageStatus: MessageStatus;
+}
+
+function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage, sending, sendError, messageStatus }: LogStreamProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [followLogs, setFollowLogs] = useState(true);
@@ -539,7 +559,7 @@ function LogStream({ logs, isActive, listenerHealthy }: { logs: LogLine[]; isAct
       {/* Log lines */}
       <div
         ref={containerRef}
-        className="max-h-[80vh] overflow-y-auto rounded-b-lg bg-slate-900 p-3 font-mono text-sm leading-relaxed"
+        className={`max-h-[80vh] overflow-y-auto bg-slate-900 p-3 font-mono text-sm leading-relaxed${taskStatus === 'cancelled' ? ' rounded-b-lg' : ''}`}
       >
         {logs.length === 0 && isActive ? (
           <div className="flex items-center gap-2 text-slate-400">
@@ -555,6 +575,104 @@ function LogStream({ logs, isActive, listenerHealthy }: { logs: LogLine[]; isAct
         ))}
         <div ref={bottomRef} />
       </div>
+
+      {/* Message input (hidden for cancelled tasks) */}
+      {taskStatus !== 'cancelled' ? (
+        <MessageInput
+          onSendMessage={onSendMessage}
+          sending={sending}
+          sendError={sendError}
+          messageStatus={messageStatus}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function MessageInput({ onSendMessage, sending, sendError, messageStatus }: {
+  onSendMessage: (message: string) => Promise<void>;
+  sending: boolean;
+  sendError: string | null;
+  messageStatus: MessageStatus;
+}): React.JSX.Element {
+  const [message, setMessage] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleSend = useCallback((): void => {
+    const trimmed = message.trim();
+    if (trimmed.length === 0 || sending) return;
+    setMessage('');
+    // Reset textarea height
+    if (textareaRef.current !== null) {
+      textareaRef.current.style.height = 'auto';
+    }
+    void onSendMessage(trimmed);
+  }, [message, sending, onSendMessage]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
+
+  // Auto-grow textarea
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>): void => {
+    setMessage(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = `${String(Math.min(el.scrollHeight, 96))}px`;
+  }, []);
+
+  const hasText = message.trim().length > 0;
+
+  return (
+    <div className="rounded-b-lg border-t border-slate-700 bg-slate-800/90 px-3 py-2">
+      <div className="flex items-end gap-2">
+        <span className={`pb-1.5 text-sm font-mono ${hasText ? 'text-blue-400' : 'text-slate-500'}`}>&rsaquo;</span>
+        <textarea
+          ref={textareaRef}
+          value={message}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Send a message to Claude..."
+          disabled={sending}
+          rows={1}
+          className="flex-1 resize-none bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none font-mono leading-relaxed min-h-6 max-h-24"
+        />
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!hasText || sending}
+          className={`rounded p-1.5 transition-colors ${
+            hasText && !sending
+              ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-900/30'
+              : 'text-slate-600 cursor-not-allowed'
+          }`}
+          title="Send (Enter)"
+        >
+          {sending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+
+      {/* Status feedback */}
+      {messageStatus === 'queued' ? (
+        <p className="mt-1 text-xs text-amber-400 italic">
+          Queued — will be delivered when current step completes
+        </p>
+      ) : null}
+      {messageStatus === 'delivered' ? (
+        <p className="mt-1 text-xs text-green-400">
+          Message delivered — task resumed
+        </p>
+      ) : null}
+      {sendError !== null ? (
+        <p className="mt-1 text-xs text-red-400">{sendError}</p>
+      ) : null}
     </div>
   );
 }
@@ -562,8 +680,9 @@ function LogStream({ logs, isActive, listenerHealthy }: { logs: LogLine[]; isAct
 const MemoLogStream = memo(LogStream);
 
 const MemoLogLineRow = memo(function LogLineRow({ line }: { line: LogLine }): React.JSX.Element {
+  const isUserMessage = line.text.startsWith('[user]');
   return (
-    <div className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}`}>
+    <div className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}${isUserMessage ? ' border-l-2 border-cyan-800 pl-2' : ''}`}>
       {line.text}
     </div>
   );

@@ -10,6 +10,7 @@ import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
+import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
@@ -757,13 +758,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       // If PR was created and task has a Linear issue, transition to In Review
-      if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) {
-        await linearIssueService.markInReview(result.value.userId, result.value.linearIssueId);
+      if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) { // @allow-result-access -- narrowed by !result.ok guard above
+        await linearIssueService.markInReview(result.value.userId, result.value.linearIssueId); // @allow-result-access -- narrowed by !result.ok guard above
       }
 
-      request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully');
+      request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully'); // @allow-result-access -- narrowed by !result.ok guard above
 
-      return await reply.ok({ task: taskToApiResponse(result.value) });
+      return await reply.ok({ task: taskToApiResponse(result.value) }); // @allow-result-access -- narrowed by !result.ok guard above
     }
   );
 
@@ -2972,11 +2973,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       request.log.info(
-        { originalTaskId: taskId, retryTaskId: result.value.codeTaskId },
+        { originalTaskId: taskId, retryTaskId: result.value.codeTaskId }, // @allow-result-access -- narrowed by !result.ok guard above
         'Task retry created successfully'
       );
 
-      return reply.ok(result.value);
+      return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }
   );
 
@@ -3167,9 +3168,102 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       request.log.info(
-        { originalTaskId: taskId, followUpTaskId: result.value.codeTaskId },
+        { originalTaskId: taskId, followUpTaskId: result.value.codeTaskId }, // @allow-result-access -- narrowed by !result.ok guard above
         'Follow-up task created from feedback'
       );
+
+      return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
+    }
+  );
+
+  // ============================================================
+  // POST /code/tasks/:taskId/messages - Send message to task
+  // ============================================================
+  fastify.post<{
+    Params: { taskId: string };
+    Body: { message: string };
+  }>(
+    '/code/tasks/:taskId/messages',
+    {
+      onRequest: [jwtValidator],
+      schema: {
+        operationId: 'sendTaskMessage',
+        summary: 'Send a message to a running or completed task',
+        tags: ['code-tasks'],
+        params: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string' },
+          },
+          required: ['taskId'],
+        },
+        body: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', minLength: 1, maxLength: 10000 },
+          },
+          required: ['message'],
+        },
+        response: {
+          200: {
+            description: 'Message sent or queued',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  action: { type: 'string', enum: ['queued', 'resumed'] },
+                },
+                required: ['action'],
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, { message: 'Received request to POST /code/tasks/:taskId/messages' });
+
+      /* v8 ignore start -- test-infra: JWT validator sets request.user, guards against missing identity @preserve */
+      const userId = request.user?.userId;
+      if (userId === undefined) {
+        return reply.fail('UNAUTHORIZED' as ErrorCode, 'Missing user identity');
+      }
+      /* v8 ignore stop @preserve */
+
+      const { taskId } = request.params;
+      const { message } = request.body;
+
+      const services = getServices();
+
+      const result = await sendTaskMessage(
+        {
+          logger: services.logger,
+          codeTaskRepo: services.codeTaskRepo,
+          logLineRepo: services.logLineRepo,
+          taskDispatcher: services.taskDispatcher,
+          workerSettingsRepo: services.workerSettingsRepo,
+        },
+        { taskId, userId, message }
+      );
+
+      /* v8 ignore start -- test-infra: error code branches require task in specific states and worker configuration scenarios @preserve */
+      if (!result.ok) {
+        const { error } = result;
+        if (error.code === 'task_not_found') {
+          return reply.fail('NOT_FOUND' as ErrorCode, error.message);
+        }
+        if (error.code === 'invalid_status') {
+          return reply.fail('INVALID_STATUS' as ErrorCode, error.message);
+        }
+        if (error.code === 'worker_not_configured') {
+          return reply.fail('MISCONFIGURED' as ErrorCode, error.message);
+        }
+        return reply.fail('INTERNAL_ERROR' as ErrorCode, error.message);
+      }
+      /* v8 ignore stop @preserve */
 
       return reply.ok(result.value);
     }
