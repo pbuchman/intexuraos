@@ -162,7 +162,7 @@ function createServiceConfig(name, port, options = {}) {
       ...(SERVICE_ENV_MAPPINGS[name] ?? {}),
       PORT: String(port),
       NODE_ENV: 'development',
-      NODE_OPTIONS: '--import @intexuraos/infra-otel/dist/register.js',
+      NODE_OPTIONS: '--import @intexuraos/infra-otel/register',
     },
     autorestart: true,
     restart_delay: 5000,
