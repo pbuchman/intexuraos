@@ -5,6 +5,7 @@ import type { Result, Logger } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
+import type { SendMessageResult, SendMessageError } from '../types/schemas.js';
 import type { StatePersistence } from './state-persistence.js';
 import type { WorktreeManager } from './worktree-manager.js';
 import type { LogForwarder } from './log-forwarder.js';
@@ -66,6 +67,7 @@ export class TaskDispatcher {
   private readonly claudeLogBuffers = new Map<string, string>();
   private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
+  private readonly pendingMessages = new Map<string, string>();
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
   private readonly preserveFailedContainers: boolean;
@@ -310,6 +312,7 @@ export class TaskDispatcher {
       this.claudeLogBuffers.delete(taskId);
       this.attemptCompletionSignals.delete(taskId);
       this.completionInProgress.delete(taskId);
+      this.pendingMessages.delete(taskId);
       await this.isolation.provider.cleanupTaskSession?.(taskId);
 
       // Update task status
@@ -345,6 +348,76 @@ export class TaskDispatcher {
       };
     }
   }
+
+  /* v8 ignore start -- test-infra: requires worker infrastructure (Docker, SSH, state persistence) for integration testing @preserve */
+  async sendMessage(
+    taskId: string,
+    message: string
+  ): Promise<Result<SendMessageResult, SendMessageError>> {
+    const state = await this.statePersistence.load();
+    const task = state.tasks[taskId];
+
+    if (task === undefined) {
+      return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
+    }
+
+    if (task.status === 'running') {
+      this.pendingMessages.set(taskId, message);
+      this.appendOrchestratorTaskLog(
+        taskId,
+        `Message queued (task is running): ${message.length > 200 ? message.slice(0, 200) + '…' : message}`
+      );
+      this.logger.info({ taskId }, 'Message queued for running task');
+      return { ok: true, value: { action: 'queued' } };
+    }
+
+    if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {
+      this.appendOrchestratorTaskLog(
+        taskId,
+        `Resuming task with message: ${message.length > 200 ? message.slice(0, 200) + '…' : message}`
+      );
+
+      await this.teardownAttempt(taskId, true);
+
+      this.logForwarder.registerTask(taskId, task.webhookSecret);
+
+      const resumeResult = await this.startWorkerAttempt(task, {
+        prompt: message,
+        hasChildren: task.hasChildren ?? false,
+        continueSession: true,
+      });
+
+      if (!resumeResult.ok) {
+        this.logger.error(
+          { taskId, error: resumeResult.error },
+          'Failed to resume task with message'
+        );
+        return { ok: false, error: { type: 'service_error', message: 'Failed to resume task' } };
+      }
+
+      task.status = 'running';
+      task.containerId = resumeResult.containerId;
+      delete task.completedAt;
+      await this.saveTask(task);
+
+      this.runningCount++;
+      this.scheduleTimeoutWarning(taskId);
+      this.scheduleTimeoutKill(taskId);
+      this.startCompletionMonitoring(taskId);
+
+      this.logger.info({ taskId }, 'Task resumed with user message');
+      return { ok: true, value: { action: 'resumed' } };
+    }
+
+    return {
+      ok: false,
+      error: {
+        type: 'invalid_status',
+        message: `Cannot send message to task with status "${task.status}"`,
+      },
+    };
+  }
+  /* v8 ignore stop @preserve */
 
   async getTask(taskId: string): Promise<Task | null> {
     const state = await this.statePersistence.load();
@@ -662,6 +735,33 @@ export class TaskDispatcher {
     }
 
     if (verification.passed) {
+      const pendingMessage = this.pendingMessages.get(task.taskId);
+      if (pendingMessage !== undefined) {
+        this.pendingMessages.delete(task.taskId);
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Delivering queued message instead of finalizing: ${pendingMessage.length > 200 ? pendingMessage.slice(0, 200) + '…' : pendingMessage}`
+        );
+        await this.flushTaskLogs(task.taskId);
+        await this.teardownAttempt(task.taskId, true);
+        const resumeResult = await this.startWorkerAttempt(task, {
+          prompt: pendingMessage,
+          hasChildren: task.hasChildren ?? false,
+          continueSession: true,
+        });
+        if (resumeResult.ok) {
+          task.containerId = resumeResult.containerId;
+          await this.saveTask(task);
+          this.claudeErrors.delete(task.taskId);
+          this.taskExitCodes.delete(task.taskId);
+          return;
+        }
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Failed to deliver queued message, finalizing normally`
+        );
+      }
+
       this.appendOrchestratorTaskLog(task.taskId, 'Completion verification passed');
       await this.flushTaskLogs(task.taskId);
       await this.finalizeTask(task, 'completed', {
@@ -829,7 +929,8 @@ export class TaskDispatcher {
   ): Promise<void> {
     let finalStatus = statusParam;
     const shouldPreserve =
-      this.preserveFailedContainers && (finalStatus === 'failed' || finalStatus === 'interrupted');
+      this.preserveFailedContainers &&
+      (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
     if (shouldPreserve) {
       this.appendOrchestratorTaskLog(
         task.taskId,
@@ -876,6 +977,7 @@ export class TaskDispatcher {
     this.taskExitCodes.delete(task.taskId);
     this.claudeLogBuffers.delete(task.taskId);
     this.attemptCompletionSignals.delete(task.taskId);
+    this.pendingMessages.delete(task.taskId);
 
     task.status = finalStatus;
     task.completedAt = new Date().toISOString();

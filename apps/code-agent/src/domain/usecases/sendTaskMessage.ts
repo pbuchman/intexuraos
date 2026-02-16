@@ -1,0 +1,138 @@
+/**
+ * Use case: Send a message to an active or completed code task.
+ *
+ * Running tasks: message is queued on the worker and delivered when the current attempt completes.
+ * Terminal tasks (completed/failed/interrupted): task resumes with the message via --continue.
+ * Cancelled/dispatched tasks: rejected.
+ */
+
+import { Timestamp } from '@google-cloud/firestore';
+import { err, ok, type Result, type Logger } from '@intexuraos/common-core';
+import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
+import type { LogLineRepository } from '../repositories/logLineRepository.js';
+import type { TaskDispatcherService } from '../services/taskDispatcher.js';
+import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+
+export interface SendTaskMessageRequest {
+  taskId: string;
+  userId: string;
+  message: string;
+}
+
+export interface SendTaskMessageResult {
+  action: 'queued' | 'resumed';
+}
+
+export type SendTaskMessageErrorCode =
+  | 'task_not_found'
+  | 'invalid_status'
+  | 'worker_not_configured'
+  | 'worker_error'
+  | 'internal_error';
+
+export interface SendTaskMessageError {
+  code: SendTaskMessageErrorCode;
+  message: string;
+}
+
+export interface SendTaskMessageDeps {
+  logger: Logger;
+  codeTaskRepo: CodeTaskRepository;
+  logLineRepo: LogLineRepository;
+  taskDispatcher: TaskDispatcherService;
+  workerSettingsRepo: WorkerSettingsRepository;
+}
+
+export async function sendTaskMessage(
+  deps: SendTaskMessageDeps,
+  request: SendTaskMessageRequest
+): Promise<Result<SendTaskMessageResult, SendTaskMessageError>> {
+  const { logger, codeTaskRepo, logLineRepo, taskDispatcher, workerSettingsRepo } = deps;
+  const { taskId, userId, message } = request;
+
+  // Step 1: Load task and validate ownership
+  const taskResult = await codeTaskRepo.findByIdForUser(taskId, userId);
+
+  if (!taskResult.ok) {
+    logger.warn({ taskId, userId }, 'Task not found for message');
+    return err({ code: 'task_not_found', message: `Task ${taskId} not found` });
+  }
+
+  const task = taskResult.value;
+
+  // Step 2: Validate task status
+  if (task.status === 'cancelled' || task.status === 'dispatched') {
+    logger.warn({ taskId, status: task.status }, 'Cannot send message to task with this status');
+    return err({
+      code: 'invalid_status',
+      message: `Cannot send message to task with status "${task.status}"`,
+    });
+  }
+
+  // Step 3: Write [user] log line to Firestore
+  const sequence = Date.now() * 1000;
+  const storeResult = await logLineRepo.storeBatch(taskId, [
+    {
+      sequence,
+      text: `[user] ${message}`,
+      timestamp: Timestamp.now(),
+    },
+  ]);
+
+  if (!storeResult.ok) {
+    logger.error({ taskId, error: storeResult.error }, 'Failed to store user message log line');
+    // Non-fatal — continue with forwarding even if log write fails
+  }
+
+  // Step 4: Look up worker credentials
+  const settingsResult = await workerSettingsRepo.getSettings(userId);
+
+  /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
+  if (!settingsResult.ok) {
+    logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings for message');
+    return err({ code: 'internal_error', message: 'Failed to fetch worker settings' });
+  }
+  /* v8 ignore stop @preserve */
+
+  const settings = settingsResult.value;
+  /* v8 ignore start -- ts-type: optional chaining for database result @preserve */
+  const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
+  /* v8 ignore stop @preserve */
+
+  if (enabledWorkers.length === 0) {
+    logger.warn({ userId }, 'User has no workers configured for messaging');
+    return err({
+      code: 'worker_not_configured',
+      message: 'No workers configured',
+    });
+  }
+
+  // Find the worker matching the task's workerLocation
+  const worker = enabledWorkers.find((w) => w.name === task.workerLocation) ?? enabledWorkers[0];
+
+  /* v8 ignore start -- ts-type: array access with nullish coalescing creates type narrowing branch @preserve */
+  if (worker === undefined) {
+    return err({ code: 'worker_not_configured', message: 'No workers configured' });
+  }
+  /* v8 ignore stop @preserve */
+
+  // Step 5: Forward to orchestrator
+  const forwardResult = await taskDispatcher.sendMessageToWorker(taskId, message, {
+    url: worker.url,
+    cfAccessClientId: worker.cfAccessClientId,
+    cfAccessClientSecret: worker.cfAccessClientSecret,
+    dispatchSigningSecret: worker.dispatchSigningSecret,
+  });
+
+  if (!forwardResult.ok) {
+    logger.error({ taskId, error: forwardResult.error }, 'Failed to forward message to worker');
+    return err({
+      code: 'worker_error',
+      message: forwardResult.error.message,
+    });
+  }
+
+  logger.info({ taskId, action: forwardResult.value.action }, 'Message sent to task');
+
+  return ok({ action: forwardResult.value.action });
+}
