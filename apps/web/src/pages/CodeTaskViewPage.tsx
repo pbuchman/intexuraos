@@ -644,7 +644,7 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, worker
       <div className="rounded-b-lg border-t border-slate-700 bg-slate-800/90 px-3 py-2">
         <div className="flex items-center gap-2 rounded bg-amber-900/30 border border-amber-800/50 px-2.5 py-1.5 text-xs text-amber-300">
           <WifiOff className="h-3.5 w-3.5 shrink-0" />
-          <span>Worker is offline — task can only be continued when the worker is back online</span>
+          <span>Worker <strong>{workerName}</strong> is offline — task can only be continued when this worker is back online</span>
         </div>
       </div>
     );
