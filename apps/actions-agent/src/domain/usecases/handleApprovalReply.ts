@@ -171,7 +171,12 @@ export function createHandleApprovalReplyUseCase(
           );
         }
       }
-      return err(new Error('Action not found'));
+      await whatsappPublisher.publishSendMessage({
+        userId,
+        message: 'This action is no longer available. It may have been deleted or already processed.',
+        correlationId: `approval-not-found-${targetActionId}`,
+      });
+      return ok({ matched: false });
     }
 
     // Verify user owns the action
@@ -320,7 +325,12 @@ async function handleButtonResponse(
 
       if (updateResult.outcome === 'not_found') {
         logger.warn({ actionId: action.id }, 'Action not found during approval update');
-        return err(new Error('Action not found'));
+        await whatsappPublisher.publishSendMessage({
+          userId: action.userId,
+          message: 'This action is no longer available. It may have been deleted or already processed.',
+          correlationId: `approval-not-found-${action.id}`,
+        });
+        return ok({ matched: false });
       }
 
       if (updateResult.outcome === 'error') {
@@ -595,7 +605,12 @@ async function executeRejection(
 
   if (updateResult.outcome === 'not_found') {
     logger.warn({ actionId: action.id }, 'Action not found during rejection update');
-    return err(new Error('Action not found'));
+    await whatsappPublisher.publishSendMessage({
+      userId: action.userId,
+      message: 'This action is no longer available. It may have been deleted or already processed.',
+      correlationId: `approval-not-found-${action.id}`,
+    });
+    return ok({ matched: false });
   }
 
   if (updateResult.outcome === 'error') {

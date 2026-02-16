@@ -123,7 +123,7 @@ describe('HandleApprovalReplyUseCase', () => {
   });
 
   describe('action lookup', () => {
-    it('returns error when action not found', async () => {
+    it('returns ok with matched false and sends WhatsApp notification when action not found', async () => {
       approvalMessageRepository.setMessage(testApprovalMessage);
 
       const result = await useCase({
@@ -132,10 +132,15 @@ describe('HandleApprovalReplyUseCase', () => {
         userId: 'user-1',
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toBe('Action not found');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(false);
       }
+
+      const sentMessages = whatsappPublisher.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.message).toContain('no longer available');
+      expect(sentMessages[0]?.userId).toBe('user-1');
     });
 
     it('cleans up orphaned approval message when action not found via wamid lookup', async () => {
@@ -165,7 +170,7 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(messages).toHaveLength(1);
     });
 
-    it('logs warning when cleanup of orphaned approval message fails', async () => {
+    it('sends WhatsApp notification even when cleanup of orphaned approval message fails', async () => {
       approvalMessageRepository.setMessage(testApprovalMessage);
 
       vi.spyOn(approvalMessageRepository, 'deleteByActionId').mockImplementationOnce(
@@ -178,10 +183,14 @@ describe('HandleApprovalReplyUseCase', () => {
         userId: 'user-1',
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toBe('Action not found');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(false);
       }
+
+      const sentMessages = whatsappPublisher.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.message).toContain('no longer available');
     });
 
     it('returns error when user ID mismatch on action', async () => {
@@ -565,7 +574,7 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(whatsappPublisher.getSentMessages()).toHaveLength(0);
     });
 
-    it('returns error when action not found during approval update', async () => {
+    it('acks and sends WhatsApp notification when action not found during approval update', async () => {
       actionRepository.setUpdateStatusIfResult('action-1', {
         outcome: 'not_found',
       });
@@ -578,13 +587,17 @@ describe('HandleApprovalReplyUseCase', () => {
         buttonId: 'approve:action-1',
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toBe('Action not found');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(false);
       }
+
+      const sentMessages = whatsappPublisher.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.message).toContain('no longer available');
     });
 
-    it('returns error when action not found during rejection update', async () => {
+    it('acks and sends WhatsApp notification when action not found during rejection update', async () => {
       actionRepository.setUpdateStatusIfResult('action-1', {
         outcome: 'not_found',
       });
@@ -597,10 +610,14 @@ describe('HandleApprovalReplyUseCase', () => {
         buttonId: 'cancel:action-1',
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toBe('Action not found');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(false);
       }
+
+      const sentMessages = whatsappPublisher.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.message).toContain('no longer available');
     });
 
     it('returns error when update fails during approval', async () => {
@@ -1881,7 +1898,7 @@ describe('HandleApprovalReplyUseCase', () => {
   });
 
   describe('button response error handling (handleButtonResponse)', () => {
-    it('should handle action null in button response', async () => {
+    it('should ack and notify when action null in button response', async () => {
       const result = await useCase({
         replyToWamid: 'wamid-123',
         replyText: '',
@@ -1890,10 +1907,14 @@ describe('HandleApprovalReplyUseCase', () => {
         buttonId: 'approve:nonexistent-action',
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain('not found');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(false);
       }
+
+      const sentMessages = whatsappPublisher.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.message).toContain('no longer available');
     });
 
     it('should handle WhatsApp publish failure after successful button approval', async () => {
@@ -1977,10 +1998,14 @@ describe('HandleApprovalReplyUseCase', () => {
         buttonId: 'approve:action-1',
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain('Action not found');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(false);
       }
+
+      const sentMessages = whatsappPublisher.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.message).toContain('no longer available');
     });
 
     it('should handle error when updating status via button approval', async () => {
@@ -2050,10 +2075,14 @@ describe('HandleApprovalReplyUseCase', () => {
         buttonId: 'cancel:reject-not-found-1',
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain('Action not found');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(false);
       }
+
+      const sentMessages = whatsappPublisher.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.message).toContain('no longer available');
     });
 
     it('handles error when status update fails', async () => {
@@ -2492,7 +2521,7 @@ describe('HandleApprovalReplyUseCase', () => {
   });
 
   describe('handleButtonResponse - action null edge case', () => {
-    it('should handle when action lookup fails with buttonId', async () => {
+    it('should ack and notify when action lookup fails with buttonId', async () => {
       const result = await useCase({
         replyToWamid: 'wamid-123',
         replyText: '',
@@ -2501,10 +2530,14 @@ describe('HandleApprovalReplyUseCase', () => {
         buttonId: 'approve:nonexistent-action',
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain('not found');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(false);
       }
+
+      const sentMessages = whatsappPublisher.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.message).toContain('no longer available');
     });
   });
 });
