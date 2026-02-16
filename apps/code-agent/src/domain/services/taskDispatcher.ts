@@ -116,4 +116,21 @@ export interface TaskDispatcherService {
     location: string,
     credentials?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string }
   ): Promise<void>;
+
+  /**
+   * Send a message to a running or completed task on a worker.
+   *
+   * - Running tasks: message is queued and delivered when current attempt completes.
+   * - Terminal tasks: task resumes with the message via --continue.
+   *
+   * @param taskId - The task ID to send a message to
+   * @param message - The message text to send
+   * @param credentials - Worker credentials for authentication
+   * @returns Action taken ('queued' or 'resumed') or error
+   */
+  sendMessageToWorker(
+    taskId: string,
+    message: string,
+    credentials: { url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }
+  ): Promise<Result<{ action: 'queued' | 'resumed' }, { code: string; message: string }>>;
 }

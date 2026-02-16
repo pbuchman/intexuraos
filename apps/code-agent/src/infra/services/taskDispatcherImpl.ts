@@ -307,6 +307,65 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }));
   }
 
+  async sendMessageToWorker(
+    taskId: string,
+    message: string,
+    credentials: { url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }
+  ): Promise<Result<{ action: 'queued' | 'resumed' }, { code: string; message: string }>> {
+    this.logger.info({ taskId }, 'Sending message to worker task');
+
+    const body = JSON.stringify({ message });
+    const timestamp = Date.now();
+    const nonce = generateNonce();
+
+    const signatureResult = signDispatchRequest(
+      { logger: this.logger, dispatchSigningSecret: credentials.dispatchSigningSecret },
+      { body, timestamp, nonce }
+    );
+    /* v8 ignore start -- test-infra: HMAC signing failure requires invalid secret configuration @preserve */
+    if (!signatureResult.ok) {
+      return err({
+        code: 'signing_failed',
+        message: `Failed to sign message request: ${signatureResult.error.message}`,
+      });
+    }
+    /* v8 ignore stop @preserve */
+
+    try {
+      const response = await this.fetchWithTimeout(`${credentials.url}/tasks/${taskId}/message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Access-Client-Id': credentials.cfAccessClientId,
+          'CF-Access-Client-Secret': credentials.cfAccessClientSecret,
+          'X-Dispatch-Timestamp': String(timestamp),
+          'X-Dispatch-Signature': signatureResult.value.signature,
+          'X-Dispatch-Nonce': nonce,
+        },
+        body,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      /* v8 ignore start -- test-infra: requires worker HTTP endpoint to return error response @preserve */
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        return err({
+          code: 'worker_error',
+          message: `Worker returned HTTP ${String(response.status)}: ${errorText}`,
+        });
+      }
+      /* v8 ignore stop @preserve */
+
+      const data = (await response.json()) as { action: 'queued' | 'resumed' };
+      return ok(data);
+    } catch (error) {
+      return err({
+        code: 'network_error',
+        message: `Failed to send message to worker: ${getErrorMessage(error)}`,
+      });
+    }
+  }
+
   async cancelOnWorker(taskId: string, location: string, credentials?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string }): Promise<void> {
     this.logger.info({ taskId, location }, 'Sending cancellation request to worker');
 

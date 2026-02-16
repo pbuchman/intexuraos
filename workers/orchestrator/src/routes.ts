@@ -7,7 +7,7 @@ import type { IsolationProvider } from './services/isolation/types.js';
 import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from './types/api.js';
-import { CreateTaskRequestSchema } from './types/schemas.js';
+import { CreateTaskRequestSchema, SendMessageRequestSchema } from './types/schemas.js';
 
 interface TaskParams {
   id: string;
@@ -232,6 +232,43 @@ export function registerRoutes(
 
     reply.send({ taskId: id, status: 'cancelled' });
   });
+
+  // POST /tasks/:id/message - Send message to task
+  app.post<{ Params: TaskParams; Body: unknown }>(
+    '/tasks/:id/message',
+    { preHandler: [verifyDispatchSignature] },
+    async (request, reply) => {
+      const { id } = request.params;
+      logger.info(
+        { taskId: id, method: 'POST', path: `/tasks/${id}/message` },
+        'Task message received'
+      );
+
+      const parseResult = SendMessageRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        reply.status(400).send({ error: parseResult.error.message });
+        return;
+      }
+
+      const result = await dispatcher.sendMessage(id, parseResult.data.message);
+
+      if (!result.ok) {
+        const { error } = result;
+        if (error.type === 'not_found') {
+          reply.status(404).send({ error: error.message });
+          return;
+        }
+        if (error.type === 'invalid_status') {
+          reply.status(409).send({ error: error.message });
+          return;
+        }
+        reply.status(500).send({ error: error.message });
+        return;
+      }
+
+      reply.send({ action: result.value.action });
+    }
+  );
 
   // GET /health - Health check
   app.get('/health', async (_request, reply) => {
