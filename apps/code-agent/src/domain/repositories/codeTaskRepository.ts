@@ -53,6 +53,8 @@ export interface UpdateTaskInput {
   // Use null to explicitly clear the field, undefined means "don't change"
   cancelNonce?: string | null;
   cancelNonceExpiresAt?: string | null;
+  // Actual worker location after dispatch (may differ from initial placeholder)
+  workerLocation?: string;
 }
 
 export interface ListTasksInput {

@@ -322,6 +322,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.lastHeartbeat !== undefined) {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
         }
+        if (input.workerLocation !== undefined) {
+          updateData['workerLocation'] = input.workerLocation;
+        }
         if (input.cancelNonce !== undefined) {
           updateData['cancelNonce'] = input.cancelNonce === null
             ? FieldValue.delete()

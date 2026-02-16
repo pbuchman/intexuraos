@@ -1174,7 +1174,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         sanitizedPrompt: body.prompt.trim().replace(/\s+/g, ' '),
         systemPromptHash: 'default', // TODO: Use actual system prompt hash
         workerType: body.workerType ?? 'auto',
-        workerLocation: 'mac', // Will be overridden by dispatcher
+        workerLocation: 'pending', // Placeholder — overwritten after dispatch with actual worker
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -1346,6 +1346,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker');
       }
+
+      // Persist actual worker location after dispatch (may differ from placeholder)
+      await codeTaskRepo.update(task.id, {
+        workerLocation: dispatchResult.value.workerLocation,
+        status: 'dispatched',
+        dispatchedAt: new Date(),
+      });
 
       // Record task start for rate limiting
       await rateLimitService.recordTaskStart(userId);
