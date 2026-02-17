@@ -448,6 +448,7 @@ ${additionalContext !== undefined && additionalContext.trim().length > 0
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(retryTask.id, {
+    workerLocation: dispatchValue.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
   });

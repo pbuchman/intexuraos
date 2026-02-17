@@ -44,6 +44,7 @@ export interface UpdateTaskInput {
   result?: CodeTask['result'];
   error?: CodeTask['error'] | null;
   statusSummary?: CodeTask['statusSummary'];
+  workerLocation?: string;
   callbackReceived?: boolean;
   dispatchedAt?: Date;
   completedAt?: Date;

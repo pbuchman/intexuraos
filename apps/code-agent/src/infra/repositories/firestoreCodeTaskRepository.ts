@@ -307,6 +307,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.statusSummary !== undefined) {
           updateData['statusSummary'] = input.statusSummary;
         }
+        if (input.workerLocation !== undefined) {
+          updateData['workerLocation'] = input.workerLocation;
+        }
         if (input.callbackReceived !== undefined) {
           updateData['callbackReceived'] = input.callbackReceived;
         }
