@@ -71,6 +71,18 @@ Branch: ${task.baseBranch}`;
 }
 
 /**
+ * Format task resumed notification message.
+ */
+function formatResumedMessage(task: CodeTask): string {
+  const title = task.linearIssueTitle ?? task.prompt.slice(0, 50);
+  return `🔄 Code task resumed: ${title}
+
+Task ID: ${task.id}
+Repository: ${task.repository}
+Branch: ${task.baseBranch}`;
+}
+
+/**
  * Factory function to create WhatsAppNotifier.
  */
 export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsAppNotifier {
@@ -130,6 +142,49 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
 
       // Build interactive buttons for task management (INT-379)
       // Cancel button includes nonce for security validation
+      const buttons: { type: 'reply'; reply: { id: string; title: string } }[] = [];
+
+      if (task.cancelNonce !== undefined) {
+        buttons.push({
+          type: 'reply',
+          reply: {
+            id: `cancel-task:${task.id}:${task.cancelNonce}`,
+            title: '❌ Cancel Task',
+          },
+        });
+      }
+
+      buttons.push({
+        type: 'reply',
+        reply: {
+          id: `view-task:${task.id}`,
+          title: '👁️ View Progress',
+        },
+      });
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        buttons,
+        correlationId: task.traceId,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
+
+    async notifyTaskResumed(
+      userId: string,
+      task: CodeTask
+    ): Promise<Result<void, NotificationError>> {
+      const message = formatResumedMessage(task);
+
       const buttons: { type: 'reply'; reply: { id: string; title: string } }[] = [];
 
       if (task.cancelNonce !== undefined) {

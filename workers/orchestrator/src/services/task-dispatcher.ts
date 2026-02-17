@@ -397,6 +397,7 @@ export class TaskDispatcher {
 
       task.status = 'running';
       task.containerId = resumeResult.containerId;
+      task.startedAt = new Date().toISOString();
       delete task.completedAt;
       await this.saveTask(task);
 
