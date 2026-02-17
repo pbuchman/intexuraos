@@ -18,7 +18,7 @@ import { Button, Card, Layout } from '@/components';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import type { LogLine, MessageStatus } from '@/hooks';
 import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
-import type { CodeTask, CodeTaskStatus } from '@/types';
+import type { CodeTask, CodeTaskStatus, WorkerStatusTag } from '@/types';
 
 // --- Status badge config ---
 
@@ -54,6 +54,13 @@ const LINEAR_STATE_STYLES: Record<string, string> = {
 
 const DEFAULT_BADGE_STYLE = 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
 const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+
+const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
+  healthy: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300',
+  'orchestrator-unreachable': 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+  'tunnel-down': 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+  unknown: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+};
 
 // --- Log line color mapping ---
 
@@ -138,13 +145,15 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
   const isActive = task.status === 'running' || task.status === 'dispatched';
   const isRetryable = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
-  const isTaskWorkerOnline = workersStatus !== null
-    ? workersStatus.workers.find((w) => w.name === task.workerLocation)?.healthy !== false
-    : true;
+  const taskWorkerStatus = workersStatus !== null
+    ? workersStatus.workers.find((w) => w.name === task.workerLocation)
+    : undefined;
+  const isTaskWorkerOnline = taskWorkerStatus === undefined || taskWorkerStatus.healthy;
+  const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
 
   return (
     <Layout>
-      <MemoTaskHeader task={task} />
+      <MemoTaskHeader task={task} workerStatusTag={workerStatusTag} />
 
       <MemoActiveProgress task={task} />
 
@@ -182,7 +191,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
 // --- Sub-components (inline, not exported) ---
 
-function TaskHeader({ task }: { task: CodeTask }): React.JSX.Element {
+function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag: WorkerStatusTag | null }): React.JSX.Element {
   const status = STATUS_MAP[task.status];
   const StatusIcon = status.icon;
 
@@ -211,7 +220,7 @@ function TaskHeader({ task }: { task: CodeTask }): React.JSX.Element {
         <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
           {task.workerType}
         </span>
-        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
+        <span className={`rounded px-2 py-0.5 text-xs capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
           {task.workerLocation}
         </span>
 
