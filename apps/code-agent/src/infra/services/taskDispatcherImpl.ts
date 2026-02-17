@@ -15,6 +15,19 @@ import type {
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
 
+/** Extract human-readable error message from a response body (may be JSON `{"error":"..."}` or plain text). */
+function extractErrorMessage(text: string): string {
+  try {
+    const parsed = JSON.parse(text) as { error?: string };
+    if (typeof parsed.error === 'string') {
+      return parsed.error;
+    }
+  } catch {
+    // Not JSON — use as-is
+  }
+  return text;
+}
+
 /**
  * Worker task request body sent to worker orchestrator.
  */
@@ -355,9 +368,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           });
         }
         const errorText = await response.text().catch(() => 'Unknown error');
+        const errorMessage = extractErrorMessage(errorText);
         return err({
           code: 'worker_error',
-          message: `Worker returned HTTP ${String(response.status)}: ${errorText}`,
+          message: `Worker returned HTTP ${String(response.status)}: ${errorMessage}`,
         });
       }
       /* v8 ignore stop @preserve */

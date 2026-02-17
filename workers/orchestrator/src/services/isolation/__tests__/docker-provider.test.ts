@@ -606,6 +606,84 @@ describe('DockerProvider', () => {
     });
   });
 
+  describe('resume preserved worker', () => {
+    it('restores preserved container on continueSession instead of creating new one', async () => {
+      const config = createTestConfig({ taskId: 'preserved-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Preserve the worker (simulates task completion with preserve)
+      await provider.preserveWorker('preserved-task');
+
+      // Verify worker is preserved, not active
+      expect(await provider.listWorkers()).toHaveLength(0);
+      expect(await provider.listPreservedWorkers()).toHaveLength(1);
+
+      // Resume with continueSession — should reuse preserved container, not create new
+      const fs = await import('node:fs');
+      (fs.promises.rm as ReturnType<typeof vi.fn>).mockClear();
+      mocks.mockDocker.createContainer.mockClear();
+
+      const handle = await provider.createWorker(
+        createTestConfig({
+          taskId: 'preserved-task',
+          continueSession: true,
+          prompt: 'Resume prompt',
+          systemPrompt: 'Resume system prompt',
+        })
+      );
+
+      expect(handle.containerId).toBe('test-container-id');
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+
+      // Worker should be back in active map, removed from preserved
+      expect(await provider.listWorkers()).toHaveLength(1);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('recreates secrets directory and writes prompt files when restoring preserved worker', async () => {
+      const fs = await import('node:fs');
+      const config = createTestConfig({ taskId: 'preserved-task-2' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('preserved-task-2');
+
+      (fs.promises.mkdir as ReturnType<typeof vi.fn>).mockClear();
+      (fs.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+      (fs.promises.copyFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'preserved-task-2',
+          continueSession: true,
+          prompt: 'New prompt',
+          systemPrompt: 'New system prompt',
+        })
+      );
+
+      // Should recreate secrets dir
+      expect(fs.promises.mkdir).toHaveBeenCalledWith(
+        expect.stringContaining('preserved-task-2'),
+        expect.objectContaining({ recursive: true })
+      );
+
+      // Should write new prompt files
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('system-prompt.txt'),
+        'New system prompt',
+        'utf-8'
+      );
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('user-prompt.txt'),
+        'New prompt',
+        'utf-8'
+      );
+
+      // Should copy GCP credentials
+      expect(fs.promises.copyFile).toHaveBeenCalled();
+    });
+  });
+
   describe('listPreservedWorkers', () => {
     it('returns empty array when no workers preserved', async () => {
       const preserved = await provider.listPreservedWorkers();
