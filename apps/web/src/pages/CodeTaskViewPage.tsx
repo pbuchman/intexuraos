@@ -57,17 +57,35 @@ const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:tex
 
 // --- Log line color mapping ---
 
+const TAG_RE = /^(?:\d{2}:\d{2}:\d{2}\.\d{3} )?\[(\w+)\]/;
+
+function extractTag(text: string): string | null {
+  return TAG_RE.exec(text)?.[1] ?? null;
+}
+
+interface TagStyle {
+  text: string;
+  border?: string;
+  bg?: string;
+}
+
+const TAG_STYLES: Record<string, TagStyle> = {
+  user:         { text: 'text-cyan-400',    border: 'border-cyan-800',    bg: 'bg-cyan-900/20' },
+  queued:       { text: 'text-amber-400',   border: 'border-amber-700',   bg: 'bg-amber-900/20' },
+  resumed:      { text: 'text-emerald-400', border: 'border-emerald-700', bg: 'bg-emerald-900/20' },
+  claude:       { text: 'text-blue-300' },
+  tool:         { text: 'text-yellow-300' },
+  error:        { text: 'text-red-400' },
+  done:         { text: 'text-green-400' },
+  hook:         { text: 'text-purple-300' },
+  init:         { text: 'text-cyan-300' },
+  system:       { text: 'text-slate-500' },
+  orchestrator: { text: 'text-slate-500' },
+};
+
 function getLogLineClass(text: string): string {
-  if (text.startsWith('[user]')) return 'text-cyan-400';
-  if (text.startsWith('[queued]')) return 'text-amber-400';
-  if (text.startsWith('[resumed]')) return 'text-emerald-400';
-  if (text.startsWith('[claude]')) return 'text-blue-300';
-  if (text.startsWith('[tool]')) return 'text-yellow-300';
-  if (text.startsWith('[error]')) return 'text-red-400';
-  if (text.startsWith('[done]')) return 'text-green-400';
-  if (text.startsWith('[hook]')) return 'text-purple-300';
-  if (text.startsWith('[init]')) return 'text-cyan-300';
-  if (text.startsWith('[system]')) return 'text-slate-500';
+  const tag = extractTag(text);
+  if (tag !== null) return TAG_STYLES[tag]?.text ?? 'text-slate-300';
   // Tool result lines (indented with arrow or x)
   if (text.startsWith('  \u2192 ') || text.startsWith('  \u2717 ')) return 'text-slate-400';
   return 'text-slate-300';
@@ -713,14 +731,10 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, worker
 const MemoLogStream = memo(LogStream);
 
 const MemoLogLineRow = memo(function LogLineRow({ line }: { line: LogLine }): React.JSX.Element {
-  const isUserMessage = line.text.startsWith('[user]');
-  const isQueued = line.text.startsWith('[queued]');
-  const isResumed = line.text.startsWith('[resumed]');
-
-  let extraClass = '';
-  if (isUserMessage) extraClass = ' border-l-2 border-cyan-800 bg-cyan-900/20 pl-2';
-  else if (isQueued) extraClass = ' border-l-2 border-amber-700 bg-amber-900/20 pl-2';
-  else if (isResumed) extraClass = ' border-l-2 border-emerald-700 bg-emerald-900/20 pl-2';
+  const tag = extractTag(line.text);
+  const style = tag !== null ? TAG_STYLES[tag] : undefined;
+  const border = style?.border;
+  const extraClass = border !== undefined ? ` border-l-2 ${border} ${style?.bg ?? ''} pl-2` : '';
 
   return (
     <div className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}${extraClass}`}>
