@@ -140,36 +140,47 @@ export async function sendTaskMessage(
     });
   }
 
-  const { action, pendingMessages } = forwardResult.value;
+  const { action } = forwardResult.value;
   logger.info({ taskId, action }, 'Message sent to task');
 
   // Best-effort: write status log lines so the transcript shows what happened
-  const statusLines =
-    action === 'queued'
-      ? [
-          { sequence: sequence + 1, text: '[queued] Message queued \u2014 will be delivered when current work completes', timestamp: Timestamp.now() },
-          ...(pendingMessages ?? [message]).map((m, i) => ({
-            sequence: sequence + 2 + i,
-            text: `[user] ${m}`,
-            timestamp: Timestamp.now(),
-          })),
-        ]
-      : [{ sequence: sequence + 1, text: `[resumed] Task resuming with your message: ${message}`, timestamp: Timestamp.now() }];
+  if (action === 'queued') {
+    // Accumulate in Firestore so the queue survives orchestrator restarts
+    const allQueued = [...(task.pendingUserMessages ?? []), message];
+    const queueUpdateResult = await codeTaskRepo.update(taskId, { pendingUserMessages: allQueued });
+    if (!queueUpdateResult.ok) {
+      logger.warn({ taskId, error: queueUpdateResult.error }, 'Failed to update pending user messages');
+    }
 
-  const statusLogResult = await logLineRepo.storeBatch(taskId, statusLines);
+    const statusLines = [
+      { sequence: sequence + 1, text: '[queued] Message queued \u2014 will be delivered when current work completes', timestamp: Timestamp.now() },
+      ...allQueued.map((m, i) => ({
+        sequence: sequence + 2 + i,
+        text: `[user] ${m}`,
+        timestamp: Timestamp.now(),
+      })),
+    ];
+    const statusLogResult = await logLineRepo.storeBatch(taskId, statusLines);
+    if (!statusLogResult.ok) {
+      logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
+    }
+  } else {
+    // Resumed — clear the accumulated queue
+    const clearResult = await codeTaskRepo.update(taskId, { status: 'running', error: null, pendingUserMessages: [] });
+    if (!clearResult.ok) {
+      logger.warn({ taskId, error: clearResult.error }, 'Failed to update task status on resume');
+    }
 
-  if (!statusLogResult.ok) {
-    logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
+    const statusLogResult = await logLineRepo.storeBatch(taskId, [
+      { sequence: sequence + 1, text: `[resumed] Task resuming with your message: ${message}`, timestamp: Timestamp.now() },
+    ]);
+    if (!statusLogResult.ok) {
+      logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
+    }
   }
 
   // Best-effort side-effects when task is resumed
   if (action === 'resumed') {
-    // Update Firestore status so web UI reflects the task is running again
-    const updateResult = await codeTaskRepo.update(taskId, { status: 'running', error: null });
-    if (!updateResult.ok) {
-      logger.warn({ taskId, error: updateResult.error }, 'Failed to update task status on resume');
-    }
-
     // Mirror running status to actions inbox
     try {
       await statusMirrorService.mirrorStatus({

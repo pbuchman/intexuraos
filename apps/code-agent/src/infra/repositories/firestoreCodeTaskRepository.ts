@@ -334,6 +334,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
             ? FieldValue.delete()
             : input.cancelNonceExpiresAt;
         }
+        if (input.pendingUserMessages !== undefined) {
+          updateData['pendingUserMessages'] = input.pendingUserMessages;
+        }
 
         await docRef.update(updateData);
 

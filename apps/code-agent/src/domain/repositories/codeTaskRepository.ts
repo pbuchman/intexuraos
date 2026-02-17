@@ -55,6 +55,7 @@ export interface UpdateTaskInput {
   // Use null to explicitly clear the field, undefined means "don't change"
   cancelNonce?: string | null;
   cancelNonceExpiresAt?: string | null;
+  pendingUserMessages?: string[];
 }
 
 export interface ListTasksInput {

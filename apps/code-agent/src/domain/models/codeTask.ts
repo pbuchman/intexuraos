@@ -154,6 +154,9 @@ export interface CodeTask {
   // Status summary (fallback when logs fail)
   statusSummary?: StatusSummary;
 
+  // Queued user messages (accumulated while task is running)
+  pendingUserMessages?: string[];
+
   // Deduplication key
   dedupKey: string;             // sha256(userId + prompt)[0:16] (design line 1547)
 

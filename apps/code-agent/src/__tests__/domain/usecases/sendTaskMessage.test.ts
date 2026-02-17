@@ -547,6 +547,43 @@ describe('sendTaskMessage', () => {
         expect(result.value.action).toBe('queued');
       }
     });
+
+    it('should succeed even if pendingUserMessages update fails (best-effort)', async () => {
+      const task = createMockTask({ status: 'running' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      setupWorkerSettings();
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'queued' }));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId }),
+        expect.stringContaining('Failed to update pending user messages')
+      );
+    });
+
+    it('should succeed even if resumed status log write fails (best-effort)', async () => {
+      const task = createMockTask({ status: 'completed' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
+      // First storeBatch (user line) succeeds, second (resumed status line) fails
+      mockLogLineRepo.storeBatch
+        .mockResolvedValueOnce(ok(undefined))
+        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }));
+      setupWorkerSettings();
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId }),
+        expect.stringContaining('Failed to write status log line')
+      );
+    });
   });
 
   describe('resume side-effects', () => {
@@ -561,7 +598,7 @@ describe('sendTaskMessage', () => {
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
       expect(result.ok).toBe(true);
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { status: 'running', error: null });
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { status: 'running', error: null, pendingUserMessages: [] });
     });
 
     it('should mirror status to running on resume', async () => {
@@ -596,12 +633,12 @@ describe('sendTaskMessage', () => {
 
     it('should not call resume side-effects when action is queued', async () => {
       setupSuccessPath({ status: 'running' }, 'queued');
-      mockCodeTaskRepo.update = vi.fn();
 
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
       expect(result.ok).toBe(true);
-      expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+      // update IS called to save pendingUserMessages, but NOT for status/mirror/whatsapp
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { pendingUserMessages: [message] });
       expect(mockStatusMirrorService.mirrorStatus).not.toHaveBeenCalled();
       expect(mockWhatsappNotifier.notifyTaskResumed).not.toHaveBeenCalled();
     });
