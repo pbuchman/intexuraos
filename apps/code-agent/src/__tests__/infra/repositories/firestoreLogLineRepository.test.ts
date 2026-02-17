@@ -89,7 +89,7 @@ describe('firestoreLogLineRepository', () => {
       expect(mockFirestore.collection).toHaveBeenCalledWith('code_tasks');
       expect(mockTasksCollection.doc).toHaveBeenCalledWith('task-1');
       expect(mockTaskDoc.collection).toHaveBeenCalledWith('log_lines');
-      expect(mockLinesCollection.doc).toHaveBeenCalledWith('000000000005');
+      expect(mockLinesCollection.doc).toHaveBeenCalledWith('0000000000000005');
     });
 
     it('stores correct fields', async () => {

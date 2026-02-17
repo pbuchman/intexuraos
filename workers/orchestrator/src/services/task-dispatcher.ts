@@ -55,7 +55,6 @@ export interface CompletionControlConfig {
   maxAttempts: number;
   verifier: CompletionVerifier;
   preserveFailedContainers?: boolean;
-  logDrainTimeoutMs?: number;
 }
 
 export class TaskDispatcher {
@@ -71,7 +70,6 @@ export class TaskDispatcher {
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
   private readonly preserveFailedContainers: boolean;
-  private readonly logDrainTimeoutMs: number;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -87,7 +85,6 @@ export class TaskDispatcher {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
     this.preserveFailedContainers = completionControl.preserveFailedContainers ?? false;
-    this.logDrainTimeoutMs = completionControl.logDrainTimeoutMs ?? 30000;
   }
 
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
@@ -934,7 +931,7 @@ export class TaskDispatcher {
     statusParam: TaskStatus,
     payload: { result?: TaskResult; error?: TaskError }
   ): Promise<void> {
-    let finalStatus = statusParam;
+    const finalStatus = statusParam;
     const shouldPreserve =
       this.preserveFailedContainers &&
       (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
@@ -951,23 +948,14 @@ export class TaskDispatcher {
 
     try {
       await this.logForwarder.flush(task.taskId);
-      await this.logForwarder.awaitDrain(task.taskId, this.logDrainTimeoutMs);
-    } catch (drainError) {
-      const drainStats = this.logForwarder.getDeliveryStats(task.taskId);
+    } catch (flushError) {
       this.logger.error(
-        { taskId: task.taskId, error: drainError, ...drainStats },
-        'Log drain failed'
+        { taskId: task.taskId, error: flushError },
+        'Log flush failed during finalization'
       );
-      if (payload.error === undefined) {
-        finalStatus = 'failed';
-        const drainMsg = drainError instanceof Error ? drainError.message : String(drainError);
-        payload.error = {
-          code: 'LOG_DELIVERY_FAILED',
-          message: `${drainMsg} (produced=${String(drainStats.produced)} acked=${String(drainStats.acked)} pending=${String(drainStats.pending)})`,
-        };
-      }
     }
-    const logStats = this.logForwarder.getDeliveryStats(task.taskId);
+
+    this.appendOrchestratorTaskLog(task.taskId, `Finalizing: flushed logs`);
     this.logForwarder.close(task.taskId);
 
     if (shouldPreserve) {
@@ -975,10 +963,6 @@ export class TaskDispatcher {
     } else {
       await this.teardownAttempt(task.taskId, false);
     }
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Log delivery stats: produced=${String(logStats.produced)} acked=${String(logStats.acked)} pending=${String(logStats.pending)}`
-    );
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);

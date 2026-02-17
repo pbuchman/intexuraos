@@ -550,10 +550,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.debug({ taskId, count: chunks.length }, 'Storing log chunks');
 
-      // If this is the first log chunk (sequence 0), task might still be dispatched
-      // Update to running and mirror to action
-      /* v8 ignore start -- test-infra: requires log chunk with sequence 0 to test @preserve */
-      if (chunks.some((c) => c.sequence === 0)) {
+      // First log delivery for this task — task might still be dispatched.
+      // Update to running and mirror to action.
+      /* v8 ignore start -- test-infra: requires first log chunk delivery to test @preserve */
+      if (!taskFormatterStates.has(taskId)) {
         const taskResult = await codeTaskRepo.findById(taskId);
         /* v8 ignore start -- ts-type: Result.ok check creates type narrowing branch @preserve */
         if (taskResult.ok && taskResult.value.status === 'dispatched') {
