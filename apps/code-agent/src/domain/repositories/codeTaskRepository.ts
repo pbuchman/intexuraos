@@ -42,7 +42,7 @@ export interface CreateTaskInput {
 export interface UpdateTaskInput {
   status?: TaskStatus;
   result?: CodeTask['result'];
-  error?: CodeTask['error'];
+  error?: CodeTask['error'] | null;
   statusSummary?: CodeTask['statusSummary'];
   callbackReceived?: boolean;
   dispatchedAt?: Date;

@@ -770,6 +770,30 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.error?.code).toBe('worker_error');
     });
 
+    it('clears task error when set to null', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // First set an error
+      await repo.update(created.value.id, {
+        error: { code: 'worker_error', message: 'Worker failed' },
+      });
+
+      // Then clear it
+      const result = await repo.update(created.value.id, { error: null });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.error).toBeUndefined();
+    });
+
     it('updates statusSummary', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,

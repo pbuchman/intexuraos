@@ -300,7 +300,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           updateData['result'] = input.result;
         }
         if (input.error !== undefined) {
-          updateData['error'] = input.error;
+          updateData['error'] = input.error === null
+            ? FieldValue.delete()
+            : input.error;
         }
         if (input.statusSummary !== undefined) {
           updateData['statusSummary'] = input.statusSummary;
