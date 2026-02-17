@@ -508,7 +508,7 @@ describe('sendTaskMessage', () => {
       expect(secondCall?.[0]).toBe(taskId);
       expect(secondCall?.[1]).toEqual([
         expect.objectContaining({
-          text: '[resumed] Task resuming with your message',
+          text: `[resumed] Task resuming with your message: ${message}`,
           timestamp: expect.any(Timestamp),
         }),
       ]);
