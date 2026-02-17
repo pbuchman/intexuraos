@@ -143,6 +143,24 @@ export async function sendTaskMessage(
   const { action } = forwardResult.value;
   logger.info({ taskId, action }, 'Message sent to task');
 
+  // Best-effort: write a status log line so the transcript shows what happened
+  const statusText =
+    action === 'queued'
+      ? '[queued] Message queued — will be delivered when current work completes'
+      : '[resumed] Task resuming with your message';
+
+  const statusLogResult = await logLineRepo.storeBatch(taskId, [
+    {
+      sequence: sequence + 1,
+      text: statusText,
+      timestamp: Timestamp.now(),
+    },
+  ]);
+
+  if (!statusLogResult.ok) {
+    logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
+  }
+
   // Best-effort side-effects when task is resumed
   if (action === 'resumed') {
     // Update Firestore status so web UI reflects the task is running again
