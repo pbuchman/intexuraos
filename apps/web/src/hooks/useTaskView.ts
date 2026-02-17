@@ -206,18 +206,34 @@ export function useTaskView(taskId: string): TaskViewState {
               }
 
               const added: LogLine[] = [];
+              const modified: LogLine[] = [];
               for (const change of snapshot.docChanges()) {
                 if (change.type === 'added') {
                   const data = change.doc.data() as LogLine;
                   added.push({ sequence: data.sequence, text: data.text });
+                } else if (change.type === 'modified') {
+                  const data = change.doc.data() as LogLine;
+                  modified.push({ sequence: data.sequence, text: data.text });
                 }
               }
-              if (added.length > 0) {
+              if (added.length > 0 || modified.length > 0) {
                 added.sort((a, b) => a.sequence - b.sequence);
                 setLogs((prev) => {
-                  const maxSeq = prev.length > 0 ? (prev[prev.length - 1]?.sequence ?? -1) : -1;
-                  const newLines = added.filter((l) => l.sequence > maxSeq);
-                  return newLines.length > 0 ? [...prev, ...newLines] : prev;
+                  let updated = prev;
+                  // Apply modifications (replace existing lines by sequence)
+                  if (modified.length > 0) {
+                    const modMap = new Map(modified.map((l) => [l.sequence, l]));
+                    updated = updated.map((l) => modMap.get(l.sequence) ?? l);
+                  }
+                  // Append new lines
+                  if (added.length > 0) {
+                    const maxSeq = updated.length > 0 ? (updated[updated.length - 1]?.sequence ?? -1) : -1;
+                    const newLines = added.filter((l) => l.sequence > maxSeq);
+                    if (newLines.length > 0) {
+                      updated = [...updated, ...newLines];
+                    }
+                  }
+                  return updated !== prev ? updated : prev;
                 });
               }
             },
