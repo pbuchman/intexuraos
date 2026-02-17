@@ -3249,6 +3249,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         {
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
+          logLineRepo: services.logLineRepo,
           taskDispatcher: services.taskDispatcher,
           workerSettingsRepo: services.workerSettingsRepo,
           statusMirrorService: services.statusMirrorService,

@@ -362,14 +362,11 @@ export class TaskDispatcher {
     }
 
     if (task.status === 'running') {
-      this.logForwarder.appendChunk(taskId, `[user] ${message}\n`);
-      this.logForwarder.appendChunk(
-        taskId,
-        '[queued] Message queued \u2014 will be delivered when current work completes\n'
-      );
-      await this.logForwarder.flush(taskId);
-
       this.pendingMessages.set(taskId, message);
+      this.appendOrchestratorTaskLog(
+        taskId,
+        `Message queued (task is running): ${message.length > 200 ? message.slice(0, 200) + '\u2026' : message}`
+      );
       this.logger.info({ taskId }, 'Message queued for running task');
       return { ok: true, value: { action: 'queued' } };
     }
@@ -377,14 +374,15 @@ export class TaskDispatcher {
     if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {
       await this.teardownAttempt(taskId, true);
 
-      // Register secret BEFORE any appendChunk calls, because
+      // Register secret BEFORE any appendOrchestratorTaskLog calls, because
       // appendChunk creates a ForwardingState that captures the webhook secret
       // at creation time and never refreshes it.
       this.logForwarder.registerTask(taskId, task.webhookSecret);
 
-      this.logForwarder.appendChunk(taskId, `[user] ${message}\n`);
-      this.logForwarder.appendChunk(taskId, '[resumed] Task resuming with your message\n');
-      await this.logForwarder.flush(taskId);
+      this.appendOrchestratorTaskLog(
+        taskId,
+        `Resuming task with message: ${message.length > 200 ? message.slice(0, 200) + '\u2026' : message}`
+      );
 
       const resumeResult = await this.startWorkerAttempt(task, {
         prompt: message,

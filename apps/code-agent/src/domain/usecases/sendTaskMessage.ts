@@ -6,8 +6,10 @@
  * Cancelled/dispatched tasks: rejected.
  */
 
+import { Timestamp } from '@google-cloud/firestore';
 import { err, ok, type Result, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
+import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { StatusMirrorService } from '../services/statusMirrorService.js';
@@ -39,6 +41,7 @@ export interface SendTaskMessageError {
 export interface SendTaskMessageDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
+  logLineRepo: LogLineRepository;
   taskDispatcher: TaskDispatcherService;
   workerSettingsRepo: WorkerSettingsRepository;
   statusMirrorService: StatusMirrorService;
@@ -49,7 +52,7 @@ export async function sendTaskMessage(
   deps: SendTaskMessageDeps,
   request: SendTaskMessageRequest
 ): Promise<Result<SendTaskMessageResult, SendTaskMessageError>> {
-  const { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo, statusMirrorService, whatsappNotifier } = deps;
+  const { logger, codeTaskRepo, logLineRepo, taskDispatcher, workerSettingsRepo, statusMirrorService, whatsappNotifier } = deps;
   const { taskId, userId, message } = request;
 
   // Step 1: Load task and validate ownership
@@ -71,7 +74,22 @@ export async function sendTaskMessage(
     });
   }
 
-  // Step 3: Look up worker credentials
+  // Step 3: Write [user] log line to Firestore
+  const sequence = Date.now() * 1000;
+  const storeResult = await logLineRepo.storeBatch(taskId, [
+    {
+      sequence,
+      text: `[user] ${message}`,
+      timestamp: Timestamp.now(),
+    },
+  ]);
+
+  if (!storeResult.ok) {
+    logger.error({ taskId, error: storeResult.error }, 'Failed to store user message log line');
+    // Non-fatal — continue with forwarding even if log write fails
+  }
+
+  // Step 4: Look up worker credentials
   const settingsResult = await workerSettingsRepo.getSettings(userId);
 
   /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
@@ -103,7 +121,7 @@ export async function sendTaskMessage(
   }
   /* v8 ignore stop @preserve */
 
-  // Step 4: Forward to orchestrator
+  // Step 5: Forward to orchestrator
   const forwardResult = await taskDispatcher.sendMessageToWorker(taskId, message, {
     url: worker.url,
     cfAccessClientId: worker.cfAccessClientId,
@@ -124,6 +142,24 @@ export async function sendTaskMessage(
 
   const { action } = forwardResult.value;
   logger.info({ taskId, action }, 'Message sent to task');
+
+  // Best-effort: write a status log line so the transcript shows what happened
+  const statusText =
+    action === 'queued'
+      ? '[queued] Message queued \u2014 will be delivered when current work completes'
+      : '[resumed] Task resuming with your message';
+
+  const statusLogResult = await logLineRepo.storeBatch(taskId, [
+    {
+      sequence: sequence + 1,
+      text: statusText,
+      timestamp: Timestamp.now(),
+    },
+  ]);
+
+  if (!statusLogResult.ok) {
+    logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
+  }
 
   // Best-effort side-effects when task is resumed
   if (action === 'resumed') {
