@@ -184,10 +184,25 @@ export function useTaskView(taskId: string): TaskViewState {
           // Live: stream log lines
           const linesRef = collection(db, 'code_tasks', taskId, 'log_lines');
           const linesQuery = query(linesRef, orderBy('sequence', 'asc'));
+          let isFirstSnapshot = true;
           const logsUnsub = onSnapshot(
             linesQuery,
             (snapshot) => {
               if (cancelled) return;
+
+              // First snapshot after (re-)attaching: replace all logs so resumed
+              // tasks don't miss lines when the orchestrator restarts sequencing.
+              if (isFirstSnapshot) {
+                isFirstSnapshot = false;
+                const all: LogLine[] = [];
+                for (const docSnap of snapshot.docs) {
+                  const data = docSnap.data() as LogLine;
+                  all.push({ sequence: data.sequence, text: data.text });
+                }
+                setLogs(all);
+                return;
+              }
+
               const added: LogLine[] = [];
               for (const change of snapshot.docChanges()) {
                 if (change.type === 'added') {

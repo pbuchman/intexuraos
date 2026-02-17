@@ -5,11 +5,10 @@
  * 1. Returns task_not_found when task doesn't exist
  * 2. Returns invalid_status for cancelled task
  * 3. Returns invalid_status for dispatched task
- * 4. Queues message for running task (writes log line, forwards to worker, returns { action: 'queued' })
- * 5. Resumes completed task with message (writes log line, forwards to worker, returns { action: 'resumed' })
+ * 4. Queues message for running task (forwards to worker, returns { action: 'queued' })
+ * 5. Resumes completed task with message (forwards to worker, returns { action: 'resumed' })
  * 6. Returns worker_not_configured when no workers are configured
  * 7. Returns worker_error when forwarding to worker fails
- * 8. Continues even if log line write fails (non-fatal)
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -29,9 +28,6 @@ describe('sendTaskMessage', () => {
   let mockCodeTaskRepo: {
     findByIdForUser: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
-  };
-  let mockLogLineRepo: {
-    storeBatch: ReturnType<typeof vi.fn>;
   };
   let mockTaskDispatcher: {
     sendMessageToWorker: ReturnType<typeof vi.fn>;
@@ -72,10 +68,6 @@ describe('sendTaskMessage', () => {
     mockCodeTaskRepo = {
       findByIdForUser: vi.fn(),
       update: vi.fn().mockResolvedValue(ok(undefined)),
-    };
-
-    mockLogLineRepo = {
-      storeBatch: vi.fn(),
     };
 
     mockTaskDispatcher = {
@@ -129,7 +121,6 @@ describe('sendTaskMessage', () => {
     return {
       logger: mockLogger,
       codeTaskRepo: mockCodeTaskRepo as unknown as SendTaskMessageDeps['codeTaskRepo'],
-      logLineRepo: mockLogLineRepo as unknown as SendTaskMessageDeps['logLineRepo'],
       taskDispatcher: mockTaskDispatcher as unknown as SendTaskMessageDeps['taskDispatcher'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SendTaskMessageDeps['workerSettingsRepo'],
       statusMirrorService: mockStatusMirrorService as unknown as StatusMirrorService,
@@ -151,7 +142,6 @@ describe('sendTaskMessage', () => {
   function setupSuccessPath(taskOverrides: Partial<CodeTask> = {}, action: 'queued' | 'resumed' = 'queued'): void {
     const task = createMockTask(taskOverrides);
     mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-    mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
     setupWorkerSettings();
     mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action }));
   }
@@ -221,15 +211,6 @@ describe('sendTaskMessage', () => {
         expect(result.value.action).toBe('queued');
       }
 
-      // Verify log line was written
-      expect(mockLogLineRepo.storeBatch).toHaveBeenCalledWith(taskId, [
-        expect.objectContaining({
-          text: `[user] ${message}`,
-          timestamp: expect.any(Timestamp),
-          sequence: expect.any(Number),
-        }),
-      ]);
-
       // Verify message was forwarded to worker
       expect(mockTaskDispatcher.sendMessageToWorker).toHaveBeenCalledWith(
         taskId,
@@ -258,12 +239,6 @@ describe('sendTaskMessage', () => {
         expect(result.value.action).toBe('resumed');
       }
 
-      expect(mockLogLineRepo.storeBatch).toHaveBeenCalledWith(taskId, [
-        expect.objectContaining({
-          text: `[user] ${message}`,
-        }),
-      ]);
-
       expect(mockTaskDispatcher.sendMessageToWorker).toHaveBeenCalledWith(
         taskId,
         message,
@@ -290,7 +265,6 @@ describe('sendTaskMessage', () => {
 
       const task = createMockTask({ status: 'running', workerLocation: 'office-pc' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(
         ok({
           userId,
@@ -319,7 +293,6 @@ describe('sendTaskMessage', () => {
     it('should fall back to first enabled worker when workerLocation does not match', async () => {
       const task = createMockTask({ status: 'running', workerLocation: 'nonexistent-worker' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
       setupWorkerSettings();
       mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'queued' }));
 
@@ -343,7 +316,6 @@ describe('sendTaskMessage', () => {
     it('should return worker_not_configured when no workers are configured', async () => {
       const task = createMockTask({ status: 'running' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(
         ok({
           userId,
@@ -369,7 +341,6 @@ describe('sendTaskMessage', () => {
     it('should return worker_not_configured when all workers are disabled', async () => {
       const task = createMockTask({ status: 'running' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(
         ok({
           userId,
@@ -390,7 +361,6 @@ describe('sendTaskMessage', () => {
     it('should return worker_not_configured when settings are null', async () => {
       const task = createMockTask({ status: 'running' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok(null));
 
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
@@ -406,7 +376,6 @@ describe('sendTaskMessage', () => {
     it('should return worker_error when forwarding to worker fails', async () => {
       const task = createMockTask({ status: 'running' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
       setupWorkerSettings();
       mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
         err({ code: 'dispatch_failed', message: 'Worker returned 500' })
@@ -423,35 +392,6 @@ describe('sendTaskMessage', () => {
         expect.objectContaining({ taskId }),
         expect.any(String)
       );
-    });
-  });
-
-  describe('graceful degradation', () => {
-    it('should continue even if log line write fails (non-fatal)', async () => {
-      const task = createMockTask({ status: 'running' });
-      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockLogLineRepo.storeBatch.mockResolvedValue(
-        err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
-      );
-      setupWorkerSettings();
-      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'queued' }));
-
-      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      // Should succeed despite log write failure
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.action).toBe('queued');
-      }
-
-      // Should have logged the error
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId }),
-        expect.stringContaining('Failed to store user message log line')
-      );
-
-      // Should still forward to worker
-      expect(mockTaskDispatcher.sendMessageToWorker).toHaveBeenCalled();
     });
   });
 
@@ -479,78 +419,11 @@ describe('sendTaskMessage', () => {
     });
   });
 
-  describe('status log lines', () => {
-    it('should write [queued] log line after user log line when action is queued', async () => {
-      setupSuccessPath({ status: 'running' }, 'queued');
-
-      await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      // storeBatch is called twice: once for [user], once for [queued]
-      expect(mockLogLineRepo.storeBatch).toHaveBeenCalledTimes(2);
-      const secondCall = mockLogLineRepo.storeBatch.mock.calls[1];
-      expect(secondCall?.[0]).toBe(taskId);
-      expect(secondCall?.[1]).toEqual([
-        expect.objectContaining({
-          text: '[queued] Message queued — will be delivered when current work completes',
-          timestamp: expect.any(Timestamp),
-        }),
-      ]);
-    });
-
-    it('should write [resumed] log line after user log line when action is resumed', async () => {
-      setupSuccessPath({ status: 'completed' }, 'resumed');
-
-      await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      // storeBatch is called twice: once for [user], once for [resumed]
-      expect(mockLogLineRepo.storeBatch).toHaveBeenCalledTimes(2);
-      const secondCall = mockLogLineRepo.storeBatch.mock.calls[1];
-      expect(secondCall?.[0]).toBe(taskId);
-      expect(secondCall?.[1]).toEqual([
-        expect.objectContaining({
-          text: '[resumed] Task resuming with your message',
-          timestamp: expect.any(Timestamp),
-        }),
-      ]);
-    });
-
-    it('should use sequence + 1 for status log line', async () => {
-      setupSuccessPath({ status: 'running' }, 'queued');
-
-      await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      const firstCall = mockLogLineRepo.storeBatch.mock.calls[0];
-      const secondCall = mockLogLineRepo.storeBatch.mock.calls[1];
-      const userSequence = (firstCall?.[1] as { sequence: number }[])[0]?.sequence;
-      const statusSequence = (secondCall?.[1] as { sequence: number }[])[0]?.sequence;
-      expect(statusSequence).toBe((userSequence ?? 0) + 1);
-    });
-
-    it('should succeed even if status log line write fails (best-effort)', async () => {
-      const task = createMockTask({ status: 'running' });
-      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      // First storeBatch (user line) succeeds, second (status line) fails
-      mockLogLineRepo.storeBatch
-        .mockResolvedValueOnce(ok(undefined))
-        .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }));
-      setupWorkerSettings();
-      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'queued' }));
-
-      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.action).toBe('queued');
-      }
-    });
-  });
-
   describe('resume side-effects', () => {
     it('should update Firestore status to running on resume', async () => {
       const task = createMockTask({ status: 'completed', actionId: 'action-1' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
       setupWorkerSettings();
       mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
 
@@ -564,7 +437,6 @@ describe('sendTaskMessage', () => {
       const task = createMockTask({ status: 'completed', actionId: 'action-1', traceId: 'trace-abc' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
       setupWorkerSettings();
       mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
 
@@ -581,7 +453,6 @@ describe('sendTaskMessage', () => {
       const task = createMockTask({ status: 'completed' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
       setupWorkerSettings();
       mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
 
@@ -606,7 +477,7 @@ describe('sendTaskMessage', () => {
       const task = createMockTask({ status: 'completed' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+
       setupWorkerSettings();
       mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
 
@@ -626,7 +497,7 @@ describe('sendTaskMessage', () => {
       const task = createMockTask({ status: 'completed', actionId: 'action-1' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+
       setupWorkerSettings();
       mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
       mockStatusMirrorService.mirrorStatus.mockRejectedValueOnce(new Error('Mirror failed'));
@@ -647,7 +518,7 @@ describe('sendTaskMessage', () => {
       const task = createMockTask({ status: 'completed' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+
       setupWorkerSettings();
       mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
       mockWhatsappNotifier.notifyTaskResumed.mockRejectedValueOnce(new Error('Notification failed'));
