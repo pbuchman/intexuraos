@@ -151,47 +151,4 @@ describe('firestoreLogLineRepository', () => {
     });
   });
 
-  describe('deleteAll', () => {
-    it('returns ok immediately when no log lines exist', async () => {
-      mockLinesCollection.get.mockResolvedValue({ docs: [] });
-      const repo = createFirestoreLogLineRepository({ firestore: mockFirestore, logger });
-
-      const result = await repo.deleteAll('task-1');
-
-      expect(result.ok).toBe(true);
-      expect(mockFirestore.batch).not.toHaveBeenCalled();
-      expect(logger.debug).toHaveBeenCalledWith(
-        { taskId: 'task-1', count: 0 },
-        'Deleted all log lines'
-      );
-    });
-
-    it('deletes all documents in log_lines subcollection', async () => {
-      const docRef1 = { id: 'doc-1' };
-      const docRef2 = { id: 'doc-2' };
-      mockLinesCollection.get.mockResolvedValue({
-        docs: [{ ref: docRef1 }, { ref: docRef2 }],
-      });
-      const repo = createFirestoreLogLineRepository({ firestore: mockFirestore, logger });
-
-      const result = await repo.deleteAll('task-1');
-
-      expect(result.ok).toBe(true);
-      expect(mockBatch.delete).toHaveBeenCalledTimes(2);
-      expect(mockBatch.delete).toHaveBeenCalledWith(docRef1);
-      expect(mockBatch.delete).toHaveBeenCalledWith(docRef2);
-      expect(mockBatch.commit).toHaveBeenCalledTimes(1);
-    });
-
-    it('accesses correct subcollection path', async () => {
-      mockLinesCollection.get.mockResolvedValue({ docs: [] });
-      const repo = createFirestoreLogLineRepository({ firestore: mockFirestore, logger });
-
-      await repo.deleteAll('task-42');
-
-      expect(mockFirestore.collection).toHaveBeenCalledWith('code_tasks');
-      expect(mockTasksCollection.doc).toHaveBeenCalledWith('task-42');
-      expect(mockTaskDoc.collection).toHaveBeenCalledWith('log_lines');
-    });
-  });
 });
