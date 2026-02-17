@@ -132,5 +132,5 @@ export interface TaskDispatcherService {
     taskId: string,
     message: string,
     credentials: { url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }
-  ): Promise<Result<{ action: 'queued' | 'resumed' }, { code: string; message: string }>>;
+  ): Promise<Result<{ action: 'queued' | 'resumed'; pendingMessages?: string[] }, { code: string; message: string }>>;
 }
