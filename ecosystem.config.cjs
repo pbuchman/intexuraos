@@ -178,9 +178,15 @@ function createServiceConfig(name, port, options = {}) {
     autorestart: true,
     kill_timeout: 5000,
     restart_delay: 5000,
-    watch: ['src', '../../packages'],
+    watch: ['src', '../../packages/*/src'],
     watch_delay: 1000,
-    ignore_watch: ['node_modules', '__tests__', '**/*.test.ts', '**/*.spec.ts', 'dist'],
+    ignore_watch: [
+      /(^|\/)node_modules\//,
+      /(^|\/)__tests__\//,
+      /(^|\/)dist\//,
+      /\.test\.[tj]sx?$/,
+      /\.spec\.[tj]sx?$/,
+    ],
   };
 
   if (waitForService) {
@@ -246,9 +252,15 @@ module.exports = {
       max_restarts: 5,
       kill_timeout: 5000,
       restart_delay: 2000,
-      watch: ['src', '../../packages'],
+      watch: ['src', '../../packages/*/src'],
       watch_delay: 1000,
-      ignore_watch: ['node_modules', '__tests__', '**/*.test.ts', '**/*.spec.ts', 'dist'],
+      ignore_watch: [
+        /(^|\/)node_modules\//,
+        /(^|\/)__tests__\//,
+        /(^|\/)dist\//,
+        /\.test\.[tj]sx?$/,
+        /\.spec\.[tj]sx?$/,
+      ],
     },
   ],
 };
