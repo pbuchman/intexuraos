@@ -45,7 +45,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
   return {
     create: async (input: CreateTaskInput): Promise<Result<CodeTask, RepositoryError>> => {
-      const taskId = `task_${randomUUID()}`;
+      const taskId = input.id ?? `task_${randomUUID()}`;
       const dedupKey = generateDedupKey(input.userId, input.prompt);
       const now = new Date();
       const dedupWindowStart = new Date(now.getTime() - DEDUP_WINDOW_MS);

@@ -12,6 +12,7 @@ import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
+import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
@@ -458,6 +459,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier: services.whatsappNotifier,
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
         },
         processRequest
       );
@@ -1147,11 +1149,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
-      // Generate webhook secret for this task
-      const webhookSecret = generateWebhookSecret();
+      // Pre-generate task ID and derive deterministic webhook secret
+      const taskId = `task_${randomUUID()}`;
+      const webhookSecret = generateWebhookSecret(loadConfig().orchestratorSecret, taskId);
 
       // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
       const createInput: {
+        id: string;
         userId: string;
         prompt: string;
         sanitizedPrompt: string;
@@ -1169,6 +1173,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         hasChildren?: boolean;
         linearFallback?: boolean;
       } = {
+        id: taskId,
         userId,
         prompt: body.prompt,
         sanitizedPrompt: body.prompt.trim().replace(/\s+/g, ' '),
@@ -2941,6 +2946,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier,
           metricsClient,
           workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
         },
         retryRequest
       );
@@ -3131,6 +3137,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier,
           metricsClient,
           workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
         },
         {
           originalTaskId: taskId,

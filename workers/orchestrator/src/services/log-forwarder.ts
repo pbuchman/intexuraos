@@ -106,13 +106,7 @@ export class LogForwarder {
 
     this.logger.info({ taskId, logFilePath }, 'Starting log forwarding');
 
-    const webhookSecret = this.taskSecrets.get(taskId) ?? '';
-    if (webhookSecret === '') {
-      this.logger.warn(
-        { taskId },
-        'No webhook secret registered - log upload signatures will fail'
-      );
-    }
+    const webhookSecret = this.taskSecrets.get(taskId) ?? this.deriveWebhookSecret(taskId);
 
     const state: ForwardingState = {
       taskId,
@@ -210,13 +204,7 @@ export class LogForwarder {
 
     // Create state if it doesn't exist (Docker mode doesn't call startForwarding)
     if (state === undefined) {
-      const webhookSecret = this.taskSecrets.get(taskId) ?? '';
-      if (webhookSecret === '') {
-        this.logger.warn(
-          { taskId },
-          'No webhook secret registered - log upload signatures will fail'
-        );
-      }
+      const webhookSecret = this.taskSecrets.get(taskId) ?? this.deriveWebhookSecret(taskId);
       const existingSeq = this.taskSequences.get(taskId);
       state = {
         taskId,
@@ -504,6 +492,15 @@ export class LogForwarder {
       /* v8 ignore stop @preserve */
       return `${ts} ${line}`;
     });
+  }
+
+  /**
+   * Derive a deterministic webhook secret from orchestratorSecret + taskId.
+   * Used as fallback when the secret is not in the in-memory taskSecrets map
+   * (e.g. after orchestrator restart while containers survive).
+   */
+  private deriveWebhookSecret(taskId: string): string {
+    return createHmac('sha256', this.config.orchestratorSecret).update(taskId).digest('hex');
   }
 
   private signPayload(payload: string, timestamp: number, secret: string): string {

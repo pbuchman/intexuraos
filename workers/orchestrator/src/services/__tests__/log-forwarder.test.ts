@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createHmac } from 'node:crypto';
 import { LogForwarder } from '../log-forwarder.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -228,6 +229,34 @@ describe('LogForwarder', () => {
       await forwarder.flush('task-1');
 
       expect(forwarder.getDroppedChunkCount('task-1')).toBeGreaterThan(0);
+    });
+  });
+
+  describe('fallback secret derivation', () => {
+    it('derives webhook secret from orchestratorSecret when task not registered', async () => {
+      const expectedSecret = createHmac('sha256', baseConfig.orchestratorSecret)
+        .update('task-unregistered')
+        .digest('hex');
+
+      fetchSpy.mockImplementation(async (_url: string | URL | Request, init?: RequestInit) => {
+        const opts = init as Record<string, unknown>;
+        const sig = (opts['headers'] as Record<string, string>)['X-Request-Signature'];
+        const ts = (opts['headers'] as Record<string, string>)['X-Request-Timestamp'];
+        const body = opts['body'] as string;
+
+        // Verify the signature was computed with the derived secret
+        const message = `${ts}.${body}`;
+        const expected = createHmac('sha256', expectedSecret).update(message).digest('hex');
+        expect(sig).toBe(expected);
+
+        return ackResponse([0]);
+      });
+
+      // Do NOT call registerTask — simulate post-restart state
+      forwarder.appendChunk('task-unregistered', 'log line\n');
+      await forwarder.flush('task-unregistered');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
   });
 });
