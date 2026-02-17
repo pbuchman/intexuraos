@@ -165,14 +165,23 @@ export async function sendTaskMessage(
       logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
     }
   } else {
-    // Resumed — clear the accumulated queue
+    // Resumed — clear old log lines so the transcript starts fresh
+    const deleteResult = await logLineRepo.deleteAll(taskId);
+    if (!deleteResult.ok) {
+      logger.warn({ taskId, error: deleteResult.error }, 'Failed to clear old log lines on resume');
+    }
+
+    // Clear the accumulated queue and reset task status
     const clearResult = await codeTaskRepo.update(taskId, { status: 'running', error: null, pendingUserMessages: [] });
     if (!clearResult.ok) {
       logger.warn({ taskId, error: clearResult.error }, 'Failed to update task status on resume');
     }
 
+    // Re-write the [user] message and [resumed] status as the first lines of the new session
+    const resumeSequence = Date.now() * 1000;
     const statusLogResult = await logLineRepo.storeBatch(taskId, [
-      { sequence: sequence + 1, text: `[resumed] Task resuming with your message: ${message}`, timestamp: Timestamp.now() },
+      { sequence: resumeSequence, text: `[user] ${message}`, timestamp: Timestamp.now() },
+      { sequence: resumeSequence + 1, text: `[resumed] Task resuming with your message: ${message}`, timestamp: Timestamp.now() },
     ]);
     if (!statusLogResult.ok) {
       logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
