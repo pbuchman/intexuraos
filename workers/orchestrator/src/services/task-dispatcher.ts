@@ -67,7 +67,7 @@ export class TaskDispatcher {
   private readonly claudeLogBuffers = new Map<string, string>();
   private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
-  private readonly pendingMessages = new Map<string, string>();
+  private readonly pendingMessages = new Map<string, string[]>();
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
   private readonly preserveFailedContainers: boolean;
@@ -362,10 +362,12 @@ export class TaskDispatcher {
     }
 
     if (task.status === 'running') {
-      this.pendingMessages.set(taskId, message);
+      const queue = this.pendingMessages.get(taskId) ?? [];
+      queue.push(message);
+      this.pendingMessages.set(taskId, queue);
       this.appendOrchestratorTaskLog(
         taskId,
-        `Message queued (task is running): ${message.length > 200 ? message.slice(0, 200) + '\u2026' : message}`
+        `Message queued (${String(queue.length)} pending): ${message.length > 200 ? message.slice(0, 200) + '\u2026' : message}`
       );
       this.logger.info({ taskId }, 'Message queued for running task');
       return { ok: true, value: { action: 'queued' } };
@@ -739,17 +741,18 @@ export class TaskDispatcher {
     }
 
     if (verification.passed) {
-      const pendingMessage = this.pendingMessages.get(task.taskId);
-      if (pendingMessage !== undefined) {
+      const pendingQueue = this.pendingMessages.get(task.taskId);
+      if (pendingQueue !== undefined && pendingQueue.length > 0) {
         this.pendingMessages.delete(task.taskId);
+        const combinedPrompt = pendingQueue.join('\n\n');
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Delivering queued message instead of finalizing: ${pendingMessage.length > 200 ? pendingMessage.slice(0, 200) + '…' : pendingMessage}`
+          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing: ${combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '…' : combinedPrompt}`
         );
         await this.flushTaskLogs(task.taskId);
         await this.teardownAttempt(task.taskId, true);
         const resumeResult = await this.startWorkerAttempt(task, {
-          prompt: pendingMessage,
+          prompt: combinedPrompt,
           hasChildren: task.hasChildren ?? false,
           continueSession: true,
         });
@@ -762,7 +765,7 @@ export class TaskDispatcher {
         }
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Failed to deliver queued message, finalizing normally`
+          `Failed to deliver queued messages, finalizing normally`
         );
       }
 

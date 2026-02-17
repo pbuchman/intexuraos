@@ -45,6 +45,7 @@ export interface TaskViewState {
   sending: boolean;
   sendError: { code: string; message: string } | null;
   messageStatus: MessageStatus;
+  queuedMessages: string[];
   cancelTask: () => Promise<void>;
   retryTask: (additionalContext?: string) => Promise<string>;
   sendMessage: (message: string) => Promise<void>;
@@ -73,6 +74,7 @@ export function useTaskView(taskId: string): TaskViewState {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<{ code: string; message: string } | null>(null);
   const [messageStatus, setMessageStatus] = useState<MessageStatus>('idle');
+  const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
   const [listenerHealthy, setListenerHealthy] = useState(false);
 
   const isMountedRef = useRef(true);
@@ -264,6 +266,13 @@ export function useTaskView(taskId: string): TaskViewState {
     };
   }, [isAuthenticated, user, taskId, task?.status, fetchTask]);
 
+  // --- Clear queued messages when task finishes (messages were delivered) ---
+  useEffect(() => {
+    if (task !== null && task.status !== 'running' && task.status !== 'dispatched') {
+      setQueuedMessages([]);
+    }
+  }, [task?.status]);
+
   // --- Actions ---
   const cancelTask = useCallback(async (): Promise<void> => {
     if (task === null) return;
@@ -323,9 +332,14 @@ export function useTaskView(taskId: string): TaskViewState {
       if (isMountedRef.current) {
         setMessageStatus(result.action === 'queued' ? 'queued' : 'delivered');
 
+        if (result.action === 'queued') {
+          setQueuedMessages((prev) => [...prev, message]);
+        }
+
         // When a terminal task is resumed, update local status so the
         // Firestore effect re-runs and attaches live onSnapshot listeners.
         if (result.action === 'resumed') {
+          setQueuedMessages([]);
           setTask({ ...task, status: 'running' });
           lastStatusRef.current = 'running';
         }
@@ -362,6 +376,7 @@ export function useTaskView(taskId: string): TaskViewState {
     sending,
     sendError,
     messageStatus,
+    queuedMessages,
     cancelTask,
     retryTask,
     sendMessage,
