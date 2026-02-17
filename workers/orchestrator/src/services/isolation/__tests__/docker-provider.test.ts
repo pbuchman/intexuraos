@@ -333,6 +333,8 @@ describe('DockerProvider', () => {
     });
 
     it('sets CLAUDE_CONTINUE for resumed attempts', async () => {
+      // No orphan container exists — force creation path
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
       const config = createTestConfig({ continueSession: true });
       await provider.createWorker(config);
 
@@ -681,6 +683,90 @@ describe('DockerProvider', () => {
 
       // Should copy GCP credentials
       expect(fs.promises.copyFile).toHaveBeenCalled();
+    });
+  });
+
+  describe('orphaned container recovery after restart', () => {
+    it('reuses orphaned running container on continueSession after orchestrator restart', async () => {
+      // Simulate: orchestrator restarted, workers/preservedWorkers Maps empty,
+      // but Docker container still alive from previous run
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-container-id',
+      });
+      mocks.mockDocker.createContainer.mockClear();
+
+      const handle = await provider.createWorker(
+        createTestConfig({
+          continueSession: true,
+          prompt: 'Resume after restart',
+          systemPrompt: 'Resume system prompt',
+        })
+      );
+
+      expect(handle.containerId).toBe('orphan-container-id');
+      expect(handle.status).toBe('running');
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+      expect(await provider.listWorkers()).toHaveLength(1);
+    });
+
+    it('writes prompt files and creates secrets dir when reusing orphaned container', async () => {
+      const fs = await import('node:fs');
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-container-id',
+      });
+      (fs.promises.mkdir as ReturnType<typeof vi.fn>).mockClear();
+      (fs.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          continueSession: true,
+          prompt: 'Resume prompt',
+          systemPrompt: 'Resume system prompt',
+        })
+      );
+
+      expect(fs.promises.mkdir).toHaveBeenCalledWith(
+        expect.stringContaining('test-task-123'),
+        expect.objectContaining({ recursive: true })
+      );
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('system-prompt.txt'),
+        'Resume system prompt',
+        'utf-8'
+      );
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('user-prompt.txt'),
+        'Resume prompt',
+        'utf-8'
+      );
+    });
+
+    it('removes stopped orphan container before creating fresh one', async () => {
+      // First inspect: stopped orphan; subsequent: default (running)
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: false },
+        Id: 'stopped-orphan-id',
+      });
+
+      const handle = await provider.createWorker(createTestConfig({ continueSession: true }));
+
+      // Should have removed the stopped container
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+      // Should have created a new container (fell through to normal creation)
+      expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
+      expect(handle.status).toBe('running');
+    });
+
+    it('falls through to normal creation when orphan container does not exist', async () => {
+      // Docker throws when container doesn't exist
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const handle = await provider.createWorker(createTestConfig({ continueSession: true }));
+
+      expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
+      expect(handle.status).toBe('running');
     });
   });
 
