@@ -372,14 +372,17 @@ export class TaskDispatcher {
     }
 
     if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {
+      await this.teardownAttempt(taskId, true);
+
+      // Register secret BEFORE any appendOrchestratorTaskLog calls, because
+      // appendChunk creates a ForwardingState that captures the webhook secret
+      // at creation time and never refreshes it.
+      this.logForwarder.registerTask(taskId, task.webhookSecret);
+
       this.appendOrchestratorTaskLog(
         taskId,
         `Resuming task with message: ${message.length > 200 ? message.slice(0, 200) + '…' : message}`
       );
-
-      await this.teardownAttempt(taskId, true);
-
-      this.logForwarder.registerTask(taskId, task.webhookSecret);
 
       const resumeResult = await this.startWorkerAttempt(task, {
         prompt: message,
