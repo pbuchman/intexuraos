@@ -119,8 +119,6 @@ export interface CodeTask {
   linearIssueId?: string;
   linearIssueTitle?: string;
   linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';  // LLM-classified issue type
-  linearIssueLabels?: string[];  // Label names from validated issue
-  hasChildren?: boolean;         // Whether the issue has child issues
   linearFallback?: boolean;     // True if Linear was unavailable (design lines 290-296)
 
   // PR Correlation (for linking tasks to PRs - INT-465)

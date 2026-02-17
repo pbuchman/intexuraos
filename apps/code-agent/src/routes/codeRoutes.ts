@@ -1169,8 +1169,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueId?: string;
         linearIssueTitle?: string;
         linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
-        linearIssueLabels?: string[];
-        hasChildren?: boolean;
         linearFallback?: boolean;
       } = {
         id: taskId,
@@ -1200,9 +1198,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
         createInput.linearIssueType = issueResult.linearIssueType;
       }
-      // Save linearIssueLabels and hasChildren
-      createInput.linearIssueLabels = issueResult.linearIssueLabels;
-      createInput.hasChildren = issueResult.hasChildren;
       // Save fallback flag
       /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
       if (issueResult.linearFallback) {
@@ -1327,8 +1322,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType: task.workerType,
         webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
         webhookSecret,
-        linearIssueLabels: task.linearIssueLabels ?? [],
-        hasChildren: task.hasChildren ?? false,
+        linearIssueLabels: issueResult.linearIssueLabels,
+        hasChildren: issueResult.hasChildren,
         workerCredentials,
       };
 

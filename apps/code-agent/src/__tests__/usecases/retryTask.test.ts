@@ -687,8 +687,6 @@ describe('retryTask use case', () => {
     it('should refresh Linear labels and children before dispatch', async () => {
       const mockTask = createMockTask({
         completedAt: sixMinutesAgo,
-        linearIssueLabels: ['stale-label'],
-        hasChildren: false,
       });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
       mockLinearAgentClient.validateIssue.mockResolvedValue(
