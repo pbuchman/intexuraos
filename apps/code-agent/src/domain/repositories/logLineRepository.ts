@@ -6,5 +6,4 @@ export type RepositoryError =
 
 export interface LogLineRepository {
   storeBatch(taskId: string, lines: FormattedLogLine[]): Promise<Result<void, RepositoryError>>;
-  deleteAll(taskId: string): Promise<Result<void, RepositoryError>>;
 }

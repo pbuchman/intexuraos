@@ -32,7 +32,6 @@ describe('sendTaskMessage', () => {
   };
   let mockLogLineRepo: {
     storeBatch: ReturnType<typeof vi.fn>;
-    deleteAll: ReturnType<typeof vi.fn>;
   };
   let mockTaskDispatcher: {
     sendMessageToWorker: ReturnType<typeof vi.fn>;
@@ -77,7 +76,6 @@ describe('sendTaskMessage', () => {
 
     mockLogLineRepo = {
       storeBatch: vi.fn(),
-      deleteAll: vi.fn().mockResolvedValue(ok(undefined)),
     };
 
     mockTaskDispatcher = {
@@ -503,23 +501,16 @@ describe('sendTaskMessage', () => {
       ]);
     });
 
-    it('should clear old logs and write [user]+[resumed] lines when action is resumed', async () => {
+    it('should append [resumed] marker when action is resumed without duplicating [user] line', async () => {
       setupSuccessPath({ status: 'completed' }, 'resumed');
 
       await sendTaskMessage(createDeps(), { taskId, userId, message });
 
-      // deleteAll clears old log lines before writing resumed session lines
-      expect(mockLogLineRepo.deleteAll).toHaveBeenCalledWith(taskId);
-
-      // storeBatch is called twice: once for initial [user] (step 3), once for re-written [user]+[resumed] after clear
+      // storeBatch is called twice: once for [user] (step 3), once for [resumed] only
       expect(mockLogLineRepo.storeBatch).toHaveBeenCalledTimes(2);
       const secondCall = mockLogLineRepo.storeBatch.mock.calls[1];
       expect(secondCall?.[0]).toBe(taskId);
       expect(secondCall?.[1]).toEqual([
-        expect.objectContaining({
-          text: `[user] ${message}`,
-          timestamp: expect.any(Timestamp),
-        }),
         expect.objectContaining({
           text: `[resumed] Task resuming with your message: ${message}`,
           timestamp: expect.any(Timestamp),
@@ -578,7 +569,7 @@ describe('sendTaskMessage', () => {
       const task = createMockTask({ status: 'completed' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
-      // First storeBatch (initial user line) succeeds, second (re-written user+resumed) fails
+      // First storeBatch (user line) succeeds, second ([resumed] marker) fails
       mockLogLineRepo.storeBatch
         .mockResolvedValueOnce(ok(undefined))
         .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }));
@@ -592,37 +583,6 @@ describe('sendTaskMessage', () => {
         expect.objectContaining({ taskId }),
         expect.stringContaining('Failed to write status log line')
       );
-    });
-  });
-
-  describe('log cleanup on resume', () => {
-    it('should succeed even if deleteAll fails (best-effort)', async () => {
-      const task = createMockTask({ status: 'completed' });
-      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
-      mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
-      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
-      mockLogLineRepo.deleteAll.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'Delete failed' }));
-      setupWorkerSettings();
-      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'resumed' }));
-
-      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.action).toBe('resumed');
-      }
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId }),
-        expect.stringContaining('Failed to clear old log lines')
-      );
-    });
-
-    it('should not call deleteAll when action is queued', async () => {
-      setupSuccessPath({ status: 'running' }, 'queued');
-
-      await sendTaskMessage(createDeps(), { taskId, userId, message });
-
-      expect(mockLogLineRepo.deleteAll).not.toHaveBeenCalled();
     });
   });
 
