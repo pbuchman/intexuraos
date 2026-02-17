@@ -1179,7 +1179,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         sanitizedPrompt: body.prompt.trim().replace(/\s+/g, ' '),
         systemPromptHash: 'default', // TODO: Use actual system prompt hash
         workerType: body.workerType ?? 'auto',
-        workerLocation: 'mac', // Will be overridden by dispatcher
+        workerLocation: 'pending', // Updated after dispatch with actual worker location
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -1352,6 +1352,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker');
       }
 
+      // Save the actual worker location returned by the dispatcher
+      const actualWorkerLocation = dispatchResult.value.workerLocation;
+      await codeTaskRepo.update(task.id, { workerLocation: actualWorkerLocation });
+
       // Record task start for rate limiting
       await rateLimitService.recordTaskStart(userId);
 
@@ -1360,7 +1364,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         await linearIssueService.markInProgress(userId, issueResult.linearIssueId);
       }
 
-      request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');
+      request.log.info({ taskId: task.id, workerLocation: actualWorkerLocation }, 'Code task submitted successfully');
 
       return await reply.ok({
         status: 'submitted',

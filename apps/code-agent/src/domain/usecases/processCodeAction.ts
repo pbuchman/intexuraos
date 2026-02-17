@@ -335,6 +335,7 @@ export async function processCodeAction(
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(task.id, {
+    workerLocation: dispatchValue.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
   });

@@ -371,6 +371,7 @@ ${feedback.trim()}
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(followUpTask.id, {
+    workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
   });

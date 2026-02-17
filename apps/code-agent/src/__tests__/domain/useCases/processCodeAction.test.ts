@@ -242,8 +242,9 @@ describe('processCodeAction', () => {
       expect(result.value.workerLocation).toBe('mac');
     }
 
-    // Verify cancel nonce was set
+    // Verify worker location and cancel nonce were set
     expect(codeTaskRepo.update).toHaveBeenCalledWith('new-task-123', {
+      workerLocation: 'mac',
       cancelNonce: expect.any(String),
       cancelNonceExpiresAt: expect.any(String),
     });
