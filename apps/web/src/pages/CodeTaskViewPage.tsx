@@ -59,6 +59,8 @@ const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:tex
 
 function getLogLineClass(text: string): string {
   if (text.startsWith('[user]')) return 'text-cyan-400';
+  if (text.startsWith('[queued]')) return 'text-amber-400';
+  if (text.startsWith('[resumed]')) return 'text-emerald-400';
   if (text.startsWith('[claude]')) return 'text-blue-300';
   if (text.startsWith('[tool]')) return 'text-yellow-300';
   if (text.startsWith('[error]')) return 'text-red-400';
@@ -712,8 +714,16 @@ const MemoLogStream = memo(LogStream);
 
 const MemoLogLineRow = memo(function LogLineRow({ line }: { line: LogLine }): React.JSX.Element {
   const isUserMessage = line.text.startsWith('[user]');
+  const isQueued = line.text.startsWith('[queued]');
+  const isResumed = line.text.startsWith('[resumed]');
+
+  let extraClass = '';
+  if (isUserMessage) extraClass = ' border-l-2 border-cyan-800 pl-2';
+  else if (isQueued) extraClass = ' border-l-2 border-amber-700 bg-amber-900/20 pl-2';
+  else if (isResumed) extraClass = ' border-l-2 border-emerald-700 bg-emerald-900/20 pl-2';
+
   return (
-    <div className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}${isUserMessage ? ' border-l-2 border-cyan-800 pl-2' : ''}`}>
+    <div className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}${extraClass}`}>
       {line.text}
     </div>
   );
