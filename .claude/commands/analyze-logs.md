@@ -248,7 +248,6 @@ Observation to store:
 | Service                      | Cloud Run Name                          |
 | ---------------------------- | --------------------------------------- |
 | user-service                 | intexuraos-user-service                 |
-| promptvault-service          | intexuraos-promptvault-service          |
 | notion-service               | intexuraos-notion-service               |
 | whatsapp-service             | intexuraos-whatsapp-service             |
 | mobile-notifications-service | intexuraos-mobile-notifications-service |

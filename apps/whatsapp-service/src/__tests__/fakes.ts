@@ -26,6 +26,9 @@ import type {
   MediaUrlInfo,
   OutboundMessage,
   OutboundMessageRepository,
+  PhoneVerification,
+  PhoneVerificationRepository,
+  PhoneVerificationStatus,
   SendMessageResult,
   SpeechTranscriptionPort,
   TextMessageSendResult,
@@ -42,6 +45,7 @@ import type {
   WebhookProcessEvent,
   WebhookProcessingStatus,
   WhatsAppCloudApiPort,
+  WhatsAppInteractiveButton,
   WhatsAppMessage,
   WhatsAppMessageRepository,
   WhatsAppMessageSender,
@@ -634,6 +638,8 @@ export class FakeEventPublisher implements EventPublisherPort {
   private transcribeAudioEvents: TranscribeAudioEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
   private approvalReplyEvents: ApprovalReplyEvent[] = [];
+  private approvalReplyFailureMessage: string | null = null;
+  private extractLinkPreviewsFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
@@ -658,13 +664,31 @@ export class FakeEventPublisher implements EventPublisherPort {
   publishExtractLinkPreviews(
     event: ExtractLinkPreviewsEvent
   ): Promise<Result<void, WhatsAppError>> {
+    if (this.extractLinkPreviewsFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.extractLinkPreviewsFailureMessage })
+      );
+    }
     this.extractLinkPreviewsEvents.push(event);
     return Promise.resolve(ok(undefined));
   }
 
+  setExtractLinkPreviewsFailure(message: string): void {
+    this.extractLinkPreviewsFailureMessage = message;
+  }
+
   publishApprovalReply(event: ApprovalReplyEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.approvalReplyFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.approvalReplyFailureMessage })
+      );
+    }
     this.approvalReplyEvents.push(event);
     return Promise.resolve(ok(undefined));
+  }
+
+  setApprovalReplyFailure(message: string): void {
+    this.approvalReplyFailureMessage = message;
   }
 
   getMediaCleanupEvents(): MediaCleanupEvent[] {
@@ -698,6 +722,8 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.transcribeAudioEvents = [];
     this.extractLinkPreviewsEvents = [];
     this.approvalReplyEvents = [];
+    this.approvalReplyFailureMessage = null;
+    this.extractLinkPreviewsFailureMessage = null;
   }
 }
 
@@ -705,7 +731,7 @@ export class FakeEventPublisher implements EventPublisherPort {
  * Fake message sender for testing.
  */
 export class FakeMessageSender implements WhatsAppMessageSender {
-  private sentMessages: { phoneNumber: string; message: string }[] = [];
+  private sentMessages: { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[] }[] = [];
   private shouldFail = false;
   private shouldThrow = false;
   private failError: WhatsAppError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
@@ -721,7 +747,7 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     this.shouldThrow = shouldThrow;
   }
 
-  sendTextMessage(
+  async sendTextMessage(
     phoneNumber: string,
     message: string
   ): Promise<Result<TextMessageSendResult, WhatsAppError>> {
@@ -736,7 +762,23 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     return Promise.resolve(ok({ wamid }));
   }
 
-  getSentMessages(): { phoneNumber: string; message: string }[] {
+  async sendInteractiveMessage(
+    phoneNumber: string,
+    message: string,
+    buttons: WhatsAppInteractiveButton[]
+  ): Promise<Result<TextMessageSendResult, WhatsAppError>> {
+    if (this.shouldThrow) {
+      throw new Error('Unexpected send error');
+    }
+    if (this.shouldFail) {
+      return Promise.resolve(err(this.failError));
+    }
+    this.sentMessages.push({ phoneNumber, message, buttons });
+    const wamid = `fake-wamid-${String(Date.now())}-${randomUUID().slice(0, 8)}`;
+    return Promise.resolve(ok({ wamid }));
+  }
+
+  getSentMessages(): { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[] }[] {
     return [...this.sentMessages];
   }
 
@@ -1312,5 +1354,275 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
     this.messages.clear();
     this.shouldFail = false;
     this.failureError = { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' };
+  }
+}
+
+/**
+ * Fake phone verification repository for testing.
+ */
+export class FakePhoneVerificationRepository implements PhoneVerificationRepository {
+  private verifications = new Map<string, PhoneVerification>();
+  private idCounter = 0;
+  private shouldFail = false;
+  private failureError: WhatsAppError = {
+    code: 'PERSISTENCE_ERROR',
+    message: 'Simulated failure',
+  };
+  private shouldFailCreate = false;
+  private shouldFailFindPending = false;
+  private shouldFailCountRecent = false;
+  private shouldFailIncrementAttempts = false;
+  private shouldFailUpdateStatus = false;
+
+  setFail(fail: boolean, error?: WhatsAppError): void {
+    this.shouldFail = fail;
+    if (error !== undefined) {
+      this.failureError = error;
+    }
+  }
+
+  setFailCreate(fail: boolean): void {
+    this.shouldFailCreate = fail;
+  }
+
+  setFailFindPending(fail: boolean): void {
+    this.shouldFailFindPending = fail;
+  }
+
+  setFailCountRecent(fail: boolean): void {
+    this.shouldFailCountRecent = fail;
+  }
+
+  setFailIncrementAttempts(fail: boolean): void {
+    this.shouldFailIncrementAttempts = fail;
+  }
+
+  setFailUpdateStatus(fail: boolean): void {
+    this.shouldFailUpdateStatus = fail;
+  }
+
+  async create(
+    verification: Omit<PhoneVerification, 'id'>
+  ): Promise<Result<PhoneVerification, WhatsAppError>> {
+    if (this.shouldFail || this.shouldFailCreate) {
+      return err(this.failureError);
+    }
+    this.idCounter++;
+    const id = `fake-verification-${String(this.idCounter)}`;
+    const doc: PhoneVerification = { id, ...verification };
+    this.verifications.set(id, doc);
+    return ok(doc);
+  }
+
+  async findById(id: string): Promise<Result<PhoneVerification | null, WhatsAppError>> {
+    if (this.shouldFail) {
+      return err(this.failureError);
+    }
+    return ok(this.verifications.get(id) ?? null);
+  }
+
+  async findPendingByUserAndPhone(
+    userId: string,
+    phoneNumber: string
+  ): Promise<Result<PhoneVerification | null, WhatsAppError>> {
+    if (this.shouldFail || this.shouldFailFindPending) {
+      return err(this.failureError);
+    }
+    const now = Math.floor(Date.now() / 1000);
+    for (const v of this.verifications.values()) {
+      if (
+        v.userId === userId &&
+        v.phoneNumber === phoneNumber &&
+        v.status === 'pending' &&
+        v.expiresAt > now
+      ) {
+        return ok(v);
+      }
+    }
+    return ok(null);
+  }
+
+  async isPhoneVerified(
+    userId: string,
+    phoneNumber: string
+  ): Promise<Result<boolean, WhatsAppError>> {
+    if (this.shouldFail) {
+      return err(this.failureError);
+    }
+    for (const v of this.verifications.values()) {
+      if (v.userId === userId && v.phoneNumber === phoneNumber && v.status === 'verified') {
+        return ok(true);
+      }
+    }
+    return ok(false);
+  }
+
+  async updateStatus(
+    id: string,
+    status: PhoneVerificationStatus,
+    metadata?: { verifiedAt?: string; lastAttemptAt?: string }
+  ): Promise<Result<PhoneVerification, WhatsAppError>> {
+    if (this.shouldFail || this.shouldFailUpdateStatus) {
+      return err(this.failureError);
+    }
+    const verification = this.verifications.get(id);
+    if (verification === undefined) {
+      return err({ code: 'NOT_FOUND', message: 'Verification not found' });
+    }
+    verification.status = status;
+    if (metadata?.verifiedAt !== undefined) {
+      verification.verifiedAt = metadata.verifiedAt;
+    }
+    if (metadata?.lastAttemptAt !== undefined) {
+      verification.lastAttemptAt = metadata.lastAttemptAt;
+    }
+    return ok(verification);
+  }
+
+  async incrementAttempts(id: string): Promise<Result<PhoneVerification, WhatsAppError>> {
+    if (this.shouldFail || this.shouldFailIncrementAttempts) {
+      return err(this.failureError);
+    }
+    const verification = this.verifications.get(id);
+    if (verification === undefined) {
+      return err({ code: 'NOT_FOUND', message: 'Verification not found' });
+    }
+    verification.attempts += 1;
+    verification.lastAttemptAt = new Date().toISOString();
+    return ok(verification);
+  }
+
+  async countRecentByPhone(
+    phoneNumber: string,
+    windowStartTime: string
+  ): Promise<Result<number, WhatsAppError>> {
+    if (this.shouldFail || this.shouldFailCountRecent) {
+      return err(this.failureError);
+    }
+    let count = 0;
+    for (const v of this.verifications.values()) {
+      if (v.phoneNumber === phoneNumber && v.createdAt >= windowStartTime) {
+        count++;
+      }
+    }
+    return ok(count);
+  }
+
+  async createWithChecks(
+    params: {
+      userId: string;
+      phoneNumber: string;
+      code: string;
+      expiresAt: number;
+      cooldownSeconds: number;
+      maxRequestsPerHour: number;
+      windowStartTime: string;
+    }
+  ): Promise<Result<{
+    verification: PhoneVerification;
+    cooldownUntil: number;
+    existingPendingId?: string;
+  }, WhatsAppError>> {
+    if (this.shouldFail || this.shouldFailCreate) {
+      return err(this.failureError);
+    }
+
+    const now = new Date();
+    const nowSeconds = Math.floor(now.getTime() / 1000);
+
+    // Check 1: Phone already verified
+    for (const v of this.verifications.values()) {
+      if (
+        v.userId === params.userId &&
+        v.phoneNumber === params.phoneNumber &&
+        v.status === 'verified'
+      ) {
+        return err({
+          code: 'ALREADY_VERIFIED',
+          message: 'Phone number already verified',
+        });
+      }
+    }
+
+    // Check 2: Pending verification within cooldown
+    if (this.shouldFailFindPending) {
+      return err({ code: 'PERSISTENCE_ERROR', message: 'Failed to find pending verification' });
+    }
+    for (const v of this.verifications.values()) {
+      if (
+        v.userId === params.userId &&
+        v.phoneNumber === params.phoneNumber &&
+        v.status === 'pending' &&
+        v.expiresAt > nowSeconds
+      ) {
+        const createdAtTime = new Date(v.createdAt).getTime();
+        const cooldownEnd = createdAtTime + params.cooldownSeconds * 1000;
+        if (Date.now() < cooldownEnd) {
+          return err({
+            code: 'COOLDOWN_ACTIVE',
+            message: 'Please wait before requesting another code',
+            details: {
+              cooldownUntil: Math.floor(cooldownEnd / 1000),
+              existingPendingId: v.id,
+            },
+          });
+        }
+      }
+    }
+
+    // Check 3: Rate limit
+    if (this.shouldFailCountRecent) {
+      return err({ code: 'PERSISTENCE_ERROR', message: 'Failed to count recent verifications' });
+    }
+    let recentCount = 0;
+    for (const v of this.verifications.values()) {
+      if (v.phoneNumber === params.phoneNumber && v.createdAt >= params.windowStartTime) {
+        recentCount++;
+      }
+    }
+    if (recentCount >= params.maxRequestsPerHour) {
+      return err({
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Too many verification requests. Try again later.',
+      });
+    }
+
+    // Create verification
+    this.idCounter++;
+    const id = `fake-verification-${String(this.idCounter)}`;
+    const verification: PhoneVerification = {
+      id,
+      userId: params.userId,
+      phoneNumber: params.phoneNumber,
+      code: params.code,
+      attempts: 0,
+      status: 'pending',
+      createdAt: now.toISOString(),
+      expiresAt: params.expiresAt,
+    };
+    this.verifications.set(id, verification);
+
+    const cooldownUntil = nowSeconds + params.cooldownSeconds;
+    return ok({ verification, cooldownUntil });
+  }
+
+  setVerification(verification: PhoneVerification): void {
+    this.verifications.set(verification.id, verification);
+  }
+
+  getVerifications(): PhoneVerification[] {
+    return Array.from(this.verifications.values());
+  }
+
+  clear(): void {
+    this.verifications.clear();
+    this.idCounter = 0;
+    this.shouldFail = false;
+    this.failureError = { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' };
+    this.shouldFailCreate = false;
+    this.shouldFailFindPending = false;
+    this.shouldFailCountRecent = false;
+    this.shouldFailIncrementAttempts = false;
+    this.shouldFailUpdateStatus = false;
   }
 }

@@ -53,7 +53,7 @@ const PROVIDER_MODELS: ProviderConfig[] = [
     displayName: 'Zai',
     models: [
       { id: LlmModels.Glm47, name: 'GLM-4.7' },
-      { id: LlmModels.Glm47Flash, name: 'GLM-4.7 Flash (Free)' },
+      { id: LlmModels.Glm47Flash, name: 'GLM-4.7 Flash' },
     ],
   },
 ];
@@ -80,7 +80,7 @@ export function ModelSelector({
   return (
     <div className="space-y-3">
       {loading ? (
-        <div className="flex items-center gap-2 text-slate-400 text-sm mb-2">
+        <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-sm mb-2">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>Loading API key status...</span>
         </div>
@@ -99,16 +99,16 @@ export function ModelSelector({
             key={provider.id}
             className={`rounded-lg border-2 p-4 transition-all ${
               isRowDisabled
-                ? 'border-slate-200 bg-slate-50 opacity-60'
+                ? 'border-slate-200 bg-slate-50 opacity-60 dark:border-slate-700 dark:bg-slate-800/50'
                 : isActive
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
+                  ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/30'
+                  : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600'
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span
-                  className={`font-medium ${!isRowDisabled ? 'text-slate-900' : 'text-slate-400'}`}
+                  className={`font-medium ${!isRowDisabled ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500'}`}
                 >
                   {provider.displayName}
                   {isProviderDisabled && isConfigured ? ' (already selected)' : ''}
@@ -121,9 +121,9 @@ export function ModelSelector({
                 {isTestFailed ? (
                   <div className="flex items-center gap-1 group relative">
                     <AlertTriangle className="h-4 w-4 text-red-500" />
-                    <span className="text-xs text-red-600">Action required</span>
-                    <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 w-64 p-2 bg-white border border-red-200 rounded shadow-lg">
-                      <p className="text-xs text-red-700 mb-2">{testFailedError ?? ''}</p>
+                    <span className="text-xs text-red-600 dark:text-red-400">Action required</span>
+                    <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 w-64 p-2 bg-white border border-red-200 rounded shadow-lg dark:bg-slate-800 dark:border-red-800">
+                      <p className="text-xs text-red-700 dark:text-red-400 mb-2">{testFailedError ?? ''}</p>
                       <Link
                         to="/settings/api-keys"
                         className="text-xs text-blue-600 hover:underline"
@@ -135,7 +135,7 @@ export function ModelSelector({
                 ) : !isConfigured ? (
                   <Link
                     to="/settings/api-keys"
-                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
                   >
                     Configure API key →
                   </Link>
@@ -152,8 +152,8 @@ export function ModelSelector({
                   disabled={isRowDisabled}
                   className={`w-full appearance-none rounded-lg border px-4 py-2 pr-10 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     isRowDisabled
-                      ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                      : 'border-slate-200 bg-white text-slate-700 cursor-pointer hover:border-slate-300'
+                      ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-700 dark:text-slate-500'
+                      : 'border-slate-200 bg-white text-slate-700 cursor-pointer hover:border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500'
                   }`}
                 >
                   <option value="">None</option>
@@ -165,7 +165,7 @@ export function ModelSelector({
                 </select>
                 <ChevronDown
                   className={`absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none ${
-                    isRowDisabled ? 'text-slate-300' : 'text-slate-500'
+                    isRowDisabled ? 'text-slate-300 dark:text-slate-600' : 'text-slate-500 dark:text-slate-400'
                   }`}
                 />
               </div>

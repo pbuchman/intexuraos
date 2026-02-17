@@ -1,22 +1,12 @@
 import { LlmProviders } from '@intexuraos/llm-contract';
 import { useCallback, useEffect, useState } from 'react';
-import { DollarSign, RefreshCw } from 'lucide-react';
+import { DollarSign } from 'lucide-react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { getLlmPricing } from '@/services/settingsApi';
+import { formatDateTime } from '@/utils/dateFormat';
 import type { AllProvidersPricing, LlmProvider, ModelPricing, ProviderPricing } from '@/types';
-
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function formatPrice(price: number): string {
   if (price === 0) return '$0.00';
@@ -25,11 +15,11 @@ function formatPrice(price: number): string {
 }
 
 const PROVIDER_CONFIG: Record<LlmProvider, { name: string; color: string; bgColor: string }> = {
-  google: { name: 'Google', color: 'text-blue-700', bgColor: 'bg-blue-50' },
-  openai: { name: 'OpenAI', color: 'text-green-700', bgColor: 'bg-green-50' },
-  anthropic: { name: 'Anthropic', color: 'text-orange-700', bgColor: 'bg-orange-50' },
-  perplexity: { name: 'Perplexity', color: 'text-purple-700', bgColor: 'bg-purple-50' },
-  zai: { name: 'Zai', color: 'text-red-700', bgColor: 'bg-red-50' },
+  google: { name: 'Google', color: 'text-blue-700 dark:text-blue-300', bgColor: 'bg-blue-50 dark:bg-blue-900/30' },
+  openai: { name: 'OpenAI', color: 'text-green-700 dark:text-green-300', bgColor: 'bg-green-50 dark:bg-green-900/30' },
+  anthropic: { name: 'Anthropic', color: 'text-orange-700 dark:text-orange-300', bgColor: 'bg-orange-50 dark:bg-orange-900/30' },
+  perplexity: { name: 'Perplexity', color: 'text-purple-700 dark:text-purple-300', bgColor: 'bg-purple-50 dark:bg-purple-900/30' },
+  zai: { name: 'Zai', color: 'text-red-700 dark:text-red-300', bgColor: 'bg-red-50 dark:bg-red-900/30' },
 };
 
 interface ModelRowProps {
@@ -39,47 +29,47 @@ interface ModelRowProps {
 
 function ModelRow({ modelId, pricing }: ModelRowProps): React.JSX.Element {
   return (
-    <div className="border-b border-slate-100 py-3 last:border-b-0">
+    <div className="border-b border-slate-100 py-3 last:border-b-0 dark:border-slate-700">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h4 className="font-mono text-sm font-medium text-slate-900">{modelId}</h4>
+          <h4 className="font-mono text-sm font-medium text-slate-900 dark:text-slate-100">{modelId}</h4>
           <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <div className="flex justify-between">
-              <span className="text-slate-500">Input:</span>
-              <span className="font-medium text-slate-700">
+              <span className="text-slate-500 dark:text-slate-400">Input:</span>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
                 {formatPrice(pricing.inputPricePerMillion)}/M
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Output:</span>
-              <span className="font-medium text-slate-700">
+              <span className="text-slate-500 dark:text-slate-400">Output:</span>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
                 {formatPrice(pricing.outputPricePerMillion)}/M
               </span>
             </div>
             {pricing.cacheReadMultiplier !== undefined ? (
               <div className="flex justify-between">
-                <span className="text-slate-500">Cache Read:</span>
-                <span className="font-medium text-slate-700">{pricing.cacheReadMultiplier}x</span>
+                <span className="text-slate-500 dark:text-slate-400">Cache Read:</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">{pricing.cacheReadMultiplier}x</span>
               </div>
             ) : null}
             {pricing.cacheWriteMultiplier !== undefined ? (
               <div className="flex justify-between">
-                <span className="text-slate-500">Cache Write:</span>
-                <span className="font-medium text-slate-700">{pricing.cacheWriteMultiplier}x</span>
+                <span className="text-slate-500 dark:text-slate-400">Cache Write:</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">{pricing.cacheWriteMultiplier}x</span>
               </div>
             ) : null}
             {pricing.webSearchCostPerCall !== undefined ? (
               <div className="flex justify-between">
-                <span className="text-slate-500">Web Search:</span>
-                <span className="font-medium text-slate-700">
+                <span className="text-slate-500 dark:text-slate-400">Web Search:</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
                   {formatPrice(pricing.webSearchCostPerCall)}/call
                 </span>
               </div>
             ) : null}
             {pricing.groundingCostPerRequest !== undefined ? (
               <div className="flex justify-between">
-                <span className="text-slate-500">Grounding:</span>
-                <span className="font-medium text-slate-700">
+                <span className="text-slate-500 dark:text-slate-400">Grounding:</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
                   {formatPrice(pricing.groundingCostPerRequest)}/req
                 </span>
               </div>
@@ -87,9 +77,9 @@ function ModelRow({ modelId, pricing }: ModelRowProps): React.JSX.Element {
           </div>
           {pricing.imagePricing !== undefined ? (
             <div className="mt-2 text-xs">
-              <span className="text-slate-500">Images: </span>
+              <span className="text-slate-500 dark:text-slate-400">Images: </span>
               {Object.entries(pricing.imagePricing).map(([size, price], idx) => (
-                <span key={size} className="text-slate-700">
+                <span key={size} className="text-slate-700 dark:text-slate-200">
                   {idx > 0 ? ', ' : ''}
                   {size}: {formatPrice(price)}
                 </span>
@@ -116,11 +106,11 @@ function ProviderBlock({ provider, pricing }: ProviderBlockProps): React.JSX.Ele
       <div className={`-m-4 mb-4 rounded-t-xl ${config.bgColor} px-4 py-3`}>
         <div className="flex items-center justify-between">
           <h3 className={`text-lg font-semibold ${config.color}`}>{config.name}</h3>
-          <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600">
+          <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
             {modelCount} {modelCount === 1 ? 'model' : 'models'}
           </span>
         </div>
-        <p className="mt-1 text-xs text-slate-500">Updated: {formatDate(pricing.updatedAt)}</p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Updated: {formatDateTime(pricing.updatedAt)}</p>
       </div>
       <div className="max-h-96 overflow-y-auto">
         {Object.entries(pricing.models)
@@ -160,25 +150,13 @@ export function LlmPricingPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">LLM Pricing</h2>
-          <p className="text-slate-600">View current pricing for all LLM providers.</p>
-        </div>
-        <button
-          onClick={(): void => {
-            void fetchPricing();
-          }}
-          disabled={loading}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
-          title="Refresh"
-        >
-          <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">LLM Pricing</h2>
+        <p className="text-slate-600 dark:text-slate-300">View current pricing for all LLM providers.</p>
       </div>
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -198,9 +176,9 @@ export function LlmPricingPage(): React.JSX.Element {
       ) : error === null ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <DollarSign className="mb-4 h-12 w-12 text-slate-300" />
-            <h3 className="mb-2 text-lg font-medium text-slate-900">No pricing data</h3>
-            <p className="text-slate-500">Pricing data is not available.</p>
+            <DollarSign className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+            <h3 className="mb-2 text-lg font-medium text-slate-900 dark:text-slate-100">No pricing data</h3>
+            <p className="text-slate-500 dark:text-slate-400">Pricing data is not available.</p>
           </div>
         </Card>
       ) : null}

@@ -11,8 +11,9 @@
 A working integration that:
 
 - Sends WhatsApp messages to users via the internal API
+- Sends interactive approval messages with buttons
 - Tracks outbound messages for reply correlation
-- Handles approval responses (text replies and reactions)
+- Handles approval responses (buttons, text replies, and reactions)
 - Processes the approval workflow end-to-end
 
 ---
@@ -57,8 +58,17 @@ interface SendMessageEvent {
   userId: string; // IntexuraOS user ID
   message: string; // Message text
   replyToMessageId?: string; // Optional: reply to specific message
+  buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons (v3.0.0)
   correlationId: string; // For tracking and reply correlation
   timestamp: string; // ISO 8601
+}
+
+interface WhatsAppInteractiveButton {
+  type: 'reply';
+  reply: {
+    id: string; // Format: "intent:actionId[:nonce]"
+    title: string; // Max 20 characters
+  };
 }
 ```
 
@@ -98,19 +108,24 @@ await topic.publishMessage({
 
 ## Part 3: Implement Approval Workflow (10 minutes)
 
-### Step 3.1: Send an Approval Request
+### Step 3.1: Send an Approval Request with Buttons
 
-For approval messages, use the special correlationId format:
+For approval messages, include interactive buttons with the message. The button ID encodes the intent, action ID, and security nonce:
 
 ```typescript
 const actionId = 'act-xyz-789';
 const actionType = 'todo';
+const nonce = crypto.randomBytes(2).toString('hex'); // Short random nonce
 
 const approvalEvent: SendMessageEvent = {
   type: 'whatsapp.message.send',
   userId: 'user-abc-123',
-  message: 'Create todo: "Review quarterly report"?\n\nReply YES to approve or NO to reject.',
-  correlationId: `action-${actionType}-approval-${actionId}`, // IMPORTANT: This format
+  message: 'Create todo: "Review quarterly report"?',
+  buttons: [
+    { type: 'reply', reply: { id: `approve:${actionId}:${nonce}`, title: 'Approve' } },
+    { type: 'reply', reply: { id: `cancel:${actionId}`, title: 'Cancel' } },
+  ],
+  correlationId: `action-${actionType}-approval-${actionId}`,
   timestamp: new Date().toISOString(),
 };
 
@@ -120,9 +135,11 @@ await topic.publishMessage({
 });
 ```
 
+When buttons are provided, the message is sent as a WhatsApp interactive message. Users can tap buttons directly instead of typing replies. Text replies and emoji reactions still work as fallbacks.
+
 ### Step 3.2: Handle Approval Responses
 
-When the user replies or reacts, whatsapp-service publishes an `action.approval.reply` event:
+When the user taps a button, replies, or reacts, whatsapp-service publishes an `action.approval.reply` event:
 
 ```typescript
 interface ApprovalReplyEvent {
@@ -131,7 +148,9 @@ interface ApprovalReplyEvent {
   replyText: string; // "yes", "no", or actual reply text
   userId: string;
   timestamp: string;
-  actionId?: string; // Extracted from correlationId!
+  actionId?: string; // Extracted from buttonId or correlationId
+  buttonId?: string; // Button ID if user tapped a button (v3.0.0)
+  buttonTitle?: string; // Button title if user tapped a button (v3.0.0)
 }
 ```
 
@@ -176,34 +195,36 @@ function classifyIntent(text: string): 'approve' | 'reject' | 'ambiguous' {
 
 ---
 
-## Part 4: Handle Emoji Reactions (5 minutes)
+## Part 4: Handle Buttons and Emoji Reactions (5 minutes)
 
-### Step 4.1: Understand Reaction Mapping
+### Step 4.1: Understand Response Types
 
-WhatsApp reactions are automatically mapped to intents:
+All three response types (buttons, text replies, reactions) produce the same `ApprovalReplyEvent`:
 
-| Emoji | Intent  | Generated replyText |
-| ----- | ------- | ------------------- |
-| `👍`  | approve | "yes"               |
-| `👎`  | reject  | "no"                |
+| Response Type    | `replyText` | `buttonId`             | `actionId`         |
+| ---------------- | ----------- | ---------------------- | ------------------ |
+| Button tap       | "yes"/"no"  | `approve:act-123:a3f2` | `act-123`          |
+| Text reply "yes" | "yes"       | undefined              | from correlationId |
+| Reaction `👍`    | "yes"       | undefined              | from correlationId |
+| Reaction `👎`    | "no"        | undefined              | from correlationId |
 
 Other emojis are ignored (not published as approval events).
 
 ### Step 4.2: No Code Changes Needed!
 
-If you're handling `ApprovalReplyEvent`, reactions work automatically:
+If you're handling `ApprovalReplyEvent`, all response types work automatically:
 
 ```typescript
-// Same handler works for both text replies AND reactions
+// Same handler works for buttons, text replies, AND reactions
 async function handleApprovalReply(event: ApprovalReplyEvent): Promise<void> {
-  // event.replyText will be "yes" for 👍 reaction
-  // event.replyText will be "no" for 👎 reaction
-  // event.actionId is extracted from the correlationId
-  // Your existing logic handles both!
+  // event.replyText is always set ("yes" for approve, "no" for cancel/reject)
+  // event.actionId is extracted from buttonId or correlationId
+  // event.buttonId is set only for button taps
+  // Your existing logic handles all three!
 }
 ```
 
-**Checkpoint:** React with 👍 on approval message, action executes automatically.
+**Checkpoint:** Send approval with buttons, tap Approve, action executes automatically.
 
 ---
 
@@ -258,10 +279,13 @@ await actionRepository.save({
 | Problem                      | Solution                                                              |
 | ---------------------------- | --------------------------------------------------------------------- |
 | "Message not delivered"      | Check user has connected WhatsApp number via `/whatsapp/status`       |
-| "No approval event received" | Verify correlationId format: `action-{type}-approval-{actionId}`      |
+| "Phone not verified"         | Run `/whatsapp/verify/send` then `/whatsapp/verify/confirm` first     |
+| "No approval event received" | Verify buttonId format or correlationId format                        |
+| "Approve button ignored"     | Approve requires nonce: `approve:{actionId}:{nonce}`                  |
 | "actionId is undefined"      | User replied to non-approval message, check correlationId in DB       |
 | "Duplicate actions created"  | Ensure not publishing both approval reply AND command.ingest handlers |
 | "Reaction not processed"     | Only 👍 and 👎 are supported, other emojis are ignored                |
+| "Button title truncated"     | WhatsApp limits button titles to 20 characters                        |
 
 ---
 
@@ -277,7 +301,17 @@ Now that you understand the basics:
 
 ## Quick Reference
 
-### CorrelationId Format for Approvals
+### Button ID Format for Approvals (v3.0.0)
+
+```
+approve:{actionId}:{nonce}   -- Approve (nonce required)
+cancel:{actionId}            -- Cancel/reject
+convert:{actionId}           -- Convert to different type
+cancel-task:{taskId}         -- Cancel running task
+view-task:{taskId}           -- View task status
+```
+
+### CorrelationId Format for Text Reply Correlation
 
 ```
 action-{actionType}-approval-{actionId}
@@ -297,9 +331,11 @@ Examples:
 | `action.approval.reply` | Incoming  | User responded to approval     |
 | `command.ingest`        | Incoming  | Regular message for processing |
 
-### Reaction Emoji Reference
+### Response Types Reference
 
 ```
-👍 (U+1F44D) -> approve
-👎 (U+1F44E) -> reject
+Button tap   -> replyText from intent, buttonId present
+Text reply   -> raw replyText, no buttonId
+👍 (U+1F44D) -> replyText "yes"
+👎 (U+1F44E) -> replyText "no"
 ```

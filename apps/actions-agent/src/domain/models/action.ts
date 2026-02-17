@@ -1,4 +1,4 @@
-export type ActionType = 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear';
+export type ActionType = 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear' | 'code';
 export type ActionStatus =
   | 'pending'
   | 'awaiting_approval'
@@ -7,6 +7,37 @@ export type ActionStatus =
   | 'failed'
   | 'rejected'
   | 'archived';
+
+/**
+ * Status of the associated resource (e.g., code task).
+ * Design doc: docs/designs/INT-156-code-action-type.md (lines 309-348)
+ */
+export type ResourceStatus =
+  | 'dispatched'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
+
+/**
+ * Payload for code actions
+ * Based on design doc: docs/designs/INT-156-code-action-type.md
+ */
+export interface CodeActionPayload {
+  /** The user's request (what they want Claude to do) */
+  prompt: string;
+  /** Which model to use (see design lines 1203-1230) */
+  workerType: 'opus' | 'auto' | 'glm';
+  /** Optional: existing Linear issue to work on */
+  linearIssueId?: string;
+  /** Optional: title if issue exists */
+  linearIssueTitle?: string;
+  /** Set when user approves (for idempotency - see design lines 1526-1536) */
+  approvalEventId?: string;
+  /** Set by code-agent after task creation (design lines 1471-1474) */
+  resource_url?: string;
+}
 
 export interface Action {
   id: string;
@@ -17,6 +48,10 @@ export interface Action {
   title: string;
   status: ActionStatus;
   payload: Record<string, unknown>;
+  /** Status of the associated resource (e.g., code task) */
+  resource_status?: ResourceStatus;
+  /** Error message from resource execution */
+  resource_error?: string;
   createdAt: string;
   updatedAt: string;
 }

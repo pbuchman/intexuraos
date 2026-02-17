@@ -1,6 +1,6 @@
 # Image Service - Technical Debt
 
-**Last Updated:** 2025-01-25
+**Last Updated:** 2026-02-08
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -109,6 +109,45 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### 2026-02-08: Standardized Response Contract Migration
+
+**Issue:** Internal endpoints used ad-hoc response formats (`{ error: 'Unauthorized' }`) with manual `reply.status()` calls and `apiFail()` helper.
+
+**Resolution:**
+
+- Migrated all auth failures to `reply.fail('UNAUTHORIZED', message)`
+- Rate limit errors now use `reply.fail('RATE_LIMITED', message)` instead of manual `apiFail()` + `reply.status(429)`
+- Downstream errors use `reply.fail('DOWNSTREAM_ERROR', message)` instead of manual `reply.status(502)`
+- Removed `apiFail` import from `@intexuraos/common-http`
+
+### 2026-02-08: Sentry-Enabled Logger Migration
+
+**Issue:** Direct `pino()` logger usage in `services.ts` bypassed Sentry error tracking.
+
+**Resolution:**
+
+- Replaced `pino({ name: 'user-service-client' })` with `createAppLogger({ name: 'user-service-client' })`
+- Errors now automatically sent to Sentry
+
+### 2026-02-08: Direct Import from internal-clients
+
+**Issue:** Local re-export barrel file `infra/user/index.ts` added unnecessary indirection.
+
+**Resolution:**
+
+- Deleted `apps/image-service/src/infra/user/index.ts`
+- All imports changed from `./infra/user/index.js` to `@intexuraos/internal-clients` directly
+- `FakeUserServiceClient` updated with `getOAuthToken` method for new interface
+
+### 2026-02-08: Env Var Registration and Coverage
+
+**Issue:** `INTEXURAOS_IMAGE_PUBLIC_BASE_URL` was used but not in `REQUIRED_ENV`. `mapError` function lacked test coverage.
+
+**Resolution:**
+
+- Added `INTEXURAOS_IMAGE_PUBLIC_BASE_URL` to `REQUIRED_ENV` in `index.ts`
+- Exported `mapError` from `GptPromptAdapter.ts` and added dedicated tests
 
 ### 2025-01-25: INT-269 Internal-Clients Migration
 

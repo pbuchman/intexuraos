@@ -55,6 +55,25 @@ export async function deleteLlmKey(
 }
 
 /**
+ * Update the user's default LLM model.
+ */
+export async function updateDefaultModel(
+  accessToken: string,
+  userId: string,
+  defaultModel: string
+): Promise<{ defaultModel: string }> {
+  return await apiRequest<{ defaultModel: string }>(
+    config.authServiceUrl,
+    `/users/${userId}/settings`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: { defaultModel },
+    }
+  );
+}
+
+/**
  * Test an LLM API key with a sample prompt.
  */
 export async function testLlmKey(

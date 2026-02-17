@@ -1,0 +1,12 @@
+{
+  "firstStartTime": "2026-01-01T00:00:00.000Z",
+  "hasCompletedOnboarding": true,
+  "lastOnboardingVersion": "2.1.37",
+  "autoUpdates": false,
+  "sonnet45MigrationComplete": true,
+  "opus45MigrationComplete": true,
+  "opusProMigrationComplete": true,
+  "thinkingMigrationComplete": true,
+  "cachedChromeExtensionInstalled": false,
+  "bypassPermissionsModeAccepted": true
+}

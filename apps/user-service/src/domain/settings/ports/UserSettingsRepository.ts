@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { EncryptedValue } from './Encryptor.js';
-import type { LlmProvider, LlmTestResult, UserSettings } from '../models/UserSettings.js';
+import type { LlmProvider, LlmTestResult, LLMModel, UserSettings } from '../models/UserSettings.js';
 import type { SettingsError } from '../models/SettingsError.js';
 
 /**
@@ -53,4 +53,10 @@ export interface UserSettingsRepository {
    * Used when any successful API call is made, preserving the existing response.
    */
   updateLlmLastUsed(userId: string, provider: LlmProvider): Promise<Result<void, SettingsError>>;
+
+  /**
+   * Update the user's default LLM model preference.
+   * Creates the settings document if it doesn't exist.
+   */
+  updateLlmPreferences(userId: string, defaultModel: LLMModel): Promise<Result<void, SettingsError>>;
 }

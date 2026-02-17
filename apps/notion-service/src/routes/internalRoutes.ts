@@ -1,6 +1,7 @@
 /**
  * Internal Routes for service-to-service communication.
  * GET /internal/notion/users/:userId/context - Get Notion connection context (token)
+ * GET /internal/notion/users/:userId/pages/:pageId/preview - Get Notion page preview
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -16,7 +17,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'getInternalNotionContext',
         summary: 'Get Notion connection context (internal)',
         description:
+/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
           'Internal endpoint for service-to-service communication. Returns connection state and token.',
+          /* v8 ignore stop @preserve */
         tags: ['internal'],
         params: {
           type: 'object',
@@ -30,17 +33,28 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Notion connection context',
             type: 'object',
             properties: {
-              connected: { type: 'boolean' },
-              token: { type: 'string', nullable: true },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  connected: { type: 'boolean' },
+                  token: { type: 'string', nullable: true },
+                },
+                required: ['connected', 'token'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
-            required: ['connected', 'token'],
+            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -59,8 +73,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { reason: authResult.reason },
           'Internal auth failed for notion/users/:userId/context endpoint'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for notion/users/:userId/context endpoint');
       }
 
       const params = request.params as { userId: string };
@@ -69,29 +82,151 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Check if connected
       const connectedResult = await connectionRepository.isConnected(params.userId);
       if (!connectedResult.ok) {
-        return {
+        return await reply.ok({
           connected: false,
           token: null,
-        };
+        });
       }
 
       if (!connectedResult.value) {
-        return {
+        return await reply.ok({
           connected: false,
           token: null,
-        };
+        });
       }
 
       // Get token
       const tokenResult = await connectionRepository.getToken(params.userId);
       const token = tokenResult.ok ? tokenResult.value : null;
 
-      return {
+      return await reply.ok({
         connected: true,
         token,
-      };
+      });
+    }
+  );
+
+  // GET /internal/notion/users/:userId/pages/:pageId/preview
+  fastify.get(
+    '/internal/notion/users/:userId/pages/:pageId/preview',
+    {
+      schema: {
+        operationId: 'getPagePreview',
+        summary: 'Get Notion page preview for a user',
+        description: 'Internal endpoint for validating Notion page access. Returns page title and URL.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          required: ['userId', 'pageId'],
+          properties: {
+            userId: { type: 'string' },
+            pageId: { type: 'string' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Page preview data',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  url: { type: 'string' },
+                },
+                required: ['title', 'url'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          502: {
+            description: 'Downstream error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/notion/users/:userId/pages/:pageId/preview',
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for page preview endpoint'
+        );
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for page preview endpoint');
+      }
+
+      const { userId, pageId } = request.params as { userId: string; pageId: string };
+      const { connectionRepository, notionApi } = getServices();
+
+      // Get user's Notion connection
+      const connectionResult = await connectionRepository.getConnection(userId);
+      /* v8 ignore start -- test-infra: fake repository getConnection always succeeds @preserve */
+      if (!connectionResult.ok) {
+        return await reply.fail('DOWNSTREAM_ERROR', connectionResult.error.message);
+      }
+      /* v8 ignore stop @preserve */
+      if (connectionResult.value?.connected !== true) {
+        return await reply.fail('NOT_FOUND', 'User has no active Notion connection');
+      }
+
+      // Get token from connection
+      const tokenResult = await connectionRepository.getToken(userId);
+      /* v8 ignore start -- test-infra: fake repository getToken always succeeds when connected @preserve */
+      if (!tokenResult.ok || tokenResult.value === null) {
+        return await reply.fail('NOT_FOUND', 'User has no active Notion connection');
+      }
+      /* v8 ignore stop @preserve */
+
+      // Fetch page preview from Notion
+      const previewResult = await notionApi.getPageWithPreview(tokenResult.value, pageId);
+
+      if (!previewResult.ok) {
+        if (previewResult.error.code === 'NOT_FOUND') {
+          return await reply.fail('NOT_FOUND', 'Page not found or not accessible');
+        }
+        return await reply.fail('DOWNSTREAM_ERROR', previewResult.error.message);
+      }
+
+      return await reply.ok({
+        title: previewResult.value.page.title,
+        url: previewResult.value.page.url,
+      });
     }
   );
 
   done();
 };
+

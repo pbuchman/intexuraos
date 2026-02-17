@@ -16,15 +16,12 @@
  *   serviceName: 'my-service',
  * });
  *
- * // 2. In server.ts, configure logger with Sentry stream
+ * // 2. In server.ts, configure logger with unified log stream
+ * import { createLogStream } from '@intexuraos/infra-sentry';
  * const app = Fastify({
  *   logger: {
  *     level: 'info',
- *     stream: createSentryStream(
- *       pino.multistream([
- *         pino.destination({ dest: 1, sync: false }), // stdout
- *       ])
- *     ),
+ *     stream: createLogStream(), // formatted in dev, raw JSON in prod, Sentry-enabled
  *   },
  * });
  *
@@ -38,3 +35,5 @@
 export { initSentry, type SentryConfig } from './init.js';
 export { createSentryStream, sendToSentry, isSentryConfigured } from './transport.js';
 export { setupSentryErrorHandler } from './fastify.js';
+export { createAppLogger, type AppLoggerConfig } from './appLogger.js';
+export { createLogStream } from './logStream.js';

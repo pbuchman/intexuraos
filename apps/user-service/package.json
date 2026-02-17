@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/user-service",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,7 +9,9 @@
   "scripts": {
     "build": "node ../../scripts/build-service.mjs user-service",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
@@ -26,6 +28,7 @@
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-glm": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",
+    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-perplexity": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",

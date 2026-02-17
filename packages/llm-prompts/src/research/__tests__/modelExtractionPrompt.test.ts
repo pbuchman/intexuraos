@@ -3,11 +3,13 @@
  * Verifies prompt building and response parsing for LLM model selection.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import type { Logger } from 'pino';
 import { LlmModels, LlmProviders, type ResearchModel } from '@intexuraos/llm-contract';
 import {
   buildModelExtractionPrompt,
   parseModelExtractionResponse,
+  parseModelExtractionResponseWithLogging,
   MODEL_KEYWORDS,
   PROVIDER_DEFAULT_MODELS,
   SYNTHESIS_MODELS,
@@ -421,6 +423,38 @@ describe('parseModelExtractionResponse', () => {
       // Should extract the outer JSON
       expect(result).toBeNull(); // selectedModels not at root level
     });
+
+    it('returns null for malformed JSON causing parse error', () => {
+      const response = '{"selectedModels": [model1], "synthesisModel": "model"';
+
+      const result = parseModelExtractionResponse(response, validModels);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null for JSON with circular references (parse error)', () => {
+      const response = '{"selectedModels": incomplete';
+
+      const result = parseModelExtractionResponse(response, validModels);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null for response with only opening brace', () => {
+      const response = '{';
+
+      const result = parseModelExtractionResponse(response, validModels);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null for response with only opening bracket', () => {
+      const response = '[';
+
+      const result = parseModelExtractionResponse(response, validModels);
+
+      expect(result).toBeNull();
+    });
   });
 });
 
@@ -476,5 +510,83 @@ describe('exported constants', () => {
     it('is in SYNTHESIS_MODELS', () => {
       expect(SYNTHESIS_MODELS).toContain(DEFAULT_SYNTHESIS_MODEL);
     });
+  });
+});
+
+describe('parseModelExtractionResponseWithLogging', () => {
+  const mockLogger: Logger = {
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  } as unknown as Logger;
+
+  const validModels: ResearchModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT52];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns valid response and does not log', () => {
+    const response = JSON.stringify({
+      selectedModels: [LlmModels.Gemini25Pro],
+      synthesisModel: LlmModels.GPT52,
+    });
+
+    const result = parseModelExtractionResponseWithLogging(response, validModels, mockLogger);
+
+    expect(result.selectedModels).toEqual([LlmModels.Gemini25Pro]);
+    expect(result.synthesisModel).toBe(LlmModels.GPT52);
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('throws and logs warning when response does not match schema (no JSON)', () => {
+    const response = 'This is just text without any JSON';
+
+    expect(() =>
+      parseModelExtractionResponseWithLogging(response, validModels, mockLogger)
+    ).toThrow('Failed to parse model extraction');
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'parseModelExtractionResponse',
+        llmResponse: response,
+        responseLength: response.length,
+      }),
+      expect.stringContaining('LLM parse error in parseModelExtractionResponse')
+    );
+  });
+
+  it('throws and logs warning for invalid JSON', () => {
+    const response = '{"selectedModels": [model1], "synthesisModel": "model"';
+
+    expect(() =>
+      parseModelExtractionResponseWithLogging(response, validModels, mockLogger)
+    ).toThrow();
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'parseModelExtractionResponse',
+      }),
+      expect.stringContaining('LLM parse error in parseModelExtractionResponse')
+    );
+  });
+
+  it('throws and logs warning for malformed JSON', () => {
+    const response = '{invalid json';
+
+    expect(() =>
+      parseModelExtractionResponseWithLogging(response, validModels, mockLogger)
+    ).toThrow();
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws and logs warning for response with missing selectedModels', () => {
+    const response = JSON.stringify({ synthesisModel: LlmModels.Gemini25Pro });
+
+    expect(() =>
+      parseModelExtractionResponseWithLogging(response, validModels, mockLogger)
+    ).toThrow();
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
   });
 });

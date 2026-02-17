@@ -264,10 +264,10 @@ describe('Notion Integration Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { connected: boolean };
+        data: Record<string, never>;
       };
       expect(body.success).toBe(true);
-      expect(body.data.connected).toBe(false);
+      expect(body.data).toEqual({});
     });
 
     it('returns 502 DOWNSTREAM_ERROR when repository fails to disconnect', async () => {

@@ -39,10 +39,17 @@ import type {
   ValidationResult,
   ImprovementResult,
 } from '../infra/llm/InputValidationAdapter.js';
-import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
+import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient, GenerateResult, LLMError } from '@intexuraos/llm-factory';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
+import type {
+  NotionServiceClient,
+  NotionTokenContext,
+  PagePreview,
+  NotionServiceError,
+} from '../infra/notion/index.js';
+import type { ResearchExportSettingsError, ResearchExportSettings } from '../infra/firestore/researchExportSettingsRepository.js';
 
 /**
  * In-memory fake implementation of ResearchRepository.
@@ -246,6 +253,16 @@ export class FakeUserServiceClient implements UserServiceClient {
       return err({ code: 'API_ERROR', message: 'Test getLlmClient failure' });
     }
     return ok(this.llmClient);
+  }
+
+  async getOAuthToken(
+    _userId: string,
+    _provider: import('@intexuraos/internal-clients').OAuthProvider
+  ): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    return err({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'OAuth not configured in fake',
+    });
   }
 
   // Test helpers
@@ -668,5 +685,200 @@ export function createFakeInputValidator(): InputValidationProvider {
         usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
       });
     },
+  };
+}
+
+/**
+ * Fake implementation of ResearchExportSettingsPort for testing.
+ */
+export class FakeResearchExportSettings {
+  private settings = new Map<string, ResearchExportSettings>();
+
+  async getResearchPageId(userId: string): Promise<Result<string | null, ResearchExportSettingsError>> {
+    const setting = this.settings.get(userId);
+    return ok(setting?.researchPageId ?? null);
+  }
+
+  async getResearchSettings(userId: string): Promise<Result<ResearchExportSettings | null, ResearchExportSettingsError>> {
+    const setting = this.settings.get(userId);
+    if (setting === undefined) {
+      return ok(null);
+    }
+    return ok(setting);
+  }
+
+  async saveResearchPageId(
+    userId: string,
+    researchPageId: string
+  ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>> {
+    const now = new Date().toISOString();
+    const existing = this.settings.get(userId);
+    const settings: ResearchExportSettings = {
+      researchPageId,
+      researchPageTitle: existing?.researchPageTitle ?? '',
+      researchPageUrl: existing?.researchPageUrl ?? '',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.settings.set(userId, settings);
+    return ok(settings);
+  }
+
+  async saveResearchSettings(
+    userId: string,
+    researchPageId: string,
+    researchPageTitle: string,
+    researchPageUrl: string
+  ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>> {
+    const now = new Date().toISOString();
+    const existing = this.settings.get(userId);
+    const settings: ResearchExportSettings = {
+      researchPageId,
+      researchPageTitle,
+      researchPageUrl,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.settings.set(userId, settings);
+    return ok(settings);
+  }
+
+  setResearchPageId(userId: string, researchPageId: string | null): void {
+    if (researchPageId === null) {
+      // Clear the setting by removing it from the map
+      this.settings.delete(userId);
+      return;
+    }
+    const now = new Date().toISOString();
+    const existing = this.settings.get(userId);
+    const settings: ResearchExportSettings = {
+      researchPageId,
+      researchPageTitle: existing?.researchPageTitle ?? '',
+      researchPageUrl: existing?.researchPageUrl ?? '',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.settings.set(userId, settings);
+  }
+
+  clear(): void {
+    this.settings.clear();
+  }
+}
+
+/**
+ * Fake implementation of NotionServiceClient for testing.
+ */
+export class FakeNotionServiceClient implements NotionServiceClient {
+  private connected = false;
+  private token: string | null = null;
+  private pagePreviews = new Map<string, { title: string; url: string }>();
+  private nextError: NotionServiceError | null = null;
+
+  async getNotionToken(_userId: string): Promise<Result<NotionTokenContext, never>> {
+    return ok({
+      connected: this.connected,
+      token: this.token,
+    });
+  }
+
+  async getPagePreview(
+    _userId: string,
+    pageId: string,
+    _logger: unknown
+  ): Promise<Result<PagePreview, NotionServiceError>> {
+    if (this.nextError !== null) {
+      const error = this.nextError;
+      this.nextError = null;
+      return err(error);
+    }
+
+    const preview = this.pagePreviews.get(pageId);
+    if (preview === undefined) {
+      return err({ code: 'NOT_FOUND', message: 'Page not found' });
+    }
+    return ok(preview);
+  }
+
+  // Test helpers
+  setConnected(connected: boolean): void {
+    this.connected = connected;
+  }
+
+  setToken(token: string | null): void {
+    this.token = token;
+    this.connected = token !== null;
+  }
+
+  setPagePreview(pageId: string, title: string, url: string): void {
+    this.pagePreviews.set(pageId, { title, url });
+  }
+
+  setNextError(error: NotionServiceError): void {
+    this.nextError = error;
+  }
+
+  clear(): void {
+    this.connected = false;
+    this.token = null;
+    this.pagePreviews.clear();
+    this.nextError = null;
+  }
+}
+
+/**
+ * Fake implementation of Notion exporter for testing.
+ */
+export function createFakeNotionExporter(): (
+  research: import('../domain/research/index.js').Research,
+  notionToken: string,
+  targetPageId: string,
+  logger: import('@intexuraos/infra-notion').NotionLogger
+) => Promise<
+  Result<
+    { mainPageId: string; mainPageUrl: string; llmReportPages: { model: string; pageId: string; pageUrl: string }[] },
+    { code: 'NOT_FOUND' | 'UNAUTHORIZED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'; message: string }
+  >
+> {
+  return async function (
+    _research: import('../domain/research/index.js').Research,
+    _notionToken: string,
+    _targetPageId: string,
+    _logger: import('@intexuraos/infra-notion').NotionLogger
+  ) {
+    return ok({
+      mainPageId: 'test-main-page-id',
+      mainPageUrl: 'https://notion.so/test-main-page-id',
+      llmReportPages: [
+        { model: 'gemini-2.0-flash-exp', pageId: 'test-report-page-id', pageUrl: 'https://notion.so/test-report-page-id' },
+      ],
+    });
+  };
+}
+
+/**
+ * Fake Notion exporter that can be configured to fail.
+ */
+export function createFailingNotionExporter(
+  errorCode: 'NOT_FOUND' | 'UNAUTHORIZED' | 'RATE_LIMITED' | 'INTERNAL_ERROR',
+  errorMessage: string
+): (
+  research: import('../domain/research/index.js').Research,
+  notionToken: string,
+  targetPageId: string,
+  logger: import('@intexuraos/infra-notion').NotionLogger
+) => Promise<
+  Result<
+    { mainPageId: string; mainPageUrl: string; llmReportPages: { model: string; pageId: string; pageUrl: string }[] },
+    { code: 'NOT_FOUND' | 'UNAUTHORIZED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'; message: string }
+  >
+> {
+  return async function (
+    _research: import('../domain/research/index.js').Research,
+    _notionToken: string,
+    _targetPageId: string,
+    _logger: import('@intexuraos/infra-notion').NotionLogger
+  ) {
+    return err({ code: errorCode, message: errorMessage });
   };
 }

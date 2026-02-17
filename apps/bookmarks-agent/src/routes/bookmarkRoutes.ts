@@ -577,6 +577,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const parsed = new URL(imageUrl);
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
           void reply.status(400);
+          // @allow-raw-send: Image proxy - binary response endpoint with legacy error format
           await reply.send({
             success: false,
             error: { code: 'INVALID_URL', message: 'Only HTTP/HTTPS URLs are allowed' },
@@ -585,6 +586,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       } catch {
         void reply.status(400);
+        // @allow-raw-send: Image proxy - binary response endpoint with legacy error format
         await reply.send({
           success: false,
           error: { code: 'INVALID_URL', message: 'Invalid URL format' },
@@ -614,6 +616,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (!response.ok) {
           request.log.warn({ imageUrl, status: response.status }, 'Failed to fetch image');
           void reply.status(response.status);
+          // @allow-raw-send: Image proxy - binary response endpoint with legacy error format
           await reply.send({
             success: false,
             error: { code: 'FETCH_FAILED', message: `Failed to fetch image: ${String(response.status)}` },
@@ -624,6 +627,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const contentType = response.headers.get('content-type') ?? 'image/jpeg';
         if (!contentType.startsWith('image/')) {
           void reply.status(400);
+          // @allow-raw-send: Image proxy - binary response endpoint with legacy error format
           await reply.send({
             success: false,
             error: { code: 'NOT_AN_IMAGE', message: 'URL does not point to an image' },
@@ -636,11 +640,13 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         void reply.header('Content-Type', contentType);
         void reply.header('Cache-Control', 'public, max-age=86400');
         void reply.header('Access-Control-Allow-Origin', '*');
+        // @allow-raw-send: Image proxy - binary response (Buffer)
         await reply.send(buffer);
       } catch (error) {
         const isAborted = error instanceof Error && error.name === 'AbortError';
         request.log.error({ imageUrl, error: String(error), isAborted }, 'Error proxying image');
         void reply.status(isAborted ? 504 : 500);
+        // @allow-raw-send: Image proxy - binary response endpoint with legacy error format
         await reply.send({
           success: false,
           error: {

@@ -194,7 +194,7 @@ When Service A needs data from Service B's collection:
 **Before (VIOLATION):**
 
 ```typescript
-// promptvault-service accessing notion_connections directly
+// consumer-service accessing notion_connections directly
 import { getFirestore } from '@intexuraos/infra-firestore';
 
 const db = getFirestore();
@@ -214,8 +214,8 @@ app.get('/internal/notion/users/:userId/context', async (req, reply) => {
   return { connected: !!token, token };
 });
 
-// promptvault-service calls notion-service via HTTP
-// apps/promptvault-service/src/infra/notion/notionServiceClient.ts
+// consumer-service calls notion-service via HTTP
+// apps/consumer-service/src/infra/notion/notionServiceClient.ts
 export async function getNotionToken(userId: string): Promise<Result<string | null, Error>> {
   const url = `${NOTION_SERVICE_URL}/internal/notion/users/${userId}/context`;
   const response = await fetch(url, {
@@ -296,7 +296,7 @@ See [service-to-service-communication.md](./service-to-service-communication.md)
 | Pattern                | Example                   | Use Case                   |
 | ---------------------- | ------------------------- | -------------------------- |
 | `{service}_{resource}` | `whatsapp_messages`       | Service-specific resources |
-| `{feature}_settings`   | `promptvault_settings`    | Feature configuration      |
+| `{feature}_settings`   | `user_settings`           | Feature configuration      |
 | `{resource}_mappings`  | `whatsapp_user_mappings`  | ID mappings/lookups        |
 | `{resource}_events`    | `whatsapp_webhook_events` | Event sourcing/audit logs  |
 

@@ -1,18 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { isOk, isErr, ok, err } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import { createHandleTodoActionUseCase } from '../domain/usecases/handleTodoAction.js';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import { FakeActionRepository, FakeWhatsAppSendPublisher } from './fakes.js';
-import pino from 'pino';
+import { FakeActionRepository, FakeWhatsAppSendPublisher, createMockLogger } from './fakes.js';
 
 vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
   shouldAutoExecute: vi.fn(() => false),
 }));
 
 import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
-
-const silentLogger = pino({ level: 'silent' });
 
 describe('handleTodoAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
@@ -69,15 +66,15 @@ describe('handleTodoAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     const action = await fakeActionRepository.getById('action-123');
@@ -88,6 +85,13 @@ describe('handleTodoAction usecase', () => {
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('New todo ready for approval');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
+
+    // Verify interactive approval buttons
+    expect(messages[0]?.buttons).toHaveLength(2);
+    expect(messages[0]?.buttons?.[0]?.reply.id).toBe('approve:action-123');
+    expect(messages[0]?.buttons?.[0]?.reply.title).toBe('Approve');
+    expect(messages[0]?.buttons?.[1]?.reply.id).toBe('reject:action-123');
+    expect(messages[0]?.buttons?.[1]?.reply.title).toBe('Reject');
   });
 
   it('fails when marking action as awaiting_approval fails', async () => {
@@ -97,7 +101,7 @@ describe('handleTodoAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     fakeActionRepository.setFailNext(true, new Error('Database unavailable'));
@@ -105,8 +109,8 @@ describe('handleTodoAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isErr(result)).toBe(true);
-    if (isErr(result)) {
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.error.message).toContain('Failed to update action status');
     }
   });
@@ -118,7 +122,7 @@ describe('handleTodoAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     fakeWhatsappPublisher.setFailNext(true, {
@@ -129,9 +133,9 @@ describe('handleTodoAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     const action = await fakeActionRepository.getById('action-123');
@@ -146,15 +150,15 @@ describe('handleTodoAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     // Should not send WhatsApp message since action was already processed
@@ -174,21 +178,21 @@ describe('handleTodoAction usecase', () => {
       await fakeActionRepository.save(createAction());
 
       const fakeExecuteTodoAction = vi.fn().mockResolvedValue(
-        ok({ status: 'completed' as const, resource_url: '/#/todos/todo-123' })
+        ok({ status: 'completed' as const, resourceUrl: '/#/todos/todo-123' })
       );
 
       const usecase = registerActionHandler(createHandleTodoActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
         executeTodoAction: fakeExecuteTodoAction,
       });
 
       const event = createEvent();
       const result = await usecase.execute(event);
 
-      expect(isOk(result)).toBe(true);
+      expect(result.ok).toBe(true);
       expect(fakeExecuteTodoAction).toHaveBeenCalledWith('action-123');
 
       // Decorator updated status to awaiting_approval; real executeTodoAction would update to processing/completed
@@ -207,15 +211,15 @@ describe('handleTodoAction usecase', () => {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
         executeTodoAction: fakeExecuteTodoAction,
       });
 
       const event = createEvent();
       const result = await usecase.execute(event);
 
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
         expect(result.error.message).toBe('Execution failed');
       }
     });
@@ -227,13 +231,13 @@ describe('handleTodoAction usecase', () => {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       });
 
       const event = createEvent();
       const result = await usecase.execute(event);
 
-      expect(isOk(result)).toBe(true);
+      expect(result.ok).toBe(true);
 
       // Action should be updated to awaiting_approval
       const action = await fakeActionRepository.getById('action-123');

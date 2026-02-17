@@ -8,11 +8,15 @@ import type {
   LinearConnection,
   LinearConnectionPublic,
   LinearIssue,
+  LinearIssueWithTeam,
   LinearTeam,
   CreateIssueInput,
   FailedLinearIssue,
   ExtractedIssueData,
   ProcessedAction,
+  WorkflowState,
+  SyncedLinearIssue,
+  LinearComment,
 } from './models.js';
 import type { LinearError } from './errors.js';
 
@@ -40,6 +44,18 @@ export interface LinearConnectionRepository {
 
   /** Disconnect user's Linear integration */
   disconnect(userId: string): Promise<Result<LinearConnectionPublic, LinearError>>;
+
+  /** Find user ID by Linear team ID (for webhook routing) */
+  findUserIdByTeamId(teamId: string): Promise<Result<string | null, LinearError>>;
+
+  /** Find webhook secret by Linear team ID (for webhook signature validation) */
+  findWebhookSecretByTeamId(teamId: string): Promise<Result<{ userId: string; webhookSecret: string } | null, LinearError>>;
+
+  /** Update webhook secret for a user's connection */
+  updateWebhookSecret(userId: string, webhookSecret: string | null): Promise<Result<void, LinearError>>;
+
+  /** Get all connected user IDs (for scheduler sync) */
+  getAllConnectedUserIds(): Promise<Result<string[], LinearError>>;
 }
 
 /** Repository for failed issue creations */
@@ -57,6 +73,15 @@ export interface FailedIssueRepository {
 
   /** List failed issues for a user */
   listByUser(userId: string): Promise<Result<FailedLinearIssue[], LinearError>>;
+
+  /** Get a failed issue by ID */
+  getById(id: string): Promise<Result<FailedLinearIssue, LinearError>>;
+
+  /** Update error message and retry timestamp (used after failed retry) */
+  update(
+    id: string,
+    input: { error: string; lastRetryAt: string }
+  ): Promise<Result<void, LinearError>>;
 
   /** Delete a failed issue (after resolution) */
   delete(id: string): Promise<Result<void, LinearError>>;
@@ -82,6 +107,25 @@ export interface LinearApiClient {
 
   /** Get a single issue by ID */
   getIssue(apiKey: string, issueId: string): Promise<Result<LinearIssue | null, LinearError>>;
+
+  /** Get a single issue by identifier (e.g., "INT-123") with team ID for validation */
+  getIssueByIdentifier(
+    apiKey: string,
+    identifier: string
+  ): Promise<Result<LinearIssueWithTeam | null, LinearError>>;
+
+  /** Update an issue's workflow state */
+  updateIssueState(
+    apiKey: string,
+    issueId: string,
+    stateId: string
+  ): Promise<Result<LinearIssue, LinearError>>;
+
+  /** Get workflow states for a team */
+  getWorkflowStates(
+    apiKey: string,
+    teamId: string
+  ): Promise<Result<WorkflowState[], LinearError>>;
 }
 
 /** Service for extracting issue data from natural language */
@@ -103,4 +147,40 @@ export interface ProcessedActionRepository {
     issueIdentifier: string;
     resourceUrl: string;
   }): Promise<Result<ProcessedAction, LinearError>>;
+}
+
+/** Repository for locally synced Linear issues */
+export interface LinearIssueRepository {
+  /** Save or update a synced issue */
+  save(issue: SyncedLinearIssue): Promise<Result<SyncedLinearIssue, LinearError>>;
+
+  /** Find issue by Linear UUID */
+  findById(id: string): Promise<Result<SyncedLinearIssue | null, LinearError>>;
+
+  /** Find issue by identifier (e.g., INT-444) */
+  findByIdentifier(identifier: string): Promise<Result<SyncedLinearIssue | null, LinearError>>;
+
+  /** List all issues for a user */
+  listByUserId(userId: string): Promise<Result<SyncedLinearIssue[], LinearError>>;
+
+  /** Delete issue by ID */
+  deleteById(id: string): Promise<Result<void, LinearError>>;
+}
+
+/** Repository for locally synced Linear comments */
+export interface LinearCommentRepository {
+  /** Save or update a synced comment */
+  save(comment: LinearComment): Promise<Result<LinearComment, LinearError>>;
+
+  /** Find comment by Linear UUID */
+  findById(id: string): Promise<Result<LinearComment | null, LinearError>>;
+
+  /** List comments for an issue (ordered by creation date) */
+  listByIssueId(issueId: string): Promise<Result<LinearComment[], LinearError>>;
+
+  /** Count comments for an issue */
+  countByIssueId(issueId: string): Promise<Result<number, LinearError>>;
+
+  /** Delete comment by ID */
+  deleteById(id: string): Promise<Result<void, LinearError>>;
 }

@@ -143,6 +143,15 @@ describe('retryFromFailed', () => {
       expect(result).toEqual({ ok: false, error: 'Research not found' });
     });
 
+    it('returns error when repository returns ok with null value', async () => {
+      // This covers the second part of the condition: !ok is false but value === null is true
+      deps.mockRepo.findById.mockResolvedValue(ok(null));
+
+      const result = await retryFromFailed('research-1', deps);
+
+      expect(result).toEqual({ ok: false, error: 'Research not found' });
+    });
+
     it('returns error when status is processing', async () => {
       const research = createTestResearch({ status: 'processing' });
       deps.mockRepo.findById.mockResolvedValue(ok(research));

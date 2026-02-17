@@ -1,11 +1,11 @@
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { TodoRepository } from './domain/ports/todoRepository.js';
 import { FirestoreTodoRepository } from './infra/firestore/firestoreTodoRepository.js';
 import {
   createTodosProcessingPublisher,
   type TodosProcessingPublisher,
 } from '@intexuraos/infra-pubsub';
-import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
+import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createTodoItemExtractionService, type TodoItemExtractionService } from './infra/gemini/todoItemExtractionService.js';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
@@ -48,7 +48,9 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthKey,
     pricingContext,
-    logger: pino({ name: 'userServiceClient' }),
+    logger: createAppLogger({ name: 'userServiceClient' }),
+    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
+    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
   container = {
@@ -56,12 +58,12 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     todosProcessingPublisher: createTodosProcessingPublisher({
       projectId: config.gcpProjectId,
       topicName: config.todosProcessingTopic,
-      logger: pino({ name: 'todos-processing-publisher' }),
+      logger: createAppLogger({ name: 'todos-processing-publisher' }),
     }),
     userServiceClient,
     todoItemExtractionService: createTodoItemExtractionService(
       userServiceClient,
-      pino({ name: 'todoItemExtractionService' })
+      createAppLogger({ name: 'todoItemExtractionService' })
     ),
   };
 }

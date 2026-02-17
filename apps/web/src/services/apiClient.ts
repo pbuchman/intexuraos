@@ -1,4 +1,41 @@
-import type { ApiResponse } from '@/types';
+import type { ApiErrorResponse, ApiResponse } from '@/types';
+
+export type ConflictReason = 'duplicate' | 'active' | 'duplicate_approval';
+
+export interface ConflictErrorInfo {
+  taskId: string;
+  reason: ConflictReason;
+}
+
+/**
+ * Parse a 409 CONFLICT error message to extract task ID and conflict reason.
+ * Returns null if the message doesn't match any known conflict pattern.
+ */
+export function parseConflictError(message: string): ConflictErrorInfo | null {
+  // Pattern 1: "Similar task submitted in last 5 minutes: {taskId}"
+  const duplicatePattern = /Similar task submitted in last 5 minutes: (.+)/;
+  const duplicateMatch = duplicatePattern.exec(message);
+  if (duplicateMatch?.[1]) {
+    return { taskId: duplicateMatch[1], reason: 'duplicate' };
+  }
+
+  // Pattern 2: "Active task already exists for this Linear issue: {taskId}"
+  const activePattern = /Active task already exists for this Linear issue: (.+)/;
+  const activeMatch = activePattern.exec(message);
+  if (activeMatch?.[1]) {
+    return { taskId: activeMatch[1], reason: 'active' };
+  }
+
+  // Pattern 3: "Duplicate: {taskId}"
+  const approvalPattern = /^Duplicate: (.+)/;
+  const approvalMatch = approvalPattern.exec(message);
+  if (approvalMatch?.[1]) {
+    return { taskId: approvalMatch[1], reason: 'duplicate_approval' };
+  }
+
+  // Unknown format - return null to fall back to generic error handling
+  return null;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -76,10 +113,26 @@ export async function apiRequest<T>(
     return undefined as T;
   }
 
-  const data = (await response.json()) as ApiResponse<T>;
+  const json: unknown = await response.json();
+
+  // Validate response structure defensively
+  if (
+    typeof json !== 'object' ||
+    json === null ||
+    !('success' in json)
+  ) {
+    throw new ApiError('UNKNOWN', 'Invalid response format', response.status);
+  }
+
+  const data = json as ApiResponse<T>;
 
   if (!data.success) {
-    throw new ApiError(data.error.code, data.error.message, response.status, data.error.details);
+    const errorResponse = json as Partial<ApiErrorResponse>;
+    const error = errorResponse.error;
+    if (error === undefined) {
+      throw new ApiError('UNKNOWN', 'An unexpected error occurred', response.status);
+    }
+    throw new ApiError(error.code, error.message, response.status, error.details);
   }
 
   return data.data;

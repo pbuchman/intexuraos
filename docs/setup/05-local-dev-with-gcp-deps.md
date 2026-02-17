@@ -1,208 +1,283 @@
 # 05 - Local Development with GCP Dependencies
 
-This document describes how to run IntexuraOS services locally while using GCP Firestore and Secret Manager.
+This is the canonical guide for running IntexuraOS services locally.
 
-## Overview
+## 1. Prerequisites
 
-Local uses:
+Before you begin, ensure you have the following installed:
 
-- **Local services**: Node.js processes via `docker-compose` or `pnpm run dev`
-- **Remote Firestore**: Dev project's Firestore database
-- **Remote Secret Manager**: Dev project's secrets (or local .env override)
+| Tool                    | Purpose                               | Installation                              |
+| ----------------------- | ------------------------------------- | ----------------------------------------- |
+| Docker                  | Pub/Sub emulator                      | [docker.com](https://www.docker.com)      |
+| Node.js 22+             | Runtime for all services              | Use [fnm](https://github.com/Schniz/fnm)  |
+| pnpm 9+                 | Package manager                       | `npm install -g pnpm`                     |
+| direnv                  | Automatic environment variable loader | [direnv.net](https://direnv.net)          |
+| GCP service account key | Firestore, GCS, Secret Manager access | Located at `~/.config/gcloud/sa-key.json` |
 
-## Prerequisites
-
-- GCP project set up (see [01-gcp-project.md](./01-gcp-project.md))
-- Terraform applied (see [02-terraform-bootstrap.md](./02-terraform-bootstrap.md))
-- `gcloud` CLI authenticated
-
-## 1. Authenticate with GCP
-
-Application Default Credentials (ADC) allows local code to access GCP services.
+**Verify Prerequisites:**
 
 ```bash
-# Login and set up ADC
-gcloud auth application-default login
-
-# Set project
-gcloud config set project YOUR_PROJECT_ID
-
-# Verify
-gcloud auth application-default print-access-token
+docker --version       # Should show Docker version
+node --version         # Should show v22.x or higher
+pnpm --version         # Should show 9.x or higher
+direnv --version       # Should show direnv version
+ls ~/.config/gcloud/sa-key.json   # Should exist
 ```
 
-## 2. Required IAM Roles for Local Development
+## 2. Initial Setup
 
-Your user account needs these roles on the dev project:
-
-| Role                                 | Purpose              |
-| ------------------------------------ | -------------------- |
-| `roles/datastore.user`               | Read/write Firestore |
-| `roles/secretmanager.secretAccessor` | Read secrets         |
-
-Grant roles:
+Clone the repository and set up your local environment:
 
 ```bash
-export PROJECT_ID="your-project-id"
-export USER_EMAIL="your-email@example.com"
+# 1. Clone repository
+git clone https://github.com/pbuchman/intexuraos.git
+cd intexuraos
 
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="user:$USER_EMAIL" \
-  --role="roles/datastore.user"
+# 2. Copy environment template
+cp .envrc.local.example .envrc.local
 
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="user:$USER_EMAIL" \
-  --role="roles/secretmanager.secretAccessor"
+# 3. Edit .envrc.local with your settings
+# At minimum, verify/update:
+#   - GOOGLE_CLOUD_PROJECT
+#   - INTEXURAOS_GCP_PROJECT_ID
+#   - Personal identifiers (INTEXURAOS_MY_PHONE_NUMBER, INTEXURAOS_USER_ID)
+nano .envrc.local
+
+# 4. Allow direnv to load environment
+direnv allow
+
+# 5. Install dependencies
+pnpm install
+
+# 6. Build all packages (required before running services)
+pnpm build
 ```
 
-## 3. Local Environment Configuration
+**Why build first?** Apps depend on `packages/*/dist/` directories. Without built packages, apps fail typecheck and throw module errors.
 
-Create `.env.local` in the repository root (gitignored):
+## 3. Sync Secrets
+
+Pull secrets from GCP Secret Manager into `.envrc`:
 
 ```bash
-# .env.local - Local environment
-# DO NOT COMMIT THIS FILE
-
-# GCP Project (for Firestore and Secret Manager)
-INTEXURAOS_GCP_PROJECT_ID=your-project-id
-
-# Auth configuration (can use secrets or direct values for local)
-# Option A: Direct values (faster, no GCP calls)
-INTEXURAOS_AUTH_JWKS_URL=https://your-tenant.auth0.com/.well-known/jwks.json
-INTEXURAOS_AUTH_ISSUER=https://your-tenant.auth0.com/
-INTEXURAOS_AUTH_AUDIENCE=urn:intexuraos:api
-
-# Option B: Use Secret Manager (comment out Option A)
-# AUTH_USE_SECRET_MANAGER=true
-
-# Service ports (defaults)
-AUTH_SERVICE_PORT=8080
-PROMPTVAULT_SERVICE_PORT=8081
-
-# Logging
-LOG_LEVEL=debug
+./scripts/sync-secrets.sh
 ```
 
-## 4. Run Services Locally
+**What this does:**
 
-### Option A: Using pnpm scripts
+- Reads Terraform-defined secrets from `terraform/environments/dev/main.tf`
+- Fetches secret values from GCP Secret Manager
+- Writes them to `.envrc` as `export` statements
+- `.envrc` is automatically loaded by `direnv` whenever you `cd` into the project
+
+**Common sync issues:**
+
+| Issue                                 | Fix                                                              |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| "Could not resolve project ID"        | Set `PROJECT_ID` env var or run sync-secrets with `--project-id` |
+| "Permission denied" on secrets        | Ensure service account has `roles/secretmanager.secretAccessor`  |
+| "Missing secret values (no versions)" | Run `./scripts/sync-secrets.sh --add-new` to populate            |
+
+After sync completes, run `direnv allow` to reload environment with new secrets.
+
+## 4. Start the Stack
+
+IntexuraOS local development uses a **hybrid architecture**:
+
+1. **Pub/Sub emulator** runs in Docker (avoids topic conflicts between environments)
+2. **All services** run via PM2 (process manager)
+3. **Real GCP services** (Firestore, Cloud Storage, Firebase Auth) via service account
+
+### Start Pub/Sub Emulator
 
 ```bash
-# Terminal 1: Auth service
-cd apps/user-service
-pnpm run dev
-
-# Terminal 2: PromptVault service
-cd apps/promptvault-service
-pnpm run dev
+pnpm run emulators:start
 ```
 
-### Option B: Using Docker Compose
+This starts the `pubsub-ui` container that:
+
+- Runs Pub/Sub emulator on `localhost:8085`
+- Creates all topics defined in `docker/docker-compose.local.yaml`
+- Forwards messages to local service HTTP endpoints
+
+**Verify emulator is running:**
 
 ```bash
-# Build and start all services
-docker compose -f docker/docker-compose.yaml up --build
-
-# Or in detached mode
-docker compose -f docker/docker-compose.yaml up -d --build
-
-# View logs
-docker compose -f docker/docker-compose.yaml logs -f
-
-# Stop
-docker compose -f docker/docker-compose.yaml down
+docker ps | grep pubsub-ui
+# Should show container running
 ```
 
-## 5. Verify Local Setup
+### Start All Services
 
 ```bash
-# Check auth service health
-curl http://localhost:8080/health | jq
-
-# Check notion-gpt service health
-curl http://localhost:8081/health | jq
-
-# View OpenAPI docs
-open http://localhost:8080/docs
-open http://localhost:8081/docs
+pnpm run services:start
 ```
 
-## 6. Testing
+This starts all IntexuraOS services via PM2. You'll see output showing each service starting.
 
-Tests use **in-memory fake repositories** via dependency injection—no external services required:
+**View logs:**
 
 ```bash
-pnpm run test          # Run all tests
-pppnpm run test:coverage # Run with coverage report
-pnpm run ci            # Full CI pipeline
+pnpm run services:logs
 ```
 
-## Project Structure for Local Development
+Press `Ctrl+C` to stop tailing logs (services continue running).
 
-```
-intexuraos/
-├── .env.local          # Local environment (gitignored)
-├── docker/
-│   └── docker-compose.yaml
-├── apps/
-│   ├── user-service/
-│   │   └── .env        # Service-specific overrides (gitignored)
-│   └── promptvault-service/
-│       └── .env        # Service-specific overrides (gitignored)
-```
-
-## Secrets Handling
-
-**DO NOT commit secrets to the repository.**
-
-For local development, you have two options:
-
-### Option 1: Direct Environment Variables (Recommended)
-
-Set auth values directly in `.env.local`. Faster, no GCP calls on startup.
-
-### Option 2: Secret Manager Integration
-
-If you need to test Secret Manager integration:
-
-```javascript
-// Code automatically uses Secret Manager when:
-// - Running on Cloud Run (has service account)
-// - GOOGLE_APPLICATION_CREDENTIALS is set
-// - ADC is configured (gcloud auth application-default login)
-```
-
-## Troubleshooting
-
-### "Could not load the default credentials"
-
-Run:
+**Check service status:**
 
 ```bash
-gcloud auth application-default login
+pnpm run services:status
 ```
 
-### "Permission denied" on Firestore
+You should see all services in "online" status.
 
-Ensure your user has `roles/datastore.user` on the project.
+## 5. What Runs Locally vs Real GCP
 
-### Services can't connect to each other
+| Service       | Location       | Notes                                                     |
+| ------------- | -------------- | --------------------------------------------------------- |
+| Pub/Sub       | Local emulator | Avoids topic conflicts between environments               |
+| Firestore     | Real GCP       | Via service account key at `~/.config/gcloud/sa-key.json` |
+| Cloud Storage | Real GCP       | Via service account key at `~/.config/gcloud/sa-key.json` |
+| Firebase Auth | Real GCP       | Via Auth0 JWT validation (JWKS URL from secrets)          |
 
-In Docker Compose, services use container names as hostnames.
-In local dev, services run on different ports on localhost.
+**Why Pub/Sub local, but Firestore/GCS real?**
 
-### Environment variables not loading
+- **Pub/Sub:** Topic names are global. Local emulator prevents collisions with dev/prod.
+- **Firestore/GCS:** Collections/buckets are namespaced by environment. Safe to share across local devs.
 
-Check that `.env.local` exists and is in the correct location.
-For Docker, ensure `env_file` is configured in `docker-compose.yaml`.
+## 6. Auto-Start on Persistent Dev VM (Optional)
 
-### Terraform hangs on "Initializing the backend..."
+If you have a persistent development VM that should auto-start services after reboot, set up systemd services.
 
-If you use local GCP emulators (Firestore, Storage, Pub/Sub), the emulator environment variables interfere with Terraform's GCS backend.
+### Create Emulator Service
 
-**Cause:** `STORAGE_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, or `PUBSUB_EMULATOR_HOST` redirects Terraform to non-existent local emulators instead of real GCP.
+```bash
+sudo tee /etc/systemd/system/intexuraos-emulators.service << 'EOF'
+[Unit]
+Description=IntexuraOS Pub/Sub emulator
+After=docker.service
+Requires=docker.service
 
-**Solution:** Use a `tf` alias that unsets emulator variables:
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=YOUR_USER
+WorkingDirectory=/path/to/intexuraos
+ExecStart=/usr/bin/direnv exec . docker compose -f docker/docker-compose.local.yaml up -d --wait
+ExecStop=/usr/bin/direnv exec . docker compose -f docker/docker-compose.local.yaml down
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+**Replace:**
+
+- `YOUR_USER` with your username
+- `/path/to/intexuraos` with absolute path to repository
+
+### Update PM2 Service
+
+The `pm2 startup` command creates a systemd service. Update it to depend on emulators and use direnv:
+
+```bash
+# 1. Generate PM2 startup script
+pm2 startup
+
+# 2. Save current PM2 process list
+pm2 save
+
+# 3. Edit the generated systemd service
+sudo systemctl edit --full pm2-YOUR_USER.service
+```
+
+**Modify the `[Unit]` section:**
+
+```ini
+[Unit]
+Description=PM2 process manager
+After=network.target intexuraos-emulators.service
+```
+
+**Modify the `[Service]` section:**
+
+```ini
+[Service]
+Type=forking
+User=YOUR_USER
+WorkingDirectory=/path/to/intexuraos
+ExecStart=/usr/bin/direnv exec /path/to/intexuraos pm2 resurrect
+ExecReload=/usr/bin/pm2 reload all
+ExecStop=/usr/bin/pm2 kill
+Restart=on-failure
+RestartSec=10
+```
+
+### Enable and Start
+
+```bash
+# Enable emulator service
+sudo systemctl daemon-reload
+sudo systemctl enable intexuraos-emulators.service
+
+# Restart PM2 service
+sudo systemctl restart pm2-YOUR_USER.service
+
+# Verify both are running
+sudo systemctl status intexuraos-emulators.service
+sudo systemctl status pm2-YOUR_USER.service
+```
+
+## 7. Troubleshooting
+
+### Services crash on startup
+
+**Symptom:** `pnpm run services:status` shows "errored" or "stopped" status.
+
+**Cause:** Pub/Sub emulator not running.
+
+**Fix:**
+
+```bash
+# Check emulator is running
+docker ps | grep pubsub-ui
+
+# If not running, start it
+pnpm run emulators:start
+
+# Restart services
+pnpm run services:restart
+```
+
+### Missing env vars
+
+**Symptom:** Service logs show "Missing required environment variable: INTEXURAOS\_..."
+
+**Cause:** `direnv` not loaded or `.envrc` missing secrets.
+
+**Fix:**
+
+```bash
+# Reload direnv
+direnv allow
+
+# Re-sync secrets if needed
+./scripts/sync-secrets.sh
+direnv allow
+
+# Restart services
+pnpm run services:restart
+```
+
+### Terraform fails with emulator vars
+
+**Symptom:** `terraform init` or `terraform plan` hangs or fails with emulator errors.
+
+**Cause:** `PUBSUB_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, or `STORAGE_EMULATOR_HOST` env vars redirect Terraform to non-existent local emulators.
+
+**Fix:**
+
+Use the `tf` alias that clears emulator env vars:
 
 ```bash
 # Add to ~/.zshrc or ~/.bashrc
@@ -211,32 +286,140 @@ alias tf='STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= 
 
 Then use `tf init`, `tf plan`, `tf apply` instead of `terraform`.
 
+### "Topic not found" errors
+
+**Symptom:** Service logs show `5 NOT_FOUND: Topic not found` when publishing to Pub/Sub.
+
+**Cause:** `pubsub-ui` creates topics on startup. If PM2 services started before `pubsub-ui` was ready, topics don't exist.
+
+**Fix:**
+
+```bash
+# Restart services after pubsub-ui is fully running
+pnpm run services:restart
+```
+
+### Pub/Sub messages not being processed
+
+**Symptom:** Actions stay in `pending` status, commands don't trigger processing.
+
+**Cause:** `pubsub-ui` container isn't running or not forwarding messages.
+
+**Verify:**
+
+```bash
+# Check all containers are running
+docker compose -f docker/docker-compose.local.yaml ps
+
+# Verify pubsub-ui is healthy
+curl http://localhost:8105/health | jq '.topics | length'
+# Should return 14
+```
+
+**Fix:**
+
+```bash
+# Restart Docker containers
+pnpm run emulators:stop
+pnpm run emulators:start
+
+# Verify pubsub-ui is forwarding messages
+docker compose -f docker/docker-compose.local.yaml logs pubsub-ui --tail 10
+```
+
+### "Cannot find module '@intexuraos/...'"
+
+**Symptom:** Service fails with module not found errors for `@intexuraos/*` packages.
+
+**Cause:** Packages not built (missing `dist/` directories).
+
+**Fix:**
+
+```bash
+pnpm build
+pnpm run services:restart
+```
+
+### "Could not load the default credentials"
+
+**Symptom:** Services fail with GCP authentication errors.
+
+**Cause:** Service account key missing or `GOOGLE_APPLICATION_CREDENTIALS` not set.
+
+**Fix:**
+
+```bash
+# Verify service account key exists
+ls ~/.config/gcloud/sa-key.json
+
+# Check .envrc.local exports it
+grep GOOGLE_APPLICATION_CREDENTIALS .envrc.local
+# Should see: export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
+
+# Reload environment
+direnv allow
+
+# Restart services
+pnpm run services:restart
+```
+
+## 8. Useful Commands
+
+| Command                     | Description                                         |
+| --------------------------- | --------------------------------------------------- |
+| `pnpm run emulators:start`  | Start Pub/Sub emulator                              |
+| `pnpm run emulators:stop`   | Stop Pub/Sub emulator                               |
+| `pnpm run emulators:logs`   | View emulator logs (live tail)                      |
+| `pnpm run services:start`   | Start all PM2 services                              |
+| `pnpm run services:stop`    | Stop all PM2 services                               |
+| `pnpm run services:logs`    | View service logs (live tail)                       |
+| `pnpm run services:status`  | PM2 status dashboard                                |
+| `pnpm run services:monit`   | Interactive TUI (CPU/memory/logs)                   |
+| `pnpm run services:restart` | Restart all services                                |
+| `pnpm run services:delete`  | Delete all PM2 processes                            |
+| `pnpm run dev`              | Start emulators + services + tail logs (all-in-one) |
+
+**Individual service development:**
+
+```bash
+# Run a single service with watch mode
+cd apps/user-service
+pnpm run dev
+```
+
+## Quick Verification
+
+After running `pnpm run services:start`, verify everything is working:
+
+```bash
+# 1. Check service status
+pnpm run services:status
+# Should show all services "online"
+
+# 2. Check web app is running
+curl -s http://localhost:3000 | grep -q "IntexuraOS" && echo "✓ Web app OK"
+
+# 3. Check a service health endpoint
+curl http://localhost:8110/health | jq
+# Should return: {"success":true,"data":{"status":"healthy"}}
+
+# 4. Verify Pub/Sub emulator
+curl http://localhost:8105/health | jq '.topics | length'
+# Should return: 14
+```
+
 ## Summary
 
 After completing these steps, you can:
 
-- [x] Run services locally with `pnpm run dev` or Docker Compose
-- [x] Connect to dev Firestore database
-- [x] Access secrets via ADC or direct environment variables
-- [x] Test API endpoints locally
+- [x] Run all services locally with `pnpm run services:start`
+- [x] Connect to dev Firestore database via service account
+- [x] Access secrets synced from GCP Secret Manager
+- [x] Test API endpoints locally on `localhost:PORT`
+- [x] Use local Pub/Sub emulator to avoid topic conflicts
 
-## Claude Code Setup
+## Next Steps
 
-If using Claude Code for development, configure MCP servers for Linear and Sentry integration:
-
-- See [11 - Claude Code MCP Setup](./11-claude-code-mcp-setup.md)
-
-Required environment variables:
-
-```bash
-export LINEAR_API_KEY="lin_api_xxxxx"      # Linear issue tracking
-export SENTRY_AUTH_TOKEN="sntrys_xxxxx"    # Sentry error monitoring
-```
-
-## Development Workflow
-
-1. Make code changes
-2. Run `pnpm run ci` to validate
-3. Test locally with `pnpm run dev`
-4. Push to `development` branch
-5. Cloud Build automatically deploys
+- [Testing](../patterns/testing.md) - Run tests with `pnpm run test`
+- [CI Validation](../patterns/verification.md) - Validate changes with `pnpm run ci`
+- [Claude Code MCP Setup](./11-claude-code-mcp-setup.md) - Configure Linear and Sentry integration

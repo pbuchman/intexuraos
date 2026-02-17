@@ -6,7 +6,7 @@
 import { getProviderForModel } from '@intexuraos/llm-contract';
 import type { ResearchRepository, NotificationSender } from '../../domain/research/ports/index.js';
 import type { ServiceContainer, DecryptedApiKeys, ImageServiceClient } from '../../services.js';
-import type { UserServiceClient } from '../../infra/user/index.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { ShareStoragePort } from '../../domain/research/ports/index.js';
 import type { ShareConfig } from '../../services.js';
 import { runSynthesis } from '../../domain/research/index.js';
@@ -112,8 +112,12 @@ export async function handleAllCompleted(params: AllCompletedHandlerParams): Pro
         logger.info({ researchId, ...obj }, msg);
       },
       error: (obj: object, msg?: string): void => {
+        /* v8 ignore start -- ts-type: type narrowing for overloaded logger signature @preserve */
         const message = typeof msg === 'string' ? msg : typeof obj === 'string' ? obj : undefined;
+        /* v8 ignore stop @preserve */
+        /* v8 ignore start -- ts-type: type narrowing for overloaded logger signature @preserve */
         const context = typeof obj === 'string' ? {} : obj;
+        /* v8 ignore stop @preserve */
         logger.error({ researchId, ...context }, message);
       },
       warn: (obj: object, msg?: string): void => {
@@ -124,6 +128,8 @@ export async function handleAllCompleted(params: AllCompletedHandlerParams): Pro
       },
     },
     imageApiKeys: apiKeys,
+    notionServiceClient: services.notionServiceClient,
+    researchExportSettings: services.researchExportSettings,
   });
 
   if (synthesisResult.ok) {

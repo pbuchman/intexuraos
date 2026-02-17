@@ -108,6 +108,88 @@ describe('GoogleCalendarClientImpl', () => {
       }
     });
 
+    it('automatically sets singleEvents=true when timeMin is provided', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query((actualQuery) => {
+          return actualQuery['singleEvents'] === 'true' && actualQuery['timeMin'] === '2025-01-08T00:00:00Z';
+        })
+        .reply(200, { items: [] });
+
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
+        timeMin: '2025-01-08T00:00:00Z',
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('automatically sets singleEvents=true when timeMax is provided', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query((actualQuery) => {
+          return actualQuery['singleEvents'] === 'true' && actualQuery['timeMax'] === '2025-01-09T00:00:00Z';
+        })
+        .reply(200, { items: [] });
+
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
+        timeMax: '2025-01-09T00:00:00Z',
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('respects explicit singleEvents=false even when time filters are provided', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query((actualQuery) => {
+          return actualQuery['singleEvents'] === 'false' && actualQuery['timeMin'] === '2025-01-08T00:00:00Z';
+        })
+        .reply(200, { items: [] });
+
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
+        timeMin: '2025-01-08T00:00:00Z',
+        singleEvents: false,
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('sets orderBy=startTime when singleEvents is automatically set to true', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query((actualQuery) => {
+          return actualQuery['singleEvents'] === 'true' && actualQuery['orderBy'] === 'startTime';
+        })
+        .reply(200, { items: [] });
+
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
+        timeMin: '2025-01-08T00:00:00Z',
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('respects explicit orderBy when provided with time filters', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query((actualQuery) => {
+          return actualQuery['singleEvents'] === 'true' && actualQuery['orderBy'] === 'updated';
+        })
+        .reply(200, { items: [] });
+
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
+        timeMin: '2025-01-08T00:00:00Z',
+        orderBy: 'updated',
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
+    });
+
     it('handles network errors', async () => {
       nock(GOOGLE_CALENDAR_API)
         .get('/calendar/v3/calendars/primary/events')
@@ -120,6 +202,38 @@ describe('GoogleCalendarClientImpl', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
       }
+    });
+
+    it('passes maxResults to API', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query((actualQuery) => {
+          return actualQuery['maxResults'] === '50';
+        })
+        .reply(200, { items: [] });
+
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
+        maxResults: 50,
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('passes q query to API', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query((actualQuery) => {
+          return actualQuery['q'] === 'meeting';
+        })
+        .reply(200, { items: [] });
+
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
+        q: 'meeting',
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
     });
   });
 

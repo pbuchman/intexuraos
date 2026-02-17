@@ -9,6 +9,7 @@ Users want Notion integration:
 1. **Connection** - Secure Notion API token storage
 2. **Status** - Check integration health
 3. **Disconnection** - Remove integration
+4. **Page access validation** - Verify pages are accessible before export
 
 ## How It Helps
 
@@ -24,14 +25,19 @@ Notion-service provides Notion integration lifecycle:
 
 - User provides Notion token
 - Service validates with Notion API
-- Token stored securely (encrypted)
-- Workspace info retrieved
+- Token stored securely
+- Connection timestamps tracked
 
 **Status endpoint:**
 
-- Connection state
-- Workspace details
-- Last sync time
+- Connection state (configured/connected)
+- Connection timestamps (createdAt/updatedAt)
+
+**Page preview:**
+
+- Validates user has access to a specific Notion page
+- Returns page title and URL
+- Used by research-agent to validate export targets
 
 **Disconnection:**
 
@@ -69,7 +75,7 @@ Notion-service provides Notion integration lifecycle:
 
 **Notion-only** - No other integrations
 
-**No sync** - PromptVault handles actual data sync
+**No sync** - Only manages connection lifecycle and page access
 
 **Token required** - User must generate token manually
 

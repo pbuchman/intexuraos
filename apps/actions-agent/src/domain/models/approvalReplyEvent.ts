@@ -14,4 +14,8 @@ export interface ApprovalReplyEvent {
   timestamp: string;
   /** Optional action ID extracted from correlation ID */
   actionId?: string;
+  /** Optional button ID (format: "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "cancel-task:{taskId}:{nonce}") */
+  buttonId?: string;
+  /** Optional button title (user-visible text of the button clicked) */
+  buttonTitle?: string;
 }

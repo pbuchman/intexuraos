@@ -7,12 +7,12 @@
 | TODO/FIXME Comments | 0     | -          |
 | Test Coverage Gaps  | 0     | -          |
 | TypeScript Issues   | 4     | Low (test) |
-| SRP Violations      | 2     | Medium     |
+| SRP Violations      | 3     | Medium     |
 | Code Duplicates     | 0     | -          |
 | Deprecations        | 0     | -          |
 | Console Logging     | 0     | -          |
 
-Last updated: 2026-01-24
+Last updated: 2026-02-08
 
 ## TypeScript Issues
 
@@ -37,8 +37,8 @@ Four instances of `as any` in test files for testing unsupported action types:
 
 | File                | Lines | Concern                                                |
 | ------------------- | ----- | ------------------------------------------------------ |
-| `publicRoutes.ts`   | 800   | Contains 8 endpoints with extensive schema definitions |
-| `internalRoutes.ts` | 798   | Contains 5 endpoints with complex Pub/Sub handling     |
+| `publicRoutes.ts`   | 806   | Contains 8 endpoints with extensive schema definitions |
+| `internalRoutes.ts` | 897   | Contains 5 endpoints with complex Pub/Sub handling     |
 
 **Severity:** Medium - Files are at the threshold but well-organized.
 
@@ -48,15 +48,20 @@ Four instances of `as any` in test files for testing unsupported action types:
 - `/routes/public/execute.ts` - Execution endpoints
 - `/routes/internal/pubsub.ts` - Pub/Sub handlers
 
-### Large Use Case File (Medium Severity)
+### Large Use Case File (High Severity)
 
-| File                     | Lines | Concern                                   |
-| ------------------------ | ----- | ----------------------------------------- |
-| `handleApprovalReply.ts` | 425   | Complex workflow with multiple code paths |
+| File                     | Lines | Concern                                                                       |
+| ------------------------ | ----- | ----------------------------------------------------------------------------- |
+| `handleApprovalReply.ts` | 1450  | Complex workflow with LLM classification, button handling, and nonce fallback |
 
-**Severity:** Medium - The file handles a complex workflow with approval, rejection, and clarification paths. The complexity is inherent to the business logic.
+**Severity:** High - The file has grown significantly with the addition of interactive button handling (v3.0.0), nonce-based approval validation, cancel-task and view-task button handlers, and text-based nonce fallback ("approve XXXX" pattern). It now contains multiple large helper functions.
 
-**Recommendation:** The file is well-structured with clear code paths. Consider extracting helper functions if the file grows beyond 500 lines.
+**Recommendation:** Extract into separate modules:
+
+- `handleButtonResponse.ts` - Interactive button handling logic
+- `handleNonceTextFallback.ts` - Text-based nonce approval fallback
+- `handleCancelTaskButton.ts` / `handleViewTaskButton.ts` - Code task button handlers
+- `approvalExecution.ts` - Direct execution logic for different action types
 
 ## Future Plans
 
@@ -92,6 +97,20 @@ The following design decisions were made in v2.0.0 and should be revisited if is
 
 4. **Approval message correlation via wamid or actionId** - Two lookup paths exist for backwards compatibility. Consider deprecating wamid lookup once all messages have correlation IDs.
 
+### v3.0.0 Technical Decisions
+
+The following design decisions were made in v3.0.0 and should be revisited if issues arise:
+
+1. **Interactive WhatsApp buttons for code actions** - Code actions use interactive buttons (Approve with nonce, Cancel, Convert to Issue) instead of free-text replies. This bypasses LLM classification for deterministic intent but is limited to 3 buttons per message.
+
+2. **Nonce-based approval tokens** - 4-character hex nonces with 15-minute TTL prevent accidental duplicate approvals. The short nonce format is a trade-off between security and usability (must fit in a WhatsApp button title).
+
+3. **Text-based nonce fallback** - Users can type "approve XXXX" as a fallback when interactive buttons fail. If the nonce fails validation, the system falls through to the LLM classifier for backward compatibility.
+
+4. **approvalEventId for idempotency** - Each code action execution generates a UUID `approvalEventId` stored in the action payload. This prevents WhatsApp retries or duplicate approval messages from spawning multiple code tasks.
+
+5. **Direct execution of code actions after approval** - Like note actions, code actions are executed directly via `executeCodeAction` after WhatsApp approval rather than publishing `action.created` to avoid duplicate processing.
+
 ## Code Smells
 
 ### None Detected
@@ -120,13 +139,13 @@ All endpoints and use cases have test coverage. The `handleApprovalReply` use ca
 
 ### Coverage Areas
 
-| Area               | Coverage | Notes                                  |
-| ------------------ | -------- | -------------------------------------- |
-| Public routes      | 95%+     | All endpoints tested                   |
-| Internal routes    | 95%+     | Including approval-reply handler       |
-| Use cases          | 95%+     | handleApprovalReply extensively tested |
-| Infrastructure     | 95%+     | Firestore repos and HTTP clients       |
-| Pub/Sub publishers | 95%+     | Event publishing tested                |
+| Area               | Coverage | Notes                                                |
+| ------------------ | -------- | ---------------------------------------------------- |
+| Public routes      | 100%     | All endpoints tested (100% branch enforcement)       |
+| Internal routes    | 100%     | Including approval-reply and code action handlers    |
+| Use cases          | 100%     | All use cases including code actions and nonce utils |
+| Infrastructure     | 100%     | Firestore repos, HTTP clients, and code-agent client |
+| Pub/Sub publishers | 100%     | Event publishing tested                              |
 
 ## Deprecations
 
@@ -135,6 +154,54 @@ All endpoints and use cases have test coverage. The `handleApprovalReply` use ca
 No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
+
+### v3.0.0 Code Action Type (INT-156)
+
+**Issue:** No support for dispatching code tasks (Claude Code) from the action system.
+
+**Resolution:** Added `code` action type with full lifecycle: `handleCodeAction` (approval with interactive WhatsApp buttons), `executeCodeAction` (dispatch to code-agent), nonce-based approval validation, and cancel-task/view-task button handlers. Includes `CodeAgentClient` port and HTTP client, `approvalNonce` utility for generating and validating 4-char hex nonces with 15-min TTL.
+
+**Date Resolved:** 2026-02-08
+
+### v3.0.0 100% Branch Coverage Enforcement (INT-427)
+
+**Issue:** Coverage was at 95% threshold, allowing some branches to go untested.
+
+**Resolution:** Enforced 100% branch coverage with `v8 ignore` exemptions requiring valid categories. All untested branches now either have tests or documented exemptions.
+
+**Date Resolved:** 2026-01-31
+
+### v3.0.0 Response Contract Standardization
+
+**Issue:** Internal routes used raw `reply.send()` / `reply.status().return` patterns instead of the standard response contract.
+
+**Resolution:** Migrated all internal route responses to use `reply.ok()` and `reply.fail()` patterns. All error schemas updated to use `ErrorBody` reference.
+
+**Date Resolved:** 2026-01-30
+
+### v3.0.0 Duplicate Pub/Sub Events Fix
+
+**Issue:** Action creation endpoint (`POST /internal/actions`) was publishing `action.created` events, causing duplicate processing when the caller (commands-agent) also published the event.
+
+**Resolution:** Removed event publishing from the create action endpoint. Event publishing is now handled exclusively by the caller.
+
+**Date Resolved:** 2026-01-30
+
+### v3.0.0 Sentry Logger Migration
+
+**Issue:** Direct `pino()` logger usage meant errors were not forwarded to Sentry.
+
+**Resolution:** Migrated to `createAppLogger()` from `@intexuraos/infra-sentry` for all logger instances in services.ts.
+
+**Date Resolved:** 2026-01-30
+
+### v3.0.0 Polish Date Parsing Fix (INT-422)
+
+**Issue:** Calendar actions failed when parsing Polish date formats.
+
+**Resolution:** Fixed date parsing to handle Polish locale formats in calendar action processing.
+
+**Date Resolved:** 2026-01-29
 
 ### v2.1.0 Internal Clients Migration (INT-269)
 

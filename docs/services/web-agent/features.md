@@ -16,15 +16,16 @@ Web content is hard to work with:
 
 ### Intelligent Page Summarization
 
-Crawl web pages and generate clean prose summaries using the user's preferred LLM.
+Crawl web pages and generate clean prose summaries using the user's preferred LLM. Summaries focus on the actual page content rather than describing the platform or site structure.
 
-**Example:** A Polish news article stays in Polish. You send a URL, get a 3-minute summary that reads naturally in the source language.
+**Example:** A Polish news article stays in Polish. You send a URL, get a 3-minute summary that reads naturally in the source language and focuses on what the article says, not what the platform is.
 
 **How it works:**
 
 1. PageContentFetcher crawls with Crawl4AI (headless browser)
 2. LlmSummarizer uses your LLM API key (not ours - you control costs)
-3. Parser validates output and triggers self-repair if LLM returns JSON
+3. Content focus instructions prevent platform descriptions (e.g., no "LinkedIn is a professional network" preambles)
+4. Parser validates output and triggers self-repair if LLM returns JSON
 
 ### Rich Link Previews
 
@@ -70,9 +71,13 @@ Browser-like request headers avoid 403 blocks from protective websites.
 
 **Language preservation** - Polish stays Polish, German stays German
 
+**Content-focused summaries** - Summarizes what the page says, not what the platform is
+
 **Self-healing AI** - Parser detects JSON format and auto-triggers repair prompt
 
 **Bot-resistant** - Browser-like headers for higher success rate
+
+**Rate limit awareness** - Crawl4AI 429 responses return a specific RATE_LIMITED error code for proper backoff handling
 
 **Partial success** - Batch requests return individual results; one failure doesn't block others
 

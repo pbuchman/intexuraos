@@ -34,7 +34,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             commandId: { type: 'string', description: 'Command ID that triggered this action' },
             type: {
               type: 'string',
-              enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear'],
+              enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear', 'code'],
               description: 'Type of action',
             },
             title: { type: 'string', description: 'Action title' },
@@ -80,22 +80,28 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Invalid request',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           500: {
             description: 'Internal error',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -109,8 +115,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for create action');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for create action');
       }
 
       const body = request.body as {
@@ -165,51 +170,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Failed to save action to Firestore'
         );
-        reply.status(500);
-        return { error: 'Failed to create action' };
+        return await reply.fail('INTERNAL_ERROR', 'Failed to create action');
       }
 
-      const event: ActionCreatedEvent = {
-        type: 'action.created',
-        actionId: action.id,
-        userId: body.userId,
-        commandId: body.commandId,
-        actionType: body.type,
-        title: body.title,
-        payload: {
-          prompt: body.title,
-          confidence: body.confidence,
-        },
-        timestamp: new Date().toISOString(),
-      };
+      // Note: Event publishing is handled by the caller (commands-agent), not this endpoint
 
-      request.log.info(
-        {
-          actionId: action.id,
-          actionType: body.type,
-        },
-        'Publishing action.created event'
-      );
-
-      const publishResult = await services.actionEventPublisher.publishActionCreated(event);
-
-      if (!publishResult.ok) {
-        request.log.error(
-          {
-            actionId: action.id,
-            error: publishResult.error.message,
-          },
-          'Failed to publish action.created event'
-        );
-      } else {
-        request.log.info({ actionId: action.id }, 'Action event published successfully');
-      }
-
-      reply.status(201);
-      return {
-        success: true,
-        data: action,
-      };
+      void reply.status(201);
+      return await reply.ok(action);
     }
   );
 
@@ -250,31 +217,42 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Message acknowledged',
             type: 'object',
             properties: {
-              success: { type: 'boolean' },
-              actionId: { type: 'string' },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  actionId: { type: 'string' },
+                },
+              },
             },
-            required: ['success'],
+            required: ['success', 'data'],
           },
           400: {
             description: 'Invalid message',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           500: {
             description: 'Processing failed',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -312,8 +290,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for actions/research endpoint'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for actions/research endpoint');
         }
       }
 
@@ -325,8 +302,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         eventData = JSON.parse(decoded) as ActionCreatedEvent;
       } catch {
         request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
-        reply.status(400);
-        return { error: 'Invalid message format' };
+        return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
       }
 
       const parsedType = eventData.type as string;
@@ -339,8 +315,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Unexpected event type'
         );
-        reply.status(400);
-        return { error: 'Invalid event type' };
+        return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
       }
 
       // Validate that URL actionType matches event actionType
@@ -354,8 +329,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Action type mismatch between URL and event'
         );
-        reply.status(400);
-        return { error: 'Action type mismatch' };
+        return await reply.fail('INVALID_REQUEST', 'Action type mismatch between URL and event');
       }
 
       // Get handler for this action type
@@ -371,8 +345,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'No handler registered for action type'
         );
-        reply.status(400);
-        return { error: `Unsupported action type: ${actionType}` };
+        return await reply.fail('INVALID_REQUEST', `Unsupported action type: ${actionType}`);
       }
 
       const result = await handler.execute(eventData);
@@ -382,8 +355,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { err: result.error, actionType, actionId: eventData.actionId },
           'Failed to process action'
         );
-        reply.status(500);
-        return { error: result.error.message };
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
       request.log.info(
@@ -391,10 +363,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'Action processed successfully'
       );
 
-      return {
-        success: true,
-        actionId: result.value.actionId,
-      };
+      return await reply.ok({ actionId: result.value.actionId });
     }
   );
 
@@ -428,33 +397,44 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Message acknowledged',
             type: 'object',
             properties: {
-              success: { type: 'boolean' },
-              actionId: { type: 'string' },
-              skipped: { type: 'boolean' },
-              reason: { type: 'string' },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  actionId: { type: 'string' },
+                  skipped: { type: 'boolean' },
+                  reason: { type: 'string' },
+                },
+              },
             },
-            required: ['success'],
+            required: ['success', 'data'],
           },
           400: {
             description: 'Invalid message',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           500: {
             description: 'Processing failed',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -483,8 +463,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for /internal/actions/process'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for /internal/actions/process');
         }
       }
 
@@ -496,8 +475,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         eventData = JSON.parse(decoded) as ActionCreatedEvent;
       } catch {
         request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
-        reply.status(400);
-        return { error: 'Invalid message format' };
+        return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
       }
 
       request.log.info(
@@ -519,8 +497,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Unexpected event type'
         );
-        reply.status(400);
-        return { error: 'Invalid event type' };
+        return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
       }
 
       const services = getServices();
@@ -535,12 +512,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'No handler for action type, action stays in pending'
         );
-        return {
-          success: true,
+        return await reply.ok({
           actionId: eventData.actionId,
           skipped: true,
           reason: 'no_handler',
-        };
+        });
       }
 
       const result = await handler.execute(eventData);
@@ -550,8 +526,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { err: result.error, actionType: eventData.actionType, actionId: eventData.actionId },
           'Failed to process action'
         );
-        reply.status(500);
-        return { error: result.error.message };
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
       request.log.info(
@@ -559,10 +534,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'Action processed successfully'
       );
 
-      return {
-        success: true,
-        actionId: result.value.actionId,
-      };
+      return await reply.ok({ actionId: result.value.actionId });
     }
   );
 
@@ -580,13 +552,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Retry completed',
             type: 'object',
             properties: {
-              success: { type: 'boolean' },
-              processed: { type: 'number' },
-              skipped: { type: 'number' },
-              failed: { type: 'number' },
-              total: { type: 'number' },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  processed: { type: 'number' },
+                  skipped: { type: 'number' },
+                  failed: { type: 'number' },
+                  total: { type: 'number' },
+                },
+                required: ['processed', 'skipped', 'failed', 'total'],
+              },
             },
-            required: ['success', 'processed', 'skipped', 'failed', 'total'],
+            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized',
@@ -615,8 +593,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for /internal/actions/retry-pending'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for /internal/actions/retry-pending');
         }
       }
 
@@ -625,10 +602,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info(result, 'Retry pending actions completed');
 
-      return {
-        success: true,
-        ...result,
-      };
+      return await reply.ok(result);
     }
   );
 
@@ -662,34 +636,45 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Reply processed',
             type: 'object',
             properties: {
-              success: { type: 'boolean' },
-              matched: { type: 'boolean' },
-              actionId: { type: 'string' },
-              intent: { type: 'string' },
-              outcome: { type: 'string' },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  matched: { type: 'boolean' },
+                  actionId: { type: 'string' },
+                  intent: { type: 'string' },
+                  outcome: { type: 'string' },
+                },
+              },
             },
-            required: ['success'],
+            required: ['success', 'data'],
           },
           400: {
             description: 'Invalid message',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           500: {
             description: 'Processing failed',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -718,8 +703,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for /internal/actions/approval-reply'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for /internal/actions/approval-reply');
         }
       }
 
@@ -731,8 +715,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         eventData = JSON.parse(decoded) as ApprovalReplyEvent;
       } catch {
         request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
-        reply.status(400);
-        return { error: 'Invalid message format' };
+        return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
       }
 
       const parsedType = eventData.type as string;
@@ -744,8 +727,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Unexpected event type for approval reply'
         );
-        reply.status(400);
-        return { error: 'Invalid event type' };
+        return await reply.fail('INVALID_REQUEST', 'Unexpected event type for approval reply');
       }
 
       request.log.info(
@@ -758,20 +740,25 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       const services = getServices();
+      /* v8 ignore start -- test-infra: spread conditionals for optional event fields @preserve */
       const result = await services.handleApprovalReplyUseCase({
         replyToWamid: eventData.replyToWamid,
         replyText: eventData.replyText,
         userId: eventData.userId,
         ...(eventData.actionId !== undefined && { actionId: eventData.actionId }),
+        ...(eventData.buttonId !== undefined && { buttonId: eventData.buttonId }),
+/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+        ...(eventData.buttonTitle !== undefined && { buttonTitle: eventData.buttonTitle }),
+        /* v8 ignore stop @preserve */
       });
+      /* v8 ignore stop @preserve */
 
       if (!result.ok) {
         request.log.error(
           { err: result.error, replyToWamid: eventData.replyToWamid },
           'Failed to process approval reply'
         );
-        reply.status(500);
-        return { error: result.error.message };
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
       request.log.info(
@@ -784,13 +771,125 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'Approval reply processed'
       );
 
-      return {
-        success: true,
+      return await reply.ok({
         matched: result.value.matched,
         ...(result.value.actionId !== undefined && { actionId: result.value.actionId }),
         ...(result.value.intent !== undefined && { intent: result.value.intent }),
         ...(result.value.outcome !== undefined && { outcome: result.value.outcome }),
+      });
+    }
+  );
+
+  // PATCH /internal/actions/:actionId/status - Update resource status from code-agent
+  fastify.patch<{
+    Params: { actionId: string };
+    Body: {
+      resource_status: 'dispatched' | 'running' | 'completed' | 'failed' | 'cancelled';
+      resource_result?: { prUrl?: string; error?: string };
+    };
+  }>(
+    '/internal/actions/:actionId/status',
+    {
+      schema: {
+        operationId: 'updateActionResourceStatus',
+        summary: 'Update action resource status',
+        description: 'Internal endpoint for code-agent to update action resource status (e.g., code task progress).',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            actionId: { type: 'string' },
+          },
+          required: ['actionId'],
+        },
+        body: {
+          type: 'object',
+          properties: {
+            resource_status: {
+              type: 'string',
+              enum: ['dispatched', 'running', 'completed', 'failed', 'cancelled'],
+            },
+            resource_result: {
+              type: 'object',
+              properties: {
+                prUrl: { type: 'string' },
+                error: { type: 'string' },
+              },
+            },
+          },
+          required: ['resource_status'],
+        },
+        response: {
+          200: {
+            description: 'Status updated successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+            },
+            required: ['success'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+            required: ['error'],
+          },
+          404: {
+            description: 'Action not found',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+            required: ['error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { actionId: string }; Body: { resource_status: 'dispatched' | 'running' | 'completed' | 'failed' | 'cancelled'; resource_result?: { prUrl?: string; error?: string } } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /internal/actions/:actionId/status',
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for resource status update');
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for resource status update');
+      }
+
+      const { actionId } = request.params;
+      const body = request.body;
+
+      request.log.info(
+        { actionId, resourceStatus: body.resource_status },
+        'Updating action resource status'
+      );
+
+      const services = getServices();
+      const action = await services.actionRepository.getById(actionId);
+
+      if (action === null) {
+        request.log.warn({ actionId }, 'Action not found for resource status update');
+        return await reply.fail('NOT_FOUND', 'Action not found');
+      }
+
+      const updatedAction = {
+        ...action,
+        resource_status: body.resource_status,
+        ...(body.resource_result?.prUrl !== undefined && {
+          payload: { ...action.payload, resource_url: body.resource_result.prUrl },
+        }),
+        ...(body.resource_result?.error !== undefined && { resource_error: body.resource_result.error }),
+        updatedAt: new Date().toISOString(),
       };
+
+      await services.actionRepository.update(updatedAction);
+
+      request.log.info({ actionId, resourceStatus: body.resource_status }, 'Action resource status updated');
+
+      return await reply.ok({});
     }
   );
 

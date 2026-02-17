@@ -5,7 +5,6 @@ import { z } from 'zod';
  */
 export const connectRequestSchema = z.object({
   notionToken: z.string().min(1, 'notionToken is required'),
-  promptVaultPageId: z.string().min(1, 'promptVaultPageId is required'),
 });
 
 export type ConnectRequest = z.infer<typeof connectRequestSchema>;

@@ -23,6 +23,7 @@ Research-agent automates multi-model AI research:
 4. **Public sharing** - Generates shareable URLs with AI-generated cover images
 5. **Context enhancement** - Add your own articles, notes, or previous research as context
 6. **Intelligent model selection** - LLM-powered extraction of model preferences from natural language (v2.0.0)
+7. **Notion export** - Automatic and manual export of completed research to Notion as structured pages (v2.2.0)
 
 ## Use Cases
 
@@ -60,6 +61,17 @@ Research-agent automates multi-model AI research:
 - Share URL includes attribution and sources
 - Unsharing removes the public page and deletes associated media
 
+### Notion Export (v2.2.0)
+
+- Completed research can be automatically exported to Notion as structured pages
+- Automatic fire-and-forget export triggers after synthesis completion
+- Manual export via `POST /research/:id/export-notion` for on-demand export
+- Hierarchical page structure: main research page with child LLM report pages
+- Markdown-to-Notion block conversion preserves formatting (headings, lists, code, bold, italic, links)
+- Cover images included in Notion export when available
+- Configurable target page via export settings UI
+- Duplicate export prevention (skips if already exported)
+
 ## Key Benefits
 
 **Comprehensive answers** - Multiple AI perspectives provide more complete information
@@ -77,6 +89,49 @@ Research-agent automates multi-model AI research:
 **Type-safe validation** - Zod schema validation for all LLM responses ensures data integrity (v2.0.0)
 
 **Self-healing responses** - Parser + repair pattern automatically fixes malformed LLM JSON (v2.0.0)
+
+**Notion integration** - Automatic export to Notion with structured page hierarchy and markdown conversion (v2.2.0)
+
+## Recent Changes (v2.2.0)
+
+### Notion Export Integration
+
+- Automatic fire-and-forget Notion export after synthesis completes
+- Manual export endpoint `POST /research/:id/export-notion` for on-demand export
+- Markdown-to-Notion block converter supporting headings, lists, code blocks, tables, inline formatting, and links
+- Batch append for exports exceeding Notion's 100-block API limit
+- Cover image inclusion in Notion pages when available
+- `NotionExportInfo` tracked on research model with `mainPageId`, `mainPageUrl`, and `llmReportPageIds`
+- Duplicate export prevention via `notionExportInfo` check
+
+### Research Export Settings
+
+- New `research_export_settings` Firestore collection for user-level Notion configuration
+- Settings endpoints: `GET/POST /research/settings/notion` for page configuration
+- Validation endpoint: `POST /research/settings/notion/validate` with page preview via notion-service
+- Page ID format validation (32 hex or UUID format) with normalization
+
+### Auth0 Claims Namespace Support
+
+- `extractGeneratedByInfo` now reads Auth0 claims under `https://intexuraos.cloud/` namespace
+- Fallback to bare `name`/`email` claims for ID token compatibility
+- Logging added for claims extraction diagnostics
+
+### Response Contract Standardization
+
+- Internal routes migrated from raw `reply.send()` to `reply.ok()`/`reply.fail()`
+- PubSub endpoints consistently return 200 OK with errors logged separately
+- Schema definitions updated with proper `required` fields and `const` boolean types
+
+### 100% Branch Coverage Enforcement (INT-427)
+
+- Strict 100% branch coverage with inline v8 ignore exemptions
+- Comprehensive test suites for Notion exporter, markdown converter, export settings, and export routes
+- Coverage exemptions use validated categories (`ts-type`, `test-infra`, `source-map`)
+
+### Sentry Logger Migration
+
+- Migrated to `createAppLogger()` from `@intexuraos/infra-sentry` for error forwarding to Sentry
 
 ## Recent Changes (v2.1.0)
 
@@ -133,6 +188,8 @@ Research-agent automates multi-model AI research:
 **No editing** - Once research is completed, it cannot be edited (only enhanced or deleted)
 
 **One model per provider** - Model selection enforces maximum one model from each provider
+
+**Single Notion export** - Each research can only be exported to Notion once (no re-export)
 
 ---
 

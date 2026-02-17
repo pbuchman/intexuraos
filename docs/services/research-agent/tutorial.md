@@ -407,6 +407,101 @@ curl -X DELETE https://research-agent.intexuraos.com/research/RESEARCH_ID/share 
 
 This removes the public page and deletes the generated cover image.
 
+## Part 7: Export Research to Notion (v2.2.0)
+
+Research can be exported to Notion as structured pages. This requires Notion integration to be configured.
+
+### Step 1: Configure Notion export settings
+
+First, validate a Notion page ID where research will be exported:
+
+```bash
+curl -X POST https://research-agent.intexuraos.com/research/settings/notion/validate \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "researchPageId": "YOUR_NOTION_PAGE_ID"
+  }'
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "title": "My Research Collection",
+    "url": "https://www.notion.so/my-research-collection-abc123"
+  }
+}
+```
+
+Then save the settings:
+
+```bash
+curl -X POST https://research-agent.intexuraos.com/research/settings/notion \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "researchPageId": "YOUR_NOTION_PAGE_ID",
+    "researchPageTitle": "My Research Collection",
+    "researchPageUrl": "https://www.notion.so/my-research-collection-abc123"
+  }'
+```
+
+### Step 2: Automatic export
+
+Once configured, completed research is automatically exported to Notion after synthesis. The export is fire-and-forget and does not block the synthesis flow.
+
+Check the `notionExportInfo` field in the research response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "research_abc123",
+    "status": "completed",
+    "notionExportInfo": {
+      "mainPageId": "notion-page-id-abc",
+      "mainPageUrl": "https://notion.so/research-title-abc",
+      "llmReportPageIds": [
+        { "model": "gemini-2.5-flash", "pageId": "report-page-1" },
+        { "model": "gpt-5.2", "pageId": "report-page-2" }
+      ],
+      "exportedAt": "2026-02-08T10:05:00Z"
+    }
+  }
+}
+```
+
+### Step 3: Manual export
+
+If automatic export was skipped (Notion not configured at the time), export manually:
+
+```bash
+curl -X POST https://research-agent.intexuraos.com/research/RESEARCH_ID/export-notion \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Prerequisites:**
+
+- Research must be in `completed` status
+- Research must have a synthesis result
+- Research must not have been already exported
+- Notion must be connected and page configured
+
+### Notion page structure
+
+The export creates:
+
+- **Main Research Page** (child of your configured target page)
+  - Cover image (if available)
+  - "Synthesis" section with full formatted content
+  - "Sources" section
+- **LLM Report Pages** (children of the main page, one per model)
+  - "Response" section with the model's full response
+  - "Sources" section with linked URLs
+
 ## Troubleshooting
 
 | Issue                        | Symptom                           | Solution                                                                       |
@@ -418,6 +513,10 @@ This removes the public page and deletes the generated cover image.
 | Share URL 404s               | Public URL does not work          | Verify `shareInfo` exists; check GCS bucket configuration                      |
 | Model extraction fails       | Draft has empty selectedModels    | Check if you have API keys; extraction gracefully degrades to manual selection |
 | Zod validation errors        | Research fails with schema error  | Check logs for specific field errors; repair pattern may have failed           |
+| Notion export missing        | `notionExportInfo` is undefined   | Check Notion is connected and page ID is configured in settings                |
+| Notion export fails          | Error on export-notion endpoint   | Verify Notion token is valid; check NOTION_NOT_CONNECTED or RATE_LIMITED error |
+| Already exported             | `ALREADY_EXPORTED` error          | Each research can only be exported once; delete the Notion page manually       |
+| Invalid page ID              | Validation fails                  | Page ID must be 32 hex characters or UUID format                               |
 
 ## Exercises
 
@@ -432,6 +531,7 @@ This removes the public page and deletes the generated cover image.
 1. Create research with input contexts and verify attribution
 2. Use natural language to select models ("use Claude and Gemini")
 3. Enhance a completed research with additional models
+4. Configure Notion export settings and export a completed research
 
 ### Hard
 
@@ -439,3 +539,4 @@ This removes the public page and deletes the generated cover image.
 2. Create a script that compares results from different models
 3. Build a cost estimator before research submission
 4. Parse the `researchContext` to understand how the service interpreted your query
+5. Verify automatic Notion export by checking `notionExportInfo` after synthesis completes

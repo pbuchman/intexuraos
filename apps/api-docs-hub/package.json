@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/api-docs-hub",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,15 +9,18 @@
   "scripts": {
     "build": "node ../../scripts/build-service.mjs api-docs-hub",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
-    "@intexuraos/common-http": "workspace:*",
-    "@intexuraos/http-server": "workspace:*",
-    "@intexuraos/infra-sentry": "workspace:*",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",
+    "@intexuraos/common-http": "workspace:*",
+    "@intexuraos/http-server": "workspace:*",
+    "@intexuraos/infra-otel": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "fastify": "^5.1.0",
     "pino": "^10.1.0"
   }

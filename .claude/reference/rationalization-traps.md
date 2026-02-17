@@ -1,0 +1,42 @@
+# Rationalization Traps Reference
+
+Common thought patterns that precede rule violations. When you catch yourself thinking any of these, STOP.
+
+---
+
+## Commit & CI Traps
+
+| Your Thought                                  | Reality                            |
+| --------------------------------------------- | ---------------------------------- |
+| "CI failed but my code passes"                | CI failed. No commit.              |
+| "The failure is in OTHER services"            | OTHER = forbidden. You own it.     |
+| "Global CI fails, but X-specific checks pass" | This phrase has caused violations. |
+| "Let me commit anyway and note the CI status" | NO. Fix first, then commit.        |
+
+## Linear State Traps
+
+| Your Thought                                  | Reality                                |
+| --------------------------------------------- | -------------------------------------- |
+| "The PR is merged, so it's obviously done"    | Merged ≠ Done. Hook blocks it.         |
+| "All child issues are complete"               | Complete ≠ Done. User confirms.        |
+| "This is just bookkeeping, I'll mark it done" | Bookkeeping requires permission.       |
+| "Ready for QA, let me move it there"          | QA is beyond agent scope. Hook blocks. |
+
+## Ownership Traps
+
+| Your Thought                    | Reality                        |
+| ------------------------------- | ------------------------------ |
+| "pre-existing issue/bug"        | Discovery = ownership          |
+| "not my fault/responsibility"   | Fault irrelevant; fix is yours |
+| "legacy issue"                  | Legacy = code awaiting owner   |
+| **"OTHER services/workspaces"** | No "other" in CI               |
+| **"my code/part passes"**       | CI passes or doesn't           |
+
+## Evidence Traps
+
+| Your Thought                               | Reality                                       |
+| ------------------------------------------ | --------------------------------------------- |
+| "This should work now"                     | Run it. Show output. Then claim.              |
+| "I added the import so it will resolve"    | Run typecheck. Show zero errors. Then claim.  |
+| "This was likely caused by X"              | Show stack trace or reproduction. Then claim. |
+| "Based on my understanding, this fixes it" | Understanding is not evidence. Run it.        |

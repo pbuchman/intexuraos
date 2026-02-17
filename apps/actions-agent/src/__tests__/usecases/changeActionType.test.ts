@@ -4,8 +4,8 @@ import {
   FakeActionRepository,
   FakeActionTransitionRepository,
   FakeCommandsAgentClient,
+  createMockLogger,
 } from '../fakes.js';
-import pino from 'pino';
 import type { Action } from '../../domain/models/action.js';
 
 describe('ChangeActionTypeUseCase', () => {
@@ -36,7 +36,7 @@ describe('ChangeActionTypeUseCase', () => {
       actionRepository,
       actionTransitionRepository,
       commandsAgentClient,
-      logger: pino({ level: 'silent' }),
+      logger: createMockLogger(),
     });
   });
 
@@ -98,7 +98,62 @@ describe('ChangeActionTypeUseCase', () => {
     }
   });
 
-  it('returns INVALID_REQUEST for failed action', async () => {
+  it('allows type change for failed action', async () => {
+    await actionRepository.save({ ...testAction, status: 'failed' });
+    commandsAgentClient.setCommand(testAction.commandId, 'Test command text');
+
+    const result = await useCase({
+      actionId: testAction.id,
+      userId: testAction.userId,
+      newType: 'todo',
+    });
+
+    expect(result.ok).toBe(true);
+
+    const updatedAction = await actionRepository.getById(testAction.id);
+    expect(updatedAction?.type).toBe('todo');
+  });
+
+  it('logs transition for failed action type change', async () => {
+    await actionRepository.save({ ...testAction, status: 'failed' });
+    commandsAgentClient.setCommand(testAction.commandId, 'Failed command text');
+
+    const result = await useCase({
+      actionId: testAction.id,
+      userId: testAction.userId,
+      newType: 'research',
+    });
+
+    expect(result.ok).toBe(true);
+
+    const transitions = actionTransitionRepository.getTransitions();
+    expect(transitions).toHaveLength(1);
+    expect(transitions[0]).toMatchObject({
+      userId: testAction.userId,
+      actionId: testAction.id,
+      originalType: 'note',
+      newType: 'research',
+    });
+  });
+
+  it('updates updatedAt when changing failed action type', async () => {
+    const failedAction = { ...testAction, status: 'failed' as const };
+    const originalUpdatedAt = failedAction.updatedAt;
+    await actionRepository.save(failedAction);
+    commandsAgentClient.setCommand(failedAction.commandId, 'Test command');
+
+    await useCase({
+      actionId: failedAction.id,
+      userId: failedAction.userId,
+      newType: 'calendar',
+    });
+
+    const updatedAction = await actionRepository.getById(failedAction.id);
+    expect(updatedAction?.type).toBe('calendar');
+    expect(updatedAction?.updatedAt).not.toBe(originalUpdatedAt);
+  });
+
+  it('returns NOT_FOUND for failed action with missing command', async () => {
     await actionRepository.save({ ...testAction, status: 'failed' });
 
     const result = await useCase({
@@ -109,8 +164,21 @@ describe('ChangeActionTypeUseCase', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe('INVALID_REQUEST');
+      expect(result.error.code).toBe('NOT_FOUND');
     }
+  });
+
+  it('skips transition log when failed action type unchanged', async () => {
+    await actionRepository.save({ ...testAction, status: 'failed' });
+
+    const result = await useCase({
+      actionId: testAction.id,
+      userId: testAction.userId,
+      newType: testAction.type,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(actionTransitionRepository.getTransitions()).toHaveLength(0);
   });
 
   it('returns INVALID_REQUEST for rejected action', async () => {

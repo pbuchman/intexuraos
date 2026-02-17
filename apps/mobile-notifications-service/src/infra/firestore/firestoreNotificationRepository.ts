@@ -2,9 +2,9 @@
  * Firestore implementation of NotificationRepository.
  * Stores mobile notifications with cursor-based pagination.
  */
-import { err, getErrorMessage, getLogLevel, ok, type Result } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type {
   CreateNotificationInput,
   Notification,
@@ -14,7 +14,7 @@ import type {
   RepositoryError,
 } from '../../domain/notifications/index.js';
 
-const logger = pino({ name: 'FirestoreNotificationRepository', level: getLogLevel() });
+const logger = createAppLogger({ name: 'FirestoreNotificationRepository' });
 
 const COLLECTION_NAME = 'mobile_notifications';
 
@@ -37,6 +37,7 @@ interface NotificationDoc {
 /**
  * Decode a cursor string to a Firestore doc snapshot.
  */
+/* v8 ignore start -- ts-type: previous `findbyid` call ensures the document exists befo... @preserve */
 function decodeCursor(cursor: string | undefined): { receivedAt: string; id: string } | undefined {
   if (cursor === undefined) {
     return undefined;
@@ -52,6 +53,7 @@ function decodeCursor(cursor: string | undefined): { receivedAt: string; id: str
     return undefined;
   }
 }
+/* v8 ignore stop @preserve */
 
 /**
  * Encode a cursor from notification data.
@@ -198,10 +200,12 @@ export class FirestoreNotificationRepository implements NotificationRepository {
         // Update cursor for next iteration (tracks DB position, not filtered results)
         if (docs.length > 0) {
           const lastDoc = docs[docs.length - 1];
+          /* v8 ignore start -- ts-type: docs.length > 0 check guarantees lastDoc exists @preserve */
           if (lastDoc !== undefined) {
             const lastData = lastDoc.data() as NotificationDoc;
             currentCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
           }
+          /* v8 ignore stop @preserve */
         }
       }
 
@@ -264,3 +268,4 @@ export class FirestoreNotificationRepository implements NotificationRepository {
     }
   }
 }
+

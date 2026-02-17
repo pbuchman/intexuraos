@@ -632,6 +632,42 @@ describe('dataInsightsRoutes', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(body.error.message).toBe('User service unavailable');
     });
+
+    it('returns 500 when composite feed repository fails', async () => {
+      const app = await buildServer();
+      const feedId = await setupFeedWithInsights();
+
+      fakeCompositeFeedRepo.setFailNextGet(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/composite-feeds/${feedId}/insights/cf-1-insight-1/chart-definition`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when snapshot repository fails', async () => {
+      const app = await buildServer();
+      const feedId = await setupFeedWithInsights();
+
+      fakeSnapshotRepo.setFailNextGet(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/composite-feeds/${feedId}/insights/cf-1-insight-1/chart-definition`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 
   describe('POST /composite-feeds/:feedId/preview', () => {
@@ -946,6 +982,52 @@ describe('dataInsightsRoutes', () => {
       const body = JSON.parse(response.payload);
       expect(body.success).toBe(true);
       expect(body.data.chartData).toEqual([]);
+    });
+
+    it('returns 500 when composite feed repository fails', async () => {
+      const app = await buildServer();
+      const feedId = await setupFeedWithInsights();
+
+      fakeCompositeFeedRepo.setFailNextGet(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/composite-feeds/${feedId}/preview`,
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          chartConfig: { mark: 'line' },
+          transformInstructions: 'Test',
+          insightId: 'cf-1-insight-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when snapshot repository fails', async () => {
+      const app = await buildServer();
+      const feedId = await setupFeedWithInsights();
+
+      fakeSnapshotRepo.setFailNextGet(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/composite-feeds/${feedId}/preview`,
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          chartConfig: { mark: 'line' },
+          transformInstructions: 'Test',
+          insightId: 'cf-1-insight-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 

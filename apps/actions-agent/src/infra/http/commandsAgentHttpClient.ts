@@ -3,17 +3,14 @@ import type {
   CommandsAgentClient,
   CommandWithText,
 } from '../../domain/ports/commandsAgentClient.js';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
 export interface CommandsAgentHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
 }
 
-const logger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'commandsAgentHttpClient',
-});
+const logger = createAppLogger({ name: 'commandsAgentHttpClient' });
 
 interface GetCommandResponse {
   success: boolean;

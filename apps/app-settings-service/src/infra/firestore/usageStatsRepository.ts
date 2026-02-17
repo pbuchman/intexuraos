@@ -4,9 +4,8 @@
  *
  * Structure: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{YYYY-MM-DD}/by_user/{userId}
  */
-import { getLogLevel } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type {
   AggregatedCosts,
   MonthlyCost,
@@ -15,7 +14,7 @@ import type {
   UsageStatsRepository,
 } from '../../domain/ports/index.js';
 
-const logger = pino({ name: 'FirestoreUsageStatsRepository', level: getLogLevel() });
+const logger = createAppLogger({ name: 'FirestoreUsageStatsRepository' });
 
 interface UserUsageDoc {
   userId: string;
@@ -83,7 +82,9 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
       const callType = pathParts[3];
       const period = pathParts[5];
 
+      /* v8 ignore start -- ts-type: path length check on line 79 ensures these exist @preserve */
       if (model === undefined || callType === undefined || period === undefined) continue;
+      /* v8 ignore stop @preserve */
       if (!isValidDatePeriod(period)) continue;
       if (period < cutoffDate) continue;
 
@@ -218,3 +219,4 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
     };
   }
 }
+

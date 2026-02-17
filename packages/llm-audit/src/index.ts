@@ -21,4 +21,15 @@ export type {
 } from './types.js';
 
 // Functions and classes from audit.ts
-export { isAuditEnabled, createAuditContext, AuditContext } from './audit.js';
+export {
+  isAuditEnabled,
+  createAuditContext,
+  AuditContext,
+  type AuditContextOptions,
+} from './audit.js';
+export {
+  FirestoreAuditSink,
+  StructuredLogAuditSink,
+  NoopAuditSink,
+  type AuditSink,
+} from './sink.js';

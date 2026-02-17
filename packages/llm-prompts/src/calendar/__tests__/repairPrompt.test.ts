@@ -1,0 +1,121 @@
+import { describe, it, expect } from 'vitest';
+import {
+  calendarExtractionRepairPrompt,
+  buildCalendarExtractionRepairPrompt,
+} from '../repairPrompt.js';
+
+describe('calendarExtractionRepairPrompt', () => {
+  const defaultInput = {
+    originalText: 'Meeting with John tomorrow at 3pm',
+    currentDate: '2026-01-29 Wednesday',
+    invalidResponse: '{"summary": "Meeting", valid: true}',
+    errorMessage: 'Invalid JSON: missing quotes around key "valid"',
+  };
+
+  describe('build', () => {
+    it('includes all required parameters in prompt', () => {
+      const prompt = calendarExtractionRepairPrompt.build(defaultInput);
+
+      expect(prompt).toContain(defaultInput.originalText);
+      expect(prompt).toContain(defaultInput.currentDate);
+      expect(prompt).toContain(defaultInput.invalidResponse);
+      expect(prompt).toContain(defaultInput.errorMessage);
+    });
+
+    it('includes JSON schema specification', () => {
+      const prompt = calendarExtractionRepairPrompt.build(defaultInput);
+
+      expect(prompt).toContain('"summary"');
+      expect(prompt).toContain('"start"');
+      expect(prompt).toContain('"end"');
+      expect(prompt).toContain('"location"');
+      expect(prompt).toContain('"description"');
+      expect(prompt).toContain('"valid"');
+      expect(prompt).toContain('"error"');
+      expect(prompt).toContain('"reasoning"');
+    });
+
+    it('includes formatting rules', () => {
+      const prompt = calendarExtractionRepairPrompt.build(defaultInput);
+
+      expect(prompt).toContain('no markdown');
+      expect(prompt).toContain('valid JSON');
+      expect(prompt).toContain('ISO 8601');
+    });
+
+    it('truncates long invalid response with default limit', () => {
+      const longResponse = 'x'.repeat(600);
+      const prompt = calendarExtractionRepairPrompt.build({
+        ...defaultInput,
+        invalidResponse: longResponse,
+      });
+
+      expect(prompt).toContain('x'.repeat(500) + '...');
+      expect(prompt).not.toContain('x'.repeat(501));
+    });
+
+    it('uses custom maxResponsePreviewLength when provided', () => {
+      const longResponse = 'y'.repeat(200);
+      const prompt = calendarExtractionRepairPrompt.build(
+        { ...defaultInput, invalidResponse: longResponse },
+        { maxResponsePreviewLength: 100 }
+      );
+
+      expect(prompt).toContain('y'.repeat(100) + '...');
+      expect(prompt).not.toContain('y'.repeat(101));
+    });
+
+    it('does not truncate response within limit', () => {
+      const shortResponse = 'z'.repeat(100);
+      const prompt = calendarExtractionRepairPrompt.build({
+        ...defaultInput,
+        invalidResponse: shortResponse,
+      });
+
+      expect(prompt).toContain(shortResponse);
+      expect(prompt).not.toContain('...');
+    });
+
+    it('mentions boolean requirement for valid field', () => {
+      const prompt = calendarExtractionRepairPrompt.build(defaultInput);
+
+      expect(prompt).toContain('boolean');
+      expect(prompt).toContain('true or false');
+    });
+
+    it('mentions required fields', () => {
+      const prompt = calendarExtractionRepairPrompt.build(defaultInput);
+
+      expect(prompt).toContain('required');
+      expect(prompt).toContain('reasoning');
+    });
+  });
+
+  describe('buildCalendarExtractionRepairPrompt convenience function', () => {
+    it('produces same output as builder', () => {
+      const builderOutput = calendarExtractionRepairPrompt.build(defaultInput);
+      const functionOutput = buildCalendarExtractionRepairPrompt(
+        defaultInput.originalText,
+        defaultInput.currentDate,
+        defaultInput.invalidResponse,
+        defaultInput.errorMessage
+      );
+
+      expect(functionOutput).toBe(builderOutput);
+    });
+
+    it('handles all parameter types correctly', () => {
+      const prompt = buildCalendarExtractionRepairPrompt(
+        'Dentist appointment',
+        '2026-02-05 Thursday',
+        '{invalid json',
+        'Unexpected token in JSON'
+      );
+
+      expect(prompt).toContain('Dentist appointment');
+      expect(prompt).toContain('2026-02-05 Thursday');
+      expect(prompt).toContain('{invalid json');
+      expect(prompt).toContain('Unexpected token in JSON');
+    });
+  });
+});

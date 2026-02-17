@@ -186,9 +186,9 @@ describe('Research Agent Routes', () => {
         });
 
         expect(response.statusCode).toBe(200);
-        const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+        const body = JSON.parse(response.body) as { success: boolean; data: { actionId: string } };
         expect(body.success).toBe(true);
-        expect(body.actionId).toBe('action-123');
+        expect(body.data.actionId).toBe('action-123');
       });
 
       it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
@@ -223,8 +223,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Invalid message format');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Failed to decode PubSub message');
     });
 
     it('returns 400 when message is missing', async () => {
@@ -267,8 +267,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Invalid event type');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Unexpected event type');
     });
 
     it('returns 400 when action type is not research', async () => {
@@ -298,8 +298,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Action type mismatch');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('Action type mismatch');
     });
 
     it('processes valid research action and returns 200', async () => {
@@ -326,9 +326,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+      const body = JSON.parse(response.body) as { success: boolean; data: { actionId: string } };
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-123');
+      expect(body.data.actionId).toBe('action-123');
 
       const updatedAction = await fakeActionRepository.getById('action-123');
       expect(updatedAction?.status).toBe('awaiting_approval');
@@ -358,9 +358,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+      const body = JSON.parse(response.body) as { success: boolean; data: { actionId: string } };
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-123');
+      expect(body.data.actionId).toBe('action-123');
 
       const action = await fakeActionRepository.getById('action-123');
       expect(action?.status).toBe('awaiting_approval');
@@ -395,8 +395,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unsupported action type: unknown_type');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Unsupported action type: unknown_type');
     });
 
     it('returns 500 when handler execution fails', async () => {
@@ -437,8 +437,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Failed to update action status');
+      const body = JSON.parse(response.body) as { success: false; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Failed to update action status');
     });
   });
 
@@ -493,7 +494,7 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('creates action with status pending and publishes event', async () => {
+    it('creates action with status pending (event published by caller)', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions',
@@ -537,12 +538,9 @@ describe('Research Agent Routes', () => {
       expect(savedAction).toBeDefined();
       expect(savedAction?.status).toBe('pending');
 
+      // Note: Event publishing is handled by the caller (commands-agent), not this endpoint
       const publishedEvents = fakeActionEventPublisher.getPublishedEvents();
-      expect(publishedEvents).toHaveLength(1);
-      expect(publishedEvents[0]?.type).toBe('action.created');
-      expect(publishedEvents[0]?.actionId).toBe(body.data.id);
-      expect(publishedEvents[0]?.userId).toBe('user-123');
-      expect(publishedEvents[0]?.actionType).toBe('research');
+      expect(publishedEvents).toHaveLength(0);
     });
 
     it('creates action with optional payload', async () => {
@@ -590,8 +588,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Failed to create action');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Failed to create action');
     });
 
     it('continues successfully even when event publishing fails', async () => {
@@ -814,6 +812,59 @@ describe('Research Agent Routes', () => {
       expect(body.success).toBe(true);
       expect(body.data.actions).toHaveLength(1);
       expect(body.data.actions[0]?.status).toBe('pending');
+    });
+
+    it('preserves all payload properties in response (additionalProperties)', async () => {
+      fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'note',
+        confidence: 0.95,
+        title: 'Test Note',
+        status: 'completed',
+        payload: {
+          prompt: 'Original prompt text',
+          message: 'Note created successfully',
+          resource_url: '/#/notes/abc123',
+          custom_field: 'custom value',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/actions',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          actions: {
+            payload: {
+              prompt?: string;
+              message?: string;
+              resource_url?: string;
+              custom_field?: string;
+            };
+          }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actions).toHaveLength(1);
+      const payload = body.data.actions[0]?.payload;
+      expect(payload?.prompt).toBe('Original prompt text');
+      expect(payload?.message).toBe('Note created successfully');
+      expect(payload?.resource_url).toBe('/#/notes/abc123');
+      expect(payload?.custom_field).toBe('custom value');
     });
   });
 
@@ -1977,9 +2028,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+      const body = JSON.parse(response.body) as { success: boolean; data: { actionId: string } };
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-123');
+      expect(body.data.actionId).toBe('action-123');
     });
 
     it('skips action type without handler and returns 200', async () => {
@@ -1995,12 +2046,14 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        skipped: boolean;
-        reason: string;
+        data: {
+          skipped: boolean;
+          reason: string;
+        };
       };
       expect(body.success).toBe(true);
-      expect(body.skipped).toBe(true);
-      expect(body.reason).toBe('no_handler');
+      expect(body.data.skipped).toBe(true);
+      expect(body.data.reason).toBe('no_handler');
     });
 
     it('returns 400 for invalid message format', async () => {
@@ -2070,10 +2123,10 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        actionId: string;
+        data: { actionId: string };
       };
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-123');
+      expect(body.data.actionId).toBe('action-123');
     });
 
     it('returns 500 when handler execution fails with other error', async () => {
@@ -2114,8 +2167,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Failed to update action status');
+      const body = JSON.parse(response.body) as { success: false; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Failed to update action status');
     });
   });
 
@@ -2165,16 +2219,241 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        processed: number;
-        skipped: number;
-        failed: number;
-        total: number;
+        data: {
+          processed: number;
+          skipped: number;
+          failed: number;
+          total: number;
+        };
       };
       expect(body.success).toBe(true);
-      expect(typeof body.processed).toBe('number');
-      expect(typeof body.skipped).toBe('number');
-      expect(typeof body.failed).toBe('number');
-      expect(typeof body.total).toBe('number');
+      expect(typeof body.data.processed).toBe('number');
+      expect(typeof body.data.skipped).toBe('number');
+      expect(typeof body.data.failed).toBe('number');
+      expect(typeof body.data.total).toBe('number');
+    });
+  });
+
+  describe('PATCH /internal/actions/:actionId/status', () => {
+    beforeEach(async () => {
+      app = await buildServer();
+      const fakeServices = createFakeServices({
+        actionServiceClient: fakeActionClient,
+        researchServiceClient: fakeResearchClient,
+        notificationSender: fakeNotificationSender,
+        actionRepository: fakeActionRepository,
+        actionEventPublisher: fakeActionEventPublisher,
+        actionTransitionRepository: fakeActionTransitionRepository,
+        commandsAgentClient: fakeCommandsAgentClient,
+      });
+      fakeActionRepository = fakeServices.actionRepository as FakeActionRepository;
+      setServices(fakeServices);
+    });
+
+    it('should update resource_status on action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'running' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('running');
+    });
+
+    it('should return 404 for unknown action', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/unknown-id/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'running' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('should store resource_url in payload when completed with PR URL', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          resource_status: 'completed',
+          resource_result: { prUrl: 'https://github.com/pr/123' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('completed');
+      expect(updated?.payload['resource_url']).toBe('https://github.com/pr/123');
+    });
+
+    it('should store error_message in resource_error when failed', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          resource_status: 'failed',
+          resource_result: { error: 'CI failed' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('failed');
+      expect(updated?.resource_error).toBe('CI failed');
+    });
+
+    it('should return 401 without internal auth', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        payload: { resource_status: 'running' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('should update updatedAt timestamp', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.updatedAt).not.toBe('2025-01-01T00:00:00.000Z');
+    });
+
+    it('should handle dispatched status', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'dispatched' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('dispatched');
+    });
+
+    it('should handle cancelled status', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'cancelled' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('cancelled');
     });
   });
 });

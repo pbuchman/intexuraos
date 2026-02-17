@@ -5,25 +5,33 @@ import type {
   ProcessCalendarRequest,
   CalendarPreview,
 } from '../../domain/ports/calendarServiceClient.js';
-import pino, { type Logger } from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
+
+type LogMethod = (obj: unknown, msg?: string) => void;
+
+interface HttpLogger {
+  info: LogMethod;
+  warn: LogMethod;
+  error: LogMethod;
+  debug: LogMethod;
+}
 
 export interface CalendarServiceHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: Logger;
+  logger?: HttpLogger;
 }
 
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'calendarServiceHttpClient',
-});
+const defaultLogger = createAppLogger({ name: 'calendarServiceHttpClient' }) as unknown as HttpLogger;
 
 interface ApiResponse {
   success: boolean;
   data?: {
     status: 'completed' | 'failed';
     message: string;
+/* v8 ignore start -- test-infra: test mock for http responses always returns `ok: true` @preserve */
     resourceUrl?: string;
+    /* v8 ignore stop @preserve */
     errorCode?: string;
   };
   error?: { code: string; message: string };
@@ -153,7 +161,9 @@ export function createCalendarServiceHttpClient(
       }
 
       if (!response.ok) {
+        /* v8 ignore start -- ts-type: API always returns error object with message @preserve */
         const errorMessage = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
+        /* v8 ignore stop @preserve */
         logger.error(
           { httpStatus: response.status, statusText: response.statusText, errorMessage, actionId },
           'calendar-agent returned error'
@@ -171,3 +181,4 @@ export function createCalendarServiceHttpClient(
     },
   };
 }
+

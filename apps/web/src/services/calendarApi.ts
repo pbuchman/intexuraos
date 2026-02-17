@@ -45,7 +45,7 @@ export async function listCalendarEvents(
 }
 
 interface ListFailedEventsResponse {
-  events: FailedCalendarEvent[];
+  failedEvents: FailedCalendarEvent[];
 }
 
 export async function listFailedEvents(
@@ -56,5 +56,33 @@ export async function listFailedEvents(
     '/calendar/failed-events',
     accessToken
   );
-  return response.events;
+  return response.failedEvents;
+}
+
+export async function deleteFailedEvent(
+  accessToken: string,
+  id: string
+): Promise<void> {
+  await apiRequest<Record<string, never>>(
+    config.calendarAgentUrl,
+    `/calendar/failed-events/${id}`,
+    accessToken,
+    { method: 'DELETE' }
+  );
+}
+
+interface RetryFailedEventResponse {
+  event: CalendarEvent;
+}
+
+export async function retryFailedEvent(
+  accessToken: string,
+  id: string
+): Promise<RetryFailedEventResponse> {
+  return await apiRequest<RetryFailedEventResponse>(
+    config.calendarAgentUrl,
+    `/calendar/failed-events/${id}/retry`,
+    accessToken,
+    { method: 'POST' }
+  );
 }

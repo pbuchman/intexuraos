@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/app-settings-service",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,8 +9,10 @@
   "scripts": {
     "build": "node ../../scripts/build-service.mjs app-settings-service",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "test": "vitest run",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
@@ -22,6 +24,7 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "fastify": "^5.1.0",

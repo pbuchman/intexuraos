@@ -17,9 +17,11 @@ New action type "code" that allows users to approve an action in the inbox and r
 1. User (or system) creates an action with type `code`
 2. Action appears in inbox with description of code changes needed
 3. User clicks "Approve" on the action
-4. System executes Claude Code on worker machine (MacBook primary, GCP VM fallback)
+4. System executes Claude Code on user's configured worker(s) (tries in priority order)
 5. User can monitor progress in real-time on `/code-tasks` page
 6. User receives a PR with the implemented changes (WhatsApp notification)
+
+**Note:** Workers are configured per-user via the Worker Settings UI (`/worker-settings`). Each user can define up to 2 workers with custom names, URLs, and Cloudflare Access credentials.
 
 ---
 
@@ -47,11 +49,11 @@ New action type "code" that allows users to approve an action in the inbox and r
 │        │              WORKER MACHINES             │                        │
 │        │                                          ▼                        │
 │  ┌─────┴─────────────────────────────────────────────────────────────────┐ │
-│  │  MacBook (cc-mac.intexuraos.cloud) — PRIMARY                         │ │
+│  │  User-Configured Workers (Dynamic, per-user settings)                │ │
 │  │  ┌─────────────────────────────────────────────────────────────────┐ │ │
-│  │  │  Orchestrator (Node.js)                                         │ │ │
-│  │  │  ├── HTTP API (:8080)                                           │ │ │
-│  │  │  ├── Task dispatcher (max 5 concurrent)                         │ │ │
+│  │  │  Each worker runs Orchestrator (Node.js)                        │ │ │
+│  │  │  ├── HTTP API (:8199)                                           │ │ │
+│  │  │  ├── Task dispatcher (max capacity configurable)               │ │ │
 │  │  │  ├── tmux session manager (session per task)                    │ │ │
 │  │  │  ├── Worktree manager (worktree per task)                       │ │ │
 │  │  │  ├── Log chunk forwarder                                        │ │ │
@@ -59,13 +61,11 @@ New action type "code" that allows users to approve an action in the inbox and r
 │  │  │  ├── PR discovery and creation                                  │ │ │
 │  │  │  └── Local state persistence                                    │ │ │
 │  │  └─────────────────────────────────────────────────────────────────┘ │ │
-│  └───────────────────────────────────────────────────────────────────────┘ │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐ │
-│  │  GCP VM (cc-vm.intexuraos.cloud) — FALLBACK                          │ │
-│  │  n2d-standard-8 (8 vCPU, 32GB) | Spot | Ubuntu 24 LTS                │ │
-│  │  Same orchestrator structure as MacBook                               │ │
-│  │  Auto-shutdown on idle | Manual start/stop from UI                   │ │
+│  │                                                                       │ │
+│  │  Example workers (user-configured via Worker Settings UI):          │ │
+│  │  • MacBook (cc-mac.intexuraos.cloud) — user's primary machine        │ │
+│  │  • Office PC (cc-office.intexuraos.cloud) — backup/high-CPU machine  │ │
+│  │  • GCP VM (cc-vm.intexuraos.cloud) — cloud fallback (auto-start)    │ │
 │  └───────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -613,16 +613,16 @@ exec pnpm --filter orchestrator start
 
 Secrets stored in GCP Secret Manager:
 
-| Secret Name                   | Purpose            |
-| ----------------------------- | ------------------ |
-| `cloudflare-tunnel-token-mac` | Mac tunnel auth    |
-| `cloudflare-tunnel-token-vm`  | VM tunnel auth     |
-| `linear-api-key`              | Linear MCP         |
-| `sentry-auth-token`           | Sentry MCP         |
-| `zai-api-key`                 | GLM worker type    |
-| `github-app-private-key`      | GitHub App for PRs |
+| Secret Name              | Purpose            |
+| ------------------------ | ------------------ |
+| `linear-api-key`         | Linear MCP         |
+| `sentry-auth-token`      | Sentry MCP         |
+| `zai-api-key`            | GLM worker type    |
+| `github-app-private-key` | GitHub App for PRs |
 
-**VM service account IAM permissions:**
+**Note:** Cloudflare Tunnel credentials are now configured per-user via the Worker Settings UI, not via GCP Secret Manager.
+
+**VM service account IAM permissions (if using VM worker):**
 
 ```hcl
 # terraform/modules/code-worker-vm/iam.tf
@@ -633,22 +633,26 @@ resource "google_project_iam_member" "vm_secret_accessor" {
 }
 ```
 
-**Startup script fetches secrets:**
+**Startup script fetches secrets (for VM workers):**
 
 ```bash
 # Fetch secrets from Secret Manager
 LINEAR_API_KEY=$(gcloud secrets versions access latest --secret="linear-api-key")
 GITHUB_APP_KEY=$(gcloud secrets versions access latest --secret="github-app-private-key")
-CF_TUNNEL_TOKEN=$(gcloud secrets versions access latest --secret="cloudflare-tunnel-token-vm")
 
 # Export to environment
 echo "export LINEAR_API_KEY='$LINEAR_API_KEY'" >> ~/.orchestrator-env
 echo "export GITHUB_APP_KEY='$GITHUB_APP_KEY'" >> ~/.orchestrator-env
-echo "export CF_TUNNEL_TOKEN='$CF_TUNNEL_TOKEN'" >> ~/.orchestrator-env
 
 # Source in orchestrator startup
 source ~/.orchestrator-env
 ```
+
+**Cloudflare Access credentials are configured per-worker in the Worker Settings UI:**
+
+- Each worker has its own Cloudflare Access Service Token (ID + Secret)
+- These are stored encrypted per-user in Firestore
+- Orchestrator receives credentials in task dispatch payload (HMAC-signed)
 
 ### Secret Rotation Strategy
 
@@ -713,21 +717,22 @@ curl -X POST https://code-agent.intexuraos.cloud/code/submit \
 
 **Zero-downtime rotation (future):** Implement dual-key support where both old and new keys are valid during transition period.
 
-### Cloudflare Tunnel Setup
+### Cloudflare Tunnel Setup (Per Worker)
 
-One-time manual setup (free tier):
+Each worker requires its own Cloudflare Tunnel configuration. Users configure their workers via the Worker Settings UI.
+
+**Per-worker setup:**
 
 1. Go to Cloudflare Zero Trust → Access → Tunnels
-2. Create tunnel: `cc-mac` and `cc-vm`
-3. Copy tunnel tokens
-4. Store in GCP Secret Manager
-5. Create Access Application:
-   - Application name: `code-orchestrator`
-   - Application domain: `cc-mac.intexuraos.cloud`, `cc-vm.intexuraos.cloud`
+2. Create tunnel for each worker (e.g., `cc-mac`, `cc-office`, `cc-vm`)
+3. Copy tunnel token for local installation
+4. Create Access Application:
+   - Application name: `code-orchestrator-{worker-name}`
+   - Application domain: `{worker-name}.intexuraos.cloud`
    - Policy: Service Auth (service token required)
-6. Create Service Token for code-agent:
-   - Token name: `code-agent-service-token`
-   - Store Client ID and Secret in code-agent secrets
+5. Create Service Token for code-agent:
+   - Token name: `code-agent-{worker-name}-token`
+   - Store Client ID and Secret in Worker Settings UI
 
 **Access policy:**
 
@@ -737,16 +742,21 @@ One-time manual setup (free tier):
 | Required headers | `CF-Access-Client-Id`, `CF-Access-Client-Secret` |
 | Token scope      | Access to orchestrator endpoints only            |
 
-Startup script installs cloudflared:
+**Note:** Cloudflare credentials are now stored per-user in Firestore (encrypted), not in GCP Secret Manager. Each user's Worker Settings contain their configured workers' credentials.
+
+Startup script installs cloudflared (for VM workers):
 
 ```bash
-TOKEN=$(gcloud secrets versions access latest --secret="cloudflare-tunnel-token-vm")
+# Token configured per-worker via user settings, not global secret
+TOKEN="YOUR_TUNNEL_TOKEN"
 curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
 chmod +x /usr/local/bin/cloudflared
 cloudflared service install $TOKEN
 ```
 
-### VM Lifecycle
+### VM Lifecycle (For VM Workers)
+
+**Note:** This is an optional feature for users who configure VM workers.
 
 **Idle timeout:** 30 minutes
 **Activity definition:** Tasks with status `running` or `queued`
@@ -762,37 +772,34 @@ cloudflared service install $TOKEN
 
 **Startup trigger (corrected flow):**
 
-1. code-agent checks VM health endpoint first
-2. If healthy: proceed to step 6
-3. If 503/timeout (VM offline):
-   a. code-agent calls Cloud Function: `start-vm`
-   b. Cloud Function starts VM instance
-   c. Cloud Function polls VM health every 10s (max 3 minutes)
-   d. On healthy: return success
-   e. On timeout: return error
-4. If start-vm fails: code-agent falls back to Mac or rejects task
-5. If start-vm succeeds: proceed to step 6
-6. code-agent dispatches task to VM orchestrator
+1. code-agent checks worker health endpoint (in priority order)
+2. If healthy: proceed to dispatch
+3. If 503/timeout (worker offline):
+   a. For VM-type workers: code-agent may call Cloud Function `start-vm` (future feature)
+   b. For other workers: skip to next worker
+4. If all workers unavailable: reject task
+5. code-agent dispatches task to first healthy worker
+
+**Note:** The VM auto-start/stop feature is planned for future. Currently, users must manually ensure their workers are running before dispatching tasks.
 
 **Race condition: task dispatched during shutdown:**
 
 - Orchestrator in `shutting_down` state returns `503 Worker Unavailable`
-- code-agent receives 503, retries with Mac worker or rejects
+- code-agent receives 503, retries with next available worker or rejects
 
 **Graceful shutdown signal (Cloud Function → Orchestrator):**
 
-When `stop-vm` Cloud Function is called:
+When a graceful shutdown is triggered (manual or automatic):
 
-1. Cloud Function calls `POST /admin/shutdown` on orchestrator
+1. System calls `POST /admin/shutdown` on orchestrator
 2. Orchestrator sets state to `shutting_down`
 3. Orchestrator returns `{ status: 'acknowledged', runningTasks: N }`
 4. If `runningTasks > 0`:
-   - Cloud Function waits up to 10 minutes for tasks to complete
+   - System waits up to 10 minutes for tasks to complete
    - Polls `/health` every 30 seconds
-   - Proceeds to VM stop after tasks complete OR timeout
+   - Proceeds to shutdown after tasks complete OR timeout
 5. If `runningTasks == 0`:
-   - Cloud Function proceeds to VM stop immediately
-6. Cloud Function calls GCP API to stop VM instance
+   - Proceeds to shutdown immediately
 
 **Why graceful signal matters:**
 
@@ -800,13 +807,7 @@ When `stop-vm` Cloud Function is called:
 - Gives running tasks chance to complete
 - Cleaner state for next startup
 
-**Fallback:** If orchestrator is unresponsive, Cloud Function stops VM after 2-minute timeout. Tasks marked as `interrupted` on next startup.
-
-**Manual control from UI:**
-
-- `/code-tasks` page shows VM status (running/stopped)
-- "Start VM" button calls Cloud Function directly
-- "Stop VM" button calls Cloud Function (only if no running tasks)
+**Fallback:** If orchestrator is unresponsive, timeout after 2 minutes. Tasks marked as `interrupted` on next startup.
 
 ### Terraform Resources
 
@@ -1078,7 +1079,7 @@ Each worktree gets `.mcp.json` copied from template:
 ```
 [SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS.
-Machine: {mac|vm} | Worktree: {path} | Task ID: {taskId}
+Worker: {workerName} | Worktree: {path} | Task ID: {taskId}
 
 [MANDATORY - FIRST ACTION]
 You MUST invoke: /linear INT-{{linearIssueId}}
@@ -1107,7 +1108,7 @@ Before completing, create investigation file:
 ```
 [SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS.
-Machine: {mac|vm} | Worktree: {path} | Task ID: {taskId}
+Worker: {workerName} | Worktree: {path} | Task ID: {taskId}
 
 [NO LINEAR ISSUE]
 This task has no Linear issue (API failure or user override).
@@ -1220,36 +1221,48 @@ These are **separate concepts**:
 | `auto` | Automatic model selection (default) |
 | `glm` | GLM-4 (ZAI) |
 
-**Routing Mode (`routingMode`):** Which physical machine to use
-| Value | Behavior |
-| ---------------- | ------------------------------------------------------------- |
-| `mac-only` | Only use Mac worker. Fail if unavailable or at capacity. |
-| `vm-only` | Only use VM worker. Start VM if stopped. Fail if at capacity. |
-| `auto` (default) | Try Mac first. If unavailable/full, try VM. |
+**Routing Mode (`routingMode`):** DEPRECATED - Workers are now user-configured via Firestore
+
+The `routingMode` concept (`auto` | `mac-only` | `vm-only`) has been replaced with dynamic worker configuration. Each user can configure up to 2 workers with custom names via the Worker Settings UI. Workers are tried in priority order (array order in user's settings).
 
 **API parameters:** Both are separate fields in the API request:
 
 ```typescript
 {
   workerType: 'opus' | 'auto' | 'glm',  // Model selection
-  routingMode?: 'auto' | 'mac-only' | 'vm-only'  // Machine selection (MVP: always auto)
+  // routingMode removed - workers are now dynamically configured per-user
 }
 ```
-
-**Note:** `routingMode` is a future feature. MVP uses `auto` for all tasks (not exposed in API).
 
 ### Worker Discovery
 
 **How code-agent knows about workers:**
 
-Workers are configured via environment variable:
+Workers are now stored per-user in Firestore (`workerSettings` collection):
 
-```bash
-INTEXURAOS_CODE_WORKERS='{
-  "mac": {"url": "https://cc-mac.intexuraos.cloud", "priority": 1},
-  "vm": {"url": "https://cc-vm.intexuraos.cloud", "priority": 2}
-}'
+```typescript
+// Document ID = userId
+interface UserWorkerSettings {
+  userId: string;
+  workers: WorkerConfig[]; // Max 2 per user
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface WorkerConfig {
+  name: string; // User-defined, e.g., "home-mac", "office-pc"
+  url: string; // e.g., "https://cc-mac.intexuraos.cloud"
+  cfAccessClientId: string; // Cloudflare Access Service Token ID
+  cfAccessClientSecret: string; // Cloudflare Access Service Token Secret
+  dispatchSigningSecret: string; // HMAC secret for task dispatch
+  enabled: boolean;
+  lastTestedAt?: string;
+  testStatus?: 'success' | 'failure';
+  testMessage?: string;
+}
 ```
+
+Workers are fetched from Firestore at runtime, not from environment variables.
 
 **Health check caching:**
 
@@ -2008,7 +2021,7 @@ interface CodeTask {
   retriedFrom?: string; // Original taskId if this is a retry
   userId: string;
   workerType: 'opus' | 'auto' | 'glm';
-  workerLocation: 'mac' | 'vm';
+  workerLocation: string; // Worker name (user-configured, e.g., "home-mac")
   status: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   prompt: string;
   sanitizedPrompt: string; // Prompt after sanitization (for audit)
@@ -2431,7 +2444,7 @@ interface CodeTask {
 **Real-time task status:**
 
 - Tasks by status (dispatched, running, completed, failed)
-- Worker health (mac: ready/degraded, vm: running/stopped)
+- Worker health (per user, per worker: enabled/disabled, last test status)
 - Active capacity utilization
 
 ---
@@ -2506,14 +2519,16 @@ tf apply -target=google_cloud_run_service.code_agent
 **Step 1: Stop all running tasks**
 
 ```bash
-# Get list of running tasks
+# Get list of running tasks (check each configured worker)
+# Example with cc-mac worker:
 curl -s https://cc-mac.intexuraos.cloud/tasks | jq '.[] | select(.status=="running") | .id'
 
 # Kill all running Claude processes
-# Mac
+# Access each worker machine directly (per-worker setup)
+# Mac example:
 pkill -f "claude --task"
-# VM
-ssh cc-vm "pkill -f 'claude --task'"
+# VM example:
+ssh your-vm-host "pkill -f 'claude --task'"
 ```
 
 **Step 2: Disable task ingress**

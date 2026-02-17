@@ -8,11 +8,11 @@ import {
   ChevronRight,
   Clock,
   Cog,
+  ExternalLink,
   FileText,
   HelpCircle,
   Link,
   ListTodo,
-  Loader2,
   MoreVertical,
   Search,
   X,
@@ -21,6 +21,7 @@ import {
 import type { Action, CommandType } from '@/types';
 import type { ResolvedActionButton, ActionExecutionResult } from '@/types/actionConfig';
 import { useActionConfig } from '@/hooks/useActionConfig';
+import { formatDateTime } from '@/utils/dateFormat';
 import { ConfigurableActionButton } from './ConfigurableActionButton.js';
 
 export interface ExecutionState {
@@ -30,15 +31,13 @@ export interface ExecutionState {
   linkLabel?: string;
   errorCode?: string;
   lastButton?: ResolvedActionButton;
-  isDismissError?: boolean;
 }
 
 interface ActionItemProps {
   action: Action;
   onClick: () => void;
   onActionSuccess: (button: ResolvedActionButton) => void;
-  onDismiss: (actionId: string) => Promise<void>;
-  isDismissing?: boolean;
+  onActionUpdated?: (action: Action) => void;
 }
 
 function getTypeIcon(type: CommandType): React.JSX.Element {
@@ -87,16 +86,6 @@ function getStatusIcon(status: string): React.JSX.Element {
   }
 }
 
-function formatDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 /**
  * Normalizes resourceUrl for HashRouter.
  * Backend returns URLs like "/#/research/..." but HashRouter's Link component
@@ -116,13 +105,11 @@ export function ActionItem({
   action,
   onClick,
   onActionSuccess,
-  onDismiss,
-  isDismissing = false,
+  onActionUpdated,
 }: ActionItemProps): React.JSX.Element {
   const { buttons } = useActionConfig(action);
   const [executionState, setExecutionState] = useState<ExecutionState | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [localDismissing, setLocalDismissing] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -148,17 +135,33 @@ export function ActionItem({
     closeDropdown?: () => void
   ): void => {
     closeDropdown?.();
-    if (result.status === 'completed') {
+
+    // For PATCH/DELETE endpoints (archive, reject, delete), success is indicated by
+    // not throwing an error. These return the updated action, not ActionExecutionResult.
+    // Only POST /execute endpoints return ActionExecutionResult with status field.
+    const isPatchOrDelete =
+      button.endpoint.method === 'PATCH' || button.endpoint.method === 'DELETE';
+    const isSuccess = isPatchOrDelete || result.status === 'completed';
+
+    if (isSuccess) {
+      const normalizedUrl =
+        result.resourceUrl !== undefined ? normalizeResourceUrl(result.resourceUrl) : undefined;
       setExecutionState({
         type: 'success',
         message: button.onSuccess?.message ?? 'Action completed!',
-        ...(result.resourceUrl !== undefined && {
-          resourceUrl: normalizeResourceUrl(result.resourceUrl),
-        }),
+        ...(normalizedUrl !== undefined && { resourceUrl: normalizedUrl }),
         ...(button.onSuccess?.linkLabel !== undefined && {
           linkLabel: button.onSuccess.linkLabel,
         }),
       });
+      if (normalizedUrl !== undefined) {
+        onActionUpdated?.({
+          ...action,
+          status: 'completed',
+          payload: { ...action.payload, resource_url: normalizedUrl },
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } else {
       setExecutionState({
         type: 'error',
@@ -174,23 +177,6 @@ export function ActionItem({
     setExecutionState(null);
   };
 
-  const handleDismissAction = async (e: React.MouseEvent): Promise<void> => {
-    e.stopPropagation();
-    setLocalDismissing(true);
-    try {
-      await onDismiss(action.id);
-    } catch (err) {
-      setExecutionState({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to archive action',
-        isDismissError: true,
-      });
-    } finally {
-      setLocalDismissing(false);
-    }
-  };
-
-  const showDismissButton = action.status === 'completed' || action.status === 'failed';
   const isSuccess = executionState?.type === 'success';
 
   const persistedError =
@@ -200,6 +186,10 @@ export function ActionItem({
   const persistedErrorCode =
     action.status === 'failed' && typeof action.payload['errorCode'] === 'string'
       ? action.payload['errorCode']
+      : null;
+  const persistedResourceUrl =
+    action.status === 'completed' && typeof action.payload['resource_url'] === 'string'
+      ? normalizeResourceUrl(action.payload['resource_url'])
       : null;
 
   const displayError = executionState?.type === 'error' ? executionState : null;
@@ -211,11 +201,10 @@ export function ActionItem({
     persistedErrorCode === 'TOKEN_ERROR' ||
     persistedErrorCode === 'NOT_CONNECTED' ||
     persistedErrorCode === 'UNAUTHORIZED';
-  const actualDismissing = isDismissing || localDismissing;
 
   return (
     <div
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -228,9 +217,9 @@ export function ActionItem({
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{getTypeIcon(action.type)}</div>
         <div className="min-w-0 flex-1">
-          <h3 className="break-words font-medium text-slate-800">{action.title}</h3>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+          <h3 className="break-words font-medium text-slate-800 dark:text-slate-200">{action.title}</h3>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">
               {getTypeLabel(action.type)}
             </span>
             <span className="inline-flex items-center gap-1">
@@ -238,7 +227,7 @@ export function ActionItem({
               {action.status}
             </span>
             <span>{String(Math.round(action.confidence * 100))}% confidence</span>
-            <span>{formatDate(action.createdAt)}</span>
+            <span>{formatDateTime(action.createdAt)}</span>
           </div>
         </div>
         <div
@@ -267,20 +256,45 @@ export function ActionItem({
             />
           )}
 
-          {(secondaryButtons.length > 0 || showDismissButton) && (
+          {persistedResourceUrl !== null && executionState === null && (
+            <RouterLink
+              to={persistedResourceUrl}
+              className="hidden items-center gap-1 rounded px-2 py-1.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-50 hover:text-green-800 sm:inline-flex"
+              onClick={(e): void => {
+                e.stopPropagation();
+              }}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              View
+            </RouterLink>
+          )}
+
+          {(secondaryButtons.length > 0 || persistedResourceUrl !== null) && (
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={(): void => {
                   setIsDropdownOpen((prev) => !prev);
                 }}
-                className="rounded p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                className="rounded p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
                 aria-label="More actions"
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
 
               {isDropdownOpen && (
-                <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                  {persistedResourceUrl !== null && executionState === null && (
+                    <RouterLink
+                      to={persistedResourceUrl}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-green-700 transition-colors hover:bg-green-50 sm:hidden"
+                      onClick={(): void => {
+                        setIsDropdownOpen(false);
+                      }}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      View
+                    </RouterLink>
+                  )}
                   {secondaryButtons.map((button) => (
                     <ConfigurableActionButton
                       key={button.id}
@@ -305,23 +319,6 @@ export function ActionItem({
                       }}
                     />
                   ))}
-                  {showDismissButton && (
-                    <button
-                      onClick={(e): void => {
-                        setIsDropdownOpen(false);
-                        void handleDismissAction(e);
-                      }}
-                      disabled={actualDismissing}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      {actualDismissing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Archive className="h-4 w-4" />
-                      )}
-                      Dismiss
-                    </button>
-                  )}
                 </div>
               )}
             </div>
@@ -332,7 +329,7 @@ export function ActionItem({
       {executionState !== null && (
         <div
           className={`mt-3 rounded-md border p-3 ${
-            isSuccess ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+            isSuccess ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/30' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30'
           }`}
           onClick={(e): void => {
             e.stopPropagation();
@@ -345,7 +342,7 @@ export function ActionItem({
               <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
             )}
             <div className="min-w-0 flex-1">
-              <p className={`text-sm ${isSuccess ? 'text-green-800' : 'text-red-800'}`}>
+              <p className={`text-sm ${isSuccess ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}`}>
                 {executionState.message}
               </p>
               {isSuccess && executionState.resourceUrl !== undefined && (
@@ -383,7 +380,7 @@ export function ActionItem({
 
       {showPersistedError && (
         <div
-          className="mt-3 rounded-md border border-red-200 bg-red-50 p-3"
+          className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30"
           onClick={(e): void => {
             e.stopPropagation();
           }}
@@ -391,7 +388,7 @@ export function ActionItem({
           <div className="flex items-start gap-2">
             <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
             <div className="min-w-0 flex-1">
-              <p className="text-sm text-red-800">{persistedError}</p>
+              <p className="text-sm text-red-800 dark:text-red-400">{persistedError}</p>
               {showReconnectLink && (
                 <RouterLink
                   to="/settings/calendar"
@@ -404,6 +401,7 @@ export function ActionItem({
           </div>
         </div>
       )}
+
     </div>
   );
 }

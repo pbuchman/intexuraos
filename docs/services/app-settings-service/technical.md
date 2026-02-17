@@ -124,7 +124,11 @@ graph TB
 
 ## Gotchas
 
-**Missing providers**: Returns 500 if any provider pricing is missing from Firestore. All 5 providers (Google, OpenAI, Anthropic, Perplexity, Zai) must be present.
+**Response contract** - All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. Internal auth errors return `{ success: false, error: { code: "UNAUTHORIZED", message: "..." } }`. Missing provider errors return `{ success: false, error: { code: "INTERNAL_ERROR", message: "Missing pricing for providers: ..." } }`.
+
+**Sentry logging** - `FirestoreUsageStatsRepository` uses `createAppLogger()` from `@intexuraos/infra-sentry`, not direct `pino()`.
+
+**Missing providers**: Returns 500 with `reply.fail('INTERNAL_ERROR', ...)` if any provider pricing is missing from Firestore. All 5 providers (Google, OpenAI, Anthropic, Perplexity, Zai) must be present.
 
 **Default days**: Usage endpoint defaults to 90 days if not specified.
 

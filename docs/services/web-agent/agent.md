@@ -113,12 +113,18 @@ interface SummarizePageResponse {
     status: 'success' | 'failed';
     summary?: {
       url: string;
-      summary: string; // Prose text in source language
+      summary: string; // Prose text in source language, focused on page content
       wordCount: number;
       estimatedReadingMinutes: number;
     };
     error?: {
-      code: 'FETCH_FAILED' | 'TIMEOUT' | 'INVALID_URL' | 'NO_CONTENT' | 'API_ERROR';
+      code:
+        | 'FETCH_FAILED'
+        | 'TIMEOUT'
+        | 'INVALID_URL'
+        | 'NO_CONTENT'
+        | 'API_ERROR'
+        | 'RATE_LIMITED';
       message: string;
     };
   };
@@ -212,6 +218,7 @@ interface SummarizePageResponse {
 | TOO_LARGE     | Response over 2MB           | Cannot process large pages   |
 | NO_CONTENT    | No text extracted from page | Page may be JS-only or empty |
 | API_ERROR     | LLM or user-service error   | Check user has API key       |
+| RATE_LIMITED  | Crawl4AI returned HTTP 429  | Wait and retry with backoff  |
 
 ## Rate Limits
 
@@ -232,4 +239,4 @@ interface SummarizePageResponse {
 
 ---
 
-**Last updated:** 2026-01-25 (INT-269: internal-clients migration)
+**Last updated:** 2026-02-08

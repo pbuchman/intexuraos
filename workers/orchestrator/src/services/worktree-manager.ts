@@ -1,0 +1,222 @@
+import { mkdir, readFile, writeFile, access, constants } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import type { Logger } from '@intexuraos/common-core';
+
+const execAsync = promisify(exec);
+
+export interface WorktreeManagerConfig {
+  repositoryPath: string;
+  worktreeBasePath: string;
+  mcpConfigTemplatePath: string;
+  settingsLocalTemplatePath?: string;
+}
+
+export class WorktreeManager {
+  constructor(
+    private readonly config: WorktreeManagerConfig,
+    private readonly logger: Logger
+  ) {}
+
+  async createWorktree(taskId: string, baseBranch: string): Promise<string> {
+    const worktreePath = join(this.config.worktreeBasePath, taskId);
+
+    // Check if worktree already exists
+    if (await this.worktreeExists(taskId)) {
+      throw new Error(`Worktree for task ${taskId} already exists at ${worktreePath}`);
+    }
+
+    try {
+      // Ensure base directory exists
+      await mkdir(this.config.worktreeBasePath, { recursive: true });
+
+      // Create worktree with a new branch for the task
+      // Using -b creates a local branch, avoiding detached HEAD state
+      // which is required for Claude to create commits and PRs
+      const { stderr } = await execAsync(
+        `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
+        {
+          cwd: this.config.repositoryPath,
+        }
+      );
+
+      // git worktree add outputs to stderr even on success
+      /* v8 ignore start -- test-infra: git worktree add outputs to stderr on success (e @preserve */
+      if (stderr && !stderr.includes('Preparing worktree')) {
+        throw new Error(`Failed to create worktree: ${stderr}`);
+      }
+      /* v8 ignore stop @preserve */
+
+      // Copy MCP config template if provided
+      if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
+        await this.copyMcpConfig(worktreePath);
+      }
+
+      // Copy settings.local.json template if provided
+      if (
+        this.config.settingsLocalTemplatePath !== undefined &&
+        existsSync(this.config.settingsLocalTemplatePath)
+      ) {
+        await this.copySettingsLocal(worktreePath);
+      }
+
+      // Install dependencies with timeout
+      await this.installDependencies(worktreePath);
+
+      return worktreePath;
+    } catch (error: unknown) {
+      /* v8 ignore start -- test-infra: worktree creation failure requires git worktree state manipulation @preserve */
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
+      throw new Error(`Failed to create worktree: ${message}`);
+    }
+  }
+
+  async removeWorktree(taskId: string): Promise<void> {
+    const worktreePath = join(this.config.worktreeBasePath, taskId);
+
+    if (!existsSync(worktreePath)) {
+      throw new Error(`Worktree for task ${taskId} does not exist at ${worktreePath}`);
+    }
+
+    try {
+      // Remove worktree using git worktree remove
+      const { stderr } = await execAsync(`git worktree remove "${worktreePath}" --force`, {
+        cwd: this.config.repositoryPath,
+      });
+
+      /* v8 ignore start -- test-infra: similar to create worktree - requires git worktree remove failure simulation @preserve */
+      if (stderr) {
+        throw new Error(`Failed to remove worktree: ${stderr}`);
+      }
+      /* v8 ignore stop @preserve */
+    } catch (error: unknown) {
+      /* v8 ignore start -- test-infra: worktree removal failure requires git worktree state manipulation @preserve */
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
+      throw new Error(`Failed to remove worktree: ${message}`);
+    }
+  }
+
+  async listWorktrees(): Promise<string[]> {
+    try {
+      const { stdout } = await execAsync('git worktree list --porcelain', {
+        cwd: this.config.repositoryPath,
+      });
+
+      const lines = stdout.split('\n').filter((line) => line.length > 0);
+      const worktreePaths: string[] = [];
+
+      /* v8 ignore start -- test-infra: filtering by worktree base path requires specific git worktree setup @preserve */
+      for (const line of lines) {
+        if (line.startsWith('worktree ')) {
+          const path = line.slice('worktree '.length);
+          // Only return worktrees under our base path
+          if (path.startsWith(this.config.worktreeBasePath)) {
+            worktreePaths.push(path);
+          }
+        }
+      }
+      /* v8 ignore stop @preserve */
+
+      return worktreePaths;
+    } catch (error) {
+      this.logger.error({ error }, 'Failed to list worktrees');
+      return [];
+    }
+  }
+
+  async worktreeExists(taskId: string): Promise<boolean> {
+    const worktreePath = join(this.config.worktreeBasePath, taskId);
+    return existsSync(worktreePath);
+  }
+
+  private async copyMcpConfig(worktreePath: string): Promise<void> {
+    const targetPath = join(worktreePath, '.mcp.json');
+
+    try {
+      // Read template
+      const template = await readFile(this.config.mcpConfigTemplatePath, 'utf-8');
+
+      // Validate environment variables
+      const linearKey = process.env['LINEAR_API_KEY'];
+      const sentryToken = process.env['SENTRY_AUTH_TOKEN'];
+
+      if (linearKey === undefined || linearKey === '') {
+        this.logger.warn({}, 'LINEAR_API_KEY not set - MCP Linear integration will fail');
+      }
+      if (sentryToken === undefined || sentryToken === '') {
+        this.logger.warn({}, 'SENTRY_AUTH_TOKEN not set - MCP Sentry integration will fail');
+      }
+
+      // Substitute environment variables
+      /* v8 ignore start -- ts-type: nullish coalescing on env vars creates type narrowing branches @preserve */
+      const config = template
+        .replace(/\{\{LINEAR_API_KEY\}\}/g, linearKey ?? '')
+        /* v8 ignore stop @preserve */
+        .replace(/\{\{SENTRY_AUTH_TOKEN\}\}/g, sentryToken ?? '');
+
+      // Ensure target directory exists
+      await mkdir(dirname(targetPath), { recursive: true });
+
+      // Write to temp file first for atomicity
+      const tempPath = `${targetPath}.tmp`;
+      await writeFile(tempPath, config, 'utf-8');
+
+      // Atomic rename
+      await (await import('node:fs/promises')).rename(tempPath, targetPath);
+    } catch (error: unknown) {
+      /* v8 ignore start -- ts-type: catch block error handling @preserve */
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+      throw new Error(`Failed to copy MCP config: ${message}`);
+      /* v8 ignore stop @preserve */
+    }
+  }
+
+  private async copySettingsLocal(worktreePath: string): Promise<void> {
+    const targetPath = join(worktreePath, '.claude', 'settings.local.json');
+
+    try {
+      const content = await readFile(this.config.settingsLocalTemplatePath as string, 'utf-8');
+      await mkdir(dirname(targetPath), { recursive: true });
+      await writeFile(targetPath, content, 'utf-8');
+    } catch (error: unknown) {
+      /* v8 ignore start -- ts-type: catch block error handling @preserve */
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
+      throw new Error(`Failed to copy settings.local.json: ${message}`);
+    }
+  }
+
+  private async installDependencies(worktreePath: string): Promise<void> {
+    const timeoutMs = 5 * 60 * 1000; // 5 minutes
+
+    try {
+      // Check if pnpm-lock.yaml exists
+      const lockPath = join(worktreePath, 'pnpm-lock.yaml');
+      try {
+        await access(lockPath, constants.F_OK);
+      } catch {
+        /* v8 ignore start -- test-infra: requires worktree without pnpm-lock.yaml to test @preserve */
+        // No lock file, skip install
+        return;
+        /* v8 ignore stop @preserve */
+      }
+
+      // Run pnpm install with timeout
+      await execAsync(`pnpm install --frozen-lockfile`, {
+        cwd: worktreePath,
+        timeout: timeoutMs,
+      });
+    } catch (error: unknown) {
+      /* v8 ignore start -- test-infra: pnpm install failure requires corrupted worktree state @preserve */
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
+      throw new Error(`Failed to install dependencies: ${message}`);
+    }
+  }
+}

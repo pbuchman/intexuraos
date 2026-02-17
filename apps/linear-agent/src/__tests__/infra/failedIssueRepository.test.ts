@@ -8,6 +8,8 @@ import {
   createFailedIssue,
   listFailedIssuesByUser,
   deleteFailedIssue,
+  getFailedIssueById,
+  updateFailedIssue,
   createFailedIssueRepository,
 } from '../../infra/firestore/failedIssueRepository.js';
 
@@ -201,12 +203,106 @@ describe('FailedIssueRepository', () => {
     });
   });
 
+  describe('getFailedIssueById', () => {
+    it('returns failed issue by id', async () => {
+      const createResult = await createFailedIssue(createTestInput());
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const getResult = await getFailedIssueById(createResult.value.id);
+
+      expect(getResult.ok).toBe(true);
+      if (getResult.ok) {
+        expect(getResult.value.id).toBe(createResult.value.id);
+        expect(getResult.value.originalText).toBe('Create a task for testing');
+      }
+    });
+
+    it('returns error for non-existent failed issue', async () => {
+      const result = await getFailedIssueById('nonexistent-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Failed issue not found');
+      }
+    });
+
+    it('returns error when Firestore fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Get failed') });
+
+      const result = await getFailedIssueById('some-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Get failed');
+      }
+    });
+  });
+
+  describe('updateFailedIssue', () => {
+    it('updates error and lastRetryAt fields', async () => {
+      const createResult = await createFailedIssue(createTestInput());
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const updateResult = await updateFailedIssue(createResult.value.id, {
+        error: 'New error message',
+        lastRetryAt: '2025-01-20T10:30:00Z',
+      });
+
+      expect(updateResult.ok).toBe(true);
+
+      const getResult = await getFailedIssueById(createResult.value.id);
+      expect(getResult.ok).toBe(true);
+      if (getResult.ok) {
+        expect(getResult.value.error).toBe('New error message');
+        expect(getResult.value.lastRetryAt).toBe('2025-01-20T10:30:00Z');
+      }
+    });
+
+    it('returns error for non-existent failed issue', async () => {
+      const result = await updateFailedIssue('nonexistent-id', {
+        error: 'New error',
+        lastRetryAt: '2025-01-20T10:30:00Z',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Failed issue not found');
+      }
+    });
+
+    it('returns error when Firestore fails', async () => {
+      const createResult = await createFailedIssue(createTestInput());
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await updateFailedIssue(createResult.value.id, {
+        error: 'New error',
+        lastRetryAt: '2025-01-20T10:30:00Z',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Update failed');
+      }
+    });
+  });
+
   describe('createFailedIssueRepository factory', () => {
     it('returns repository with all methods', () => {
       const repository = createFailedIssueRepository();
 
       expect(typeof repository.create).toBe('function');
       expect(typeof repository.listByUser).toBe('function');
+      expect(typeof repository.getById).toBe('function');
+      expect(typeof repository.update).toBe('function');
       expect(typeof repository.delete).toBe('function');
     });
 
@@ -215,6 +311,13 @@ describe('FailedIssueRepository', () => {
 
       const createResult = await repository.create(createTestInput());
       expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const getResult = await repository.getById(createResult.value.id);
+      expect(getResult.ok).toBe(true);
+      if (getResult.ok) {
+        expect(getResult.value.id).toBe(createResult.value.id);
+      }
 
       const listResult = await repository.listByUser('user-123');
       expect(listResult.ok).toBe(true);

@@ -816,4 +816,84 @@ Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
     expect(sections[0]?.title).toBe('H2 Section');
     expect(sections[1]?.title).toBe('Another H2');
   });
+
+  it('handles h2 heading with empty title (only ##)', () => {
+    const markdown = `##
+Content
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false`;
+
+    const sections = parseSections(markdown);
+    expect(sections).toHaveLength(1);
+    // When h2 regex matches but title is undefined, creates implicit section
+    expect(sections[0]?.title).toBe('Synthesis');
+  });
+
+  it('handles h3 heading with empty title (only ###)', () => {
+    const markdown = `###
+Content
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false`;
+
+    const sections = parseSections(markdown);
+    expect(sections).toHaveLength(1);
+    // When h3 regex matches but title is undefined, creates implicit section
+    expect(sections[0]?.title).toBe('Synthesis');
+  });
+
+  it('handles h2 with only whitespace after ##', () => {
+    const markdown = `##
+Content
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false`;
+
+    const sections = parseSections(markdown);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.title).toBe('Synthesis');
+  });
+
+  it('handles h3 with only whitespace after ###', () => {
+    const markdown = `###
+Content
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false`;
+
+    const sections = parseSections(markdown);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.title).toBe('Synthesis');
+  });
+
+  it('handles heading with trailing whitespace only', () => {
+    const markdown = `## Section
+Content
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false`;
+
+    const sections = parseSections(markdown);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.title).toBe('Section');
+  });
+
+  it('handles lines array where heading element is undefined', () => {
+    // Simulate edge case where lines[i] could be undefined in sparse array
+    const linesWithUndefined = ['## Section 1', undefined, '## Section 2'] as unknown as string[];
+    const markdown = linesWithUndefined.filter((l): l is string => l !== undefined).join('\n');
+
+    const sections = parseSections(markdown);
+    // Filter removes undefined, so we should get 2 sections
+    expect(sections).toHaveLength(2);
+  });
+
+  it('handles parseAttributionLine with empty pairs array after split', () => {
+    const result = parseAttributionLine('Attribution: ; ; ');
+
+    // Empty pairs should result in empty arrays and false unk
+    expect(result).not.toBeNull();
+    expect(result?.primary).toEqual([]);
+    expect(result?.secondary).toEqual([]);
+    expect(result?.constraints).toEqual([]);
+    expect(result?.unk).toBe(false);
+  });
+
+  it('handles parseAttributionLine with missing value after equals', () => {
+    const result = parseAttributionLine('Attribution: Primary=; Secondary=; UNK=');
+
+    // UNK with empty value is treated as invalid (not 'true', 'false', or undefined)
+    expect(result).toBeNull();
+  });
 });

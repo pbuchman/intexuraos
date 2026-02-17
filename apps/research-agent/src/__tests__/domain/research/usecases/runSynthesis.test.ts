@@ -75,6 +75,8 @@ function createMockDeps(): RunSynthesisDeps & {
     webAppUrl: 'https://app.example.com',
     reportLlmSuccess: mockReportSuccess,
     logger: mockLogger,
+    notionServiceClient: null,
+    researchExportSettings: null,
     mockRepo,
     mockSynthesizer,
     mockNotificationSender,
@@ -894,6 +896,7 @@ describe('runSynthesis', () => {
         totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
         shareInfo: expect.objectContaining({
           coverImageId: 'img-123',
+          coverImageUrl: 'https://storage.example.com/full.png',
         }),
       });
     });

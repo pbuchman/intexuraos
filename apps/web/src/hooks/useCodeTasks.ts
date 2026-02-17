@@ -1,0 +1,243 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getErrorMessage } from '@intexuraos/common-core/errors';
+import { useAuth } from '@/context';
+import {
+  listCodeTasks as listCodeTasksApi,
+  submitCodeTask as submitCodeTaskApi,
+  getWorkersStatus as getWorkersStatusApi,
+  refreshWorkersStatus as refreshWorkersStatusApi,
+} from '@/services/codeAgentApi';
+import type { CodeTask, CodeTaskStatus, SubmitCodeTaskRequest, WorkersStatusResponse } from '@/types';
+
+/**
+ * Hook for managing a list of code tasks with pagination.
+ */
+export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
+  tasks: CodeTask[];
+  loading: boolean;
+  loadingMore: boolean;
+  refreshing: boolean;
+  error: string | null;
+  hasMore: boolean;
+  loadMore: () => Promise<void>;
+  refresh: () => Promise<void>;
+  submitTask: (request: SubmitCodeTaskRequest) => Promise<string>;
+} {
+  const { getAccessToken } = useAuth();
+  const [tasks, setTasks] = useState<CodeTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [hasMore, setHasMore] = useState(true);
+  const isInitialLoadRef = useRef(true);
+  const isMountedRef = useRef(true);
+
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      const shouldShowLoading = showLoading !== false;
+
+      if (shouldShowLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const listOptions = options?.status !== undefined ? { status: options.status } : {};
+        const data = await listCodeTasksApi(token, listOptions);
+        if (isMountedRef.current) {
+          setTasks(data.tasks);
+          setCursor(data.nextCursor);
+          setHasMore(data.nextCursor !== undefined);
+        }
+      } catch (err) {
+        if (isMountedRef.current) {
+          setError(getErrorMessage(err, 'Failed to load code tasks'));
+        }
+      } finally {
+        if (isMountedRef.current) {
+          if (shouldShowLoading) {
+            setLoading(false);
+          } else {
+            setRefreshing(false);
+          }
+        }
+      }
+    },
+    [getAccessToken, options?.status]
+  );
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    void refresh();
+    return (): void => {
+      isMountedRef.current = false;
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === 'visible' && !isInitialLoadRef.current) {
+        void refresh(false);
+      }
+      isInitialLoadRef.current = false;
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return (): void => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refresh]);
+
+  const loadMore = useCallback(async (): Promise<void> => {
+    if (!hasMore || loading || loadingMore) return;
+
+    setLoadingMore(true);
+    try {
+      const token = await getAccessToken();
+      const loadMoreOptions: { status?: CodeTaskStatus; cursor?: string } = {};
+      if (options?.status !== undefined) {
+        loadMoreOptions.status = options.status;
+      }
+      if (cursor !== undefined) {
+        loadMoreOptions.cursor = cursor;
+      }
+      const data = await listCodeTasksApi(token, loadMoreOptions);
+      setTasks((prev) => [...prev, ...data.tasks]);
+      setCursor(data.nextCursor);
+      setHasMore(data.nextCursor !== undefined);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load more'));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [cursor, hasMore, loading, loadingMore, getAccessToken, options?.status]);
+
+  const submitTask = useCallback(
+    async (request: SubmitCodeTaskRequest): Promise<string> => {
+      const token = await getAccessToken();
+      const result = await submitCodeTaskApi(token, request);
+      await refresh();
+      return result.codeTaskId;
+    },
+    [getAccessToken, refresh]
+  );
+
+  return {
+    tasks,
+    loading,
+    loadingMore,
+    refreshing,
+    error,
+    hasMore,
+    loadMore,
+    refresh,
+    submitTask,
+  };
+}
+
+/**
+ * Hook for fetching worker status (Mac and VM health).
+ * Polls every 60 seconds when visible.
+ */
+export function useWorkersStatus(): {
+  status: WorkersStatusResponse | null;
+  loading: boolean;
+  refreshing: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  refreshStatus: () => Promise<void>;
+} {
+  const { getAccessToken, isAuthenticated } = useAuth();
+  const [status, setStatus] = useState<WorkersStatusResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const isInitialLoadRef = useRef(true);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const token = await getAccessToken();
+      const data = await getWorkersStatusApi(token);
+      if (isMountedRef.current) {
+        setStatus(data);
+        setError(null);
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setError(getErrorMessage(err, 'Failed to check worker status'));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [getAccessToken, isAuthenticated]);
+
+  const refreshStatus = useCallback(async (): Promise<void> => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    if (isMountedRef.current) {
+      setRefreshing(true);
+    }
+
+    try {
+      const token = await getAccessToken();
+      const data = await refreshWorkersStatusApi(token);
+      if (isMountedRef.current) {
+        setStatus(data);
+        setError(null);
+      }
+    } catch {
+      // Silently fail - status update is best effort
+    } finally {
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
+    }
+  }, [getAccessToken, isAuthenticated]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    void refresh();
+    return (): void => {
+      isMountedRef.current = false;
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const pollInterval = setInterval(() => {
+      void refresh();
+    }, 60000);
+
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === 'visible' && !isInitialLoadRef.current) {
+        void refresh();
+      }
+      isInitialLoadRef.current = false;
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return (): void => {
+      clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refresh, isAuthenticated]);
+
+  return { status, loading, refreshing, error, refresh, refreshStatus };
+}

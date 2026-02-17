@@ -47,4 +47,14 @@ describe('loadConfig', () => {
     expect(config.auth.audience).toBe('');
     expect(config.internalAuthKey).toBe('');
   });
+
+  it('uses fallback values for service URLs when env vars are not set', () => {
+    delete process.env['INTEXURAOS_USER_SERVICE_URL'];
+    delete process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
+
+    const config = loadConfig();
+
+    expect(config.userServiceUrl).toBe('http://localhost:8110');
+    expect(config.appSettingsServiceUrl).toBe('http://localhost:8113');
+  });
 });

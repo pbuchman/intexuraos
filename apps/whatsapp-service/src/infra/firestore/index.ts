@@ -30,3 +30,14 @@ export {
   updateLinkPreview,
   deleteMessage,
 } from './messageRepository.js';
+
+export {
+  createVerification,
+  findVerificationById,
+  findPendingByUserAndPhone,
+  isPhoneVerified,
+  updateVerificationStatus,
+  incrementVerificationAttempts,
+  countRecentVerificationsByPhone,
+  createVerificationWithChecks,
+} from './phoneVerificationRepository.js';

@@ -161,7 +161,7 @@ export function createExecuteLinearActionUseCase(
     logger.info({ actionId, status: 'completed' }, 'Action marked as completed');
 
     if (resourceUrl !== undefined) {
-      const whatsappMessage = `${message} View it here: ${resourceUrl}`;
+      const whatsappMessage = `🎯 ${message} View it here: ${resourceUrl}`;
 
       logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 

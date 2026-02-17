@@ -56,6 +56,10 @@ For notes and bookmarks:
 
 **Cost transparency** - Image generation tracked per user for billing
 
+**Standardized response contract** - All endpoints use `reply.ok(data)` / `reply.fail(code, message)` for consistent error handling
+
+**Sentry error tracking** - Logger integrated with Sentry for automatic error reporting
+
 **Clean deletion** - Images removed from GCS when content is unshared
 
 ## Limitations

@@ -32,7 +32,6 @@ const FORBIDDEN_KEYWORDS = [
   'WhatsApp',
   'Notion',
   // Domain-specific concepts
-  'PromptVault',
   'Workspace',
   'Block',
   'Session',

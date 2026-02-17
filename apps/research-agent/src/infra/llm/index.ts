@@ -14,4 +14,4 @@ export {
 export { ContextInferenceAdapter } from './ContextInferenceAdapter.js';
 export { InputValidationAdapter } from './InputValidationAdapter.js';
 // Re-export DecryptedApiKeys from user module (canonical source)
-export type { DecryptedApiKeys } from '../user/index.js';
+export type { DecryptedApiKeys } from '@intexuraos/internal-clients';

@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/llm-utils",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",

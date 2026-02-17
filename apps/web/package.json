@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/web",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --max-warnings 0",
+    "lint:local": "eslint src --max-warnings 0",
     "lint:fix": "eslint src --fix",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -21,6 +22,8 @@
     "@intexuraos/llm-contract": "workspace:*",
     "@sentry/react": "^8.55.0",
     "@types/js-yaml": "^4.0.9",
+    "@uiw/react-markdown-preview": "^5.1.5",
+    "@uiw/react-md-editor": "^4.0.11",
     "firebase": "^11.9.0",
     "highlight.js": "^11.11.1",
     "js-yaml": "^4.1.1",
@@ -31,6 +34,7 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.1.1",
     "rehype-highlight": "^7.0.2",
+    "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "vega": "^5.28.0",
     "vega-embed": "^6.25.0",

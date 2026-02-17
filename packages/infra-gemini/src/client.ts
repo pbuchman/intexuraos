@@ -36,7 +36,7 @@ import { randomUUID } from 'node:crypto';
 import { type GenerateContentResponse, GoogleGenAI } from '@google/genai';
 import { buildResearchPrompt } from '@intexuraos/llm-prompts';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
+import { type AuditContext, type AuditSink, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmModels,
   LlmProviders,
@@ -59,24 +59,31 @@ const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 function createRequestContext(
   method: string,
   model: string,
-  prompt: string
+  prompt: string,
+  auditSink?: AuditSink
 ): { requestId: string; startTime: Date; auditContext: AuditContext } {
   const requestId = randomUUID();
   const startTime = new Date();
-  const auditContext = createAuditContext({
-    provider: LlmProviders.Google,
-    model,
-    method,
-    prompt,
-    startedAt: startTime,
-  });
+  const auditContext = createAuditContext(
+    {
+      provider: LlmProviders.Google,
+      model,
+      method,
+      prompt,
+      startedAt: startTime,
+    },
+    auditSink !== undefined ? { sink: auditSink } : undefined
+  );
   return { requestId, startTime, auditContext };
 }
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, imagePricing, logger } = config;
-  const usageLogger = createUsageLogger({ logger });
+  const { model, userId, pricing, imagePricing, logger, usageSink, auditSink } = config;
+  const usageLogger = createUsageLogger({
+    logger,
+    ...(usageSink !== undefined && { sink: usageSink }),
+  });
 
   function trackUsage(
     callType: CallType,
@@ -98,7 +105,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
       const researchPrompt = buildResearchPrompt(prompt);
-      const { auditContext } = createRequestContext('research', model, researchPrompt);
+      const { auditContext } = createRequestContext('research', model, researchPrompt, auditSink);
 
       try {
         const response = await ai.models.generateContent({
@@ -138,7 +145,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     },
 
     async generate(prompt: string): Promise<Result<GenerateResult, GeminiError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt);
+      const { auditContext } = createRequestContext('generate', model, prompt, auditSink);
 
       try {
         const response = await ai.models.generateContent({ model, contents: prompt });
@@ -173,7 +180,12 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       prompt: string,
       options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GeminiError>> {
-      const { auditContext } = createRequestContext('generateImage', IMAGE_MODEL, prompt);
+      const { auditContext } = createRequestContext(
+        'generateImage',
+        IMAGE_MODEL,
+        prompt,
+        auditSink
+      );
 
       try {
         const response = await ai.models.generateContent({

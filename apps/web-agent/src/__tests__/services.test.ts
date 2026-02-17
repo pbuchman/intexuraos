@@ -12,7 +12,7 @@ describe('services', () => {
   const mockPricingContext = new FakePricingContext();
 
   beforeEach(() => {
-    vi.stubEnv('INTEXURAOS_CRAWL4AI_API_KEY', 'test-key');
+    vi.stubEnv('INTEXURAOS_CRAWL4AI_APP_API_KEY', 'test-key');
   });
 
   afterEach(() => {

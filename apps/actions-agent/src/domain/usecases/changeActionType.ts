@@ -41,7 +41,7 @@ export function createChangeActionTypeUseCase(deps: ChangeActionTypeDeps): Chang
     }
 
     // 2. Validate status allows type change
-    const allowedStatuses = ['pending', 'awaiting_approval'];
+    const allowedStatuses = ['pending', 'awaiting_approval', 'failed'];
     if (!allowedStatuses.includes(action.status)) {
       logger.error(
         { actionId, currentStatus: action.status, newType, reason: 'invalid_status' },

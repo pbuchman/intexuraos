@@ -2,7 +2,7 @@
  * Tests for Firestore UserSettings repository.
  * Uses FakeFirestore for in-memory testing.
  */
-import { LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
@@ -432,6 +432,63 @@ describe('FirestoreUserSettingsRepository', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toContain('Update failed');
+      }
+    });
+  });
+
+  describe('updateLlmPreferences', () => {
+    it('creates new settings document if user does not exist', async () => {
+      const result = await repo.updateLlmPreferences('new-user', LlmModels.Gemini25Flash);
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('new-user');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.userId).toBe('new-user');
+        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      }
+    });
+
+    it('updates existing settings document', async () => {
+      await repo.saveSettings(createTestSettings());
+
+      const result = await repo.updateLlmPreferences('user-123', LlmModels.ClaudeHaiku35);
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.ClaudeHaiku35);
+      }
+    });
+
+    it('returns error when Firestore fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await repo.updateLlmPreferences('user-123', LlmModels.Gemini25Flash);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Update failed');
+      }
+    });
+  });
+
+  describe('getSettings with llmPreferences', () => {
+    it('returns llmPreferences when present', async () => {
+      const settings = createTestSettings({
+        llmPreferences: { defaultModel: LlmModels.GPT4oMini },
+      });
+      await repo.saveSettings(settings);
+
+      const result = await repo.getSettings('user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
       }
     });
   });

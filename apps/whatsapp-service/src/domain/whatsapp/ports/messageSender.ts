@@ -14,6 +14,17 @@ export interface TextMessageSendResult {
 }
 
 /**
+ * WhatsApp interactive button for reply messages.
+ */
+export interface WhatsAppInteractiveButton {
+  type: 'reply';
+  reply: {
+    id: string;
+    title: string;
+  };
+}
+
+/**
  * Port for sending WhatsApp messages.
  */
 export interface WhatsAppMessageSender {
@@ -26,5 +37,18 @@ export interface WhatsAppMessageSender {
   sendTextMessage(
     phoneNumber: string,
     message: string
+  ): Promise<Result<TextMessageSendResult, WhatsAppError>>;
+
+  /**
+   * Send an interactive message with buttons to a user.
+   * @param phoneNumber - User's phone number in E.164 format (e.g., +48123456789)
+   * @param message - Text message body
+   * @param buttons - Interactive buttons to display
+   * @returns The wamid of the sent message
+   */
+  sendInteractiveMessage(
+    phoneNumber: string,
+    message: string,
+    buttons: WhatsAppInteractiveButton[]
   ): Promise<Result<TextMessageSendResult, WhatsAppError>>;
 }

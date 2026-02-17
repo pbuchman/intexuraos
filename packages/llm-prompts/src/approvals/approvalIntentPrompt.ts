@@ -5,7 +5,6 @@
  * to an approval request indicates approval, rejection, or is unclear.
  */
 
-import { getErrorMessage } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 
 /**
@@ -111,11 +110,11 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
 
     // The regex only matches {...} patterns, which always parse to objects.
     // The typeof check is defensive but unreachable in practice.
-    /* v8 ignore start */
+    /* v8 ignore start -- test-infra: block coverage @preserve */
     if (typeof parsed !== 'object' || parsed === null) {
       return null;
     }
-    /* v8 ignore stop */
+    /* v8 ignore stop @preserve */
 
     const obj = parsed as Record<string, unknown>;
 
@@ -173,28 +172,9 @@ export function parseApprovalIntentResponseWithLogging(
   response: string,
   logger: Logger
 ): ApprovalIntentResponse {
-  try {
-    const result = parseApprovalIntentResponse(response);
-    if (result === null) {
-      const error = new Error(
-        'Failed to parse approval intent: response does not match expected schema'
-      );
-      logger.warn(
-        {
-          operation: 'parseApprovalIntentResponse',
-          errorMessage: error.message,
-          llmResponse: response,
-          expectedSchema:
-            '{"intent":"approve"|"reject"|"unclear","confidence":0.0-1.0,"reasoning":"string"}',
-          responseLength: response.length,
-        },
-        'LLM parse error in parseApprovalIntentResponse: Failed to parse approval intent: response does not match expected schema'
-      );
-      throw error;
-    }
-    return result;
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
+  const result = parseApprovalIntentResponse(response);
+  if (result === null) {
+    const errorMessage = 'Failed to parse approval intent: response does not match expected schema';
     logger.warn(
       {
         operation: 'parseApprovalIntentResponse',
@@ -206,6 +186,7 @@ export function parseApprovalIntentResponseWithLogging(
       },
       `LLM parse error in parseApprovalIntentResponse: ${errorMessage}`
     );
-    throw error;
+    throw new Error(errorMessage);
   }
+  return result;
 }

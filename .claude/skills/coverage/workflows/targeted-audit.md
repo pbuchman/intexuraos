@@ -35,43 +35,45 @@ Note: Coverage runs for entire monorepo, but we filter to target.
    - If app → `apps/<name>/**/*`
    - If package → `packages/<name>/**/*`
 
-### Phase 4: Load Existing Exemptions
+### Phase 4: Verify Existing Inline Comments (Rule 1)
 
-Read `.claude/skills/coverage/unreachable/<name>.md` if exists.
+Run `pnpm run verify:v8-ignore` to validate all existing comments.
 
-### Phase 5: Verify Existing Exemptions (Rule 1)
-
-For EACH documented exemption:
+For EACH inline comment in the target:
 
 1. **Find source file:**
    ```bash
    # e.g., src/infra/http/client.ts → apps/<name>/src/infra/http/client.ts
    ```
 
-2. **Search for code snippet:**
-   - Extract the code block from exemption entry
-   - Search for exact match in source file
-   - Use grep or string search (NOT line numbers)
+2. **Verify code pattern:**
+   - Check if the code pattern still matches the category
+   - Use the category detectors to validate
 
 3. **Determine action:**
    | Scenario | Action |
    |----------|--------|
-   | Snippet found at same line | Keep as-is |
-   | Snippet found at different line | Update line reference |
-   | Snippet not found, file exists | DELETE section |
-   | Source file deleted | DELETE all sections for file |
+   | Pattern still valid | Keep as-is |
+   | Code moved/changed | Update comment |
+   | Pattern no longer applies | Remove comment |
+   | Source file deleted | Remove all comments for file |
 
 ### Phase 6: Check Linear Deduplication (Rule 2)
 
 1. Query Linear:
    ```
    title contains "[coverage][<name>]"
-   state NOT IN (Done, Cancelled)
+   state IN (Backlog, Todo, In Progress, In Review, QA)
    ```
+
+   **IMPORTANT:** Only issues in ACTIVE statuses count toward coverage accounting.
+   Issues in Done, Canceled, or Duplicate do NOT count — they represent completed
+   or abandoned work, not tracked gaps. If a Done issue's branch is still uncovered,
+   a NEW issue must be created.
 
 2. Build map: `filename → issue ID`
 
-3. Include subtasks of parent issues
+3. Include subtasks of parent issues (if parent is in active status)
 
 ### Phase 7: Investigate New Gaps
 
@@ -89,16 +91,16 @@ For each file with `branches.pct < 100` not yet exempted:
 3. **Determine fate:**
    | Analysis | Action |
    |----------|--------|
-   | Truly unreachable | Add exemption |
+   | Truly unreachable | Add inline `/* v8 ignore <CATEGORY> -- reason */` comment |
    | Testable with setup | Create Linear issue (if not duplicate) |
 
 ### Phase 8: Execute Actions
 
-1. **Update exemption file:**
-   - Remove stale entries
-   - Update moved entries
-   - Add new exemptions
-   - Write to `.claude/skills/coverage/unreachable/<name>.md`
+1. **Update inline comments:**
+   - Remove stale comments
+   - Update moved/changed comments
+   - Add new inline comments: `/* v8 ignore <CATEGORY> -- reason */`
+   - Run `pnpm run verify:v8-ignore` to confirm all valid
 
 2. **Create Linear issues:**
    - Use [linear-issue.md](../templates/linear-issue.md) template

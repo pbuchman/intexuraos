@@ -17,8 +17,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when x-internal-auth token is invalid', async () => {
@@ -305,7 +305,7 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string };
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.error).toBeDefined();
     });
 

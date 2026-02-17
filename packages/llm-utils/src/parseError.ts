@@ -15,7 +15,7 @@
 
 import type { Logger } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
-import type { ZodError } from 'zod';
+import type { ZodIssue, ZodError } from 'zod';
 
 /**
  * Error details from LLM response parsing failures.
@@ -184,7 +184,7 @@ export function formatZodErrors(error: ZodError): string {
   const issuesToReport = error.issues.slice(0, MAX_ISSUES);
 
   const formatted = issuesToReport
-    .map((issue) => {
+    .map((issue: ZodIssue) => {
       const path = issue.path.join('.');
       const pathStr = path !== '' ? path : '(root)';
 

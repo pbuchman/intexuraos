@@ -7,9 +7,8 @@ import {
   FakeNotesServiceClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
-import pino from 'pino';
 
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 describe('executeNoteAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
@@ -42,7 +41,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('non-existent-action');
@@ -65,7 +64,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -86,7 +85,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -114,7 +113,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -140,7 +139,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -169,7 +168,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -200,7 +199,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -225,7 +224,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -250,7 +249,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -273,7 +272,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -302,7 +301,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -327,7 +326,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -354,7 +353,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -381,7 +380,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -405,7 +404,7 @@ describe('executeNoteAction usecase', () => {
       notesServiceClient: fakeNotesClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');

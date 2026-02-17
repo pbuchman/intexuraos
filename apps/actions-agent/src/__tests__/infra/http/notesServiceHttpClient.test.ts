@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
-import pino from 'pino';
 import { isOk, isErr } from '@intexuraos/common-core';
 import { createNotesServiceHttpClient } from '../../../infra/http/notesServiceHttpClient.js';
-
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from '../../fakes.js';
 
 describe('createNotesServiceHttpClient', () => {
   const baseUrl = 'http://notes-agent.local';
@@ -33,7 +31,7 @@ describe('createNotesServiceHttpClient', () => {
           },
         });
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createNote({
         userId: 'user-456',
         title: 'Meeting notes',
@@ -54,7 +52,7 @@ describe('createNotesServiceHttpClient', () => {
     it('returns error on HTTP 500', async () => {
       nock(baseUrl).post('/internal/notes').reply(500, 'Internal Server Error');
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createNote({
         userId: 'user-456',
         title: 'Test',
@@ -76,7 +74,7 @@ describe('createNotesServiceHttpClient', () => {
         error: { code: 'TOKEN_ERROR', message: 'Token expired' },
       });
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createNote({
         userId: 'user-456',
         title: 'Test',
@@ -99,7 +97,7 @@ describe('createNotesServiceHttpClient', () => {
         error: { message: 'Unauthorized' },
       });
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createNote({
         userId: 'user-456',
         title: 'Test',
@@ -125,7 +123,7 @@ describe('createNotesServiceHttpClient', () => {
           error: { code: 'VALIDATION_ERROR', message: 'Title is required' },
         });
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createNote({
         userId: 'user-456',
         title: '',
@@ -144,7 +142,7 @@ describe('createNotesServiceHttpClient', () => {
     it('returns error when response data is undefined', async () => {
       nock(baseUrl).post('/internal/notes').reply(200, { success: true });
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createNote({
         userId: 'user-456',
         title: 'Test',
@@ -163,7 +161,7 @@ describe('createNotesServiceHttpClient', () => {
     it('returns error on network failure', async () => {
       nock(baseUrl).post('/internal/notes').replyWithError('Connection refused');
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createNote({
         userId: 'user-456',
         title: 'Test',
@@ -184,7 +182,7 @@ describe('createNotesServiceHttpClient', () => {
         'Content-Type': 'text/plain',
       });
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createNote({
         userId: 'user-456',
         title: 'Test',
@@ -212,7 +210,7 @@ describe('createNotesServiceHttpClient', () => {
           },
         });
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createNote({
         userId: 'user-456',
         title: 'Test',
@@ -249,7 +247,7 @@ describe('createNotesServiceHttpClient', () => {
           },
         });
 
-      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       await client.createNote({
         userId: 'user-456',
         title: 'Meeting notes',

@@ -72,8 +72,7 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for pubsub/todos-processing endpoint'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/todos-processing endpoint');
         }
       }
 
@@ -85,13 +84,13 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         eventData = JSON.parse(decoded) as TodoProcessingEvent;
       } catch {
         request.log.error({ messageId: body.message.messageId }, 'Failed to decode PubSub message');
-        return { success: true };
+        return await reply.ok({});
       }
 
       const parsedType = eventData.type as string;
       if (parsedType !== 'todos.processing.created') {
         request.log.warn({ type: parsedType }, 'Unexpected event type');
-        return { success: true };
+        return await reply.ok({});
       }
 
       request.log.info(
@@ -123,7 +122,7 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      return { success: true };
+      return await reply.ok({});
     }
   );
 

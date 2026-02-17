@@ -3,30 +3,31 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  Trash2,
+  AlertCircle,
   ChevronDown,
   ChevronUp,
-  Clock,
-  ExternalLink,
-  MapPin,
-  RefreshCw,
-  Users,
-  AlertCircle,
-  X,
 } from 'lucide-react';
-import { Button, Card, Layout, RefreshIndicator } from '@/components';
+import { Button, Layout } from '@/components';
+import { useAuth } from '@/context';
 import { useCalendarEvents, useFailedCalendarEvents } from '@/hooks';
-import type { CalendarEvent, CalendarEventDateTime, FailedCalendarEvent } from '@/types';
-import { getCurrentWeekRange } from '@/utils';
+import { deleteFailedEvent, retryFailedEvent } from '@/services/calendarApi.js';
+import { getErrorMessage } from '@intexuraos/common-core/errors';
+import type { CalendarEvent, FailedCalendarEvent } from '@/types';
+import { formatTime, formatMonthYear } from '@/utils/dateFormat';
+import {
+  getCurrentMonthRange,
+  getMonthRange,
+  getCalendarDays,
+  isToday,
+  stripHtmlTags,
+  type MonthRange,
+} from '@/utils';
 
-function formatTimeOnly(dt: CalendarEventDateTime): string {
-  if (dt.dateTime !== undefined) {
-    return new Date(dt.dateTime).toLocaleTimeString(undefined, {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-  return 'All day';
-}
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function isAllDayEvent(event: CalendarEvent): boolean {
   return event.start.date !== undefined;
@@ -42,38 +43,16 @@ function getEventDate(event: CalendarEvent): Date {
   return new Date();
 }
 
-function formatWeekRange(start: Date, end: Date): string {
-  const startStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const lastDayOfWeek = new Date(end);
-  lastDayOfWeek.setDate(lastDayOfWeek.getDate() - 1);
-  const endStr = lastDayOfWeek.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  return `${startStr} - ${endStr}`;
-}
-
-function groupEventsByDate(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
-  const grouped = new Map<string, CalendarEvent[]>();
-  for (const event of events) {
-    const date = getEventDate(event);
-    const dateKey = date.toDateString();
-    const existing = grouped.get(dateKey);
-    if (existing !== undefined) {
-      existing.push(event);
-    } else {
-      grouped.set(dateKey, [event]);
-    }
-  }
-  return grouped;
-}
-
-interface EventRowProps {
+interface EventChipProps {
   event: CalendarEvent;
 }
 
-function EventRow({ event }: EventRowProps): React.JSX.Element {
+function EventChip({ event }: EventChipProps): React.JSX.Element {
   const allDay = isAllDayEvent(event);
   const hasLink = event.htmlLink !== undefined;
 
-  const handleClick = (): void => {
+  const handleClick = (e: React.MouseEvent): void => {
+    e.stopPropagation();
     if (hasLink) {
       window.open(event.htmlLink, '_blank', 'noopener,noreferrer');
     }
@@ -87,51 +66,137 @@ function EventRow({ event }: EventRowProps): React.JSX.Element {
       onKeyDown={(e) => {
         if (hasLink && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
-          handleClick();
+          handleClick(e as unknown as React.MouseEvent);
         }
       }}
-      className={`flex gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:bg-slate-50 ${hasLink ? 'cursor-pointer' : ''}`}
+      className={`group mb-0.5 flex items-center gap-1 truncate rounded px-1 py-0.5 text-xs ${
+        allDay
+          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300'
+          : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
+      } ${hasLink ? 'cursor-pointer' : ''}`}
+      title={`${event.summary}${event.location !== undefined ? ` • ${event.location}` : ''}`}
     >
-      <div className="flex w-20 shrink-0 flex-col items-center justify-center rounded-lg bg-blue-50 p-2 text-center">
-        <Clock className="mb-1 h-4 w-4 text-blue-600" />
-        <span className="text-xs font-medium text-blue-700">
-          {allDay ? 'All day' : formatTimeOnly(event.start)}
+      {!allDay && (
+        <span className="shrink-0 text-slate-500 dark:text-slate-400">
+          {formatTime(event.start.dateTime ?? undefined, false).replace(' ', '')}
         </span>
-        {!allDay && (
-          <span className="text-xs text-blue-500">
-            {formatTimeOnly(event.end)}
-          </span>
+      )}
+      <span className="truncate">{event.summary}</span>
+      {hasLink && (
+        <ExternalLink className="hidden h-3 w-3 shrink-0 text-slate-400 group-hover:block dark:text-slate-500" />
+      )}
+    </div>
+  );
+}
+
+interface DayCellProps {
+  date: Date;
+  events: CalendarEvent[];
+  isCurrentMonth: boolean;
+}
+
+function DayCell({ date, events, isCurrentMonth }: DayCellProps): React.JSX.Element {
+  const [showAll, setShowAll] = useState(false);
+  const today = isToday(date);
+  const maxVisible = 3;
+  const hasMore = events.length > maxVisible;
+  const visibleEvents = showAll ? events : events.slice(0, maxVisible);
+
+  return (
+    <div
+      className={`min-h-24 border-b border-r border-slate-200 p-1 dark:border-slate-700 ${
+        isCurrentMonth ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'
+      }`}
+    >
+      <div className="mb-1 flex items-center justify-between">
+        <span
+          className={`flex h-6 w-6 items-center justify-center rounded-full text-sm ${
+            today
+              ? 'bg-blue-600 font-semibold text-white'
+              : isCurrentMonth
+                ? 'text-slate-900 dark:text-slate-100'
+                : 'text-slate-400 dark:text-slate-500'
+          }`}
+        >
+          {date.getDate()}
+        </span>
+        {hasMore && !showAll && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowAll(true);
+            }}
+            className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            +{events.length - maxVisible}
+          </button>
+        )}
+        {showAll && hasMore && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowAll(false);
+            }}
+            className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+          >
+            less
+          </button>
         )}
       </div>
+      <div className="space-y-0">
+        {visibleEvents.map((event) => (
+          <EventChip key={event.id} event={event} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-medium text-slate-900">{event.summary}</h3>
-          {hasLink && (
-            <span className="shrink-0 rounded p-1 text-slate-400">
-              <ExternalLink className="h-4 w-4" />
-            </span>
-          )}
-        </div>
+interface CalendarGridProps {
+  range: MonthRange;
+  events: CalendarEvent[];
+}
 
-        {event.description !== undefined && event.description !== '' && (
-          <p className="mt-1 line-clamp-2 text-sm text-slate-500">{event.description}</p>
-        )}
+function CalendarGrid({ range, events }: CalendarGridProps): React.JSX.Element {
+  const days = getCalendarDays(range);
 
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-          {event.location !== undefined && event.location !== '' && (
-            <span className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              {event.location}
-            </span>
-          )}
-          {event.attendees !== undefined && event.attendees.length > 0 && (
-            <span className="flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              {event.attendees.length} attendee{event.attendees.length !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
+  const eventsByDate = new Map<string, CalendarEvent[]>();
+  for (const event of events) {
+    const date = getEventDate(event);
+    const key = date.toDateString();
+    const existing = eventsByDate.get(key);
+    if (existing !== undefined) {
+      existing.push(event);
+    } else {
+      eventsByDate.set(key, [event]);
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border-l border-t border-slate-200 dark:border-slate-700">
+      <div className="grid grid-cols-7 bg-slate-100 dark:bg-slate-700">
+        {WEEKDAYS.map((day) => (
+          <div
+            key={day}
+            className="border-b border-r border-slate-200 px-2 py-2 text-center text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
+          >
+            {day}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {days.map((day) => {
+          const dayEvents = eventsByDate.get(day.toDateString()) ?? [];
+          const isCurrentMonth = day.getMonth() === range.month;
+          return (
+            <DayCell
+              key={day.toISOString()}
+              date={day}
+              events={dayEvents}
+              isCurrentMonth={isCurrentMonth}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -139,47 +204,78 @@ function EventRow({ event }: EventRowProps): React.JSX.Element {
 
 interface FailedEventCardProps {
   event: FailedCalendarEvent;
-  onDismiss: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  onRetry: (id: string) => Promise<void>;
+  isDeleting: boolean;
+  isRetrying: boolean;
 }
 
-function FailedEventCard({ event, onDismiss }: FailedEventCardProps): React.JSX.Element {
+function FailedEventCard({
+  event,
+  onDelete,
+  onRetry,
+  isDeleting,
+  isRetrying,
+}: FailedEventCardProps): React.JSX.Element {
   return (
-    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-      <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600">
+    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/30">
+      <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400">
         <AlertCircle className="h-4 w-4" />
       </div>
 
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-start justify-between gap-2">
-          <h4 className="font-medium text-amber-900">
+          <h4 className="font-medium text-amber-900 dark:text-amber-200">
             {event.summary ?? 'Untitled event'}
           </h4>
-          <button
-            type="button"
-            onClick={() => {
-              onDismiss(event.id);
-            }}
-            className="shrink-0 rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-amber-600"
-            aria-label="Dismiss"
-          >
-            <X className="h-3 w-3" />
-          </button>
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => void onRetry(event.id)}
+              disabled={isRetrying || isDeleting}
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-amber-900/50 dark:hover:text-blue-400"
+              aria-label="Retry"
+              title="Retry creating event"
+            >
+              {isRetrying ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => void onDelete(event.id)}
+              disabled={isDeleting || isRetrying}
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-red-600 disabled:opacity-50 dark:hover:bg-amber-900/50 dark:hover:text-red-400"
+              aria-label="Delete"
+              title="Delete failed event"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+            </button>
+          </div>
         </div>
 
         {event.description !== null && event.description !== '' && (
-          <p className="mb-2 line-clamp-2 text-sm text-amber-700">{event.description}</p>
+          <p className="mb-2 line-clamp-2 text-sm text-amber-700 dark:text-amber-300">
+            {stripHtmlTags(event.description)}
+          </p>
         )}
 
-        <div className="mb-2 rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800">
+        <div className="mb-2 rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
           <span className="font-medium">Issue:</span> {event.error}
         </div>
 
-        <div className="text-xs text-amber-600">
+        <div className="text-xs text-amber-600 dark:text-amber-400">
           <span className="font-medium">Original text:</span> "{event.originalText}"
         </div>
 
         {event.reasoning !== null && (
-          <div className="mt-1 text-xs text-amber-600">
+          <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
             <span className="font-medium">Reasoning:</span> {event.reasoning}
           </div>
         )}
@@ -190,12 +286,18 @@ function FailedEventCard({ event, onDismiss }: FailedEventCardProps): React.JSX.
 
 interface NeedsAttentionSectionProps {
   events: FailedCalendarEvent[];
-  onDismiss: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  onRetry: (id: string) => Promise<void>;
+  deletingId: string | null;
+  retryingId: string | null;
 }
 
 function NeedsAttentionSection({
   events,
-  onDismiss,
+  onDelete,
+  onRetry,
+  deletingId,
+  retryingId,
 }: NeedsAttentionSectionProps): React.JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   const visibleCount = expanded ? events.length : Math.min(events.length, 3);
@@ -205,11 +307,11 @@ function NeedsAttentionSection({
   }
 
   return (
-    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/30">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 text-amber-600" />
-          <h3 className="font-semibold text-amber-900">
+          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <h3 className="font-semibold text-amber-900 dark:text-amber-200">
             Needs Attention ({events.length})
           </h3>
         </div>
@@ -221,7 +323,7 @@ function NeedsAttentionSection({
             onClick={() => {
               setExpanded(!expanded);
             }}
-            className="text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+            className="text-amber-700 hover:bg-amber-100 hover:text-amber-900 dark:text-amber-300 dark:hover:bg-amber-900/50 dark:hover:text-amber-200"
           >
             {expanded ? (
               <>
@@ -238,47 +340,20 @@ function NeedsAttentionSection({
         )}
       </div>
 
-      <p className="mb-4 text-sm text-amber-700">
+      <p className="mb-4 text-sm text-amber-700 dark:text-amber-300">
         These events couldn't be created. Please edit them and try again.
       </p>
 
       <div className="space-y-2">
         {events.slice(0, visibleCount).map((event) => (
-          <FailedEventCard key={event.id} event={event} onDismiss={onDismiss} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-interface DateGroupProps {
-  date: string;
-  events: CalendarEvent[];
-}
-
-function DateGroup({ date, events }: DateGroupProps): React.JSX.Element {
-  const dateObj = new Date(date);
-  const isToday = new Date().toDateString() === date;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <h3 className={`text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-slate-700'}`}>
-          {dateObj.toLocaleDateString(undefined, {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </h3>
-        {isToday && (
-          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-            Today
-          </span>
-        )}
-      </div>
-      <div className="space-y-2">
-        {events.map((event) => (
-          <EventRow key={event.id} event={event} />
+          <FailedEventCard
+            key={event.id}
+            event={event}
+            onDelete={onDelete}
+            onRetry={onRetry}
+            isDeleting={deletingId === event.id}
+            isRetrying={retryingId === event.id}
+          />
         ))}
       </div>
     </div>
@@ -286,50 +361,51 @@ function DateGroup({ date, events }: DateGroupProps): React.JSX.Element {
 }
 
 export function CalendarPage(): React.JSX.Element {
-  const { events, loading, refreshing, error, filters, setFilters, refresh } = useCalendarEvents();
+  const { getAccessToken } = useAuth();
+  const [monthRange, setMonthRange] = useState<MonthRange>(getCurrentMonthRange());
+  const { events, loading, error, setFilters, refresh } = useCalendarEvents({
+    timeMin: monthRange.start.toISOString(),
+    timeMax: monthRange.end.toISOString(),
+  });
   const {
     events: failedEvents,
     loading: failedEventsLoading,
     refresh: refreshFailedEvents,
   } = useFailedCalendarEvents();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-  const [dismissedFailedEventIds, setDismissedFailedEventIds] = useState<Set<string>>(new Set());
+  const [deletingFailedEventId, setDeletingFailedEventId] = useState<string | null>(null);
+  const [retryingFailedEventId, setRetryingFailedEventId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const currentStart = filters.timeMin !== undefined ? new Date(filters.timeMin) : new Date();
-  const currentEnd = filters.timeMax !== undefined ? new Date(filters.timeMax) : new Date();
-
-  const handlePrevWeek = (): void => {
-    const newStart = new Date(currentStart);
-    newStart.setDate(newStart.getDate() - 7);
-    const newEnd = new Date(newStart);
-    newEnd.setDate(newStart.getDate() + 7);
-
+  const handlePrevMonth = (): void => {
+    const newMonth = monthRange.month === 0 ? 11 : monthRange.month - 1;
+    const newYear = monthRange.month === 0 ? monthRange.year - 1 : monthRange.year;
+    const newRange = getMonthRange(newYear, newMonth);
+    setMonthRange(newRange);
     setFilters({
-      ...filters,
-      timeMin: newStart.toISOString(),
-      timeMax: newEnd.toISOString(),
+      timeMin: newRange.start.toISOString(),
+      timeMax: newRange.end.toISOString(),
     });
   };
 
-  const handleNextWeek = (): void => {
-    const newStart = new Date(currentStart);
-    newStart.setDate(newStart.getDate() + 7);
-    const newEnd = new Date(newStart);
-    newEnd.setDate(newStart.getDate() + 7);
-
+  const handleNextMonth = (): void => {
+    const newMonth = monthRange.month === 11 ? 0 : monthRange.month + 1;
+    const newYear = monthRange.month === 11 ? monthRange.year + 1 : monthRange.year;
+    const newRange = getMonthRange(newYear, newMonth);
+    setMonthRange(newRange);
     setFilters({
-      ...filters,
-      timeMin: newStart.toISOString(),
-      timeMax: newEnd.toISOString(),
+      timeMin: newRange.start.toISOString(),
+      timeMax: newRange.end.toISOString(),
     });
   };
 
   const handleToday = (): void => {
-    const { start, end } = getCurrentWeekRange();
+    const newRange = getCurrentMonthRange();
+    setMonthRange(newRange);
     setFilters({
-      ...filters,
-      timeMin: start.toISOString(),
-      timeMax: end.toISOString(),
+      timeMin: newRange.start.toISOString(),
+      timeMax: newRange.end.toISOString(),
     });
   };
 
@@ -342,18 +418,41 @@ export function CalendarPage(): React.JSX.Element {
     }
   };
 
-  const handleDismissFailedEvent = (id: string): void => {
-    setDismissedFailedEventIds((prev) => new Set([...prev, id]));
+  const handleDeleteFailedEvent = async (id: string): Promise<void> => {
+    try {
+      setDeletingFailedEventId(id);
+      setActionError(null);
+      const token = await getAccessToken();
+      await deleteFailedEvent(token, id);
+      await refreshFailedEvents();
+      setSuccessMessage('Successfully discarded event');
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
+    } catch (e) {
+      setActionError(getErrorMessage(e, 'Unable to delete event'));
+    } finally {
+      setDeletingFailedEventId(null);
+    }
   };
 
-  const visibleFailedEvents = failedEvents.filter(
-    (event) => !dismissedFailedEventIds.has(event.id)
-  );
-
-  const groupedEvents = groupEventsByDate(events);
-  const sortedDates = Array.from(groupedEvents.keys()).sort(
-    (a, b) => new Date(a).getTime() - new Date(b).getTime()
-  );
+  const handleRetryFailedEvent = async (id: string): Promise<void> => {
+    try {
+      setRetryingFailedEventId(id);
+      setActionError(null);
+      const token = await getAccessToken();
+      await retryFailedEvent(token, id);
+      await Promise.all([refreshFailedEvents(), refresh()]);
+      setSuccessMessage('Event created successfully');
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
+    } catch (e) {
+      setActionError(getErrorMessage(e, 'Failed to retry event creation'));
+    } finally {
+      setRetryingFailedEventId(null);
+    }
+  };
 
   if (loading && failedEventsLoading && events.length === 0) {
     return (
@@ -369,73 +468,69 @@ export function CalendarPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Calendar</h2>
-          <p className="text-slate-600">Events from your connected Google Calendar.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Calendar</h2>
+          <p className="text-slate-600 dark:text-slate-300">Events from your connected Google Calendar.</p>
         </div>
         <button
           onClick={(): void => {
             void handleRefresh();
           }}
           disabled={isManualRefreshing}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           title="Refresh"
         >
           <RefreshCw className={`h-5 w-5 ${isManualRefreshing ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      <RefreshIndicator show={refreshing || isManualRefreshing} />
+      {successMessage !== null && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
+          {successMessage}
+        </div>
+      )}
+
+      {actionError !== null && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
+          {actionError}
+        </div>
+      )}
 
       <NeedsAttentionSection
-        events={visibleFailedEvents}
-        onDismiss={handleDismissFailedEvent}
+        events={failedEvents}
+        onDelete={handleDeleteFailedEvent}
+        onRetry={handleRetryFailedEvent}
+        deletingId={deletingFailedEventId}
+        retryingId={retryingFailedEventId}
       />
 
-      <div className="mb-6 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4">
-        <Button type="button" variant="ghost" size="sm" onClick={handlePrevWeek}>
+      <div className="mb-6 flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+        <Button type="button" variant="ghost" size="sm" onClick={handlePrevMonth}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
         <div className="flex items-center gap-3">
-          <CalendarIcon className="h-5 w-5 text-slate-500" />
-          <span className="font-medium text-slate-700">
-            {formatWeekRange(currentStart, currentEnd)}
+          <CalendarIcon className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+          <span className="min-w-36 text-center font-medium text-slate-700 dark:text-slate-200">
+            {formatMonthYear(monthRange.year, monthRange.month)}
           </span>
-          <Button type="button" variant="secondary" size="sm" onClick={handleToday}>
-            Today
-          </Button>
         </div>
 
-        <Button type="button" variant="ghost" size="sm" onClick={handleNextWeek}>
+        <Button type="button" variant="ghost" size="sm" onClick={handleNextMonth}>
           <ChevronRight className="h-4 w-4" />
+        </Button>
+
+        <Button type="button" variant="secondary" size="sm" onClick={handleToday} className="ml-4">
+          Today
         </Button>
       </div>
 
       {error !== null && error !== '' && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       )}
 
-      {events.length === 0 ? (
-        <Card>
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <CalendarIcon className="mb-4 h-12 w-12 text-slate-300" />
-            <h3 className="mb-2 text-lg font-medium text-slate-900">No events this week</h3>
-            <p className="mb-4 text-slate-500">
-              Your calendar is clear for the selected time range.
-            </p>
-          </div>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {sortedDates.map((dateKey) => {
-            const dateEvents = groupedEvents.get(dateKey);
-            if (dateEvents === undefined) return null;
-            return <DateGroup key={dateKey} date={dateKey} events={dateEvents} />;
-          })}
-        </div>
-      )}
+      <CalendarGrid range={monthRange} events={events} />
     </Layout>
   );
 }

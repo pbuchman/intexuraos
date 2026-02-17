@@ -37,7 +37,7 @@ pnpm run test -- packages
 pnpm run test -- packages/common-core
 
 # Run tests with coverage
-ppnpm run test:coverage
+pnpm run test:coverage
 ```
 
 ### Test Patterns

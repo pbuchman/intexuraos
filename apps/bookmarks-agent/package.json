@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/bookmarks-agent",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,7 +9,9 @@
   "scripts": {
     "build": "node ../../scripts/build-service.mjs bookmarks-agent",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -24,17 +26,18 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
-    "@intexuraos/infra-sentry": "workspace:*",
     "fastify": "^5.1.0",
     "pino": "^10.1.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^2.1.8",
-    "vitest": "^2.1.8"
+    "@vitest/coverage-v8": "^4.0.16",
+    "vitest": "^4.0.16"
   }
 }

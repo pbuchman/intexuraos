@@ -8,13 +8,6 @@ resource "google_service_account" "user_service" {
   description  = "Service account for user-service Cloud Run deployment"
 }
 
-# Service account for promptvault-service
-resource "google_service_account" "promptvault_service" {
-  account_id   = "intexuraos-pv-svc-${var.environment}"
-  display_name = "IntexuraOS PromptVault Service (${var.environment})"
-  description  = "Service account for promptvault-service Cloud Run deployment"
-}
-
 # Service account for notion-service
 resource "google_service_account" "notion_service" {
   account_id   = "intexuraos-notion-svc-${var.environment}"
@@ -106,6 +99,13 @@ resource "google_service_account" "bookmarks_agent" {
   description  = "Service account for bookmarks-agent Cloud Run deployment"
 }
 
+# Service account for code-agent
+resource "google_service_account" "code_agent" {
+  account_id   = "intexuraos-code-${var.environment}"
+  display_name = "IntexuraOS Code Agent (${var.environment})"
+  description  = "Service account for code-agent Cloud Run deployment"
+}
+
 # Service account for calendar-agent
 resource "google_service_account" "calendar_agent" {
   account_id   = "intexuraos-calendar-${var.environment}"
@@ -127,6 +127,13 @@ resource "google_service_account" "linear_agent" {
   description  = "Service account for linear-agent Cloud Run deployment"
 }
 
+# Service account for chat-agent
+resource "google_service_account" "chat_agent" {
+  account_id   = "intexuraos-chat-${var.environment}"
+  display_name = "IntexuraOS Chat Agent (${var.environment})"
+  description  = "Service account for chat-agent Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -135,15 +142,6 @@ resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.user_service.email}"
-}
-
-# PromptVault service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "promptvault_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.promptvault_service.email}"
 }
 
 # Notion service: Secret Manager access
@@ -281,6 +279,24 @@ resource "google_secret_manager_secret_iam_member" "linear_agent_secrets" {
   member    = "serviceAccount:${google_service_account.linear_agent.email}"
 }
 
+# Code Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "code_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.code_agent.email}"
+}
+
+# Chat Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "chat_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.chat_agent.email}"
+}
+
 # API Docs Hub: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "api_docs_hub_secrets" {
   for_each = var.secret_ids
@@ -290,13 +306,6 @@ resource "google_secret_manager_secret_iam_member" "api_docs_hub_secrets" {
   member    = "serviceAccount:${google_service_account.api_docs_hub.email}"
 }
 
-
-# PromptVault service: Firestore access
-resource "google_project_iam_member" "promptvault_service_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.promptvault_service.email}"
-}
 
 # Notion service: Firestore access
 resource "google_project_iam_member" "notion_service_firestore" {
@@ -417,18 +426,26 @@ resource "google_project_iam_member" "calendar_agent_firestore" {
   member  = "serviceAccount:${google_service_account.calendar_agent.email}"
 }
 
+# Code Agent: Firestore access
+resource "google_project_iam_member" "code_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.code_agent.email}"
+}
+
+# Chat Agent: Firestore access
+resource "google_project_iam_member" "chat_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.chat_agent.email}"
+}
+
 
 # All services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "user_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.user_service.email}"
-}
-
-resource "google_project_iam_member" "promptvault_service_logging" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.promptvault_service.email}"
 }
 
 # Notion service: Cloud Logging
@@ -548,4 +565,18 @@ resource "google_project_iam_member" "linear_agent_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.linear_agent.email}"
+}
+
+# Code Agent: Cloud Logging
+resource "google_project_iam_member" "code_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.code_agent.email}"
+}
+
+# Chat Agent: Cloud Logging
+resource "google_project_iam_member" "chat_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.chat_agent.email}"
 }

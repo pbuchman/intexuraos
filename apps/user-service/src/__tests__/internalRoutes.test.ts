@@ -106,8 +106,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when internal auth token is wrong', async () => {
@@ -122,8 +122,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns null for all providers when no keys configured', async () => {
@@ -139,17 +139,20 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        google: string | null;
-        openai: string | null;
-        anthropic: string | null;
-        perplexity: string | null;
-        zai: string | null;
+        success: boolean;
+        data: {
+          google: string | null;
+          openai: string | null;
+          anthropic: string | null;
+          perplexity: string | null;
+          zai: string | null;
+        };
       };
-      expect(body.google).toBeNull();
-      expect(body.openai).toBeNull();
-      expect(body.anthropic).toBeNull();
-      expect(body.perplexity).toBeNull();
-      expect(body.zai).toBeNull();
+      expect(body.data.google).toBeNull();
+      expect(body.data.openai).toBeNull();
+      expect(body.data.anthropic).toBeNull();
+      expect(body.data.perplexity).toBeNull();
+      expect(body.data.zai).toBeNull();
     });
 
     it('returns decrypted keys for configured providers', async () => {
@@ -185,17 +188,20 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        google: string | null;
-        openai: string | null;
-        anthropic: string | null;
-        perplexity: string | null;
-        zai: string | null;
+        success: boolean;
+        data: {
+          google: string | null;
+          openai: string | null;
+          anthropic: string | null;
+          perplexity: string | null;
+          zai: string | null;
+        };
       };
-      expect(body.google).toBe(googleKey);
-      expect(body.openai).toBeNull();
-      expect(body.anthropic).toBe(anthropicKey);
-      expect(body.perplexity).toBeNull();
-      expect(body.zai).toBe(zaiKey);
+      expect(body.data.google).toBe(googleKey);
+      expect(body.data.openai).toBeNull();
+      expect(body.data.anthropic).toBe(anthropicKey);
+      expect(body.data.perplexity).toBeNull();
+      expect(body.data.zai).toBe(zaiKey);
     });
 
     it('returns empty when repository fails', async () => {
@@ -213,13 +219,20 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        google: string | null;
-        openai: string | null;
-        anthropic: string | null;
+        success: boolean;
+        data: {
+          google: string | null;
+          openai: string | null;
+          anthropic: string | null;
+          perplexity: string | null;
+          zai: string | null;
+        };
       };
-      expect(body.google).toBeNull();
-      expect(body.openai).toBeNull();
-      expect(body.anthropic).toBeNull();
+      expect(body.data.google).toBeNull();
+      expect(body.data.openai).toBeNull();
+      expect(body.data.anthropic).toBeNull();
+      expect(body.data.perplexity).toBeNull();
+      expect(body.data.zai).toBeNull();
     });
 
     it('returns 401 when INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured', async () => {
@@ -266,12 +279,15 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        google: string | null;
-        openai: string | null;
-        anthropic: string | null;
+        success: boolean;
+        data: {
+          google: string | null;
+          openai: string | null;
+          anthropic: string | null;
+        };
       };
       // Google key should be null due to decryption failure
-      expect(body.google).toBeNull();
+      expect(body.data.google).toBeNull();
     });
   });
 
@@ -285,8 +301,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('updates llm last used timestamp for valid request', async () => {
@@ -315,8 +331,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when internal auth token is wrong', async () => {
@@ -354,9 +370,9 @@ describe('Internal Routes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string; code: string };
-      expect(body.code).toBe('CONFIGURATION_ERROR');
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.code).toBe('MISCONFIGURED');
     });
 
     it('returns 404 when no connection exists', async () => {
@@ -371,8 +387,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(404);
-      const body = JSON.parse(response.body) as { error: string; code: string };
-      expect(body.code).toBe('CONNECTION_NOT_FOUND');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.code).toBe('NOT_FOUND');
     });
 
     it('returns valid access token when connection exists and token is fresh', async () => {
@@ -402,9 +418,12 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { accessToken: string; email: string };
-      expect(body.accessToken).toBe('valid-access-token');
-      expect(body.email).toBe('user@example.com');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { accessToken: string; email: string };
+      };
+      expect(body.data.accessToken).toBe('valid-access-token');
+      expect(body.data.email).toBe('user@example.com');
     });
 
     it('refreshes token when expired and returns new token', async () => {
@@ -434,8 +453,11 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { accessToken: string; email: string };
-      expect(body.accessToken).toBe('new-fake-access-token');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { accessToken: string; email: string };
+      };
+      expect(body.data.accessToken).toBe('new-fake-access-token');
     });
 
     it('returns 500 when refresh fails', async () => {
@@ -465,9 +487,9 @@ describe('Internal Routes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { code: string };
-      expect(body.code).toBe('TOKEN_REFRESH_FAILED');
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
 
     it('returns 404 and deletes connection when refresh returns invalid_grant', async () => {
@@ -502,8 +524,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(404);
-      const body = JSON.parse(response.body) as { code: string };
-      expect(body.code).toBe('CONNECTION_NOT_FOUND');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.code).toBe('NOT_FOUND');
 
       const connection = fakeOAuthRepo.getStoredConnection(userId, 'google');
       expect(connection).toBeUndefined();
@@ -522,9 +544,9 @@ describe('Internal Routes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { code: string };
-      expect(body.code).toBe('INTERNAL_ERROR');
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
 
     it('still returns token when updateTokens fails after refresh', async () => {
@@ -555,9 +577,12 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { accessToken: string; email: string };
-      expect(body.accessToken).toBe('new-fake-access-token');
-      expect(body.email).toBe('user@example.com');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { accessToken: string; email: string };
+      };
+      expect(body.data.accessToken).toBe('new-fake-access-token');
+      expect(body.data.email).toBe('user@example.com');
     });
 
     it('uses existing refreshToken and scope when refresh does not return them', async () => {
@@ -591,8 +616,11 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { accessToken: string; email: string };
-      expect(body.accessToken).toBe('new-access-from-partial-refresh');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { accessToken: string; email: string };
+      };
+      expect(body.data.accessToken).toBe('new-access-from-partial-refresh');
 
       const updatedConnection = fakeOAuthRepo.getStoredConnection(userId, 'google');
       expect(updatedConnection?.tokens.refreshToken).toBe('original-refresh-token');
@@ -610,8 +638,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when internal auth header is invalid', async () => {
@@ -626,8 +654,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns user llmPreferences when valid auth header', async () => {
@@ -653,9 +681,12 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        llmPreferences?: { defaultModel: string };
+        success: boolean;
+        data: {
+          llmPreferences?: { defaultModel: string };
+        };
       };
-      expect(body.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(body.data.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
     });
 
     it('returns undefined llmPreferences when user has no settings', async () => {
@@ -674,9 +705,12 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        llmPreferences?: { defaultModel: string };
+        success: boolean;
+        data: {
+          llmPreferences?: { defaultModel: string };
+        };
       };
-      expect(body.llmPreferences).toBeUndefined();
+      expect(body.data.llmPreferences).toBeUndefined();
     });
 
     it('returns undefined llmPreferences when repository errors', async () => {
@@ -695,9 +729,12 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        llmPreferences?: { defaultModel: string };
+        success: boolean;
+        data: {
+          llmPreferences?: { defaultModel: string };
+        };
       };
-      expect(body.llmPreferences).toBeUndefined();
+      expect(body.data.llmPreferences).toBeUndefined();
     });
   });
 });

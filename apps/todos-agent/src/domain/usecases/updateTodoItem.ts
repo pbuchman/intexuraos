@@ -13,10 +13,11 @@ export interface UpdateTodoItemDeps {
 }
 
 function computeTodoStatus(items: TodoItem[]): 'pending' | 'in_progress' | 'completed' {
-  /* istanbul ignore next -- unreachable: called only when updating existing item, so items.length >= 1 */
+  /* v8 ignore start -- test-infra: called only when updating existing item, so items.length >= 1 @preserve */
   if (items.length === 0) {
     return 'pending';
   }
+  /* v8 ignore stop @preserve */
 
   const allCompleted = items.every((item) => item.status === 'completed');
   if (allCompleted) {
@@ -63,10 +64,11 @@ export async function updateTodoItem(
   }
 
   const existingItem = todo.items[itemIndex];
-  /* istanbul ignore next -- defensive: itemIndex validated above, noUncheckedIndexedAccess requires this check */
+  /* v8 ignore start -- ts-type: findIndex check on line 62 guarantees existingItem exists @preserve */
   if (existingItem === undefined) {
     return { ok: false, error: { code: 'NOT_FOUND', message: 'Item not found' } };
   }
+  /* v8 ignore stop @preserve */
 
   const now = new Date();
   const isCompletingItem = input.status === 'completed' && existingItem.status !== 'completed';
@@ -116,3 +118,5 @@ export async function updateTodoItem(
 
   return result;
 }
+
+

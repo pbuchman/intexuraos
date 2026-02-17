@@ -51,7 +51,7 @@ describe('OAuth2 Routes', () => {
         });
 
         expect(response.statusCode).toBe(400);
-        const body = JSON.parse(response.body) as { error: string };
+        const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
         expect(body.error).toBe('server_error');
       });
     });
@@ -256,7 +256,7 @@ describe('OAuth2 Routes', () => {
         });
 
         expect(response.statusCode).toBe(400);
-        const body = JSON.parse(response.body) as { error: string };
+        const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
         expect(body.error).toBe('invalid_grant');
       });
 
@@ -405,7 +405,7 @@ describe('OAuth2 Routes', () => {
         });
 
         expect(response.statusCode).toBe(400);
-        const body = JSON.parse(response.body) as { error: string };
+        const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
         expect(body.error).toBe('server_error');
       });
     });

@@ -57,9 +57,6 @@ cloudbuild.dynamic.json
 
 speechmatics-js-sdk/
 
-# Local Firestore export data
-data/firestore-export/
-
 # Firestore rules (deployed via firebase deploy)
 # firestore.indexes.json - tracked in git for version control
 firestore.rules
@@ -77,3 +74,11 @@ CLAUDE.md
 
 .playwright-mcp/
 
+# Hook logs (for analyzing false positives)
+.claude/hooks/*.log
+
+# CI failure tracking (local analysis only)
+.claude/ci-failures/*.jsonl
+
+.claude/hooks/commands.log
+.claude/hooks/__tests__/fixtures/temp-files/

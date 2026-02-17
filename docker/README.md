@@ -2,64 +2,89 @@
 
 Container configurations for local development.
 
-## Quick Start (Recommended)
+## Overview
 
-The easiest way to run all services locally with hot-reload:
+Local development uses a **Pub/Sub emulator** for message isolation. All other GCP services (Firestore, Google Cloud Storage) use **real GCP** via Application Default Credentials (ADC).
 
-```bash
-# Start everything (emulators + all 7 services with hot-reload)
-pnpm run dev
+This setup provides:
 
-# Start only emulators (if you want to run services manually)
-ppnpm run dev:emulators
-```
+- **Isolated messaging**: Pub/Sub messages stay local, preventing cross-contamination with production
+- **Real data**: Firestore and GCS use actual cloud resources for realistic testing
+- **Simple onboarding**: No large data syncs or complex multi-emulator orchestration
 
-This starts:
-
-- Firebase Emulator (Firestore + Pub/Sub)
-- Fake GCS Server
-- All 7 services with `node --watch` (instant restart on file changes)
-
-## Emulator Management
+## Quick Start
 
 ```bash
-# Start emulators only
+# Start Pub/Sub emulator
 pnpm run emulators:start
 
-# Stop emulators
+# Stop
 pnpm run emulators:stop
 
-# View emulator logs
+# View logs
 pnpm run emulators:logs
 ```
 
-## Services & Ports
+This starts **2 Docker containers**:
 
-| Service                      | Port | Health Check                 |
-| ---------------------------- | ---- | ---------------------------- |
-| user-service                 | 8110 | http://localhost:8110/health |
-| promptvault-service          | 8111 | http://localhost:8111/health |
-| notion-service               | 8112 | http://localhost:8112/health |
-| whatsapp-service             | 8113 | http://localhost:8113/health |
-| mobile-notifications-service | 8114 | http://localhost:8114/health |
-| api-docs-hub                 | 8115 | http://localhost:8115/docs   |
-| research-agent               | 8116 | http://localhost:8116/health |
+| Service         | Image                                                     | Ports |
+| --------------- | --------------------------------------------------------- | ----- |
+| pubsub-emulator | gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators | 8102  |
+| pubsub-ui       | Built from tools/pubsub-ui                                | 8105  |
 
-### Emulator Ports
+## Pub/Sub Architecture (Local)
 
-| Emulator    | Port | UI/Endpoint                                   |
-| ----------- | ---- | --------------------------------------------- |
-| Firebase UI | 8100 | http://localhost:8100                         |
-| Firestore   | 8101 | (used internally via FIRESTORE_EMULATOR_HOST) |
-| Pub/Sub     | 8102 | (used internally via PUBSUB_EMULATOR_HOST)    |
-| Fake GCS    | 8103 | http://localhost:8103/storage/v1/b            |
+In production, GCP Pub/Sub automatically pushes messages to Cloud Run endpoints. Locally, the **pubsub-ui** container bridges this gap:
 
-## Prerequisites
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
+│  Service        │     │  Pub/Sub     │     │  pubsub-ui  │
+│  (publisher)    │────▶│  Emulator    │────▶│  (bridge)   │
+│                 │     │  :8102       │     │  :8105      │
+└─────────────────┘     └──────────────┘     └──────┬──────┘
+                                                    │ HTTP POST
+                                                    ▼
+                                             ┌─────────────┐
+                                             │  Service    │
+                                             │  (handler)  │
+                                             │  /internal/ │
+                                             └─────────────┘
+```
 
-1. **Docker** - Must be running
-2. **Node 22+** - For `node --watch` support
-3. **direnv** - For environment variable management
-4. **Sync secrets and configure local overrides:**
+**pubsub-ui** performs two functions:
+
+1. **Message forwarding**: Pulls from emulator, POSTs to local service endpoints
+2. **Monitoring dashboard**: Real-time event visualization at http://localhost:8105
+
+### How pubsub-ui works
+
+The bridge reads topic-to-endpoint mappings from `tools/pubsub-ui/topics.json`:
+
+```json
+{
+  "actions-queue": {
+    "endpoint": "http://localhost:8118/internal/actions/process",
+    "description": "Process queued actions"
+  }
+}
+```
+
+When a message is published to `actions-queue`, pubsub-ui:
+
+1. Pulls the message from the emulator
+2. POSTs it to `http://localhost:8118/internal/actions/process`
+3. Acknowledges the message after successful delivery
+
+## Environment Variables
+
+The Docker Compose setup requires two environment variables:
+
+- `INTEXURAOS_INTERNAL_AUTH_TOKEN` - Authenticates forwarded messages to service endpoints
+- `INTEXURAOS_GCP_PROJECT_ID` - GCP project ID for emulator configuration
+
+These are read from the shell environment (via direnv) at `docker compose up` time.
+
+**Setup:**
 
 ```bash
 # Sync secrets from GCP Secret Manager (creates .envrc)
@@ -72,30 +97,58 @@ cp .envrc.local.example .envrc.local
 direnv allow
 ```
 
-The `.envrc.local` file overrides cloud service URLs with localhost URLs for local development.
+## Files
 
-## Docker Compose Files
+| File                               | Purpose                    |
+| ---------------------------------- | -------------------------- |
+| `docker/docker-compose.local.yaml` | Pub/Sub emulator + UI      |
+| `tools/pubsub-ui/`                 | Message bridge source code |
+| `tools/pubsub-ui/topics.json`      | Topic → endpoint mapping   |
 
-| File                        | Purpose                                  |
-| --------------------------- | ---------------------------------------- |
-| `docker-compose.yaml`       | Full containerized services (legacy)     |
-| `docker-compose.local.yaml` | Emulators only (Firestore, Pub/Sub, GCS) |
+## Troubleshooting
 
-## Legacy: Full Docker Build
+### Pub/Sub messages not being processed
 
-If you prefer running services in containers (slower iteration):
+**Symptom:** Actions stay in `pending` status, no processing happens.
+
+**Cause:** The `pubsub-ui` container isn't running.
+
+**Fix:**
 
 ```bash
-docker compose -f docker/docker-compose.yaml up --build
+# Check both containers are running
+docker compose -f docker/docker-compose.local.yaml ps
+
+# If pubsub-ui is missing, restart all:
+docker compose -f docker/docker-compose.local.yaml up -d --build
 ```
 
-## Testing
+### "Topic not found" errors in service logs
 
-Tests use **fake repositories** (in-memory) via dependency injection, so no external services are required:
+**Symptom:** Service logs show `5 NOT_FOUND: Topic not found`.
+
+**Cause:** pubsub-ui creates topics on startup. If services started before pubsub-ui was ready, the topics don't exist yet.
+
+**Fix:** Restart the affected service after pubsub-ui is fully running:
 
 ```bash
-pnpm run test          # Run all tests
-ppnpm run test:coverage # Run with coverage
+pnpm exec pm2 restart actions-agent
+```
+
+### Verifying Pub/Sub is working
+
+```bash
+# 1. Check pubsub-ui health
+curl http://localhost:8105/health | jq '.topics | length'
+# Should return 14
+
+# 2. Publish a test message
+curl -X POST http://localhost:8105/publish \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "actions-queue", "data": {"type": "test"}}'
+
+# 3. Check pubsub-ui logs for forwarding
+docker compose -f docker/docker-compose.local.yaml logs pubsub-ui --tail 10
 ```
 
 ## See Also

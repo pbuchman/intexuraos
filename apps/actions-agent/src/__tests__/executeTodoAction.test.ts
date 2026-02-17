@@ -7,9 +7,8 @@ import {
   FakeTodosServiceClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
-import pino from 'pino';
 
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 describe('executeTodoAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
@@ -42,7 +41,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('non-existent-action');
@@ -65,7 +64,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -86,7 +85,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -114,7 +113,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -140,7 +139,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -169,7 +168,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -200,7 +199,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -225,7 +224,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -250,7 +249,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -273,7 +272,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -305,7 +304,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -332,7 +331,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -356,7 +355,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -377,7 +376,7 @@ describe('executeTodoAction usecase', () => {
       todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');

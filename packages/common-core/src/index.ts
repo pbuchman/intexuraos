@@ -9,7 +9,14 @@
 export { type Result, ok, err, isOk, isErr } from './result.js';
 
 // Error types and codes
-export { type ErrorCode, ERROR_HTTP_STATUS, IntexuraOSError, getErrorMessage } from './errors.js';
+export {
+  type ErrorCode,
+  ERROR_HTTP_STATUS,
+  IntexuraOSError,
+  getErrorMessage,
+  type SerializedError,
+  serializeError,
+} from './errors.js';
 
 // Logger interface for adapters
 export type { Logger } from './logging.js';
@@ -34,3 +41,6 @@ export {
 
 // Service error codes
 export { ServiceErrorCodes, type ServiceErrorCode } from './serviceErrorCodes.js';
+
+// Tracing utilities for distributed tracing
+export * from './tracing/index.js';

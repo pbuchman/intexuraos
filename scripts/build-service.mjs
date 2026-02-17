@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import * as esbuild from 'esbuild';
-import { resolve, dirname } from 'path';
+import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
@@ -14,23 +14,27 @@ if (!service) {
 }
 
 /**
- * Recursively collect all npm dependencies from workspace packages.
- * @intexuraos/* packages are bundled, their npm deps must be external.
+ * Recursively collect all pnpm dependencies from workspace packages.
+ * @intexuraos/* packages are bundled, their pnpm deps must be external.
  */
 function collectExternalDeps(pkgName, visited = new Set()) {
   if (visited.has(pkgName)) return new Set();
   visited.add(pkgName);
 
   if (!pkgName.startsWith('@intexuraos/')) {
-    return new Set(); // npm package - not our concern
+    return new Set(); // pnpm package - not our concern
   }
 
-  // Determine package path - check apps first, then packages
+  // Determine package path - check apps first, then workers, then packages
   const shortName = pkgName.replace('@intexuraos/', '');
   const appPath = resolve(rootDir, `apps/${shortName}/package.json`);
-  const pkgPath = existsSync(appPath)
-    ? appPath
-    : resolve(rootDir, `packages/${shortName}/package.json`);
+  const workerPath = resolve(rootDir, `workers/${shortName}/package.json`);
+  let pkgPath = appPath;
+  if (!existsSync(appPath)) {
+    pkgPath = existsSync(workerPath)
+      ? workerPath
+      : resolve(rootDir, `packages/${shortName}/package.json`);
+  }
 
   if (!existsSync(pkgPath)) return new Set();
 
@@ -44,7 +48,7 @@ function collectExternalDeps(pkgName, visited = new Set()) {
       const subExternals = collectExternalDeps(dep, visited);
       subExternals.forEach((e) => externals.add(e));
     } else {
-      // npm package - must be external
+      // pnpm package - must be external
       externals.add(dep);
     }
   }
@@ -53,7 +57,7 @@ function collectExternalDeps(pkgName, visited = new Set()) {
 }
 
 /**
- * Recursively collect all npm dependencies WITH versions from workspace packages.
+ * Recursively collect all pnpm dependencies WITH versions from workspace packages.
  * Returns a Map of package name -> version for generating production package.json.
  */
 function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
@@ -64,9 +68,13 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
 
   const shortName = pkgName.replace('@intexuraos/', '');
   const appPath = resolve(rootDir, `apps/${shortName}/package.json`);
-  const pkgPath = existsSync(appPath)
-    ? appPath
-    : resolve(rootDir, `packages/${shortName}/package.json`);
+  const workerPath = resolve(rootDir, `workers/${shortName}/package.json`);
+  let pkgPath = appPath;
+  if (!existsSync(appPath)) {
+    pkgPath = existsSync(workerPath)
+      ? workerPath
+      : resolve(rootDir, `packages/${shortName}/package.json`);
+  }
 
   if (!existsSync(pkgPath)) return new Map();
 
@@ -86,16 +94,32 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
   return externals;
 }
 
-// Collect all external npm deps (including transitive from workspace packages)
-const externalPackages = [...collectExternalDeps(`@intexuraos/${service}`)];
+// Collect all external pnpm deps (including transitive from workspace packages)
+const serviceDeps = collectExternalDeps(`@intexuraos/${service}`);
+// Always include infra-otel's deps (OTel preload is built separately for all services)
+const otelDeps = collectExternalDeps('@intexuraos/infra-otel');
+otelDeps.forEach((dep) => serviceDeps.add(dep));
+const externalPackages = [...serviceDeps];
+
+// Detect service directory (apps, workers, or packages)
+let serviceDir;
+if (existsSync(resolve(rootDir, `apps/${service}/src/index.ts`))) {
+  serviceDir = `apps/${service}`;
+} else if (existsSync(resolve(rootDir, `workers/${service}/src/index.ts`))) {
+  serviceDir = `workers/${service}`;
+} else {
+  console.error(`ERROR: Cannot find service entry point for ${service}`);
+  console.error(`  Checked: apps/${service}/src/index.ts, workers/${service}/src/index.ts`);
+  process.exit(1);
+}
 
 const result = await esbuild.build({
-  entryPoints: [resolve(rootDir, `apps/${service}/src/index.ts`)],
+  entryPoints: [resolve(rootDir, `${serviceDir}/src/index.ts`)],
   bundle: true,
   platform: 'node',
   target: 'node22',
   format: 'esm',
-  outfile: resolve(rootDir, `apps/${service}/dist/index.js`),
+  outfile: resolve(rootDir, `${serviceDir}/dist/index.js`),
   external: externalPackages,
   sourcemap: true,
   mainFields: ['module', 'main'],
@@ -104,7 +128,7 @@ const result = await esbuild.build({
   metafile: true,
 });
 
-// Detect npm packages that were bundled instead of marked external.
+// Detect pnpm packages that were bundled instead of marked external.
 // This catches missing dependency declarations that cause runtime errors.
 const bundledNpmPackages = new Set();
 for (const inputPath of Object.keys(result.metafile.inputs)) {
@@ -118,16 +142,19 @@ for (const inputPath of Object.keys(result.metafile.inputs)) {
 }
 
 if (bundledNpmPackages.size > 0) {
-  console.error('\nERROR: npm packages bundled instead of external:');
+  console.error('\nERROR: pnpm packages bundled instead of external:');
   for (const pkg of bundledNpmPackages) {
     console.error(`  - ${pkg}`);
   }
-  console.error(`\nFix: Add missing packages to apps/${service}/package.json dependencies\n`);
+  console.error(`\nFix: Add missing packages to ${serviceDir}/package.json dependencies\n`);
   process.exit(1);
 }
 
-// Generate production package.json with all npm dependencies (including transitive)
+// Generate production package.json with all pnpm dependencies (including transitive)
 const depsWithVersions = collectExternalDepsWithVersions(`@intexuraos/${service}`);
+// Always include infra-otel's deps for the OTel preload module
+const otelDepsWithVersions = collectExternalDepsWithVersions('@intexuraos/infra-otel');
+otelDepsWithVersions.forEach((v, k) => depsWithVersions.set(k, v));
 const prodPackageJson = {
   name: `@intexuraos/${service}-prod`,
   version: '1.0.0',
@@ -136,9 +163,28 @@ const prodPackageJson = {
 };
 
 writeFileSync(
-  resolve(rootDir, `apps/${service}/dist/package.json`),
+  resolve(rootDir, `${serviceDir}/dist/package.json`),
   JSON.stringify(prodPackageJson, null, 2)
 );
+
+// Build OTel preload module (separate entry point for --import flag)
+const otelRegisterPath = resolve(rootDir, 'packages/infra-otel/src/register.ts');
+if (existsSync(otelRegisterPath)) {
+  await esbuild.build({
+    entryPoints: [otelRegisterPath],
+    bundle: true,
+    platform: 'node',
+    target: 'node22',
+    format: 'esm',
+    outfile: resolve(rootDir, `${serviceDir}/dist/otel-register.js`),
+    external: externalPackages,
+    sourcemap: true,
+    mainFields: ['module', 'main'],
+    conditions: ['import', 'node'],
+    absWorkingDir: rootDir,
+  });
+  console.log('Built OTel preload: dist/otel-register.js');
+}
 
 console.log(`Built ${service}`);
 console.log(

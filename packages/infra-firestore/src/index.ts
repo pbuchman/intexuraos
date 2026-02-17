@@ -6,7 +6,13 @@
  */
 
 // Firestore client
-export { getFirestore, resetFirestore, setFirestore, FieldValue } from './firestore.js';
+export {
+  getFirestore,
+  resetFirestore,
+  setFirestore,
+  FieldValue,
+  type Firestore,
+} from './firestore.js';
 
 // Testing utilities
 export {

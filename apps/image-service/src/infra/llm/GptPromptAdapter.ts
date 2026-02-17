@@ -54,7 +54,7 @@ export class GptPromptAdapter implements PromptGenerator {
   }
 }
 
-function mapError(code: string, message: string): PromptGenerationError {
+export function mapError(code: string, message: string): PromptGenerationError {
   switch (code) {
     case 'INVALID_KEY':
       return { code: 'INVALID_KEY', message };

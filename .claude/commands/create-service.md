@@ -1,18 +1,29 @@
 # Create New Service
 
-Create a new backend service in the IntexuraOS monorepo.
+Create a new backend service (app or worker) in the IntexuraOS monorepo.
+
+## Service Types
+
+| Type   | Deploy Target   | Use Case                                        |
+| ------ | --------------- | ----------------------------------------------- |
+| App    | Cloud Run       | Persistent HTTP server, full DI, routes, domain |
+| Worker | Cloud Functions | Event-driven processing, scale-to-zero          |
 
 ## Usage
 
 ```
-/create-service <service-name>
+/create-service <service-name>              # Creates an app (default)
+/create-service <worker-name> --worker      # Creates a worker
 ```
 
-Example: `/create-service web-agent`
+Examples:
+
+- `/create-service web-agent` — Creates a Cloud Run app
+- `/create-service log-cleanup --worker` — Creates a Cloud Function worker
 
 ---
 
-## Required Steps
+## App Creation Steps
 
 ### 1. Create App Directory Structure
 
@@ -84,7 +95,9 @@ Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/tod
   "scripts": {
     "build": "node ../../scripts/build-service.mjs <service-name>",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
@@ -95,6 +108,7 @@ Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/tod
     "@intexuraos/common-http": "*",
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
+    "@intexuraos/infra-otel": "workspace:*",
     "fastify": "^5.1.0",
     "pino": "^10.1.0",
     "zod": "^3.24.1"
@@ -113,15 +127,20 @@ Add service-specific dependencies as needed (e.g., `@google-cloud/pubsub`, `@int
 # Stage 1: Build
 FROM node:22-alpine AS builder
 
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
 WORKDIR /app
 
-# Copy all package.json files
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 COPY package*.json ./
 COPY apps/<service-name>/package*.json ./apps/<service-name>/
-COPY packages/*/package*.json ./packages/
 
+COPY packages/ ./packages/
 # Install dependencies
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 
 # Copy source files
 COPY tsconfig*.json ./
@@ -130,33 +149,42 @@ COPY packages/ ./packages/
 COPY apps/<service-name>/ ./apps/<service-name>/
 
 # Build service (esbuild bundles everything into one file)
-RUN pnpm run --filter @intexuraos/<service-name>
+RUN pnpm run --filter @intexuraos/<service-name> build
 
 # Stage 2: Production
 FROM node:22-alpine
 
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
 WORKDIR /app
+
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/<service-name>/dist/package.json ./
-RUN pnpm install --omit=dev
+RUN CI=true pnpm install --prod --no-frozen-lockfile
 
-# Copy built file
+# Copy built files
 COPY --from=builder /app/apps/<service-name>/dist/index.js ./dist/
 COPY --from=builder /app/apps/<service-name>/dist/index.js.map ./dist/
+COPY --from=builder /app/apps/<service-name>/dist/otel-register.js ./dist/
 
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV OTEL_SERVICE_NAME=<service-name>
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "--import", "./dist/otel-register.js", "dist/index.js"]
 ```
 
-Note: The build script auto-generates `dist/package.json` with all transitive dependencies.
+Note: The build script auto-generates `dist/package.json` with all transitive dependencies. The `otel-register.js` preload bootstraps OpenTelemetry instrumentation before any app code runs (no-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset).
 
 ### 4. Create src/index.ts
 
@@ -482,7 +510,6 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_MEDIUM
 
 timeout: '600s'
 ```
@@ -500,31 +527,11 @@ locals {
 }
 ```
 
-#### 8d. Add to Smart Dispatch
+#### 8d. Terraform Change Detection (Optional)
 
-Edit `.github/scripts/smart-dispatch.mjs`, add to `SERVICES` array:
+Smart dispatch (`.github/scripts/smart-dispatch.mjs`) and terraform change detection (`scripts/detect-tf-changes.sh`) **auto-discover** services from the filesystem — no manual registration needed. Your new service will be detected automatically because it has a `Dockerfile` in `apps/<service-name>/`.
 
-```javascript
-const SERVICES = [
-  // ... existing services ...
-  '<service-name>',
-];
-```
-
-#### 8e. Add to Terraform Change Detection
-
-Edit `scripts/detect-tf-changes.sh`, add to `ALL_SERVICES` array:
-
-```bash
-ALL_SERVICES=(
-  # ... existing services ...
-  "<service-name>"
-)
-```
-
-**Why:** This ensures the "Detect Terraform Affected Services" step in the deploy workflow correctly identifies your service when terraform changes affect it.
-
-**Optional:** If your service uses specific terraform modules, add it to `MODULE_TO_SERVICES` mapping:
+**Optional:** If your service uses specific terraform modules, add it to `MODULE_TO_SERVICES` mapping in `scripts/detect-tf-changes.sh`:
 
 ```bash
 # Example: if your service uses a custom Pub/Sub topic
@@ -665,16 +672,40 @@ Edit `tsconfig.json`:
 
 ### 13. Add to Local Dev Setup
 
-Edit `scripts/dev.mjs` — add service to SERVICES array:
+Edit `ecosystem.config.cjs`:
+
+**Step 1:** Add to the `apps` array using `createServiceConfig`:
 
 ```javascript
-const SERVICES = [
-  // ... existing services ...
-  { name: '<service-name>', port: 81XX, color: '\x1b[XXm' },
-];
+module.exports = {
+  apps: [
+    // ... existing services ...
+    createServiceConfig('<service-name>', 81XX),
+  ],
+};
 ```
 
-Choose next unused port in range 8110-\* and an ANSI color code.
+**Step 2:** Add service URL to `COMMON_SERVICE_URLS`:
+
+```javascript
+const COMMON_SERVICE_URLS = {
+  // ... existing URLs ...
+  INTEXURAOS_<SERVICE_NAME>_URL: 'http://localhost:81XX',
+};
+```
+
+**Step 3:** If service needs specific env vars, add to `SERVICE_ENV_MAPPINGS`:
+
+```javascript
+const SERVICE_ENV_MAPPINGS = {
+  // ... existing mappings ...
+  '<service-name>': {
+    INTEXURAOS_MY_TOPIC: process.env.INTEXURAOS_MY_TOPIC ?? 'my-topic',
+  },
+};
+```
+
+Choose next unused port in range 8110-8199.
 
 **Also add to `.envrc.local.example`** for local development (use the same port):
 
@@ -688,7 +719,27 @@ export INTEXURAOS_<SERVICE_NAME>_SERVICE_URL=http://localhost:81XX
 
 This ensures developers can run the service locally with proper configuration.
 
-### 14. Run Verification
+### 14. Update Statusline
+
+**MANDATORY:** Update `.claude/statusline.sh` to include the new service in the dev services monitoring.
+
+**Step 1:** Add service name and port to the parallel arrays (around line 278-281):
+
+```bash
+# Dev services (ports 8110-8128) - parallel arrays for bash 3.x compatibility
+DEV_NAMES="user notion whatsapp mobile research commands actions insights image notes settings todos bookmarks calendar linear web-agent code <new-service>"
+DEV_PORTS="8110 8112 8113 8114 8116 8117 8118 8119 8120 8121 8122 8123 8124 8125 8126 8127 8128 81XX"
+DEV_TOTAL=18  # Increment by 1
+```
+
+**Step 2:** Verify the arrays are aligned:
+
+- `DEV_NAMES` and `DEV_PORTS` must have the same number of space-separated entries
+- `DEV_TOTAL` must equal the count of entries
+
+**Why:** The statusline displays dev service health (🟢🟡🔴) based on port availability. Without this update, the new service won't be monitored in the statusline, making debugging harder during local development.
+
+### 15. Run Verification
 
 ```bash
 pnpm install
@@ -696,7 +747,7 @@ pnpm run ci
 cd terraform && terraform fmt -recursive && terraform validate
 ```
 
-### 15. Update Domain Docs Registry (if service has domain layer)
+### 16. Update Domain Docs Registry (if service has domain layer)
 
 If your service has a `src/domain/` directory, update the domain documentation registry:
 
@@ -712,12 +763,219 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 
 ---
 
-## Service Requirements Checklist
+## Worker Creation Steps
+
+**Use these steps when creating a worker with `--worker` flag.**
+
+### 1. Create Worker Directory Structure
+
+```
+workers/<worker-name>/
+├── src/
+│   ├── index.ts          # Cloud Functions Framework entry point
+│   ├── main.ts           # Business logic
+│   └── logger.ts         # Pino logger setup
+├── __tests__/            # Unit tests
+├── package.json
+├── tsconfig.json
+└── vitest.config.ts
+```
+
+### 2. Create package.json
+
+```json
+{
+  "name": "@intexuraos/<worker-name>",
+  "version": "0.0.4",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
+    "start": "node dist/index.js",
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.0.0",
+    "pino": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.16"
+  }
+}
+```
+
+### 3. Create src/index.ts (Pub/Sub Trigger)
+
+```typescript
+import * as functions from '@google-cloud/functions-framework';
+import { handleEvent } from './main.js';
+
+functions.cloudEvent('handlerName', handleEvent);
+```
+
+**Or for HTTP trigger:**
+
+```typescript
+import * as functions from '@google-cloud/functions-framework';
+import { handleRequest } from './main.js';
+
+functions.http('handlerName', handleRequest);
+```
+
+### 4. Create src/main.ts
+
+```typescript
+import type { CloudEvent } from '@google-cloud/functions-framework';
+import { createLogger } from './logger.js';
+
+interface PubSubData {
+  message: {
+    data: string;
+    attributes?: Record<string, string>;
+  };
+}
+
+const logger = createLogger();
+
+export async function handleEvent(event: CloudEvent<PubSubData>): Promise<void> {
+  logger.info({ eventId: event.id }, 'Processing event');
+
+  // Business logic here
+
+  logger.info('Event processed successfully');
+}
+```
+
+### 5. Create src/logger.ts
+
+```typescript
+import pino from 'pino';
+
+export function createLogger() {
+  return pino({
+    name: '<worker-name>',
+    level: process.env['LOG_LEVEL'] ?? 'info',
+  });
+}
+```
+
+### 6. Add Terraform Configuration
+
+Workers use the `cloud-function` module (NOT `cloud-run-service`).
+
+**In `terraform/environments/dev/main.tf`:**
+
+```hcl
+module "<worker_name>" {
+  source = "../../modules/cloud-function"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  function_name   = "intexuraos-<worker-name>"
+  service_account = module.iam.service_accounts["<worker_name>"]
+
+  # Trigger configuration (choose one)
+  trigger_type    = "pubsub"  # or "http" or "scheduler"
+  pubsub_topic    = google_pubsub_topic.<topic_name>.id
+
+  # Resources
+  memory          = "256Mi"
+  timeout_seconds = 60
+  max_instances   = 10
+
+  labels = local.common_labels
+}
+```
+
+### 7. Create Cloud Build Deploy Script
+
+Create `cloudbuild/scripts/deploy-<worker-name>.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib.sh"
+
+WORKER="<worker-name>"
+FUNCTION_NAME="intexuraos-<worker-name>"
+
+require_env_vars REGION
+
+log "Deploying ${WORKER} to Cloud Functions"
+
+# Build and zip
+cd workers/${WORKER}
+pnpm run build
+zip -r function.zip dist/ package.json
+
+# Upload to GCS
+gsutil cp function.zip gs://cloud-functions-source/${WORKER}/function.zip
+
+# Deploy
+gcloud functions deploy ${FUNCTION_NAME} \
+  --gen2 \
+  --region=${REGION} \
+  --source=gs://cloud-functions-source/${WORKER}/function.zip \
+  --quiet
+
+log "Deployment complete for ${WORKER}"
+```
+
+### 8. Add to Root tsconfig.json
+
+```json
+{
+  "references": [{ "path": "./workers/<worker-name>" }]
+}
+```
+
+### 9. Run Verification
+
+```bash
+pnpm install
+pnpm run ci:tracked
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform fmt -check -recursive && terraform validate
+```
+
+---
+
+## Worker Requirements Checklist
+
+- [ ] Worker directory created in `workers/`
+- [ ] `package.json` with Cloud Functions Framework dependency
+- [ ] Entry point uses `functions.cloudEvent()` or `functions.http()`
+- [ ] Service account in IAM module
+- [ ] Terraform `cloud-function` module configured
+- [ ] Deploy script created
+- [ ] Added to root tsconfig.json
+- [ ] `pnpm run ci:tracked` passes
+- [ ] `terraform validate` passes
+
+---
+
+## App Requirements Checklist
 
 - [ ] OpenAPI spec at `/openapi.json`
 - [ ] Swagger UI at `/docs`
 - [ ] Health endpoint at `/health`
 - [ ] CORS enabled
+- [ ] `@intexuraos/infra-otel` in package.json dependencies
+- [ ] Dockerfile includes `COPY otel-register.js`, `ENV OTEL_SERVICE_NAME`, and `--import` in CMD
 - [ ] Added to `local.services` map in Terraform
 - [ ] Added service URL to `local.common_service_env_vars` in Terraform
 - [ ] Terraform module created with `local.common_service_secrets` and `local.common_service_env_vars`
@@ -726,13 +984,12 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 - [ ] Per-service `apps/<service>/cloudbuild.yaml` created
 - [ ] Deploy script `cloudbuild/scripts/deploy-<service>.sh` created
 - [ ] Added to `docker_services` in `terraform/modules/cloud-build/main.tf`
-- [ ] Added to `SERVICES` in `.github/scripts/smart-dispatch.mjs`
-- [ ] Added to `ALL_SERVICES` in `scripts/detect-tf-changes.sh`
 - [ ] Registered in api-docs-hub
 - [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files
 - [ ] Added to `.envrc.local.example`
 - [ ] Added to root tsconfig.json
-- [ ] Added to local dev setup (`scripts/dev.mjs`)
+- [ ] Added to local dev setup (`ecosystem.config.cjs`)
+- [ ] Updated statusline (`DEV_NAMES`, `DEV_PORTS`, `DEV_TOTAL` in `.claude/statusline.sh`)
 - [ ] Updated domain docs registry
 - [ ] `pnpm run ci` passes
 - [ ] `terraform validate` passes
@@ -748,6 +1005,7 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 | Cloud Storage | `@google-cloud/storage`       |
 | HTTP client   | `@intexuraos/common-http`     |
 | Auth/JWT      | `@intexuraos/common-core`     |
+| OpenTelemetry | `@intexuraos/infra-otel`      |
 
 ---
 

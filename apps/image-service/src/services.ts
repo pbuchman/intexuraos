@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders, type Google, type OpenAI } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
@@ -19,7 +19,7 @@ import {
   createUserServiceClient,
   type UserServiceClient,
   type DecryptedApiKeys,
-} from './infra/user/index.js';
+} from '@intexuraos/internal-clients';
 
 export interface ServiceContainer {
   generatedImageRepository: GeneratedImageRepository;
@@ -67,7 +67,9 @@ export function initializeServices(pricingContext: IPricingContext): void {
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     pricingContext,
-    logger: pino({ name: 'user-service-client' }),
+    logger: createAppLogger({ name: 'user-service-client' }),
+    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
+    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
   // Get pricing for prompt generation models

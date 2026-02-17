@@ -1,5 +1,4 @@
-import pino from 'pino';
-import { getLogLevel } from '@intexuraos/common-core';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { LinkPreviewFetcherPort } from './domain/index.js';
 import {
   OpenGraphFetcher,
@@ -29,22 +28,24 @@ export interface ServiceDependencies {
 let container: ServiceContainer | undefined;
 
 export function initServices(dependencies: ServiceDependencies): void {
-  const logger = pino({ level: getLogLevel() });
+  const logger = createAppLogger({ name: 'web-agent' });
 
   container = {
     linkPreviewFetcher: new OpenGraphFetcher({}, logger),
     pageContentFetcher: createPageContentFetcher(
       { apiKey: dependencies.crawl4aiApiKey },
-      pino({ name: 'pageContentFetcher', level: getLogLevel() })
+      createAppLogger({ name: 'pageContentFetcher' })
     ),
     llmSummarizer: createLlmSummarizer(
-      pino({ name: 'llmSummarizer', level: getLogLevel() })
+      createAppLogger({ name: 'llmSummarizer' })
     ),
     userServiceClient: createUserServiceClient({
       baseUrl: dependencies.userServiceUrl,
       internalAuthToken: dependencies.internalAuthToken,
       pricingContext: dependencies.pricingContext,
-      logger: pino({ name: 'userServiceClient', level: getLogLevel() }),
+      logger: createAppLogger({ name: 'userServiceClient' }),
+      platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
+      platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
     }),
   };
 }

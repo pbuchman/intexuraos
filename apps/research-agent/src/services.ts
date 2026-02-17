@@ -5,7 +5,7 @@
  * Note: LLM usage logging is handled by the clients in packages/infra-*.
  */
 
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import { FirestoreResearchRepository } from './infra/research/index.js';
 import {
   createContextInferrer,
@@ -22,12 +22,22 @@ import {
   type LlmCallPublisher,
   type ResearchEventPublisher,
 } from './infra/pubsub/index.js';
-import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
+import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createImageServiceClient, type ImageServiceClient } from './infra/image/index.js';
+import { createNotionServiceClient, type NotionServiceClient } from './infra/notion/index.js';
+import { exportResearchToNotion } from './infra/notion/notionResearchExporter.js';
+import {
+  getResearchPageId,
+  saveResearchPageId,
+  getResearchSettings,
+  saveResearchSettings,
+  type ResearchExportSettingsError,
+  type ResearchExportSettings,
+} from './infra/firestore/researchExportSettingsRepository.js';
 
-export type { DecryptedApiKeys } from './infra/user/index.js';
+export type { DecryptedApiKeys } from '@intexuraos/internal-clients';
 export type { ImageServiceClient, GeneratedImageData } from './infra/image/index.js';
-import type { Logger } from '@intexuraos/common-core';
+import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing, ResearchModel, FastModel } from '@intexuraos/llm-contract';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import {
@@ -52,14 +62,31 @@ export interface ShareConfig {
 /**
  * Service container holding all adapter instances.
  */
+export interface ResearchExportSettingsPort {
+  getResearchPageId(userId: string): Promise<Result<string | null, ResearchExportSettingsError>>;
+  getResearchSettings(userId: string): Promise<Result<ResearchExportSettings | null, ResearchExportSettingsError>>;
+  saveResearchPageId(
+    userId: string,
+    pageId: string
+  ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>>;
+  saveResearchSettings(
+    userId: string,
+    researchPageId: string,
+    researchPageTitle: string,
+    researchPageUrl: string
+  ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>>;
+}
+
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
+  researchExportSettings: ResearchExportSettingsPort;
   pricingContext: IPricingContext;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
   llmCallPublisher: LlmCallPublisher;
   userServiceClient: UserServiceClient;
   imageServiceClient: ImageServiceClient | null;
+  notionServiceClient: NotionServiceClient;
   notificationSender: NotificationSender;
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
@@ -99,6 +126,7 @@ export interface ServiceContainer {
     pricing: ModelPricing,
     logger: Logger
   ) => InputValidationProvider;
+  notionExporter: typeof exportResearchToNotion;
 }
 
 let container: ServiceContainer | null = null;
@@ -146,7 +174,7 @@ function createNotificationSender(): NotificationSender {
     return new WhatsAppNotificationSender({
       projectId: gcpProjectId,
       topicName: whatsappSendTopic,
-      logger: pino({ name: 'whatsapp-notification-sender' }),
+      logger: createAppLogger({ name: 'whatsapp-notification-sender' }),
     });
   }
 
@@ -191,7 +219,9 @@ export function initializeServices(pricingContext: IPricingContext): void {
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     pricingContext,
-    logger: pino({ name: 'user-service-client' }),
+    logger: createAppLogger({ name: 'user-service-client' }),
+    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
+    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
   const notificationSender = createNotificationSender();
@@ -199,13 +229,13 @@ export function initializeServices(pricingContext: IPricingContext): void {
   const researchEventPublisher = createResearchEventPublisher({
     projectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
     topicName: process.env['INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC'] ?? '',
-    logger: pino({ name: 'research-event-publisher' }),
+    logger: createAppLogger({ name: 'research-event-publisher' }),
   });
 
   const llmCallPublisher = createLlmCallPublisher({
     projectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
     topicName: process.env['INTEXURAOS_PUBSUB_LLM_CALL_TOPIC'] ?? '',
-    logger: pino({ name: 'llm-call-publisher' }),
+    logger: createAppLogger({ name: 'llm-call-publisher' }),
   });
 
   const { shareStorage, shareConfig } = createShareStorageAndConfig();
@@ -219,14 +249,26 @@ export function initializeServices(pricingContext: IPricingContext): void {
         })
       : null;
 
+  const notionServiceClient = createNotionServiceClient({
+    baseUrl: process.env['INTEXURAOS_NOTION_SERVICE_URL'] ?? 'http://localhost:8012',
+    internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+  });
+
   container = {
     researchRepo,
+    researchExportSettings: {
+      getResearchPageId,
+      saveResearchPageId,
+      getResearchSettings,
+      saveResearchSettings,
+    },
     pricingContext,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
     llmCallPublisher,
     userServiceClient,
     imageServiceClient,
+    notionServiceClient,
     notificationSender,
     shareStorage,
     shareConfig,
@@ -236,5 +278,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
     createTitleGenerator,
     createContextInferrer,
     createInputValidator,
+    notionExporter: exportResearchToNotion,
   };
 }

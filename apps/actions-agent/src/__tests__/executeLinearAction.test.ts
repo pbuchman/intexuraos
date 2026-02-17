@@ -7,9 +7,8 @@ import {
   FakeLinearAgentClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
-import pino from 'pino';
 
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 describe('executeLinearAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
@@ -41,7 +40,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('non-existent-action');
@@ -66,7 +65,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -90,7 +89,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -111,7 +110,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -130,7 +129,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -159,7 +158,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -181,7 +180,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -205,7 +204,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -234,7 +233,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -255,7 +254,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -278,7 +277,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -304,7 +303,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -325,7 +324,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -344,7 +343,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -368,7 +367,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -394,7 +393,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -421,7 +420,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -445,7 +444,7 @@ describe('executeLinearAction usecase', () => {
       actionRepository: fakeActionRepo,
       linearAgentClient: fakeLinearClient,
       whatsappPublisher: fakeWhatsappPublisher,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');

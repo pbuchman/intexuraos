@@ -211,15 +211,17 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
       oauth2Client.setCredentials({ access_token: accessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-      const params = filterUndefined({
-        calendarId,
-        timeMin: options.timeMin,
-        timeMax: options.timeMax,
-        maxResults: options.maxResults,
-        singleEvents: options.singleEvents,
-        orderBy: options.orderBy,
-        q: options.q,
-      });
+      const hasTimeFilter = options.timeMin !== undefined || options.timeMax !== undefined;
+      const effectiveSingleEvents = options.singleEvents ?? (hasTimeFilter ? true : undefined);
+      const effectiveOrderBy = options.orderBy ?? (hasTimeFilter && effectiveSingleEvents !== false ? 'startTime' as const : undefined);
+
+      const params: calendar_v3.Params$Resource$Events$List = { calendarId };
+      if (options.timeMin !== undefined) params.timeMin = options.timeMin;
+      if (options.timeMax !== undefined) params.timeMax = options.timeMax;
+      if (options.maxResults !== undefined) params.maxResults = options.maxResults;
+      if (effectiveSingleEvents !== undefined) params.singleEvents = effectiveSingleEvents;
+      if (effectiveOrderBy !== undefined) params.orderBy = effectiveOrderBy;
+      if (options.q !== undefined) params.q = options.q;
 
       const response = await calendar.events.list(params);
       const events = (response.data.items ?? []).map(mapGoogleEventToCalendarEvent);

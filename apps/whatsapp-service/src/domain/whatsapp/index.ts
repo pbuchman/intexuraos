@@ -25,6 +25,12 @@ export type {
   LinkPreviewState,
 } from './models/LinkPreview.js';
 
+export type {
+  PhoneVerification,
+  PhoneVerificationPublic,
+  PhoneVerificationStatus,
+} from './models/PhoneVerification.js';
+
 // Ports
 export type {
   WhatsAppUserMapping,
@@ -35,6 +41,7 @@ export type {
   WhatsAppWebhookEvent,
   WhatsAppWebhookEventRepository,
   WhatsAppMessageRepository,
+  PhoneVerificationRepository,
 } from './ports/repositories.js';
 
 export type { MediaStoragePort, UploadResult } from './ports/mediaStorage.js';
@@ -50,6 +57,8 @@ export type { ThumbnailGeneratorPort, ThumbnailResult } from './ports/thumbnailG
 export type { EventPublisherPort } from './ports/eventPublisher.js';
 
 export type { WhatsAppMessageSender } from './ports/messageSender.js';
+
+export type { TextMessageSendResult } from './ports/messageSender.js';
 
 export type {
   SpeechTranscriptionPort,
@@ -68,8 +77,6 @@ export type {
   OutboundMessageRepository,
 } from './ports/outboundMessageRepository.js';
 
-export type { TextMessageSendResult } from './ports/messageSender.js';
-
 // Events
 export type {
   ApprovalReplyEvent,
@@ -82,6 +89,7 @@ export type {
   TranscriptionCompletedEvent,
   WebhookProcessEvent,
   WhatsAppEvent,
+  WhatsAppInteractiveButton,
 } from './events/index.js';
 
 // Use cases

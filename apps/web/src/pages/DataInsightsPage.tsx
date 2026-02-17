@@ -63,8 +63,8 @@ export function DataInsightsPage(): React.JSX.Element {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
-          <AlertCircle className="mr-2 h-5 w-5 text-red-500" />
-          <span className="text-slate-700">Invalid feed ID</span>
+          <AlertCircle className="mr-2 h-5 w-5 text-red-500 dark:text-red-400" />
+          <span className="text-slate-700 dark:text-slate-300">Invalid feed ID</span>
         </div>
       </Layout>
     );
@@ -73,21 +73,21 @@ export function DataInsightsPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Data Insights</h1>
-        <p className="mt-1 text-slate-600">Analyze your composite feed data and generate visualizations</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Data Insights</h1>
+        <p className="mt-1 text-slate-600 dark:text-slate-300">Analyze your composite feed data and generate visualizations</p>
       </div>
 
       {analyzing && (
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
-          <p className="mt-4 text-lg text-slate-600">Analyzing your data...</p>
-          <p className="mt-1 text-sm text-slate-500">This may take a moment</p>
+          <p className="mt-4 text-lg text-slate-600 dark:text-slate-300">Analyzing your data...</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">This may take a moment</p>
         </div>
       )}
 
       {insightsError !== null && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <div className="flex items-center gap-2 text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+          <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
             <AlertCircle className="h-5 w-5" />
             <span className="font-medium">Error analyzing data:</span>
             <span>{insightsError}</span>
@@ -98,10 +98,10 @@ export function DataInsightsPage(): React.JSX.Element {
       {!analyzing && insights !== null && (
         <>
           {insights.length === 0 ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-8 text-center">
-              <AlertCircle className="mx-auto h-10 w-10 text-slate-400" />
-              <p className="mt-4 text-lg font-medium text-slate-700">No insights generated</p>
-              <p className="mt-1 text-sm text-slate-500">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-800">
+              <AlertCircle className="mx-auto h-10 w-10 text-slate-400 dark:text-slate-500" />
+              <p className="mt-4 text-lg font-medium text-slate-700 dark:text-slate-200">No insights generated</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {noInsightsReason ?? 'Unable to generate insights from the current data structure.'}
               </p>
             </div>
@@ -119,14 +119,14 @@ export function DataInsightsPage(): React.JSX.Element {
               </div>
 
               {chartDefinitionError !== null && selectedInsight !== null && (
-                <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
+                <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
                   <div className="flex items-start gap-2">
-                    <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
+                    <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500 dark:text-red-400" />
                     <div>
-                      <p className="font-medium text-red-700">
+                      <p className="font-medium text-red-700 dark:text-red-400">
                         Failed to generate chart for: {selectedInsight.title}
                       </p>
-                      <p className="mt-1 text-sm text-red-600">{chartDefinitionError}</p>
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-300">{chartDefinitionError}</p>
                     </div>
                   </div>
                 </div>
@@ -134,8 +134,8 @@ export function DataInsightsPage(): React.JSX.Element {
 
               {chartDefinition !== null && selectedInsight !== null && (
                 <>
-                  <div className="mt-6 border-t border-slate-200 pt-6">
-                    <h2 className="text-xl font-semibold text-slate-900">
+                  <div className="mt-6 border-t border-slate-200 pt-6 dark:border-slate-700">
+                    <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
                       Chart for: {selectedInsight.title}
                     </h2>
                     <ChartDefinitionDisplay

@@ -2,28 +2,28 @@
  * Tests for listIssues use case.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { LinearConnection, LinearIssue } from '../../../domain/models.js';
+import type { LinearConnection, LinearIssue, SyncedLinearIssue } from '../../../domain/models.js';
 import {
   listIssues,
   type ListIssuesRequest,
 } from '../../../domain/useCases/listIssues.js';
 import {
   FakeLinearConnectionRepository,
-  FakeLinearApiClient,
+  FakeLinearIssueRepository,
 } from '../../fakes.js';
 
 describe('listIssues', () => {
   let fakeConnectionRepo: FakeLinearConnectionRepository;
-  let fakeLinearClient: FakeLinearApiClient;
+  let fakeIssueRepo: FakeLinearIssueRepository;
 
   beforeEach(() => {
     fakeConnectionRepo = new FakeLinearConnectionRepository();
-    fakeLinearClient = new FakeLinearApiClient();
+    fakeIssueRepo = new FakeLinearIssueRepository();
   });
 
   afterEach(() => {
     fakeConnectionRepo.reset();
-    fakeLinearClient.reset();
+    fakeIssueRepo.reset();
   });
 
   const defaultRequest: ListIssuesRequest = {
@@ -36,6 +36,7 @@ describe('listIssues', () => {
       apiKey: 'linear-api-key',
       teamId: 'team-789',
       teamName: 'Engineering',
+      webhookSecret: null,
       connected: true,
       createdAt: '2025-01-15T00:00:00Z',
       updatedAt: '2025-01-15T00:00:00Z',
@@ -43,8 +44,34 @@ describe('listIssues', () => {
     fakeConnectionRepo.seedConnection(connection);
   }
 
+  /**
+   * Convert LinearIssue test fixture to SyncedLinearIssue Firestore format
+   */
+  function toSyncedIssue(issue: LinearIssue, userId: string): SyncedLinearIssue {
+    return {
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description,
+      state: issue.state.name,
+      stateType: issue.state.type,
+      priority: issue.priority,
+      assigneeId: null,
+      assigneeName: null,
+      labels: issue.labels,
+      url: issue.url,
+      userId,
+      parentId: issue.parentId ?? null,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
+      syncedAt: new Date().toISOString(),
+      teamId: 'team-789',
+    };
+  }
+
   function seedIssue(issue: LinearIssue): void {
-    fakeLinearClient.seedIssue(issue);
+    const synced = toSyncedIssue(issue, 'user-456');
+    fakeIssueRepo.seedIssue(synced);
   }
 
   function createIssue(overrides: Partial<LinearIssue>): LinearIssue {
@@ -60,6 +87,9 @@ describe('listIssues', () => {
       createdAt: now,
       updatedAt: now,
       completedAt: null,
+      childCount: 0,
+      children: [],
+      labels: [],
       ...overrides,
     };
   }
@@ -100,7 +130,7 @@ describe('listIssues', () => {
       );
 
       const result = await listIssues(defaultRequest, {
-        linearApiClient: fakeLinearClient,
+        issueRepository: fakeIssueRepo,
         connectionRepository: fakeConnectionRepo,
       });
 
@@ -151,7 +181,7 @@ describe('listIssues', () => {
       );
 
       const result = await listIssues(defaultRequest, {
-        linearApiClient: fakeLinearClient,
+        issueRepository: fakeIssueRepo,
         connectionRepository: fakeConnectionRepo,
       });
 
@@ -183,7 +213,7 @@ describe('listIssues', () => {
       );
 
       const result = await listIssues(defaultRequest, {
-        linearApiClient: fakeLinearClient,
+        issueRepository: fakeIssueRepo,
         connectionRepository: fakeConnectionRepo,
       });
 
@@ -209,7 +239,7 @@ describe('listIssues', () => {
       );
 
       const result = await listIssues(defaultRequest, {
-        linearApiClient: fakeLinearClient,
+        issueRepository: fakeIssueRepo,
         connectionRepository: fakeConnectionRepo,
       });
 
@@ -232,7 +262,7 @@ describe('listIssues', () => {
       );
 
       const result = await listIssues(defaultRequest, {
-        linearApiClient: fakeLinearClient,
+        issueRepository: fakeIssueRepo,
         connectionRepository: fakeConnectionRepo,
       });
 
@@ -270,7 +300,7 @@ describe('listIssues', () => {
       const result = await listIssues(
         { userId: 'user-456', includeArchive: false },
         {
-          linearApiClient: fakeLinearClient,
+          issueRepository: fakeIssueRepo,
           connectionRepository: fakeConnectionRepo,
         }
       );
@@ -278,6 +308,69 @@ describe('listIssues', () => {
       if (result.ok) {
         expect(result.value.issues.done).toHaveLength(1);
         expect(result.value.issues.archive).toHaveLength(0);
+      }
+    });
+  });
+
+  describe('labels', () => {
+    beforeEach(() => {
+      setupConnectedUser();
+    });
+
+    it('includes labels in returned issues', async () => {
+      const today = new Date();
+
+      seedIssue(
+        createIssue({
+          id: 'issue-1',
+          title: 'Issue with labels',
+          state: { id: 's1', name: 'Todo', type: 'unstarted' },
+          updatedAt: today.toISOString(),
+          labels: [
+            { id: 'label-1', name: 'bug', color: '#ff0000' },
+            { id: 'label-2', name: 'frontend', color: '#00ff00' },
+          ],
+        })
+      );
+
+      const result = await listIssues(defaultRequest, {
+        issueRepository: fakeIssueRepo,
+        connectionRepository: fakeConnectionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.issues.todo).toHaveLength(1);
+        const issue = result.value.issues.todo[0];
+        expect(issue?.labels).toEqual([
+          { id: 'label-1', name: 'bug', color: '#ff0000' },
+          { id: 'label-2', name: 'frontend', color: '#00ff00' },
+        ]);
+      }
+    });
+
+    it('handles issues with no labels', async () => {
+      const today = new Date();
+
+      seedIssue(
+        createIssue({
+          id: 'issue-1',
+          title: 'Issue without labels',
+          state: { id: 's1', name: 'Todo', type: 'unstarted' },
+          updatedAt: today.toISOString(),
+          labels: [],
+        })
+      );
+
+      const result = await listIssues(defaultRequest, {
+        issueRepository: fakeIssueRepo,
+        connectionRepository: fakeConnectionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.issues.todo).toHaveLength(1);
+        expect(result.value.issues.todo[0]?.labels).toEqual([]);
       }
     });
   });
@@ -290,7 +383,7 @@ describe('listIssues', () => {
       });
 
       const result = await listIssues(defaultRequest, {
-        linearApiClient: fakeLinearClient,
+        issueRepository: fakeIssueRepo,
         connectionRepository: fakeConnectionRepo,
       });
 
@@ -303,7 +396,7 @@ describe('listIssues', () => {
 
     it('returns NOT_CONNECTED error when user has no connection', async () => {
       const result = await listIssues(defaultRequest, {
-        linearApiClient: fakeLinearClient,
+        issueRepository: fakeIssueRepo,
         connectionRepository: fakeConnectionRepo,
       });
 
@@ -314,22 +407,22 @@ describe('listIssues', () => {
       }
     });
 
-    it('returns API error when Linear API fails', async () => {
+    it('returns error when issue repository fails', async () => {
       setupConnectedUser();
-      fakeLinearClient.setFailure(true, {
-        code: 'API_ERROR',
-        message: 'Rate limit exceeded',
+      fakeIssueRepo.setListByUserIdFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database read error',
       });
 
       const result = await listIssues(defaultRequest, {
-        linearApiClient: fakeLinearClient,
+        issueRepository: fakeIssueRepo,
         connectionRepository: fakeConnectionRepo,
       });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toBe('Rate limit exceeded');
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Database read error');
       }
     });
   });
@@ -341,7 +434,7 @@ describe('listIssues', () => {
 
     it('returns empty columns when no issues exist', async () => {
       const result = await listIssues(defaultRequest, {
-        linearApiClient: fakeLinearClient,
+        issueRepository: fakeIssueRepo,
         connectionRepository: fakeConnectionRepo,
       });
 
@@ -354,5 +447,99 @@ describe('listIssues', () => {
         expect(result.value.issues.archive).toHaveLength(0);
       }
     });
+  });
+
+  describe('parent-child relationships', () => {
+    beforeEach(() => {
+      setupConnectedUser();
+    });
+
+    it('attaches children to parent issues', async () => {
+      const today = new Date();
+
+      // Create parent issue
+      seedIssue(
+        createIssue({
+          id: 'parent-1',
+          identifier: 'ENG-100',
+          title: 'Parent Issue',
+          state: { id: 's1', name: 'In Progress', type: 'started' },
+          updatedAt: today.toISOString(),
+          parentId: null,
+        })
+      );
+
+      // Create child issues
+      seedIssue(
+        createIssue({
+          id: 'child-1',
+          identifier: 'ENG-101',
+          title: 'Child Issue 1',
+          state: { id: 's2', name: 'Todo', type: 'unstarted' },
+          updatedAt: today.toISOString(),
+          parentId: 'parent-1',
+        })
+      );
+
+      seedIssue(
+        createIssue({
+          id: 'child-2',
+          identifier: 'ENG-102',
+          title: 'Child Issue 2',
+          state: { id: 's3', name: 'Done', type: 'completed' },
+          updatedAt: today.toISOString(),
+          parentId: 'parent-1',
+        })
+      );
+
+      const result = await listIssues(defaultRequest, {
+        issueRepository: fakeIssueRepo,
+        connectionRepository: fakeConnectionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Parent should be in in_progress column
+        expect(result.value.issues.in_progress).toHaveLength(1);
+        const parent = result.value.issues.in_progress[0];
+        expect(parent?.id).toBe('parent-1');
+        expect(parent?.childCount).toBe(2);
+        expect(parent?.children).toHaveLength(2);
+        expect(parent?.children[0]?.id).toBe('child-1');
+        expect(parent?.children[1]?.id).toBe('child-2');
+
+        // Children should NOT appear in top-level columns
+        expect(result.value.issues.todo).toHaveLength(0);
+        expect(result.value.issues.done).toHaveLength(0);
+      }
+    });
+
+    it('handles children with missing parents', async () => {
+      const today = new Date();
+
+      // Create child with non-existent parent
+      seedIssue(
+        createIssue({
+          id: 'orphan-1',
+          identifier: 'ENG-200',
+          title: 'Orphan Issue',
+          state: { id: 's1', name: 'Backlog', type: 'backlog' },
+          updatedAt: today.toISOString(),
+          parentId: 'nonexistent-parent',
+        })
+      );
+
+      const result = await listIssues(defaultRequest, {
+        issueRepository: fakeIssueRepo,
+        connectionRepository: fakeConnectionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Orphan should not appear in any column (not top-level)
+        expect(result.value.issues.backlog).toHaveLength(0);
+      }
+    });
+
   });
 });

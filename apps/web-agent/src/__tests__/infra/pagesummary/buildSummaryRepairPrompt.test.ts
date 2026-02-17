@@ -47,6 +47,26 @@ describe('buildSummaryPrompt (convenience function)', () => {
     expect(prompt).toContain('NO JSON format');
     expect(prompt).toContain('NO markdown code blocks');
   });
+
+  it('includes content focus instruction', () => {
+    const prompt = buildSummaryPrompt(20, 3);
+    expect(prompt).toContain('Focus on the SPECIFIC CONTENT');
+  });
+
+  it('includes platform ignore instruction', () => {
+    const prompt = buildSummaryPrompt(20, 3);
+    expect(prompt).toContain('Do NOT describe what the platform is');
+  });
+
+  it('includes metadata avoidance instruction', () => {
+    const prompt = buildSummaryPrompt(20, 3);
+    expect(prompt).toContain('Do NOT include platform structural information');
+  });
+
+  it('includes CONTENT FOCUS section header', () => {
+    const prompt = buildSummaryPrompt(20, 3);
+    expect(prompt).toContain('## CONTENT FOCUS');
+  });
 });
 
 describe('summaryPrompt (PromptBuilder)', () => {
@@ -75,6 +95,15 @@ describe('summaryPrompt (PromptBuilder)', () => {
     const prompt = summaryPrompt.build(input);
 
     expect(prompt).toContain('Maximum 400 words'); // 2 * 200
+  });
+
+  it('includes content focus instructions via PromptBuilder', () => {
+    const input: SummaryPromptInput = { maxSentences: 10, maxReadingMinutes: 2 };
+    const prompt = summaryPrompt.build(input);
+
+    expect(prompt).toContain('## CONTENT FOCUS');
+    expect(prompt).toContain('Focus on the SPECIFIC CONTENT');
+    expect(prompt).toContain('Do NOT describe what the platform is');
   });
 });
 
@@ -121,6 +150,13 @@ describe('buildSummaryRepairPrompt (convenience function)', () => {
     expect(prompt).toContain('## INVALID RESPONSE');
     expect(prompt).toContain('## REQUIREMENTS');
     expect(prompt).toContain('## OUTPUT FORMAT');
+  });
+
+  it('includes content focus requirements', () => {
+    const prompt = buildSummaryRepairPrompt('content', 'invalid', 'error');
+
+    expect(prompt).toContain('Focus on the SPECIFIC CONTENT');
+    expect(prompt).toContain('Do NOT describe what the platform is');
   });
 
   it('includes invalid response snippet', () => {

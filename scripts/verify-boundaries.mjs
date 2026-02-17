@@ -49,7 +49,12 @@ function runEslint(filePath) {
  * Cleanup temp directories
  */
 function cleanup() {
-  for (const dir of [outsideDir, insideDir, join(repoRoot, 'packages', 'orphan')]) {
+  for (const dir of [
+    outsideDir,
+    insideDir,
+    join(repoRoot, 'packages', 'orphan'),
+    join(repoRoot, 'packages', 'common'),
+  ]) {
     try {
       if (existsSync(dir)) {
         rmSync(dir, { recursive: true, force: true });

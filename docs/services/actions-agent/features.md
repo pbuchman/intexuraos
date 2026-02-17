@@ -6,7 +6,7 @@ Turn natural language commands into structured actions that get executed across 
 
 You send commands to your AI assistant through WhatsApp, web, or other interfaces. The system needs to:
 
-1. **Understand what you want** - Classify your command into a specific action type (todo, research, note, link, calendar, linear, reminder)
+1. **Understand what you want** - Classify your command into a specific action type (todo, research, note, link, calendar, linear, reminder, code)
 2. **Track the action lifecycle** - Move actions from pending to processing to completed
 3. **Route to the right service** - Send research actions to research-agent, todos to todos-agent, linear to linear-agent, etc.
 4. **Handle failures gracefully** - Retry stuck actions, allow manual correction
@@ -26,7 +26,7 @@ Actions-agent is the **central coordinator** for all user-initiated actions in I
 
 ## Key Features
 
-### WhatsApp Approval Workflow (New in v2.0.0)
+### WhatsApp Approval Workflow (v2.0.0, enhanced in v3.0.0)
 
 Approve or reject actions by simply replying to WhatsApp messages:
 
@@ -34,6 +34,8 @@ Approve or reject actions by simply replying to WhatsApp messages:
 - Reply "no", "cancel", "reject", or similar to reject it
 - LLM-powered intent classification understands natural language
 - Race condition protection ensures only one approval is processed
+- Code actions use interactive WhatsApp buttons with nonce validation (v3.0.0)
+- Text fallback: type "approve XXXX" (where XXXX is the nonce) for code action approvals
 
 ### Atomic Status Transitions
 
@@ -53,6 +55,7 @@ After WhatsApp approval, actions-agent publishes `action.created` events to trig
 - Links go to bookmarks-agent
 - Calendar events go to calendar-agent
 - Linear issues go to linear-agent
+- Code tasks go to code-agent
 
 ## Use Cases
 
@@ -93,6 +96,15 @@ After WhatsApp approval, actions-agent publishes `action.created` events to trig
 - "Add task to Linear: implement dark mode"
 - Action flows: pending -> awaiting_approval -> (WhatsApp approval) -> processing -> completed (Linear issue created)
 
+### Code Actions
+
+- "Fix the authentication bug in the login module"
+- "Implement dark mode for the settings page"
+- Action flows: pending -> awaiting_approval -> (WhatsApp approval with interactive buttons) -> processing -> completed (code task dispatched)
+- Approval includes estimated cost ($1-2) and time (30-60 min)
+- Supports interactive WhatsApp buttons: Approve (with nonce), Cancel, Convert to Issue
+- Nonce-based approval prevents accidental double-approvals (4-char hex code, 15-min expiry)
+
 ### User Correction Workflow
 
 When classification is wrong:
@@ -121,6 +133,10 @@ When classification is wrong:
 **Progressive enhancement** - New action types can be added without modifying core routing logic
 
 **Code quality** - Migrated to centralized `@intexuraos/internal-clients` package (v2.1.0)
+
+**Interactive approval buttons** - Code actions use WhatsApp interactive buttons with nonce validation for secure, one-tap approvals (v3.0.0)
+
+**Nonce-based security** - Approval nonces (4-char hex, 15-min TTL) prevent accidental duplicate approvals and replay attacks
 
 ## Limitations
 

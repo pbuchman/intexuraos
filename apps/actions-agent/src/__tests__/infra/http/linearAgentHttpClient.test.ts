@@ -3,9 +3,7 @@ import { isOk, isErr } from '@intexuraos/common-core';
 import nock from 'nock';
 import { createLinearAgentHttpClient } from '../../../infra/http/linearAgentHttpClient.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
-import pino from 'pino';
-
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from '../../fakes.js';
 
 const baseUrl = 'http://linear-agent.test';
 const internalAuthToken = 'test-internal-token';
@@ -19,7 +17,7 @@ describe('linearAgentHttpClient', () => {
     createLinearAgentHttpClient({
       baseUrl,
       internalAuthToken,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
   describe('successful responses', () => {
@@ -440,7 +438,7 @@ describe('linearAgentHttpClient', () => {
       const client = createLinearAgentHttpClient({
         baseUrl,
         internalAuthToken: customToken,
-        logger: silentLogger,
+        logger: createMockLogger(),
       });
       await client.processAction('action-123', 'user-456', 'Fix bug');
 

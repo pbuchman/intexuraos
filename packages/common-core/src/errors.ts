@@ -8,9 +8,28 @@ export type ErrorCode =
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
+  | 'GONE'
+  | 'PRECONDITION_FAILED'
+  | 'UNPROCESSABLE_ENTITY'
+  | 'RATE_LIMITED'
+  | 'LOCKED'
   | 'DOWNSTREAM_ERROR'
   | 'INTERNAL_ERROR'
-  | 'MISCONFIGURED';
+  | 'MISCONFIGURED'
+  | 'WORKER_NOT_CONFIGURED'
+  | 'INVALID_WORKER'
+  | 'WORKER_UNHEALTHY'
+  | 'WORKER_UNAVAILABLE'
+  | 'NOTION_NOT_CONNECTED'
+  | 'PAGE_NOT_CONFIGURED'
+  | 'RESEARCH_NOT_COMPLETED'
+  | 'NO_SYNTHESIS'
+  | 'ALREADY_EXPORTED'
+  | 'NOTION_UNAUTHORIZED'
+  | 'INVALID_NONCE'
+  | 'NONCE_EXPIRED'
+  | 'NOT_OWNER'
+  | 'TASK_NOT_CANCELLABLE';
 
 /**
  * HTTP status codes mapped to error codes.
@@ -21,9 +40,28 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
+  GONE: 410,
+  PRECONDITION_FAILED: 412,
+  UNPROCESSABLE_ENTITY: 422,
+  RATE_LIMITED: 429,
+  LOCKED: 423,
   DOWNSTREAM_ERROR: 502,
   INTERNAL_ERROR: 500,
   MISCONFIGURED: 503,
+  WORKER_NOT_CONFIGURED: 424,
+  INVALID_WORKER: 400,
+  WORKER_UNHEALTHY: 400,
+  WORKER_UNAVAILABLE: 502,
+  NOTION_NOT_CONNECTED: 400,
+  PAGE_NOT_CONFIGURED: 400,
+  RESEARCH_NOT_COMPLETED: 400,
+  NO_SYNTHESIS: 400,
+  ALREADY_EXPORTED: 409,
+  NOTION_UNAUTHORIZED: 401,
+  INVALID_NONCE: 400,
+  NONCE_EXPIRED: 400,
+  NOT_OWNER: 403,
+  TASK_NOT_CANCELLABLE: 400,
 };
 
 /**
@@ -51,4 +89,76 @@ export class IntexuraOSError extends Error {
  */
 export function getErrorMessage(error: unknown, fallback = 'Unknown error'): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+const MAX_STACK_LENGTH = 2000;
+
+/**
+ * Serialized error object suitable for structured logging.
+ * Contains all non-enumerable Error properties extracted explicitly.
+ */
+export interface SerializedError {
+  message: string;
+  name?: string;
+  stack?: string;
+  code?: string;
+  errno?: number;
+  syscall?: string;
+}
+
+/**
+ * Serialize an error for structured logging.
+ *
+ * JavaScript Error properties (message, stack, name) are non-enumerable,
+ * so logging `{ error }` directly produces `{"error":{}}`.
+ * This function extracts all useful properties for proper logging.
+ *
+ * @param error - Any caught error value (may not be Error instance)
+ * @returns Serialized error object with message, stack, code, etc.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await riskyOperation();
+ * } catch (error) {
+ *   logger.error({ error: serializeError(error) }, 'Operation failed');
+ * }
+ * ```
+ */
+export function serializeError(error: unknown): SerializedError {
+  if (!(error instanceof Error)) {
+    return { message: 'Unknown error' };
+  }
+
+  const result: SerializedError = {
+    message: error.message,
+    name: error.name,
+  };
+
+  /* v8 ignore start -- ts-type: Error.stack can be undefined per TS types but practically always exists in JS runtimes @preserve */
+  if (error.stack !== undefined) {
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- test-infra: MAX_STACK_LENGTH truncation branch requires generating 100KB+ stack trace @preserve */
+    result.stack =
+      error.stack.length > MAX_STACK_LENGTH
+        ? error.stack.substring(0, MAX_STACK_LENGTH)
+        : error.stack;
+    /* v8 ignore stop @preserve */
+  }
+
+  const errorWithCode = error as Error & { code?: unknown; errno?: unknown; syscall?: unknown };
+
+  if (typeof errorWithCode.code === 'string') {
+    result.code = errorWithCode.code;
+  }
+
+  if (typeof errorWithCode.errno === 'number') {
+    result.errno = errorWithCode.errno;
+  }
+
+  if (typeof errorWithCode.syscall === 'string') {
+    result.syscall = errorWithCode.syscall;
+  }
+
+  return result;
 }

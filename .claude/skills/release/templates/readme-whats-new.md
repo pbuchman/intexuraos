@@ -76,7 +76,7 @@ Use this template when generating the "What's New in vX.Y.Z" section for README.
 | **Natural Language Model Selection** | Specify models in messages: "research with Claude and GPT"                                  |
 | **5-Step Classification**            | URL keyword isolation, explicit intent priority, Polish language support                    |
 | **Zod Schema Validation**            | Type-safe LLM response handling with parser + repair pattern                                |
-| **GLM-4.7-Flash**                    | New free-tier model for cost-effective classification                                       |
+| **GLM-4.7-Flash**                    | New lightweight model for cost-effective classification                                     |
 ```
 
 ### Bad Example

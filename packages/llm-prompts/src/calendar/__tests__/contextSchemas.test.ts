@@ -106,10 +106,66 @@ describe('CalendarEventSchema', () => {
       }
     });
 
-    it('rejects date-only format', () => {
+    it('accepts date-only format for all-day events', () => {
+      const result = CalendarEventSchema.safeParse({
+        summary: 'Company holiday',
+        start: '2026-01-25',
+        end: '2026-01-25',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'All-day event',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts date-only start with null end', () => {
+      const result = CalendarEventSchema.safeParse({
+        summary: 'Birthday',
+        start: '2026-05-15',
+        end: null,
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Single date event',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects invalid date-only with impossible day (Feb 30)', () => {
       const result = CalendarEventSchema.safeParse({
         summary: 'Test',
-        start: '2026-01-25',
+        start: '2026-02-30',
+        end: null,
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'test',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects invalid date-only with impossible month', () => {
+      const result = CalendarEventSchema.safeParse({
+        summary: 'Test',
+        start: '2026-13-01',
+        end: null,
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'test',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects partial datetime format (missing seconds)', () => {
+      const result = CalendarEventSchema.safeParse({
+        summary: 'Test',
+        start: '2026-01-25T15:30',
         end: null,
         location: null,
         description: null,

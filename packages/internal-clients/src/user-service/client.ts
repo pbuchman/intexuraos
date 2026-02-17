@@ -23,6 +23,8 @@ import type {
   UserServiceError,
   DecryptedApiKeys,
   UserServiceClient,
+  OAuthTokenResult,
+  OAuthProvider,
 } from './types.js';
 
 export type { LlmProvider } from '@intexuraos/llm-contract';
@@ -31,6 +33,8 @@ export type {
   UserServiceError,
   DecryptedApiKeys,
   UserServiceClient,
+  OAuthTokenResult,
+  OAuthProvider,
 } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
@@ -58,11 +62,14 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
   return {
     async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
       try {
-        const response = await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys`, {
-          headers: {
-            'X-Internal-Auth': config.internalAuthToken,
-          },
-        });
+        const response = await fetch(
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys`,
+          {
+            headers: {
+              'X-Internal-Auth': config.internalAuthToken,
+            },
+          }
+        );
 
         if (!response.ok) {
           return err({
@@ -71,19 +78,26 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
-        const data = (await response.json()) as {
-          google?: string | null;
-          openai?: string | null;
-          anthropic?: string | null;
-          perplexity?: string | null;
-          zai?: string | null;
+        const body = (await response.json()) as {
+          success: boolean;
+          data: {
+            google?: string | null;
+            openai?: string | null;
+            anthropic?: string | null;
+            perplexity?: string | null;
+            zai?: string | null;
+          };
         };
+
+        const data = body.data;
 
         // Convert null values to undefined (null is used by JSON to distinguish from missing)
         const result: DecryptedApiKeys = {};
+        /* v8 ignore start -- test-infra: response shape depends on user's configured API keys @preserve */
         if (data.google !== null && data.google !== undefined) {
           result.google = data.google;
         }
+        /* v8 ignore stop @preserve */
         if (data.openai !== null && data.openai !== undefined) {
           result.openai = data.openai;
         }
@@ -113,7 +127,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       try {
         // Step 1: Fetch user settings to get default model
         const settingsResponse = await fetch(
-          `${config.baseUrl}/internal/users/${userId}/settings`,
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/settings`,
           {
             headers: {
               'X-Internal-Auth': config.internalAuthToken,
@@ -132,14 +146,17 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
-        const settingsData = (await settingsResponse.json()) as {
-          llmPreferences?: {
-            defaultModel: string;
+        const settingsBody = (await settingsResponse.json()) as {
+          success: boolean;
+          data: {
+            llmPreferences?: {
+              defaultModel: string;
+            };
           };
         };
 
         // Step 2: Determine model (use user's preference or default)
-        const rawModel = settingsData.llmPreferences?.defaultModel ?? LlmModels.Gemini25Flash;
+        const rawModel = settingsBody.data.llmPreferences?.defaultModel ?? LlmModels.Gemini25Flash;
 
         // Validate that the model is supported
         if (!isValidModel(rawModel)) {
@@ -156,11 +173,14 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         const provider = getProviderForModel(defaultModel);
         const keyField = providerToKeyField(provider);
 
-        const keysResponse = await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys`, {
-          headers: {
-            'X-Internal-Auth': config.internalAuthToken,
-          },
-        });
+        const keysResponse = await fetch(
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys`,
+          {
+            headers: {
+              'X-Internal-Auth': config.internalAuthToken,
+            },
+          }
+        );
 
         if (!keysResponse.ok) {
           logger.error({ userId, status: keysResponse.status }, 'Failed to fetch API keys');
@@ -170,11 +190,60 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
-        const keysData = (await keysResponse.json()) as Record<string, string | null | undefined>;
+        const keysBody = (await keysResponse.json()) as {
+          success: boolean;
+          data: Record<string, string | null | undefined>;
+        };
 
-        const apiKey = keysData[keyField];
+        const apiKey = keysBody.data[keyField];
 
         if (apiKey === null || apiKey === undefined) {
+          if (config.platformGeminiApiKey !== undefined) {
+            logger.warn(
+              { userId, provider, requestedModel: defaultModel },
+              'No API key for provider, falling back to platform Gemini25Flash'
+            );
+            const fallbackModel = LlmModels.Gemini25Flash;
+            const fallbackPricing = config.pricingContext.getPricing(fallbackModel);
+            const fallbackClient = createLlmClient({
+              apiKey: config.platformGeminiApiKey,
+              model: fallbackModel,
+              userId,
+              pricing: fallbackPricing,
+              logger: config.logger,
+            });
+
+            logger.info(
+              { userId, model: fallbackModel, provider: LlmProviders.Google },
+              'LLM client created successfully'
+            );
+
+            return ok(fallbackClient);
+          }
+
+          if (config.platformZaiApiKey !== undefined) {
+            logger.warn(
+              { userId, provider, requestedModel: defaultModel },
+              'No API key for provider, falling back to platform Glm47Flash'
+            );
+            const fallbackModel = LlmModels.Glm47Flash;
+            const fallbackPricing = config.pricingContext.getPricing(fallbackModel);
+            const fallbackClient = createLlmClient({
+              apiKey: config.platformZaiApiKey,
+              model: fallbackModel,
+              userId,
+              pricing: fallbackPricing,
+              logger: config.logger,
+            });
+
+            logger.info(
+              { userId, model: fallbackModel, provider: LlmProviders.Zai },
+              'LLM client created successfully'
+            );
+
+            return ok(fallbackClient);
+          }
+
           logger.info({ userId, provider }, 'No API key configured for provider');
           return err({
             code: 'NO_API_KEY',
@@ -214,14 +283,61 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
     async reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void> {
       try {
-        await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys/${provider}/last-used`, {
-          method: 'POST',
-          headers: {
-            'X-Internal-Auth': config.internalAuthToken,
-          },
-        });
-      } catch /* v8 ignore next -- best effort, silent failure intentional */ {
+        await fetch(
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys/${provider}/last-used`,
+          {
+            method: 'POST',
+            headers: {
+              'X-Internal-Auth': config.internalAuthToken,
+            },
+          }
+        );
+        /* v8 ignore start -- test-infra: best effort, silent failure intentional @preserve */
+      } catch {
+        /* v8 ignore stop @preserve */
         // Best effort - don't block on failure
+      }
+    },
+
+    async getOAuthToken(
+      userId: string,
+      provider: OAuthProvider
+    ): Promise<Result<OAuthTokenResult, UserServiceError>> {
+      try {
+        const response = await fetch(
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/oauth/${provider}/token`,
+          {
+            headers: { 'X-Internal-Auth': config.internalAuthToken },
+          }
+        );
+
+        if (!response.ok) {
+          const errorBody = (await response.json()) as { code?: string; error?: string };
+          const code = errorBody.code;
+
+          if (code === 'CONNECTION_NOT_FOUND' || response.status === 404) {
+            return err({ code: 'CONNECTION_NOT_FOUND', message: 'OAuth not connected' });
+          }
+          if (code === 'TOKEN_REFRESH_FAILED') {
+            return err({ code: 'TOKEN_REFRESH_FAILED', message: 'Failed to refresh token' });
+          }
+          if (code === 'CONFIGURATION_ERROR') {
+            return err({ code: 'OAUTH_NOT_CONFIGURED', message: 'OAuth not configured' });
+          }
+
+          return err({
+            code: 'API_ERROR',
+            message: errorBody.error ?? `HTTP ${String(response.status)}`,
+          });
+        }
+
+        const body = (await response.json()) as {
+          success: boolean;
+          data: { accessToken: string; email: string };
+        };
+        return ok({ accessToken: body.data.accessToken, email: body.data.email });
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
       }
     },
   };

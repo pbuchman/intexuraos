@@ -40,6 +40,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               data: {
                 type: 'object',
                 properties: {
+                  defaultModel: { type: 'string', nullable: true },
                   google: { type: 'string', nullable: true },
                   openai: { type: 'string', nullable: true },
                   anthropic: { type: 'string', nullable: true },
@@ -163,6 +164,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
 
         return await reply.ok({
+          defaultModel: settings?.llmPreferences?.defaultModel ?? null,
           google: getMaskedKey(llmApiKeys?.google),
           openai: getMaskedKey(llmApiKeys?.openai),
           anthropic: getMaskedKey(llmApiKeys?.anthropic),
@@ -559,7 +561,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);
       }
 
-      return await reply.ok(undefined);
+      return await reply.ok({});
     }
   );
 

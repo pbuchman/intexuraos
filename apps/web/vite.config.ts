@@ -6,25 +6,54 @@ import { resolve } from 'path';
 import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 
-function getBuildVersion(): string {
+interface BuildInfo {
+  version: string;
+  shortSha: string;
+  fullSha: string;
+  commitMessage: string;
+  buildDate: string;
+}
+
+function getBuildInfo(): BuildInfo {
   const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8')) as {
     version: string;
   };
-  let sha = 'unknown';
 
-  // First try COMMIT_SHA from Cloud Build environment
+  let shortSha = 'unknown';
+  let fullSha = 'unknown';
+  let commitMessage = 'Unknown commit';
+
   if (process.env['COMMIT_SHA'] !== undefined && process.env['COMMIT_SHA'] !== '') {
-    sha = process.env['COMMIT_SHA'].slice(0, 7);
-  } else {
-    // Fallback to git for local development
-    try {
-      sha = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
-    } catch {
-      // Git not available or not a git repo
-    }
+    fullSha = process.env['COMMIT_SHA'];
+    shortSha = fullSha.slice(0, 7);
   }
 
-  return `${pkg.version}-${sha}`;
+  if (process.env['COMMIT_MESSAGE'] !== undefined && process.env['COMMIT_MESSAGE'] !== '') {
+    commitMessage = process.env['COMMIT_MESSAGE'];
+  }
+
+  // Fallback to git for local development or missing env vars
+  try {
+    if (shortSha === 'unknown') {
+      shortSha = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    }
+    if (fullSha === 'unknown') {
+      fullSha = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+    }
+    if (commitMessage === 'Unknown commit') {
+      commitMessage = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    }
+  } catch {
+    // Git not available or not a git repo
+  }
+
+  return {
+    version: pkg.version,
+    shortSha,
+    fullSha,
+    commitMessage,
+    buildDate: new Date().toISOString(),
+  };
 }
 
 export default defineConfig(({ mode }) => {
@@ -42,7 +71,30 @@ export default defineConfig(({ mode }) => {
   // Merge: file env takes precedence over shell env
   const env = { ...shellEnv, ...fileEnv };
 
-  const buildVersion = getBuildVersion();
+  const buildInfo = getBuildInfo();
+  const buildVersion = `${buildInfo.version}-${buildInfo.shortSha}`;
+
+  // Proxy routes shared between dev server and preview — strips /api/<service> prefix
+  const apiProxy = {
+    '/api/user': { target: 'http://localhost:8110', rewrite: (p: string) => p.replace(/^\/api\/user/, '') },
+    '/api/notion': { target: 'http://localhost:8112', rewrite: (p: string) => p.replace(/^\/api\/notion/, '') },
+    '/api/whatsapp': { target: 'http://localhost:8113', rewrite: (p: string) => p.replace(/^\/api\/whatsapp/, '') },
+    '/api/notifications': { target: 'http://localhost:8114', rewrite: (p: string) => p.replace(/^\/api\/notifications/, '') },
+    '/api/research': { target: 'http://localhost:8116', rewrite: (p: string) => p.replace(/^\/api\/research/, '') },
+    '/api/commands': { target: 'http://localhost:8117', rewrite: (p: string) => p.replace(/^\/api\/commands/, '') },
+    '/api/actions': { target: 'http://localhost:8118', rewrite: (p: string) => p.replace(/^\/api\/actions/, '') },
+    '/api/data-insights': { target: 'http://localhost:8119', rewrite: (p: string) => p.replace(/^\/api\/data-insights/, '') },
+    '/api/images': { target: 'http://localhost:8120', rewrite: (p: string) => p.replace(/^\/api\/images/, '') },
+    '/api/notes': { target: 'http://localhost:8121', rewrite: (p: string) => p.replace(/^\/api\/notes/, '') },
+    '/api/settings': { target: 'http://localhost:8122', rewrite: (p: string) => p.replace(/^\/api\/settings/, '') },
+    '/api/todos': { target: 'http://localhost:8123', rewrite: (p: string) => p.replace(/^\/api\/todos/, '') },
+    '/api/bookmarks': { target: 'http://localhost:8124', rewrite: (p: string) => p.replace(/^\/api\/bookmarks/, '') },
+    '/api/calendar': { target: 'http://localhost:8125', rewrite: (p: string) => p.replace(/^\/api\/calendar/, '') },
+    '/api/linear': { target: 'http://localhost:8126', rewrite: (p: string) => p.replace(/^\/api\/linear/, '') },
+    '/api/web': { target: 'http://localhost:8127', rewrite: (p: string) => p.replace(/^\/api\/web/, '') },
+    '/api/code': { target: 'http://localhost:8128', rewrite: (p: string) => p.replace(/^\/api\/code/, '') },
+    '/api/chat': { target: 'http://localhost:8129', rewrite: (p: string) => p.replace(/^\/api\/chat/, '') },
+  };
 
   return {
     plugins: [
@@ -90,8 +142,8 @@ export default defineConfig(({ mode }) => {
           },
         },
         workbox: {
-          // Allow larger bundles (Vega + Auth0 Lock libraries are ~3.5MB)
-          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+          // Allow larger bundles (libraries: Vega, Auth0, Chat components ~4.5MB)
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           // Skip waiting to activate new service worker immediately
           skipWaiting: true,
           clientsClaim: true,
@@ -153,6 +205,9 @@ export default defineConfig(({ mode }) => {
         Object.entries(env).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)])
       ),
       'import.meta.env.INTEXURAOS_BUILD_VERSION': JSON.stringify(buildVersion),
+      'import.meta.env.INTEXURAOS_COMMIT_SHA': JSON.stringify(buildInfo.fullSha),
+      'import.meta.env.INTEXURAOS_COMMIT_MESSAGE': JSON.stringify(buildInfo.commitMessage),
+      'import.meta.env.INTEXURAOS_BUILD_DATE': JSON.stringify(buildInfo.buildDate),
     },
     resolve: {
       alias: {
@@ -165,12 +220,19 @@ export default defineConfig(({ mode }) => {
       sourcemap: true,
     },
     server: {
+      allowedHosts: true,
+      host: '0.0.0.0',
       port: 3000,
       strictPort: true,
+      hmr: false,
+      proxy: apiProxy,
     },
     preview: {
+      allowedHosts: true,
       port: 3000,
       strictPort: true,
+      host: '0.0.0.0',
+      proxy: apiProxy,
     },
   };
 });

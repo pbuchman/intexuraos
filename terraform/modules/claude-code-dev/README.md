@@ -54,14 +54,14 @@ GOOGLE_APPLICATION_CREDENTIALS=<existing-owner-key> terraform apply
 ### 2. Generate Service Account Key
 
 ```bash
-gcloud iam service-accounts keys create ~/personal/gcloud-claude-code-dev.json \
+gcloud iam service-accounts keys create ~/.config/gcloud/sa-key.json \
   --iam-account=claude-code-dev@<project-id>.iam.gserviceaccount.com
 ```
 
 ### 3. Activate Service Account
 
 ```bash
-gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
+gcloud auth activate-service-account --key-file=~/.config/gcloud/sa-key.json
 ```
 
 ### 4. Verify Access
@@ -75,11 +75,11 @@ gcloud projects describe <project-id>
 
 **IMPORTANT:** Service account keys are NOT managed by Terraform.
 
-| Item            | Location                                 |
-| --------------- | ---------------------------------------- |
-| Key file        | `~/personal/gcloud-claude-code-dev.json` |
-| Version control | **NEVER** commit keys to the repository  |
-| Rotation        | Manually rotate keys via `gcloud` CLI    |
+| Item            | Location                                |
+| --------------- | --------------------------------------- |
+| Key file        | `~/.config/gcloud/sa-key.json`          |
+| Version control | **NEVER** commit keys to the repository |
+| Rotation        | Manually rotate keys via `gcloud` CLI   |
 
 ### Key Rotation
 
@@ -89,7 +89,7 @@ gcloud iam service-accounts keys list \
   --iam-account=claude-code-dev@<project-id>.iam.gserviceaccount.com
 
 # Create new key
-gcloud iam service-accounts keys create ~/personal/gcloud-claude-code-dev-new.json \
+gcloud iam service-accounts keys create ~/.config/gcloud/sa-key.json \
   --iam-account=claude-code-dev@<project-id>.iam.gserviceaccount.com
 
 # After verifying new key works, delete old key

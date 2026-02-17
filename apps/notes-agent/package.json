@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/notes-agent",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,7 +9,9 @@
   "scripts": {
     "build": "node ../../scripts/build-service.mjs notes-agent",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -24,14 +26,15 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "fastify": "^5.1.0",
     "pino": "^10.1.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^3.0.2",
+    "@vitest/coverage-v8": "^4.0.16",
     "jose": "^5.9.6",
-    "vitest": "^3.0.2"
+    "vitest": "^4.0.16"
   }
 }

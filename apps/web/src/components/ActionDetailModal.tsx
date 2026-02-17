@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { useActionConfig } from '@/hooks/useActionConfig';
+import { formatDateTime } from '@/utils/dateFormat';
 import { ConfigurableActionButton } from './ConfigurableActionButton';
 import { CalendarPreviewCard } from './CalendarPreviewCard';
 import { Button } from './ui/Button';
@@ -70,17 +71,6 @@ function getTypeIcon(type: CommandType): React.JSX.Element {
 
 function getTypeLabel(type: CommandType): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
-}
-
-function formatDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function ActionDetailModal({
@@ -162,28 +152,37 @@ export function ActionDetailModal({
     };
   }, [onClose]);
 
-  // Fetch calendar preview for calendar actions
+  // Fetch calendar preview for calendar actions, with polling when pending
   useEffect(() => {
     if (action.type !== 'calendar') return;
     if (action.status === 'completed' || action.status === 'rejected') return;
 
     let cancelled = false;
+    let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-    const fetchPreview = async (): Promise<void> => {
-      setIsLoadingPreview(true);
-      setPreviewError(null);
+    const fetchPreview = async (isPolling = false): Promise<void> => {
+      if (!isPolling) {
+        setIsLoadingPreview(true);
+        setPreviewError(null);
+      }
       try {
         const token = await getAccessToken();
         const preview = await getActionPreview(token, action.id);
         if (!cancelled) {
           setCalendarPreview(preview);
+          // If preview is still pending, poll again after 2 seconds
+          if (preview !== null && preview.status === 'pending') {
+            pollTimeoutId = setTimeout(() => {
+              void fetchPreview(true);
+            }, 2000);
+          }
         }
       } catch (error) {
         if (!cancelled) {
           setPreviewError(error instanceof Error ? error.message : 'Failed to load preview');
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !isPolling) {
           setIsLoadingPreview(false);
         }
       }
@@ -193,6 +192,9 @@ export function ActionDetailModal({
 
     return (): void => {
       cancelled = true;
+      if (pollTimeoutId !== null) {
+        clearTimeout(pollTimeoutId);
+      }
     };
   }, [action.id, action.type, action.status, getAccessToken]);
 
@@ -212,6 +214,11 @@ export function ActionDetailModal({
     return url;
   };
 
+  const persistedResourceUrl =
+    action.status === 'completed' && typeof action.payload['resource_url'] === 'string'
+      ? normalizeResourceUrl(action.payload['resource_url'])
+      : null;
+
   const handleResult = (result: ActionExecutionResult, button: ResolvedActionButton): void => {
     // Check for duplicate bookmark conflict
     if (result.existingBookmarkId !== undefined) {
@@ -223,8 +230,14 @@ export function ActionDetailModal({
       return;
     }
 
+    // For PATCH/DELETE endpoints (archive, reject, delete), success is indicated by
+    // not throwing an error. These return the updated action, not ActionExecutionResult.
+    // Only POST /execute endpoints return ActionExecutionResult with status field.
+    const isPatchOrDelete =
+      button.endpoint.method === 'PATCH' || button.endpoint.method === 'DELETE';
+
     // Handle success case (completed with resourceUrl)
-    if (result.status === 'completed' && result.resourceUrl !== undefined) {
+    if ((isPatchOrDelete || result.status === 'completed') && result.resourceUrl !== undefined) {
       const normalizedUrl = normalizeResourceUrl(result.resourceUrl);
       const message = button.onSuccess?.message ?? 'Action completed successfully';
       const linkLabel = button.onSuccess?.linkLabel ?? `Open ${action.type}`;
@@ -237,9 +250,17 @@ export function ActionDetailModal({
         linkLabel,
       });
 
+      // Update parent state with resource_url in payload for persistence
+      onActionUpdated?.({
+        ...action,
+        status: 'completed',
+        payload: { ...action.payload, resource_url: normalizedUrl },
+        updatedAt: new Date().toISOString(),
+      });
+
       setExecutionResult({
         actionId: result.actionId,
-        status: result.status,
+        status: 'completed',
         resourceUrl: normalizedUrl,
         message,
         linkLabel,
@@ -247,7 +268,12 @@ export function ActionDetailModal({
       return;
     }
 
-    // Handle failure case
+    // For PATCH/DELETE without resourceUrl, silently succeed (modal will close via onSuccess)
+    if (isPatchOrDelete) {
+      return;
+    }
+
+    // Handle failure case (only for POST endpoints that return status: 'failed')
     if (result.status === 'failed') {
       setExecutionResult({
         actionId: result.actionId,
@@ -309,14 +335,14 @@ export function ActionDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl dark:bg-slate-800">
         {/* Header */}
-        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 p-4">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 p-4 dark:border-slate-700">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 rounded-lg bg-slate-100 p-2">{getTypeIcon(selectedType)}</div>
+            <div className="mt-0.5 rounded-lg bg-slate-100 p-2 dark:bg-slate-700">{getTypeIcon(selectedType)}</div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">{action.title}</h2>
-              <div className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{action.title}</h2>
+              <div className="mt-1 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                 {canChangeType ? (
                   <div className="relative inline-flex items-center">
                     <select
@@ -325,7 +351,7 @@ export function ActionDetailModal({
                         void handleTypeChange(e.target.value as CommandType);
                       }}
                       disabled={isChangingType}
-                      className="appearance-none rounded-full border border-slate-200 bg-slate-100 py-0.5 pl-2 pr-6 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="appearance-none rounded-full border border-slate-200 bg-slate-100 py-0.5 pl-2 pr-6 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300"
                     >
                       {ACTION_TYPES.map((t) => (
                         <option key={t} value={t}>
@@ -338,20 +364,20 @@ export function ActionDetailModal({
                     )}
                   </div>
                 ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">
                     {getTypeLabel(selectedType)}
                   </span>
                 )}
                 <span>{String(Math.round(action.confidence * 100))}% confidence</span>
               </div>
               {typeChangeError !== null && (
-                <p className="mt-1 text-xs text-red-600">{typeChangeError}</p>
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{typeChangeError}</p>
               )}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -363,10 +389,10 @@ export function ActionDetailModal({
           {/* Original command text */}
           {command !== undefined && (
             <div>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Original Command
               </h3>
-              <div className="break-words rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+              <div className="break-words rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-700 dark:text-slate-300">
                 {command.text}
               </div>
             </div>
@@ -375,10 +401,10 @@ export function ActionDetailModal({
           {/* Classification reasoning */}
           {command?.classification?.reasoning !== undefined && (
             <div>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Classification Reasoning
               </h3>
-              <div className="break-words rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
+              <div className="break-words rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">
                 {command.classification.reasoning}
               </div>
             </div>
@@ -389,7 +415,7 @@ export function ActionDetailModal({
             action.status !== 'completed' &&
             action.status !== 'rejected' && (
               <div>
-                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Event Preview
                 </h3>
                 <CalendarPreviewCard
@@ -401,46 +427,57 @@ export function ActionDetailModal({
             )}
 
           {/* Timestamps */}
-          <div className="flex items-center gap-4 text-xs text-slate-500">
+          <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
-              <span>Created {formatDate(action.createdAt)}</span>
+              <span>Created {formatDateTime(action.createdAt)}</span>
             </div>
             {action.updatedAt !== action.createdAt && (
               <div className="flex items-center gap-1">
-                <span>Updated {formatDate(action.updatedAt)}</span>
+                <span>Updated {formatDateTime(action.updatedAt)}</span>
               </div>
             )}
           </div>
 
           {/* Status badge */}
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <span className="text-sm font-medium text-slate-600">
-              Status:{' '}
-              <span
-                className={
-                  action.status === 'completed'
-                    ? 'text-green-600'
-                    : action.status === 'processing'
-                      ? 'text-blue-600'
-                      : action.status === 'failed' || action.status === 'rejected'
-                        ? 'text-red-600'
-                        : 'text-slate-600'
-                }
-              >
-                {action.status.charAt(0).toUpperCase() + action.status.slice(1)}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-600 dark:bg-slate-700">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                Status:{' '}
+                <span
+                  className={
+                    action.status === 'completed'
+                      ? 'text-green-600'
+                      : action.status === 'processing'
+                        ? 'text-blue-600'
+                        : action.status === 'failed' || action.status === 'rejected'
+                          ? 'text-red-600'
+                          : 'text-slate-600'
+                  }
+                >
+                  {action.status.charAt(0).toUpperCase() + action.status.slice(1)}
+                </span>
               </span>
-            </span>
+              {persistedResourceUrl !== null && executionResult === null && (
+                <RouterLink
+                  to={persistedResourceUrl}
+                  className="inline-flex items-center gap-1 rounded-lg bg-green-100 px-3 py-1.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-200"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  View {action.type.charAt(0).toUpperCase() + action.type.slice(1)}
+                </RouterLink>
+              )}
+            </div>
           </div>
 
           {/* Persisted failure reason */}
           {persistedError !== null && executionResult === null && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
               <div className="flex items-start gap-2">
                 <X className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-red-800">Failure Reason</p>
-                  <p className="mt-1 text-sm text-red-700">{persistedError}</p>
+                  <p className="text-sm font-medium text-red-800 dark:text-red-400">Failure Reason</p>
+                  <p className="mt-1 text-sm text-red-700 dark:text-red-300">{persistedError}</p>
                   {(persistedErrorCode === 'TOKEN_ERROR' ||
                     persistedErrorCode === 'NOT_CONNECTED' ||
                     persistedErrorCode === 'UNAUTHORIZED') && (
@@ -459,12 +496,12 @@ export function ActionDetailModal({
 
         {/* Actions, Success View, or Error View */}
         {executionResult !== null && executionResult.status === 'completed' ? (
-          <div className="shrink-0 border-t border-slate-200 p-4">
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+          <div className="shrink-0 border-t border-slate-200 p-4 dark:border-slate-700">
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/30">
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
                 <div className="flex-1">
-                  <h4 className="font-medium text-green-800">
+                  <h4 className="font-medium text-green-800 dark:text-green-400">
                     {executionResult.message ?? 'Action completed successfully'}
                   </h4>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -484,12 +521,12 @@ export function ActionDetailModal({
             </div>
           </div>
         ) : executionResult !== null && executionResult.status === 'failed' ? (
-          <div className="shrink-0 border-t border-slate-200 p-4">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <div className="shrink-0 border-t border-slate-200 p-4 dark:border-slate-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
               <div className="flex items-start gap-3">
                 <X className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
                 <div className="flex-1">
-                  <h4 className="font-medium text-red-800">
+                  <h4 className="font-medium text-red-800 dark:text-red-400">
                     {executionResult.message ?? 'Action failed'}
                   </h4>
                   {(executionResult.errorCode === 'TOKEN_ERROR' ||
@@ -512,15 +549,15 @@ export function ActionDetailModal({
             </div>
           </div>
         ) : (
-          <div className="shrink-0 border-t border-slate-200 p-4">
+          <div className="shrink-0 border-t border-slate-200 p-4 dark:border-slate-700">
             {executionError !== null && (
-              <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3">
-                <p className="text-sm text-red-600">{executionError}</p>
+              <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
+                <p className="text-sm text-red-600 dark:text-red-400">{executionError}</p>
               </div>
             )}
             <div className="flex flex-nowrap items-center justify-end gap-2">
             {isLoading ? (
-              <div className="text-sm text-slate-500">Loading actions...</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">Loading actions...</div>
             ) : (
               buttons.map((button) => (
                 <ConfigurableActionButton

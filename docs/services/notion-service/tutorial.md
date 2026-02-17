@@ -1,6 +1,6 @@
 # Notion Service - Tutorial
 
-Notion integration management.
+Notion integration management and page access validation.
 
 ## Prerequisites
 
@@ -21,6 +21,19 @@ curl -X POST https://notion-service.intexuraos.com/notion/connect \
   }'
 ```
 
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "connected": true,
+    "createdAt": "2026-02-08T10:00:00Z",
+    "updatedAt": "2026-02-08T10:00:00Z"
+  }
+}
+```
+
 ## Part 2: Check Status
 
 ```bash
@@ -35,9 +48,12 @@ curl -X DELETE https://notion-service.intexuraos.com/notion/disconnect \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
+**Note:** Disconnect returns an empty data object (`{}`).
+
 ## Troubleshooting
 
-| Error            | Cause            | Solution             |
-| ---------------- | ---------------- | -------------------- |
-| INVALID_TOKEN    | Bad token        | Regenerate in Notion |
-| DOWNSTREAM_ERROR | Notion API issue | Retry later          |
+| Error            | Cause                       | Solution                       |
+| ---------------- | --------------------------- | ------------------------------ |
+| INVALID_TOKEN    | Bad token                   | Regenerate in Notion           |
+| DOWNSTREAM_ERROR | Notion API issue            | Retry later                    |
+| NOT_FOUND        | No connection or page issue | Connect first or check page ID |

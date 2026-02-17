@@ -287,6 +287,15 @@ describe('generateShareableHtml', () => {
       expect(html).toContain('Context 1');
     });
 
+    it('uses numbered label when label is undefined', () => {
+      const html = generateShareableHtml({
+        ...baseInput,
+        inputContexts: [{ content: 'Context content' } as { content: string; label?: string }],
+      });
+
+      expect(html).toContain('Context 1');
+    });
+
     it('does not render section when empty array', () => {
       const html = generateShareableHtml({
         ...baseInput,
