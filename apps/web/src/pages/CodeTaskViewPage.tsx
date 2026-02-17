@@ -138,21 +138,13 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
   const isActive = task.status === 'running' || task.status === 'dispatched';
   const isRetryable = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
-  const taskWorker = workersStatus !== null
-    ? workersStatus.workers.find((w) => w.name === task.workerLocation) ?? null
-    : undefined; // undefined = still loading, null = worker not found
-  const isTaskWorkerOnline = taskWorker === undefined ? true : taskWorker?.healthy === true;
+  const isTaskWorkerOnline = workersStatus !== null
+    ? workersStatus.workers.find((w) => w.name === task.workerLocation)?.healthy !== false
+    : true;
 
   return (
     <Layout>
       <MemoTaskHeader task={task} />
-
-      <MemoTaskCancelAction
-        isActive={isActive}
-        cancelling={cancelling}
-        cancelError={cancelError}
-        onCancel={cancelTask}
-      />
 
       <MemoActiveProgress task={task} />
 
@@ -174,7 +166,11 @@ export function CodeTaskViewPage(): React.JSX.Element {
         workerName={task.workerLocation}
       />
 
-      <MemoTaskRetryAction
+      <MemoTaskActions
+        isActive={isActive}
+        cancelling={cancelling}
+        cancelError={cancelError}
+        onCancel={cancelTask}
         isRetryable={isRetryable}
         retrying={retrying}
         retryError={retryError}
@@ -275,52 +271,34 @@ function isActiveStatus(status: CodeTaskStatus): boolean {
   return status === 'dispatched' || status === 'running';
 }
 
-function TaskCancelAction({
+function TaskActions({
   isActive, cancelling, cancelError, onCancel,
+  isRetryable, retrying, retryError, onRetry,
 }: {
   isActive: boolean;
   cancelling: boolean;
   cancelError: string | null;
   onCancel: () => Promise<void>;
-}): React.JSX.Element | null {
-  if (!isActive && cancelError === null) return null;
-
-  return (
-    <div className="mb-6">
-      {isActive ? (
-        <div className="flex gap-3">
-          <Button
-            variant="danger"
-            onClick={(): void => { void onCancel(); }}
-            disabled={cancelling}
-            isLoading={cancelling}
-          >
-            <StopCircle className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Cancel Task</span>
-          </Button>
-        </div>
-      ) : null}
-      {cancelError !== null ? (
-        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{cancelError}</p>
-      ) : null}
-    </div>
-  );
-}
-
-const MemoTaskCancelAction = memo(TaskCancelAction);
-
-function TaskRetryAction({
-  isRetryable, retrying, retryError, onRetry,
-}: {
   isRetryable: boolean;
   retrying: boolean;
   retryError: string | null;
   onRetry: () => Promise<void>;
 }): React.JSX.Element | null {
-  if (!isRetryable && retryError === null) return null;
+  if (!isActive && !isRetryable && cancelError === null && retryError === null) return null;
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-3">
+      {isActive ? (
+        <Button
+          variant="danger"
+          onClick={(): void => { void onCancel(); }}
+          disabled={cancelling}
+          isLoading={cancelling}
+        >
+          <StopCircle className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Cancel Task</span>
+        </Button>
+      ) : null}
       {isRetryable ? (
         <Button
           onClick={(): void => { void onRetry(); }}
@@ -332,6 +310,9 @@ function TaskRetryAction({
           <span className="hidden sm:inline">Retry Task</span>
         </Button>
       ) : null}
+      {cancelError !== null ? (
+        <p className="text-sm text-red-600 dark:text-red-400">{cancelError}</p>
+      ) : null}
       {retryError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{retryError}</p>
       ) : null}
@@ -339,7 +320,7 @@ function TaskRetryAction({
   );
 }
 
-const MemoTaskRetryAction = memo(TaskRetryAction);
+const MemoTaskActions = memo(TaskActions);
 
 // --- Elapsed timer (self-contained interval, only re-renders itself) ---
 
