@@ -718,7 +718,7 @@ const MemoLogLineRow = memo(function LogLineRow({ line }: { line: LogLine }): Re
   const isResumed = line.text.startsWith('[resumed]');
 
   let extraClass = '';
-  if (isUserMessage) extraClass = ' border-l-2 border-cyan-800 pl-2';
+  if (isUserMessage) extraClass = ' border-l-2 border-cyan-800 bg-cyan-900/20 pl-2';
   else if (isQueued) extraClass = ' border-l-2 border-amber-700 bg-amber-900/20 pl-2';
   else if (isResumed) extraClass = ' border-l-2 border-emerald-700 bg-emerald-900/20 pl-2';
 
