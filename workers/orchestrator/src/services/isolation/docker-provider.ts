@@ -149,6 +149,57 @@ export class DockerProvider implements IsolationProvider {
       return existingWorker.handle;
     }
 
+    // Restore preserved container for resume (container still alive but removed from workers Map)
+    if (config.continueSession === true) {
+      const preserved = this.preservedWorkers.get(taskId);
+      if (preserved !== undefined) {
+        this.preservedWorkers.delete(taskId);
+
+        const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
+        const taskSessionPath = path.join(
+          this.config.secretsBasePath,
+          `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
+        );
+
+        // Recreate secrets dir (deleted during preservation) and write new prompt files
+        await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+        await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
+
+        /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
+        if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
+          await fs.promises.copyFile(
+            config.gcpSaKeyPath,
+            path.join(taskSecretsPath, 'gcp-sa.json')
+          );
+        }
+        /* v8 ignore stop @preserve */
+
+        const handle: WorkerHandle = {
+          taskId,
+          containerId: preserved.containerId,
+          status: 'running',
+          startedAt: new Date(),
+        };
+
+        this.workers.set(taskId, {
+          containerId: preserved.containerId,
+          handle,
+          taskSecretsPath,
+          taskSessionPath,
+          attemptRunning: false,
+          attemptLogBuffer: '',
+        });
+
+        this.logger.info(
+          { taskId, containerId: preserved.containerId },
+          'Restored preserved container for resume'
+        );
+
+        void this.runAttemptInContainer(taskId, config);
+        return handle;
+      }
+    }
+
     if (this.workers.size >= this.config.maxConcurrent) {
       throw new Error(`Max concurrent workers (${String(this.config.maxConcurrent)}) reached`);
     }
