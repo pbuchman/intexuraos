@@ -236,7 +236,13 @@ export class TaskDispatcher {
       const promptPreview =
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
       /* v8 ignore stop @preserve */
-      this.appendOrchestratorTaskLog(taskId, `Prompt: ${promptPreview}`);
+      this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
+      const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'Phase 2' : 'Phase 1';
+      const phaseDesc =
+        phase === 'Phase 2'
+          ? 'Strict Execution \u2014 implement autonomously, run CI, create PR'
+          : 'Design & Validation \u2014 analyze and enrich the Linear issue, do not execute code';
+      this.appendTaggedTaskLog(taskId, 'instructions', `${phase}: ${phaseDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
       /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
@@ -378,9 +384,11 @@ export class TaskDispatcher {
       // at creation time and never refreshes it.
       this.logForwarder.registerTask(taskId, task.webhookSecret);
 
-      this.appendOrchestratorTaskLog(
+      this.appendOrchestratorTaskLog(taskId, 'Resuming task with user message');
+      this.appendTaggedTaskLog(
         taskId,
-        `Resuming task with message: ${message.length > 200 ? message.slice(0, 200) + '\u2026' : message}`
+        'prompt',
+        message.length > 200 ? message.slice(0, 200) + '\u2026' : message
       );
 
       const resumeResult = await this.startWorkerAttempt(task, {
@@ -400,6 +408,8 @@ export class TaskDispatcher {
       task.status = 'running';
       task.containerId = resumeResult.containerId;
       task.startedAt = new Date().toISOString();
+      task.attemptCount = 1;
+      task.verificationHistory = [];
       delete task.completedAt;
       await this.saveTask(task);
 
@@ -744,7 +754,12 @@ export class TaskDispatcher {
         const combinedPrompt = pendingQueue.join('\n\n');
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing: ${combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '…' : combinedPrompt}`
+          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
+        );
+        this.appendTaggedTaskLog(
+          task.taskId,
+          'prompt',
+          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
         );
         await this.flushTaskLogs(task.taskId);
         await this.teardownAttempt(task.taskId, true);
@@ -1214,9 +1229,13 @@ export class TaskDispatcher {
   }
 
   private appendOrchestratorTaskLog(taskId: string, message: string): void {
+    this.appendTaggedTaskLog(taskId, 'orchestrator', message);
+  }
+
+  private appendTaggedTaskLog(taskId: string, tag: string, message: string): void {
     this.logForwarder.appendChunk(
       taskId,
-      `${this.formatLocalTime(new Date())} [orchestrator] ${message}\n`
+      `${this.formatLocalTime(new Date())} [${tag}] ${message}\n`
     );
   }
 

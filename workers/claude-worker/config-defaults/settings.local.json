@@ -1,3 +1,4 @@
 {
-  "preferredNotifChannel": "terminal_bell"
+  "preferredNotifChannel": "terminal_bell",
+  "outputStyle": "explanatory"
 }
