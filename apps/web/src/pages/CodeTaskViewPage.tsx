@@ -73,6 +73,8 @@ const TAG_STYLES: Record<string, TagStyle> = {
   user:         { text: 'text-cyan-400',    border: 'border-cyan-800',    bg: 'bg-cyan-900/20' },
   queued:       { text: 'text-amber-400',   border: 'border-amber-700',   bg: 'bg-amber-900/20' },
   resumed:      { text: 'text-emerald-400', border: 'border-emerald-700', bg: 'bg-emerald-900/20' },
+  prompt:       { text: 'text-orange-300',  border: 'border-orange-700',  bg: 'bg-orange-900/20' },
+  instructions: { text: 'text-violet-300',  border: 'border-violet-700',  bg: 'bg-violet-900/20' },
   claude:       { text: 'text-blue-300' },
   tool:         { text: 'text-yellow-300' },
   error:        { text: 'text-red-400' },
@@ -640,7 +642,7 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, worker
     setMessage('');
     // Reset textarea height
     if (textareaRef.current !== null) {
-      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = '';
     }
     void onSendMessage(trimmed).finally(() => {
       // Restore focus after React settles (resume path re-renders heavily)
