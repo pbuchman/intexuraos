@@ -113,7 +113,16 @@ export async function apiRequest<T>(
     return undefined as T;
   }
 
-  const json: unknown = await response.json();
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    throw new ApiError(
+      'INVALID_RESPONSE',
+      `Server returned ${String(response.status)} with non-JSON response`,
+      response.status
+    );
+  }
 
   // Validate response structure defensively
   if (

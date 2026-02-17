@@ -56,10 +56,10 @@ const DEFAULT_BADGE_STYLE = 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:
 const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
 
 const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
-  healthy: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300',
-  'orchestrator-unreachable': 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
-  'tunnel-down': 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
-  unknown: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+  healthy: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-700 dark:text-emerald-100',
+  'orchestrator-unreachable': 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100',
+  'tunnel-down': 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100',
+  unknown: 'bg-amber-200 text-amber-900 dark:bg-amber-700 dark:text-amber-100',
 };
 
 // --- Log line color mapping ---
@@ -217,10 +217,10 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
         {!isActiveStatus(task.status) ? (
           <span>Updated: {formatRelative(task.updatedAt)}</span>
         ) : null}
-        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
+        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
           {task.workerType}
         </span>
-        <span className={`rounded px-2 py-0.5 text-xs capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
           {task.workerLocation}
         </span>
 
