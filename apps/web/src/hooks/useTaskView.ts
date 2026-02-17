@@ -307,6 +307,14 @@ export function useTaskView(taskId: string): TaskViewState {
       const result = await sendTaskMessageApi(token, task.id, { message });
       if (isMountedRef.current) {
         setMessageStatus(result.action === 'queued' ? 'queued' : 'delivered');
+
+        // When a terminal task is resumed, update local status so the
+        // Firestore effect re-runs and attaches live onSnapshot listeners.
+        if (result.action === 'resumed') {
+          setTask({ ...task, status: 'running' });
+          lastStatusRef.current = 'running';
+        }
+
         // Reset status after 3 seconds so user can send another message
         setTimeout(() => {
           if (isMountedRef.current) {
