@@ -138,7 +138,6 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
   const isActive = task.status === 'running' || task.status === 'dispatched';
   const isRetryable = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
-  const hasHealthyWorker = workersStatus?.workers.some((w) => w.healthy && w.priority > 0) === true;
   const taskWorker = workersStatus !== null
     ? workersStatus.workers.find((w) => w.name === task.workerLocation) ?? null
     : undefined; // undefined = still loading, null = worker not found
@@ -148,17 +147,11 @@ export function CodeTaskViewPage(): React.JSX.Element {
     <Layout>
       <MemoTaskHeader task={task} />
 
-      <MemoTaskActions
-        task={task}
+      <MemoTaskCancelAction
         isActive={isActive}
-        isRetryable={isRetryable}
-        hasHealthyWorker={hasHealthyWorker}
         cancelling={cancelling}
         cancelError={cancelError}
-        retrying={retrying}
-        retryError={retryError}
         onCancel={cancelTask}
-        onRetry={handleRetry}
       />
 
       <MemoActiveProgress task={task} />
@@ -179,6 +172,13 @@ export function CodeTaskViewPage(): React.JSX.Element {
         messageStatus={messageStatus}
         workerOnline={isTaskWorkerOnline}
         workerName={task.workerLocation}
+      />
+
+      <MemoTaskRetryAction
+        isRetryable={isRetryable}
+        retrying={retrying}
+        retryError={retryError}
+        onRetry={handleRetry}
       />
     </Layout>
   );
@@ -275,71 +275,71 @@ function isActiveStatus(status: CodeTaskStatus): boolean {
   return status === 'dispatched' || status === 'running';
 }
 
-interface TaskActionsProps {
-  task: CodeTask;
+function TaskCancelAction({
+  isActive, cancelling, cancelError, onCancel,
+}: {
   isActive: boolean;
-  isRetryable: boolean;
-  hasHealthyWorker: boolean;
   cancelling: boolean;
   cancelError: string | null;
-  retrying: boolean;
-  retryError: string | null;
   onCancel: () => Promise<void>;
-  onRetry: () => Promise<void>;
-}
-
-function TaskActions({
-  isActive, isRetryable, hasHealthyWorker,
-  cancelling, cancelError, retrying, retryError,
-  onCancel, onRetry,
-}: TaskActionsProps): React.JSX.Element | null {
-  const showActions = isActive || (isRetryable && hasHealthyWorker);
-  if (!showActions && cancelError === null && retryError === null && !(isRetryable && !hasHealthyWorker)) return null;
+}): React.JSX.Element | null {
+  if (!isActive && cancelError === null) return null;
 
   return (
     <div className="mb-6">
-      {showActions ? (
+      {isActive ? (
         <div className="flex gap-3">
-          {isActive ? (
-            <Button
-              variant="danger"
-              onClick={(): void => { void onCancel(); }}
-              disabled={cancelling}
-              isLoading={cancelling}
-            >
-              <StopCircle className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Cancel Task</span>
-            </Button>
-          ) : null}
-          {isRetryable && hasHealthyWorker ? (
-            <Button
-              onClick={(): void => { void onRetry(); }}
-              disabled={retrying}
-              isLoading={retrying}
-              loadingText="Retrying..."
-            >
-              <RotateCcw className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Retry Task</span>
-            </Button>
-          ) : null}
+          <Button
+            variant="danger"
+            onClick={(): void => { void onCancel(); }}
+            disabled={cancelling}
+            isLoading={cancelling}
+          >
+            <StopCircle className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Cancel Task</span>
+          </Button>
         </div>
-      ) : null}
-      {isRetryable && !hasHealthyWorker ? (
-        <p className="text-sm text-amber-600 dark:text-amber-400">
-          No healthy workers available. Retry will be enabled when a worker is online.
-        </p>
       ) : null}
       {cancelError !== null ? (
         <p className="mt-2 text-sm text-red-600 dark:text-red-400">{cancelError}</p>
-      ) : null}
-      {retryError !== null ? (
-        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{retryError}</p>
       ) : null}
     </div>
   );
 }
 
-const MemoTaskActions = memo(TaskActions);
+const MemoTaskCancelAction = memo(TaskCancelAction);
+
+function TaskRetryAction({
+  isRetryable, retrying, retryError, onRetry,
+}: {
+  isRetryable: boolean;
+  retrying: boolean;
+  retryError: string | null;
+  onRetry: () => Promise<void>;
+}): React.JSX.Element | null {
+  if (!isRetryable && retryError === null) return null;
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3">
+      {isRetryable ? (
+        <Button
+          onClick={(): void => { void onRetry(); }}
+          disabled={retrying}
+          isLoading={retrying}
+          loadingText="Retrying..."
+        >
+          <RotateCcw className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Retry Task</span>
+        </Button>
+      ) : null}
+      {retryError !== null ? (
+        <p className="text-sm text-red-600 dark:text-red-400">{retryError}</p>
+      ) : null}
+    </div>
+  );
+}
+
+const MemoTaskRetryAction = memo(TaskRetryAction);
 
 // --- Elapsed timer (self-contained interval, only re-renders itself) ---
 
