@@ -541,6 +541,39 @@ All artifacts must be connected:
 **Dev** and **local** both use `pnpm dev` (Vite dev server with proxy). Service URLs are `/api/*` relative paths proxied by Vite.
 **Prod** uses `pnpm build` (static bundle on CDN). Service URLs are absolute Cloud Run URLs baked at build time.
 
+### ⛔ Environment Awareness — BEFORE Investigating Any Runtime Issue
+
+**RULE: Identify WHERE you are running before investigating.** Wrong assumptions waste time.
+
+```
+STEP 1: Am I on home-dev, local macOS, or analyzing prod logs?
+STEP 2: If home-dev → everything is co-located. No SSH needed. Direct access.
+STEP 3: Check service status with the right tool (see below).
+```
+
+**On home-dev / local — all services run on the SAME machine:**
+
+| Component                        | Manager        | Commands                                           |
+| -------------------------------- | -------------- | -------------------------------------------------- |
+| Apps (18 services + web)         | PM2            | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>` |
+| Workers (orchestrator, etc.)     | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`     |
+
+**Workers are NOT in PM2.** The orchestrator, claude-worker, log-cleanup, and vm-lifecycle run as separate processes outside PM2. Check with `ps aux | grep orchestrator`, not `pm2 status`.
+
+**Key port map** (full list in `ecosystem.config.cjs`):
+
+| Service      | Port |
+| ------------ | ---- |
+| code-agent   | 8128 |
+| chat-agent   | 8129 |
+| web-agent    | 8127 |
+| user-service | 8110 |
+
+**Forbidden assumptions:**
+- "This is a prod issue" — verify first. Claude Code runs on home-dev.
+- "I can't access that service" — on home-dev, you CAN. It's localhost.
+- "Not related to my changes" — if it's on the same machine, investigate it.
+
 ---
 
 # [R] REFERENCE — On-Demand Lookup
