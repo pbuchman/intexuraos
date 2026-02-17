@@ -156,7 +156,7 @@ export async function sendTaskMessage(
       { sequence: sequence + 1, text: '[queued] Message queued \u2014 will be delivered when current work completes', timestamp: Timestamp.now() },
       ...allQueued.map((m, i) => ({
         sequence: sequence + 2 + i,
-        text: `[user] ${m}`,
+        text: `[queued] ${m}`,
         timestamp: Timestamp.now(),
       })),
     ];

@@ -480,12 +480,12 @@ describe('sendTaskMessage', () => {
   });
 
   describe('status log lines', () => {
-    it('should write [queued] log line with accumulated [user] lines when action is queued', async () => {
+    it('should write [queued] log line with accumulated [queued] lines when action is queued', async () => {
       setupSuccessPath({ status: 'running' }, 'queued');
 
       await sendTaskMessage(createDeps(), { taskId, userId, message });
 
-      // storeBatch is called twice: once for [user], once for [queued] + accumulated [user] lines
+      // storeBatch is called twice: once for [user], once for [queued] status + accumulated [queued] lines
       expect(mockLogLineRepo.storeBatch).toHaveBeenCalledTimes(2);
       const secondCall = mockLogLineRepo.storeBatch.mock.calls[1];
       expect(secondCall?.[0]).toBe(taskId);
@@ -495,7 +495,7 @@ describe('sendTaskMessage', () => {
           timestamp: expect.any(Timestamp),
         }),
         expect.objectContaining({
-          text: `[user] ${message}`,
+          text: `[queued] ${message}`,
           timestamp: expect.any(Timestamp),
         }),
       ]);
