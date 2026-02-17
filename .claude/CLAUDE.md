@@ -553,10 +553,10 @@ STEP 3: Check service status with the right tool (see below).
 
 **On home-dev / local — all services run on the SAME machine:**
 
-| Component                        | Manager        | Commands                                           |
-| -------------------------------- | -------------- | -------------------------------------------------- |
-| Apps (18 services + web)         | PM2            | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>` |
-| Workers (orchestrator, etc.)     | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`     |
+| Component                    | Manager        | Commands                                              |
+| ---------------------------- | -------------- | ----------------------------------------------------- |
+| Apps (18 services + web)     | PM2            | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>` |
+| Workers (orchestrator, etc.) | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`        |
 
 **Workers are NOT in PM2.** The orchestrator, claude-worker, log-cleanup, and vm-lifecycle run as separate processes outside PM2. Check with `ps aux | grep orchestrator`, not `pm2 status`.
 
@@ -570,6 +570,7 @@ STEP 3: Check service status with the right tool (see below).
 | user-service | 8110 |
 
 **Forbidden assumptions:**
+
 - "This is a prod issue" — verify first. Claude Code runs on home-dev.
 - "I can't access that service" — on home-dev, you CAN. It's localhost.
 - "Not related to my changes" — if it's on the same machine, investigate it.
