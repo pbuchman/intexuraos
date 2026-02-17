@@ -123,6 +123,7 @@ vi.mock('node:fs', async (importOriginal) => {
       mkdir: vi.fn().mockResolvedValue(undefined),
       copyFile: vi.fn().mockResolvedValue(undefined),
       rm: vi.fn().mockResolvedValue(undefined),
+      readdir: vi.fn().mockResolvedValue(['system-prompt.txt', 'user-prompt.txt', 'github-token']),
       writeFile: vi.fn().mockResolvedValue(undefined),
     },
   };
@@ -565,16 +566,20 @@ describe('DockerProvider', () => {
       expect(handle.taskId).toBe('task-3');
     });
 
-    it('cleans up secrets directory but not session directory', async () => {
+    it('clears files inside secrets directory but keeps the directory itself', async () => {
       const fs = await import('node:fs');
       await provider.createWorker(createTestConfig({ taskId: 'task-1' }));
 
       await provider.preserveWorker('task-1');
 
+      // Reads directory entries, then removes each file individually
+      expect(fs.promises.readdir).toHaveBeenCalledWith(expect.stringContaining('task-1'));
       const rmCalls = (fs.promises.rm as ReturnType<typeof vi.fn>).mock.calls;
-      expect(rmCalls).toHaveLength(1);
-      expect(rmCalls[0]?.[0]).toContain('task-1');
-      expect(rmCalls[0]?.[0]).not.toContain('claude-session');
+      // Each file entry is removed, but not the directory itself
+      expect(rmCalls.length).toBeGreaterThanOrEqual(3);
+      for (const call of rmCalls) {
+        expect(call[0]).toContain('task-1');
+      }
     });
 
     it('does not stop or remove the container', async () => {
@@ -595,7 +600,7 @@ describe('DockerProvider', () => {
 
     it('logs secrets cleanup failure without throwing', async () => {
       const fs = await import('node:fs');
-      (fs.promises.rm as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      (fs.promises.readdir as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('permission denied')
       );
 
@@ -603,7 +608,7 @@ describe('DockerProvider', () => {
       await expect(provider.preserveWorker('task-1')).resolves.not.toThrow();
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'task-1' }),
-        'Failed to remove task secrets directory during preservation'
+        'Failed to clear task secrets during preservation'
       );
     });
   });

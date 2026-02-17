@@ -721,13 +721,20 @@ export class DockerProvider implements IsolationProvider {
     });
     this.workers.delete(taskId);
 
+    // Clear sensitive files but keep the directory — rm -rf would invalidate
+    // the container's bind mount (Linux bind mounts follow inodes, not paths).
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
     try {
-      await fs.promises.rm(taskSecretsPath, { recursive: true, force: true });
+      const entries = await fs.promises.readdir(taskSecretsPath);
+      await Promise.all(
+        entries.map((entry) =>
+          fs.promises.rm(path.join(taskSecretsPath, entry), { recursive: true, force: true })
+        )
+      );
     } catch (err: unknown) {
       this.logger.error(
         { taskId, error: err, path: taskSecretsPath },
-        'Failed to remove task secrets directory during preservation'
+        'Failed to clear task secrets during preservation'
       );
     }
 
