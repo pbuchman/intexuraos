@@ -164,7 +164,7 @@ export async function sendTaskMessage(
   // Best-effort side-effects when task is resumed
   if (action === 'resumed') {
     // Update Firestore status so web UI reflects the task is running again
-    const updateResult = await codeTaskRepo.update(taskId, { status: 'running' });
+    const updateResult = await codeTaskRepo.update(taskId, { status: 'running', error: null });
     if (!updateResult.ok) {
       logger.warn({ taskId, error: updateResult.error }, 'Failed to update task status on resume');
     }

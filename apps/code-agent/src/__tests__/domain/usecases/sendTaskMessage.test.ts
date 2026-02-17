@@ -557,7 +557,7 @@ describe('sendTaskMessage', () => {
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
       expect(result.ok).toBe(true);
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { status: 'running' });
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(taskId, { status: 'running', error: null });
     });
 
     it('should mirror status to running on resume', async () => {
