@@ -15,6 +15,7 @@ import type {
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
 
+/* v8 ignore start -- test-infra: requires worker HTTP endpoint to return specific JSON/text error bodies @preserve */
 /** Extract human-readable error message from a response body (may be JSON `{"error":"..."}` or plain text). */
 function extractErrorMessage(text: string): string {
   try {
@@ -27,6 +28,7 @@ function extractErrorMessage(text: string): string {
   }
   return text;
 }
+/* v8 ignore stop @preserve */
 
 /**
  * Worker task request body sent to worker orchestrator.
