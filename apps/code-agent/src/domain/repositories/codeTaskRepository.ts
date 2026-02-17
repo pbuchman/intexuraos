@@ -7,6 +7,8 @@ import type { Result } from '@intexuraos/common-core';
 import type { CodeTask, TaskStatus } from '../models/codeTask.js';
 
 export interface CreateTaskInput {
+  /** Pre-generated task ID. Auto-generated if not provided. */
+  id?: string;
   userId: string;
   prompt: string;
   sanitizedPrompt: string;

@@ -147,6 +147,7 @@ describe('submitTaskFeedback use case', () => {
       whatsappNotifier: mockWhatsAppNotifier as unknown as SubmitTaskFeedbackDeps['whatsappNotifier'],
       metricsClient: mockMetricsClient as unknown as SubmitTaskFeedbackDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitTaskFeedbackDeps['workerSettingsRepo'],
+      orchestratorSecret: 'test-orchestrator-secret',
     };
   }
 

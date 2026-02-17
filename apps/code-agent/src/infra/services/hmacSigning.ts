@@ -79,15 +79,17 @@ export function signDispatchRequest(
 }
 
 /**
- * Generate a unique webhook secret for a task.
+ * Generate a deterministic webhook secret for a task.
  *
- * Format: `whsec_{24 hex chars}` per design specification.
+ * Derives the secret from HMAC-SHA256(sharedSecret, taskId) so both code-agent
+ * and orchestrator can independently compute the same value without shared state.
  *
- * @returns Webhook secret string
+ * @param sharedSecret - The shared INTEXURAOS_ORCHESTRATOR_SECRET
+ * @param taskId - The task identifier
+ * @returns Deterministic hex string
  */
-export function generateWebhookSecret(): string {
-  const randomBytes = crypto.randomBytes(24);
-  return `whsec_${randomBytes.toString('hex')}`;
+export function generateWebhookSecret(sharedSecret: string, taskId: string): string {
+  return crypto.createHmac('sha256', sharedSecret).update(taskId).digest('hex');
 }
 
 /**

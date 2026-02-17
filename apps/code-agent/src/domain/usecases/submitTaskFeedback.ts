@@ -16,14 +16,14 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 
 /**
- * Generate a webhook secret for a task.
+ * Generate a deterministic webhook secret for a task.
+ * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
  */
-function generateWebhookSecret(): string {
-  const buffer = randomBytes(24);
-  return `whsec_${buffer.toString('hex')}`;
+function generateWebhookSecret(sharedSecret: string, taskId: string): string {
+  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
 }
 
 /**
@@ -83,6 +83,7 @@ export interface SubmitTaskFeedbackDeps {
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  orchestratorSecret: string;
 }
 
 /**
@@ -199,11 +200,13 @@ export async function submitTaskFeedback(
 ${feedback.trim()}
 `;
 
-  // Step 6: Generate webhook secret
-  const webhookSecret = generateWebhookSecret();
+  // Step 6: Pre-generate task ID and derive deterministic webhook secret
+  const followUpTaskId = `task_${randomUUID()}`;
+  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, followUpTaskId);
 
   // Step 7: Create follow-up task with parentTaskId
   const createInput = {
+    id: followUpTaskId,
     userId,
     prompt: feedbackPrompt,
     sanitizedPrompt: feedbackPrompt,

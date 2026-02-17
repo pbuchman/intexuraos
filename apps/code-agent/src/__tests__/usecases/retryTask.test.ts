@@ -163,6 +163,7 @@ describe('retryTask use case', () => {
       whatsappNotifier: mockWhatsAppNotifier as unknown as RetryTaskDeps['whatsappNotifier'],
       metricsClient: mockMetricsClient as unknown as RetryTaskDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as RetryTaskDeps['workerSettingsRepo'],
+      orchestratorSecret: 'test-orchestrator-secret',
     };
   }
 
