@@ -3,7 +3,17 @@
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
-import pino from 'pino';
+
+// Augment Fastify types for webhook signature validation
+declare module 'fastify' {
+  interface FastifyRequest {
+    rawBody?: string;
+  }
+
+  interface FastifyContextConfig {
+    rawBody?: boolean;
+  }
+}
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
@@ -19,9 +29,11 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
-import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
+import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { linearRoutes } from './routes/linearRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
+import { internalIssuesRoutes } from './routes/internalIssuesRoutes.js';
+import { linearWebhookRoutes } from './routes/linearWebhookRoutes.js';
 
 const SERVICE_NAME = 'linear-agent';
 const SERVICE_VERSION = '0.0.1';
@@ -167,23 +179,35 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   };
 }
 
-export async function buildServer(): Promise<FastifyInstance> {
+export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Promise<FastifyInstance> {
   const app = Fastify({
-    logger:
-      process.env['NODE_ENV'] === 'test'
+    logger: testLoggerStream !== undefined
+      ? {
+          level: 'error',
+          stream: testLoggerStream,
+        }
+      : process.env['NODE_ENV'] === 'test'
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
-            stream: createSentryStream(
-              pino.multistream([
-                pino.destination({ dest: 1, sync: false }),
-              ])
-            ),
+            stream: createLogStream(),
           },
     disableRequestLogging: true,
   });
 
   registerQuietHealthCheckLogging(app);
+
+  // Add content type parser to capture raw body for Linear webhook signature validation
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    try {
+      // Store raw body for signature validation
+      (req as unknown as { rawBody: string }).rawBody = body as string;
+      const json: unknown = JSON.parse(body as string);
+      done(null, json);
+    } catch {
+      done(new Error('Invalid JSON'), null);
+    }
+  });
 
   await app.register(fastifyCors, {
     origin: true,
@@ -204,6 +228,8 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(linearRoutes);
   await app.register(internalRoutes);
+  await app.register(internalIssuesRoutes);
+  await app.register(linearWebhookRoutes);
 
   app.get(
     '/openapi.json',

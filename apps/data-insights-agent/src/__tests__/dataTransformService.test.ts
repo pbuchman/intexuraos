@@ -20,6 +20,7 @@ describe('dataTransformService', () => {
           ),
         getApiKeys: vi.fn(),
         reportLlmSuccess: vi.fn(),
+          getOAuthToken: vi.fn(),
       };
     }
     const mockLlmClient: LlmGenerateClient = {
@@ -29,6 +30,7 @@ describe('dataTransformService', () => {
       getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
       getApiKeys: vi.fn(),
       reportLlmSuccess: vi.fn(),
+          getOAuthToken: vi.fn(),
     };
   }
 

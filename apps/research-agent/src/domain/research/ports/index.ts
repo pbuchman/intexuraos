@@ -28,3 +28,9 @@ export type {
   TextGenerationError,
   TextGenerationResult,
 } from './modelExtraction.js';
+
+export type {
+  ResearchExportSettingsError,
+  ResearchExportSettings,
+  ResearchExportSettingsPort,
+} from './researchExportSettings.js';

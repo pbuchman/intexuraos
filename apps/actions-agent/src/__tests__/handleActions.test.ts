@@ -10,9 +10,8 @@ import {
   FakeWhatsAppSendPublisher,
   FakeCalendarPreviewPublisher,
 } from './fakes.js';
-import pino from 'pino';
 
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 const createAction = (overrides: Partial<Action> = {}): Action => ({
   id: 'action-123',
@@ -65,7 +64,7 @@ describe('handleCalendarAction usecase', () => {
         whatsappPublisher: fakeWhatsappPublisher,
         calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       }
     );
 
@@ -88,7 +87,7 @@ describe('handleCalendarAction usecase', () => {
         whatsappPublisher: fakeWhatsappPublisher,
         calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       }
     );
 
@@ -108,7 +107,7 @@ describe('handleCalendarAction usecase', () => {
         whatsappPublisher: fakeWhatsappPublisher,
         calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       }
     );
 
@@ -129,7 +128,7 @@ describe('handleCalendarAction usecase', () => {
         whatsappPublisher: fakeWhatsappPublisher,
         calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       }
     );
 
@@ -150,7 +149,7 @@ describe('handleCalendarAction usecase', () => {
         whatsappPublisher: fakeWhatsappPublisher,
         calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       }
     );
 
@@ -175,7 +174,7 @@ describe('handleCalendarAction usecase', () => {
         whatsappPublisher: fakeWhatsappPublisher,
         calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       }
     );
 
@@ -203,7 +202,7 @@ describe('handleCalendarAction usecase', () => {
         whatsappPublisher: fakeWhatsappPublisher,
         calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       }
     );
 
@@ -231,7 +230,7 @@ describe('handleCalendarAction usecase', () => {
         whatsappPublisher: fakeWhatsappPublisher,
         calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       }
     );
 
@@ -257,7 +256,7 @@ describe('handleLinearAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute(event);
@@ -277,7 +276,7 @@ describe('handleLinearAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute(event);
@@ -294,7 +293,7 @@ describe('handleLinearAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute(event);
@@ -314,7 +313,7 @@ describe('handleLinearAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase.execute(event);
@@ -338,7 +337,7 @@ describe('handleLinearAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute(event);
@@ -362,7 +361,7 @@ describe('handleLinearAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute(event);

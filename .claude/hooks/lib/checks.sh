@@ -1,0 +1,152 @@
+#!/bin/bash
+# Shared check functions for detect-common-patterns.sh
+# Each function returns issues found (empty = no issues)
+
+# Check for direct pino import in apps/ (should use createAppLogger)
+# Args: $1 = file_path, $2 = file_content
+# Returns: issue string or empty
+check_pino_import() {
+    local file_path="$1"
+    local hook_name="detect-common-patterns"
+
+    # Only check apps/ source files (not tests, not server.ts)
+    [[ ! "$file_path" =~ ^apps/ ]] && return 0
+    [[ "$file_path" =~ /__tests__/ ]] && return 0
+    [[ "$file_path" =~ /server\.ts$ ]] && return 0
+    [[ "$file_path" =~ \.test\.ts$ ]] && return 0
+
+    local issues=""
+
+    while IFS= read -r line_info; do
+        [[ -z "$line_info" ]] && continue
+
+        local line_num
+        line_num=$(echo "$line_info" | cut -d: -f1)
+        local line_content
+        line_content=$(sed -n "${line_num}p" "$file_path" 2>/dev/null || true)
+
+        # Skip type-only imports (import type { Logger } from 'pino' is OK)
+        if echo "$line_content" | grep -qE "import\s+type\s+"; then
+            continue
+        fi
+
+        # Check for suppression (on same line or previous line)
+        if echo "$line_content" | grep -qE "@allow-pino-import"; then
+            log_info "$hook_name" "suppressed-pino-import" "$file_path:$line_num" "Allowed via @allow-pino-import"
+            continue
+        fi
+        local prev_line
+        prev_line=$(sed -n "$((line_num - 1))p" "$file_path" 2>/dev/null || true)
+        if echo "$prev_line" | grep -qE "@allow-pino-import"; then
+            log_info "$hook_name" "suppressed-pino-import" "$file_path:$line_num" "Allowed via @allow-pino-import on previous line"
+            continue
+        fi
+
+        issues+="pino-import at $file_path:$line_num - Direct pino import forbidden in apps/ (use createAppLogger from @intexuraos/infra-sentry or suppress with // @allow-pino-import -- reason)\n"
+        log_warned "$hook_name" "pino-import" "$file_path" \
+            "Line $line_num: $(echo "$line_content" | xargs)" \
+            "Use: import { createAppLogger } from '@intexuraos/infra-sentry'"
+    done < <(grep -nE "import\s+.*\s+from\s+['\"]pino['\"]" "$file_path" 2>/dev/null || true)
+
+    echo -e "$issues"
+}
+
+# Check for raw reply.send() in routes (should use reply.ok/fail)
+# Args: $1 = file_path
+# Returns: issue string or empty
+check_reply_send() {
+    local file_path="$1"
+    local hook_name="detect-common-patterns"
+
+    # Only check route files in apps/
+    [[ ! "$file_path" =~ ^apps/.*/routes/.*\.ts$ ]] && return 0
+    [[ "$file_path" =~ /__tests__/ ]] && return 0
+    [[ "$file_path" =~ \.test\.ts$ ]] && return 0
+
+    local issues=""
+
+    while IFS= read -r line_info; do
+        [[ -z "$line_info" ]] && continue
+
+        local line_num
+        line_num=$(echo "$line_info" | cut -d: -f1)
+        local line_content
+        line_content=$(sed -n "${line_num}p" "$file_path" 2>/dev/null || true)
+
+        # Allow reply.status(204).send() - HTTP No Content
+        if echo "$line_content" | grep -qE "\.status\s*\(\s*204\s*\)"; then
+            continue
+        fi
+
+        # Allow empty send() - typically used with 204
+        if echo "$line_content" | grep -qE "\.send\s*\(\s*\)"; then
+            continue
+        fi
+
+        # Check for suppression
+        if echo "$line_content" | grep -qE "@allow-raw-send"; then
+            log_info "$hook_name" "suppressed-reply-send" "$file_path:$line_num" "Allowed via @allow-raw-send"
+            continue
+        fi
+
+        # Check previous line for suppression too
+        local prev_line
+        prev_line=$(sed -n "$((line_num - 1))p" "$file_path" 2>/dev/null || true)
+        if echo "$prev_line" | grep -qE "@allow-raw-send"; then
+            log_info "$hook_name" "suppressed-reply-send" "$file_path:$line_num" "Allowed via @allow-raw-send on previous line"
+            continue
+        fi
+
+        # Check previous 3 lines for status(204)
+        local found_204=false
+        for i in 1 2 3; do
+            local check_line
+            check_line=$(sed -n "$((line_num - i))p" "$file_path" 2>/dev/null || true)
+            if echo "$check_line" | grep -qE "reply\.status\s*\(\s*204\s*\)"; then
+                found_204=true
+                break
+            fi
+        done
+        [[ "$found_204" == "true" ]] && continue
+
+        issues+="reply-send at $file_path:$line_num - Raw reply.send() forbidden in routes (use reply.ok(data) or reply.fail(code, msg) or suppress with // @allow-raw-send -- reason)\n"
+        log_warned "$hook_name" "reply-send" "$file_path" \
+            "Line $line_num: $(echo "$line_content" | xargs)" \
+            "Use: reply.ok(data) or reply.fail(code, message)"
+    done < <(grep -nE "reply\.send\s*\(" "$file_path" 2>/dev/null || true)
+
+    echo -e "$issues"
+}
+
+# Check for modification of existing migration files
+# Args: $1 = file_path, $2 = tool_name (Edit vs Write)
+# Returns: issue string or empty
+check_migration_immutable() {
+    local file_path="$1"
+    local tool_name="$2"
+    local hook_name="detect-common-patterns"
+
+    # Only check migrations directory
+    [[ ! "$file_path" =~ ^migrations/.*\.mjs$ ]] && return 0
+    # Skip test files
+    [[ "$file_path" =~ /__tests__/ ]] && return 0
+
+    # For Edit tool, the file must already exist - that's a modification
+    if [[ "$tool_name" == "Edit" ]]; then
+        local issues="migration-immutable at $file_path - Migrations are IMMUTABLE. Create a new migration file instead of modifying existing ones.\n"
+        log_warned "$hook_name" "migration-immutable" "$file_path" \
+            "Attempted to modify existing migration" \
+            "Create a new migration file: migrations/NNN-description.mjs"
+        echo -e "$issues"
+        return 0
+    fi
+
+    # For Write tool, check if file already exists
+    if [[ "$tool_name" == "Write" && -f "$file_path" ]]; then
+        local issues="migration-immutable at $file_path - Migrations are IMMUTABLE. Create a new migration file instead of overwriting existing ones.\n"
+        log_warned "$hook_name" "migration-immutable" "$file_path" \
+            "Attempted to overwrite existing migration" \
+            "Create a new migration file: migrations/NNN-description.mjs"
+        echo -e "$issues"
+    fi
+}

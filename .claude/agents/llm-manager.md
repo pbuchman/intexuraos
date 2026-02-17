@@ -358,7 +358,7 @@ After completing:
 
 ```bash
 pnpm run ci
-ppnpm run migrate:status  # Should show new migration as pending
+pnpm run migrate:status  # Should show new migration as pending
 ```
 
 ---

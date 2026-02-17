@@ -1,4 +1,4 @@
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
@@ -15,8 +15,7 @@ import {
 import { createFirestoreCommandRepository } from './infra/firestore/commandRepository.js';
 import { createGeminiClassifier } from './infra/llm/classifier.js';
 import { createActionEventPublisher } from './infra/pubsub/index.js';
-import { createUserServiceClient } from './infra/user/index.js';
-import { adaptUserServiceClient, type UserServiceClient } from './domain/ports/userServiceClient.js';
+import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createActionsAgentClient, type ActionsAgentClient } from './infra/actionsAgent/client.js';
 
 export interface Services {
@@ -49,7 +48,7 @@ const CLASSIFIER_MODELS = [
 ] as const;
 
 export async function initServices(config: ServiceConfig): Promise<void> {
-  const logger = pino({ name: 'commands-agent' });
+  const logger = createAppLogger({ name: 'commands-agent' });
 
   // Fetch pricing data from app-settings-service
   const pricingResult = await fetchAllPricing(
@@ -67,20 +66,21 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const actionsAgentClient = createActionsAgentClient({
     baseUrl: config.actionsAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'actionsAgentClient' }),
+    logger: createAppLogger({ name: 'actionsAgentClient' }),
   });
   const classifierFactory: ClassifierFactory = (client, classifierLogger) =>
     createGeminiClassifier(client, classifierLogger);
-  const sharedUserServiceClient = createUserServiceClient({
+  const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext,
-    logger: pino({ name: 'userServiceClient' }),
+    logger: createAppLogger({ name: 'userServiceClient' }),
+    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
+    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
-  const userServiceClient = adaptUserServiceClient(sharedUserServiceClient);
   const eventPublisher = createActionEventPublisher({
     projectId: config.gcpProjectId,
-    logger: pino({ name: 'action-event-publisher' }),
+    logger: createAppLogger({ name: 'action-event-publisher' }),
   });
 
   container = {

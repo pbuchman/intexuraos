@@ -182,7 +182,8 @@ class FakeDocumentSnapshot {
     private readonly _data: DocumentData | undefined,
     private readonly _exists: boolean,
     private readonly _collectionName: string,
-    private readonly _store: DocumentStore
+    private readonly _store: DocumentStore,
+    private readonly _docCounterRef: { value: number } = { value: 0 }
   ) {}
 
   get id(): string {
@@ -214,7 +215,12 @@ class FakeDocumentSnapshot {
   }
 
   get ref(): FakeDocumentReference {
-    return new FakeDocumentReference(this._collectionName, this._id, this._store);
+    return new FakeDocumentReference(
+      this._collectionName,
+      this._id,
+      this._store,
+      this._docCounterRef
+    );
   }
 }
 
@@ -247,8 +253,9 @@ class FakeQuery {
   private startAfterValue: unknown = null;
 
   constructor(
-    private readonly collectionName: string,
-    private readonly store: DocumentStore
+    protected readonly collectionName: string,
+    protected readonly store: DocumentStore,
+    protected readonly docCounterRef: { value: number } = { value: 0 }
   ) {}
 
   where(field: string, op: string, value: unknown): FakeQuery {
@@ -279,7 +286,14 @@ class FakeQuery {
     const collection = this.store.get(this.collectionName) ?? new Map<string, DocumentData>();
     let docs = Array.from(collection.entries()).map(
       ([id, data]: [string, DocumentData | undefined]) =>
-        new FakeDocumentSnapshot(id, data, true, this.collectionName, this.store)
+        new FakeDocumentSnapshot(
+          id,
+          data,
+          true,
+          this.collectionName,
+          this.store,
+          this.docCounterRef
+        )
     );
 
     // Apply filters
@@ -353,7 +367,7 @@ class FakeQuery {
   }
 
   private clone(): FakeQuery {
-    const query = new FakeQuery(this.collectionName, this.store);
+    const query = new FakeQuery(this.collectionName, this.store, this.docCounterRef);
     query.filters = [...this.filters];
     query.ordering = [...this.ordering];
     query.limitCount = this.limitCount;
@@ -369,7 +383,8 @@ class FakeDocumentReference {
   constructor(
     private readonly collectionName: string,
     private readonly docId: string,
-    private readonly store: DocumentStore
+    private readonly store: DocumentStore,
+    private readonly docCounterRef: { value: number } = { value: 0 }
   ) {}
 
   get id(): string {
@@ -386,6 +401,11 @@ class FakeDocumentReference {
     return this.store;
   }
 
+  collection(subcollectionName: string): FakeCollectionReference {
+    const fullPath = `${this.collectionName}/${this.docId}/${subcollectionName}`;
+    return new FakeCollectionReference(fullPath, this.store, this.docCounterRef);
+  }
+
   get(): Promise<FakeDocumentSnapshot> {
     const collection = this.store.get(this.collectionName);
     const data = collection?.get(this.docId);
@@ -395,7 +415,8 @@ class FakeDocumentReference {
         data,
         data !== undefined,
         this.collectionName,
-        this.store
+        this.store,
+        this.docCounterRef
       )
     );
   }
@@ -487,22 +508,9 @@ class FakeDocumentReference {
  * Fake CollectionReference implementation.
  */
 class FakeCollectionReference extends FakeQuery {
-  constructor(
-    collectionName: string,
-    store: DocumentStore,
-    private readonly docCounterRef: { value: number }
-  ) {
-    super(collectionName, store);
-    this.collectionNameInternal = collectionName;
-    this.storeInternal = store;
-  }
-
-  private collectionNameInternal: string;
-  private storeInternal: DocumentStore;
-
   doc(docId?: string): FakeDocumentReference {
     const id = docId ?? `auto-${String(++this.docCounterRef.value)}`;
-    return new FakeDocumentReference(this.collectionNameInternal, id, this.storeInternal);
+    return new FakeDocumentReference(this.collectionName, id, this.store, this.docCounterRef);
   }
 
   add(data: DocumentData): Promise<FakeDocumentReference> {

@@ -2,7 +2,6 @@ output "service_accounts" {
   description = "Map of service names to their service account emails"
   value = {
     user_service                 = google_service_account.user_service.email
-    promptvault_service          = google_service_account.promptvault_service.email
     notion_service               = google_service_account.notion_service.email
     whatsapp_service             = google_service_account.whatsapp_service.email
     api_docs_hub                 = google_service_account.api_docs_hub.email
@@ -19,17 +18,14 @@ output "service_accounts" {
     calendar_agent               = google_service_account.calendar_agent.email
     web_agent                    = google_service_account.web_agent.email
     linear_agent                 = google_service_account.linear_agent.email
+    chat_agent                   = google_service_account.chat_agent.email
+    code_agent                   = google_service_account.code_agent.email
   }
 }
 
 output "user_service_sa" {
   description = "User service service account email"
   value       = google_service_account.user_service.email
-}
-
-output "promptvault_service_sa" {
-  description = "PromptVault service service account email"
-  value       = google_service_account.promptvault_service.email
 }
 
 output "notion_service_sa" {
@@ -110,4 +106,14 @@ output "web_agent_sa" {
 output "linear_agent_sa" {
   description = "Linear Agent service account email"
   value       = google_service_account.linear_agent.email
+}
+
+output "chat_agent_sa" {
+  description = "Chat Agent service account email"
+  value       = google_service_account.chat_agent.email
+}
+
+output "code_agent_sa" {
+  description = "Code Agent service account email"
+  value       = google_service_account.code_agent.email
 }

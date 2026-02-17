@@ -94,7 +94,7 @@ describe('Internal Routes', () => {
       expect(body.data.message).toBe('Linear service unavailable');
     });
 
-    it('returns 502 when connection repository fails', async () => {
+    it('returns 500 when connection repository fails', async () => {
       ctx.connectionRepository.setGetFullConnectionFailure(true, {
         code: 'INTERNAL_ERROR',
         message: 'Database connection failed',
@@ -109,10 +109,10 @@ describe('Internal Routes', () => {
         payload: validPayload,
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(body.error.message).toBe('Database connection failed');
     });
 

@@ -11,7 +11,8 @@ export type PageSummaryErrorCode =
   | 'TOO_LARGE'
   | 'INVALID_URL'
   | 'NO_CONTENT'
-  | 'API_ERROR';
+  | 'API_ERROR'
+  | 'RATE_LIMITED';
 
 export interface PageSummaryError {
   code: PageSummaryErrorCode;

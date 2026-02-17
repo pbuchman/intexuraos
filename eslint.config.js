@@ -16,7 +16,12 @@ export default tseslint.config(
       'vitest.setup.ts',
       'vitest.config.ts',
       'packages/*/vitest.config.ts',
+      'apps/*/vitest.config.ts',
+      'migrations/vitest.config.ts',
       'vitest-mocks/**',
+      'workers/**/scripts/**',
+      // Standalone tools not in pnpm workspace
+      'tools/log-viewer/**',
       // Test files now linted with same rules as production code
     ],
   },
@@ -28,7 +33,14 @@ export default tseslint.config(
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
-        allowDefaultProject: ['vitest.config.ts', 'vitest.setup.ts'],
+        allowDefaultProject: [
+          'vitest.config.ts',
+          'vitest.setup.ts',
+          'apps/*/vitest.config.ts',
+          'migrations/vitest.config.ts',
+          // Test files are excluded from tsconfig but need linting
+          'apps/web/src/**/__tests__/**/*.tsx',
+        ],
       },
       globals: {
         ...globals.node,
@@ -494,6 +506,7 @@ export default tseslint.config(
   // Dependency direction: Routes → Domain → Infra (never Infra → Routes)
   {
     files: ['apps/*/src/infra/**/*.ts'],
+    ignores: ['apps/*/src/infra/**/__tests__/**'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -861,7 +874,13 @@ export default tseslint.config(
   // Test files: Disable type-aware linting (not in tsconfig by design)
   // This MUST be last to override all type-checked rules from strictTypeChecked
   {
-    files: ['**/__tests__/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
+    files: [
+      '**/__tests__/**/*.ts',
+      '**/__tests__/**/*.tsx',
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+    ],
     languageOptions: {
       parserOptions: {
         program: null,
@@ -931,6 +950,123 @@ export default tseslint.config(
       '@typescript-eslint/switch-exhaustiveness-check': 'off',
       '@typescript-eslint/unbound-method': 'off',
       '@typescript-eslint/use-unknown-in-catch-callback-variable': 'off',
+    },
+  },
+  // Workers orchestrator: Zod compatibility - Zod's internal types use 'any' which conflicts with strict ESLint
+  // This is a known limitation: https://github.com/colinhacks/zod/issues/2945
+  {
+    files: ['workers/orchestrator/src/**/*.ts'],
+    rules: {
+      // Disable unsafe-* rules for Zod schema interactions
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      // Relax other strict rules for worker compatibility
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
+  // Cloud Function workers: GCP SDK types are complex and cause false positives
+  // These workers use @google-cloud/compute, @google-cloud/functions-framework, firebase-admin
+  {
+    files: ['workers/vm-lifecycle/src/**/*.ts', 'workers/log-cleanup/src/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+    },
+  },
+  // E2E tests: Helper files and mock server use external dependencies (axios, express)
+  // with complex types that cause false positives. These are test infrastructure, not production code.
+  {
+    files: ['e2e/**/*.ts'],
+    ignores: ['e2e/tests/**/*.spec.ts'], // .spec.ts files already handled by test pattern
+    rules: {
+      // Disable ALL type-aware rules for E2E infrastructure (same pattern as scripts and tests)
+      '@typescript-eslint/await-thenable': 'off',
+      '@typescript-eslint/consistent-return': 'off',
+      '@typescript-eslint/consistent-type-exports': 'off',
+      '@typescript-eslint/dot-notation': 'off',
+      '@typescript-eslint/naming-convention': 'off',
+      '@typescript-eslint/no-array-delete': 'off',
+      '@typescript-eslint/no-base-to-string': 'off',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
+      '@typescript-eslint/no-deprecated': 'off',
+      '@typescript-eslint/no-duplicate-type-constituents': 'off',
+      '@typescript-eslint/no-floating-promises': 'off',
+      '@typescript-eslint/no-for-in-array': 'off',
+      '@typescript-eslint/no-implied-eval': 'off',
+      '@typescript-eslint/no-meaningless-void-operator': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/no-misused-spread': 'off',
+      '@typescript-eslint/no-mixed-enums': 'off',
+      '@typescript-eslint/no-redundant-type-constituents': 'off',
+      '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/no-unnecessary-qualifier': 'off',
+      '@typescript-eslint/no-unnecessary-template-expression': 'off',
+      '@typescript-eslint/no-unnecessary-type-arguments': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      '@typescript-eslint/no-unnecessary-type-conversion': 'off',
+      '@typescript-eslint/no-unnecessary-type-parameters': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-enum-comparison': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-type-assertion': 'off',
+      '@typescript-eslint/no-unsafe-unary-minus': 'off',
+      '@typescript-eslint/no-useless-default-assignment': 'off',
+      '@typescript-eslint/non-nullable-type-assertion-style': 'off',
+      '@typescript-eslint/only-throw-error': 'off',
+      '@typescript-eslint/prefer-destructuring': 'off',
+      '@typescript-eslint/prefer-find': 'off',
+      '@typescript-eslint/prefer-includes': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      '@typescript-eslint/prefer-optional-chain': 'off',
+      '@typescript-eslint/prefer-promise-reject-errors': 'off',
+      '@typescript-eslint/prefer-readonly': 'off',
+      '@typescript-eslint/prefer-readonly-parameter-types': 'off',
+      '@typescript-eslint/prefer-reduce-type-parameter': 'off',
+      '@typescript-eslint/prefer-regexp-exec': 'off',
+      '@typescript-eslint/prefer-return-this-type': 'off',
+      '@typescript-eslint/prefer-string-starts-ends-with': 'off',
+      '@typescript-eslint/promise-function-async': 'off',
+      '@typescript-eslint/related-getter-setter-pairs': 'off',
+      '@typescript-eslint/require-array-sort-compare': 'off',
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/return-await': 'off',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+      '@typescript-eslint/strict-plus-operands': 'off',
+      '@typescript-eslint/strict-template-expressions': 'off',
+      '@typescript-eslint/switch-exhaustiveness-check': 'off',
+      '@typescript-eslint/no-unnecessary-template-expression': 'off',
+      'no-unnecessary-template-expression': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      'no-unnecessary-condition': 'off',
+      '@typescript-eslint/prefer-regexp-exec': 'off',
+      'prefer-regexp-exec': 'off',
+      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'off',
+      'no-empty': 'off', // Allow empty catch for cleanup best-effort
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'off',
+      // Keep these enabled to catch basic issues
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      'no-console': 'off', // E2E can use console for debugging
+      'no-empty': 'off', // Allow empty catch for cleanup best-effort
     },
   }
 );

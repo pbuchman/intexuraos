@@ -7,7 +7,9 @@
  */
 import {
   createAudioWebhookPayload,
+  createButtonWebhookPayload,
   createImageWebhookPayload,
+  createReactionWebhookPayload,
   createReplyWebhookPayload,
   createSignature,
   createWebhookPayload,
@@ -330,7 +332,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        error: string;
+        error: string; // WhatsApp webhook uses string error, not object
       };
       expect(body.success).toBe(false);
       expect(body.error).toBe('Failed to persist webhook event');
@@ -1462,6 +1464,112 @@ describe('Webhook async processing', () => {
       expect(events[0]?.ignoredReason?.message).toContain('unknown');
     });
 
+    it('handles markAsRead failure gracefully for text messages', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      ctx.whatsappCloudApi.setFailMarkAsRead(true);
+
+      const payload = createWebhookPayload();
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('completed');
+
+      ctx.whatsappCloudApi.setFailMarkAsRead(false);
+    });
+
+    it('handles link preview publish failure gracefully', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      ctx.eventPublisher.setExtractLinkPreviewsFailure('PubSub unavailable');
+
+      const payload = createWebhookPayload();
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('completed');
+
+      ctx.eventPublisher.clear();
+    });
+
+    it('handles markAsReadWithTyping failure gracefully for audio messages', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+      const mediaId = 'test-audio-id-12345';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      ctx.whatsappCloudApi.setMediaUrl(mediaId, {
+        url: 'https://cdn.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+        fileSize: 1000,
+      });
+      ctx.whatsappCloudApi.setMediaContent('https://cdn.example.com/audio.ogg', Buffer.from([0x00, 0x01]));
+      ctx.whatsappCloudApi.setFailMarkAsRead(true);
+
+      const payload = createAudioWebhookPayload({ mediaId });
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('completed');
+
+      ctx.whatsappCloudApi.setFailMarkAsRead(false);
+    });
+
     it('skips markAsRead when originalMessageId is null', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
@@ -1738,6 +1846,350 @@ describe('Webhook async processing', () => {
     });
   });
 
+  describe('Button response handling', () => {
+    const senderPhone = '15551234567';
+    const testUserId = 'user-buttons-test';
+
+    it('processes approve button', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.approve.message',
+        buttonId: 'approve:action-abc123',
+        buttonTitle: 'Approve',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalReplyEvents.length).toBeGreaterThanOrEqual(1);
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.type).toBe('action.approval.reply');
+      expect(latestEvent?.actionId).toBe('action-abc123');
+      expect(latestEvent?.buttonId).toBe('approve:action-abc123');
+      expect(latestEvent?.buttonTitle).toBe('Approve');
+      expect(latestEvent?.replyText).toBe('yes');
+
+      const markedWithTyping = ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages();
+      expect(markedWithTyping.length).toBeGreaterThan(0);
+    });
+
+    it('processes button even when markAsReadWithTyping fails', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+      ctx.whatsappCloudApi.setFailMarkAsRead(true);
+
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.approve.failread',
+        buttonId: 'approve:action-readfail',
+        buttonTitle: 'Approve',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.actionId).toBe('action-readfail');
+      expect(latestEvent?.replyText).toBe('yes');
+
+      ctx.whatsappCloudApi.setFailMarkAsRead(false);
+    });
+
+    it('skips markAsReadWithTyping when message id is missing from button payload', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: senderPhone,
+                      profile: { name: 'Test User' },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: senderPhone,
+                      timestamp: '1234567890',
+                      type: 'interactive' as const,
+                      interactive: {
+                        type: 'button_reply',
+                        button_reply: {
+                          id: 'approve:action-noid',
+                          title: 'Approve',
+                        },
+                      },
+                      context: {
+                        from: '15550987654',
+                        id: 'wamid.context.noid',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const countBefore = ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages().length;
+      await triggerWebhookProcessing();
+
+      const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.actionId).toBe('action-noid');
+
+      const countAfter = ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages().length;
+      expect(countAfter).toBe(countBefore);
+    });
+
+    it('processes cancel button', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.cancel.message',
+        buttonId: 'cancel:action-def456',
+        buttonTitle: 'Cancel',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalReplyEvents.length).toBeGreaterThanOrEqual(1);
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.actionId).toBe('action-def456');
+      expect(latestEvent?.buttonId).toBe('cancel:action-def456');
+      expect(latestEvent?.replyText).toBe('no'); // Cancel intent maps to 'no'
+    });
+
+    it('processes convert button', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.convert.message',
+        buttonId: 'convert:action-ghi789',
+        buttonTitle: 'Convert to Linear',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalReplyEvents.length).toBeGreaterThanOrEqual(1);
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.actionId).toBe('action-ghi789');
+      expect(latestEvent?.buttonId).toBe('convert:action-ghi789');
+      expect(latestEvent?.replyText).toBe('convert'); // Convert intent maps to 'convert'
+    });
+
+    it('marks event as ignored when button ID has invalid format', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      // Create button payload with invalid buttonId (missing colon separator)
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.invalid.message',
+        buttonId: 'invalid-no-colon',
+        buttonTitle: 'Invalid',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      // Event should be marked as ignored with INVALID_BUTTON_FORMAT
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.ignoredReason?.code).toBe('INVALID_BUTTON_FORMAT');
+    });
+
+    it('marks event as ignored when button intent is unknown', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      // Create button payload with unknown intent
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.unknown.message',
+        buttonId: 'unknown:action-123',
+        buttonTitle: 'Unknown',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      // Event should be marked as ignored with UNKNOWN_BUTTON_INTENT
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.ignoredReason?.code).toBe('UNKNOWN_BUTTON_INTENT');
+    });
+
+    it('processes reject button', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.reject.message',
+        buttonId: 'reject:action-rej456',
+        buttonTitle: 'Reject',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalReplyEvents.length).toBeGreaterThanOrEqual(1);
+      const latestEvent = approvalReplyEvents[approvalReplyEvents.length - 1];
+      expect(latestEvent?.actionId).toBe('action-rej456');
+      expect(latestEvent?.buttonId).toBe('reject:action-rej456');
+      expect(latestEvent?.replyText).toBe('no');
+    });
+
+    it('handles event publisher failure gracefully', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      // Configure event publisher to fail
+      ctx.eventPublisher.setApprovalReplyFailure('Simulated approval reply failure');
+
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.fail.message',
+        buttonId: 'cancel:action-fail',
+        buttonTitle: 'Cancel',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      // Event should be marked as failed when publish fails
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Failed to publish approval reply');
+    });
+  });
+
   describe('approval reply command.ingest skip', () => {
     it('should skip command.ingest when approval reply has known actionId', async () => {
       const senderPhone = '15551234567';
@@ -1854,6 +2306,403 @@ describe('Webhook async processing', () => {
         type: 'command.ingest',
         text: 'Create a note to buy milk',
       });
+    });
+  });
+
+  describe('Button message handling', () => {
+    it('ignores button message with invalid ID format (less than 2 parts)', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-invalid';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'invalid-no-colon',
+        buttonTitle: 'Test',
+        replyToWamid: 'wamid.original',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.ignoredReason?.code).toBe('INVALID_BUTTON_FORMAT');
+    });
+
+    it('ignores button message with unknown intent', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-unknown';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'delete:action-123',
+        buttonTitle: 'Delete',
+        replyToWamid: 'wamid.original',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.ignoredReason?.code).toBe('UNKNOWN_BUTTON_INTENT');
+    });
+
+    it('publishes approval reply event for approve button', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-approve';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'approve:action-123',
+        buttonTitle: 'Approve',
+        replyToWamid: 'wamid.original',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(1);
+      expect(approvalEvents[0]).toMatchObject({
+        type: 'action.approval.reply',
+        replyText: 'yes',
+        userId: testUserId,
+        actionId: 'action-123',
+        buttonId: 'approve:action-123',
+        buttonTitle: 'Approve',
+        replyToWamid: 'wamid.original',
+      });
+    });
+
+    it('publishes approval reply event for reject button', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-reject';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'reject:action-rej789',
+        buttonTitle: 'Reject',
+        replyToWamid: 'wamid.reject',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(1);
+      expect(approvalEvents[0]).toMatchObject({
+        type: 'action.approval.reply',
+        replyText: 'no',
+        userId: testUserId,
+        actionId: 'action-rej789',
+        buttonId: 'reject:action-rej789',
+        buttonTitle: 'Reject',
+      });
+    });
+
+    it('publishes approval reply event for cancel button', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-cancel';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'cancel:action-456',
+        buttonTitle: 'Cancel',
+        replyToWamid: 'wamid.cancel',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(1);
+      expect(approvalEvents[0]).toMatchObject({
+        type: 'action.approval.reply',
+        replyText: 'no',
+        userId: testUserId,
+        actionId: 'action-456',
+        buttonId: 'cancel:action-456',
+        buttonTitle: 'Cancel',
+      });
+    });
+
+    it('publishes approval reply event for convert button', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-convert';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'convert:action-789',
+        buttonTitle: 'Convert',
+        replyToWamid: 'wamid.convert',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(1);
+      expect(approvalEvents[0]).toMatchObject({
+        type: 'action.approval.reply',
+        replyText: 'convert',
+        userId: testUserId,
+        actionId: 'action-789',
+      });
+    });
+
+    it('publishes approval reply event for cancel-task button (INT-379)', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-cancel-task';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'cancel-task:task-123:abcd',
+        buttonTitle: '❌ Cancel Task',
+        replyToWamid: 'wamid.cancel-task',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(1);
+      expect(approvalEvents[0]).toMatchObject({
+        type: 'action.approval.reply',
+        replyText: 'cancel-task',
+        userId: testUserId,
+        actionId: 'task-123',
+        buttonId: 'cancel-task:task-123:abcd',
+        buttonTitle: '❌ Cancel Task',
+      });
+    });
+
+    it('publishes approval reply event for view-task button (INT-379)', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-view-task';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'view-task:task-456',
+        buttonTitle: '👁️ View Progress',
+        replyToWamid: 'wamid.view-task',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(1);
+      expect(approvalEvents[0]).toMatchObject({
+        type: 'action.approval.reply',
+        replyText: 'view-task',
+        userId: testUserId,
+        actionId: 'task-456',
+        buttonId: 'view-task:task-456',
+        buttonTitle: '👁️ View Progress',
+      });
+    });
+
+    it('marks event as failed when approval publish fails', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-button-publish-fail';
+
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+      ctx.eventPublisher.setApprovalReplyFailure('Publish failed');
+
+      const webhookPayload = createButtonWebhookPayload({
+        buttonId: 'approve:action-fail',
+        buttonTitle: 'Approve',
+        replyToWamid: 'wamid.fail',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Publish failed');
+    });
+  });
+
+  describe('Reaction message handling', () => {
+    const senderPhone = '15551234567';
+    const testUserId = 'test-user-reaction';
+
+    it('ignores reaction messages with REACTION_NOT_SUPPORTED', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createReactionWebhookPayload({
+        emoji: '👍',
+        messageId: 'wamid.action.approval',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.ignoredReason?.code).toBe('REACTION_NOT_SUPPORTED');
+
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(0);
     });
   });
 });

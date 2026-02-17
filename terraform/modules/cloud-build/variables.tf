@@ -48,3 +48,8 @@ variable "web_app_bucket" {
   type        = string
 }
 
+variable "functions_source_bucket" {
+  description = "Name of the GCS bucket for Cloud Functions source code"
+  type        = string
+}
+

@@ -51,6 +51,7 @@ describe('processLinearAction', () => {
       apiKey: 'linear-api-key',
       teamId: 'team-789',
       teamName: 'Engineering',
+      webhookSecret: null,
       connected: true,
       createdAt: '2025-01-15T00:00:00Z',
       updatedAt: '2025-01-15T00:00:00Z',

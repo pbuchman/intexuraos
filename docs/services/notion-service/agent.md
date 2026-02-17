@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                            |
-| -------- | ---------------------------------------------------------------- |
-| **Name** | notion-service                                                   |
-| **Role** | Notion Integration Service                                       |
-| **Goal** | Connect and manage Notion workspaces for prompt and data storage |
+| Field    | Value                                                                    |
+| -------- | ------------------------------------------------------------------------ |
+| **Name** | notion-service                                                           |
+| **Role** | Notion Integration Service                                               |
+| **Goal** | Connect and manage Notion workspaces for research export and page access |
 
 ---
 
@@ -36,19 +36,20 @@ interface NotionServiceTools {
 ```typescript
 interface ConnectResult {
   connected: boolean;
-  workspaceName: string;
-  workspaceIcon?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface StatusResult {
+  configured: boolean;
   connected: boolean;
-  workspaceName?: string;
-  workspaceIcon?: string;
-  connectedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-interface DisconnectResult {
-  disconnected: boolean;
+interface PagePreview {
+  title: string;
+  url: string;
 }
 ```
 
@@ -73,7 +74,7 @@ const result = await connectNotion({
   notionToken: 'secret_...',
 });
 // result.connected: true
-// result.workspaceName: "My Workspace"
+// result.createdAt: "2026-02-08T10:00:00Z"
 ```
 
 ### Check Connection Status
@@ -81,7 +82,7 @@ const result = await connectNotion({
 ```typescript
 const status = await getNotionStatus();
 if (status.connected) {
-  console.log(`Connected to ${status.workspaceName}`);
+  console.log(`Connected since ${status.createdAt}`);
 }
 ```
 
@@ -104,8 +105,7 @@ await disconnectNotion();
                                                        │
                                                        ▼
                                               ┌─────────────────┐
-                                              │ promptvault-    │
-                                              │ service         │
+                                              │ research-agent  │
                                               │ (uses token)    │
                                               └─────────────────┘
 ```
@@ -114,18 +114,17 @@ await disconnectNotion();
 
 ## Internal Endpoints
 
-| Method | Path                     | Purpose                                          |
-| ------ | ------------------------ | ------------------------------------------------ |
-| GET    | `/internal/notion/token` | Get Notion token (called by promptvault-service) |
-| POST   | `/webhook`               | Handle Notion webhook events                     |
+| Method | Path                                                   | Purpose                          |
+| ------ | ------------------------------------------------------ | -------------------------------- |
+| GET    | `/internal/notion/users/:userId/context`               | Get connection context and token |
+| GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | Get page preview (title and URL) |
 
 ---
 
 ## Used By
 
-- **promptvault-service** - Stores prompts in Notion databases
-- **research-agent** - Can export research to Notion pages
+- **research-agent** - Exports research to Notion pages, validates page access via preview endpoint
 
 ---
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-02-08

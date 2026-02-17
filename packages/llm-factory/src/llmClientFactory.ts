@@ -30,6 +30,8 @@
 
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGlmClient } from '@intexuraos/infra-glm';
+import type { AuditSink } from '@intexuraos/llm-audit';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   getProviderForModel,
   LlmProviders,
@@ -53,6 +55,10 @@ export interface LlmClientConfig {
   pricing: ModelPricing;
   /** Logger for structured LLM usage logging */
   logger: Logger;
+  /** Optional audit sink override (defaults to Firestore audit sink) */
+  auditSink?: AuditSink;
+  /** Optional usage sink override (defaults to Firestore usage sink) */
+  usageSink?: UsageSink;
 }
 
 /**

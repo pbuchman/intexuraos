@@ -13,7 +13,6 @@ steps:
         # Add new services here - URLs are auto-generated from Cloud Run API
         CLOUD_RUN_SERVICES=(
           "user-service:USER_SERVICE"
-          "promptvault-service:PROMPTVAULT_SERVICE"
           "whatsapp-service:WHATSAPP_SERVICE"
           "notion-service:NOTION_SERVICE"
           "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
@@ -25,7 +24,11 @@ steps:
           "todos-agent:TODOS_AGENT"
           "bookmarks-agent:BOOKMARKS_AGENT"
           "calendar-agent:CALENDAR_AGENT"
+          "chat-agent:CHAT_AGENT"
           "linear-agent:LINEAR_AGENT"
+          "code-agent:CODE_AGENT"
+          "image-service:IMAGE_SERVICE"
+          "web-agent:WEB_AGENT"
           "app-settings-service:APP_SETTINGS_SERVICE"
         )
 
@@ -77,6 +80,7 @@ steps:
         apt-get update && apt-get install -y git
         npm install -g pnpm@9
         pnpm install --frozen-lockfile
+        export COMMIT_MESSAGE=$$(git log -1 --pretty=%s)
         pnpm run --filter @intexuraos/web build
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
@@ -91,7 +95,6 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_MEDIUM
 
 timeout: '900s'
 

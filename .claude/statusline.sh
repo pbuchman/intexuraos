@@ -4,21 +4,7 @@
 # Theme: detailed | Colors: true | Features: directory, git, model, context, usage, tokens, burnrate
 STATUSLINE_VERSION="1.4.0"
 
-# Debug logging - writes to file when statusline is called
-DEBUG_LOG="$HOME/.claude-statusline-debug.log"
-echo "$(date '+%Y-%m-%d %H:%M:%S') - statusline.sh called, pwd=$(pwd)" >> "$DEBUG_LOG"
-
-# Trap errors to log them
-trap 'echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR at line $LINENO: $BASH_COMMAND" >> "$DEBUG_LOG"' ERR
-
 input=$(cat)
-
-# Log whether we got input
-if [ -z "$input" ]; then
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - WARNING: Empty input received" >> "$DEBUG_LOG"
-else
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Input received, length=${#input}" >> "$DEBUG_LOG"
-fi
 
 # ---- check jq availability ----
 HAS_JQ=0
@@ -41,6 +27,17 @@ cc_version_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi
 style_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;245m'; fi; } # gray
 api_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;222m'; fi; }   # warm gold
 rst() { if [ "$use_color" -eq 1 ]; then printf '\033[0m'; fi; }
+
+# Terminal hyperlink helper (OSC 8)
+hyperlink() { printf '\033]8;;%s\033\\%s\033]8;;\033\\' "$1" "$2"; }
+
+# Colored hyperlink helper (works in command substitution)
+colored_hyperlink() {
+  local url="$1"
+  local text="$2"
+  local color_code="$3"
+  printf '\033]8;;%s\033\\%s%s\033]8;;\033\\%s' "$url" "$color_code" "$text" "$(rst)"
+}
 
 # ---- time helpers ----
 to_epoch() {
@@ -154,12 +151,38 @@ fi
 
 # Parse the endpoint to show a friendly name
 api_display=""
+api_bg_color=""  # Background color for special APIs
 if [ -n "$api_endpoint" ] && [ "$api_endpoint" != "null" ]; then
   # Extract host from URL for display (remove protocol and path)
   api_host=$(echo "$api_endpoint" | sed -E 's|^https?://||' | cut -d'/' -f1)
-  api_display="$api_host"
+
+  # Special handling for known APIs
+  if [ "$api_host" = "api.z.ai" ]; then
+    api_display="Z.AI"
+    api_bg_color="47"  # White background
+  elif [ "$api_host" = "api.anthropic.com" ]; then
+    api_display="anthropic"
+    api_bg_color="48;5;208"  # Orange background
+  else
+    api_display="$api_host"
+  fi
 else
-  api_display="api.anthropic.com"
+  api_display="anthropic"
+  api_bg_color="48;5;208"  # Orange background for default Anthropic
+fi
+
+# ---- Model override for api.z.ai ----
+# Store original api_host for model override logic
+if [ -n "$api_endpoint" ] && [ "$api_endpoint" != "null" ]; then
+  stored_api_host=$(echo "$api_endpoint" | sed -E 's|^https?://||' | cut -d'/' -f1)
+else
+  stored_api_host="api.anthropic.com"
+fi
+
+# Override model display when using api.z.ai
+if [ "$stored_api_host" = "api.z.ai" ]; then
+  model_name="GLM 4.7"
+  model_version=""  # Clear version for cleaner display
 fi
 
 # ---- git colors ----
@@ -173,40 +196,207 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 # ---- context window calculation (native) ----
-context_pct=""
-context_remaining_pct=""
-context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[1;37m'; fi; }  # default white
+context_used_pct=""
+token_metrics=""
+context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;158m'; fi; }  # default mint green
+token_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
 
 if [ "$HAS_JQ" -eq 1 ]; then
-  # Get context window size and current usage from native Claude Code input
   CONTEXT_SIZE=$(echo "$input" | jq -r '.context_window.context_window_size // 200000' 2>/dev/null)
+
+  # Cumulative session totals
+  TOTAL_INPUT=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0' 2>/dev/null)
+  TOTAL_OUTPUT=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0' 2>/dev/null)
+
+  # Per-request cache metrics
   USAGE=$(echo "$input" | jq '.context_window.current_usage' 2>/dev/null)
-
   if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
-    # Calculate current context from current_usage fields
-    # Formula: input_tokens + cache_creation_input_tokens + cache_read_input_tokens
-    CURRENT_TOKENS=$(echo "$USAGE" | jq '(.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)' 2>/dev/null)
+    CACHE_CREATION=$(echo "$USAGE" | jq '.cache_creation_input_tokens // 0' 2>/dev/null)
+    CACHE_READ=$(echo "$USAGE" | jq '.cache_read_input_tokens // 0' 2>/dev/null)
+  else
+    CACHE_CREATION=0
+    CACHE_READ=0
+  fi
 
-    if [ -n "$CURRENT_TOKENS" ] && [ "$CURRENT_TOKENS" -gt 0 ] 2>/dev/null; then
+  if [ "$TOTAL_INPUT" -gt 0 ] 2>/dev/null; then
+    # Calculate context % from current_usage (accurate for context window)
+    if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
+      INPUT_TOKENS=$(echo "$USAGE" | jq '.input_tokens // 0' 2>/dev/null)
+      CURRENT_TOKENS=$((INPUT_TOKENS + CACHE_CREATION + CACHE_READ))
       context_used_pct=$(( CURRENT_TOKENS * 100 / CONTEXT_SIZE ))
-      context_remaining_pct=$(( 100 - context_used_pct ))
-      # Clamp to valid range
-      (( context_remaining_pct < 0 )) && context_remaining_pct=0
-      (( context_remaining_pct > 100 )) && context_remaining_pct=100
-
-      # Set color based on remaining percentage
-      if [ "$context_remaining_pct" -le 20 ]; then
-        context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;203m'; fi; }  # coral red
-      elif [ "$context_remaining_pct" -le 40 ]; then
-        context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;215m'; fi; }  # peach
-      else
-        context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;158m'; fi; }  # mint green
-      fi
-
-      context_pct="${context_remaining_pct}%"
+      (( context_used_pct < 0 )) && context_used_pct=0
+      (( context_used_pct > 100 )) && context_used_pct=100
     fi
+
+    # Set color based on used percentage (higher = worse)
+    if [ "$context_used_pct" -ge 80 ]; then
+      context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;203m'; fi; }  # coral red
+    elif [ "$context_used_pct" -ge 60 ]; then
+      context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;215m'; fi; }  # peach
+    fi
+
+    # Format with k for thousands
+    fmt_k() {
+      local n="$1"
+      if [ "$n" -ge 1000 ]; then
+        echo "$((n / 1000))k"
+      else
+        echo "$n"
+      fi
+    }
+
+    token_metrics="📊 $(token_color)↓$(fmt_k $TOTAL_INPUT) ↑$(fmt_k $TOTAL_OUTPUT) +$(fmt_k $CACHE_CREATION) ⚡$(fmt_k $CACHE_READ)$(rst)"
   fi
 fi
+
+# ---- hook metrics (executed + blocked commands) ----
+hook_metrics=""
+hooks_dir=""
+
+# Find hooks directory - try CLAUDE_PROJECT_DIR first, then current_dir
+if [ -n "$CLAUDE_PROJECT_DIR" ] && [ -d "$CLAUDE_PROJECT_DIR/.claude/hooks" ]; then
+  hooks_dir="$CLAUDE_PROJECT_DIR/.claude/hooks"
+elif [ -d ".claude/hooks" ]; then
+  hooks_dir=".claude/hooks"
+fi
+
+if [ -n "$hooks_dir" ]; then
+  # Count session commands (from session-commands.log, cleared at session start)
+  session_cmds=0
+  if [ -f "$hooks_dir/session-commands.log" ]; then
+    session_cmds=$(wc -l < "$hooks_dir/session-commands.log" 2>/dev/null | tr -d ' ' || echo 0)
+  fi
+
+  # Count session blocked (from session-blocked.log, cleared at session start)
+  session_blocked=0
+  if [ -f "$hooks_dir/session-blocked.log" ]; then
+    session_blocked=$(wc -l < "$hooks_dir/session-blocked.log" 2>/dev/null | tr -d ' ' || echo 0)
+  fi
+
+  # Count total blocked (cumulative from hooks.log)
+  total_blocked=0
+  if [ -f "$hooks_dir/hooks.log" ]; then
+    total_blocked=$(grep -c "BLOCKED" "$hooks_dir/hooks.log" 2>/dev/null || echo 0)
+  fi
+
+  # Show metrics if any activity exists
+  if [ "$session_cmds" -gt 0 ] || [ "$session_blocked" -gt 0 ] || [ "$total_blocked" -gt 0 ]; then
+    # Calculate session block rate percentage
+    session_total=$((session_cmds + session_blocked))
+    if [ "$session_total" -gt 0 ]; then
+      session_pct=$((session_blocked * 100 / session_total))
+    else
+      session_pct=0
+    fi
+    hook_metrics="🛡️ ✓${session_cmds} ✗${session_blocked} (${session_pct}%) | ✗${total_blocked} total"
+  fi
+fi
+
+# ---- Port status check (fast, no PM2) ----
+check_port_status() {
+  local port="$1"
+  local pid=$(lsof -t -i :"$port" -sTCP:LISTEN 2>/dev/null | head -1)
+  if [ -n "$pid" ]; then
+    echo "up"
+  else
+    echo "down"
+  fi
+}
+
+get_worktree_from_port() {
+  local port="$1"
+  local pid=$(lsof -t -i :"$port" -sTCP:LISTEN 2>/dev/null | head -1)
+  if [ -n "$pid" ]; then
+    local cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | grep ^n | cut -c2-)
+    echo "$cwd" | grep -oE 'intexuraos-[0-9]+' || echo ""
+  fi
+}
+
+# Dev services (ports 8110-8128) - parallel arrays for bash 3.x compatibility
+DEV_NAMES="user notion whatsapp mobile research commands actions insights image notes settings todos bookmarks calendar linear web-agent code chat"
+DEV_PORTS="8110 8112 8113 8114 8116 8117 8118 8119 8120 8121 8122 8123 8124 8125 8126 8127 8128 8129"
+DEV_TOTAL=18
+
+# Check all dev services
+dev_up=0
+dev_down_list=""
+dev_worktree=""
+set -- $DEV_PORTS
+for name in $DEV_NAMES; do
+  port="$1"; shift
+  status=$(check_port_status "$port")
+  if [ "$status" = "up" ]; then
+    dev_up=$((dev_up + 1))
+    [ -z "$dev_worktree" ] && dev_worktree=$(get_worktree_from_port "$port")
+  else
+    [ -n "$dev_down_list" ] && dev_down_list="${dev_down_list},"
+    dev_down_list="${dev_down_list}${name}"
+  fi
+done
+
+# Build dev metrics display
+dev_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;150m'; fi; }  # green
+dev_warn_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;220m'; fi; }  # yellow
+dev_fail_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;203m'; fi; }  # red
+
+if [ "$dev_up" -eq 0 ]; then
+  dev_metrics=":dev 🔴"
+elif [ "$dev_up" -eq "$DEV_TOTAL" ]; then
+  wt_info=""
+  [ -n "$dev_worktree" ] && wt_info="${dev_worktree}, "
+  dev_metrics=":dev 🟢 (${wt_info}${dev_up}/${DEV_TOTAL})"
+else
+  wt_info=""
+  [ -n "$dev_worktree" ] && wt_info="${dev_worktree}, "
+  dev_metrics=":dev 🟡 (${wt_info}${dev_up}/${DEV_TOTAL})"
+fi
+
+# Docker services (from docker-compose.local.yaml)
+DOCKER_PORTS="8102 8105"
+DOCKER_TOTAL=2
+
+docker_up=0
+for port in $DOCKER_PORTS; do
+  status=$(check_port_status "$port")
+  [ "$status" = "up" ] && docker_up=$((docker_up + 1))
+done
+
+if [ "$docker_up" -eq 0 ]; then
+  docker_metrics=":docker 🔴"
+elif [ "$docker_up" -eq "$DOCKER_TOTAL" ]; then
+  docker_metrics=":docker 🟢 (${docker_up}/${DOCKER_TOTAL})"
+else
+  docker_metrics=":docker 🟡 (${docker_up}/${DOCKER_TOTAL})"
+fi
+
+# Individual port checks (3000=web, 8107=log-viewer, 8199=orchestrator)
+port_3000=$(check_port_status 3000)
+port_8107=$(check_port_status 8107)
+port_8199=$(check_port_status 8199)
+
+# Get color codes as strings
+dev_color_code=$(dev_color)
+dev_fail_color_code=$(dev_fail_color)
+
+if [ "$port_3000" = "up" ]; then
+  p3000="$(colored_hyperlink 'http://localhost:3000' ':3000' "$dev_color_code")"
+else
+  p3000="$(colored_hyperlink 'http://localhost:3000' ':3000' "$dev_fail_color_code")"
+fi
+
+if [ "$port_8107" = "up" ]; then
+  p8107="$(colored_hyperlink 'http://localhost:8107' ':8107' "$dev_color_code")"
+else
+  p8107="$(colored_hyperlink 'http://localhost:8107' ':8107' "$dev_fail_color_code")"
+fi
+
+if [ "$port_8199" = "up" ]; then
+  p8199="$(dev_color):8199$(rst)"
+else
+  p8199="$(dev_fail_color):8199$(rst)"
+fi
+
+port_metrics="🔌 ${docker_metrics}  ${dev_metrics}  ${p3000}  ${p8107}  ${p8199}"
 
 # ---- render statusline ----
 # Line 1: Core info (directory, git, model, claude code version, output style)
@@ -221,46 +411,77 @@ fi
 if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
   printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
 fi
-if [ -n "$output_style" ] && [ "$output_style" != "null" ]; then
-  printf '  🎨 %s%s%s' "$(style_color)" "$output_style" "$(rst)"
-fi
 if [ -n "$api_display" ]; then
-  printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
+  if [ -n "$api_bg_color" ]; then
+    # Use background color for special APIs (white for Z.AI, orange for anthropic)
+    # Need contrasting text color: black on white, white on orange
+    if [ "$api_bg_color" = "47" ]; then
+      # White background - use black text
+      printf '  🌐 \033[30;%sm %s \033[0m' "$api_bg_color" "$api_display"
+    else
+      # Orange background - use white text
+      printf '  🌐 \033[97;%sm %s \033[0m' "$api_bg_color" "$api_display"
+    fi
+  else
+    # Default styling for other APIs
+    printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
+  fi
 fi
 
-# Line 2: Context and session time
+# Line 2: Context and hook metrics
 line2=""
-if [ -n "$context_pct" ]; then
-  context_bar=$(progress_bar "$context_remaining_pct" 10)
-  line2="🧠 $(context_color)Context Remaining: ${context_pct} [${context_bar}]$(rst)"
+if [ -n "$context_used_pct" ]; then
+  line2="🧠 $(context_color)${context_used_pct}%$(rst)"
+else
+  line2="🧠 $(context_color)-$(rst)"
 fi
-if [ -z "$line2" ] && [ -z "$context_pct" ]; then
-  line2="🧠 $(context_color)Context Remaining: TBD$(rst)"
+if [ -n "$hook_metrics" ]; then
+  line2="$line2  $hook_metrics"
+fi
+if [ -n "$token_metrics" ]; then
+  line2="$line2  $token_metrics"
 fi
 
-# Line 3: Cost and usage analytics
-line3=""
+# MEGA session stats (append to line2, only if session matches)
+mega_sessions_file="$HOME/.make-english-great-again/sessions.json"
+if [ -f "$mega_sessions_file" ] && [ -n "$session_id" ]; then
+  mega_total=$(jq -r --arg sid "$session_id" '.sessions[] | select(.session_id == $sid) | .total // 0' "$mega_sessions_file" 2>/dev/null)
+  mega_saved=$(jq -r --arg sid "$session_id" '.sessions[] | select(.session_id == $sid) | .saved // 0' "$mega_sessions_file" 2>/dev/null)
+  if [ -n "$mega_total" ] && [ "$mega_total" != "null" ] && [ "$mega_total" -gt 0 ] 2>/dev/null; then
+    mega_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;183m'; fi; }
+    line2="$line2  📝 $(mega_color)MEGA: ${mega_saved}/${mega_total}$(rst)"
+  fi
+fi
+
+# Line 3: Port metrics and load average
+# Get all 3 load averages (1min, 5min, 15min)
+load_avg=$(uptime | sed -E 's/.*load averages?: ([0-9.]+)[, ]+([0-9.]+)[, ]+([0-9.]+).*/\1 \2 \3/')
+load_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
+line3="$port_metrics  📈 $(load_color)${load_avg}$(rst)"
+
+# Line 4: Cost and usage analytics (optional)
+line4=""
 if [ -n "$cost_usd" ] && [[ "$cost_usd" =~ ^[0-9.]+$ ]]; then
   if [ -n "$cost_per_hour" ] && [[ "$cost_per_hour" =~ ^[0-9.]+$ ]]; then
     cost_per_hour_formatted=$(printf '%.2f' "$cost_per_hour")
-    line3="💰 $(cost_color)\$$(printf '%.2f' "$cost_usd")$(rst) ($(burn_color)\$${cost_per_hour_formatted}/h$(rst))"
+    line4="💰 $(cost_color)\$$(printf '%.2f' "$cost_usd")$(rst) ($(burn_color)\$${cost_per_hour_formatted}/h$(rst))"
   else
-    line3="💰 $(cost_color)\$$(printf '%.2f' "$cost_usd")$(rst)"
+    line4="💰 $(cost_color)\$$(printf '%.2f' "$cost_usd")$(rst)"
   fi
 fi
 if [ -n "$tot_tokens" ] && [[ "$tot_tokens" =~ ^[0-9]+$ ]]; then
   if [ -n "$tpm" ] && [[ "$tpm" =~ ^[0-9.]+$ ]]; then
     tpm_formatted=$(printf '%.0f' "$tpm")
-    if [ -n "$line3" ]; then
-      line3="$line3  📊 $(usage_color)${tot_tokens} tok (${tpm_formatted} tpm)$(rst)"
+    if [ -n "$line4" ]; then
+      line4="$line4  📊 $(usage_color)${tot_tokens} tok (${tpm_formatted} tpm)$(rst)"
     else
-      line3="📊 $(usage_color)${tot_tokens} tok (${tpm_formatted} tpm)$(rst)"
+      line4="📊 $(usage_color)${tot_tokens} tok (${tpm_formatted} tpm)$(rst)"
     fi
   else
-    if [ -n "$line3" ]; then
-      line3="$line3  📊 $(usage_color)${tot_tokens} tok$(rst)"
+    if [ -n "$line4" ]; then
+      line4="$line4  📊 $(usage_color)${tot_tokens} tok$(rst)"
     else
-      line3="📊 $(usage_color)${tot_tokens} tok$(rst)"
+      line4="📊 $(usage_color)${tot_tokens} tok$(rst)"
     fi
   fi
 fi
@@ -272,6 +493,7 @@ fi
 if [ -n "$line3" ]; then
   printf '\n%s' "$line3"
 fi
+if [ -n "$line4" ]; then
+  printf '\n%s' "$line4"
+fi
 printf '\n'
-
-echo "$(date '+%Y-%m-%d %H:%M:%S') - statusline.sh completed successfully" >> "$DEBUG_LOG"

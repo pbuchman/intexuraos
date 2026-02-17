@@ -3,11 +3,11 @@
  * Parallel Typecheck for all workspaces
  *
  * Runs `tsc --noEmit` in parallel across all workspaces that have a typecheck script.
- * Much faster than sequential execution (npm run typecheck --workspaces).
+ * Much faster than sequential execution (pnpm run typecheck --workspaces).
  */
 
 import { spawn } from 'node:child_process';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const rootDir = resolve(import.meta.dirname, '..');
@@ -50,7 +50,7 @@ function getWorkspaces() {
 // Run typecheck for a single workspace, returning process handle
 function typecheckWorkspace(workspaceName, activeProcesses) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('npm', ['run', 'typecheck', '--workspace', workspaceName], {
+    const proc = spawn('pnpm', ['run', 'typecheck', '--workspace', workspaceName], {
       stdio: 'inherit',
     });
 

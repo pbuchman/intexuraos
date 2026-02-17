@@ -5,6 +5,11 @@
 import type { Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type {
+  UserServiceClient,
+  OAuthTokenResult,
+} from '@intexuraos/internal-clients';
+import type { ExtractedCalendarEvent } from '@intexuraos/llm-prompts';
+import type {
   CalendarEvent,
   CreateEventInput,
   FreeBusyInput,
@@ -20,6 +25,8 @@ import type {
   UpdateCalendarPreviewInput,
 } from './models.js';
 import type { CalendarError } from './errors.js';
+
+export type { UserServiceClient, OAuthTokenResult, ExtractedCalendarEvent };
 
 export interface GoogleCalendarClient {
   getCalendarTimezone(
@@ -71,15 +78,6 @@ export interface GoogleCalendarClient {
   ): Promise<Result<Map<string, FreeBusySlot[]>, CalendarError>>;
 }
 
-export interface OAuthTokenResult {
-  accessToken: string;
-  email: string;
-}
-
-export interface UserServiceClient {
-  getOAuthToken(userId: string): Promise<Result<OAuthTokenResult, CalendarError>>;
-}
-
 export interface FailedEventRepository {
   create(input: CreateFailedEventInput): Promise<Result<FailedEvent, CalendarError>>;
   list(userId: string, filters?: FailedEventFilters): Promise<Result<FailedEvent[], CalendarError>>;
@@ -100,17 +98,6 @@ export interface ExtractionError {
     originalLength?: number;
     cleanedLength?: number;
   };
-}
-
-export interface ExtractedCalendarEvent {
-  summary: string;
-  start: string | null;
-  end: string | null;
-  location: string | null;
-  description: string | null;
-  valid: boolean;
-  error: string | null;
-  reasoning: string;
 }
 
 export interface CalendarActionExtractionService {

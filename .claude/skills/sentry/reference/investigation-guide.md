@@ -81,7 +81,7 @@ When you need to check actual data:
 
 ```bash
 # Authenticate
-gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
+gcloud auth activate-service-account --key-file=~/.config/gcloud/sa-key.json
 
 # Query Firestore (example)
 gcloud firestore documents get projects/intexuraos-dev-pbuchman/databases/(default)/documents/users/abc123

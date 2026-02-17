@@ -193,8 +193,8 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('Missing pricing for providers');
-      expect(body.error).toContain('anthropic');
+      expect(body.error.message).toContain('Missing pricing for providers');
+      expect(body.error.message).toContain('anthropic');
 
       await app.close();
     });
@@ -215,9 +215,9 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('Missing pricing for providers');
+      expect(body.error.message).toContain('Missing pricing for providers');
       // With the new individual checks, it returns on first missing provider (google)
-      expect(body.error).toContain('google');
+      expect(body.error.message).toContain('google');
 
       await app.close();
     });
@@ -253,7 +253,7 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('google');
+      expect(body.error.message).toContain('google');
 
       await app.close();
     });
@@ -289,7 +289,7 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('openai');
+      expect(body.error.message).toContain('openai');
 
       await app.close();
     });
@@ -325,7 +325,7 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('perplexity');
+      expect(body.error.message).toContain('perplexity');
 
       await app.close();
     });
@@ -361,7 +361,7 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('zai');
+      expect(body.error.message).toContain('zai');
 
       await app.close();
     });

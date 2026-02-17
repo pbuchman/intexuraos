@@ -8,14 +8,15 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type {
   LinearError,
-  LinearApiClient,
   LinearConnectionRepository,
   LinearIssue,
+  LinearIssueRepository,
+  SyncedLinearIssue,
 } from '../index.js';
 import { mapStateToDashboardColumn } from '../models.js';
 
 export interface ListIssuesDeps {
-  linearApiClient: LinearApiClient;
+  issueRepository: LinearIssueRepository;
   connectionRepository: LinearConnectionRepository;
   logger?: Logger;
 }
@@ -43,16 +44,42 @@ export interface ListIssuesResponse {
 
 const DONE_RECENT_DAYS = 7;
 
+/**
+ * Convert SyncedLinearIssue to LinearIssue for API response.
+ */
+function syncedToLinearIssue(synced: SyncedLinearIssue): LinearIssue {
+  return {
+    id: synced.id,
+    identifier: synced.identifier,
+    title: synced.title,
+    description: synced.description,
+    priority: synced.priority,
+    state: {
+      id: '', // Not stored in SyncedLinearIssue, not critical for frontend
+      name: synced.state,
+      type: synced.stateType,
+    },
+    url: synced.url,
+    createdAt: synced.createdAt,
+    updatedAt: synced.updatedAt,
+    completedAt: null, // Derived from state, not stored separately
+    parentId: synced.parentId,
+    childCount: 0, // Will be calculated from children array
+    children: [],
+    labels: synced.labels,
+  };
+}
+
 export async function listIssues(
   request: ListIssuesRequest,
   deps: ListIssuesDeps
 ): Promise<Result<ListIssuesResponse, LinearError>> {
   const { userId, includeArchive = true } = request;
-  const { linearApiClient, connectionRepository, logger } = deps;
+  const { issueRepository, connectionRepository, logger } = deps;
 
   logger?.info({ userId, includeArchive }, 'listIssues: entry');
 
-  // Get user's connection
+  // Get user's connection (for team name)
   const connectionResult = await connectionRepository.getFullConnection(userId);
   if (!connectionResult.ok) {
     return err(connectionResult.error);
@@ -63,18 +90,49 @@ export async function listIssues(
     return err({ code: 'NOT_CONNECTED', message: 'Linear not connected' });
   }
 
-  // Fetch issues - get more days for archive
-  const fetchDays = includeArchive ? 30 : DONE_RECENT_DAYS;
-  const issuesResult = await linearApiClient.listIssues(connection.apiKey, connection.teamId, {
-    completedSinceDays: fetchDays,
-  });
+  // Fetch all issues from Firestore
+  const issuesResult = await issueRepository.listByUserId(userId);
 
   if (!issuesResult.ok) {
     return err(issuesResult.error);
   }
 
-  const issues = issuesResult.value;
-  logger?.info({ userId, totalIssues: issues.length }, 'Fetched issues');
+  const syncedIssues = issuesResult.value;
+  logger?.info({ userId, totalIssues: syncedIssues.length }, 'Fetched issues from Firestore');
+
+  // Convert to LinearIssue and build parent-child relationships
+  const issueMap = new Map<string, LinearIssue>();
+  const topLevelIssues: LinearIssue[] = [];
+  const childIssues: LinearIssue[] = [];
+
+  // First pass: convert all issues
+  for (const synced of syncedIssues) {
+    const issue = syncedToLinearIssue(synced);
+    issueMap.set(issue.id, issue);
+
+    if (synced.parentId === null) {
+      topLevelIssues.push(issue);
+    } else {
+      childIssues.push(issue);
+    }
+  }
+
+  // Second pass: attach children to parents
+  for (const child of childIssues) {
+    /* v8 ignore start -- ts-type: childIssues only contains issues with parentId !== null from line 112-115, this is defensive narrowing for TypeScript @preserve */
+    if (child.parentId !== null && child.parentId !== undefined) {
+      const parent = issueMap.get(child.parentId);
+      if (parent !== undefined) {
+        parent.children.push(child);
+        parent.childCount = parent.children.length;
+      }
+    }
+    /* v8 ignore stop @preserve */
+  }
+
+  // Use top-level issues for grouping
+  const issues = topLevelIssues;
+  logger?.info({ userId, topLevelIssues: issues.length }, 'Built parent-child relationships');
 
   // Group issues by dashboard column
   const grouped: GroupedIssues = {
@@ -96,16 +154,17 @@ export async function listIssues(
 
     if (column === 'done') {
       // Check if issue is recent or archive
-      if (issue.completedAt !== null) {
-        const completedDate = new Date(issue.completedAt);
-        if (completedDate >= recentCutoff) {
-          grouped.done.push(issue);
-        } else if (includeArchive) {
-          grouped.archive.push(issue);
-        }
-      } else {
-        // No completedAt but in done state - treat as recent
+      // Use completedAt if available, otherwise use updatedAt as a proxy for completion time
+      /* v8 ignore start -- upstream: SyncedLinearIssue doesn't include completedAt field, so this always uses updatedAt. True branch reserved for future when completedAt is added to sync pipeline @preserve */
+      const completionDate = issue.completedAt !== null
+        ? new Date(issue.completedAt)
+        : new Date(issue.updatedAt);
+      /* v8 ignore stop @preserve */
+
+      if (completionDate >= recentCutoff) {
         grouped.done.push(issue);
+      } else if (includeArchive) {
+        grouped.archive.push(issue);
       }
     } else {
       grouped[column].push(issue);

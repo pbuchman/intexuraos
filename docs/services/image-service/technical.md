@@ -84,11 +84,13 @@ sequenceDiagram
 
 | Commit     | Description                                                  | Date       |
 | ---------- | ------------------------------------------------------------ | ---------- |
+| `c3198407` | Fix all 132 response contract violations across codebase     | 2026-01-30 |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps       | 2026-01-30 |
+| `1faa1d3b` | INT-301 Consolidate user service client architecture         | 2026-01-26 |
+| `73e8375f` | INT-408 Enforce mandatory env var registration               | 2026-01-28 |
+| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement (Phase 3)    | 2026-01-31 |
 | `88cec45f` | Fix deployment: Remove internal-clients subpath exports      | 2025-01-25 |
 | `b1c7a4bb` | INT-269 Create internal-clients package and migrate all apps | 2025-01-25 |
-| `51b4a325` | INT-266 Migrate LLM clients to UsageLogger class             | 2025-01-24 |
-| `4fa0fed3` | Release v2.0.0                                               | 2025-01-24 |
-| `32cc2826` | Add tests for image-service uncovered branches               | 2025-01-19 |
 
 ## API Endpoints
 
@@ -193,7 +195,7 @@ sequenceDiagram
 | `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer                          |
 | `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience                        |
 | `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket for image storage        |
-| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | No       | Public base URL for GCS objects     |
+| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects     |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service (pricing data) |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking               |
 
@@ -221,6 +223,10 @@ sequenceDiagram
 **No deduplication**: Each image generation creates a new unique ID. Identical prompts generate separate images.
 
 **Internal-only access**: All functional endpoints require `X-Internal-Auth` header. No public API endpoints.
+
+**Rate limit error code**: Rate limited responses now return `reply.fail('RATE_LIMITED', message)` with proper 429 status code, instead of the previous manual `apiFail()` approach.
+
+**Auth failure response**: Internal auth failures now return standardized `{ success: false, error: { code: 'UNAUTHORIZED', message } }` instead of `{ error: 'Unauthorized' }`.
 
 ## File Structure
 
@@ -250,8 +256,7 @@ apps/image-service/src/
       parseResponse.ts              # LLM response parser
     storage/
       GcsImageStorage.ts            # GCS operations with Sharp
-    user/
-      index.ts                      # Re-exports from @intexuraos/internal-clients
+    # UserServiceClient imported directly from @intexuraos/internal-clients
   routes/
     internalRoutes.ts               # POST /internal/images/generate
                                    # POST /internal/images/prompts/generate
@@ -264,10 +269,24 @@ apps/image-service/src/
   server.ts                         # Fastify server setup
 ```
 
-## INT-269 Migration Notes
+## Migration Notes
 
-**v2.1.0 Changes**:
+### Response Contract Migration (2026-02-08)
 
-- User service client migrated from direct HTTP calls to `@intexuraos/internal-clients/user-service` package
-- `UserServiceClient` now imported from `internal-clients` rather than implemented locally
+- All internal endpoints migrated from ad-hoc response formats to `reply.ok()` / `reply.fail()`
+- `apiFail` import removed from `@intexuraos/common-http`
+- Rate limit errors: `apiFail()` + `reply.status(429).send()` -> `reply.fail('RATE_LIMITED', message)`
+- Auth failures: `{ error: 'Unauthorized' }` -> `reply.fail('UNAUTHORIZED', message)`
+- Sentry logger: `pino()` -> `createAppLogger()` from `@intexuraos/infra-sentry`
+
+### INT-301 Direct Import Consolidation (2026-01-26)
+
+- Deleted local `infra/user/index.ts` re-export barrel
+- All user service client types imported directly from `@intexuraos/internal-clients`
+- `FakeUserServiceClient` updated with `getOAuthToken` method
+
+### INT-269 Internal-Clients Migration (2025-01-25)
+
+- User service client migrated from direct HTTP calls to `@intexuraos/internal-clients` package
+- `UserServiceClient` now imported from shared package
 - `getApiKeys()` method signature unchanged - backwards compatible

@@ -142,14 +142,13 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
       });
 
       void reply.status(201);
-      return {
-        success: true,
-        data: formatCompositeFeed(result.value),
+      return await reply.ok({
+        ...formatCompositeFeed(result.value),
         diagnostics: {
           requestId: request.requestId,
           durationMs: Date.now() - request.startTime,
         },
-      };
+      });
     }
   );
 

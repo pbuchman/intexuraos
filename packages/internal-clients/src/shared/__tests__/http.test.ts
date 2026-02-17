@@ -50,6 +50,62 @@ describe('fetchWithAuth', () => {
         expect.fail('Expected successful result');
       }
     });
+
+    it('sends request body when provided', async () => {
+      const mockData = { success: true };
+      const requestBody = JSON.stringify({ foo: 'bar' });
+
+      nock('http://localhost:3000')
+        .post('/test', requestBody)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockData);
+
+      const result = await fetchWithAuth(config, '/test', {
+        method: 'POST',
+        body: requestBody,
+      });
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockData);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('includes X-Trace-Id header when traceId is provided', async () => {
+      const mockData = { message: 'success' };
+      const traceId = 'test-trace-id-123';
+      nock('http://localhost:3000')
+        .get('/test')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .matchHeader('X-Trace-Id', traceId)
+        .reply(200, mockData);
+
+      const result = await fetchWithAuth(config, '/test', { traceId });
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockData);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('does not include X-Trace-Id header when traceId is not provided', async () => {
+      const mockData = { message: 'success' };
+      nock('http://localhost:3000')
+        .get('/test')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        // Note: nock requires all defined headers to match, so not defining X-Trace-Id means it must not be present
+        .reply(200, mockData);
+
+      const result = await fetchWithAuth(config, '/test', {});
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockData);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
   });
 
   describe('HTTP errors', () => {

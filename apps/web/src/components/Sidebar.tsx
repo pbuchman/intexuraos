@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -10,10 +10,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Code2,
   Database,
   DollarSign,
   FileText,
   Filter,
+  GitPullRequest,
   Inbox,
   Key,
   LayoutList,
@@ -22,6 +24,7 @@ import {
   MessageCircle,
   MessageSquare,
   Plus,
+  Server,
   Settings,
   Sparkles,
   StickyNote,
@@ -44,6 +47,7 @@ const settingsItems: NavItem[] = [
   { to: '/settings/notion', label: 'Notion', icon: FileText },
   { to: '/settings/calendar', label: 'Google Calendar', icon: Calendar },
   { to: '/settings/linear', label: 'Linear', icon: LayoutList },
+  { to: '/settings/workers', label: 'Workers', icon: Server },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
   { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
   { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
@@ -57,6 +61,12 @@ const researchAgentItems: NavItem[] = [
 const dataInsightsItems: NavItem[] = [
   { to: '/data-insights', label: 'Data Sources', icon: List },
   { to: '/data-insights/new', label: 'Add Source', icon: Plus },
+];
+
+const codeTasksItems: NavItem[] = [
+  { to: '/code-tasks', label: 'Task History', icon: List },
+  { to: '/code-tasks/new', label: 'New Task', icon: Plus },
+  { to: '/code-tasks/pr-events', label: 'PR Events', icon: GitPullRequest },
 ];
 
 /**
@@ -116,9 +126,37 @@ export function Sidebar(): React.JSX.Element {
   const [isDataInsightsOpen, setIsDataInsightsOpen] = useState(() =>
     window.location.hash.includes('/data-insights')
   );
+  const [isCodeTasksOpen, setIsCodeTasksOpen] = useState(() =>
+    window.location.hash.includes('/code-tasks')
+  );
   const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
+  const navRef = useRef<HTMLElement>(null);
+  const scrollPositionRef = useRef(0);
+
+  // Preserve scroll position across route changes
+  useEffect(() => {
+    const nav = navRef.current;
+    if (nav === null) return;
+
+    const handleScroll = (): void => {
+      scrollPositionRef.current = nav.scrollTop;
+    };
+
+    nav.addEventListener('scroll', handleScroll);
+    return (): void => {
+      nav.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  // Restore scroll position after route change
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (nav !== null && scrollPositionRef.current > 0) {
+      nav.scrollTop = scrollPositionRef.current;
+    }
+  }, [location.pathname]);
 
   // Auto-expand settings when on a settings page
   useEffect(() => {
@@ -145,6 +183,13 @@ export function Sidebar(): React.JSX.Element {
   useEffect(() => {
     if (location.pathname.startsWith('/data-insights')) {
       setIsDataInsightsOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand code tasks when on code-tasks page
+  useEffect(() => {
+    if (location.pathname.startsWith('/code-tasks')) {
+      setIsCodeTasksOpen(true);
     }
   }, [location.pathname]);
 
@@ -211,7 +256,7 @@ export function Sidebar(): React.JSX.Element {
         onClick={(): void => {
           setIsMobileOpen(true);
         }}
-        className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg bg-white text-slate-600 shadow-md transition-colors hover:bg-slate-100 md:hidden"
+        className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg bg-white text-slate-600 shadow-md transition-colors hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 md:hidden"
         aria-label="Open menu"
       >
         <Menu className="h-5 w-5" />
@@ -230,7 +275,7 @@ export function Sidebar(): React.JSX.Element {
 
       {/* Sidebar */}
       <aside
-        className={`fixed bottom-0 left-0 top-16 z-40 flex flex-col border-r border-slate-200 bg-white transition-all duration-300
+        className={`fixed bottom-0 left-0 top-16 z-40 flex flex-col border-r border-slate-200 bg-white transition-all duration-300 dark:border-slate-700 dark:bg-slate-800
           ${isCollapsed ? 'w-16' : 'w-64'}
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0
@@ -241,13 +286,13 @@ export function Sidebar(): React.JSX.Element {
           onClick={(): void => {
             setIsMobileOpen(false);
           }}
-          className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 md:hidden"
+          className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 md:hidden"
           aria-label="Close menu"
         >
           <X className="h-5 w-5" />
         </button>
 
-        <nav className="mt-8 flex-1 space-y-1 overflow-y-auto p-3 md:mt-0">
+        <nav ref={navRef} className="mt-8 flex-1 space-y-1 overflow-y-auto p-3 md:mt-0">
           {/* Inbox - primary nav item */}
           <NavLink
             to="/inbox"
@@ -255,8 +300,8 @@ export function Sidebar(): React.JSX.Element {
             className={({ isActive }): string =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`
             }
           >
@@ -272,8 +317,8 @@ export function Sidebar(): React.JSX.Element {
               }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 location.pathname.startsWith('/research')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`}
             >
               <Sparkles className="h-5 w-5 shrink-0" />
@@ -291,7 +336,7 @@ export function Sidebar(): React.JSX.Element {
 
             {/* ResearchAgent sub-items */}
             {isResearchAgentOpen && !isCollapsed ? (
-              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
                 {researchAgentItems.map((item) => (
                   <NavLink
                     key={item.to}
@@ -300,8 +345,8 @@ export function Sidebar(): React.JSX.Element {
                     className={({ isActive }): string =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         isActive
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
                       }`
                     }
                   >
@@ -321,8 +366,8 @@ export function Sidebar(): React.JSX.Element {
               }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 location.pathname.startsWith('/data-insights')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`}
             >
               <Database className="h-5 w-5 shrink-0" />
@@ -340,7 +385,7 @@ export function Sidebar(): React.JSX.Element {
 
             {/* Data Insights sub-items */}
             {isDataInsightsOpen && !isCollapsed ? (
-              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
                 {dataInsightsItems.map((item) => (
                   <NavLink
                     key={item.to}
@@ -349,8 +394,57 @@ export function Sidebar(): React.JSX.Element {
                     className={({ isActive }): string =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         isActive
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Code Tasks section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                setIsCodeTasksOpen(!isCodeTasksOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/code-tasks')
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`}
+            >
+              <Code2 className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Code Tasks</span>
+                  {isCodeTasksOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Code Tasks sub-items */}
+            {isCodeTasksOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
+                {codeTasksItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/code-tasks'}
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
                       }`
                     }
                   >
@@ -369,8 +463,8 @@ export function Sidebar(): React.JSX.Element {
             className={({ isActive }): string =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`
             }
           >
@@ -385,8 +479,8 @@ export function Sidebar(): React.JSX.Element {
             className={({ isActive }): string =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`
             }
           >
@@ -401,8 +495,8 @@ export function Sidebar(): React.JSX.Element {
             className={({ isActive }): string =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`
             }
           >
@@ -417,8 +511,8 @@ export function Sidebar(): React.JSX.Element {
             className={({ isActive }): string =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`
             }
           >
@@ -433,8 +527,8 @@ export function Sidebar(): React.JSX.Element {
             className={({ isActive }): string =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`
             }
           >
@@ -449,8 +543,8 @@ export function Sidebar(): React.JSX.Element {
             className={({ isActive }): string =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`
             }
           >
@@ -464,7 +558,7 @@ export function Sidebar(): React.JSX.Element {
               onClick={(): void => {
                 setIsNotificationsOpen(!isNotificationsOpen);
               }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
             >
               <BellRing className="h-5 w-5 shrink-0" />
               {!isCollapsed ? (
@@ -481,7 +575,7 @@ export function Sidebar(): React.JSX.Element {
 
             {/* Notifications sub-items */}
             {isNotificationsOpen && !isCollapsed ? (
-              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
                 <NavLink
                   to="/notifications"
                   className={(): string => {
@@ -489,8 +583,8 @@ export function Sidebar(): React.JSX.Element {
                       location.pathname === '/notifications' && location.search === '';
                     return `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                       isAllActive
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
                     }`;
                   }}
                 >
@@ -509,11 +603,11 @@ export function Sidebar(): React.JSX.Element {
                       }}
                       className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         isFilterActive
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
                       }`}
                     >
-                      <Filter className="h-4 w-4 shrink-0 text-blue-600" />
+                      <Filter className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
                       <span className="truncate text-left" title={filter.name}>
                         {filter.name}
                       </span>
@@ -532,8 +626,8 @@ export function Sidebar(): React.JSX.Element {
               }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 location.pathname.startsWith('/settings')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`}
             >
               <Settings className="h-5 w-5 shrink-0" />
@@ -551,7 +645,7 @@ export function Sidebar(): React.JSX.Element {
 
             {/* Settings sub-items */}
             {isSettingsOpen && !isCollapsed ? (
-              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
                 {settingsItems.map((item) => (
                   <NavLink
                     key={item.to}
@@ -560,8 +654,8 @@ export function Sidebar(): React.JSX.Element {
                     className={({ isActive }): string =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         isActive
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
                       }`
                     }
                   >
@@ -579,7 +673,7 @@ export function Sidebar(): React.JSX.Element {
           onClick={(): void => {
             setIsCollapsed(!isCollapsed);
           }}
-          className="hidden items-center justify-center border-t border-slate-200 p-3 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 md:flex"
+          className="hidden items-center justify-center border-t border-slate-200 p-3 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 md:flex"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {isCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}

@@ -9,6 +9,7 @@ import type { NotesServiceClient } from './domain/ports/notesServiceClient.js';
 import type { BookmarksServiceClient } from './domain/ports/bookmarksServiceClient.js';
 import type { CalendarServiceClient } from './domain/ports/calendarServiceClient.js';
 import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
+import type { CodeAgentClient } from './domain/ports/codeAgentClient.js';
 import type { ApprovalMessageRepository } from './domain/ports/approvalMessageRepository.js';
 import {
   createHandleResearchActionUseCase,
@@ -59,6 +60,14 @@ import {
   type ExecuteLinearActionUseCase,
 } from './domain/usecases/executeLinearAction.js';
 import {
+  createHandleCodeActionUseCase,
+  type HandleCodeActionUseCase,
+} from './domain/usecases/handleCodeAction.js';
+import {
+  createExecuteCodeActionUseCase,
+  type ExecuteCodeActionUseCase,
+} from './domain/usecases/executeCodeAction.js';
+import {
   createRetryPendingActionsUseCase,
   type RetryPendingActionsUseCase,
 } from './domain/usecases/retryPendingActions.js';
@@ -70,7 +79,7 @@ import {
   createHandleApprovalReplyUseCase,
   type HandleApprovalReplyUseCase,
 } from './domain/usecases/handleApprovalReply.js';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createLocalActionServiceClient } from './infra/action/localActionServiceClient.js';
 import { createResearchAgentClient } from './infra/research/researchAgentClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
@@ -84,6 +93,7 @@ import { createNotesServiceHttpClient } from './infra/http/notesServiceHttpClien
 import { createBookmarksServiceHttpClient } from './infra/http/bookmarksServiceHttpClient.js';
 import { createCalendarServiceHttpClient } from './infra/http/calendarServiceHttpClient.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
+import { createCodeAgentHttpClient } from './infra/http/codeAgentHttpClient.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
 import {
   createWhatsAppSendPublisher,
@@ -91,8 +101,7 @@ import {
   createCalendarPreviewPublisher,
   type CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
-import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
-import { createApprovalIntentClassifierFactory } from './infra/llm/approvalIntentClassifierFactory.js';
+import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 
@@ -108,6 +117,7 @@ export interface Services {
   bookmarksServiceClient: BookmarksServiceClient;
   calendarServiceClient: CalendarServiceClient;
   linearAgentClient: LinearAgentClient;
+  codeAgentClient: CodeAgentClient;
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
   calendarPreviewPublisher: CalendarPreviewPublisher;
@@ -119,12 +129,14 @@ export interface Services {
   handleLinkActionUseCase: HandleLinkActionUseCase;
   handleCalendarActionUseCase: HandleCalendarActionUseCase;
   handleLinearActionUseCase: HandleLinearActionUseCase;
+  handleCodeActionUseCase: HandleCodeActionUseCase;
   executeResearchActionUseCase: ExecuteResearchActionUseCase;
   executeTodoActionUseCase: ExecuteTodoActionUseCase;
   executeNoteActionUseCase: ExecuteNoteActionUseCase;
   executeLinkActionUseCase: ExecuteLinkActionUseCase;
   executeCalendarActionUseCase: ExecuteCalendarActionUseCase;
   executeLinearActionUseCase: ExecuteLinearActionUseCase;
+  executeCodeActionUseCase: ExecuteCodeActionUseCase;
   retryPendingActionsUseCase: RetryPendingActionsUseCase;
   changeActionTypeUseCase: ChangeActionTypeUseCase;
   handleApprovalReplyUseCase: HandleApprovalReplyUseCase;
@@ -135,6 +147,7 @@ export interface Services {
   link: HandleLinkActionUseCase;
   calendar: HandleCalendarActionUseCase;
   linear: HandleLinearActionUseCase;
+  code: HandleCodeActionUseCase;
 }
 
 export interface ServiceConfig {
@@ -146,6 +159,7 @@ export interface ServiceConfig {
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
   linearAgentUrl: string;
+  codeAgentUrl: string;
   appSettingsServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
@@ -179,7 +193,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   ]);
 
   const actionRepository = createFirestoreActionRepository({
-    logger: pino({ name: 'actionRepository' }),
+    logger: createAppLogger({ name: 'actionRepository' }),
   });
   const actionTransitionRepository = createFirestoreActionTransitionRepository();
   const approvalMessageRepository = createFirestoreApprovalMessageRepository();
@@ -189,11 +203,9 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext,
-    logger: pino({ name: 'userServiceClient' }),
-  });
-
-  const approvalIntentClassifierFactory = createApprovalIntentClassifierFactory({
-    userServiceClient,
+    logger: createAppLogger({ name: 'userServiceClient' }),
+    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
+    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
   const commandsAgentClient = createCommandsAgentHttpClient({
@@ -209,54 +221,60 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const notificationSender = createWhatsappNotificationSender({
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
-    logger: pino({ name: 'whatsapp-notification-sender' }),
+    logger: createAppLogger({ name: 'whatsapp-notification-sender' }),
   });
 
   const actionEventPublisher = createActionEventPublisher({
     projectId: config.gcpProjectId,
-    logger: pino({ name: 'action-event-publisher' }),
+    logger: createAppLogger({ name: 'action-event-publisher' }),
   });
 
   const whatsappPublisher = createWhatsAppSendPublisher({
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
-    logger: pino({ name: 'whatsapp-publisher' }),
+    logger: createAppLogger({ name: 'whatsapp-publisher' }),
   });
 
   const calendarPreviewPublisher = createCalendarPreviewPublisher({
     projectId: config.gcpProjectId,
     topicName: config.calendarPreviewTopic,
-    logger: pino({ name: 'calendar-preview-publisher' }),
+    logger: createAppLogger({ name: 'calendar-preview-publisher' }),
   });
 
   const todosServiceClient = createTodosServiceHttpClient({
     baseUrl: config.todosAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'todosServiceClient' }),
+    logger: createAppLogger({ name: 'todosServiceClient' }),
   });
 
   const notesServiceClient = createNotesServiceHttpClient({
     baseUrl: config.notesAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'notesServiceClient' }),
+    logger: createAppLogger({ name: 'notesServiceClient' }),
   });
 
   const bookmarksServiceClient = createBookmarksServiceHttpClient({
     baseUrl: config.bookmarksAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'bookmarksServiceClient' }),
+    logger: createAppLogger({ name: 'bookmarksServiceClient' }),
   });
 
   const calendarServiceClient = createCalendarServiceHttpClient({
     baseUrl: config.calendarAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'calendarServiceClient' }),
+    logger: createAppLogger({ name: 'calendarServiceClient' }),
   });
 
   const linearAgentClient = createLinearAgentHttpClient({
     baseUrl: config.linearAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'linearAgentClient' }),
+    logger: createAppLogger({ name: 'linearAgentClient' }),
+  });
+
+  const codeAgentClient = createCodeAgentHttpClient({
+    baseUrl: config.codeAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger: createAppLogger({ name: 'codeAgentClient' }),
   });
 
   const executeResearchActionUseCase = createExecuteResearchActionUseCase({
@@ -264,7 +282,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     researchServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeResearchAction' }),
+    logger: createAppLogger({ name: 'executeResearchAction' }),
   });
 
   const executeTodoActionUseCase = createExecuteTodoActionUseCase({
@@ -272,7 +290,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     todosServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeTodoAction' }),
+    logger: createAppLogger({ name: 'executeTodoAction' }),
   });
 
   const executeNoteActionUseCase = createExecuteNoteActionUseCase({
@@ -280,7 +298,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     notesServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeNoteAction' }),
+    logger: createAppLogger({ name: 'executeNoteAction' }),
   });
 
   const executeLinkActionUseCase = createExecuteLinkActionUseCase({
@@ -289,7 +307,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     commandsAgentClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeLinkAction' }),
+    logger: createAppLogger({ name: 'executeLinkAction' }),
   });
 
   const executeCalendarActionUseCase = createExecuteCalendarActionUseCase({
@@ -297,14 +315,22 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     calendarServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeCalendarAction' }),
+    logger: createAppLogger({ name: 'executeCalendarAction' }),
   });
 
   const executeLinearActionUseCase = createExecuteLinearActionUseCase({
     actionRepository,
     linearAgentClient,
     whatsappPublisher,
-    logger: pino({ name: 'executeLinearAction' }),
+    logger: createAppLogger({ name: 'executeLinearAction' }),
+  });
+
+  const executeCodeActionUseCase = createExecuteCodeActionUseCase({
+    actionRepository,
+    codeAgentClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: createAppLogger({ name: 'executeCodeAction' }),
   });
 
   const handleResearchActionUseCase = registerActionHandler(
@@ -313,7 +339,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       actionRepository,
       whatsappPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleResearchAction' }),
+      logger: createAppLogger({ name: 'handleResearchAction' }),
       executeResearchAction: executeResearchActionUseCase,
     }
   );
@@ -324,7 +350,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       actionRepository,
       whatsappPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleTodoAction' }),
+      logger: createAppLogger({ name: 'handleTodoAction' }),
       executeTodoAction: executeTodoActionUseCase,
     }
   );
@@ -335,7 +361,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       actionRepository,
       whatsappPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleNoteAction' }),
+      logger: createAppLogger({ name: 'handleNoteAction' }),
       executeNoteAction: executeNoteActionUseCase,
     }
   );
@@ -346,7 +372,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       actionRepository,
       whatsappPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleLinkAction' }),
+      logger: createAppLogger({ name: 'handleLinkAction' }),
       executeLinkAction: executeLinkActionUseCase,
     }
   );
@@ -358,7 +384,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       whatsappPublisher,
       calendarPreviewPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleCalendarAction' }),
+      logger: createAppLogger({ name: 'handleCalendarAction' }),
     }
   );
 
@@ -366,7 +392,15 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     actionRepository,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleLinearAction' }),
+    logger: createAppLogger({ name: 'handleLinearAction' }),
+  });
+
+  const handleCodeActionUseCase = registerActionHandler(createHandleCodeActionUseCase, {
+    actionRepository,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: createAppLogger({ name: 'handleCodeAction' }),
+    executeCodeAction: executeCodeActionUseCase,
   });
 
   const retryPendingActionsUseCase = createRetryPendingActionsUseCase({
@@ -379,30 +413,33 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       link: handleLinkActionUseCase,
       calendar: handleCalendarActionUseCase,
       linear: handleLinearActionUseCase,
+      code: handleCodeActionUseCase,
     },
-    logger: pino({ name: 'retryPendingActions' }),
+    logger: createAppLogger({ name: 'retryPendingActions' }),
   });
 
   const changeActionTypeUseCase = createChangeActionTypeUseCase({
     actionRepository,
     actionTransitionRepository,
     commandsAgentClient,
-    logger: pino({ name: 'changeActionType' }),
+    logger: createAppLogger({ name: 'changeActionType' }),
   });
 
   const handleApprovalReplyUseCase = createHandleApprovalReplyUseCase({
     actionRepository,
     approvalMessageRepository,
-    approvalIntentClassifierFactory,
     whatsappPublisher,
     actionEventPublisher,
-    logger: pino({ name: 'handleApprovalReply' }),
+    logger: createAppLogger({ name: 'handleApprovalReply' }),
     executeNoteAction: executeNoteActionUseCase,
     executeTodoAction: executeTodoActionUseCase,
     executeResearchAction: executeResearchActionUseCase,
     executeLinkAction: executeLinkActionUseCase,
     executeCalendarAction: executeCalendarActionUseCase,
     executeLinearAction: executeLinearActionUseCase,
+    executeCodeAction: executeCodeActionUseCase,
+    codeAgentClient,
+    webAppUrl: config.webAppUrl,
   });
 
   container = {
@@ -417,6 +454,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     bookmarksServiceClient,
     calendarServiceClient,
     linearAgentClient,
+    codeAgentClient,
     actionEventPublisher,
     whatsappPublisher,
     calendarPreviewPublisher,
@@ -428,12 +466,14 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     handleLinkActionUseCase,
     handleCalendarActionUseCase,
     handleLinearActionUseCase,
+    handleCodeActionUseCase,
     executeResearchActionUseCase,
     executeTodoActionUseCase,
     executeNoteActionUseCase,
     executeLinkActionUseCase,
     executeCalendarActionUseCase,
     executeLinearActionUseCase,
+    executeCodeActionUseCase,
     retryPendingActionsUseCase,
     changeActionTypeUseCase,
     handleApprovalReplyUseCase,
@@ -444,6 +484,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     link: handleLinkActionUseCase,
     calendar: handleCalendarActionUseCase,
     linear: handleLinearActionUseCase,
+    code: handleCodeActionUseCase,
   };
 }
 

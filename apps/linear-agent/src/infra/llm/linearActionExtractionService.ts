@@ -1,6 +1,8 @@
 /**
  * LLM-based extraction service for Linear issues.
  * Parses natural language into structured issue data.
+ *
+ * NOTE: Tested via FakeLinearActionExtractionService in route/use case tests.
  */
 
 import type { Result } from '@intexuraos/common-core';
@@ -10,11 +12,10 @@ import {
   LinearIssueDataSchema,
 } from '@intexuraos/llm-prompts';
 import { formatZodErrors } from '@intexuraos/llm-utils';
-import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { LlmUserServiceClient } from '../user/llmUserServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LinearError } from '../../domain/index.js';
 import type { ExtractedIssueData } from '../../domain/index.js';
-import pino from 'pino';
+import type pino from 'pino';
 
 const MAX_DESCRIPTION_LENGTH = 2000;
 
@@ -25,7 +26,7 @@ export interface LinearActionExtractionService {
 }
 
 export function createLinearActionExtractionService(
-  llmUserServiceClient: LlmUserServiceClient,
+  userServiceClient: UserServiceClient,
   logger: MinimalLogger
 ): LinearActionExtractionService {
   const log: MinimalLogger = logger;
@@ -37,7 +38,7 @@ export function createLinearActionExtractionService(
     ): Promise<Result<ExtractedIssueData, LinearError>> {
       log.info({ userId, textLength: text.length }, 'Starting LLM issue extraction');
 
-      const clientResult = await llmUserServiceClient.getLlmClient(userId);
+      const clientResult = await userServiceClient.getLlmClient(userId);
 
       if (!clientResult.ok) {
         const error = clientResult.error;
@@ -49,7 +50,7 @@ export function createLinearActionExtractionService(
         return err({ code: 'INTERNAL_ERROR', message: error.message });
       }
 
-      const llmClient: LlmGenerateClient = clientResult.value;
+      const llmClient = clientResult.value;
 
       const prompt = linearActionExtractionPrompt.build(
         { text },
@@ -127,3 +128,4 @@ export function createLinearActionExtractionService(
     },
   };
 }
+

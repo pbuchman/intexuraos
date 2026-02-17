@@ -2,7 +2,7 @@
 
 ## Overview
 
-Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Version 2.1.0 adds internal client standardization and enhanced input validation.
+Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Version 2.2.0 adds Notion export integration with automatic and manual export, markdown-to-Notion block conversion, and research export settings management.
 
 ## Architecture
 
@@ -37,63 +37,72 @@ graph TB
         RA --> GCS[GCS:<br/>shared research HTML]
         RA --> ImageSvc[Image Service:<br/>cover generation]
         RA --> Notify[WhatsApp Notification]
+        RA --> NotionSvc[Notion Service:<br/>OAuth tokens]
+        RA --> NotionExport[Notion Export:<br/>page creation]
     end
 
     Pricing[Pricing Service] --> RA
     InternalClients["@intexuraos/internal-clients"] --> UserSvc
+    ExportSettings["Firestore:<br/>research_export_settings"] --> RA
 ```
 
-## Recent Changes (v2.1.0)
+## Recent Changes (v2.2.0)
 
-### INT-269: Internal Clients Migration
+### Notion Export Integration
 
-Migrated user-service communication to the centralized `@intexuraos/internal-clients` package:
+Completed research is automatically exported to Notion as a hierarchical page structure after synthesis completes. Users can also trigger manual export via the API.
 
-**Before:**
+**Automatic export (fire-and-forget):**
+
+After synthesis and database save, `runSynthesis` dynamically imports `exportResearchToNotionUseCase` and calls it in a non-blocking `void` promise. This ensures the Notion export reads the updated `shareInfo` with `coverImageUrl`.
+
+**Manual export:**
 
 ```typescript
-// apps/research-agent/src/infra/user/userServiceClient.ts (local)
-import { createUserClient } from './userServiceClient';
+POST /research/:id/export-notion
+// Validates: completed status, synthesis exists, not already exported, Notion connected, page configured
 ```
 
-**After:**
+**Page structure:**
+
+- Main Research Page (child of user's configured target page)
+  - Cover image block (if `shareInfo.coverImageUrl` exists)
+  - "Synthesis" heading + synthesized content as Notion blocks
+  - "Sources" heading
+- LLM Report Pages (children of main page, one per completed model)
+  - "Response" heading + LLM result as Notion blocks
+  - "Sources" heading with linked URLs (if available)
+
+**Markdown-to-Notion conversion:**
+
+The `markdownToNotionBlocks` converter handles: headings (h1-h3), paragraphs, bulleted and numbered lists, code blocks with language, blockquotes, horizontal rules, tables, and inline formatting (bold, italic, code, links).
+
+Blocks exceeding Notion's 100-block API limit are appended in batches via `appendBlocksInBatches`.
+
+### Research Export Settings
+
+New Firestore-backed settings for per-user Notion export configuration:
 
 ```typescript
-// apps/research-agent/src/infra/user/index.ts
-export { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
+// Collection: research_export_settings (keyed by userId)
+interface ResearchExportSettings {
+  researchPageId: string; // Target Notion page ID
+  researchPageTitle: string; // Cached page title
+  researchPageUrl: string; // Cached page URL
+  createdAt: string;
+  updatedAt: string;
+}
 ```
 
-**Benefits:**
+Settings endpoints validate page IDs (32 hex or UUID format) and fetch page previews via notion-service before saving.
 
-- Shared HTTP client implementation across all services
-- Consistent error handling with typed `UserServiceError` codes
-- Single source of truth for user-service integration
-- Flat exports enable proper esbuild bundling for Docker
+### Auth0 Namespaced Claims
 
-### INT-218: Input Validation Zod Migration
+`extractGeneratedByInfo` now reads Auth0 claims under `https://intexuraos.cloud/` namespace first (set by Auth0 Actions for API audiences), falling back to bare `name`/`email` claims for ID token compatibility.
 
-Migrated `InputValidationAdapter` to use Zod schema validation:
+### Previous Changes (v2.1.0)
 
-```typescript
-// Before: Manual type guard
-const isValidQuality = (q: unknown): q is 0 | 1 | 2 => {
-  /* ... */
-};
-
-// After: Zod schema
-const InputQualitySchema = z.object({
-  quality: z.union([z.literal(0), z.literal(1), z.literal(2)]),
-  quality_scale: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-  reason: z.string(),
-});
-```
-
-**Benefits:**
-
-- Type-safe validation with compile-time inference
-- Detailed error messages with field paths
-- Backwards compatible with `quality_scale` alias
-- Parser + repair pattern for resilient validation
+See v2.1.0 section below for INT-269 (Internal Clients Migration) and INT-218 (Input Validation Zod Migration).
 
 ## Model Extraction Flow (v2.0.0)
 
@@ -235,22 +244,26 @@ sequenceDiagram
 
 ### Public Endpoints
 
-| Method | Path                       | Description                             | Auth         |
-| ------ | -------------------------- | --------------------------------------- | ------------ |
-| POST   | `/research`                | Create new research (starts processing) | Bearer token |
-| POST   | `/research/draft`          | Save as draft (v2.0.0)                  | Bearer token |
-| GET    | `/research`                | List researches for user                | Bearer token |
-| GET    | `/research/:id`            | Get research by ID                      | Bearer token |
-| DELETE | `/research/:id`            | Delete research and unshare             | Bearer token |
-| POST   | `/research/:id/approve`    | Approve draft research                  | Bearer token |
-| POST   | `/research/:id/enhance`    | Enhance with more models/context        | Bearer token |
-| POST   | `/research/:id/retry`      | Retry failed LLM calls                  | Bearer token |
-| POST   | `/research/:id/confirm`    | Confirm partial failure decision        | Bearer token |
-| DELETE | `/research/:id/share`      | Remove public sharing                   | Bearer token |
-| PATCH  | `/research/:id/favourite`  | Toggle favourite status                 | Bearer token |
-| POST   | `/research/validate-input` | Validate input quality                  | Bearer token |
-| POST   | `/research/improve-input`  | Improve research prompt                 | Bearer token |
-| PATCH  | `/research/:id`            | Update draft research                   | Bearer token |
+| Method | Path                                 | Description                             | Auth         |
+| ------ | ------------------------------------ | --------------------------------------- | ------------ |
+| POST   | `/research`                          | Create new research (starts processing) | Bearer token |
+| POST   | `/research/draft`                    | Save as draft (v2.0.0)                  | Bearer token |
+| GET    | `/research`                          | List researches for user                | Bearer token |
+| GET    | `/research/:id`                      | Get research by ID                      | Bearer token |
+| DELETE | `/research/:id`                      | Delete research and unshare             | Bearer token |
+| POST   | `/research/:id/approve`              | Approve draft research                  | Bearer token |
+| POST   | `/research/:id/enhance`              | Enhance with more models/context        | Bearer token |
+| POST   | `/research/:id/retry`                | Retry failed LLM calls                  | Bearer token |
+| POST   | `/research/:id/confirm`              | Confirm partial failure decision        | Bearer token |
+| POST   | `/research/:id/export-notion`        | Manually export to Notion (v2.2.0)      | Bearer token |
+| DELETE | `/research/:id/share`                | Remove public sharing                   | Bearer token |
+| PATCH  | `/research/:id/favourite`            | Toggle favourite status                 | Bearer token |
+| POST   | `/research/validate-input`           | Validate input quality                  | Bearer token |
+| POST   | `/research/improve-input`            | Improve research prompt                 | Bearer token |
+| PATCH  | `/research/:id`                      | Update draft research                   | Bearer token |
+| GET    | `/research/settings/notion`          | Get Notion export settings (v2.2.0)     | Bearer token |
+| POST   | `/research/settings/notion`          | Save Notion export settings (v2.2.0)    | Bearer token |
+| POST   | `/research/settings/notion/validate` | Validate Notion page ID (v2.2.0)        | Bearer token |
 
 ### Internal Endpoints
 
@@ -297,6 +310,7 @@ sequenceDiagram
 | `favourite`         | boolean           | User favorited                       |
 | `userName`          | string            | User's name for "Generated by"       |
 | `userEmail`         | string            | User's email for "Generated by"      |
+| `notionExportInfo`  | NotionExportInfo  | Notion export details (v2.2.0)       |
 
 ### ResearchStatus Enum
 
@@ -328,6 +342,37 @@ sequenceDiagram
 | `outputTokens`     | number          | Tokens generated                        |
 | `costUsd`          | number          | Cost of this call                       |
 | `copiedFromSource` | boolean         | Copied from enhanced source research    |
+
+### ShareInfo (updated v2.2.0)
+
+| Field           | Type   | Description                     |
+| --------------- | ------ | ------------------------------- |
+| `shareToken`    | string | HMAC-based share token          |
+| `slug`          | string | URL-friendly slug               |
+| `shareUrl`      | string | Full shareable URL              |
+| `sharedAt`      | string | Share timestamp                 |
+| `gcsPath`       | string | GCS storage path                |
+| `coverImageId`  | string | Cover image identifier          |
+| `coverImageUrl` | string | Full-size cover image URL (NEW) |
+
+### NotionExportInfo (v2.2.0)
+
+| Field              | Type                                  | Description                  |
+| ------------------ | ------------------------------------- | ---------------------------- |
+| `mainPageId`       | string                                | Notion main research page ID |
+| `mainPageUrl`      | string                                | Notion main page URL         |
+| `llmReportPageIds` | `{ model: string; pageId: string }[]` | LLM report child page IDs    |
+| `exportedAt`       | string (ISO 8601)                     | Export timestamp             |
+
+### ResearchExportSettings (v2.2.0)
+
+| Field               | Type              | Description           |
+| ------------------- | ----------------- | --------------------- |
+| `researchPageId`    | string            | Target Notion page ID |
+| `researchPageTitle` | string            | Cached page title     |
+| `researchPageUrl`   | string            | Cached page URL       |
+| `createdAt`         | string (ISO 8601) | Creation timestamp    |
+| `updatedAt`         | string (ISO 8601) | Last update timestamp |
 
 ## Model Filtering Logic (v2.0.0)
 
@@ -374,24 +419,26 @@ const RESEARCH_MODELS: ResearchModel[] = [
 
 ## Dependencies
 
-### Internal Services (v2.1.0 via internal-clients)
+### Internal Services (v2.2.0)
 
-| Service         | Purpose                                                            |
-| --------------- | ------------------------------------------------------------------ |
-| `user-service`  | API keys, LLM usage, LLM client via `@intexuraos/internal-clients` |
-| `image-service` | Cover image generation                                             |
+| Service          | Purpose                                                            |
+| ---------------- | ------------------------------------------------------------------ |
+| `user-service`   | API keys, LLM usage, LLM client via `@intexuraos/internal-clients` |
+| `image-service`  | Cover image generation                                             |
+| `notion-service` | Notion OAuth tokens and page previews (NEW in v2.2.0)              |
 
 ### Infrastructure
 
-| Component                             | Purpose                      |
-| ------------------------------------- | ---------------------------- |
-| Firestore (`researches` collection)   | Research persistence         |
-| Firestore (`app_settings` collection) | LLM pricing configuration    |
-| Firestore (`llm_api_logs` collection) | API call audit               |
-| Pub/Sub (`llm-call-queue`)            | LLM call distribution        |
-| Pub/Sub (`llm-process-queue`)         | Research processing trigger  |
-| Pub/Sub (`whatsapp-send`)             | Notification delivery        |
-| GCS                                   | Shared research HTML storage |
+| Component                                         | Purpose                              |
+| ------------------------------------------------- | ------------------------------------ |
+| Firestore (`researches` collection)               | Research persistence                 |
+| Firestore (`app_settings` collection)             | LLM pricing configuration            |
+| Firestore (`llm_api_logs` collection)             | API call audit                       |
+| Firestore (`research_export_settings` collection) | Notion export configuration (v2.2.0) |
+| Pub/Sub (`llm-call-queue`)                        | LLM call distribution                |
+| Pub/Sub (`llm-process-queue`)                     | Research processing trigger          |
+| Pub/Sub (`whatsapp-send`)                         | Notification delivery                |
+| GCS                                               | Shared research HTML storage         |
 
 ### LLM Providers
 
@@ -403,18 +450,20 @@ const RESEARCH_MODELS: ResearchModel[] = [
 | Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research` |
 | Zai        | `glm-4.7`, `glm-4.7-flash`                  |
 
-### Shared Packages (v2.1.0)
+### Shared Packages (v2.2.0)
 
-| Package                        | Purpose                             |
-| ------------------------------ | ----------------------------------- |
-| `@intexuraos/internal-clients` | User service client (NEW in v2.1.0) |
-| `@intexuraos/llm-contract`     | Model types, provider mapping       |
-| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders        |
-| `@intexuraos/llm-pricing`      | Pricing context interface           |
-| `@intexuraos/llm-utils`        | Parse error formatting              |
-| `@intexuraos/infra-gemini`     | Gemini client wrapper               |
-| `@intexuraos/common-http`      | HTTP utilities, auth                |
-| `@intexuraos/common-core`      | Result types, logging               |
+| Package                        | Purpose                                         |
+| ------------------------------ | ----------------------------------------------- |
+| `@intexuraos/internal-clients` | User service client (NEW in v2.1.0)             |
+| `@intexuraos/infra-notion`     | Notion client and error mapping (NEW in v2.2.0) |
+| `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                   |
+| `@intexuraos/llm-contract`     | Model types, provider mapping                   |
+| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                    |
+| `@intexuraos/llm-pricing`      | Pricing context interface                       |
+| `@intexuraos/llm-utils`        | Parse error formatting                          |
+| `@intexuraos/infra-gemini`     | Gemini client wrapper                           |
+| `@intexuraos/common-http`      | HTTP utilities, auth                            |
+| `@intexuraos/common-core`      | Result types, logging                           |
 
 ## Configuration
 
@@ -422,6 +471,7 @@ const RESEARCH_MODELS: ResearchModel[] = [
 | ------------------------------------------ | -------- | ------------------------------------ |
 | `INTEXURAOS_USER_SERVICE_URL`              | Yes      | User-service base URL                |
 | `INTEXURAOS_IMAGE_SERVICE_URL`             | Yes      | Image-service base URL               |
+| `INTEXURAOS_NOTION_SERVICE_URL`            | Yes      | Notion-service base URL (v2.2.0)     |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes      | Shared secret for service-to-service |
 | `INTEXURAOS_GCP_PROJECT_ID`                | Yes      | Google Cloud project ID              |
 | `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Yes      | LLM call queue topic                 |
@@ -430,6 +480,7 @@ const RESEARCH_MODELS: ResearchModel[] = [
 | `INTEXURAOS_WEB_APP_URL`                   | Yes      | Web app URL for notifications        |
 | `INTEXURAOS_SHARED_CONTENT_BUCKET`         | Yes      | GCS bucket for shared research       |
 | `INTEXURAOS_SHARE_BASE_URL`                | Yes      | Base URL for shared research         |
+| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Yes      | Public base URL for images           |
 
 ## Gotchas
 
@@ -459,13 +510,23 @@ const RESEARCH_MODELS: ResearchModel[] = [
 
 **Internal-clients flat exports**: The `@intexuraos/internal-clients` package uses flat exports (not subpath exports) to enable proper esbuild bundling for Docker deployment.
 
+**Notion export ordering**: The fire-and-forget Notion export in `runSynthesis` must happen AFTER the database save so the export can read the updated `shareInfo` with `coverImageUrl`. Previously this caused a race condition where cover images were missing.
+
+**Notion 100-block limit**: The Notion API limits `pages.create` to 100 children blocks. The exporter uses `appendBlocksInBatches` to handle larger exports by appending in batches of 100.
+
+**Notion export deduplication**: Both automatic and manual export check `research.notionExportInfo` before exporting. If already set, the export is skipped to prevent duplicate pages.
+
+**Notion page ID normalization**: Page IDs can be either 32 hex characters or UUID format with dashes. The validation endpoint normalizes by removing dashes before passing to notion-service.
+
+**Auth0 namespaced claims**: Auth0 Actions add user claims under `https://intexuraos.cloud/` namespace for API audience tokens. The service tries namespaced keys first, then falls back to bare `name`/`email`.
+
 ## File Structure
 
 ```
 apps/research-agent/src/
   domain/research/
     models/
-      Research.ts                   # Core research entity and factories
+      Research.ts                   # Core research entity and factories (NotionExportInfo added v2.2.0)
     config/
       synthesisPrompt.ts            # Synthesis prompt template
     ports/
@@ -474,6 +535,7 @@ apps/research-agent/src/
       contextInference.ts           # Context inference interface
       modelExtraction.ts            # Model extraction types
       shareStorage.ts               # Shared HTML storage interface
+      researchExportSettings.ts     # Export settings port interface (v2.2.0)
     services/
       contextLabels.ts              # Context labeling utilities
     usecases/
@@ -482,11 +544,12 @@ apps/research-agent/src/
       submitResearch.ts             # Submit for processing
       enhanceResearch.ts            # Add models/context
       unshareResearch.ts            # Remove public share
-      runSynthesis.ts               # Combine results
+      runSynthesis.ts               # Combine results + fire-and-forget Notion export (v2.2.0)
       retryFromFailed.ts            # Retry failed LLMs
       retryFailedLlms.ts            # Retry specific models
       checkLlmCompletion.ts         # Completion status check
       repairAttribution.ts          # Fix attribution issues
+      toggleResearchFavourite.ts    # Toggle favourite status
     utils/
       htmlGenerator.ts              # Shared HTML generation
       slugify.ts                    # URL-friendly IDs
@@ -503,6 +566,14 @@ apps/research-agent/src/
       LlmAdapterFactory.ts          # Factory pattern
     research/
       FirestoreResearchRepository.ts  # Research persistence
+    firestore/
+      researchExportSettingsRepository.ts  # Notion export settings (v2.2.0)
+    notion/
+      index.ts                      # Notion client exports (v2.2.0)
+      notionServiceClient.ts        # HTTP client for notion-service (v2.2.0)
+      notionResearchExporter.ts     # Exports research to Notion pages (v2.2.0)
+      markdownToNotionBlocks.ts     # Markdown to Notion block converter (v2.2.0)
+      exportResearchToNotionUseCase.ts  # Fire-and-forget export use case (v2.2.0)
     pricing/
       PricingClient.ts              # Fetch pricing from settings
     pubsub/
@@ -519,14 +590,16 @@ apps/research-agent/src/
       index.ts                      # Re-exports from @intexuraos/internal-clients (v2.1.0)
   routes/
     internalRoutes.ts               # Service-to-service + Pub/Sub
-    researchRoutes.ts               # User-facing endpoints
+    researchRoutes.ts               # User-facing endpoints + export-notion (v2.2.0)
+    researchExportRoutes.ts         # Notion export settings endpoints (v2.2.0)
     helpers/
       completionHandlers.ts         # Post-LLM completion logic
       synthesisHelper.ts            # Synthesis setup
     schemas/
+      common.ts                     # Shared schema components
       researchSchemas.ts            # Request/response schemas
       validationSchemas.ts          # Input validation schemas (v2.1.0)
-  services.ts                       # DI container with factories
-  server.ts                         # Fastify server setup
-  index.ts                          # Entry point
+  services.ts                       # DI container with factories (notionServiceClient, notionExporter added v2.2.0)
+  server.ts                         # Fastify server setup (researchExportRoutes registered v2.2.0)
+  index.ts                          # Entry point (INTEXURAOS_NOTION_SERVICE_URL added v2.2.0)
 ```

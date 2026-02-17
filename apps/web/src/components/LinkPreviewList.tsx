@@ -17,13 +17,13 @@ export function LinkPreviewList({ linkPreview }: LinkPreviewListProps): React.JS
   const { status, previews, error } = linkPreview;
 
   if (status === 'pending') {
-    return <div className="mt-2 text-xs text-gray-400 italic">Loading link previews...</div>;
+    return <div className="mt-2 text-xs text-gray-400 dark:text-slate-500 italic">Loading link previews...</div>;
   }
 
   if (status === 'failed') {
     const errorMessage = error !== undefined ? `: ${error.message}` : '';
     return (
-      <div className="mt-2 text-xs text-gray-400 italic">
+      <div className="mt-2 text-xs text-gray-400 dark:text-slate-500 italic">
         Failed to load link previews{errorMessage}
       </div>
     );

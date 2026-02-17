@@ -55,8 +55,10 @@ describe('calendarActionExtractionService', () => {
       case 'ok':
         return {
           getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
-        getApiKeys: vi.fn(),
-        reportLlmSuccess: vi.fn()        };
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
+          getOAuthToken: vi.fn(),
+        };
       case 'no_api_key':
         return {
           getLlmClient: vi
@@ -64,12 +66,15 @@ describe('calendarActionExtractionService', () => {
             .mockResolvedValue(err({ code: 'NO_API_KEY' as const, message: 'No API key configured' })),
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
+          getOAuthToken: vi.fn(),
         };
       case 'api_error':
         return {
           getLlmClient: vi.fn().mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service error' })),
-        getApiKeys: vi.fn(),
-        reportLlmSuccess: vi.fn()        };
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
+          getOAuthToken: vi.fn(),
+        };
       case 'network_error':
         return {
           getLlmClient: vi
@@ -77,6 +82,7 @@ describe('calendarActionExtractionService', () => {
             .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
+          getOAuthToken: vi.fn(),
         };
       case 'invalid_model':
         return {
@@ -85,6 +91,7 @@ describe('calendarActionExtractionService', () => {
             .mockResolvedValue(err({ code: 'INVALID_MODEL' as const, message: 'Unsupported model' })),
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
+          getOAuthToken: vi.fn(),
         };
     }
   }
@@ -164,7 +171,7 @@ describe('calendarActionExtractionService', () => {
       }
     });
 
-    it('returns INVALID_RESPONSE when JSON parsing fails', async () => {
+    it('returns INVALID_RESPONSE when JSON parsing fails after repair attempt', async () => {
       mockGenerate.mockResolvedValue(ok({ content: 'not valid json', usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
       const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
@@ -174,16 +181,16 @@ describe('calendarActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toContain('Failed to parse');
+        expect(result.error.message).toContain('JSON parse error');
         expect(result.error.details?.parseError).toBeDefined();
         expect(result.error.details?.rawResponsePreview).toBe('not valid json');
       }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
     });
 
-    it('returns INVALID_RESPONSE when response schema validation fails', async () => {
+    it('returns INVALID_RESPONSE when response schema validation fails after repair attempt', async () => {
       const invalidResponse = JSON.stringify({
         summary: 'Test',
-        // Missing required fields: valid, reasoning
       });
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
@@ -196,9 +203,9 @@ describe('calendarActionExtractionService', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
         expect(result.error.message).toContain('LLM returned invalid response format');
-        expect(result.error.details?.zodErrors).toBeDefined();
-        expect(result.error.details?.zodErrors).toContain('valid');
+        expect(result.error.message).toContain('Schema validation failed');
       }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
     });
 
     it('strips markdown code blocks from LLM response', async () => {
@@ -253,8 +260,8 @@ describe('calendarActionExtractionService', () => {
       }
     });
 
-    it('handles date-only format with Zod validation error', async () => {
-      const nullDatesResponse = JSON.stringify({
+    it('handles date-only format for all-day events', async () => {
+      const allDayResponse = JSON.stringify({
         summary: 'All day event',
         start: '2025-01-15',
         end: null,
@@ -265,19 +272,18 @@ describe('calendarActionExtractionService', () => {
         reasoning: 'All day event with only start date',
       });
 
-      mockGenerate.mockResolvedValue(ok({ content: nullDatesResponse, usage: mockUsage }));
+      mockGenerate.mockResolvedValue(ok({ content: allDayResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
       const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Company holiday on Jan 15', '2025-01-14');
 
-      // Zod schema requires ISO date-time format, not date-only
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toContain('LLM returned invalid response format');
-        expect(result.error.details?.zodErrors).toBeDefined();
-        expect(result.error.details?.zodErrors).toContain('start');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.summary).toBe('All day event');
+        expect(result.value.start).toBe('2025-01-15');
+        expect(result.value.end).toBeNull();
+        expect(result.value.description).toBe('Company holiday');
       }
     });
 
@@ -610,6 +616,153 @@ describe('calendarActionExtractionService', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
       }
+    });
+  });
+
+  describe('repair mechanism', () => {
+    const mockUsage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 };
+
+    const validResponse = JSON.stringify({
+      summary: 'Meeting with John',
+      start: '2025-01-15T15:00:00',
+      end: '2025-01-15T16:00:00',
+      location: null,
+      description: null,
+      valid: true,
+      error: null,
+      reasoning: 'Extracted meeting details',
+    });
+
+    it('repairs JSON syntax error successfully', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(ok({ content: '{invalid json', usage: mockUsage }))
+        .mockResolvedValueOnce(ok({ content: validResponse, usage: mockUsage }));
+
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Meeting with John at 3pm', '2025-01-14');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.summary).toBe('Meeting with John');
+        expect(result.value.start).toBe('2025-01-15T15:00:00');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('repairs Zod validation error successfully', async () => {
+      const invalidSchemaResponse = JSON.stringify({
+        summary: 'Meeting',
+        start: '2025-01-15T15:00:00',
+        end: '2025-01-15T16:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+      });
+
+      mockGenerate
+        .mockResolvedValueOnce(ok({ content: invalidSchemaResponse, usage: mockUsage }))
+        .mockResolvedValueOnce(ok({ content: validResponse, usage: mockUsage }));
+
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Meeting tomorrow', '2025-01-14');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.summary).toBe('Meeting with John');
+        expect(result.value.reasoning).toBe('Extracted meeting details');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails after max repair attempts when repair also fails', async () => {
+      const invalidResponse = JSON.stringify({ summary: 'Test' });
+
+      mockGenerate
+        .mockResolvedValueOnce(ok({ content: invalidResponse, usage: mockUsage }))
+        .mockResolvedValueOnce(ok({ content: invalidResponse, usage: mockUsage }));
+
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not repair when LLM generation fails (not invalid JSON)', async () => {
+      mockGenerate.mockResolvedValue(err({ code: 'RATE_LIMIT_EXCEEDED', message: 'Rate limit exceeded' }));
+
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('GENERATION_ERROR');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs repair attempt context', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(ok({ content: '{bad json', usage: mockUsage }))
+        .mockResolvedValueOnce(ok({ content: validResponse, usage: mockUsage }));
+
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      await service.extractEvent('user-123', 'Meeting', '2025-01-14');
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-123',
+          errorMessage: expect.stringContaining('JSON parse error'),
+        }),
+        'Initial extraction failed, attempting repair'
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repairAttempt: 1,
+          maxAttempts: 1,
+        }),
+        'Sending repair prompt'
+      );
+    });
+
+    it('continues to next repair attempt when repair LLM generation fails', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(ok({ content: '{invalid}', usage: mockUsage }))
+        .mockResolvedValueOnce(err({ code: 'RATE_LIMIT_EXCEEDED', message: 'Rate limit' }));
+
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
+
+      expect(result.ok).toBe(false);
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns valid event without repair when first call succeeds', async () => {
+      mockGenerate.mockResolvedValueOnce(ok({ content: validResponse, usage: mockUsage }));
+
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Meeting', '2025-01-14');
+
+      expect(result.ok).toBe(true);
+      expect(mockGenerate).toHaveBeenCalledTimes(1);
     });
   });
 });

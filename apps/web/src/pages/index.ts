@@ -1,6 +1,7 @@
 export { BookmarksListPage } from './BookmarksListPage.js';
 export { CalendarPage } from './CalendarPage.js';
 export { DataInsightsPage } from './DataInsightsPage.js';
+export { PREventsPage } from './PREventsPage.js';
 export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
 export { NotionConnectionPage } from './NotionConnectionPage.js';
@@ -26,3 +27,7 @@ export { ShareTargetPage } from './ShareTargetPage.js';
 export { TodosListPage } from './TodosListPage.js';
 export { LlmPricingPage } from './LlmPricingPage.js';
 export { LlmCostsPage } from './LlmCostsPage.js';
+export { CodeTasksPage } from './CodeTasksPage.js';
+export { CodeTaskViewPage } from './CodeTaskViewPage.js';
+export { CodeTaskNewPage } from './CodeTaskNewPage.js';
+export { WorkerSettingsPage } from './WorkerSettingsPage.js';

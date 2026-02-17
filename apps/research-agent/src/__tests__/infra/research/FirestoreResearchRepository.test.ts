@@ -227,6 +227,80 @@ describe('FirestoreResearchRepository', () => {
       }
     });
 
+    it('returns empty list when cursor type is "done" (no more results)', async () => {
+      // This covers the "done" cursor type branch at line 75-76
+      const result = await repository.findByUserId('user-1', { cursor: 'done:' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(0);
+        expect(result.value.nextCursor).toBeUndefined();
+      }
+    });
+
+    it('handles cursor with missing type gracefully (queries favorites first, then non)', async () => {
+      // Covers cursor without ":" separator - defaults to normal query
+      const nonFavorites: Research[] = [
+        {
+          id: 'non-1',
+          userId: 'user-1',
+          title: 'Non-Favorite',
+          prompt: 'Test',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
+          status: 'pending',
+          llmResults: [],
+          favourite: false,
+          startedAt: '2024-01-01T00:00:00Z',
+        },
+      ];
+
+      // Favorites query returns empty, non-favorites returns data
+      const mockFavoritesGet = vi.fn().mockResolvedValue({ docs: [] });
+      const mockNonFavoritesGet = vi.fn().mockResolvedValue({
+        docs: nonFavorites.map((r): { id: string; data: () => Research } => ({
+          id: r.id,
+          data: (): Research => r,
+        })),
+      });
+
+      let callCount = 0;
+      mockWhere.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // Favorites query (but we'll return empty)
+          return {
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockReturnValue({
+                limit: vi.fn().mockReturnValue({
+                  get: mockFavoritesGet,
+                }),
+              }),
+            }),
+          };
+        }
+        // Non-favorites query
+        return {
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                get: mockNonFavoritesGet,
+              }),
+            }),
+          }),
+        };
+      });
+
+      // Malformed cursor (no ":") - queries favorites first (empty), then non-favorites
+      const result = await repository.findByUserId('user-1', { cursor: 'malformed', limit: 5 });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(1);
+        expect(result.value.items[0]?.id).toBe('non-1');
+      }
+    });
+
     it('respects limit parameter', async () => {
       const favorites: Research[] = Array.from({ length: 10 }, (_, i) => ({
         id: `fav-${i}`,

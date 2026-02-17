@@ -39,14 +39,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           401: {
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           500: {
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
         },
         security: [{ internalAuth: [] }],
@@ -60,8 +64,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for get all pricing');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for get all pricing');
       }
 
       const { pricingRepository } = getServices();
@@ -78,28 +81,23 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Check if any provider is missing - need individual null checks for TypeScript narrowing
       if (google === null) {
         request.log.error({ missingProviders: ['google'] }, 'Missing pricing for providers');
-        reply.status(500);
-        return { error: 'Missing pricing for providers: google' };
+        return await reply.fail('INTERNAL_ERROR', 'Missing pricing for providers: google');
       }
       if (openai === null) {
         request.log.error({ missingProviders: ['openai'] }, 'Missing pricing for providers');
-        reply.status(500);
-        return { error: 'Missing pricing for providers: openai' };
+        return await reply.fail('INTERNAL_ERROR', 'Missing pricing for providers: openai');
       }
       if (anthropic === null) {
         request.log.error({ missingProviders: ['anthropic'] }, 'Missing pricing for providers');
-        reply.status(500);
-        return { error: 'Missing pricing for providers: anthropic' };
+        return await reply.fail('INTERNAL_ERROR', 'Missing pricing for providers: anthropic');
       }
       if (perplexity === null) {
         request.log.error({ missingProviders: ['perplexity'] }, 'Missing pricing for providers');
-        reply.status(500);
-        return { error: 'Missing pricing for providers: perplexity' };
+        return await reply.fail('INTERNAL_ERROR', 'Missing pricing for providers: perplexity');
       }
       if (zai === null) {
         request.log.error({ missingProviders: ['zai'] }, 'Missing pricing for providers');
-        reply.status(500);
-        return { error: 'Missing pricing for providers: zai' };
+        return await reply.fail('INTERNAL_ERROR', 'Missing pricing for providers: zai');
       }
 
       // At this point all providers are non-null (TypeScript can narrow from the early returns above)
@@ -112,16 +110,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info({ totalModels }, 'Returning pricing for all providers');
 
-      return {
-        success: true,
-        data: {
-          google,
-          openai,
-          anthropic,
-          perplexity,
-          zai,
-        },
-      };
+      return await reply.ok({
+        google,
+        openai,
+        anthropic,
+        perplexity,
+        zai,
+      });
     }
   );
 

@@ -84,6 +84,27 @@ export const shareInfoSchema = {
   required: ['shareToken', 'slug', 'shareUrl', 'sharedAt', 'gcsPath'],
 } as const;
 
+export const notionExportInfoSchema = {
+  type: 'object',
+  properties: {
+    mainPageId: { type: 'string' },
+    mainPageUrl: { type: 'string' },
+    llmReportPageIds: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          model: { type: 'string' },
+          pageId: { type: 'string' },
+        },
+        required: ['model', 'pageId'],
+      },
+    },
+    exportedAt: { type: 'string' },
+  },
+  required: ['mainPageId', 'mainPageUrl', 'llmReportPageIds', 'exportedAt'],
+} as const;
+
 export const researchSchema = {
   type: 'object',
   properties: {
@@ -111,6 +132,7 @@ export const researchSchema = {
     synthesisError: { type: 'string', nullable: true },
     partialFailure: { ...partialFailureSchema, nullable: true },
     shareInfo: { ...shareInfoSchema, nullable: true },
+    notionExportInfo: { ...notionExportInfoSchema, nullable: true },
     startedAt: { type: 'string' },
     completedAt: { type: 'string', nullable: true },
     totalDurationMs: { type: 'number', nullable: true },
@@ -120,6 +142,8 @@ export const researchSchema = {
     sourceActionId: { type: 'string', nullable: true },
     sourceResearchId: { type: 'string', nullable: true },
     favourite: { type: 'boolean', nullable: true },
+    userName: { type: 'string', nullable: true },
+    userEmail: { type: 'string', nullable: true },
   },
   required: [
     'id',

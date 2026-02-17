@@ -83,6 +83,18 @@ export interface ShareInfo {
   shareUrl: string;
   sharedAt: string;
   gcsPath: string;
+  coverImageId?: string;
+  coverImageUrl?: string;
+}
+
+/**
+ * Notion export information for a research.
+ */
+export interface NotionExportInfo {
+  mainPageId: string;
+  mainPageUrl: string;
+  llmReportPageIds: { model: string; pageId: string }[];
+  exportedAt: string;
 }
 
 /**
@@ -104,6 +116,7 @@ export interface Research {
   synthesisError?: string;
   partialFailure?: PartialFailure;
   shareInfo?: ShareInfo;
+  notionExportInfo?: NotionExportInfo;
   startedAt: string;
   completedAt?: string;
   totalDurationMs?: number;

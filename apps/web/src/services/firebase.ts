@@ -58,12 +58,9 @@ export function initializeFirebase(): void {
 
   firebaseAuth = getAuth(firebaseApp);
 
-  // Connect to emulators when running on localhost
-  const isLocalhost =
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const useEmulators = import.meta.env['INTEXURAOS_USE_FIREBASE_EMULATORS'] === 'true';
 
-  if (isLocalhost) {
+  if (useEmulators) {
     connectFirestoreEmulator(firestoreClient, 'localhost', 8101);
     connectAuthEmulator(firebaseAuth, 'http://localhost:8104', { disableWarnings: true });
   }

@@ -28,6 +28,8 @@ Processes commands through a 5-step decision tree that eliminates ambiguity.
 
 **Step 5:** Category signals - Traditional keyword matching (calendar, reminder, research, note, todo)
 
+**Step 6:** Code detection - Programming-related commands ("fix the login bug", "refactor the auth module") trigger `code` classification
+
 **Example:** "save bookmark https://research-world.com" correctly classifies as `link` because Step 2 (explicit "save bookmark") executes before Step 4 (URL presence), and both override the misleading "research" keyword.
 
 ### URL Keyword Isolation
@@ -86,11 +88,17 @@ Result: Link saved to bookmarks, not queued for research.
 
 **Reminder handler** - Classification recognizes `reminder` but actions-agent handler not yet implemented
 
+**Code handler** - Classification recognizes `code` but actions-agent handler not yet implemented
+
 **Language coverage** - Currently English and Polish; other languages use English keyword matching
 
 **Confidence threshold** - Very ambiguous commands default to `note` with low confidence
 
 **No reclassification** - Failed commands must be deleted and re-sent, not reclassified
+
+## Recent Changes
+
+- **2026-02-08:** Add `code` command type for programming-related commands. Adopt standardized response contract (`reply.ok()`/`reply.fail()`). Migrate to Sentry-enabled logging via `createAppLogger()`. Consolidate user service client into shared `@intexuraos/internal-clients` package. Register `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` as required env var.
 
 ---
 

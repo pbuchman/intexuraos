@@ -1,7 +1,7 @@
 # Commands Agent - Technical Debt
 
-**Last Updated:** 2025-01-25
-**Analysis Run:** Service documentation generation (v2.1.0 context)
+**Last Updated:** 2026-02-08
+**Analysis Run:** Service documentation generation (v2.2.0 context)
 
 ---
 
@@ -20,11 +20,13 @@ Based on code analysis and git history:
 
 1. **Reminder handler implementation** - CommandType includes `reminder` but actions-agent handler not yet implemented
 
-2. **Additional language support** - Currently English and Polish; German and Spanish phrases could be added to Step 1 and Step 2 of classification prompt
+2. **Code handler implementation** - CommandType includes `code` but actions-agent handler not yet implemented
 
-3. **Confidence threshold tuning** - Low confidence commands default to `note`; could offer user confirmation flow for ambiguous inputs
+3. **Additional language support** - Currently English and Polish; German and Spanish phrases could be added to Step 1 and Step 2 of classification prompt
 
-4. **Structured output mode** - Consider using Gemini function calling or OpenAI JSON mode instead of regex JSON extraction
+4. **Confidence threshold tuning** - Low confidence commands default to `note`; could offer user confirmation flow for ambiguous inputs
+
+5. **Structured output mode** - Consider using Gemini function calling or OpenAI JSON mode instead of regex JSON extraction
 
 ## Code Smells
 
@@ -86,11 +88,35 @@ const PWA_SHARED_LINK_CONFIDENCE_BOOST = 0.1;
 
 **Solution:** Migrated to `@intexuraos/internal-clients/user-service` package for shared implementation.
 
+### Local user service client adapter layer
+
+**Resolved in:** INT-301 (v2.2.0)
+
+**Previous issue:** commands-agent maintained a local adapter (`domain/ports/userServiceClient.ts`) and re-export barrel (`infra/user/index.ts`) that wrapped the shared `@intexuraos/internal-clients` package with a domain-specific `UserApiKeys` type.
+
+**Solution:** Removed the adapter entirely. Use cases now import `UserServiceClient` directly from `@intexuraos/internal-clients`. The local `infra/user/` directory and `domain/ports/userServiceClient.ts` were deleted.
+
+### Raw response format inconsistency
+
+**Resolved in:** INT-340 (v2.2.0)
+
+**Previous issue:** Internal routes returned raw objects (e.g., `{ error: 'Unauthorized' }`, `{ success: true, commandId: '...' }`) instead of using the standardized response contract.
+
+**Solution:** All routes now use `reply.ok(data)` and `reply.fail(code, message)`, wrapping data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
+
+### Direct pino() logger usage
+
+**Resolved in:** INT-340 (v2.2.0)
+
+**Previous issue:** `services.ts` created loggers with `pino()` directly, which skipped Sentry error reporting integration.
+
+**Solution:** All loggers now use `createAppLogger()` from `@intexuraos/infra-sentry`, which automatically sends errors to Sentry.
+
 ## Test Coverage
 
 No test coverage gaps identified. Core paths tested:
 
-- Classification for all command types
+- Classification for all command types (including `code`)
 - URL keyword isolation
 - Explicit intent detection
 - Polish language support
@@ -107,6 +133,8 @@ No test coverage gaps identified. Core paths tested:
 - No `@ts-ignore` or `@ts-expect-error` usage
 - Strict mode compliance: Pass
 - Zod schema validation: Implemented (v2.1.0)
+- Response contract compliance: `reply.ok()`/`reply.fail()` (v2.2.0)
+- Sentry-enabled logging: `createAppLogger()` (v2.2.0)
 
 ## TODOs/FIXMEs
 
@@ -132,4 +160,4 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ---
 
-**Last updated:** 2025-01-25
+**Last updated:** 2026-02-08

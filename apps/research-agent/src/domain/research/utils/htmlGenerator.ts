@@ -341,8 +341,8 @@ function renderSources(sources: string[] | undefined): string {
 }
 
 function renderGeneratedByInfo(
-  generatedBy: GeneratedByUserInfo | undefined,
-  formattedDate: string
+  formattedDate: string,
+  generatedBy?: GeneratedByUserInfo
 ): string {
   if (generatedBy === undefined) {
     return `<p class="meta">Generated on ${formattedDate}</p>`;
@@ -401,6 +401,11 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
       (r) => r.status === 'completed' && r.result !== undefined && r.result !== ''
     ) ?? [];
 
+  // Helper to render a single LLM result with type narrowing
+  /* v8 ignore start -- ts-type: result is defined after filter, fallback is for type system @preserve */
+  const renderLlmResult = (r: { result?: string }): string => marked.parse(r.result ?? '', { async: false });
+  /* v8 ignore stop @preserve */
+
   const llmResultsHtml =
     completedResults.length > 0
       ? `
@@ -414,7 +419,7 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
             <span class="provider-badge provider-${r.provider}">${r.provider}</span>
           </summary>
           <div class="detail-content prose">
-            ${marked.parse(r.result ?? '', { async: false })}
+            ${renderLlmResult(r)}
             ${renderSources(r.sources)}
           </div>
         </details>
@@ -445,7 +450,7 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
     `
       : '';
 
-  const generatedByHtml = renderGeneratedByInfo(generatedBy, formattedDate);
+  const generatedByHtml = renderGeneratedByInfo(formattedDate, generatedBy);
 
   return `<!DOCTYPE html>
 <html lang="en">

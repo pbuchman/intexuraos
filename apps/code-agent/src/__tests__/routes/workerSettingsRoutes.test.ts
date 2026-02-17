@@ -1,0 +1,718 @@
+/**
+ * Tests for worker settings routes.
+ *
+ * Tests:
+ * - GET /code/worker-settings
+ * - POST /code/worker-settings/workers
+ * - PATCH /code/worker-settings/workers/:name
+ * - DELETE /code/worker-settings/workers/:name
+ * - POST /code/worker-settings/workers/:name/test
+ * - PUT /code/worker-settings/priority
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as jose from 'jose';
+import nock from 'nock';
+
+vi.mock('jose', () => ({
+  createRemoteJWKSet: vi.fn(() => vi.fn()),
+  jwtVerify: vi.fn(),
+}));
+
+const mockedJwtVerify = vi.mocked(jose.jwtVerify);
+
+import { buildServer } from '../../server.js';
+import { resetServices, setServices } from '../../services.js';
+import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import type { Firestore } from '@google-cloud/firestore';
+import pino from 'pino';
+import type { Logger } from 'pino';
+import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
+import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
+import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
+import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
+import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
+import { createNoOpMetricsClient } from '../../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import { ok } from '@intexuraos/common-core';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { ServiceContainer } from '../../services.js';
+import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
+
+describe('Worker Settings Routes', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+  let fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  let logger: Logger;
+
+  beforeEach(async () => {
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+
+    fakeFirestore = createFakeFirestore();
+    setFirestore(fakeFirestore as unknown as Firestore);
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
+
+    const codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const taskDispatcher = createTaskDispatcherService({ logger });
+
+    const whatsappNotifier = createWhatsAppNotifier({
+      whatsappPublisher: {
+        publishSendMessage: async () => ok(undefined),
+      } as unknown as WhatsAppSendPublisher,
+    });
+
+    const logChunkRepo = createFirestoreLogChunkRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
+    const linearAgentClient = createLinearAgentHttpClient(
+      {
+        baseUrl: 'http://linear-agent:8086',
+        internalAuthToken: 'test-token',
+        timeoutMs: 10000,
+      },
+      logger
+    );
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
+    const workerSettingsRepo = createWorkerSettingsRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    setServices({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo,
+      taskDispatcher,
+      whatsappNotifier,
+      logChunkRepo,
+      logLineRepo: createFirestoreLogLineRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      actionsAgentClient,
+      linearAgentClient,
+      rateLimitService: {
+        async checkLimits() {
+          return ok(undefined);
+        },
+        async recordTaskStart() {
+          return;
+        },
+        async recordTaskComplete() {
+          return;
+        },
+      },
+      linearIssueService,
+      metricsClient: createNoOpMetricsClient(),
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
+      processHeartbeat: createProcessHeartbeatUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      detectZombieTasks: createDetectZombieTasksUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      workerSettingsRepo,
+      workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
+        logger,
+      }),
+      prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+    } as ServiceContainer);
+
+    app = await buildServer();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    resetServices();
+    resetFirestore();
+    nock.cleanAll();
+  });
+
+  describe('GET /code/worker-settings', () => {
+    it('should return empty workers array for new user', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { workers: unknown[] } };
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toEqual([]);
+    });
+
+    it('should return masked secrets for configured workers', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac.example.com',
+        cfAccessClientId: 'client-id-12345',
+        cfAccessClientSecret: 'secret-abcdef',
+        dispatchSigningSecret: 'signing-xyz123',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { workers: { name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; enabled: boolean }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toHaveLength(1);
+      expect(body.data.workers[0]?.name).toBe('home-mac');
+      expect(body.data.workers[0]?.url).toBe('https://mac.example.com');
+      expect(body.data.workers[0]?.cfAccessClientId).toContain('•');
+      expect(body.data.workers[0]?.cfAccessClientId.endsWith('345')).toBe(true);
+      expect(body.data.workers[0]?.cfAccessClientSecret).toContain('•');
+      expect(body.data.workers[0]?.cfAccessClientSecret.endsWith('def')).toBe(true);
+      expect(body.data.workers[0]?.enabled).toBe(true);
+    });
+  });
+
+  describe('POST /code/worker-settings/workers', () => {
+    it('should add new worker', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://my-mac.example.com',
+          cfAccessClientId: 'my-client-id',
+          cfAccessClientSecret: 'my-secret',
+          dispatchSigningSecret: 'my-signing-secret',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { added: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.added).toBe(true);
+    });
+
+    it('should enforce max workers limit', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+
+      // Add 2 workers (max)
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac.example.com',
+        cfAccessClientId: 'id1',
+        cfAccessClientSecret: 'secret1',
+        dispatchSigningSecret: 'signing1',
+      });
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'office-pc',
+        url: 'https://office.example.com',
+        cfAccessClientId: 'id2',
+        cfAccessClientSecret: 'secret2',
+        dispatchSigningSecret: 'signing2',
+      });
+
+      // Try to add 3rd worker
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'cloud-vm',
+          url: 'https://vm.example.com',
+          cfAccessClientId: 'id3',
+          cfAccessClientSecret: 'secret3',
+          dispatchSigningSecret: 'signing3',
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('should validate worker name format', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'AB', // invalid: too short, uppercase (requires 3-32 chars, lowercase alphanumeric with hyphens)
+          url: 'https://example.com',
+          cfAccessClientId: 'id',
+          cfAccessClientSecret: 'secret',
+          dispatchSigningSecret: 'signing',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('should reject masked cfAccessClientId', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://example.com',
+          cfAccessClientId: '•••••••345', // masked value
+          cfAccessClientSecret: 'real-secret',
+          dispatchSigningSecret: 'real-signing',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('CF Access Client ID');
+      expect(body.error.message).toContain('masked');
+    });
+
+    it('should reject masked cfAccessClientSecret', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://example.com',
+          cfAccessClientId: 'real-id',
+          cfAccessClientSecret: '•••••def', // masked value
+          dispatchSigningSecret: 'real-signing',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('CF Access Client Secret');
+    });
+
+    it('should reject masked dispatchSigningSecret', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://example.com',
+          cfAccessClientId: 'real-id',
+          cfAccessClientSecret: 'real-secret',
+          dispatchSigningSecret: '•••123', // masked value
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('Orchestrator Secret');
+    });
+  });
+
+  describe('PATCH /code/worker-settings/workers/:name', () => {
+    beforeEach(async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac.example.com',
+        cfAccessClientId: 'id',
+        cfAccessClientSecret: 'secret',
+        dispatchSigningSecret: 'signing',
+      });
+    });
+
+    it('should update existing worker', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://new-mac.example.com',
+          cfAccessClientId: 'new-client-id',
+          cfAccessClientSecret: 'new-secret',
+          dispatchSigningSecret: 'new-signing-secret',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { updated: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.updated).toBe(true);
+    });
+
+    it('should support partial updates', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          enabled: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      const getBody = JSON.parse(getResponse.body) as {
+        success: boolean;
+        data: { workers: { enabled: boolean }[] };
+      };
+      expect(getBody.data.workers[0]?.enabled).toBe(false);
+    });
+
+    it('should return 404 for non-existent worker', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/cloud-vm',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('should reject masked credentials in update', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://new-url.example.com',
+          cfAccessClientId: '•••••••xyz', // masked value
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('masked');
+    });
+
+    it('should allow partial update with url only (no credentials)', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://updated-mac.example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { updated: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.updated).toBe(true);
+    });
+  });
+
+  describe('DELETE /code/worker-settings/workers/:name', () => {
+    beforeEach(async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac.example.com',
+        cfAccessClientId: 'id',
+        cfAccessClientSecret: 'secret',
+        dispatchSigningSecret: 'signing',
+      });
+    });
+
+    it('should delete existing worker', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { deleted: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.deleted).toBe(true);
+
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      const getBody = JSON.parse(getResponse.body) as { success: boolean; data: { workers: unknown[] } };
+      expect(getBody.data.workers).toEqual([]);
+    });
+
+    it('should return 404 for non-existent worker', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/code/worker-settings/workers/cloud-vm',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+  });
+
+  describe('POST /code/worker-settings/workers/:name/test', () => {
+    beforeEach(async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac-worker.example.com',
+        cfAccessClientId: 'id',
+        cfAccessClientSecret: 'secret',
+        dispatchSigningSecret: 'signing',
+      });
+    });
+
+    it('should return 404 for non-existent worker', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers/cloud-vm/test',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('should test connectivity and update result on success', async () => {
+      nock('https://mac-worker.example.com')
+        .get('/health')
+        .reply(200, { status: 'ok' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers/home-mac/test',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          testStatus: string;
+          testMessage: string;
+          lastTestedAt: string;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.testStatus).toBe('success');
+      expect(body.data.testMessage).toBe('Connection successful');
+      expect(body.data.lastTestedAt).toBeDefined();
+    });
+
+    it('should record failure when health check fails', async () => {
+      nock('https://mac-worker.example.com')
+        .get('/health')
+        .reply(503, 'Service Unavailable');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers/home-mac/test',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          testStatus: string;
+          testMessage: string;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.testStatus).toBe('failure');
+      expect(body.data.testMessage).toContain('503');
+    });
+  });
+
+  describe('PUT /code/worker-settings/priority', () => {
+    beforeEach(async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac.example.com',
+        cfAccessClientId: 'id1',
+        cfAccessClientSecret: 'secret1',
+        dispatchSigningSecret: 'signing1',
+      });
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'office-pc',
+        url: 'https://office.example.com',
+        cfAccessClientId: 'id2',
+        cfAccessClientSecret: 'secret2',
+        dispatchSigningSecret: 'signing2',
+      });
+    });
+
+    it('should reorder workers', async () => {
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/code/worker-settings/priority',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          workerNames: ['office-pc', 'home-mac'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { reordered: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.reordered).toBe(true);
+
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer test-token' },
+      });
+
+      const getBody = JSON.parse(getResponse.body) as {
+        success: boolean;
+        data: { workers: { name: string }[] };
+      };
+      expect(getBody.data.workers[0]?.name).toBe('office-pc');
+      expect(getBody.data.workers[1]?.name).toBe('home-mac');
+    });
+
+    it('should return error for non-existent worker', async () => {
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/code/worker-settings/priority',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          workerNames: ['home-mac', 'cloud-vm'],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+  });
+
+  describe('authentication', () => {
+    it('should return 401 without valid token', async () => {
+      mockedJwtVerify.mockRejectedValue(new Error('Invalid token'));
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
+        headers: { Authorization: 'Bearer invalid-token' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+  });
+});

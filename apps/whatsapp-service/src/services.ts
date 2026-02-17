@@ -2,9 +2,10 @@
  * Service wiring for whatsapp-service.
  * Provides class-based adapters for domain use cases.
  */
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import {
   MessageRepositoryAdapter,
+  PhoneVerificationRepositoryAdapter,
   UserMappingRepositoryAdapter,
   WebhookEventRepositoryAdapter,
 } from './adapters.js';
@@ -19,6 +20,7 @@ import type {
   LinkPreviewFetcherPort,
   MediaStoragePort,
   OutboundMessageRepository,
+  PhoneVerificationRepository,
   SpeechTranscriptionPort,
   ThumbnailGeneratorPort,
   WhatsAppCloudApiPort,
@@ -51,7 +53,7 @@ function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
   const pubsubConfig: GcpPubSubPublisherConfig = {
     projectId: config.gcpProjectId,
     mediaCleanupTopic: config.mediaCleanupTopic,
-    logger: pino({ name: 'whatsapp-pubsub-publisher' }),
+    logger: createAppLogger({ name: 'whatsapp-pubsub-publisher' }),
   };
   if (config.commandsIngestTopic !== undefined) {
     pubsubConfig.commandsIngestTopic = config.commandsIngestTopic;
@@ -77,6 +79,7 @@ export interface ServiceContainer {
   userMappingRepository: WhatsAppUserMappingRepository;
   messageRepository: WhatsAppMessageRepository;
   outboundMessageRepository: OutboundMessageRepository;
+  phoneVerificationRepository: PhoneVerificationRepository;
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
@@ -115,6 +118,7 @@ export function getServices(): ServiceContainer {
     userMappingRepository: new UserMappingRepositoryAdapter(),
     messageRepository: new MessageRepositoryAdapter(),
     outboundMessageRepository: createOutboundMessageRepository(),
+    phoneVerificationRepository: new PhoneVerificationRepositoryAdapter(),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher: new GcpPubSubPublisher(buildPubSubConfig(serviceConfig)),
     messageSender: new WhatsAppCloudApiSender(
@@ -127,7 +131,7 @@ export function getServices(): ServiceContainer {
     linkPreviewFetcher: createWebAgentLinkPreviewClient({
       baseUrl: serviceConfig.webAgentUrl,
       internalAuthToken: serviceConfig.internalAuthToken,
-      logger: pino({ name: 'webAgentLinkPreviewClient' }),
+      logger: createAppLogger({ name: 'webAgentLinkPreviewClient' }),
     }),
   };
   return container;

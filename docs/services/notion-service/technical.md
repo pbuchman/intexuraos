@@ -4,13 +4,33 @@
 
 Notion-service manages the lifecycle of Notion integrations - connection validation, token storage, and disconnection.
 
+## Recent Changes
+
+| Commit     | Description                                        | Date       |
+| ---------- | -------------------------------------------------- | ---------- |
+| `3a25d55e` | Add Notion page preview endpoint for validation    | 2026-01-29 |
+| `7c5e9153` | INT-319: Remove PromptVault, keep Notion connector | 2026-01-26 |
+| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)      | 2026-01-30 |
+| `c3198407` | Fix response contract violations (reply.ok/fail)   | 2026-01-30 |
+| `9723dc24` | Standardize DELETE endpoint response               | 2026-01-31 |
+| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement   | 2026-01-31 |
+
 ## API Endpoints
+
+### Public Endpoints
 
 | Method | Path                 | Description                | Auth         |
 | ------ | -------------------- | -------------------------- | ------------ |
 | POST   | `/notion/connect`    | Connect Notion integration | Bearer token |
 | GET    | `/notion/status`     | Get integration status     | Bearer token |
 | DELETE | `/notion/disconnect` | Disconnect integration     | Bearer token |
+
+### Internal Endpoints
+
+| Method | Path                                                   | Description                  | Auth         |
+| ------ | ------------------------------------------------------ | ---------------------------- | ------------ |
+| GET    | `/internal/notion/users/:userId/context`               | Get connection context/token | Internal key |
+| GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | Get Notion page preview      | Internal key |
 
 ### Connect Request
 
@@ -24,10 +44,9 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 ```typescript
 {
-  connectionId: string,
-  workspaceName: string,
-  workspaceIcon: string | null,
-  workspaceId: string
+  connected: boolean,
+  createdAt: string,
+  updatedAt: string
 }
 ```
 
@@ -35,18 +54,23 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 ```typescript
 {
+  configured: boolean,
   connected: boolean,
-  workspaceName?: string,
-  workspaceIcon?: string,
-  workspaceId?: string
+  createdAt?: string,
+  updatedAt?: string
 }
 ```
 
 ### Disconnect Response
 
+Returns empty data object (`{}`).
+
+### Page Preview Response (Internal)
+
 ```typescript
 {
-  message: 'Notion integration disconnected';
+  title: string,
+  url: string
 }
 ```
 
@@ -80,9 +104,11 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 **One integration per user** - Reconnecting replaces existing connection.
 
-**Cascading delete** - Disconnecting affects PromptVault which depends on Notion.
+**Legacy createdAt handling** - The repository defaults `createdAt` to the current timestamp when existing documents lack the field (backward compatibility).
 
-**Workspace detection** - Uses Notion's search API to find workspace info.
+**Disconnect returns empty data** - The disconnect endpoint returns `reply.ok({})` (empty object), not connection state.
+
+**Page preview requires active connection** - The page preview endpoint validates the user has an active Notion connection with a valid token before querying the Notion API.
 
 ## File Structure
 
@@ -93,6 +119,8 @@ apps/notion-service/src/
       connectNotion.ts
       disconnectNotion.ts
       getNotionStatus.ts
+    ports/
+      ConnectionRepository.ts
   infra/
     firestore/
       notionConnectionRepository.ts
@@ -100,8 +128,9 @@ apps/notion-service/src/
       notionApi.ts
   routes/
     integrationRoutes.ts   # Connect/status/disconnect
-    webhookRoutes.ts        # Notion webhooks
-    internalRoutes.ts
+    internalRoutes.ts      # Context + page preview endpoints
+    webhookRoutes.ts       # Notion webhooks
+    schemas.ts             # Zod request schemas
   services.ts
   server.ts
 ```

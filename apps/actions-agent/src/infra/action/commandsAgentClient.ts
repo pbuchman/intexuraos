@@ -2,17 +2,14 @@ import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { ActionServiceClient } from '../../domain/ports/actionServiceClient.js';
 import type { Action } from '../../domain/models/action.js';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
 export interface CommandsAgentClientConfig {
   baseUrl: string;
   internalAuthToken: string;
 }
 
-const logger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'commandsAgentClient',
-});
+const logger = createAppLogger({ name: 'commandsAgentClient' });
 
 export function createCommandsAgentClient(
   config: CommandsAgentClientConfig

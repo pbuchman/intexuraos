@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/branding/exports/logo-primary-light.png" alt="IntexuraOS Logo" width="320">
+  <img src="apps/web/public/branding/logo-primary-light.png" alt="IntexuraOS Logo" width="320">
 
   <h2><a href="https://intexuraos.cloud/" target="_blank">intexuraos.cloud</a></h2>
 
@@ -10,36 +10,13 @@
 
   <p>
     <a href="https://github.com/pbuchman/intexuraos/actions"><img src="https://img.shields.io/github/actions/workflow/status/pbuchman/intexuraos/ci.yml?branch=main&label=CI&style=flat-square&logo=github" alt="CI Status"></a>
-    <img src="https://img.shields.io/badge/Coverage-95%25+-success?style=flat-square&logo=codecov" alt="Coverage">
+    <img src="https://img.shields.io/badge/Coverage-100%25-success?style=flat-square&logo=codecov" alt="Coverage">
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
     <img src="https://img.shields.io/badge/AI_Models-17-purple?style=flat-square" alt="AI Models">
     <img src="https://img.shields.io/badge/Services-18-orange?style=flat-square" alt="Services">
     <img src="https://img.shields.io/badge/Infrastructure-Terraform-623CE4?style=flat-square&logo=terraform&logoColor=white" alt="Terraform">
   </p>
 </div>
-
----
-
-## What's New in v2.1.0
-
-| Improvement                 | Impact                                           |
-| --------------------------- | ------------------------------------------------ |
-| **Code Consolidation**      | Removed 4,200+ duplicate lines across 8 services |
-| **Standardized Validation** | All LLM responses now use Zod schemas            |
-| **Cost Optimization**       | 63% Cloud Build cost reduction                   |
-| **Bug Fix**                 | Fixed duplicate WhatsApp approval messages       |
-
-## What's New in v2.0.0
-
-| Feature                     | Description                                        |
-| --------------------------- | -------------------------------------------------- |
-| **WhatsApp Approval**       | Approve/reject via text replies or emoji reactions |
-| **Calendar Preview**        | See event details before approving                 |
-| **Natural Language Models** | "Research with Claude and GPT"                     |
-| **5-Step Classification**   | URL isolation, explicit intent, Polish support     |
-| **Zod Validation**          | Type-safe LLM response handling                    |
-| **GLM-4.7-Flash**           | New free-tier model                                |
-| **Linear Dashboard**        | 3-column layout (Planning → Work → Closed)         |
 
 ---
 
@@ -170,7 +147,7 @@ Single-model assistants hallucinate. IntexuraOS queries multiple AI experts simu
 | Category           | Services                                                                                                      |
 | ------------------ | ------------------------------------------------------------------------------------------------------------- |
 | **AI Agents**      | research-agent, commands-agent, data-insights-agent, todos-agent, calendar-agent, linear-agent, image-service |
-| **Content**        | bookmarks-agent, notes-agent, promptvault-service                                                             |
+| **Content**        | bookmarks-agent, notes-agent                                                                                  |
 | **Integration**    | whatsapp-service, notion-service, user-service                                                                |
 | **Infrastructure** | actions-agent, web-agent, mobile-notifications-service, api-docs-hub, app-settings-service                    |
 
@@ -178,13 +155,13 @@ Single-model assistants hallucinate. IntexuraOS queries multiple AI experts simu
 
 IntexuraOS treats LLMs as a **council of experts**:
 
-| Provider       | Models                                      | Specialty                                     |
-| -------------- | ------------------------------------------- | --------------------------------------------- |
-| **Google**     | Gemini 2.5 Pro, Flash, Flash-Image          | Fast classification, image generation         |
-| **OpenAI**     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, creative content               |
-| **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Nuanced analysis, safety                      |
-| **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research       | Real-time web search                          |
-| **Zai**        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, free tier (Flash new in v2.0.0) |
+| Provider       | Models                                      | Specialty                                       |
+| -------------- | ------------------------------------------- | ----------------------------------------------- |
+| **Google**     | Gemini 2.5 Pro, Flash, Flash-Image          | Fast classification, image generation           |
+| **OpenAI**     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, creative content                 |
+| **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Nuanced analysis, safety                        |
+| **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research       | Real-time web search                            |
+| **Zai**        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, lightweight (Flash new in v2.0.0) |
 
 **Total**: 17 models across 5 providers
 
@@ -241,17 +218,25 @@ From task acceptance until `pnpm run ci:tracked` passes, YOU own everything. "Pr
 ### Quality Gates
 
 ```bash
-pnpm run ci:tracked  # TypeCheck → Lint → Tests (95% coverage) → Build
+pnpm run ci:tracked  # TypeCheck → Lint → Tests (100% branch coverage) → Build
 ```
 
-**Coverage is a gate, not a target.** 94.9% is failure. Every operation returns `Result<T, E>` — no silent failures.
+**Coverage is a gate, not a target.** Every branch is either tested OR exempted with `/* v8 ignore */`. Every operation returns `Result<T, E>` — no silent failures.
 
 ### Sleep-at-Night Reliability
 
-- **95%+ test coverage**: Enforced by CI, no exceptions
+- **100% branch coverage**: Every branch tested OR exempted with `/* v8 ignore <CATEGORY> */`
 - **Strict TypeScript**: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
 - **Hexagonal architecture**: Domain logic is pure and testable
 - **Infrastructure as Code**: Everything in Terraform
+
+### Code Coverage
+
+IntexuraOS enforces **100% branch coverage**:
+
+- Every branch is either: tested OR exempted with `/* v8 ignore */`
+- CI fails on any unaccounted branch
+- See `.claude/skills/coverage/reference/canonical-categories.md` for valid exemption categories
 
 See `.claude/CLAUDE.md` for the complete AI development playbook.
 
@@ -259,21 +244,40 @@ See `.claude/CLAUDE.md` for the complete AI development playbook.
 
 ## Quick Start
 
+### Prerequisites
+
+- Node.js 22+, pnpm 9+, Docker
+- GCP account (for remote services)
+
+### First Time Setup
+
 ```bash
-# Install dependencies
 pnpm install
-
-# Setup environment
-cp .env.example .env.local
-
-# Run test suite (in-memory fakes, no external deps)
-pnpm run ci
-
-# Start local development
-pnpm run dev
+cp .envrc.local.example .envrc.local  # Environment template
+direnv allow                         # Load env vars
 ```
 
-For full setup: [Setup Guide](docs/setup/01-gcp-project.md)
+### Start Local Development
+
+```bash
+pnpm run dev          # Start emulators + all services
+```
+
+**Access Points:**
+| Service | URL |
+|---------|-----|
+| Web App | http://localhost:3000 |
+| API Docs | http://localhost:8115/docs |
+| Log Viewer | http://localhost:8107 |
+| Firebase UI | http://localhost:8100 |
+
+**Management:**
+
+- `pnpm services:status` - View all services
+- `pnpm services:logs` - Tail logs
+- `pnpm services:stop` - Stop all
+
+Full setup: [Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md)
 
 ---
 
@@ -318,6 +322,29 @@ IntexuraOS demonstrates that **software engineering is a discipline, not just a 
 This project applies Staff Engineer thinking to personal productivity: rigorous standards, comprehensive automation, and AI integration enable a single developer to build and maintain a complex, distributed system with enterprise-grade reliability.
 
 Built by [Piotr Buchman](https://www.linkedin.com/in/piotrbuchman/) — open to discussing architecture, AI-native development, or leadership roles where technical excellence is a core value.
+
+---
+
+## What's New in v2.1.0
+
+| Improvement                 | Impact                                           |
+| --------------------------- | ------------------------------------------------ |
+| **Code Consolidation**      | Removed 4,200+ duplicate lines across 8 services |
+| **Standardized Validation** | All LLM responses now use Zod schemas            |
+| **Cost Optimization**       | 63% Cloud Build cost reduction                   |
+| **Bug Fix**                 | Fixed duplicate WhatsApp approval messages       |
+
+## What's New in v2.0.0
+
+| Feature                     | Description                                        |
+| --------------------------- | -------------------------------------------------- |
+| **WhatsApp Approval**       | Approve/reject via text replies or emoji reactions |
+| **Calendar Preview**        | See event details before approving                 |
+| **Natural Language Models** | "Research with Claude and GPT"                     |
+| **5-Step Classification**   | URL isolation, explicit intent, Polish support     |
+| **Zod Validation**          | Type-safe LLM response handling                    |
+| **GLM-4.7-Flash**           | New lightweight model                              |
+| **Linear Dashboard**        | 3-column layout (Planning → Work → Closed)         |
 
 ---
 

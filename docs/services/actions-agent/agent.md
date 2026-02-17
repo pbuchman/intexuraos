@@ -70,7 +70,15 @@ interface ActionsAgentTools {
 ### Types
 
 ```typescript
-type ActionType = 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear';
+type ActionType =
+  | 'todo'
+  | 'research'
+  | 'note'
+  | 'link'
+  | 'calendar'
+  | 'reminder'
+  | 'linear'
+  | 'code';
 
 type ActionStatus =
   | 'pending'
@@ -90,11 +98,33 @@ interface Action {
   title: string;
   status: ActionStatus;
   payload: Record<string, unknown>;
+  resource_status?: ResourceStatus;
+  resource_error?: string;
+  approvalNonce?: string;
+  approvalNonceExpiresAt?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-// v2.0.0: Approval intent classification
+type ResourceStatus =
+  | 'dispatched'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
+
+// Code action payload
+interface CodeActionPayload {
+  prompt: string;
+  workerType: 'opus' | 'auto' | 'glm';
+  linearIssueId?: string;
+  linearIssueTitle?: string;
+  approvalEventId?: string;
+  resource_url?: string;
+}
+
+// v2.0.0: Approval intent classification (also available via interactive buttons in v3.0.0)
 type ApprovalIntent = 'approve' | 'reject' | 'unclear';
 
 interface ApprovalIntentResult {
@@ -104,6 +134,7 @@ interface ApprovalIntentResult {
 }
 
 // v2.0.0: Approval reply event from whatsapp-service
+// v3.0.0: Added buttonId/buttonTitle for interactive button responses
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
   replyToWamid: string;
@@ -111,6 +142,8 @@ interface ApprovalReplyEvent {
   userId: string;
   timestamp: string;
   actionId?: string; // Optional, extracted from correlationId
+  buttonId?: string; // v3.0.0: Format "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
+  buttonTitle?: string; // v3.0.0: User-visible text of the button clicked
 }
 
 // v2.0.0: Atomic status update result
@@ -147,7 +180,7 @@ interface CalendarPreview {
 | **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions          |
 | **Batch Limit**             | Maximum 50 action IDs per batch request                                    |
 | **Ownership**               | Users can only access their own actions                                    |
-| **Supported Types**         | Execute only supports: research, todo, note, link, linear, calendar        |
+| **Supported Types**         | Execute only supports: research, todo, note, link, linear, calendar, code  |
 | **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval reply |
 
 ---
@@ -358,4 +391,4 @@ if (updateResult.outcome === 'status_mismatch') {
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2026-02-08

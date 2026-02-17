@@ -258,7 +258,22 @@ function parseAllFailures(output) {
   });
 }
 
-function saveFailures(project, branch, runNumber, passed, durationMs, failures) {
+function parsePhaseTimings(output) {
+  const regex = /@@PHASE_TIMING@@(.+?)\|(\d+)\|(.+?)\|(\d+)/g;
+  const phases = [];
+  let match;
+  while ((match = regex.exec(output)) !== null) {
+    phases.push({
+      name: match[1],
+      number: parseInt(match[2], 10),
+      status: match[3],
+      durationMs: parseInt(match[4], 10),
+    });
+  }
+  return phases;
+}
+
+function saveFailures(project, branch, runNumber, passed, durationMs, failures, phases) {
   // Only track failed runs - passed runs don't provide learning value
   if (passed) {
     return null;
@@ -277,6 +292,7 @@ function saveFailures(project, branch, runNumber, passed, durationMs, failures) 
     durationMs,
     failureCount: failures.length,
     failures,
+    phases,
   };
 
   const filePath = resolve(failuresDir, getLogFileName(project, branch));
@@ -289,11 +305,13 @@ async function runCI() {
   return new Promise((resolve) => {
     const startTime = Date.now();
     let output = '';
+    const env = { ...process.env, FORCE_COLOR: '1' };
+    delete env.NO_COLOR;
 
     const proc = spawn('node', ['scripts/ci.mjs'], {
       cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '1' },
+      env,
     });
 
     proc.stdout.on('data', (data) => {
@@ -325,8 +343,9 @@ async function runCI() {
   const { code, output, durationMs } = await runCI();
   const passed = code === 0;
   const failures = passed ? [] : parseAllFailures(output);
+  const phases = parsePhaseTimings(output);
 
-  const filePath = saveFailures(project, branch, runNumber, passed, durationMs, failures);
+  const filePath = saveFailures(project, branch, runNumber, passed, durationMs, failures, phases);
 
   if (!passed && failures.length > 0 && filePath) {
     console.log(`\n📊 Tracked ${failures.length} failure(s) → ${filePath}`);

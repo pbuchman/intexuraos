@@ -1,5 +1,4 @@
-import pino from 'pino';
-import { initSentry } from '@intexuraos/infra-sentry';
+import { initSentry, createAppLogger } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
@@ -23,6 +22,10 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL',
+  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -41,10 +44,7 @@ const REQUIRED_MODELS: LLMModel[] = [LlmModels.Gemini25Flash, LlmModels.Glm47, L
 async function main(): Promise<void> {
   const config = loadConfig();
 
-  const logger = pino({
-    name: 'data-insights-agent',
-    level: process.env['LOG_LEVEL'] ?? 'info',
-  });
+  const logger = createAppLogger({ name: 'data-insights-agent' });
 
   // Fetch pricing from app-settings-service
   process.stdout.write(`Fetching pricing from ${config.appSettingsServiceUrl}\n`);
@@ -62,6 +62,9 @@ async function main(): Promise<void> {
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext,
+    logger,
+    platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],
+    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
   initServices({

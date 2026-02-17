@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Mock Claude - Simulates Claude Code behavior
+  mock-claude:
+    build:
+      context: ./mock-claude
+      dockerfile: Dockerfile
+    ports:
+      - '8090:8090'
+    environment:
+      - PORT=8090
+      - NODE_ENV=development
+      - LOG_LEVEL=info
+      - REPO_PATH=/workspace
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    volumes:
+      # Mount workspace for git operations
+      - ../..:/workspace
+    networks:
+      - e2e-network
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:8090/health']
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Firestore Emulator - For code-agent state
+  firestore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: >
+      bash -c "
+        gcloud emulators firestore start --host-port 0.0.0.0:8080 --project test-project &
+        sleep 5
+        gcloud beta emulators firestore init --project test-project || true
+        wait
+      "
+    ports:
+      - '8081:8080'
+    environment:
+      - CLOUDSDK_CORE_PROJECT=test-project
+    networks:
+      - e2e-network
+
+  # Pub/Sub Emulator - For webhook notifications
+  pubsub:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: >
+      gcloud beta emulators pubsub start
+      --host-port 0.0.0.0:8085
+      --project test-project
+    ports:
+      - '8085:8085'
+    environment:
+      - CLOUDSDK_CORE_PROJECT=test-project
+      - PUBSUB_PROJECT_ID=test-project
+    networks:
+      - e2e-network
+
+networks:
+  e2e-network:
+    driver: bridge

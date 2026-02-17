@@ -44,7 +44,6 @@ export interface UserInfo {
 export interface NotionStatus {
   configured: boolean;
   connected: boolean;
-  promptVaultPageId: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -54,11 +53,8 @@ export interface NotionStatus {
  */
 export interface NotionConnectResponse {
   connected: boolean;
-  promptVaultPageId: string;
   createdAt: string;
   updatedAt: string;
-  pageTitle?: string;
-  pageUrl?: string;
 }
 
 /**
@@ -168,7 +164,6 @@ export interface AppConfig {
   auth0ClientId: string;
   authAudience: string;
   authServiceUrl: string;
-  promptVaultServiceUrl: string;
   whatsappServiceUrl: string;
   notionServiceUrl: string;
   mobileNotificationsServiceUrl: string;
@@ -181,6 +176,8 @@ export interface AppConfig {
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
   linearAgentUrl: string;
+  codeAgentUrl: string;
+  chatAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -664,6 +661,19 @@ export interface UpdateTodoItemRequest {
 export type { LlmProvider };
 
 /**
+ * Chat types for Intex Chat feature.
+ */
+export type {
+  ChatRole,
+  ChatMessage,
+  ChatSource,
+  SuggestedAction,
+  ChatResponse,
+  ChatSession,
+  ChatRequest,
+} from './chat.js';
+
+/**
  * Image size for pricing
  */
 export type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
@@ -928,7 +938,11 @@ export interface LinearIssue {
   identifier: string;
   title: string;
   description: string | null;
-  status?: LinearIssueState;
+  state?: {
+    id: string;
+    name: string;
+    type: IssueStateCategory;
+  };
   priority: LinearPriority;
   assignee?: LinearUser;
   creator?: LinearUser;
@@ -937,6 +951,10 @@ export interface LinearIssue {
   dueDate: string | null;
   url: string;
   labels: LinearLabel[];
+  /** Number of child issues (subtasks) */
+  childCount: number;
+  /** Child issues (populated when parent issue has children) */
+  children: LinearIssue[];
 }
 
 /**
@@ -977,6 +995,15 @@ export interface LinearConnectionStatus {
   teamName: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Linear webhook configuration from linear-agent
+ */
+export interface LinearWebhookConfig {
+  webhookUrl: string;
+  hasWebhookSecret: boolean;
+  teamId: string;
 }
 
 /**
@@ -1022,4 +1049,227 @@ export interface CalendarPreview {
   error?: string;
   reasoning?: string;
   generatedAt: string;
+}
+
+/**
+ * Worker type determines which model Claude uses.
+ */
+export type CodeTaskWorkerType = 'opus' | 'auto' | 'glm';
+
+/**
+ * Worker location for routing.
+ */
+export type CodeTaskWorkerLocation = string;
+
+/**
+ * Task status lifecycle.
+ */
+export type CodeTaskStatus =
+  | 'dispatched'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'interrupted'
+  | 'cancelled';
+
+/**
+ * Task result on successful completion.
+ */
+export interface CodeTaskResult {
+  prUrl?: string;
+  branch: string;
+  commits: number;
+  summary: string;
+  ciFailed?: boolean;
+  partialWork?: boolean;
+  rebaseResult?: 'success' | 'conflict' | 'skipped';
+}
+
+/**
+ * Task error on failure.
+ */
+export interface CodeTaskError {
+  code: string;
+  message: string;
+  remediation?: {
+    retryAfter?: number;
+    manualSteps?: string;
+    supportLink?: string;
+  };
+}
+
+/**
+ * Code task from code-agent
+ */
+export interface CodeTask {
+  id: string;
+  userId: string;
+  prompt: string;
+  sanitizedPrompt: string;
+  systemPromptHash: string;
+  workerType: CodeTaskWorkerType;
+  workerLocation: CodeTaskWorkerLocation;
+  repository: string;
+  baseBranch: string;
+  traceId: string;
+  status: CodeTaskStatus;
+  dedupKey: string;
+  callbackReceived: boolean;
+  createdAt: string;
+  updatedAt: string;
+  actionId?: string;
+  approvalEventId?: string;
+  linearIssueId?: string;
+  linearIssueTitle?: string;
+  linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
+  linearFallback?: boolean;
+  linearIssue?: {
+    identifier: string;
+    title: string;
+    state: { name: string; type: string };
+    priority: number;
+    assignee: { id: string; name: string } | null;
+    labels: { id: string; name: string }[];
+    url: string;
+    commentCount: number;
+    lastCommentAt: string | null;
+  };
+  result?: CodeTaskResult;
+  error?: CodeTaskError;
+}
+
+/**
+ * Request to submit a code task
+ *
+ * Linear integration:
+ * - If linearIssueId is provided: link to existing issue (backend validates it exists and belongs to user's team)
+ * - If linearIssueId is NOT provided: backend creates new issue with auto-generated LLM title
+ */
+export interface SubmitCodeTaskRequest {
+  prompt: string;
+  workerType?: CodeTaskWorkerType;
+  workerLocation?: string;
+  linearIssueId?: string;
+}
+
+/**
+ * Response from submitting a code task
+ */
+export interface SubmitCodeTaskResponse {
+  status: 'submitted';
+  codeTaskId: string;
+}
+
+/**
+ * Request to retry a failed code task
+ */
+export interface RetryCodeTaskRequest {
+  taskId: string;
+  additionalContext?: string;
+}
+
+/**
+ * Response from retrying a failed code task
+ */
+export interface RetryCodeTaskResponse {
+  codeTaskId: string;
+  resourceUrl: string;
+  workerLocation: string;
+  retriedFrom: string;
+}
+
+/**
+ * Response from listing code tasks
+ */
+export interface ListCodeTasksResponse {
+  tasks: CodeTask[];
+  nextCursor?: string;
+}
+
+/**
+ * Worker health status tag
+ */
+export type WorkerStatusTag = 'healthy' | 'orchestrator-unreachable' | 'tunnel-down' | 'unknown';
+
+/**
+ * Worker status details
+ */
+export interface WorkerStatusDetails {
+  capacity?: number;
+  available?: number;
+  running?: number;
+  responseTimeMs?: number;
+  reason?: string;
+  code?: string;
+}
+
+/**
+ * Worker health status for a single worker
+ */
+export interface WorkerStatus {
+  name: string;
+  url: string;
+  priority: number;
+  healthy: boolean;
+  status: WorkerStatusTag;
+  details: WorkerStatusDetails | null;
+  checkedAt: string | null;
+  stale: boolean;
+}
+
+/**
+ * Response from worker status endpoint
+ */
+export interface WorkersStatusResponse {
+  workers: WorkerStatus[];
+  stale: boolean;
+}
+
+/**
+ * GitHub Pull Request event types
+ */
+export type GitHubPREventType =
+  | 'pull_request'
+  | 'pull_request_review'
+  | 'push';
+
+/**
+ * Valid actions for pull_request events
+ */
+export type PRAction = 'opened' | 'closed' | 'edited' | 'synchronized';
+
+/**
+ * Valid actions for pull_request_review events
+ */
+export type ReviewAction = 'submitted' | 'edited' | 'dismissed';
+
+/**
+ * GitHub Pull Request event from code-agent
+ */
+export interface GitHubPREvent {
+  id: string;
+  githubEventId: number;
+  repository: string;
+  repositoryId: number;
+  pullRequestNumber: number;
+  pullRequestId: number;
+  eventType: GitHubPREventType;
+  action: string | null;
+  senderLogin: string;
+  senderId: number;
+  senderType: string;
+  title: string | null;
+  body: string | null;
+  state: string | null;
+  mergedAt: string | null;
+  createdAt: string;
+  processedAt: string | null;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Response from GitHub PR events endpoint
+ */
+export interface GitHubPREventsResponse {
+  events: GitHubPREvent[];
 }

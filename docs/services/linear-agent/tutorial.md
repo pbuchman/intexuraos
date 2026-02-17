@@ -1,8 +1,8 @@
 # Linear Agent Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 25-35 minutes
 > **Prerequisites:** Node.js 20+, Linear account with API key, IntexuraOS running locally
-> **You'll learn:** How to connect Linear, create issues via AI, and view issues in the dashboard
+> **You'll learn:** How to connect Linear, create issues via AI, configure webhooks, sync issues, and use the internal API
 
 ---
 
@@ -13,6 +13,9 @@ A working integration that:
 - Connects your Linear workspace to IntexuraOS
 - Creates issues from natural language via AI extraction
 - Views issues grouped by workflow stage in the dashboard
+- Configures webhooks for real-time issue sync
+- Triggers full issue synchronization
+- Manages issues programmatically via the internal API
 - Handles errors and reviews failed extractions
 
 ---
@@ -78,8 +81,8 @@ curl -X POST http://localhost:3000/linear/connection \
     "connected": true,
     "teamId": "team-uuid-123",
     "teamName": "Engineering",
-    "createdAt": "2026-01-24T10:00:00.000Z",
-    "updatedAt": "2026-01-24T10:00:00.000Z"
+    "createdAt": "2026-02-08T10:00:00.000Z",
+    "updatedAt": "2026-02-08T10:00:00.000Z"
   }
 }
 ```
@@ -242,7 +245,142 @@ curl "http://localhost:3000/linear/issues?includeArchive=false" \
 
 ---
 
-## Part 4: Handle Errors (5 minutes)
+## Part 4: Configure Webhooks (5 minutes)
+
+Webhooks enable real-time issue sync from Linear to IntexuraOS.
+
+### Step 4.1: Get Webhook Configuration
+
+Check the webhook URL and secret status.
+
+```bash
+curl http://localhost:3000/linear/webhook-config \
+  -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
+```
+
+**Expected Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "webhookUrl": "https://intexuraos-linear-agent-cj44trunra-lm.a.run.app/linear/webhook",
+    "hasWebhookSecret": false,
+    "teamId": "team-uuid-123"
+  }
+}
+```
+
+### Step 4.2: Set Up in Linear
+
+1. Go to Linear Settings > API > Webhooks
+2. Create a new webhook with the URL from step 4.1
+3. Select "Issues" as the resource type
+4. Copy the webhook signing secret that Linear generates
+
+### Step 4.3: Configure the Webhook Secret
+
+```bash
+curl -X POST http://localhost:3000/linear/webhook-config \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_AUTH0_TOKEN" \
+  -d '{"secret": "YOUR_LINEAR_WEBHOOK_SECRET"}'
+```
+
+**Expected Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "configured": true
+  }
+}
+```
+
+### Step 4.4: Verify Webhook is Active
+
+Create or update an issue in Linear. The webhook endpoint at `POST /linear/webhook` receives the event, validates the HMAC-SHA256 signature, and syncs the issue to local storage.
+
+**Checkpoint:** After configuring the webhook, changes in Linear should appear in the synced issue repository.
+
+---
+
+## Part 5: Full Issue Sync (3 minutes)
+
+Trigger a full reconciliation of all issues from Linear.
+
+```bash
+curl -X POST http://localhost:3000/linear/sync \
+  -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
+```
+
+**Expected Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "created": 15,
+    "updated": 3,
+    "deleted": 1,
+    "total": 18,
+    "durationMs": 2340,
+    "syncedAt": "2026-02-08T10:15:00.000Z"
+  }
+}
+```
+
+The sync creates new local records, updates existing ones, and deletes issues that no longer exist in Linear.
+
+---
+
+## Part 6: Internal API for Code Agents (5 minutes)
+
+Code agents use internal endpoints to manage issues programmatically.
+
+### Step 6.1: Create an Issue
+
+```bash
+curl -X POST http://localhost:3000/internal/issues \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Auth: your-internal-secret" \
+  -H "X-User-Id: YOUR_USER_ID" \
+  -d '{
+    "title": "Implement pagination for user list",
+    "description": "Add cursor-based pagination to the GET /users endpoint."
+  }'
+```
+
+**Expected Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "issue-uuid-789",
+    "identifier": "ENG-130",
+    "title": "Implement pagination for user list",
+    "url": "https://linear.app/your-team/issue/ENG-130"
+  }
+}
+```
+
+### Step 6.2: Update Issue State
+
+```bash
+curl -X PATCH http://localhost:3000/internal/issues/issue-uuid-789/state \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Auth: your-internal-secret" \
+  -H "X-User-Id: YOUR_USER_ID" \
+  -d '{"state": "in_progress"}'
+```
+
+Available states: `backlog`, `in_progress`, `in_review`, `qa`.
+
+---
+
+## Part 7: Handle Errors (5 minutes)
 
 ### Error: Not Connected
 
@@ -295,12 +433,30 @@ curl http://localhost:3000/linear/failed-issues \
         "extractedTitle": null,
         "error": "Could not extract meaningful issue details from input",
         "reasoning": "Input too vague to determine specific issue",
-        "createdAt": "2026-01-24T10:30:00.000Z"
+        "createdAt": "2026-02-08T10:30:00.000Z"
       }
     ]
   }
 }
 ```
+
+### Retry a Failed Issue
+
+```bash
+curl -X POST http://localhost:3000/linear/failed-issues/failed-123/retry \
+  -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
+```
+
+On success, the failed issue is deleted and the created Linear issue is returned. On failure, the error message and retry timestamp are updated.
+
+### Delete a Failed Issue
+
+```bash
+curl -X DELETE http://localhost:3000/linear/failed-issues/failed-123 \
+  -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
+```
+
+Returns 204 No Content on success.
 
 ### Test Extraction Failure
 
@@ -334,7 +490,7 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
 
 ---
 
-## Part 5: Real-World Scenario (5 minutes)
+## Part 8: Real-World Scenario (5 minutes)
 
 ### Voice-to-Issue Pipeline
 
@@ -352,6 +508,15 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
    - Returns success with Linear issue URL
 
 6. **User receives** confirmation with link to the new issue.
+
+### Code Agent Workflow
+
+1. **Code agent** receives a task to implement a feature.
+2. Agent validates parent issue via `validateIssue` (checks identifier format, existence, and team).
+3. Agent generates a title from the task description via `generateIssueTitle`.
+4. Agent creates a subtask via `POST /internal/issues`.
+5. Agent moves the issue to "In Progress" via `PATCH /internal/issues/:issueId/state`.
+6. After completion, agent moves issue to "In Review".
 
 ### Test Idempotency
 
@@ -397,6 +562,9 @@ Both requests return the same issue URL without creating duplicates.
 | Extraction returns null title | Input too vague              | Provide more specific issue description     |
 | 429 Rate Limit                | Too many Linear API calls    | Wait and retry (Linear has generous limits) |
 | Issue in wrong column         | Custom state name            | Check state name matches expected patterns  |
+| Webhook not syncing           | Missing webhook secret       | POST `/linear/webhook-config` with secret   |
+| Webhook 401 errors            | Wrong secret or changed key  | Reconfigure secret in Linear and IntexuraOS |
+| Full sync missing issues      | Connection not configured    | Verify connection status first              |
 
 ---
 
@@ -413,12 +581,15 @@ Both requests return the same issue URL without creating duplicates.
 4. Create issues with all 4 priority levels (urgent, high, normal, low).
 5. Move an issue through workflow stages in Linear and verify column changes.
 6. Send vague text ("fix bug") and retrieve it from failed issues.
+7. Configure a webhook and verify real-time sync by creating an issue in Linear.
+8. Trigger a full sync and inspect the created/updated/deleted counts.
 
 ### Hard
 
-7. Set up the full pipeline: Send a WhatsApp message and trace it through to Linear issue creation.
-8. Implement a retry mechanism for failed extractions using the `/linear/failed-issues` endpoint.
-9. Create a custom Linear workflow with "QA" and "Code Review" states and verify correct column mapping.
+9. Set up the full pipeline: Send a WhatsApp message and trace it through to Linear issue creation.
+10. Use the internal API to create an issue and update its state through the workflow.
+11. Create a custom Linear workflow with "QA" and "Code Review" states and verify correct column mapping.
+12. Delete a failed issue and retry another, verifying the retry creates the Linear issue successfully.
 
 <details>
 <summary>Solutions</summary>
@@ -465,6 +636,31 @@ curl http://localhost:3000/linear/failed-issues \
   -H "Authorization: Bearer YOUR_AUTH0_TOKEN"
 ```
 
+### Exercise 10: Internal API Issue Management
+
+```bash
+# Create issue
+curl -X POST http://localhost:3000/internal/issues \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Auth: your-internal-secret" \
+  -H "X-User-Id: USER" \
+  -d '{"title": "Add user search", "description": "Implement search by name and email."}'
+
+# Move to In Progress (use the issue ID from the create response)
+curl -X PATCH http://localhost:3000/internal/issues/ISSUE_ID/state \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Auth: your-internal-secret" \
+  -H "X-User-Id: USER" \
+  -d '{"state": "in_progress"}'
+
+# Move to In Review
+curl -X PATCH http://localhost:3000/internal/issues/ISSUE_ID/state \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Auth: your-internal-secret" \
+  -H "X-User-Id: USER" \
+  -d '{"state": "in_review"}'
+```
+
 </details>
 
 ---
@@ -479,4 +675,4 @@ Now that you understand the basics:
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2026-02-08

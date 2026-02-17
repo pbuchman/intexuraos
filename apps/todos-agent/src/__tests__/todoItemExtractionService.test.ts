@@ -53,6 +53,7 @@ describe('todoItemExtractionService', () => {
           getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
+        getOAuthToken: vi.fn(),
         };
       case 'no_api_key':
         return {
@@ -61,6 +62,7 @@ describe('todoItemExtractionService', () => {
             .mockResolvedValue(err({ code: 'NO_API_KEY' as const, message: 'No API key configured for google' })),
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
+        getOAuthToken: vi.fn(),
         };
       case 'api_error':
         return {
@@ -69,6 +71,7 @@ describe('todoItemExtractionService', () => {
             .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service error' })),
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
+        getOAuthToken: vi.fn(),
         };
       case 'network_error':
         return {
@@ -77,6 +80,7 @@ describe('todoItemExtractionService', () => {
             .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
+        getOAuthToken: vi.fn(),
         };
       case 'invalid_model':
         return {
@@ -85,6 +89,7 @@ describe('todoItemExtractionService', () => {
             .mockResolvedValue(err({ code: 'INVALID_MODEL' as const, message: 'Unsupported model' })),
           getApiKeys: vi.fn(),
           reportLlmSuccess: vi.fn(),
+        getOAuthToken: vi.fn(),
         };
     }
   }

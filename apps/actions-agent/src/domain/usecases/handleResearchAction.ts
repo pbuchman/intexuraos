@@ -5,6 +5,7 @@ import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import type { ExecuteResearchActionUseCase } from './executeResearchAction.js';
 import { shouldAutoExecute } from './shouldAutoExecute.js';
+import { buildApprovalButtons } from '../utils/approvalButtons.js';
 
 export interface HandleResearchActionDeps {
   actionRepository: ActionRepository;
@@ -55,7 +56,8 @@ export function createHandleResearchActionUseCase(
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New research request ready for approval. Review here: ${actionLink} or reply to approve/reject.`;
+      const message = `📚 New research request ready for approval\n\nReview: ${actionLink}`;
+      const buttons = buildApprovalButtons({ actionId: event.actionId });
 
       logger.info(
         { actionId: event.actionId, userId: event.userId },
@@ -65,6 +67,7 @@ export function createHandleResearchActionUseCase(
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: event.userId,
         message,
+        buttons,
         correlationId: `action-approval-${event.actionId}`,
       });
 

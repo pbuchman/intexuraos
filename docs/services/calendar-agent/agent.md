@@ -96,6 +96,12 @@ interface CalendarAgentTools {
 
   // List failed event extractions
   listFailedEvents(params?: { limit?: number }): Promise<FailedEvent[]>;
+
+  // Delete a failed event extraction
+  deleteFailedEvent(id: string): Promise<void>;
+
+  // Retry creating a calendar event from a failed extraction
+  retryFailedEvent(id: string): Promise<CalendarEvent>;
 }
 ```
 
@@ -171,13 +177,15 @@ interface ServiceFeedback {
 
 ## Constraints
 
-| Rule                      | Description                                     |
-| ------------------------- | ----------------------------------------------- |
-| **Google OAuth Required** | User must have Google OAuth connected           |
-| **Calendar Access**       | Default calendarId is 'primary'                 |
-| **Time Format**           | All times in ISO 8601 format                    |
-| **Date Range**            | timeMin must be before timeMax                  |
-| **Preview Lifecycle**     | Preview deleted after successful event creation |
+| Rule                      | Description                                                                 |
+| ------------------------- | --------------------------------------------------------------------------- |
+| **Google OAuth Required** | User must have Google OAuth connected                                       |
+| **Calendar Access**       | Default calendarId is 'primary'                                             |
+| **Time Format**           | All times in ISO 8601 format                                                |
+| **Date Range**            | timeMin must be before timeMax                                              |
+| **Preview Lifecycle**     | Preview deleted after successful event creation                             |
+| **Retry Precondition**    | Failed event retry requires both start and end times to be set              |
+| **Ownership Check**       | Failed event delete/retry checks userId ownership (returns 404 if mismatch) |
 
 ---
 
@@ -215,11 +223,20 @@ interface ServiceFeedback {
 ```
 1. Call GET /calendar/failed-events to list extraction failures
 2. Display originalText, summary, error, reasoning to user
-3. Allow manual correction of event details
-4. Call POST /calendar/events with corrected data
+3. If start and end are present: Call POST /calendar/failed-events/:id/retry
+4. If start/end missing: Allow manual correction, call POST /calendar/events with corrected data
+5. To dismiss: Call DELETE /calendar/failed-events/:id
 ```
 
 ---
+
+## Public Endpoints (Failed Events Management)
+
+| Method | Path                                | Purpose                    | Auth         |
+| ------ | ----------------------------------- | -------------------------- | ------------ |
+| GET    | `/calendar/failed-events`           | List failed extractions    | Bearer token |
+| DELETE | `/calendar/failed-events/:id`       | Delete a failed event      | Bearer token |
+| POST   | `/calendar/failed-events/:id/retry` | Retry creating from failed | Bearer token |
 
 ## Internal Endpoints
 
@@ -281,4 +298,4 @@ interface ServiceFeedback {
 
 ---
 
-**Last updated:** 2025-01-25 (v2.1.0 - INT-269 internal-clients migration)
+**Last updated:** 2026-02-08 (v2.3.0 - INT-311 failed event delete/retry, INT-422 Polish date parsing, LLM repair mechanism)

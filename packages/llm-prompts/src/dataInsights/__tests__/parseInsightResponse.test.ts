@@ -160,6 +160,14 @@ EXTRA_LINE`;
     expect(() => parseInsightResponse(response)).toThrow();
   });
 
+  it('throws on NO_INSIGHTS with spaces and letters as reason (trimmed)', () => {
+    const response = 'NO_INSIGHTS: Reason=   x   ';
+
+    // This should pass the regex but after trim becomes 'x'
+    const result = parseInsightResponse(response);
+    expect(result.noInsightsReason).toBe('x');
+  });
+
   it('throws on insights without INSIGHT_ prefix', () => {
     const response = 'NOT_AN_INSIGHT: Title=Test; Description=Test; Trackable=Test; ChartType=C1';
 
@@ -286,5 +294,74 @@ INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=C1
     const result = parseInsightResponse(response);
 
     expect(result.noInsightsReason).toBe('Data insufficient for analysis');
+  });
+
+  it('handles INSIGHT line with match but undefined content group', () => {
+    // This tests the defensive check on line 28-29
+    // The regex should match but content[1] would be undefined
+    const response = 'INSIGHT_1: ; Description=Test; Trackable=Test; ChartType=C1';
+
+    expect(() => parseInsightResponse(response)).toThrow();
+  });
+
+  it('handles INSIGHT with empty content between colon and semicolon', () => {
+    const response = 'INSIGHT_1:; Description=Test; Trackable=Test; ChartType=C1';
+
+    expect(() => parseInsightResponse(response)).toThrow();
+  });
+
+  it('handles parts array with empty string at first index', () => {
+    const response = 'INSIGHT_1: Title=; Description=Test; Trackable=Test; ChartType=C1';
+
+    // Regex requires at least one character after Title=
+    expect(() => parseInsightResponse(response)).toThrow('Title field missing or malformed');
+  });
+
+  it('handles parts with empty description part', () => {
+    const response = 'INSIGHT_1: Title=Test; Description=; Trackable=Test; ChartType=C1';
+
+    expect(() => parseInsightResponse(response)).toThrow('Description field missing or malformed');
+  });
+
+  it('handles parts with empty trackable part', () => {
+    const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=; ChartType=C1';
+
+    expect(() => parseInsightResponse(response)).toThrow('Trackable field missing or malformed');
+  });
+
+  it('handles parts with empty charttype part', () => {
+    const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=';
+
+    expect(() => parseInsightResponse(response)).toThrow('ChartType field missing or malformed');
+  });
+
+  it('handles INSIGHT with missing parts due to consecutive semicolons', () => {
+    const response = 'INSIGHT_1: Title=Test;; Trackable=Test; ChartType=C1';
+
+    // Consecutive semicolons create empty string parts, but the regex still matches
+    // The error message comes from the missing description field
+    expect(() => parseInsightResponse(response)).toThrow('Description field missing or malformed');
+  });
+
+  it('handles multiple consecutive semicolons', () => {
+    const response = 'INSIGHT_1: Title=Test;;; Description=Test; Trackable=Test; ChartType=C1';
+
+    expect(() => parseInsightResponse(response)).toThrow('Expected 4 parts');
+  });
+
+  it('handles response with very long line', () => {
+    const longTitle = 'A'.repeat(1000);
+    const response = `INSIGHT_1: Title=${longTitle}; Description=Test; Trackable=Test; ChartType=C1`;
+
+    // Long titles are actually valid, only empty titles fail
+    const result = parseInsightResponse(response);
+    expect(result.insights).toHaveLength(1);
+    expect(result.insights[0]?.title).toBe(longTitle);
+  });
+
+  it('handles NO_INSIGHTS with missing equals sign', () => {
+    const response = 'NO_INSIGHTS: Reason Test';
+
+    expect(() => parseInsightResponse(response)).toThrow('Invalid NO_INSIGHTS format');
   });
 });

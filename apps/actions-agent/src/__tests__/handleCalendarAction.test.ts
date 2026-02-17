@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { isOk, isErr } from '@intexuraos/common-core';
 import { createHandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -8,9 +7,8 @@ import {
   FakeWhatsAppSendPublisher,
   FakeCalendarPreviewPublisher,
 } from './fakes.js';
-import pino from 'pino';
 
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 describe('handleCalendarAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
@@ -70,15 +68,15 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     const action = await fakeActionRepository.getById('action-123');
@@ -89,6 +87,13 @@ describe('handleCalendarAction usecase', () => {
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('New calendar event ready for approval');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
+
+    // Verify interactive approval buttons
+    expect(messages[0]?.buttons).toHaveLength(2);
+    expect(messages[0]?.buttons?.[0]?.reply.id).toBe('approve:action-123');
+    expect(messages[0]?.buttons?.[0]?.reply.title).toBe('Approve');
+    expect(messages[0]?.buttons?.[1]?.reply.id).toBe('reject:action-123');
+    expect(messages[0]?.buttons?.[1]?.reply.title).toBe('Reject');
 
     // Verify preview generation was triggered
     const previewRequests = fakeCalendarPreviewPublisher.getPublishedRequests();
@@ -111,15 +116,15 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     const action = await fakeActionRepository.getById('action-123');
@@ -136,14 +141,14 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isErr(result)).toBe(true);
-    if (isErr(result)) {
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.error.message).toContain('Failed to update action status');
     }
   });
@@ -156,7 +161,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     fakeWhatsappPublisher.setFailNext(true, {
@@ -167,9 +172,9 @@ describe('handleCalendarAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     const action = await fakeActionRepository.getById('action-123');
@@ -182,7 +187,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await fakeActionRepository.save({
@@ -193,9 +198,9 @@ describe('handleCalendarAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);
@@ -207,7 +212,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await fakeActionRepository.save({
@@ -218,9 +223,9 @@ describe('handleCalendarAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);
@@ -232,15 +237,15 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.actionId).toBe('action-123'); // @allow-result-access -- guarded by result.ok
     }
 
     expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);

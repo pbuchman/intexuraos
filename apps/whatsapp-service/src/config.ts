@@ -102,7 +102,7 @@ const configSchema = z.object({
   /**
    * Speechmatics API key for audio transcription.
    */
-  speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_API_KEY is required'),
+  speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_APP_API_KEY is required'),
 
   /**
    * GCP project ID.
@@ -146,7 +146,7 @@ export function loadConfig(): Config {
     mediaBucket: process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'],
     mediaCleanupTopic: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'],
     mediaCleanupSubscription: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'],
-    speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_API_KEY'],
+    speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_APP_API_KEY'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
@@ -174,7 +174,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_WHATSAPP_MEDIA_BUCKET',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
-    'INTEXURAOS_SPEECHMATICS_API_KEY',
+    'INTEXURAOS_SPEECHMATICS_APP_API_KEY',
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_AGENT_URL',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',

@@ -25,30 +25,29 @@ Capture output for analysis. Do NOT re-run just to grep different patterns.
 
 For each app and package with gaps:
 
-1. **Load existing exemptions:**
-   - Read `.claude/skills/coverage/unreachable/<name>.md` if exists
-   - If not exists, will be created
+1. **Verify existing inline comments** (Rule 1):
+   - Run `pnpm run verify:v8-ignore` to validate existing comments
+   - For each inline comment in the target:
+     - Verify the code pattern still matches the category
+     - Update or remove comment if code was refactored
+     - Remove comment if no longer valid
 
-2. **Verify existing exemptions** (Rule 1):
-   - For each documented exemption:
-     - Search for CODE SNIPPET in current source
-     - Update line numbers if code moved
-     - Delete section if code removed
-     - Delete all sections if file deleted
-
-3. **Check Linear for existing issues** (Rule 2):
+2. **Check Linear for existing issues** (Rule 2):
    ```
-   Query: [coverage] state:!Done state:!Cancelled
+   Query: [coverage] state IN (Backlog, Todo, In Progress, In Review, QA)
    ```
    - Build map of file → issue ID
-   - Include parent issues AND their subtasks
+   - Include parent issues AND their subtasks (if parent is in active status)
+   - **IMPORTANT:** Only issues in ACTIVE statuses count toward coverage accounting.
+     Issues in Done, Canceled, or Duplicate do NOT count — they represent completed
+     or abandoned work, not tracked gaps.
 
-4. **Investigate each new gap:**
+3. **Investigate each new gap:**
    - Read source code at uncovered lines
    - Determine: TESTABLE or UNREACHABLE
 
-5. **Execute actions:**
-   - If UNREACHABLE → add to `unreachable/<name>.md`
+4. **Execute actions:**
+   - If UNREACHABLE → add inline `/* v8 ignore <CATEGORY> -- reason */` comment
    - If TESTABLE and no existing issue → create Linear issue
 
 ### Phase 4: Generate Report
@@ -73,13 +72,13 @@ Processing packages...
   ...
 
 Processing apps...
-  ✓ actions-agent: 3 new exemptions, 2 issues created
+  ✓ actions-agent: 3 new inline exemptions, 2 issues created
   ✓ research-agent: 5 exemptions verified, 1 stale removed
   ...
 
 Summary:
   Total exemptions: 45
-  New exemptions: 8
+  New inline comments: 8
   Stale removed: 3
   Issues created: 12
   Issues skipped (duplicate): 4

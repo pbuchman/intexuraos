@@ -5,6 +5,13 @@
 /** Linear issue priority values */
 export type LinearPriority = 0 | 1 | 2 | 3 | 4;
 
+/** Linear label with id, name, and color */
+export interface LinearLabel {
+  id: string;
+  name: string;
+  color: string;
+}
+
 /** Priority mapping: 0=none, 1=urgent, 2=high, 3=normal, 4=low */
 export const PRIORITY_LABELS: Record<LinearPriority, string> = {
   0: 'No priority',
@@ -33,6 +40,21 @@ export interface LinearIssue {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  /** Parent issue UUID (null for top-level issues, populated during full sync) */
+  parentId?: string | null;
+  /** Number of child issues (subtasks) */
+  childCount: number;
+  /** Child issues (populated when includeChildren=true) */
+  children: LinearIssue[];
+  /** Labels associated with the issue */
+  labels: LinearLabel[];
+}
+
+/** Linear issue with team ID for validation */
+export interface LinearIssueWithTeam extends LinearIssue {
+  teamId: string;
+  /** Number of child issues (subtasks) */
+  childCount: number;
 }
 
 /** Linear team from API */
@@ -48,6 +70,7 @@ export interface LinearConnection {
   apiKey: string;
   teamId: string;
   teamName: string;
+  webhookSecret: string | null;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -99,6 +122,7 @@ export interface FailedLinearIssue {
   error: string;
   reasoning: string | null;
   createdAt: string;
+  lastRetryAt?: string;
 }
 
 /** Successfully processed action record for idempotency */
@@ -113,6 +137,13 @@ export interface ProcessedAction {
 
 /** Dashboard filter for issue states */
 export type DashboardColumn = 'todo' | 'backlog' | 'in_progress' | 'in_review' | 'to_test' | 'done';
+
+/** Linear workflow state for state transition */
+export interface WorkflowState {
+  id: string;
+  name: string;
+  type: IssueStateCategory;
+}
 
 /** Map Linear state types to dashboard columns */
 export function mapStateToDashboardColumn(
@@ -150,4 +181,38 @@ export function mapStateToDashboardColumn(
     default:
       return 'todo';
   }
+}
+
+/** Locally synced Linear issue (stored in Firestore) */
+export interface SyncedLinearIssue {
+  id: string; /* Linear UUID (document ID) */
+  identifier: string; /* e.g., "INT-444" */
+  title: string;
+  description: string | null;
+  state: string; /* State name e.g., "In Progress" */
+  stateType: IssueStateCategory; /* State type for categorization */
+  priority: LinearPriority;
+  assigneeId: string | null;
+  assigneeName: string | null;
+  labels: LinearLabel[];
+  url: string;
+  userId: string; /* Owner user ID (for multi-tenant) */
+  parentId: string | null; /* Parent issue UUID (null for top-level issues) */
+  createdAt: string; /* ISO timestamp from Linear */
+  updatedAt: string; /* ISO timestamp from Linear */
+  syncedAt: string; /* When we last synced this issue */
+  teamId: string; /* Linear team ID (for webhook secret lookup) */
+}
+
+/** Locally synced Linear comment (stored in Firestore) */
+export interface LinearComment {
+  id: string; /* Linear UUID (document ID) */
+  issueId: string; /* Linear issue UUID */
+  issueIdentifier: string; /* e.g., "INT-444" */
+  userId: string; /* Comment author Linear user ID */
+  userName: string; /* Comment author display name */
+  body: string; /* Comment body (can include markdown) */
+  createdAt: string; /* ISO timestamp from Linear */
+  updatedAt: string; /* ISO timestamp from Linear */
+  syncedAt: string; /* When we last synced this comment */
 }

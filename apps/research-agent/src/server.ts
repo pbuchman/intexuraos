@@ -1,5 +1,4 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import pino from 'pino';
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
@@ -16,8 +15,8 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
-import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-import { researchRoutes, internalRoutes } from './routes/index.js';
+import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
+import { researchRoutes, researchExportRoutes, internalRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'research-agent';
 const SERVICE_VERSION = '0.0.4';
@@ -135,11 +134,7 @@ export async function buildServer(): Promise<FastifyInstance> {
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
-            stream: createSentryStream(
-              pino.multistream([
-                pino.destination({ dest: 1, sync: false }),
-              ])
-            ),
+            stream: createLogStream(),
           },
     disableRequestLogging: true,
   });
@@ -165,6 +160,9 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // Register research routes
   await app.register(researchRoutes);
+
+  // Register research export settings routes
+  await app.register(researchExportRoutes);
 
   // Register internal routes
   await app.register(internalRoutes);

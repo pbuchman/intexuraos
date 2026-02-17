@@ -2,7 +2,7 @@
 
 > **The AI-Native Personal Operating System** — An autonomous agent platform that transforms fragmented information into structured intelligence.
 
-**Version 2.1.0** — January 25, 2026
+**Version 3.0.0** — February 8, 2026
 
 ---
 
@@ -11,6 +11,67 @@
 IntexuraOS reimagines personal productivity as an **AI-first system**. Instead of building another app that uses AI as a feature, IntexuraOS builds AI agents that use apps as tools.
 
 **The Core Insight**: Your brain excels at creative thinking and decision-making. It struggles with remembering, scheduling, aggregating, and cross-referencing. IntexuraOS handles the cognitive load while you remain the commander.
+
+---
+
+## What's New in v3.0.0
+
+### Autonomous Code Execution Pipeline
+
+This release introduces a complete autonomous coding pipeline, an in-app AI assistant, worker orchestration infrastructure, and a 21-package shared library ecosystem:
+
+**Code Agent (code-agent)**
+
+- Submit coding tasks via WhatsApp or web UI and receive pull requests back
+- Multi-layer deduplication (approval event, action ID, SHA-256 dedup key) prevents duplicate work
+- Per-user worker infrastructure with encrypted Cloudflare Access credentials and HMAC signing
+- Rate limiting with concurrent (3), hourly (10), daily ($20), and monthly ($200) caps
+- GitHub PR comment auto-response for `@claude` mentions
+- Retry and feedback loops with Linear issue tracking throughout the lifecycle
+
+**Chat Agent (chat-agent)**
+
+- In-app AI assistant for documentation Q&A with source citations
+- Command creation through natural conversation with multilingual confirmation (English/Polish)
+- Guest access without sign-up using GLM-4.7-Flash at zero cost
+- Conversation context preserved across follow-up questions
+- RAG-based documentation retrieval with 1536-dimension OpenAI embeddings
+
+**Orchestrator (worker)**
+
+- PM2-based local worker orchestration engine running behind Cloudflare Tunnel
+- Docker container isolation with dropped capabilities, memory limits, and read-only secrets
+- Git worktree parallelism for concurrent task execution (default: 2 slots)
+- Real-time log forwarding to code-agent in 8KB chunks at 3-second intervals
+- System prompt phases: Phase 1 (design validation) vs Phase 2 (autonomous execution) based on Linear issue labels
+- HMAC-signed webhooks with 3 retries, exponential backoff, and pending queue with 24-hour TTL
+- Crash-safe state persistence with startup recovery
+
+**Claude Worker (worker)**
+
+- Docker-based sandbox container for Claude Code sessions
+- Filesystem sandboxing (worktree at `/repo`, read-only `/secrets`), resource enforcement (4 CPU, 8 GB RAM)
+- Non-root execution (UID 1001) with all Linux capabilities dropped
+- Three worker types: `opus` (Claude Opus 4.5), `auto` (API-selected), `glm` (ZAI GLM)
+- Pre-baked developer toolchain (git, pnpm, ripgrep, fd, bat, jq, terraform, gcloud, gh)
+- GitHub token auto-refresh every 30 minutes
+
+**VM Lifecycle (worker)**
+
+- Scheduled VM start/stop on weekday schedule (7 AM start, 11 PM stop, Europe/Warsaw)
+- Health-aware startup with automatic restart of unhealthy VMs
+- Graceful shutdown with orchestrator coordination (waits for running tasks)
+
+**Log Cleanup (worker)**
+
+- Scheduled daily cleanup of execution logs older than 90 days
+- Runs at 3 AM UTC via Cloud Scheduler with configurable retention and batch size
+
+**Package Ecosystem (21 packages)**
+
+- Grew from 6 to 21 shared packages covering core types, HTTP infrastructure, 6 AI provider clients, Pub/Sub, Sentry, and the full LLM toolchain
+- `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity` provide standardized AI provider wrappers
+- `llm-audit`, `llm-contract`, `llm-factory`, `llm-pricing`, `llm-prompts`, `llm-utils` form the complete LLM management stack
 
 ---
 
@@ -58,7 +119,7 @@ This release consolidates duplicate code, standardizes validation patterns, and 
 Approve or reject actions directly from WhatsApp using:
 
 - **Text replies** — "Yes", "Ok", "Reject" with LLM-based intent classification
-- **Emoji reactions** — 👍 to approve, 👎 to reject
+- **Emoji reactions** — to approve, to reject
 
 ### Calendar Preview Before Commit
 
@@ -100,17 +161,17 @@ New 3-column layout optimized for workflow visibility:
 
 IntexuraOS integrates with **5 AI providers** and **17 models**, treating them as a **council of experts** rather than a single oracle:
 
-| Provider   | Models                                      | Capabilities                                  |
-| ---------- | ------------------------------------------- | --------------------------------------------- |
-| Google     | Gemini 2.5 Pro, Flash, Flash-Image          | Reasoning, classification, images             |
-| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, images              |
-| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Analysis, research, validation                |
-| Perplexity | Sonar, Sonar Pro, Sonar Deep Research       | Web search, real-time information             |
-| Zai        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, free tier (v2.0.0: Flash added) |
+| Provider   | Models                                      | Capabilities                                              |
+| ---------- | ------------------------------------------- | --------------------------------------------------------- |
+| Google     | Gemini 2.5 Pro, Flash, Flash-Image          | Reasoning, classification, images                         |
+| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, images, embeddings (RAG)        |
+| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Analysis, research, validation, autonomous code execution |
+| Perplexity | Sonar, Sonar Pro, Sonar Deep Research       | Web search, real-time information                         |
+| Zai        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, lightweight, cost-efficient code tasks      |
 
 ### Intelligent Routing
 
-The **commands-agent** uses Gemini 2.5 Flash to classify natural language into action types with a **5-step decision tree** (v2.0.0):
+The **commands-agent** uses Gemini 2.5 Flash to classify natural language into action types with a **5-step decision tree** (v2.0.0). In v3.0.0, two new action types were added:
 
 ```
 "Schedule a call with the team for Tuesday at 3pm"
@@ -122,15 +183,12 @@ The **commands-agent** uses Gemini 2.5 Flash to classify natural language into a
 "What are the latest developments in quantum computing?"
     → research action (confidence: 0.97)
 
+"Fix the login redirect that loops on Safari"
+    → code action (v3.0.0: dispatched to autonomous worker)
+
 "Save bookmark https://research-world.com"
     → link action (v2.0.0: URL keywords ignored, explicit intent detected)
 ```
-
-**v2.0.0 Classification Improvements:**
-
-- URL keyword isolation — keywords inside URLs don't affect classification
-- Explicit intent priority — "save bookmark" overrides incidental keywords
-- Polish language support for command phrases
 
 ### Research Synthesis Protocol
 
@@ -168,25 +226,57 @@ graph TB
     end
 ```
 
+### Autonomous Code Execution Pipeline
+
+The **code-agent** dispatches coding tasks to local worker machines running Claude Code in Docker containers:
+
+```mermaid
+graph TB
+    subgraph "Task Submission"
+        WA2[WhatsApp] --> AA2[actions-agent]
+        WEB2[Web UI] --> AA2
+        GH[GitHub PR Comment] --> CA[code-agent]
+    end
+
+    subgraph "Dispatch"
+        AA2 --> CA
+        CA --> |HMAC-signed| ORCH[orchestrator]
+    end
+
+    subgraph "Execution"
+        ORCH --> |Docker spawn| CW[claude-worker]
+        CW --> |Claude Code| CODE[Git + Tests + PR]
+        ORCH --> |Log streaming| CA
+    end
+
+    subgraph "Completion"
+        ORCH --> |Webhook| CA
+        CA --> |Update| LIN2[Linear Issue]
+        CA --> |Notify| WA3[WhatsApp]
+    end
+```
+
 ---
 
 ## Agent Architecture
 
-IntexuraOS deploys **18 specialized microservices**, each with a distinct AI-powered role:
+IntexuraOS deploys **20 apps**, **4 workers**, and **21 packages** — a total of **45 components** across three architectural layers:
 
 ### AI Agents (Primary Intelligence)
 
-| Agent                   | AI Capabilities                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| **research-agent**      | Multi-model orchestration, parallel queries, synthesis, Zod validation (v2.0.0) |
-| **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)        |
-| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                        |
-| **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)         |
-| **todos-agent**         | Natural language task extraction, priority inference                            |
-| **calendar-agent**      | Preview generation before commit, duration/all-day detection (v2.0.0)           |
-| **linear-agent**        | 3-column dashboard, Todo/To Test categories (v2.0.0)                            |
-| **notes-agent**         | Content structuring, tag inference                                              |
-| **web-agent**           | Separated crawling from LLM summarization, parser+repair pattern (v2.0.0)       |
+| Agent                   | AI Capabilities                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| **research-agent**      | Multi-model orchestration, parallel queries, synthesis, Zod validation (v2.0.0)   |
+| **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)          |
+| **code-agent**          | Autonomous code execution, worker dispatch, deduplication, rate limiting (v3.0.0) |
+| **chat-agent**          | Documentation RAG Q&A, command creation, guest access (v3.0.0)                    |
+| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                          |
+| **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)           |
+| **todos-agent**         | Natural language task extraction, priority inference                              |
+| **calendar-agent**      | Preview generation before commit, duration/all-day detection (v2.0.0)             |
+| **linear-agent**        | 3-column dashboard, Todo/To Test categories (v2.0.0)                              |
+| **notes-agent**         | Content structuring, tag inference                                                |
+| **web-agent**           | Separated crawling from LLM summarization, parser+repair pattern (v2.0.0)         |
 
 ### Infrastructure Services
 
@@ -198,9 +288,99 @@ IntexuraOS deploys **18 specialized microservices**, each with a distinct AI-pow
 | **user-service**                 | Rate limit detection precedence, API key validation (v2.0.0)                |
 | **mobile-notifications-service** | Push notifications, device management                                       |
 | **notion-service**               | Notion integration, sync management                                         |
-| **promptvault-service**          | Prompt template versioning                                                  |
 | **app-settings-service**         | LLM pricing, usage analytics                                                |
 | **api-docs-hub**                 | OpenAPI documentation aggregator                                            |
+| **web**                          | Progressive Web App (PWA) dashboard                                         |
+
+---
+
+## Worker Architecture
+
+Workers are event-driven components that run outside Cloud Run, either as Cloud Functions (serverless) or as local processes on dedicated machines:
+
+### Workers
+
+| Worker            | Runtime          | Purpose                                                                |
+| ----------------- | ---------------- | ---------------------------------------------------------------------- |
+| **orchestrator**  | Local (PM2)      | Dispatches code tasks to Docker containers, manages worktrees and logs |
+| **claude-worker** | Docker container | Sandboxed Claude Code execution with filesystem and resource isolation |
+| **log-cleanup**   | Cloud Function   | Daily retention-based deletion of old execution logs (90-day default)  |
+| **vm-lifecycle**  | Cloud Function   | Scheduled VM start/stop with health checks and graceful shutdown       |
+
+### Worker Deployment Model
+
+```mermaid
+graph LR
+    subgraph "Cloud Functions"
+        LC[log-cleanup]
+        VL[vm-lifecycle]
+    end
+
+    subgraph "Local Machine"
+        ORCH[orchestrator]
+        CW1[claude-worker 1]
+        CW2[claude-worker 2]
+    end
+
+    subgraph "Cloud Run"
+        CA[code-agent]
+    end
+
+    CA --> |HMAC dispatch| ORCH
+    ORCH --> |Docker spawn| CW1
+    ORCH --> |Docker spawn| CW2
+    ORCH --> |Log stream + webhooks| CA
+
+    LC --> |POST cleanup| CA
+    VL --> |Start/Stop| ORCH
+```
+
+---
+
+## Package Ecosystem
+
+The monorepo contains **21 shared packages** organized into four layers:
+
+### Core Packages
+
+| Package            | Purpose                                          |
+| ------------------ | ------------------------------------------------ |
+| `common-core`      | Result types, error codes, redaction utilities   |
+| `common-http`      | Fastify plugins, JWT auth, API response helpers  |
+| `http-contracts`   | OpenAPI schemas, Fastify JSON schemas            |
+| `http-server`      | Health check utilities, validation error handler |
+| `internal-clients` | Shared HTTP clients for service-to-service calls |
+
+### Infrastructure Packages
+
+| Package           | Purpose                                          |
+| ----------------- | ------------------------------------------------ |
+| `infra-firestore` | Firestore singleton, fake implementation         |
+| `infra-pubsub`    | Cloud Pub/Sub publisher base class and utilities |
+| `infra-sentry`    | Sentry integration, `createAppLogger()` factory  |
+| `infra-whatsapp`  | WhatsApp Business API client                     |
+| `infra-notion`    | Notion client, error mapping, connection repo    |
+
+### AI Provider Packages
+
+| Package            | Provider   | Purpose                   |
+| ------------------ | ---------- | ------------------------- |
+| `infra-claude`     | Anthropic  | Claude API client wrapper |
+| `infra-gemini`     | Google     | Gemini API client wrapper |
+| `infra-gpt`        | OpenAI     | GPT API client wrapper    |
+| `infra-glm`        | Zai        | GLM API client wrapper    |
+| `infra-perplexity` | Perplexity | Sonar API client wrapper  |
+
+### LLM Toolchain Packages
+
+| Package        | Purpose                                           |
+| -------------- | ------------------------------------------------- |
+| `llm-contract` | Shared types and interfaces for LLM providers     |
+| `llm-factory`  | Provider creation and configuration               |
+| `llm-prompts`  | Prompt templates and builders with Zod validation |
+| `llm-utils`    | Shared utilities (redaction, error parsing)       |
+| `llm-pricing`  | Per-model cost calculation and usage aggregation  |
+| `llm-audit`    | LLM call audit logging and token usage tracking   |
 
 ---
 
@@ -215,6 +395,7 @@ graph LR
         WM[WhatsApp Text] --> CMD
         WL[Shared Links] --> CMD
         UI[Web Dashboard] --> CMD
+        CHAT[Chat Agent] --> CMD
     end
 
     T --> CMD[commands-agent]
@@ -225,12 +406,13 @@ graph LR
 - **WhatsApp Text**: Direct message parsing
 - **Shared Links**: OpenGraph extraction + AI summarization
 - **Web Dashboard**: Direct action creation
+- **Chat Agent**: Conversational command creation via in-app assistant (v3.0.0)
 
 ### Phase 2: Intelligent Classification
 
 The **commands-agent** analyzes input to determine:
 
-1. **Action Type**: research, todo, note, link, calendar, linear
+1. **Action Type**: research, todo, note, link, calendar, linear, code (v3.0.0)
 2. **Confidence Score**: 0.0 - 1.0 (low confidence = draft for review)
 3. **Model Preference**: User's preferred LLM for this task type
 4. **Context Extraction**: Dates, priorities, entities
@@ -239,14 +421,15 @@ The **commands-agent** analyzes input to determine:
 
 Each agent type executes domain-specific logic:
 
-| Action Type | Agent           | AI Operations                                     |
-| ----------- | --------------- | ------------------------------------------------- |
-| Research    | research-agent  | Parallel LLM queries, synthesis, cover generation |
-| Todo        | todos-agent     | Item extraction, priority inference               |
-| Note        | notes-agent     | Content structuring                               |
-| Link        | bookmarks-agent | Summarization, metadata extraction                |
-| Calendar    | calendar-agent  | Date parsing, availability checking               |
-| Linear      | linear-agent    | Issue creation, project mapping                   |
+| Action Type | Agent           | AI Operations                                           |
+| ----------- | --------------- | ------------------------------------------------------- |
+| Research    | research-agent  | Parallel LLM queries, synthesis, cover generation       |
+| Todo        | todos-agent     | Item extraction, priority inference                     |
+| Note        | notes-agent     | Content structuring                                     |
+| Link        | bookmarks-agent | Summarization, metadata extraction                      |
+| Calendar    | calendar-agent  | Date parsing, availability checking                     |
+| Linear      | linear-agent    | Issue creation, project mapping                         |
+| Code        | code-agent      | Worker dispatch, Docker execution, PR creation (v3.0.0) |
 
 ### Phase 4: Notification & Storage
 
@@ -254,6 +437,7 @@ Each agent type executes domain-specific logic:
 - WhatsApp notification sent via Pub/Sub
 - Web dashboard updated in real-time
 - Shareable URLs generated for research
+- Live terminal logs streamed for code tasks (v3.0.0)
 
 ---
 
@@ -263,35 +447,108 @@ Each agent type executes domain-specific logic:
 
 All inter-service communication uses Cloud Pub/Sub:
 
-| Topic                   | Publisher        | Subscriber(s)               | v2.0.0 |
-| ----------------------- | ---------------- | --------------------------- | ------ |
-| `commands-ingest`       | whatsapp-service | commands-agent              |        |
-| `action-created`        | actions-agent    | research-agent, todos-agent |        |
-| `action-approval-reply` | whatsapp-service | actions-agent               | ✓      |
-| `calendar-preview`      | actions-agent    | calendar-agent              | ✓      |
-| `research-process`      | actions-agent    | research-agent              |        |
-| `whatsapp-send`         | All agents       | whatsapp-service            |        |
-| `llm-call`              | All LLM services | usage tracking              |        |
-| `bookmark-enrich`       | bookmarks-agent  | web-agent                   |        |
-| `bookmark-summarize`    | bookmarks-agent  | web-agent                   |        |
+| Topic                   | Publisher        | Subscriber(s)               | Version |
+| ----------------------- | ---------------- | --------------------------- | ------- |
+| `commands-ingest`       | whatsapp-service | commands-agent              |         |
+| `action-created`        | actions-agent    | research-agent, todos-agent |         |
+| `action-approval-reply` | whatsapp-service | actions-agent               | v2.0.0  |
+| `calendar-preview`      | actions-agent    | calendar-agent              | v2.0.0  |
+| `research-process`      | actions-agent    | research-agent              |         |
+| `whatsapp-send`         | All agents       | whatsapp-service            |         |
+| `llm-call`              | All LLM services | usage tracking              |         |
+| `bookmark-enrich`       | bookmarks-agent  | web-agent                   |         |
+| `bookmark-summarize`    | bookmarks-agent  | web-agent                   |         |
+| `log-cleanup`           | Cloud Scheduler  | log-cleanup worker          | v3.0.0  |
 
 ### Firestore Collections
 
 Each service owns its collections (enforced by CI):
 
-| Collection                   | Owner               | v2.0.0 |
-| ---------------------------- | ------------------- | ------ |
-| `research`                   | research-agent      |        |
-| `actions`                    | actions-agent       |        |
-| `commands`                   | commands-agent      |        |
-| `todos`, `todoItems`         | todos-agent         |        |
-| `bookmarks`                  | bookmarks-agent     |        |
-| `notes`                      | notes-agent         |        |
-| `dataSources`                | data-insights-agent |        |
-| `users`                      | user-service        |        |
-| `calendarEvents`             | calendar-agent      |        |
-| `calendar_previews`          | calendar-agent      | ✓      |
-| `whatsapp_outbound_messages` | whatsapp-service    | ✓      |
+| Collection                   | Owner               | Version |
+| ---------------------------- | ------------------- | ------- |
+| `researches`                 | research-agent      |         |
+| `actions`                    | actions-agent       |         |
+| `commands`                   | commands-agent      |         |
+| `todos`                      | todos-agent         |         |
+| `bookmarks`                  | bookmarks-agent     |         |
+| `notes`                      | notes-agent         |         |
+| `custom_data_sources`        | data-insights-agent |         |
+| `user_settings`              | user-service        |         |
+| `calendar_previews`          | calendar-agent      | v2.0.0  |
+| `whatsapp_outbound_messages` | whatsapp-service    | v2.0.0  |
+| `code_tasks`                 | code-agent          | v3.0.0  |
+| `user_usage`                 | code-agent          | v3.0.0  |
+| `code_worker_settings`       | code-agent          | v3.0.0  |
+| `github-pr-events`           | code-agent          | v3.0.0  |
+| `pr_task_locks`              | code-agent          | v3.0.0  |
+| `doc_embeddings`             | chat-agent          | v3.0.0  |
+
+---
+
+## Service Dependencies
+
+```mermaid
+graph TD
+    subgraph "Entry Points"
+        WA[whatsapp-service]
+        WEB[Web Dashboard]
+        CHAT[chat-agent]
+        GH_PR[GitHub PR Webhooks]
+    end
+
+    subgraph "Routing"
+        CMD[commands-agent]
+        ACT[actions-agent]
+    end
+
+    subgraph "Execution"
+        RES[research-agent]
+        TODO[todos-agent]
+        NOTE[notes-agent]
+        BOOK[bookmarks-agent]
+        CAL[calendar-agent]
+        LIN[linear-agent]
+        CODE[code-agent]
+    end
+
+    subgraph "Worker Layer"
+        ORCH[orchestrator]
+        CW[claude-worker]
+    end
+
+    subgraph "Support"
+        USER[user-service]
+        IMG[image-service]
+        WEB_A[web-agent]
+        NOTIF[mobile-notifications]
+    end
+
+    WA --> CMD
+    WEB --> CMD
+    CHAT --> CMD
+    CMD --> ACT
+
+    ACT --> RES
+    ACT --> TODO
+    ACT --> NOTE
+    ACT --> BOOK
+    ACT --> CAL
+    ACT --> LIN
+    ACT --> CODE
+
+    GH_PR --> CODE
+    CODE --> ORCH
+    ORCH --> CW
+    CODE --> LIN
+
+    RES --> USER
+    RES --> IMG
+    BOOK --> WEB_A
+
+    RES --> NOTIF
+    TODO --> NOTIF
+    CODE --> NOTIF
+```
 
 ---
 
@@ -309,12 +566,21 @@ Every LLM call is tracked with:
 
 ### Pricing Transparency
 
-The **app-settings-service** maintains real-time pricing for all 16 models, enabling:
+The **app-settings-service** maintains real-time pricing for all 17 models, enabling:
 
 - Pre-execution cost estimates
 - Post-execution cost reporting
 - Monthly usage analytics
 - Per-model cost comparison
+
+### Code Task Cost Controls (v3.0.0)
+
+The **code-agent** enforces per-user cost limits:
+
+- 3 concurrent tasks maximum
+- 10 tasks per hour
+- $20 daily spend cap
+- $200 monthly spend cap
 
 ---
 
@@ -336,24 +602,36 @@ User API Keys → AES-256-GCM Encryption → Firestore
 - **Google OAuth**: Calendar and Gmail access
 - **Internal Auth**: Service-to-service with `X-Internal-Auth` header
 - **Mobile**: Signature-based device authentication
+- **HMAC Signing**: Nonce + timestamp + HMAC-SHA256 for worker dispatch (v3.0.0)
+- **Cloudflare Access**: Tunnel-based secure connectivity to local workers (v3.0.0)
+
+### Worker Isolation (v3.0.0)
+
+- Docker containers with all Linux capabilities dropped
+- Non-root execution (UID 1001) with tmpfs ephemeral home
+- Per-task secrets directory (never shared between tasks)
+- Network isolation blocking cloud metadata and private IPs
+- Sensitive file guard reverts commits touching `.env`, `.pem`, or credentials
 
 ---
 
 ## Technology Stack
 
-| Layer          | Technology                                 |
-| -------------- | ------------------------------------------ |
-| Runtime        | Node.js 22 on Cloud Run                    |
-| Framework      | Fastify with OpenAPI                       |
-| Database       | Firestore (NoSQL)                          |
-| Storage        | Google Cloud Storage                       |
-| Messaging      | Cloud Pub/Sub                              |
-| AI Providers   | Google, OpenAI, Anthropic, Perplexity, Zai |
-| Transcription  | Speechmatics                               |
-| Authentication | Auth0, Google OAuth                        |
-| Infrastructure | Terraform                                  |
-| Monorepo       | pnpm workspaces                            |
-| Language       | TypeScript 5.7 (strict mode)               |
+| Layer          | Technology                                         |
+| -------------- | -------------------------------------------------- |
+| Runtime        | Node.js 22 on Cloud Run                            |
+| Framework      | Fastify with OpenAPI                               |
+| Workers        | Cloud Functions, Docker, PM2 (v3.0.0)              |
+| Database       | Firestore (NoSQL)                                  |
+| Storage        | Google Cloud Storage                               |
+| Messaging      | Cloud Pub/Sub                                      |
+| AI Providers   | Google, OpenAI, Anthropic, Perplexity, Zai         |
+| AI Tooling     | Claude Code (autonomous worker), OpenAI Embeddings |
+| Transcription  | Speechmatics                                       |
+| Authentication | Auth0, Google OAuth, Cloudflare Access             |
+| Infrastructure | Terraform, GCE Spot VMs, Cloudflare Tunnels        |
+| Monorepo       | pnpm workspaces (21 packages)                      |
+| Language       | TypeScript 5.7 (strict mode)                       |
 
 ---
 
@@ -364,6 +642,16 @@ User API Keys → AES-256-GCM Encryption → Firestore
 **Multi-Model Orchestration**
 
 - [research-agent](services/research-agent/features.md) - Parallel LLM research with synthesis
+
+**Autonomous Code Execution**
+
+- [code-agent](services/code-agent/features.md) - Worker dispatch, Docker isolation, PR creation (v3.0.0)
+- [orchestrator](services/orchestrator/features.md) - Local task orchestration with Claude Code (v3.0.0)
+- [claude-worker](services/claude-worker/features.md) - Sandboxed Docker execution environment (v3.0.0)
+
+**Conversational AI**
+
+- [chat-agent](services/chat-agent/features.md) - Documentation Q&A and command creation (v3.0.0)
 
 **Intent Classification**
 
@@ -394,6 +682,7 @@ User API Keys → AES-256-GCM Encryption → Firestore
 - [calendar-agent](services/calendar-agent/features.md) - Google Calendar
 - [notion-service](services/notion-service/features.md) - Notion API
 - [linear-agent](services/linear-agent/features.md) - Linear API
+- [code-agent](services/code-agent/features.md) - GitHub API (v3.0.0)
 
 **Infrastructure**
 
@@ -402,19 +691,26 @@ User API Keys → AES-256-GCM Encryption → Firestore
 - [mobile-notifications-service](services/mobile-notifications-service/features.md) - Push notifications
 - [api-docs-hub](services/api-docs-hub/features.md) - API documentation
 
+**Workers**
+
+- [orchestrator](services/orchestrator/features.md) - Code task orchestration (v3.0.0)
+- [claude-worker](services/claude-worker/features.md) - Docker sandbox (v3.0.0)
+- [log-cleanup](services/log-cleanup/features.md) - Log retention management (v3.0.0)
+- [vm-lifecycle](services/vm-lifecycle/features.md) - VM schedule management (v3.0.0)
+
 ---
 
 ## Documentation Index
 
-| Document                                              | Purpose                        |
-| ----------------------------------------------------- | ------------------------------ |
-| [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration |
-| [Services Catalog](services/index.md)                 | All 18 services documented     |
-| [Architecture Patterns](architecture/)                | System design decisions        |
-| [Setup Guide](setup/01-gcp-project.md)                | Getting started                |
-| [API Contracts](architecture/api-contracts.md)        | HTTP API standards             |
-| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns       |
+| Document                                              | Purpose                            |
+| ----------------------------------------------------- | ---------------------------------- |
+| [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration     |
+| [Services Catalog](services/index.md)                 | All 20 apps + 4 workers documented |
+| [Architecture Patterns](architecture/)                | System design decisions            |
+| [Setup Guide](setup/01-gcp-project.md)                | Getting started                    |
+| [API Contracts](architecture/api-contracts.md)        | HTTP API standards                 |
+| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns           |
 
 ---
 
-**Last updated:** 2026-01-25 (v2.1.0)
+**Last updated:** 2026-02-08 (v3.0.0)

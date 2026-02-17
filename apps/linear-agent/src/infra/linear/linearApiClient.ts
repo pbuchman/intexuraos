@@ -14,14 +14,17 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
   LinearApiClient,
   LinearIssue,
+  LinearIssueWithTeam,
+  LinearLabel,
   LinearTeam,
   CreateIssueInput,
   LinearError,
   IssueStateCategory,
+  WorkflowState,
 } from '../../domain/index.js';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
-const logger = pino({ name: 'linear-api-client' });
+const logger = createAppLogger({ name: 'linear-api-client' });
 
 const CLIENT_TTL_MS = 5 * 60 * 1000;
 const DEDUP_TTL_MS = 10 * 1000;
@@ -89,11 +92,37 @@ interface IssueState {
 
 /* istanbul ignore next -- @preserve Maps Linear SDK Issue objects that require real API response */
 async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[]> {
+  // Batch fetch all states
   const statePromises = issues.map(async (issue) => {
     const state = issue.state;
     return state !== undefined ? await state : null;
   });
   const states = await Promise.all(statePromises);
+
+  // Batch fetch all child counts
+  const childrenPromises = issues.map(async (issue) => {
+    const children = await issue.children();
+    return children.nodes.length;
+  });
+  const childCounts = await Promise.all(childrenPromises);
+
+  // Batch fetch all parents
+  const parentPromises = issues.map(async (issue) => {
+    const parent = await issue.parent;
+    return parent?.id ?? null;
+  });
+  const parentIds = await Promise.all(parentPromises);
+
+  // Batch fetch all labels
+  const labelsPromises = issues.map(async (issue) => {
+    const labelsConnection = await issue.labels();
+    return labelsConnection.nodes.map((l) => ({
+      id: l.id,
+      name: l.name,
+      color: l.color,
+    })) satisfies LinearLabel[];
+  });
+  const allLabels = await Promise.all(labelsPromises);
 
   return issues.map((issue, index) => {
     const state = states[index] as IssueState | null | undefined;
@@ -112,6 +141,10 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
       createdAt: issue.createdAt.toISOString(),
       updatedAt: issue.updatedAt.toISOString(),
       completedAt: issue.completedAt?.toISOString() ?? null,
+      parentId: parentIds[index] ?? null,
+      childCount: childCounts[index] ?? 0,
+      children: [],
+      labels: allLabels[index] ?? [],
     };
   });
 }
@@ -119,6 +152,16 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
 /* istanbul ignore next -- @preserve Maps Linear SDK Issue object that requires real API response */
 async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
   const state = (await issue.state) as IssueState | null | undefined;
+  const children = await issue.children();
+  const parent = await issue.parent;
+
+  // Fetch labels for the issue
+  const labelsConnection = await issue.labels();
+  const labels: LinearLabel[] = labelsConnection.nodes.map((l) => ({
+    id: l.id,
+    name: l.name,
+    color: l.color,
+  }));
 
   return {
     id: issue.id,
@@ -135,6 +178,49 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
     createdAt: issue.createdAt.toISOString(),
     updatedAt: issue.updatedAt.toISOString(),
     completedAt: issue.completedAt?.toISOString() ?? null,
+    parentId: parent?.id ?? null,
+    childCount: children.nodes.length,
+    children: [],
+    labels,
+  };
+}
+
+/* istanbul ignore next -- @preserve Maps Linear SDK Issue with team that requires real API response */
+async function mapSingleIssueWithTeam(issue: Issue): Promise<LinearIssueWithTeam> {
+  const state = (await issue.state) as IssueState | null | undefined;
+  const team = (await issue.team) as { id: string } | null | undefined;
+
+  // Fetch labels for the issue
+  const labelsConnection = await issue.labels();
+  const labels: LinearLabel[] = labelsConnection.nodes.map((l) => ({
+    id: l.id,
+    name: l.name,
+    color: l.color,
+  }));
+
+  // Fetch child issues to count them
+  const childrenConnection = await issue.children();
+  const childCount = childrenConnection.nodes.length;
+
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    description: issue.description ?? null,
+    priority: issue.priority as 0 | 1 | 2 | 3 | 4,
+    state: {
+      id: state?.id ?? '',
+      name: state?.name ?? 'Unknown',
+      type: mapIssueStateType(state?.type ?? 'backlog'),
+    },
+    url: issue.url,
+    createdAt: issue.createdAt.toISOString(),
+    updatedAt: issue.updatedAt.toISOString(),
+    completedAt: issue.completedAt?.toISOString() ?? null,
+    teamId: team?.id ?? '',
+    labels,
+    childCount,
+    children: [],
   };
 }
 
@@ -301,14 +387,28 @@ export function createLinearApiClient(): LinearApiClient {
 
           const client = getOrCreateClient(apiKey);
 
-          const issuesConnection = await client.issues({
-            filter: {
-              team: { id: { eq: teamId } },
-            },
-            first: 100,
-          });
+          // Paginate through all issues
+          const allIssues: Issue[] = [];
+          let hasMore = true;
+          let after: string | undefined;
 
-          const allMappedIssues = await mapIssuesWithBatchedStates(issuesConnection.nodes);
+          while (hasMore) {
+            const issuesConnection = await client.issues({
+              filter: {
+                team: { id: { eq: teamId } },
+              },
+              first: 100,
+              ...(after !== undefined ? { after } : {}),
+            });
+
+            allIssues.push(...issuesConnection.nodes);
+            hasMore = issuesConnection.pageInfo.hasNextPage;
+            after = issuesConnection.pageInfo.endCursor;
+          }
+
+          logger.info({ totalIssues: allIssues.length }, 'Fetched all pages');
+
+          const allMappedIssues = await mapIssuesWithBatchedStates(allIssues);
 
           return filterIssuesByCompletionDate(allMappedIssues, completedSinceDays);
         });
@@ -340,6 +440,93 @@ export function createLinearApiClient(): LinearApiClient {
         return ok(mapped);
       } catch (error) {
         logger.error({ error: getErrorMessage(error) }, 'Failed to fetch Linear issue');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async getIssueByIdentifier(
+      apiKey: string,
+      identifier: string
+    ): Promise<Result<LinearIssueWithTeam | null, LinearError>> {
+      const dedupKey = createDedupKey('getIssueByIdentifier', apiKey.slice(0, 8), identifier);
+
+      try {
+        const mapped = await withDeduplication(dedupKey, async () => {
+          logger.info({ identifier }, 'Fetching Linear issue by identifier');
+
+          const client = getOrCreateClient(apiKey);
+
+          const issue = await client.issue(identifier);
+
+          return await mapSingleIssueWithTeam(issue);
+        });
+
+        return ok(mapped);
+      } catch (error) {
+        const errorMessage = getErrorMessage(error);
+        if (errorMessage.includes('not found') || errorMessage.includes('Entity not found')) {
+          logger.info({ identifier }, 'Issue not found by identifier');
+          return ok(null);
+        }
+        logger.error({ error: errorMessage }, 'Failed to fetch Linear issue by identifier');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async updateIssueState(
+      apiKey: string,
+      issueId: string,
+      stateId: string
+    ): Promise<Result<LinearIssue, LinearError>> {
+      try {
+        logger.info({ issueId, stateId }, 'Updating Linear issue state');
+        const client = getOrCreateClient(apiKey);
+        const payload = await client.updateIssue(issueId, { stateId });
+
+        if (!payload.success) {
+          return err({ code: 'API_ERROR', message: 'Failed to update issue state' });
+        }
+
+        const issue = await payload.issue;
+        if (issue === undefined) {
+          return err({ code: 'API_ERROR', message: 'Issue updated but could not fetch details' });
+        }
+
+        const mapped = await mapSingleIssue(issue);
+        logger.info({ issueId, newState: mapped.state.name }, 'Issue state updated');
+        return ok(mapped);
+      } catch (error) {
+        logger.error({ error: getErrorMessage(error) }, 'Failed to update Linear issue state');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async getWorkflowStates(
+      apiKey: string,
+      teamId: string
+    ): Promise<Result<WorkflowState[], LinearError>> {
+      const dedupKey = createDedupKey('getWorkflowStates', apiKey.slice(0, 8), teamId);
+
+      try {
+        const states = await withDeduplication(dedupKey, async () => {
+          logger.info({ teamId }, 'Fetching Linear workflow states');
+
+          const client = getOrCreateClient(apiKey);
+          const statesConnection = await client.workflowStates({
+            filter: { team: { id: { eq: teamId } } },
+          });
+
+          return statesConnection.nodes.map((s) => ({
+            id: s.id,
+            name: s.name,
+            type: mapIssueStateType(s.type),
+          }));
+        });
+
+        logger.info({ teamId, stateCount: states.length }, 'Fetched Linear workflow states');
+        return ok(states);
+      } catch (error) {
+        logger.error({ error: getErrorMessage(error) }, 'Failed to fetch Linear workflow states');
         return err(mapLinearError(error));
       }
     },

@@ -92,13 +92,20 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                             | Date       |
-| ---------- | ------------------------------------------------------- | ---------- |
-| `b1c7a4bb` | INT-269 Migrate to @intexuraos/internal-clients package | 2026-01-25 |
-| `4cc3276f` | INT-213 Fix AI summary returning raw JSON               | 2026-01-24 |
-| `31dbd6d0` | Handle 403 errors on OpenGraph link preview fetching    | 2026-01-21 |
-| `8e006901` | INT-193 Migrate Crawl4AI client to api.crawl4ai.com/v1  | 2026-01-20 |
-| `5b589289` | INT-128 Add page summarization via Crawl4AI             | 2026-01-18 |
+| Commit     | Description                                              | Date       |
+| ---------- | -------------------------------------------------------- | ---------- |
+| `3a5d9380` | INT-533 Add content focus instructions to summary prompt | 2026-02-07 |
+| `d105688f` | Add RATE_LIMITED error code for Crawl4AI 429 responses   | 2026-01-30 |
+| `c3198407` | Fix response contract violations (reply.ok/reply.fail)   | 2026-01-30 |
+| `dfd702f1` | Migrate to Sentry-enabled createAppLogger                | 2026-01-30 |
+| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement          | 2026-01-31 |
+| `73e8375f` | INT-408 Enforce mandatory env var registration           | 2026-01-28 |
+| `1faa1d3b` | INT-301 Consolidate user service client architecture     | 2026-01-26 |
+| `b1c7a4bb` | INT-269 Migrate to @intexuraos/internal-clients package  | 2026-01-25 |
+| `4cc3276f` | INT-213 Fix AI summary returning raw JSON                | 2026-01-24 |
+| `31dbd6d0` | Handle 403 errors on OpenGraph link preview fetching     | 2026-01-21 |
+| `8e006901` | INT-193 Migrate Crawl4AI client to api.crawl4ai.com/v1   | 2026-01-20 |
+| `5b589289` | INT-128 Add page summarization via Crawl4AI              | 2026-01-18 |
 
 ## API Endpoints
 
@@ -193,6 +200,8 @@ interface PageSummary {
 | `NO_CONTENT`   | No markdown extracted from page       |
 | `API_ERROR`    | LLM API error or user service error   |
 | `INVALID_URL`  | Malformed URL or unsupported protocol |
+| `TOO_LARGE`    | Response exceeds size limit           |
+| `RATE_LIMITED` | Crawl4AI returned HTTP 429 rate limit |
 
 ## Key Components
 
@@ -222,7 +231,10 @@ Generates prose summaries with automatic repair on parse failures.
 4. If JSON detected, send repair prompt and retry once
 5. Return `PageSummary` or error
 
-**Key feature:** Prompt includes "Write in SAME LANGUAGE as original content" instruction.
+**Key features:**
+
+- Prompt includes "Write in SAME LANGUAGE as original content" instruction
+- Content focus section guides LLM to summarize actual page content, not platform descriptions (INT-533)
 
 ### parseSummaryResponse
 
@@ -289,12 +301,12 @@ Fetches and parses OpenGraph metadata.
 | Variable                              | Purpose                | Required |
 | ------------------------------------- | ---------------------- | -------- |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth  | Yes      |
-| `INTEXURAOS_CRAWL4AI_API_KEY`         | Crawl4AI Cloud API key | Yes      |
+| `INTEXURAOS_CRAWL4AI_APP_API_KEY`     | Crawl4AI Cloud API key | Yes      |
+| `INTEXURAOS_USER_SERVICE_URL`         | User service base URL  | Yes      |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup         | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Error tracking         | Yes      |
-| `INTEXURAOS_USER_SERVICE_URL`         | User service base URL  | No\*     |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup         | No\*     |
 
-\*Has localhost defaults for development
+All four service env vars are now validated at startup via `validateRequiredEnv()` (INT-408).
 
 ## Gotchas
 
@@ -313,6 +325,14 @@ Fetches and parses OpenGraph metadata.
 **Empty response handling** - `nonEmpty()` helper treats empty strings same as undefined for fallback logic.
 
 **Concurrent link previews** - All URLs fetched in parallel via Promise.all. One timeout doesn't affect others.
+
+**Rate limiting (429)** - Crawl4AI 429 responses return `RATE_LIMITED` error code, distinct from general `API_ERROR`.
+
+**Content focus prompting** - Summary prompts include a CONTENT FOCUS section that prevents LLM from describing the platform instead of the actual content (e.g., avoids "LinkedIn is a professional network" preambles).
+
+**Sentry logging** - Uses `createAppLogger()` from `@intexuraos/infra-sentry` for automatic error forwarding to Sentry.
+
+**Response contract** - All internal routes use `reply.ok()` / `reply.fail()` instead of raw `reply.send()` / `reply.status()`.
 
 ## File Structure
 
@@ -333,13 +353,11 @@ apps/web-agent/src/
     linkpreview/
       openGraphFetcher.ts        # Cheerio-based OG extraction
     pagesummary/
-      pageContentFetcher.ts      # Crawl4AI client (crawl only)
+      pageContentFetcher.ts      # Crawl4AI client (crawl only, with RATE_LIMITED handling)
       llmSummarizer.ts           # User's LLM summarization
       crawl4aiClient.ts          # Legacy combined client (deprecated)
       parseSummaryResponse.ts    # Response validation
-      buildSummaryRepairPrompt.ts # Prompt builders
-    user/
-      index.ts                   # Re-exports from @intexuraos/internal-clients
+      buildSummaryRepairPrompt.ts # Prompt builders (with content focus section)
   routes/
     internalRoutes.ts            # /internal/* endpoints
     schemas/

@@ -13,7 +13,11 @@ import type {
 } from '../domain/ports/classifier.js';
 import type { EventPublisherPort, PublishError } from '../domain/ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../domain/events/actionCreatedEvent.js';
-import type { UserServiceClient, UserApiKeys, UserServiceError } from '../domain/ports/userServiceClient.js';
+import type {
+  UserServiceClient,
+  DecryptedApiKeys as UserApiKeys,
+  UserServiceError,
+} from '@intexuraos/internal-clients';
 import type { ActionsAgentClient, CreateActionParams } from '../infra/actionsAgent/client.js';
 import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
 import { createRetryPendingCommandsUseCase } from '../domain/usecases/retryPendingCommands.js';
@@ -176,6 +180,24 @@ export class FakeUserServiceClient implements UserServiceClient {
       return this.llmClientResult;
     }
     return err({ code: 'NO_API_KEY', message: 'No API key found for user' });
+  }
+
+  async reportLlmSuccess(_userId: string, _provider: import('@intexuraos/llm-contract').LlmProvider): Promise<void> {
+    // Best effort - silently ignore in tests
+  }
+
+  async getOAuthToken(
+    _userId: string,
+    _provider: import('@intexuraos/internal-clients').OAuthProvider
+  ): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err({ code: 'NETWORK_ERROR', message: 'Simulated network error' });
+    }
+    return err({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'OAuth not configured in fake',
+    });
   }
 }
 

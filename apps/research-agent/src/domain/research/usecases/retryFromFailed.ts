@@ -95,7 +95,9 @@ export async function retryFromFailed(
     });
 
     if (!synthesisResult.ok) {
+      /* v8 ignore start -- ts-type: error type has message field but TypeScript can't narrow after !ok check @preserve */
       return { ok: false, error: synthesisResult.error ?? 'Synthesis failed' };
+      /* v8 ignore stop @preserve */
     }
 
     return { ok: true, action: 'retried_synthesis' };

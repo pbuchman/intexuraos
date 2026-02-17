@@ -6,6 +6,7 @@ import type { HandleNoteActionUseCase } from './handleNoteAction.js';
 import type { HandleLinkActionUseCase } from './handleLinkAction.js';
 import type { HandleCalendarActionUseCase } from './handleCalendarAction.js';
 import type { HandleLinearActionUseCase } from './handleLinearAction.js';
+import type { HandleCodeActionUseCase } from './handleCodeAction.js';
 
 export interface ActionHandler {
   execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>>;
@@ -18,6 +19,7 @@ export interface ActionHandlerRegistry {
   link: HandleLinkActionUseCase;
   calendar: HandleCalendarActionUseCase;
   linear: HandleLinearActionUseCase;
+  code: HandleCodeActionUseCase;
 }
 
 export function getHandlerForType(

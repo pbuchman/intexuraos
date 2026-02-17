@@ -115,6 +115,7 @@ function callIncludesLogger(callContent) {
   // Check if the call object includes logger: ...
   return (
     /logger\s*:\s*pino\s*\(/.test(callContent) ||
+    /logger\s*:\s*createAppLogger\s*\(/.test(callContent) ||
     /logger\s*:\s*logger/.test(callContent) ||
     /logger\s*:\s*config\./.test(callContent) ||
     /logger\s*:\s*serviceConfig\./.test(callContent)
@@ -245,7 +246,7 @@ function main() {
     console.log(`Logging verification failed with ${String(errors.length)} error(s).`);
     console.log('');
     console.log('Factory functions that accept logger should be called with:');
-    console.log('  logger: pino({ name: "serviceName" })');
+    console.log('  logger: createAppLogger({ name: "serviceName" })');
     process.exit(1);
   }
 

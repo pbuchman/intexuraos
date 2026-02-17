@@ -209,14 +209,8 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail(result.error.code, result.error.message);
       }
 
-      return await reply.status(201).send({
-        success: true,
-        data: result.value,
-        diagnostics: {
-          requestId: request.requestId,
-          durationMs: Date.now() - request.startTime,
-        },
-      });
+      reply.status(201);
+      return await reply.ok(result.value);
     }
   );
 
@@ -289,6 +283,7 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail(result.error.code, result.error.message);
       }
 
+      // @allow-raw-send: 204 No Content response
       reply.status(204);
       return await reply.send();
     }

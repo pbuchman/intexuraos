@@ -1,8 +1,10 @@
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
-import { AuthProvider, SyncQueueProvider, useAuth } from '@/context';
+import { AuthProvider, SyncQueueProvider, ThemeProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
+import { DevBar } from '@/components/DevBar';
+import { Chat } from '@/components/Chat';
 import { config } from '@/config';
 
 
@@ -18,6 +20,9 @@ import {
   ApiKeysSettingsPage,
   BookmarksListPage,
   CalendarPage,
+  CodeTaskViewPage,
+  CodeTaskNewPage,
+  CodeTasksPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataInsightsPage,
@@ -36,6 +41,7 @@ import {
   MobileNotificationsListPage,
   NotesListPage,
   NotionConnectionPage,
+  PREventsPage,
   ResearchDetailPage,
   ResearchListPage,
   ShareHistoryPage,
@@ -43,6 +49,7 @@ import {
   TodosListPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
+  WorkerSettingsPage,
 } from '@/pages';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -112,6 +119,11 @@ function TodoDetailRedirect(): React.JSX.Element {
 function BookmarkDetailRedirect(): React.JSX.Element {
   const { id } = useParams();
   return <Navigate to={`/my-bookmarks?id=${id ?? ''}`} replace />;
+}
+
+function CodeTaskViewPageKeyed(): React.JSX.Element {
+  const { id } = useParams<{ id: string }>();
+  return <CodeTaskViewPage key={id} />;
 }
 
 function AppRoutes(): React.JSX.Element {
@@ -192,10 +204,51 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/settings/workers"
+        element={
+          <ProtectedRoute>
+            <WorkerSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/settings/share-history"
         element={
           <ProtectedRoute>
             <ShareHistoryPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Code Tasks routes */}
+      <Route
+        path="/code-tasks"
+        element={
+          <ProtectedRoute>
+            <CodeTasksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/new"
+        element={
+          <ProtectedRoute>
+            <CodeTaskNewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/:id"
+        element={
+          <ProtectedRoute>
+            <CodeTaskViewPageKeyed />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/pr-events"
+        element={
+          <ProtectedRoute>
+            <PREventsPage />
           </ProtectedRoute>
         }
       />
@@ -392,28 +445,32 @@ function AppRoutes(): React.JSX.Element {
 
 export function App(): React.JSX.Element {
   return (
-    <PWAProvider>
-      <Auth0Provider
-        domain={config.auth0Domain}
-        clientId={config.auth0ClientId}
-        authorizationParams={{
-          redirect_uri: window.location.origin,
-          audience: config.authAudience,
-          scope: 'openid profile email',
-        }}
-        cacheLocation="localstorage"
-      >
-        <HashRouter>
-          <AuthProvider>
-            <SyncQueueProvider>
-              <AppRoutes />
-              <UpdateBanner />
-              <IOSInstallBanner />
-              <AndroidInstallBanner />
-            </SyncQueueProvider>
-          </AuthProvider>
-        </HashRouter>
-      </Auth0Provider>
-    </PWAProvider>
+    <ThemeProvider>
+        <PWAProvider>
+          <Auth0Provider
+            domain={config.auth0Domain}
+            clientId={config.auth0ClientId}
+            authorizationParams={{
+              redirect_uri: window.location.origin,
+              audience: config.authAudience,
+              scope: 'openid profile email',
+            }}
+            cacheLocation="localstorage"
+          >
+            <HashRouter>
+              <AuthProvider>
+                <SyncQueueProvider>
+                  <AppRoutes />
+                  <UpdateBanner />
+                  <IOSInstallBanner />
+                  <AndroidInstallBanner />
+                  <DevBar />
+                  <Chat />
+                </SyncQueueProvider>
+              </AuthProvider>
+            </HashRouter>
+          </Auth0Provider>
+        </PWAProvider>
+    </ThemeProvider>
   );
 }

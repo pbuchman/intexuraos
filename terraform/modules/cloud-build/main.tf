@@ -113,6 +113,13 @@ resource "google_project_iam_member" "cloud_build_firebase_admin" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
+# Cloud Build needs to deploy Cloud Functions
+resource "google_project_iam_member" "cloud_build_functions_developer" {
+  project = var.project_id
+  role    = "roles/cloudfunctions.developer"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 # -----------------------------------------------------------------------------
 # Cloud Build Trigger (invoked by GitHub Actions)
 # -----------------------------------------------------------------------------
@@ -133,9 +140,10 @@ resource "google_cloudbuild_trigger" "manual_main" {
   filename = "cloudbuild/cloudbuild.yaml"
 
   substitutions = {
-    _REGION                = var.region
-    _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
-    _ENVIRONMENT           = var.environment
+    _REGION                  = var.region
+    _ARTIFACT_REGISTRY_URL   = var.artifact_registry_url
+    _ENVIRONMENT             = var.environment
+    _FUNCTIONS_SOURCE_BUCKET = var.functions_source_bucket
   }
 
   service_account = google_service_account.cloud_build.id
@@ -152,7 +160,6 @@ locals {
   # Docker-based services (build + deploy)
   docker_services = [
     "user-service",
-    "promptvault-service",
     "notion-service",
     "whatsapp-service",
     "api-docs-hub",
@@ -169,6 +176,13 @@ locals {
     "calendar-agent",
     "linear-agent",
     "web-agent",
+    "code-agent",
+  ]
+
+  # Cloud Function workers (zip + upload to GCS)
+  cloud_function_workers = [
+    "vm-lifecycle",
+    "log-cleanup",
   ]
 }
 
@@ -205,7 +219,7 @@ resource "google_cloudbuild_trigger" "service" {
   }
 }
 
-# Web trigger (special: npm build + secrets)
+# Web trigger (special: pnpm build + secrets)
 resource "google_cloudbuild_trigger" "web" {
   name        = "web"
   description = "Deploy web frontend only"
@@ -249,6 +263,84 @@ resource "google_cloudbuild_trigger" "firestore" {
   ignored_files = ["**"]
 
   filename = "cloudbuild/cloudbuild-firestore.yaml"
+
+  service_account = google_service_account.cloud_build.id
+
+  lifecycle {
+    # GCP API normalizes ignored_files=["**"] to null, causing perpetual drift
+    ignore_changes = [ignored_files]
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Function Worker Triggers
+# -----------------------------------------------------------------------------
+# Individual triggers for Cloud Function workers (vm-lifecycle, log-cleanup).
+# These deploy function source to GCS without triggering on git push.
+
+resource "google_cloudbuild_trigger" "worker" {
+  for_each = toset(local.cloud_function_workers)
+
+  name        = each.key
+  description = "Deploy ${each.key} Cloud Function"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  ignored_files = ["**"]
+
+  filename = "workers/${each.key}/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION                  = var.region
+    _ENVIRONMENT             = var.environment
+    _FUNCTIONS_SOURCE_BUCKET = var.functions_source_bucket
+  }
+
+  service_account = google_service_account.cloud_build.id
+
+  lifecycle {
+    # GCP API normalizes ignored_files=["**"] to null, causing perpetual drift
+    ignore_changes = [ignored_files]
+  }
+}
+
+# Cloud Build needs to write to functions source bucket
+resource "google_storage_bucket_iam_member" "cloud_build_functions_storage" {
+  bucket = var.functions_source_bucket
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# -----------------------------------------------------------------------------
+# claude-worker Docker Image Trigger
+# -----------------------------------------------------------------------------
+# Individual trigger for claude-worker Docker image (build+push only, no deploy).
+# Does not trigger on git push — invoked via GitHub Actions workflow.
+
+resource "google_cloudbuild_trigger" "claude_worker" {
+  name        = "claude-worker"
+  description = "Build and push claude-worker Docker image"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  ignored_files = ["**"]
+  filename      = "workers/claude-worker/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION                = var.region
+    _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
+    _ENVIRONMENT           = var.environment
+  }
 
   service_account = google_service_account.cloud_build.id
 

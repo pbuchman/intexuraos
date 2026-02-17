@@ -11,6 +11,7 @@ import type {
   LinearApiClient,
   LinearTeam,
   LinearIssue,
+  LinearIssueWithTeam,
   CreateIssueInput,
   LinearActionExtractionService,
   ExtractedIssueData,
@@ -18,7 +19,42 @@ import type {
   FailedLinearIssue,
   ProcessedActionRepository,
   ProcessedAction,
+  WorkflowState,
+  LinearIssueRepository,
+  SyncedLinearIssue,
+  LinearCommentRepository,
+  LinearComment,
 } from '../domain/index.js';
+import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
+import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
+import type { LLMError, LLMErrorCode } from '@intexuraos/llm-contract';
+import type { IssueStateCategory, LinearPriority } from '../domain/models.js';
+
+/**
+ * Helper to create SyncedLinearIssue test fixtures with defaults
+ */
+export function createSyncedIssue(
+  overrides: Partial<SyncedLinearIssue> & { id: string; identifier: string; userId: string }
+): SyncedLinearIssue {
+  const now = new Date().toISOString();
+  return {
+    title: 'Test Issue',
+    description: null,
+    state: 'Backlog',
+    stateType: 'backlog' as IssueStateCategory,
+    priority: 0 as LinearPriority,
+    assigneeId: null,
+    assigneeName: null,
+    labels: [],
+    url: 'https://linear.app/test/issue/test',
+    createdAt: now,
+    updatedAt: now,
+    syncedAt: now,
+    teamId: 'team-123',
+    parentId: null,
+    ...overrides,
+  };
+}
 
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
   private connections = new Map<string, LinearConnection>();
@@ -44,6 +80,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
       apiKey,
       teamId,
       teamName,
+      webhookSecret: existing?.webhookSecret ?? null,
       connected: true,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -108,9 +145,17 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     if (error) this.failError = error;
   }
 
+  private shouldFailIsConnected = false;
+
   async isConnected(userId: string): Promise<Result<boolean, LinearError>> {
+    if (this.shouldFailIsConnected) return err(this.failError);
     const conn = this.connections.get(userId);
     return ok(conn?.connected ?? false);
+  }
+
+  setIsConnectedFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailIsConnected = fail;
+    if (error) this.failError = error;
   }
 
   async disconnect(userId: string): Promise<Result<LinearConnectionPublic, LinearError>> {
@@ -133,25 +178,85 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     });
   }
 
+  async findUserIdByTeamId(teamId: string): Promise<Result<string | null, LinearError>> {
+    if (this.shouldFailGetConnection) return err(this.failError);
+
+    for (const [userId, conn] of this.connections.entries()) {
+      if (conn.connected && conn.teamId === teamId) return ok(userId);
+    }
+    return ok(null);
+  }
+
+  async findWebhookSecretByTeamId(
+    teamId: string
+  ): Promise<Result<{ userId: string; webhookSecret: string } | null, LinearError>> {
+    if (this.shouldFailGetConnection) return err(this.failError);
+
+    for (const [userId, conn] of this.connections.entries()) {
+      if (conn.connected && conn.teamId === teamId) {
+        if (!conn.webhookSecret) return ok(null);
+        return ok({ userId, webhookSecret: conn.webhookSecret });
+      }
+    }
+    return ok(null);
+  }
+
+  async updateWebhookSecret(
+    userId: string,
+    webhookSecret: string | null
+  ): Promise<Result<void, LinearError>> {
+    if (this.shouldFailSave) return err(this.failError);
+
+    const conn = this.connections.get(userId);
+    if (conn) {
+      conn.webhookSecret = webhookSecret;
+      conn.updatedAt = new Date().toISOString();
+    }
+    return ok(undefined);
+  }
+
+  async getAllConnectedUserIds(): Promise<Result<string[], LinearError>> {
+    if (this.shouldFailGetConnection) return err(this.failError);
+
+    const connectedUserIds: string[] = [];
+    for (const [userId, conn] of this.connections.entries()) {
+      if (conn.connected) {
+        connectedUserIds.push(userId);
+      }
+    }
+    return ok(connectedUserIds);
+  }
+
   reset(): void {
     this.connections.clear();
     this.shouldFailGetFullConnection = false;
     this.shouldFailGetConnection = false;
     this.shouldFailSave = false;
     this.shouldFailDisconnect = false;
+    this.shouldFailIsConnected = false;
   }
 
-  seedConnection(conn: LinearConnection): void {
-    this.connections.set(conn.userId, conn);
+  seedConnection(conn: Omit<LinearConnection, 'webhookSecret'> & { webhookSecret?: string | null }): void {
+    this.connections.set(conn.userId, {
+      ...conn,
+      webhookSecret: conn.webhookSecret ?? null,
+    } as LinearConnection);
   }
 }
 
 export class FakeLinearApiClient implements LinearApiClient {
   private teams: LinearTeam[] = [{ id: 'team-1', name: 'Engineering', key: 'ENG' }];
   private issues: LinearIssue[] = [];
+  private issuesWithTeam: LinearIssueWithTeam[] = [];
   private shouldFail = false;
   private failError: LinearError = { code: 'API_ERROR', message: 'Fake error' };
   private issueCounter = 1;
+  private workflowStates: WorkflowState[] = [
+    { id: 'state-backlog', name: 'Backlog', type: 'backlog' },
+    { id: 'state-progress', name: 'In Progress', type: 'started' },
+    { id: 'state-review', name: 'In Review', type: 'started' },
+    { id: 'state-qa', name: 'QA', type: 'started' },
+  ];
 
   async validateAndGetTeams(apiKey: string): Promise<Result<LinearTeam[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
@@ -178,6 +283,9 @@ export class FakeLinearApiClient implements LinearApiClient {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       completedAt: null,
+      childCount: 0,
+      children: [],
+      labels: [],
     };
 
     this.issues.push(issue);
@@ -202,8 +310,50 @@ export class FakeLinearApiClient implements LinearApiClient {
     return ok(issue ?? null);
   }
 
+  async getIssueByIdentifier(
+    _apiKey: string,
+    identifier: string
+  ): Promise<Result<LinearIssueWithTeam | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    const issue = this.issuesWithTeam.find((i) => i.identifier === identifier);
+    return ok(issue ?? null);
+  }
+
+  async updateIssueState(
+    _apiKey: string,
+    issueId: string,
+    stateId: string
+  ): Promise<Result<LinearIssue, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+
+    const issue = this.issues.find((i) => i.id === issueId);
+    if (!issue) {
+      return err({ code: 'API_ERROR', message: 'Issue not found' });
+    }
+
+    // Find the workflow state to get the name
+    const workflowState = this.workflowStates.find((s) => s.id === stateId);
+    issue.state = {
+      id: stateId,
+      name: workflowState?.name ?? stateId,
+      type: workflowState?.type ?? 'started',
+    };
+    issue.updatedAt = new Date().toISOString();
+
+    return ok(issue);
+  }
+
+  async getWorkflowStates(
+    _apiKey: string,
+    _teamId: string
+  ): Promise<Result<WorkflowState[], LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(this.workflowStates);
+  }
+
   reset(): void {
     this.issues = [];
+    this.issuesWithTeam = [];
     this.shouldFail = false;
     this.issueCounter = 1;
   }
@@ -214,6 +364,10 @@ export class FakeLinearApiClient implements LinearApiClient {
 
   seedIssue(issue: LinearIssue): void {
     this.issues.push(issue);
+  }
+
+  seedIssueWithTeam(issue: LinearIssueWithTeam): void {
+    this.issuesWithTeam.push(issue);
   }
 
   setFailure(fail: boolean, error?: LinearError): void {
@@ -270,6 +424,9 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   private counter = 1;
   private shouldFailListByUser = false;
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
+  private shouldFailGetById = false;
+  private shouldFailUpdate = false;
+  private shouldFailDelete = false;
 
   async create(input: {
     userId: string;
@@ -301,12 +458,54 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     return ok(userIssues);
   }
 
+  async getById(id: string): Promise<Result<FailedLinearIssue, LinearError>> {
+    if (this.shouldFailGetById) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Failed issue not found' });
+    }
+    const issue = this.failedIssues.find((fi) => fi.id === id);
+    if (!issue) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Failed issue not found' });
+    }
+    return ok(issue);
+  }
+
+  async update(
+    id: string,
+    input: { error: string; lastRetryAt: string }
+  ): Promise<Result<void, LinearError>> {
+    if (this.shouldFailUpdate) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Update failed' });
+    }
+    const issue = this.failedIssues.find((fi) => fi.id === id);
+    if (!issue) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Failed issue not found' });
+    }
+    issue.error = input.error;
+    issue.lastRetryAt = input.lastRetryAt;
+    return ok(undefined);
+  }
+
   setListByUserFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailListByUser = fail;
     if (error) this.failError = error;
   }
 
+  setGetByIdFailure(fail: boolean): void {
+    this.shouldFailGetById = fail;
+  }
+
+  setUpdateFailure(fail: boolean): void {
+    this.shouldFailUpdate = fail;
+  }
+
+  setDeleteFailure(fail: boolean): void {
+    this.shouldFailDelete = fail;
+  }
+
   async delete(id: string): Promise<Result<void, LinearError>> {
+    if (this.shouldFailDelete) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Delete failed' });
+    }
     this.failedIssues = this.failedIssues.filter((fi) => fi.id !== id);
     return ok(undefined);
   }
@@ -315,6 +514,9 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     this.failedIssues = [];
     this.counter = 1;
     this.shouldFailListByUser = false;
+    this.shouldFailGetById = false;
+    this.shouldFailUpdate = false;
+    this.shouldFailDelete = false;
   }
 
   get count(): number {
@@ -359,5 +561,239 @@ export class FakeProcessedActionRepository implements ProcessedActionRepository 
 
   get count(): number {
     return this.processedActions.size;
+  }
+}
+
+export class FakeLinearIssueRepository implements LinearIssueRepository {
+  private issues = new Map<string, SyncedLinearIssue>();
+  private shouldFail = false;
+  private shouldFailSave = false;
+  private shouldFailListByUserId = false;
+  private shouldFailDeleteById = false;
+  private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
+
+  async save(issue: SyncedLinearIssue): Promise<Result<SyncedLinearIssue, LinearError>> {
+    if (this.shouldFail || this.shouldFailSave) return err(this.failError);
+    this.issues.set(issue.id, { ...issue });
+    return ok(issue);
+  }
+
+  async findById(id: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(this.issues.get(id) ?? null);
+  }
+
+  async findByIdentifier(identifier: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    for (const issue of this.issues.values()) {
+      if (issue.identifier === identifier) return ok(issue);
+    }
+    return ok(null);
+  }
+
+  async listByUserId(userId: string): Promise<Result<SyncedLinearIssue[], LinearError>> {
+    if (this.shouldFail || this.shouldFailListByUserId) return err(this.failError);
+    const userIssues = Array.from(this.issues.values()).filter((i) => i.userId === userId);
+    return ok(userIssues);
+  }
+
+  async deleteById(id: string): Promise<Result<void, LinearError>> {
+    if (this.shouldFail || this.shouldFailDeleteById) return err(this.failError);
+    this.issues.delete(id);
+    return ok(undefined);
+  }
+
+  setFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFail = fail;
+    if (error) this.failError = error;
+  }
+
+  setSaveFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailSave = fail;
+    if (error) this.failError = error;
+  }
+
+  setListByUserIdFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailListByUserId = fail;
+    if (error) this.failError = error;
+  }
+
+  setDeleteFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailDeleteById = fail;
+    if (error) this.failError = error;
+  }
+
+  reset(): void {
+    this.issues.clear();
+    this.shouldFail = false;
+    this.shouldFailSave = false;
+    this.shouldFailListByUserId = false;
+    this.shouldFailDeleteById = false;
+  }
+
+  seedIssue(issue: SyncedLinearIssue): void {
+    this.issues.set(issue.id, issue);
+  }
+
+  get count(): number {
+    return this.issues.size;
+  }
+}
+
+export class FakeLlmGenerateClient implements LlmGenerateClient {
+  private content = '{"title": "Generated title", "issueType": "feature"}';
+  private shouldFail = false;
+  private failError: LLMError = { code: 'API_ERROR', message: 'LLM error' };
+  private responseSequence: Result<GenerateResult, LLMError>[] | null = null;
+  private sequenceIndex = 0;
+
+  async generate(_prompt: string): Promise<Result<GenerateResult, LLMError>> {
+    if (this.responseSequence !== null) {
+      const index = Math.min(this.sequenceIndex, this.responseSequence.length - 1);
+      this.sequenceIndex++;
+      return this.responseSequence[index] as Result<GenerateResult, LLMError>;
+    }
+    if (this.shouldFail) return err(this.failError);
+    return ok({
+      content: this.content,
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+    });
+  }
+
+  setContent(content: string): void {
+    this.content = content;
+  }
+
+  setFailure(fail: boolean, error?: { code: LLMErrorCode; message: string }): void {
+    this.shouldFail = fail;
+    if (error !== undefined) {
+      this.failError = { code: error.code, message: error.message };
+    }
+  }
+
+  setResponseSequence(responses: Result<GenerateResult, LLMError>[]): void {
+    this.responseSequence = responses;
+    this.sequenceIndex = 0;
+  }
+
+  reset(): void {
+    this.content = '{"title": "Generated title", "issueType": "feature"}';
+    this.shouldFail = false;
+    this.responseSequence = null;
+    this.sequenceIndex = 0;
+  }
+}
+
+export class FakeUserServiceClient implements UserServiceClient {
+  private llmClient: LlmGenerateClient = new FakeLlmGenerateClient();
+  private shouldFail = false;
+  private failError: UserServiceError = { code: 'API_ERROR', message: 'User service error' };
+
+  async getApiKeys(_userId: string): Promise<Result<{ google?: string; openai?: string; anthropic?: string; perplexity?: string; zai?: string }, UserServiceError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok({ google: 'fake-google-key', openai: 'fake-openai-key' });
+  }
+
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(this.llmClient);
+  }
+
+  async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
+    return;
+  }
+
+  async getOAuthToken(_userId: string, _provider: string): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok({ accessToken: 'fake-token', email: 'test@example.com' });
+  }
+
+  setLlmClient(client: LlmGenerateClient): void {
+    this.llmClient = client;
+  }
+
+  setFailure(fail: boolean, error?: UserServiceError): void {
+    this.shouldFail = fail;
+    if (error !== undefined) this.failError = error;
+  }
+
+  reset(): void {
+    this.llmClient = new FakeLlmGenerateClient();
+    this.shouldFail = false;
+  }
+}
+
+export class FakeLinearCommentRepository implements LinearCommentRepository {
+  private comments = new Map<string, LinearComment>();
+  private shouldFail = false;
+  private shouldFailSave = false;
+  private shouldFailListByIssueId = false;
+  private shouldFailCountByIssueId = false;
+  private shouldFailDeleteById = false;
+  private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
+
+  async save(comment: LinearComment): Promise<Result<LinearComment, LinearError>> {
+    if (this.shouldFail || this.shouldFailSave) return err(this.failError);
+    this.comments.set(comment.id, { ...comment });
+    return ok(comment);
+  }
+
+  async findById(id: string): Promise<Result<LinearComment | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(this.comments.get(id) ?? null);
+  }
+
+  async listByIssueId(issueId: string): Promise<Result<LinearComment[], LinearError>> {
+    if (this.shouldFail || this.shouldFailListByIssueId) return err(this.failError);
+    const issueComments = Array.from(this.comments.values())
+      .filter((c) => c.issueId === issueId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return ok(issueComments);
+  }
+
+  async countByIssueId(issueId: string): Promise<Result<number, LinearError>> {
+    if (this.shouldFail || this.shouldFailCountByIssueId) return err(this.failError);
+    const count = Array.from(this.comments.values()).filter((c) => c.issueId === issueId).length;
+    return ok(count);
+  }
+
+  async deleteById(id: string): Promise<Result<void, LinearError>> {
+    if (this.shouldFail || this.shouldFailDeleteById) return err(this.failError);
+    this.comments.delete(id);
+    return ok(undefined);
+  }
+
+  setFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFail = fail;
+    if (error) this.failError = error;
+  }
+
+  setSaveFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailSave = fail;
+    if (error) this.failError = error;
+  }
+
+  setListByIssueIdFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailListByIssueId = fail;
+    if (error) this.failError = error;
+  }
+
+  setCountByIssueIdFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailCountByIssueId = fail;
+    if (error) this.failError = error;
+  }
+
+  setDeleteByIdFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailDeleteById = fail;
+    if (error) this.failError = error;
+  }
+
+  reset(): void {
+    this.comments.clear();
+    this.shouldFail = false;
+    this.shouldFailSave = false;
+    this.shouldFailListByIssueId = false;
+    this.shouldFailCountByIssueId = false;
+    this.shouldFailDeleteById = false;
   }
 }

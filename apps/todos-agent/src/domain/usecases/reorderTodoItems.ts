@@ -58,10 +58,11 @@ export async function reorderTodoItems(
   const itemMap = new Map(todo.items.map((item) => [item.id, item]));
   const reorderedItems = input.itemIds.map((id, index) => {
     const item = itemMap.get(id);
-    /* istanbul ignore next - defensive check, validated above */
+    /* v8 ignore start -- ts-type: itemIds validated against todo.items above @preserve */
     if (item === undefined) {
       throw new Error(`Item ${id} not found`);
     }
+    /* v8 ignore stop @preserve */
     return { ...item, position: index };
   });
 
@@ -79,3 +80,4 @@ export async function reorderTodoItems(
 
   return result;
 }
+

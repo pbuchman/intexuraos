@@ -1,7 +1,7 @@
 # Web Agent - Technical Debt
 
-**Last Updated:** 2026-01-25
-**Analysis Run:** v2.1.0 documentation refresh (INT-269)
+**Last Updated:** 2026-02-08
+**Analysis Run:** Development branch documentation update
 
 ---
 
@@ -74,15 +74,17 @@ const html = new TextDecoder().decode(
 
 ## Test Coverage
 
-No test coverage gaps identified. All major paths tested:
+No test coverage gaps identified. All major paths tested at 100% threshold with v8 ignore exemptions:
 
 - Link preview fetching with nock mocking
 - OpenGraph tag extraction
 - 403 error handling (ACCESS_DENIED)
+- HTTP 429 rate limiting (RATE_LIMITED)
 - Page content fetching via Crawl4AI
 - LLM summarization with repair mechanism
-- Parse response validation
+- Parse response validation (including content focus instructions)
 - Empty/JSON response handling
+- OAuth token support in FakeUserServiceClient
 
 ---
 
@@ -102,23 +104,32 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 
 ## Deprecations
 
-| Item             | Location                                  | Replacement                        | Deadline |
-| ---------------- | ----------------------------------------- | ---------------------------------- | -------- |
-| `Crawl4AIClient` | `src/infra/pagesummary/crawl4aiClient.ts` | PageContentFetcher + LlmSummarizer | None     |
+| Item                         | Location                                            | Replacement                        | Deadline |
+| ---------------------------- | --------------------------------------------------- | ---------------------------------- | -------- |
+| `Crawl4AIClient`             | `src/infra/pagesummary/crawl4aiClient.ts`           | PageContentFetcher + LlmSummarizer | None     |
+| `buildSummaryPrompt()`       | `src/infra/pagesummary/buildSummaryRepairPrompt.ts` | `summaryPrompt.build()`            | None     |
+| `buildSummaryRepairPrompt()` | `src/infra/pagesummary/buildSummaryRepairPrompt.ts` | `summaryRepairPrompt.build()`      | None     |
 
-**Note:** The combined `Crawl4AIClient` class that used Crawl4AI's built-in LLM extraction is superseded by the separated architecture (PageContentFetcher for crawling, LlmSummarizer for user's LLM). The old client remains for reference but is not used.
+**Note:** The combined `Crawl4AIClient` class that used Crawl4AI's built-in LLM extraction is superseded by the separated architecture (PageContentFetcher for crawling, LlmSummarizer for user's LLM). The old client remains for reference but is not used. The convenience functions are deprecated in favor of the PromptBuilder pattern.
 
 ---
 
 ## Resolved Issues
 
-| Date       | Issue                                     | Resolution                                         |
-| ---------- | ----------------------------------------- | -------------------------------------------------- |
-| 2026-01-25 | Manual user-service client implementation | Migrated to @intexuraos/internal-clients (INT-269) |
-| 2026-01-24 | AI summaries returning raw JSON           | Added parseSummaryResponse + repair mechanism      |
-| 2026-01-21 | 403 errors not distinguished from others  | Added ACCESS_DENIED error code                     |
-| 2026-01-20 | Summaries losing source language          | Added "SAME LANGUAGE" instruction to prompt        |
-| 2026-01-18 | Using shared LLM infrastructure           | Switched to user's own LLM keys via user-service   |
+| Date       | Issue                                      | Resolution                                           |
+| ---------- | ------------------------------------------ | ---------------------------------------------------- |
+| 2026-02-08 | INT-533 Summaries describing platforms     | Added CONTENT FOCUS section to summary prompts       |
+| 2026-02-08 | Response contract violations               | Migrated internalRoutes to reply.ok() / reply.fail() |
+| 2026-02-08 | Raw pino() logger usage                    | Migrated to createAppLogger() for Sentry integration |
+| 2026-02-08 | INT-408 Missing env var registration       | Added USER_SERVICE_URL and APP_SETTINGS_SERVICE_URL  |
+| 2026-02-08 | No specific error for Crawl4AI rate limits | Added RATE_LIMITED error code for HTTP 429           |
+| 2026-02-08 | INT-427 Coverage enforcement               | Strict 100% branch coverage with v8 ignore           |
+| 2026-02-08 | INT-301 User service client consolidation  | Removed local infra/user/ re-export wrapper          |
+| 2026-01-25 | Manual user-service client implementation  | Migrated to @intexuraos/internal-clients (INT-269)   |
+| 2026-01-24 | AI summaries returning raw JSON            | Added parseSummaryResponse + repair mechanism        |
+| 2026-01-21 | 403 errors not distinguished from others   | Added ACCESS_DENIED error code                       |
+| 2026-01-20 | Summaries losing source language           | Added "SAME LANGUAGE" instruction to prompt          |
+| 2026-01-18 | Using shared LLM infrastructure            | Switched to user's own LLM keys via user-service     |
 
 ---
 

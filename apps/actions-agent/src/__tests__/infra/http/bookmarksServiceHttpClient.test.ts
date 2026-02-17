@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
-import pino from 'pino';
 import { isOk, isErr } from '@intexuraos/common-core';
 import { createBookmarksServiceHttpClient } from '../../../infra/http/bookmarksServiceHttpClient.js';
-
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from '../../fakes.js';
 
 describe('createBookmarksServiceHttpClient', () => {
   const baseUrl = 'http://bookmarks-agent.local';
@@ -34,7 +32,7 @@ describe('createBookmarksServiceHttpClient', () => {
           },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com/article',
@@ -66,7 +64,7 @@ describe('createBookmarksServiceHttpClient', () => {
           },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com/article',
@@ -85,7 +83,7 @@ describe('createBookmarksServiceHttpClient', () => {
     it('returns error on HTTP 500', async () => {
       nock(baseUrl).post('/internal/bookmarks').reply(500, 'Internal Server Error');
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com',
@@ -104,7 +102,7 @@ describe('createBookmarksServiceHttpClient', () => {
     it('returns error on HTTP 401', async () => {
       nock(baseUrl).post('/internal/bookmarks').reply(401, { error: 'Unauthorized' });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com',
@@ -128,7 +126,7 @@ describe('createBookmarksServiceHttpClient', () => {
           error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'not-a-url',
@@ -147,7 +145,7 @@ describe('createBookmarksServiceHttpClient', () => {
     it('returns error when response data is undefined', async () => {
       nock(baseUrl).post('/internal/bookmarks').reply(200, { success: true });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com',
@@ -166,7 +164,7 @@ describe('createBookmarksServiceHttpClient', () => {
     it('returns error on network failure', async () => {
       nock(baseUrl).post('/internal/bookmarks').replyWithError('Connection refused');
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com',
@@ -202,7 +200,7 @@ describe('createBookmarksServiceHttpClient', () => {
           },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com/typescript',
@@ -227,7 +225,7 @@ describe('createBookmarksServiceHttpClient', () => {
           },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com',
@@ -257,7 +255,7 @@ describe('createBookmarksServiceHttpClient', () => {
           },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com',
@@ -287,7 +285,7 @@ describe('createBookmarksServiceHttpClient', () => {
           },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com',
@@ -316,7 +314,7 @@ describe('createBookmarksServiceHttpClient', () => {
           },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com',
@@ -342,7 +340,7 @@ describe('createBookmarksServiceHttpClient', () => {
           error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'not-a-url',
@@ -362,7 +360,7 @@ describe('createBookmarksServiceHttpClient', () => {
     it('includes SERVICE_UNAVAILABLE errorCode on network failure', async () => {
       nock(baseUrl).post('/internal/bookmarks').replyWithError('Connection refused');
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.createBookmark({
         userId: 'user-456',
         url: 'https://example.com',
@@ -400,7 +398,7 @@ describe('createBookmarksServiceHttpClient', () => {
           },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.forceRefreshBookmark('bookmark-123');
 
       expect(isOk(result)).toBe(true);
@@ -420,7 +418,7 @@ describe('createBookmarksServiceHttpClient', () => {
           error: { code: 'NOT_FOUND', message: 'Bookmark not found' },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.forceRefreshBookmark('nonexistent');
 
       expect(isErr(result)).toBe(true);
@@ -432,7 +430,7 @@ describe('createBookmarksServiceHttpClient', () => {
     it('returns error on HTTP 500', async () => {
       nock(baseUrl).post('/internal/bookmarks/bookmark-500/force-refresh').reply(500, 'Internal Server Error');
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.forceRefreshBookmark('bookmark-500');
 
       expect(isErr(result)).toBe(true);
@@ -446,7 +444,7 @@ describe('createBookmarksServiceHttpClient', () => {
         .post('/internal/bookmarks/bookmark-401/force-refresh')
         .reply(401, { error: 'Unauthorized' });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.forceRefreshBookmark('bookmark-401');
 
       expect(isErr(result)).toBe(true);
@@ -463,7 +461,7 @@ describe('createBookmarksServiceHttpClient', () => {
           error: { code: 'FETCH_FAILED', message: 'Failed to fetch preview' },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.forceRefreshBookmark('bookmark-fail');
 
       expect(isErr(result)).toBe(true);
@@ -477,7 +475,7 @@ describe('createBookmarksServiceHttpClient', () => {
         .post('/internal/bookmarks/bookmark-nodata/force-refresh')
         .reply(200, { success: true });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.forceRefreshBookmark('bookmark-nodata');
 
       expect(isErr(result)).toBe(true);
@@ -491,7 +489,7 @@ describe('createBookmarksServiceHttpClient', () => {
         .post('/internal/bookmarks/bookmark-network/force-refresh')
         .replyWithError('Connection refused');
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.forceRefreshBookmark('bookmark-network');
 
       expect(isErr(result)).toBe(true);
@@ -521,7 +519,7 @@ describe('createBookmarksServiceHttpClient', () => {
           }];
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.forceRefreshBookmark('bookmark-no-content-type');
 
       expect(scope.isDone()).toBe(true);
@@ -542,7 +540,7 @@ describe('createBookmarksServiceHttpClient', () => {
           },
         });
 
-      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: createMockLogger() });
       const result = await client.forceRefreshBookmark('bookmark-failed');
 
       expect(isOk(result)).toBe(true);

@@ -1,5 +1,4 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import pino from 'pino';
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
@@ -11,7 +10,7 @@ import {
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
-import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
+import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { mobileNotificationsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 
@@ -114,11 +113,7 @@ export async function buildServer(): Promise<FastifyInstance> {
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
-            stream: createSentryStream(
-              pino.multistream([
-                pino.destination({ dest: 1, sync: false }),
-              ])
-            ),
+            stream: createLogStream(),
           },
     disableRequestLogging: true,
   });

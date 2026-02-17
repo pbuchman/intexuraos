@@ -122,13 +122,6 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    promptvault_service = {
-      name      = "intexuraos-promptvault-service"
-      app_path  = "apps/promptvault-service"
-      port      = 8080
-      min_scale = 0
-      max_scale = 1
-    }
     notion_service = {
       name      = "intexuraos-notion-service"
       app_path  = "apps/notion-service"
@@ -213,6 +206,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    code_agent = {
+      name      = "intexuraos-code-agent"
+      app_path  = "apps/code-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
     app_settings_service = {
       name      = "intexuraos-app-settings-service"
       app_path  = "apps/app-settings-service"
@@ -241,6 +241,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    chat_agent = {
+      name      = "intexuraos-chat-agent"
+      app_path  = "apps/chat-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -258,7 +265,6 @@ locals {
     INTEXURAOS_ENVIRONMENT                      = var.environment
     INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
     INTEXURAOS_USER_SERVICE_URL                 = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_PROMPTVAULT_SERVICE_URL          = "https://${local.services.promptvault_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_NOTION_SERVICE_URL               = "https://${local.services.notion_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_WHATSAPP_SERVICE_URL             = "https://${local.services.whatsapp_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL = "https://${local.services.mobile_notifications_service.name}-${local.cloud_run_url_suffix}"
@@ -270,10 +276,12 @@ locals {
     INTEXURAOS_NOTES_AGENT_URL                  = "https://${local.services.notes_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_TODOS_AGENT_URL                  = "https://${local.services.todos_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_BOOKMARKS_AGENT_URL              = "https://${local.services.bookmarks_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_CODE_AGENT_URL                   = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_APP_SETTINGS_SERVICE_URL         = "https://${local.services.app_settings_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_CALENDAR_AGENT_URL               = "https://${local.services.calendar_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_WEB_AGENT_URL                    = "https://${local.services.web_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_LINEAR_AGENT_URL                 = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_CHAT_AGENT_URL                   = "https://${local.services.chat_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_API_DOCS_HUB_URL                 = "https://${local.services.api_docs_hub.name}-${local.cloud_run_url_suffix}"
   }
 }
@@ -296,6 +304,8 @@ resource "google_project_service" "apis" {
     "compute.googleapis.com",
     "cloudscheduler.googleapis.com",
     "calendar-json.googleapis.com",
+    "cloudfunctions.googleapis.com",
+    "eventarc.googleapis.com",
   ])
 
   project            = var.project_id
@@ -460,7 +470,7 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
     # Speechmatics API secrets
-    "INTEXURAOS_SPEECHMATICS_API_KEY" = "Speechmatics Batch API key for speech transcription"
+    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for whatsapp-service"
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Firebase configuration for web app
@@ -477,7 +487,27 @@ module "secret_manager" {
     "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
     # Crawl4AI Cloud API
-    "INTEXURAOS_CRAWL4AI_API_KEY" = "Crawl4AI Cloud API key for web page content extraction"
+    "INTEXURAOS_CRAWL4AI_APP_API_KEY" = "Crawl4AI Cloud API key for web-agent"
+    # LLM API keys
+    "INTEXURAOS_OPENAI_APP_API_KEY" = "OpenAI API key for chat-agent"
+    "INTEXURAOS_ZAI_APP_API_KEY"    = "Platform ZAI API key for all services"
+    "INTEXURAOS_GEMINI_APP_API_KEY" = "Gemini API key for orchestrator completion verifier"
+    # External service API keys for worker containers
+    "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to Claude worker containers"
+    "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to Claude worker containers"
+    # Code worker secrets (INT-156)
+    "INTEXURAOS_ORCHESTRATOR_SECRET"   = "HMAC signing secret for orchestrator communication"
+    "INTEXURAOS_WEBHOOK_VERIFY_SECRET" = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
+    # GitHub App for code worker PRs (INT-156)
+    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY" = "GitHub App private key (PEM format) for code worker authentication"
+    "INTEXURAOS_GITHUB_APP_ID"          = "GitHub App ID for code worker"
+    "INTEXURAOS_GITHUB_INSTALLATION_ID" = "GitHub App installation ID for pbuchman/intexuraos"
+    # Orchestrator repository management (INT-515)
+    "INTEXURAOS_REPOSITORY_URL"        = "GitHub repository URL for orchestrator self-managed clone"
+    "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
+    # Dash0 OpenTelemetry observability
+    "INTEXURAOS_DASH0_OTLP_ENDPOINT" = "Dash0 OTLP HTTP ingress endpoint for OpenTelemetry"
+    "INTEXURAOS_DASH0_AUTH_TOKEN"    = "Dash0 Bearer auth token for OTLP export"
   }
 
   depends_on = [google_project_service.apis]
@@ -526,6 +556,10 @@ locals {
     INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
     INTEXURAOS_SENTRY_DSN          = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+    INTEXURAOS_ZAI_APP_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_ZAI_APP_API_KEY"]
+    INTEXURAOS_GEMINI_APP_API_KEY  = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_APP_API_KEY"]
+    INTEXURAOS_DASH0_OTLP_ENDPOINT = module.secret_manager.secret_ids["INTEXURAOS_DASH0_OTLP_ENDPOINT"]
+    INTEXURAOS_DASH0_AUTH_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_DASH0_AUTH_TOKEN"]
   }
 }
 
@@ -731,7 +765,7 @@ module "pubsub_llm_call" {
   ]
 }
 
-# Topic for sending WhatsApp messages (actions-agent, research-agent -> whatsapp-service)
+# Topic for sending WhatsApp messages (actions-agent, research-agent, code-agent -> whatsapp-service)
 module "pubsub_whatsapp_send" {
   source = "../../modules/pubsub-push"
 
@@ -748,6 +782,7 @@ module "pubsub_whatsapp_send" {
     actions_agent   = module.iam.service_accounts["actions_agent"]
     research_agent  = module.iam.service_accounts["research_agent"]
     bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
+    code_agent      = module.iam.service_accounts["code_agent"]
   }
 
   depends_on = [
@@ -822,32 +857,6 @@ module "user_service" {
   ]
 }
 
-module "promptvault_service" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.promptvault_service.name
-  service_account = module.iam.service_accounts["promptvault_service"]
-  port            = local.services.promptvault_service.port
-  min_scale       = local.services.promptvault_service.min_scale
-  max_scale       = local.services.promptvault_service.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/promptvault-service:latest"
-
-  secrets = local.common_service_secrets
-
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
 # Notion Service - Notion integration management and webhooks
 module "notion_service" {
   source = "../../modules/cloud-run-service"
@@ -898,7 +907,7 @@ module "whatsapp_service" {
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
     INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
     INTEXURAOS_WHATSAPP_WABA_ID         = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_WABA_ID"]
-    INTEXURAOS_SPEECHMATICS_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_API_KEY"]
+    INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
@@ -909,6 +918,7 @@ module "whatsapp_service" {
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
     INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC       = module.pubsub_approval_reply.topic_name
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC        = "intexuraos-whatsapp-send-${var.environment}"
   })
 
   depends_on = [
@@ -968,7 +978,6 @@ module "api_docs_hub" {
   # OpenAPI URLs use module outputs (api_docs_hub depends on all services anyway)
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_USER_SERVICE_OPENAPI_URL                 = "${module.user_service.service_url}/openapi.json"
-    INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL          = "${module.promptvault_service.service_url}/openapi.json"
     INTEXURAOS_NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
     INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
@@ -982,6 +991,7 @@ module "api_docs_hub" {
     INTEXURAOS_TODOS_AGENT_OPENAPI_URL                  = "${module.todos_agent.service_url}/openapi.json"
     INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL              = "${module.bookmarks_agent.service_url}/openapi.json"
     INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL               = "${module.calendar_agent.service_url}/openapi.json"
+    INTEXURAOS_CHAT_AGENT_OPENAPI_URL                   = "${module.chat_agent.service_url}/openapi.json"
   })
 
   depends_on = [
@@ -989,7 +999,6 @@ module "api_docs_hub" {
     module.iam,
     module.secret_manager,
     module.user_service,
-    module.promptvault_service,
     module.notion_service,
     module.whatsapp_service,
     module.mobile_notifications_service,
@@ -1002,6 +1011,7 @@ module "api_docs_hub" {
     module.todos_agent,
     module.bookmarks_agent,
     module.calendar_agent,
+    module.chat_agent,
   ]
 }
 
@@ -1032,6 +1042,8 @@ module "research_agent" {
     INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
     INTEXURAOS_SHARED_CONTENT_BUCKET         = module.shared_content.bucket_name
     INTEXURAOS_SHARE_BASE_URL                = "https://${var.web_app_domain}/share/research"
+    INTEXURAOS_NOTION_SERVICE_URL            = module.notion_service.service_url
+    INTEXURAOS_IMAGE_PUBLIC_BASE_URL         = "https://${var.web_app_domain}"
   })
 
   depends_on = [
@@ -1287,6 +1299,11 @@ module "pubsub_bookmark_summarize" {
   push_audience              = module.bookmarks_agent.service_url
   ack_deadline_seconds       = 120
 
+  # 6-hour retry window for transient Crawl4AI errors
+  retry_minimum_backoff = "30s"
+  retry_maximum_backoff = "600s"
+  max_delivery_attempts = 50
+
   publisher_service_accounts = {
     bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
   }
@@ -1374,6 +1391,41 @@ module "app_settings_service" {
   ]
 }
 
+# Code Agent - Code execution service (INT-156)
+module "code_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.code_agent.name
+  service_account = module.iam.service_accounts["code_agent"]
+  port            = local.services.code_agent.port
+  min_scale       = local.services.code_agent.min_scale
+  max_scale       = local.services.code_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/code-agent:latest"
+
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_WEBHOOK_VERIFY_SECRET = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
+    INTEXURAOS_ORCHESTRATOR_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY  = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
+    INTEXURAOS_GITHUB_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
+  })
+
+  env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+  })
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
 # Calendar Agent - Google Calendar integration
 module "calendar_agent" {
   source = "../../modules/cloud-run-service"
@@ -1426,6 +1478,79 @@ module "linear_agent" {
   ]
 }
 
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Linear Sync (Hourly) (INT-444)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_linear_agent" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.linear_agent.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.linear_agent]
+}
+
+resource "google_cloud_scheduler_job" "linear_sync_hourly" {
+  name        = "intexuraos-linear-sync-hourly-${var.environment}"
+  description = "Sync all Linear issues for all connected users hourly"
+  schedule    = "0 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/sync-all"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_linear_agent,
+    module.linear_agent,
+  ]
+}
+
+# Chat Agent - In-app AI assistant with RAG
+module "chat_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.chat_agent.name
+  service_account = module.iam.service_accounts["chat_agent"]
+  port            = local.services.chat_agent.port
+  min_scale       = local.services.chat_agent.min_scale
+  max_scale       = local.services.chat_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/chat-agent:latest"
+
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_OPENAI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
+  })
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
 # Web Agent - Link preview and Open Graph metadata extraction
 module "web_agent" {
   source = "../../modules/cloud-run-service"
@@ -1443,7 +1568,7 @@ module "web_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/web-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_CRAWL4AI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_CRAWL4AI_API_KEY"]
+    INTEXURAOS_CRAWL4AI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_CRAWL4AI_APP_API_KEY"]
   })
   env_vars = local.common_service_env_vars
 
@@ -1469,15 +1594,17 @@ module "cloud_build" {
   github_branch          = var.github_branch
   github_connection_name = var.github_connection_name
 
-  artifact_registry_url = module.artifact_registry.repository_url
-  static_assets_bucket  = module.static_assets.bucket_name
-  web_app_bucket        = module.web_app.bucket_name
+  artifact_registry_url   = module.artifact_registry.repository_url
+  static_assets_bucket    = module.static_assets.bucket_name
+  web_app_bucket          = module.web_app.bucket_name
+  functions_source_bucket = google_storage_bucket.cloud_functions_source.name
 
   depends_on = [
     google_project_service.apis,
     module.artifact_registry,
     module.static_assets,
     module.web_app,
+    google_storage_bucket.cloud_functions_source,
   ]
 }
 
@@ -1734,6 +1861,304 @@ resource "google_secret_manager_secret_version" "firebase_project_id" {
 }
 
 # -----------------------------------------------------------------------------
+# Cloud Functions - Source Bucket
+# -----------------------------------------------------------------------------
+
+resource "google_storage_bucket" "cloud_functions_source" {
+  name          = "intexuraos-functions-source-${var.environment}"
+  project       = var.project_id
+  location      = var.region
+  force_destroy = true
+
+  uniform_bucket_level_access = true
+
+  labels = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+# Placeholder source for initial deployment (will be replaced by Cloud Build)
+resource "google_storage_bucket_object" "function_placeholder" {
+  name    = "placeholder/function.zip"
+  bucket  = google_storage_bucket.cloud_functions_source.name
+  content = "placeholder"
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Functions - Service Account
+# -----------------------------------------------------------------------------
+
+resource "google_service_account" "cloud_functions" {
+  account_id   = "intexuraos-functions-${var.environment}"
+  display_name = "Cloud Functions Service Account"
+  description  = "Service account for Cloud Functions (vm-lifecycle, log-cleanup)"
+
+  depends_on = [google_project_service.apis]
+}
+
+# Grant Cloud Functions SA permission to read Firestore
+resource "google_project_iam_member" "functions_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
+}
+
+# Grant Cloud Functions SA permission to manage Compute Engine VMs
+resource "google_project_iam_member" "functions_compute" {
+  project = var.project_id
+  role    = "roles/compute.instanceAdmin.v1"
+  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
+}
+
+# Grant Cloud Functions SA permission to receive Eventarc events
+resource "google_project_iam_member" "functions_eventarc" {
+  project = var.project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
+}
+
+# Grant Cloud Functions SA permission to access secrets (for INTEXURAOS_INTERNAL_AUTH_TOKEN)
+resource "google_secret_manager_secret_iam_member" "functions_internal_auth_token" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloud_functions.email}"
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Functions - VM Lifecycle (Start/Stop)
+# -----------------------------------------------------------------------------
+
+module "function_vm_start" {
+  source = "../../modules/cloud-function"
+
+  project_id    = var.project_id
+  region        = var.region
+  environment   = var.environment
+  function_name = "intexuraos-vm-start-${var.environment}"
+  description   = "Start a GCE VM instance"
+  entry_point   = "startVm"
+  runtime       = "nodejs22"
+
+  source_bucket   = google_storage_bucket.cloud_functions_source.name
+  source_object   = "vm-lifecycle/function.zip"
+  service_account = google_service_account.cloud_functions.email
+
+  trigger_type     = "http"
+  invoker_members  = ["serviceAccount:${google_service_account.cloud_scheduler.email}"]
+  timeout_seconds  = 120
+  available_memory = "256M"
+
+  env_vars = {
+    INTEXURAOS_ENVIRONMENT    = var.environment
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+  }
+
+  secrets = {
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    google_storage_bucket_object.function_placeholder,
+    google_service_account.cloud_functions,
+  ]
+}
+
+module "function_vm_stop" {
+  source = "../../modules/cloud-function"
+
+  project_id    = var.project_id
+  region        = var.region
+  environment   = var.environment
+  function_name = "intexuraos-vm-stop-${var.environment}"
+  description   = "Stop a GCE VM instance"
+  entry_point   = "stopVm"
+  runtime       = "nodejs22"
+
+  source_bucket   = google_storage_bucket.cloud_functions_source.name
+  source_object   = "vm-lifecycle/function.zip"
+  service_account = google_service_account.cloud_functions.email
+
+  trigger_type     = "http"
+  invoker_members  = ["serviceAccount:${google_service_account.cloud_scheduler.email}"]
+  timeout_seconds  = 120
+  available_memory = "256M"
+
+  env_vars = {
+    INTEXURAOS_ENVIRONMENT    = var.environment
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+  }
+
+  secrets = {
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    google_storage_bucket_object.function_placeholder,
+    google_service_account.cloud_functions,
+  ]
+}
+
+# Cloud Scheduler - Start VM at 7 AM Poland time (Mon-Fri)
+resource "google_cloud_scheduler_job" "vm_start" {
+  name        = "intexuraos-vm-start-${var.environment}"
+  description = "Start VM instances at 7 AM Poland time on weekdays"
+  schedule    = "0 7 * * 1-5"
+  time_zone   = "Europe/Warsaw"
+  region      = var.region
+
+  http_target {
+    uri         = module.function_vm_start.function_uri
+    http_method = "POST"
+    body        = base64encode(jsonencode({ trigger = "scheduled" }))
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.function_vm_start.function_uri
+    }
+  }
+
+  retry_config {
+    retry_count          = 3
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.function_vm_start,
+  ]
+}
+
+# Cloud Scheduler - Stop VM at 11 PM Poland time (daily)
+resource "google_cloud_scheduler_job" "vm_stop" {
+  name        = "intexuraos-vm-stop-${var.environment}"
+  description = "Stop VM instances at 11 PM Poland time daily"
+  schedule    = "0 23 * * *"
+  time_zone   = "Europe/Warsaw"
+  region      = var.region
+
+  http_target {
+    uri         = module.function_vm_stop.function_uri
+    http_method = "POST"
+    body        = base64encode(jsonencode({ trigger = "scheduled" }))
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.function_vm_stop.function_uri
+    }
+  }
+
+  retry_config {
+    retry_count          = 3
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.function_vm_stop,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Functions - Log Cleanup (90-day retention)
+# -----------------------------------------------------------------------------
+
+# Pub/Sub topic for log cleanup trigger
+resource "google_pubsub_topic" "log_cleanup" {
+  name    = "intexuraos-log-cleanup-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+# Grant Cloud Scheduler permission to publish to the topic
+resource "google_pubsub_topic_iam_member" "scheduler_publishes_log_cleanup" {
+  project = var.project_id
+  topic   = google_pubsub_topic.log_cleanup.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+}
+
+module "function_log_cleanup" {
+  source = "../../modules/cloud-function"
+
+  project_id    = var.project_id
+  region        = var.region
+  environment   = var.environment
+  function_name = "intexuraos-log-cleanup-${var.environment}"
+  description   = "Clean up old execution logs (90-day retention)"
+  entry_point   = "cleanupLogs"
+  runtime       = "nodejs22"
+
+  source_bucket   = google_storage_bucket.cloud_functions_source.name
+  source_object   = "log-cleanup/function.zip"
+  service_account = google_service_account.cloud_functions.email
+
+  trigger_type = "pubsub"
+  pubsub_topic = google_pubsub_topic.log_cleanup.id
+
+  timeout_seconds  = 540
+  available_memory = "512M"
+
+  env_vars = {
+    INTEXURAOS_ENVIRONMENT    = var.environment
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+    INTEXURAOS_CODE_AGENT_URL = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
+  }
+
+  secrets = {
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    google_storage_bucket_object.function_placeholder,
+    google_service_account.cloud_functions,
+    google_pubsub_topic.log_cleanup,
+    google_secret_manager_secret_iam_member.functions_internal_auth_token,
+  ]
+}
+
+# Cloud Scheduler - Trigger log cleanup at 3 AM UTC daily
+resource "google_cloud_scheduler_job" "log_cleanup" {
+  name        = "intexuraos-log-cleanup-${var.environment}"
+  description = "Trigger log cleanup at 3 AM UTC daily"
+  schedule    = "0 3 * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  pubsub_target {
+    topic_name = google_pubsub_topic.log_cleanup.id
+    data       = base64encode(jsonencode({ trigger = "scheduled" }))
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_pubsub_topic.log_cleanup,
+    google_pubsub_topic_iam_member.scheduler_publishes_log_cleanup,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
 
@@ -1756,11 +2181,6 @@ output "artifact_registry_url" {
 output "user_service_url" {
   description = "User Service URL"
   value       = module.user_service.service_url
-}
-
-output "promptvault_service_url" {
-  description = "PromptVault Service URL"
-  value       = module.promptvault_service.service_url
 }
 
 output "notion_service_url" {
@@ -1918,3 +2338,29 @@ output "claude_code_dev_service_account" {
   description = "Claude Code dev service account email for local development"
   value       = module.claude_code_dev.service_account_email
 }
+
+output "cloud_functions_source_bucket" {
+  description = "GCS bucket for Cloud Functions source code"
+  value       = google_storage_bucket.cloud_functions_source.name
+}
+
+output "function_vm_start_uri" {
+  description = "VM Start Cloud Function HTTP endpoint"
+  value       = module.function_vm_start.function_uri
+}
+
+output "function_vm_stop_uri" {
+  description = "VM Stop Cloud Function HTTP endpoint"
+  value       = module.function_vm_stop.function_uri
+}
+
+output "function_log_cleanup_name" {
+  description = "Log Cleanup Cloud Function name"
+  value       = module.function_log_cleanup.function_name
+}
+
+output "pubsub_log_cleanup_topic" {
+  description = "Pub/Sub topic for log cleanup trigger"
+  value       = google_pubsub_topic.log_cleanup.name
+}
+

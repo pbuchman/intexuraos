@@ -1,45 +1,11 @@
 services:
-  firebase-emulator:
-    image: andreysenov/firebase-tools
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
     ports:
-      - '8100:8100'
-      - '8101:8101'
       - '8102:8102'
-      - '8104:8104'
-    volumes:
-      - ../firebase.json:/home/node/firebase.json:ro
-      - ../data/firestore-export:/data/firestore-export:ro
-      - firebase-cache:/home/node/.cache/firebase
-    command: >
-      sh -c "if [ -d /data/firestore-export ] && [ -n \"$$(ls -A /data/firestore-export 2>/dev/null)\" ]; then
-        echo 'Importing Firestore data from /data/firestore-export...';
-        firebase emulators:start --project=demo-intexuraos --import=/data/firestore-export;
-      else
-        echo 'Starting with empty Firestore...';
-        firebase emulators:start --project=demo-intexuraos;
-      fi"
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8102 --project=demo-intexuraos
     healthcheck:
-      test:
-        [
-          'CMD',
-          'node',
-          '-e',
-          'require("http").get("http://localhost:8101", (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on("error", () => process.exit(1))',
-        ]
-      interval: 5s
-      timeout: 3s
-      start_period: 30s
-      retries: 10
-
-  fake-gcs:
-    image: fsouza/fake-gcs-server
-    ports:
-      - '8103:8103'
-    command: -scheme http -port 8103 -external-url http://localhost:8103
-    volumes:
-      - gcs-data:/storage
-    healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:8103/storage/v1/b']
+      test: ['CMD', 'curl', '-f', 'http://localhost:8102']
       interval: 5s
       timeout: 3s
       start_period: 10s
@@ -52,16 +18,12 @@ services:
     ports:
       - '8105:8105'
     environment:
-      - PUBSUB_EMULATOR_HOST=firebase-emulator:8102
-      - PUBSUB_PROJECT_ID=demo-intexuraos
+      - PUBSUB_EMULATOR_HOST=pubsub-emulator:8102
+      - PUBSUB_PROJECT_ID=${INTEXURAOS_GCP_PROJECT_ID:-demo-intexuraos}
       - PORT=8105
-      - INTEXURAOS_INTERNAL_AUTH_TOKEN=local-dev-token
+      - INTEXURAOS_INTERNAL_AUTH_TOKEN=${INTEXURAOS_INTERNAL_AUTH_TOKEN}
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     depends_on:
-      firebase-emulator:
+      pubsub-emulator:
         condition: service_healthy
-
-volumes:
-  gcs-data:
-  firebase-cache:

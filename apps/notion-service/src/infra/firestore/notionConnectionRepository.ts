@@ -9,6 +9,7 @@ import type {
   NotionError,
 } from '../../domain/integration/ports/ConnectionRepository.js';
 
+/* v8 ignore start -- ts-type: query is performed with a specific document id @preserve */
 /**
  * Internal document structure stored in Firestore.
  */
@@ -19,6 +20,7 @@ interface NotionConnectionDoc {
   createdAt: string;
   updatedAt: string;
 }
+/* v8 ignore stop @preserve */
 
 const COLLECTION_NAME = 'notion_connections';
 
@@ -140,7 +142,9 @@ export async function disconnectNotion(
 
     return ok({
       connected: false,
+      /* v8 ignore start -- ts-type: fallback for new connections @preserve */
       createdAt: existingData?.createdAt ?? now,
+      /* v8 ignore stop @preserve */
       updatedAt: now,
     });
   } catch (error) {
@@ -150,3 +154,4 @@ export async function disconnectNotion(
     });
   }
 }
+

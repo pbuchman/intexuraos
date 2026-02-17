@@ -12,6 +12,7 @@ export type {
   UserSettings,
   LlmProvider,
   LlmApiKeys,
+  LlmPreferences,
   LlmTestResult,
   LlmTestResults,
   NotificationFilter,

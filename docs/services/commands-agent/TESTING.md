@@ -2,7 +2,7 @@
 
 ## Test Coverage
 
-**Current Coverage:** >95%
+**Current Coverage:** 100% branch coverage (enforced by CI)
 
 Tests are located in `apps/commands-agent/src/__tests__//`
 

@@ -15,6 +15,7 @@ import {
   getMessageMediaUrl,
   getWhatsAppMessages,
 } from '@/services';
+import { formatDateTime } from '@/utils/dateFormat';
 import type { WhatsAppMessage } from '@/types';
 import {
   Check,
@@ -53,7 +54,7 @@ function TextWithLinks({ text }: { text: string }): React.JSX.Element {
               href={part}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 underline hover:text-blue-800"
+              className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
               onClick={(e): void => {
                 e.stopPropagation();
               }}
@@ -92,17 +93,6 @@ function NoteDetailModal({
   onClose,
 }: Omit<NoteDetailModalProps, 'accessToken'>): React.JSX.Element {
   const [copied, setCopied] = useState(false);
-
-  const receivedDate = new Date(message.receivedAt);
-  const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-  const formattedTime = receivedDate.toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 
   const textToCopy = message.caption ?? message.text;
   const hasTextContent = textToCopy !== '';
@@ -144,11 +134,11 @@ function NoteDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg bg-white shadow-xl">
+      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg bg-white shadow-xl dark:bg-slate-800">
         {/* Header */}
-        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4">
-          <div className="text-sm text-slate-500">
-            {formattedDate} • {formattedTime}
+        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+          <div className="text-sm text-slate-500 dark:text-slate-400">
+            {formatDateTime(message.receivedAt)}
           </div>
           <div className="flex items-center gap-2">
             {hasTextContent && (
@@ -158,8 +148,8 @@ function NoteDetailModal({
                 }}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                   copied
-                    ? 'bg-green-50 text-green-600'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
                 }`}
                 aria-label={copied ? 'Copied!' : 'Copy text'}
               >
@@ -178,7 +168,7 @@ function NoteDetailModal({
             )}
             <button
               onClick={onClose}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
@@ -190,7 +180,7 @@ function NoteDetailModal({
         <div className="p-4">
           {/* Text content */}
           {message.text !== '' && (
-            <p className="whitespace-pre-wrap break-word text-slate-800">
+            <p className="whitespace-pre-wrap break-word text-slate-800 dark:text-slate-200">
               <TextWithLinks text={message.text} />
             </p>
           )}
@@ -199,7 +189,7 @@ function NoteDetailModal({
           {message.caption !== null &&
             message.caption !== '' &&
             message.caption !== message.text && (
-              <p className="mt-3 whitespace-pre-wrap break-word text-slate-600 italic">
+              <p className="mt-3 whitespace-pre-wrap break-word text-slate-600 italic dark:text-slate-400">
                 <TextWithLinks text={message.caption} />
               </p>
             )}
@@ -220,17 +210,6 @@ function TranscriptionDetailModal({
   onClose: () => void;
 }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
-
-  const receivedDate = new Date(message.receivedAt);
-  const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-  const formattedTime = receivedDate.toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 
   const transcriptionText = message.transcription ?? '';
   const hasContent = transcriptionText !== '';
@@ -272,15 +251,13 @@ function TranscriptionDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg bg-white shadow-xl">
+      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg bg-white shadow-xl dark:bg-slate-800">
         {/* Header */}
-        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4">
+        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-2">
-            <Mic className="h-4 w-4 text-slate-500" />
-            <span className="text-sm font-medium text-slate-700">Transcription</span>
-            <span className="text-sm text-slate-500">
-              • {formattedDate} • {formattedTime}
-            </span>
+            <Mic className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Transcription</span>
+            <span className="text-sm text-slate-500 dark:text-slate-400">• {formatDateTime(message.receivedAt)}</span>
           </div>
           <div className="flex items-center gap-2">
             {hasContent && (
@@ -290,8 +267,8 @@ function TranscriptionDetailModal({
                 }}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                   copied
-                    ? 'bg-green-50 text-green-600'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
                 }`}
                 aria-label={copied ? 'Copied!' : 'Copy transcription'}
               >
@@ -310,7 +287,7 @@ function TranscriptionDetailModal({
             )}
             <button
               onClick={onClose}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
@@ -320,7 +297,7 @@ function TranscriptionDetailModal({
 
         {/* Content */}
         <div className="p-4">
-          <p className="whitespace-pre-wrap break-word text-slate-800">
+          <p className="whitespace-pre-wrap break-word text-slate-800 dark:text-slate-200">
             <TextWithLinks text={transcriptionText} />
           </p>
         </div>
@@ -341,17 +318,6 @@ function MessageItem({
   const [copied, setCopied] = useState(false);
   const [copiedTranscription, setCopiedTranscription] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const receivedDate = new Date(message.receivedAt);
-  const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-  const formattedTime = receivedDate.toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 
   const handleCopy = async (): Promise<void> => {
     const textToCopy = message.caption ?? message.text;
@@ -409,14 +375,14 @@ function MessageItem({
 
   return (
     <div
-      className={`group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 ${
-        isDeleting ? 'scale-95 opacity-50' : 'hover:border-slate-300 hover:shadow-md'
+      className={`group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 dark:border-slate-700 dark:bg-slate-800 ${
+        isDeleting ? 'scale-95 opacity-50' : 'hover:border-slate-300 hover:shadow-md dark:hover:border-slate-600'
       }`}
     >
       {/* Delete confirmation dialog */}
       {showDeleteConfirm && (
-        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3">
-          <p className="mb-2 text-sm text-red-700">Are you sure you want to delete this message?</p>
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
+          <p className="mb-2 text-sm text-red-700 dark:text-red-300">Are you sure you want to delete this message?</p>
           <div className="flex gap-2">
             <button
               onClick={handleDeleteConfirm}
@@ -426,7 +392,7 @@ function MessageItem({
             </button>
             <button
               onClick={handleDeleteCancel}
-              className="rounded bg-slate-200 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-300"
+              className="rounded bg-slate-200 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-300 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500"
             >
               Cancel
             </button>
@@ -438,7 +404,7 @@ function MessageItem({
         <div className="min-w-0 flex-1">
           {/* Media type indicator - only show for actual image/audio messages */}
           {(message.mediaType === 'image' || message.mediaType === 'audio') && (
-            <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
+            <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               {message.mediaType === 'image' ? (
                 <>
                   <Image className="h-3.5 w-3.5" />
@@ -474,21 +440,21 @@ function MessageItem({
               {/* Transcription status/content */}
               {message.transcriptionStatus === 'pending' ||
               message.transcriptionStatus === 'processing' ? (
-                <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                <div className="mt-2 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                   {/* WhatsApp-style typing indicator */}
                   <div className="flex items-center gap-1">
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:0ms]" />
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:150ms]" />
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:300ms]" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 [animation-delay:0ms]" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 [animation-delay:150ms]" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 [animation-delay:300ms]" />
                   </div>
-                  <span className="text-xs text-slate-400">Transcribing...</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">Transcribing...</span>
                 </div>
               ) : message.transcriptionStatus === 'completed' &&
                 message.transcription !== undefined &&
                 message.transcription !== '' ? (
-                <div className="mt-2 rounded-md bg-slate-50 p-3">
+                <div className="mt-2 rounded-md bg-slate-50 p-3 dark:bg-slate-700">
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs font-medium text-slate-500">Transcription:</p>
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Transcription:</p>
                     <button
                       onClick={(e): void => {
                         e.stopPropagation();
@@ -496,8 +462,8 @@ function MessageItem({
                       }}
                       className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-all ${
                         copiedTranscription
-                          ? 'bg-green-100 text-green-600'
-                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                          ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500'
                       }`}
                       aria-label={copiedTranscription ? 'Copied!' : 'Copy transcription'}
                     >
@@ -518,21 +484,21 @@ function MessageItem({
                     onClick={(): void => {
                       onTranscriptionClick(message);
                     }}
-                    className="cursor-pointer hover:bg-slate-100 -mx-1 px-1 py-1 rounded transition-colors"
+                    className="cursor-pointer hover:bg-slate-100 -mx-1 px-1 py-1 rounded transition-colors dark:hover:bg-slate-600"
                   >
-                    <p className="whitespace-pre-wrap text-sm text-slate-700">
+                    <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
                       <TextWithLinks text={message.transcription} />
                     </p>
                     {message.transcription.length > TEXT_PREVIEW_LIMIT && (
-                      <span className="text-sm text-blue-600 hover:underline">show more</span>
+                      <span className="text-sm text-blue-600 hover:underline dark:text-blue-400">show more</span>
                     )}
                   </div>
                 </div>
               ) : message.transcriptionStatus === 'failed' ? (
-                <div className="mt-2 rounded-md bg-red-50 p-3 text-sm text-red-600">
+                <div className="mt-2 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-400">
                   <p className="font-medium">Transcription failed</p>
                   {message.transcriptionError?.message !== undefined && (
-                    <p className="mt-1 text-xs text-red-500">{message.transcriptionError.message}</p>
+                    <p className="mt-1 text-xs text-red-500 dark:text-red-400">{message.transcriptionError.message}</p>
                   )}
                 </div>
               ) : null}
@@ -547,16 +513,16 @@ function MessageItem({
               }}
               className={
                 message.mediaType !== 'audio'
-                  ? 'cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded transition-colors'
+                  ? 'cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded transition-colors dark:hover:bg-slate-700'
                   : ''
               }
             >
-              <p className="whitespace-pre-wrap break-word text-slate-800">
+              <p className="whitespace-pre-wrap break-word text-slate-800 dark:text-slate-200">
                 {message.text.length > TEXT_PREVIEW_LIMIT ? (
                   <>
                     <TextWithLinks text={message.text.slice(0, TEXT_PREVIEW_LIMIT)} />
-                    <span className="text-slate-400">...</span>
-                    <span className="ml-1 text-sm text-blue-600 hover:underline">show more</span>
+                    <span className="text-slate-400 dark:text-slate-500">...</span>
+                    <span className="ml-1 text-sm text-blue-600 hover:underline dark:text-blue-400">show more</span>
                   </>
                 ) : (
                   <TextWithLinks text={message.text} />
@@ -573,14 +539,14 @@ function MessageItem({
                 onClick={(): void => {
                   onNoteClick(message);
                 }}
-                className="cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded transition-colors"
+                className="cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded transition-colors dark:hover:bg-slate-700"
               >
-                <p className="mt-2 whitespace-pre-wrap break-word text-slate-600 italic">
+                <p className="mt-2 whitespace-pre-wrap break-word text-slate-600 italic dark:text-slate-400">
                   {message.caption.length > TEXT_PREVIEW_LIMIT ? (
                     <>
                       <TextWithLinks text={message.caption.slice(0, TEXT_PREVIEW_LIMIT)} />
-                      <span className="text-slate-400">...</span>
-                      <span className="ml-1 text-sm text-blue-600 hover:underline">show more</span>
+                      <span className="text-slate-400 dark:text-slate-500">...</span>
+                      <span className="ml-1 text-sm text-blue-600 hover:underline dark:text-blue-400">show more</span>
                     </>
                   ) : (
                     <TextWithLinks text={message.caption} />
@@ -592,10 +558,8 @@ function MessageItem({
           {/* Link previews */}
           <LinkPreviewList linkPreview={message.linkPreview} />
 
-          <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-            <span>{formattedDate}</span>
-            <span>•</span>
-            <span>{formattedTime}</span>
+          <div className="mt-2 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>{formatDateTime(message.receivedAt)}</span>
             {message.mediaType === 'image' && message.hasMedia && (
               <>
                 <span>•</span>
@@ -603,7 +567,7 @@ function MessageItem({
                   onClick={(): void => {
                     void handleOpenFullSize(message.id);
                   }}
-                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
                   title="Open full size in new tab"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
@@ -624,8 +588,8 @@ function MessageItem({
               }}
               className={`rounded-lg p-2 transition-all ${
                 copied
-                  ? 'bg-green-50 text-green-600'
-                  : 'text-slate-400 opacity-0 hover:bg-slate-100 hover:text-slate-600 focus:opacity-100 group-hover:opacity-100'
+                  ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                  : 'text-slate-400 opacity-0 hover:bg-slate-100 hover:text-slate-600 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-300'
               }`}
               aria-label={copied ? 'Copied!' : 'Copy message'}
               title={copied ? 'Copied!' : 'Copy message'}
@@ -638,7 +602,7 @@ function MessageItem({
           <button
             onClick={handleDeleteClick}
             disabled={isDeleting || showDeleteConfirm}
-            className="rounded-lg p-2 text-slate-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg p-2 text-slate-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/30 dark:hover:text-red-400"
             aria-label="Delete message"
           >
             <Trash2 className="h-5 w-5" />
@@ -756,20 +720,20 @@ export function WhatsAppNotesPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">WhatsApp Notes</h2>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">WhatsApp Notes</h2>
           {fromNumber !== null && fromNumber !== '' ? (
-            <p className="text-slate-600">
+            <p className="text-slate-600 dark:text-slate-300">
               Messages from{' '}
-              <span className="font-mono font-medium text-slate-800">{fromNumber}</span>
+              <span className="font-mono font-medium text-slate-800 dark:text-slate-200">{fromNumber}</span>
             </p>
           ) : (
-            <p className="text-slate-600">Your saved WhatsApp messages</p>
+            <p className="text-slate-600 dark:text-slate-300">Your saved WhatsApp messages</p>
           )}
         </div>
         <button
           onClick={handleRefresh}
           disabled={isRefreshing}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           title="Refresh"
         >
           <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -777,7 +741,7 @@ export function WhatsAppNotesPage(): React.JSX.Element {
       </div>
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -786,9 +750,9 @@ export function WhatsAppNotesPage(): React.JSX.Element {
         {messages.length === 0 ? (
           <Card title="">
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <MessageSquare className="mb-4 h-12 w-12 text-slate-300" />
-              <h3 className="text-lg font-medium text-slate-700">No messages yet</h3>
-              <p className="mt-1 text-sm text-slate-500">
+              <MessageSquare className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+              <h3 className="text-lg font-medium text-slate-700 dark:text-slate-200">No messages yet</h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Messages you send to your WhatsApp number will appear here.
               </p>
             </div>
@@ -833,7 +797,7 @@ export function WhatsAppNotesPage(): React.JSX.Element {
       ) : null}
 
       {messages.length > 0 ? (
-        <p className="mt-6 text-center text-sm text-slate-500">
+        <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
           Showing {String(messages.length)} message{messages.length === 1 ? '' : 's'}
         </p>
       ) : null}

@@ -15,10 +15,10 @@ Mobile-notifications-service manages device connections, filters, and notificati
 
 ### Notifications
 
-| Method | Path                                      | Description         | Auth         |
-| ------ | ----------------------------------------- | ------------------- | ------------ |
-| GET    | `/mobile-notifications/notifications`     | List notifications  | Bearer token |
-| DELETE | `/mobile-notifications/notifications/:id` | Delete notification | Bearer token |
+| Method | Path                                      | Description         | Auth         | Response |
+| ------ | ----------------------------------------- | ------------------- | ------------ | -------- |
+| GET    | `/mobile-notifications/notifications`     | List notifications  | Bearer token | 200 OK   |
+| DELETE | `/mobile-notifications/notifications/:id` | Delete notification | Bearer token | 200 OK   |
 
 ### Filters
 
@@ -29,9 +29,9 @@ Mobile-notifications-service manages device connections, filters, and notificati
 
 ### Internal
 
-| Method | Path                                     | Description          | Auth           |
-| ------ | ---------------------------------------- | -------------------- | -------------- |
-| POST   | `/internal/mobile-notifications/process` | Process notification | Internal token |
+| Method | Path                                     | Description          | Auth           | Response Format                                    |
+| ------ | ---------------------------------------- | -------------------- | -------------- | -------------------------------------------------- |
+| POST   | `/internal/mobile-notifications/process` | Process notification | Internal token | `{ success, data }` or `{ success, error: {...} }` |
 
 ### Webhook
 
@@ -85,6 +85,12 @@ Mobile-notifications-service manages device connections, filters, and notificati
 **Hash comparison** - Webhook signatures compared as hashes, never plaintext stored.
 
 **Filter defaults** - Sources without filters use default behavior (allow all).
+
+**Response contract** - All endpoints use `reply.ok(data)` / `reply.fail(code, message)`. Internal auth errors return `{ success: false, error: { code: "UNAUTHORIZED", message: "..." } }`.
+
+**DELETE returns 200** - DELETE notification returns `{ success: true, data: {} }` instead of 204 No Content.
+
+**Sentry logging** - Uses `createAppLogger()` from `@intexuraos/infra-sentry`, not direct `pino()`.
 
 ## File Structure
 

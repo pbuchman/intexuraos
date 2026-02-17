@@ -21,7 +21,7 @@ const commandSchema = {
       properties: {
         type: {
           type: 'string',
-          enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear'],
+          enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear', 'code'],
         },
         confidence: { type: 'number' },
         reasoning: { type: 'string' },
@@ -213,9 +213,10 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [true] },
+              data: { type: 'object' },
               diagnostics: { $ref: 'Diagnostics#' },
             },
-            required: ['success'],
+            required: ['success', 'data'],
           },
           400: {
             description: 'Cannot delete classified command',

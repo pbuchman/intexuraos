@@ -6,6 +6,10 @@ import type { Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from '../models/error.js';
 import type { TranscriptionState, WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type { LinkPreviewState } from '../models/LinkPreview.js';
+import type {
+  PhoneVerification,
+  PhoneVerificationStatus,
+} from '../models/PhoneVerification.js';
 
 // Re-export WhatsAppError for use in other ports
 export type { WhatsAppError };
@@ -155,4 +159,88 @@ export interface WhatsAppMessageRepository {
    * Delete a message.
    */
   deleteMessage(messageId: string): Promise<Result<void, WhatsAppError>>;
+}
+
+/**
+ * Repository for phone number verification.
+ */
+export interface PhoneVerificationRepository {
+  /**
+   * Create a new verification record.
+   */
+  create(
+    verification: Omit<PhoneVerification, 'id'>
+  ): Promise<Result<PhoneVerification, WhatsAppError>>;
+
+  /**
+   * Find a verification record by ID.
+   */
+  findById(id: string): Promise<Result<PhoneVerification | null, WhatsAppError>>;
+
+  /**
+   * Find the most recent pending verification for a user and phone number.
+   */
+  findPendingByUserAndPhone(
+    userId: string,
+    phoneNumber: string
+  ): Promise<Result<PhoneVerification | null, WhatsAppError>>;
+
+  /**
+   * Check if a phone number is verified for a user.
+   */
+  isPhoneVerified(userId: string, phoneNumber: string): Promise<Result<boolean, WhatsAppError>>;
+
+  /**
+   * Update verification status.
+   */
+  updateStatus(
+    id: string,
+    status: PhoneVerificationStatus,
+    metadata?: { verifiedAt?: string; lastAttemptAt?: string }
+  ): Promise<Result<PhoneVerification, WhatsAppError>>;
+
+  /**
+   * Increment failed attempt count.
+   */
+  incrementAttempts(id: string): Promise<Result<PhoneVerification, WhatsAppError>>;
+
+  /**
+   * Count recent verification requests for rate limiting.
+   * Returns count of verifications created within the time window.
+   */
+  countRecentByPhone(
+    phoneNumber: string,
+    windowStartTime: string
+  ): Promise<Result<number, WhatsAppError>>;
+
+  /**
+   * Atomically create a verification record after checking all constraints.
+   * Uses a transaction to prevent race conditions with concurrent requests.
+   *
+   * Checks performed atomically:
+   * 1. Phone not already verified for user
+   * 2. No pending verification within cooldown window
+   * 3. Rate limit not exceeded
+   *
+   * Returns:
+   * - ok with verification and shouldSendSms=true on success
+   * - err with ALREADY_VERIFIED if phone already verified
+   * - err with COOLDOWN_ACTIVE if pending verification exists within cooldown
+   * - err with RATE_LIMIT_EXCEEDED if max requests per hour exceeded
+   */
+  createWithChecks(
+    params: {
+      userId: string;
+      phoneNumber: string;
+      code: string;
+      expiresAt: number;
+      cooldownSeconds: number;
+      maxRequestsPerHour: number;
+      windowStartTime: string;
+    }
+  ): Promise<Result<{
+    verification: PhoneVerification;
+    cooldownUntil: number;
+    existingPendingId?: string;
+  }, WhatsAppError>>;
 }

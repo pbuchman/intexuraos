@@ -211,7 +211,7 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.payload);
-      expect(body.error).toContain('Failed to list feeds');
+      expect(body.error.message).toContain('Failed to list feeds');
     });
 
     it('accepts Pub/Sub push from Google without X-Internal-Auth', async () => {

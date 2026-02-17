@@ -7,6 +7,9 @@ import type {
   IgnoredReason,
   WhatsAppError,
   LinkPreviewState,
+  PhoneVerification,
+  PhoneVerificationRepository,
+  PhoneVerificationStatus,
   TranscriptionState,
   WebhookProcessingStatus,
   WhatsAppMessage,
@@ -17,21 +20,29 @@ import type {
   WhatsAppWebhookEventRepository,
 } from './domain/whatsapp/index.js';
 import {
+  countRecentVerificationsByPhone,
+  createVerification,
+  createVerificationWithChecks,
   deleteMessage,
   disconnectUserMapping,
   findById,
+  findPendingByUserAndPhone,
   findPhoneByUserId,
   findUserByPhoneNumber,
+  findVerificationById,
   getMessage,
   getMessagesByUser,
   getUserMapping,
   getWebhookEvent,
+  incrementVerificationAttempts,
+  isPhoneVerified,
   isUserConnected,
   saveMessage,
   saveUserMapping,
   saveWebhookEvent,
   updateLinkPreview,
   updateTranscription,
+  updateVerificationStatus,
   updateWebhookEventStatus,
 } from './infra/firestore/index.js';
 
@@ -144,5 +155,71 @@ export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
 
   async deleteMessage(messageId: string): Promise<Result<void, WhatsAppError>> {
     return await deleteMessage(messageId);
+  }
+}
+
+/**
+ * Class adapter for PhoneVerificationRepository.
+ */
+export class PhoneVerificationRepositoryAdapter implements PhoneVerificationRepository {
+  async create(
+    verification: Omit<PhoneVerification, 'id'>
+  ): Promise<Result<PhoneVerification, WhatsAppError>> {
+    return await createVerification(verification);
+  }
+
+  async findById(id: string): Promise<Result<PhoneVerification | null, WhatsAppError>> {
+    return await findVerificationById(id);
+  }
+
+  async findPendingByUserAndPhone(
+    userId: string,
+    phoneNumber: string
+  ): Promise<Result<PhoneVerification | null, WhatsAppError>> {
+    return await findPendingByUserAndPhone(userId, phoneNumber);
+  }
+
+  async isPhoneVerified(
+    userId: string,
+    phoneNumber: string
+  ): Promise<Result<boolean, WhatsAppError>> {
+    return await isPhoneVerified(userId, phoneNumber);
+  }
+
+  async updateStatus(
+    id: string,
+    status: PhoneVerificationStatus,
+    metadata?: { verifiedAt?: string; lastAttemptAt?: string }
+  ): Promise<Result<PhoneVerification, WhatsAppError>> {
+    return await updateVerificationStatus(id, status, metadata);
+  }
+
+  async incrementAttempts(id: string): Promise<Result<PhoneVerification, WhatsAppError>> {
+    return await incrementVerificationAttempts(id);
+  }
+
+  async countRecentByPhone(
+    phoneNumber: string,
+    windowStartTime: string
+  ): Promise<Result<number, WhatsAppError>> {
+    return await countRecentVerificationsByPhone(phoneNumber, windowStartTime);
+  }
+
+  async createWithChecks(
+    params: {
+      userId: string;
+      phoneNumber: string;
+      code: string;
+      expiresAt: number;
+      cooldownSeconds: number;
+      maxRequestsPerHour: number;
+      windowStartTime: string;
+    }
+  ): Promise<Result<{
+    verification: PhoneVerification;
+    cooldownUntil: number;
+    existingPendingId?: string;
+  }, WhatsAppError>> {
+    return await createVerificationWithChecks(params);
   }
 }

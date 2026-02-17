@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/web-agent",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -8,27 +8,30 @@
     "build": "node ../../scripts/build-service.mjs web-agent",
     "dev": "npx tsx watch src/index.ts",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "test": "pnpm run --filter @intexuraos/root test -- apps/web-agent",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
   },
   "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/swagger": "^9.4.2",
+    "@fastify/swagger-ui": "^5.2.1",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/common-http": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
+    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
-    "@intexuraos/llm-prompts": "workspace:*",
-    "@intexuraos/llm-utils": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
-    "@fastify/cors": "^10.0.2",
-    "@fastify/swagger": "^9.4.2",
-    "@fastify/swagger-ui": "^5.2.1",
+    "@intexuraos/llm-prompts": "workspace:*",
+    "@intexuraos/llm-utils": "workspace:*",
     "cheerio": "^1.0.0",
     "fastify": "^5.1.0",
-    "pino": "^9.5.0"
+    "pino": "^10.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

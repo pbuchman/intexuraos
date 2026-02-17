@@ -1,0 +1,532 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { isOk, isErr } from '@intexuraos/common-core';
+import { createExecuteCodeActionUseCase } from '../domain/usecases/executeCodeAction.js';
+import type { Action } from '../domain/models/action.js';
+import type { Logger } from 'pino';
+import {
+  FakeActionRepository,
+  FakeCodeAgentClient,
+  FakeWhatsAppSendPublisher,
+} from './fakes.js';
+
+// Create a proper logger mock that actually logs (for coverage)
+const createMockLogger = (): Logger =>
+  ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    level: 'silent',
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    silent: vi.fn(),
+    msgPrefix: '',
+  }) as unknown as Logger;
+
+describe('executeCodeAction usecase', () => {
+  let fakeActionRepo: FakeActionRepository;
+  let fakeCodeClient: FakeCodeAgentClient;
+  let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
+
+  const createAction = (overrides: Partial<Action> = {}): Action => ({
+    id: 'action-123',
+    userId: 'user-456',
+    commandId: 'cmd-789',
+    type: 'code',
+    confidence: 0.9,
+    title: 'Fix authentication bug',
+    status: 'awaiting_approval',
+    payload: {
+      prompt: 'Fix the login bug',
+      workerType: 'auto',
+    },
+    createdAt: '2025-01-01T12:00:00.000Z',
+    updatedAt: '2025-01-01T12:00:00.000Z',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    fakeActionRepo = new FakeActionRepository();
+    fakeCodeClient = new FakeCodeAgentClient();
+    fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
+  });
+
+  it('returns error when action not found', async () => {
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('non-existent-action');
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.message).toBe('Action not found');
+    }
+  });
+
+  it('returns completed status for already completed action with resourceUrl and message', async () => {
+    const action = createAction({
+      status: 'completed',
+      payload: {
+        prompt: 'Fix the login bug',
+        workerType: 'auto',
+        resource_url: 'https://app.intexuraos.com/code-tasks/123',
+        message: 'Code task created: code-task-123',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.resourceUrl).toBe('https://app.intexuraos.com/code-tasks/123');
+      expect(result.value.message).toBe('Code task created: code-task-123');
+    }
+  });
+
+  it('returns error for action with invalid status', async () => {
+    const action = createAction({ status: 'processing' });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.message).toContain('Cannot execute action with status: processing');
+    }
+  });
+
+  it('processes code action from pending status and updates to completed on success', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.resourceUrl).toBe('https://app.intexuraos.com/code-tasks/123');
+      expect(result.value.message).toContain('code-task-123');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('completed');
+    expect(updatedAction?.payload['resource_url']).toBe('https://app.intexuraos.com/code-tasks/123');
+    expect(updatedAction?.payload['approvalEventId']).toBeDefined();
+  });
+
+  it('processes code action from failed status (retry)', async () => {
+    const action = createAction({
+      status: 'failed',
+      payload: { prompt: 'Fix the login bug', workerType: 'auto', error: 'Previous error' },
+    });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('completed');
+  });
+
+  it('processes code action from awaiting_approval status', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+    }
+  });
+
+  it('updates action to failed when code-agent returns 503 worker unavailable', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+    fakeCodeClient.setNextError({
+      code: 'WORKER_UNAVAILABLE',
+      message: 'No workers available',
+    });
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('failed');
+      expect(result.value.message).toBe('No workers available. Please try again later.');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('failed');
+    expect(updatedAction?.payload['message']).toBe('No workers available. Please try again later.');
+  });
+
+  it('returns completed status with existing task info when code-agent returns 409 duplicate', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+    fakeCodeClient.setNextError({
+      code: 'DUPLICATE',
+      message: 'Task already exists for this approval',
+      existingTaskId: 'existing-task-456',
+    });
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.message).toContain('existing-task-456');
+    }
+  });
+
+  it('returns completed status without task ID when duplicate error has no existingTaskId', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+    fakeCodeClient.setNextError({
+      code: 'DUPLICATE',
+      message: 'Task already exists for this approval',
+      // existingTaskId is undefined
+    });
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.message).toBe('Task already exists');
+    }
+  });
+
+  it('updates action to failed when code-agent call fails with network error', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+    fakeCodeClient.setFailNext(true);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('failed');
+      expect(result.value.message).toContain('Simulated network failure');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('failed');
+  });
+
+  it('generates unique approvalEventId (UUID format)', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    const approvalEventId = updatedAction?.payload['approvalEventId'] as string | undefined;
+
+    expect(approvalEventId).toBeDefined();
+    expect(approvalEventId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  });
+
+  it('stores resource_url in action payload after successful dispatch', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.payload['resource_url']).toBe('https://app.intexuraos.com/code-tasks/123');
+  });
+
+  it('passes correct parameters to code-agent', async () => {
+    const action = createAction({
+      status: 'pending',
+      payload: {
+        prompt: 'Fix the login bug',
+        workerType: 'opus',
+        linearIssueId: 'LIN-123',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const submittedTasks = fakeCodeClient.getSubmittedTasks();
+    expect(submittedTasks).toHaveLength(1);
+    expect(submittedTasks[0]?.actionId).toBe('action-123');
+    expect(submittedTasks[0]?.payload.prompt).toBe('Fix the login bug');
+    expect(submittedTasks[0]?.payload.workerType).toBe('opus');
+    expect(submittedTasks[0]?.payload.linearIssueId).toBe('LIN-123');
+    expect(submittedTasks[0]?.approvalEventId).toBeDefined();
+  });
+
+  it('includes linearIssueTitle in payload when provided', async () => {
+    const action = createAction({
+      status: 'pending',
+      payload: {
+        prompt: 'Fix the login bug',
+        workerType: 'opus',
+        linearIssueId: 'LIN-123',
+        linearIssueTitle: 'Fix authentication bug',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const submittedTasks = fakeCodeClient.getSubmittedTasks();
+    expect(submittedTasks).toHaveLength(1);
+    expect(submittedTasks[0]?.payload.linearIssueTitle).toBe('Fix authentication bug');
+  });
+
+  it('defaults workerType to auto when not specified in payload', async () => {
+    const action = createAction({
+      status: 'pending',
+      payload: {
+        prompt: 'Fix the login bug',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const submittedTasks = fakeCodeClient.getSubmittedTasks();
+    expect(submittedTasks).toHaveLength(1);
+    expect(submittedTasks[0]?.payload.workerType).toBe('auto');
+  });
+
+  it('uses action title when payload prompt is not a string', async () => {
+    const action = createAction({
+      status: 'pending',
+      title: 'Fix authentication bug',
+      payload: {
+        // prompt is not a string (e.g., could be an object or missing)
+        prompt: { some: 'object' } as unknown as undefined,
+        workerType: 'auto',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const submittedTasks = fakeCodeClient.getSubmittedTasks();
+    expect(submittedTasks).toHaveLength(1);
+    // When prompt is not a string, it should fall back to the action title
+    expect(submittedTasks[0]?.payload.prompt).toBe('Fix authentication bug');
+  });
+
+  it('publishes WhatsApp notification on success when resourceUrl exists', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.userId).toBe('user-456');
+    expect(messages[0]?.message).toContain('Code task');
+    expect(messages[0]?.message).toContain('https://app.intexuraos.com/code-tasks/123');
+    expect(messages[0]?.correlationId).toBe('code-complete-action-123');
+  });
+
+  it('succeeds even when WhatsApp notification fails (best-effort)', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+    fakeWhatsappPublisher.setFailNext(true, {
+      code: 'PUBLISH_FAILED',
+      message: 'WhatsApp unavailable',
+    });
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+    }
+  });
+
+  it('returns error for archived status (another invalid status)', async () => {
+    const action = createAction({ status: 'archived' });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.message).toContain('Cannot execute action with status: archived');
+    }
+  });
+});

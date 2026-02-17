@@ -4,9 +4,7 @@ import nock from 'nock';
 import { createCalendarServiceHttpClient } from '../../../infra/http/calendarServiceHttpClient.js';
 import type { CalendarServiceClient } from '../../../domain/ports/calendarServiceClient.js';
 import type { Action } from '../../../domain/models/action.js';
-import pino from 'pino';
-
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from '../../fakes.js';
 
 const baseUrl = 'http://calendar-agent.test';
 const internalAuthToken = 'test-internal-token';
@@ -35,7 +33,7 @@ describe('calendarServiceHttpClient', () => {
     createCalendarServiceHttpClient({
       baseUrl,
       internalAuthToken,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
   describe('successful responses', () => {
@@ -466,7 +464,7 @@ describe('calendarServiceHttpClient', () => {
       const client = createCalendarServiceHttpClient({
         baseUrl,
         internalAuthToken: customToken,
-        logger: silentLogger,
+        logger: createMockLogger(),
       });
       await client.processAction({ action });
 
@@ -862,7 +860,7 @@ describe('calendarServiceHttpClient', () => {
         const client = createCalendarServiceHttpClient({
           baseUrl,
           internalAuthToken: customToken,
-          logger: silentLogger,
+          logger: createMockLogger(),
         });
         await client.getPreview(actionId);
 

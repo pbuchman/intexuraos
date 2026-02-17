@@ -4,6 +4,20 @@
 
 > **Note:** For comprehensive Sentry triage, AI analysis, and batch processing, use the dedicated `/sentry` skill. This workflow focuses specifically on creating Linear issues from Sentry errors.
 
+---
+
+## Verbose Transition Logging (MANDATORY)
+
+```
+🔍 FETCH: Parsing Sentry URL...
+🔍 FETCH: Getting Sentry issue details (org: intexuraos, issue: 12345)
+📋 CREATED: INT-789 "[sentry] TypeError: null is not an object"
+📍 STATE: Backlog
+🔀 ROUTING: Creation complete. No execution keywords detected. Stopping.
+```
+
+---
+
 ## Delegation to Sentry Skill
 
 For advanced operations, delegate to the Sentry skill:
@@ -66,11 +80,22 @@ Required tools:
 
 If possible, add comment linking to Linear issue.
 
-### 7. Handoff to Work Flow
+### 7. Execution Intent Detection
 
-Ask: "Start working on this issue now?"
+**Check if user's input contains explicit execution keywords:**
 
-If yes: Proceed with [work-existing.md](work-existing.md)
+| Keywords Found                                | Action                                                                                         |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| "fix now", "implement", "work on", "fix this" | Ask: "Start working immediately?" → If yes, transition to [work-existing.md](work-existing.md) |
+| No execution keywords                         | **STOP.** Issue created. Do not offer to work on it.                                           |
+
+**Output:**
+
+```
+📋 CREATED: INT-XXX "[sentry] <error>"
+📍 STATE: Backlog
+🔀 ROUTING: Creation complete. No execution keywords detected. Stopping.
+```
 
 ## Sentry Issue Description Template
 

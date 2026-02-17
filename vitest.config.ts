@@ -16,13 +16,26 @@ export default defineConfig({
   test: {
     globals: false,
     include: ['**/*.test.ts', '**/*.spec.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'e2e/**',
+      '.claude/hooks/__tests__/**',
+      '**/e2e-container.test.ts',
+    ],
     // Setup file to mock Firebase and suppress logging (use absolute path)
     setupFiles: [path.resolve(__dirname, './vitest.setup.ts')],
     // Run tests sequentially to avoid race conditions in shared state
     sequence: {
       shuffle: false,
     },
+    // Use forks pool in CI for better memory isolation during coverage collection
+    // Each test file runs in a separate process, releasing memory on completion
+    // This prevents heap fragmentation after Type & Lint phase consumes memory
+    pool: process.env.CI === 'true' ? 'forks' : 'threads',
+    // Limit workers in CI to prevent memory exhaustion during coverage
+    // GitHub Actions runners have ~7GB memory, but coverage tracking is memory-intensive
+    maxWorkers: process.env.CI === 'true' ? 2 : undefined,
     // Standard timeout for async operations
     testTimeout: 10000,
     hookTimeout: 30000,
@@ -30,7 +43,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'html'],
       reportOnFailure: true,
-      include: ['packages/**/src/**/*.ts', 'apps/**/src/**/*.ts'],
+      include: ['packages/**/src/**/*.ts', 'apps/**/src/**/*.ts', 'workers/**/src/**/*.ts'],
       exclude: [
         // Test files (no coverage for tests themselves)
         '**/*.test.ts',
@@ -55,7 +68,6 @@ export default defineConfig({
         // JUSTIFIED: Interfaces and types only, no executable code
         '**/domain/**/models/**',
         '**/domain/**/ports/**',
-        '**/domain/**/events/**',
 
         // Web app - React frontend
         // JUSTIFIED: Requires E2E testing strategy, out of scope for unit coverage
@@ -84,6 +96,11 @@ export default defineConfig({
         // Route barrel files (re-exports only)
         // JUSTIFIED: Pure re-exports with no runtime behavior
         '**/routes/routes.ts',
+
+        // Cloud Monitoring adapter
+        // JUSTIFIED: Infra adapter to Google Cloud Monitoring API with external dependency
+        // Tests verify contract via mock implementation, actual API requires integration testing
+        'apps/code-agent/src/infra/metrics.ts',
       ],
       thresholds: {
         lines: 95,

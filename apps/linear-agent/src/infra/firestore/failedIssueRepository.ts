@@ -17,10 +17,11 @@ interface FailedIssueDoc {
   error: string;
   reasoning: string | null;
   createdAt: string;
+  lastRetryAt?: string;
 }
 
 function toFailedIssue(id: string, doc: FailedIssueDoc): FailedLinearIssue {
-  return {
+  const base = {
     id,
     userId: doc.userId,
     actionId: doc.actionId,
@@ -31,6 +32,10 @@ function toFailedIssue(id: string, doc: FailedIssueDoc): FailedLinearIssue {
     reasoning: doc.reasoning,
     createdAt: doc.createdAt,
   };
+
+  return doc.lastRetryAt === undefined
+    ? base
+    : { ...base, lastRetryAt: doc.lastRetryAt };
 }
 
 export async function createFailedIssue(input: {
@@ -110,11 +115,58 @@ export async function deleteFailedIssue(id: string): Promise<Result<void, Linear
   }
 }
 
+export async function getFailedIssueById(id: string): Promise<Result<FailedLinearIssue, LinearError>> {
+  try {
+    const db = getFirestore();
+    const docRef = db.collection(COLLECTION_NAME).doc(id);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Failed issue not found' });
+    }
+
+    return ok(toFailedIssue(doc.id, doc.data() as FailedIssueDoc));
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to get failed issue: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+export async function updateFailedIssue(
+  id: string,
+  input: { error: string; lastRetryAt: string }
+): Promise<Result<void, LinearError>> {
+  try {
+    const db = getFirestore();
+    const docRef = db.collection(COLLECTION_NAME).doc(id);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Failed issue not found' });
+    }
+
+    await docRef.update({
+      error: input.error,
+      lastRetryAt: input.lastRetryAt,
+    });
+    return ok(undefined);
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to update failed issue: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
 /** Factory for creating repository with interface */
 export function createFailedIssueRepository(): FailedIssueRepository {
   return {
     create: createFailedIssue,
     listByUser: listFailedIssuesByUser,
+    getById: getFailedIssueById,
+    update: updateFailedIssue,
     delete: deleteFailedIssue,
   };
 }

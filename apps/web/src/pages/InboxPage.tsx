@@ -9,7 +9,6 @@ import {
 import { useAuth } from '@/context';
 import {
   ApiError,
-  archiveAction,
   archiveCommand,
   batchGetActions,
   deleteCommand,
@@ -20,6 +19,7 @@ import type { Action, ActionStatus, Command, CommandType } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
 import { useActionChanges } from '@/hooks/useActionChanges';
 import { useCommandChanges } from '@/hooks/useCommandChanges';
+import { formatDate } from '@/utils/dateFormat';
 import {
   Archive,
   Bell,
@@ -112,16 +112,6 @@ function getStatusIcon(status: string): React.JSX.Element {
   }
 }
 
-function formatDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 interface CommandItemProps {
   command: Command;
   onClick: () => void;
@@ -146,7 +136,7 @@ function CommandItem({
 
   return (
     <div
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -165,10 +155,10 @@ function CommandItem({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-3 break-words text-sm text-slate-800">{command.text}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <p className="line-clamp-3 break-words text-sm text-slate-800 dark:text-slate-200">{command.text}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             {command.classification !== undefined && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">
                 {getTypeIcon(command.classification.type)}
                 {getTypeLabel(command.classification.type)}
               </span>
@@ -192,7 +182,7 @@ function CommandItem({
                 onDelete(command.id);
               }}
               disabled={isDeleting}
-              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/30"
               title="Delete command"
             >
               {isDeleting ? (
@@ -208,7 +198,7 @@ function CommandItem({
                 onArchive(command.id);
               }}
               disabled={isArchiving}
-              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
+              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50 dark:hover:bg-amber-900/30"
               title="Archive command"
             >
               {isArchiving ? (
@@ -492,12 +482,6 @@ export function InboxPage(): React.JSX.Element {
     }
   };
 
-  const handleDismissAction = async (actionId: string): Promise<void> => {
-    const token = await getAccessToken();
-    await archiveAction(token, actionId);
-    setActions((prev) => prev.filter((a) => a.id !== actionId));
-  };
-
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
@@ -635,13 +619,13 @@ export function InboxPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Inbox</h2>
-          <p className="text-slate-600">Your commands and pending actions</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Inbox</h2>
+          <p className="text-slate-600 dark:text-slate-400">Your commands and pending actions</p>
         </div>
         <button
           onClick={handleRefresh}
           disabled={isRefreshing}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           title="Refresh"
         >
           <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -650,27 +634,27 @@ export function InboxPage(): React.JSX.Element {
 
       {/* Real-time listener error warning */}
       {listenerError !== null && listenerError !== '' ? (
-        <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-700">
+        <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-700 dark:border-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
           Real-time updates paused: {listenerError}
         </div>
       ) : null}
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
 
       {/* Tabs */}
-      <div className="mb-4 flex border-b border-slate-200">
+      <div className="mb-4 flex border-b border-slate-200 dark:border-slate-700">
         <button
           onClick={(): void => {
             setActiveTab('actions');
           }}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+          className={`flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'actions'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+              ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+              : 'border-transparent text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300'
           }`}
         >
           <ListTodo className="h-4 w-4" />
@@ -680,10 +664,10 @@ export function InboxPage(): React.JSX.Element {
           onClick={(): void => {
             setActiveTab('commands');
           }}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+          className={`flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'commands'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+              ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+              : 'border-transparent text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300'
           }`}
         >
           <MessageSquare className="h-4 w-4" />
@@ -698,12 +682,12 @@ export function InboxPage(): React.JSX.Element {
             onClick={(): void => {
               setIsFilterExpanded((prev) => !prev);
             }}
-            className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
           >
             <Filter className="h-4 w-4" />
             Filter by status
             {statusFilter.length > 0 && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900/50 dark:text-blue-400">
                 {String(statusFilter.length)}
               </span>
             )}
@@ -721,8 +705,8 @@ export function InboxPage(): React.JSX.Element {
                   key={status}
                   className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
                     statusFilter.includes(status)
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500'
                   }`}
                 >
                   <input
@@ -742,7 +726,7 @@ export function InboxPage(): React.JSX.Element {
                   onClick={(): void => {
                     setStatusFilter([]);
                   }}
-                  className="text-sm text-slate-500 hover:text-slate-700"
+                  className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                 >
                   Clear all
                 </button>
@@ -759,11 +743,11 @@ export function InboxPage(): React.JSX.Element {
             {actions.length === 0 ? (
               <Card title="">
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <ListTodo className="mb-4 h-12 w-12 text-slate-300" />
-                  <h3 className="text-lg font-medium text-slate-700">
+                  <ListTodo className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+                  <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">
                     {statusFilter.length > 0 ? 'No matching actions' : 'No actions yet'}
                   </h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     {statusFilter.length > 0
                       ? 'Try adjusting your filters or clear them to see all actions.'
                       : 'Actions are created when commands are classified.'}
@@ -790,7 +774,11 @@ export function InboxPage(): React.JSX.Element {
                       void fetchData(true);
                     }
                   }}
-                  onDismiss={handleDismissAction}
+                  onActionUpdated={(updatedAction: Action): void => {
+                    setActions((prev) =>
+                      prev.map((a) => (a.id === updatedAction.id ? updatedAction : a))
+                    );
+                  }}
                 />
               ))
             )}
@@ -802,9 +790,9 @@ export function InboxPage(): React.JSX.Element {
             {commands.length === 0 ? (
               <Card title="">
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Inbox className="mb-4 h-12 w-12 text-slate-300" />
-                  <h3 className="text-lg font-medium text-slate-700">No commands yet</h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <Inbox className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+                  <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">No commands yet</h3>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     Send a text or voice message via WhatsApp to create a command.
                   </p>
                 </div>

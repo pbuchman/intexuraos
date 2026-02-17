@@ -1,5 +1,55 @@
 @import 'tailwindcss';
-@import 'highlight.js/styles/github.css';
+
+/* Markdown editor styles */
+@import '@uiw/react-md-editor/markdown-editor.css';
+@import '@uiw/react-markdown-preview/markdown.css';
+
+/* Light mode code highlighting */
+@import 'highlight.js/styles/github.css' layer(hljs-light);
+
+/* Dark mode code highlighting override */
+.dark .hljs {
+  background: #0d1117;
+  color: #c9d1d9;
+}
+
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-title,
+.dark .hljs-section,
+.dark .hljs-doctag,
+.dark .hljs-name,
+.dark .hljs-strong {
+  color: #ff7b72;
+}
+
+.dark .hljs-string,
+.dark .hljs-attr {
+  color: #a5d6ff;
+}
+
+.dark .hljs-comment,
+.dark .hljs-quote {
+  color: #8b949e;
+}
+
+.dark .hljs-number,
+.dark .hljs-literal {
+  color: #79c0ff;
+}
+
+.dark .hljs-built_in,
+.dark .hljs-type {
+  color: #ffa657;
+}
+
+.dark .hljs-variable,
+.dark .hljs-template-variable {
+  color: #c9d1d9;
+}
+
+/* Enable class-based dark mode */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Custom theme variables */
 :root {
@@ -7,6 +57,13 @@
   --color-primary-hover: theme('colors.blue.700');
   --color-accent: theme('colors.amber.400');
   --color-accent-hover: theme('colors.amber.500');
+}
+
+.dark {
+  --color-primary: theme('colors.blue.400');
+  --color-primary-hover: theme('colors.blue.300');
+  --color-accent: theme('colors.amber.300');
+  --color-accent-hover: theme('colors.amber.200');
 }
 
 /* Prevent horizontal scrolling on mobile */
@@ -19,6 +76,11 @@ body {
 /* Base styles */
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+.dark body,
+body.dark {
+  @apply bg-slate-900 text-slate-100;
 }
 
 /* Focus styles */
@@ -45,47 +107,47 @@ body {
 
 /* Enhanced prose styling for markdown content */
 .prose table {
-  @apply w-full border-collapse border border-slate-300 my-4;
+  @apply w-full border-collapse border border-slate-300 my-4 dark:border-slate-600;
 }
 
 .prose thead {
-  @apply bg-slate-100;
+  @apply bg-slate-100 dark:bg-slate-700;
 }
 
 .prose th {
-  @apply border border-slate-300 px-4 py-2 text-left font-semibold text-slate-700;
+  @apply border border-slate-300 px-4 py-2 text-left font-semibold text-slate-700 dark:border-slate-600 dark:text-slate-200;
 }
 
 .prose td {
-  @apply border border-slate-300 px-4 py-2 text-slate-600;
+  @apply border border-slate-300 px-4 py-2 text-slate-600 dark:border-slate-600 dark:text-slate-300;
 }
 
 .prose tbody tr:nth-child(even) {
-  @apply bg-slate-50;
+  @apply bg-slate-50 dark:bg-slate-800/50;
 }
 
 .prose tbody tr:hover {
-  @apply bg-slate-100;
+  @apply bg-slate-100 dark:bg-slate-700;
 }
 
 .prose p {
-  @apply mb-4 leading-relaxed;
+  @apply mb-4 leading-relaxed text-slate-700 dark:text-slate-300;
 }
 
 .prose h1 {
-  @apply text-2xl font-bold mt-8 mb-4 text-slate-900 border-b border-slate-200 pb-2;
+  @apply text-2xl font-bold mt-8 mb-4 text-slate-900 border-b border-slate-200 pb-2 dark:text-slate-100 dark:border-slate-700;
 }
 
 .prose h2 {
-  @apply text-xl font-bold mt-6 mb-3 text-slate-900;
+  @apply text-xl font-bold mt-6 mb-3 text-slate-900 dark:text-slate-100;
 }
 
 .prose h3 {
-  @apply text-lg font-semibold mt-5 mb-2 text-slate-800;
+  @apply text-lg font-semibold mt-5 mb-2 text-slate-800 dark:text-slate-200;
 }
 
 .prose h4 {
-  @apply text-base font-semibold mt-4 mb-2 text-slate-800;
+  @apply text-base font-semibold mt-4 mb-2 text-slate-800 dark:text-slate-200;
 }
 
 .prose ul {
@@ -97,7 +159,7 @@ body {
 }
 
 .prose li {
-  @apply text-slate-700;
+  @apply text-slate-700 dark:text-slate-300;
 }
 
 .prose li > ul,
@@ -106,15 +168,15 @@ body {
 }
 
 .prose blockquote {
-  @apply border-l-4 border-blue-500 pl-4 py-2 my-4 bg-blue-50 text-slate-700 italic;
+  @apply border-l-4 border-blue-500 pl-4 py-2 my-4 bg-blue-50 text-slate-700 italic dark:bg-blue-900/30 dark:text-slate-300;
 }
 
 .prose code:not(pre code) {
-  @apply bg-slate-100 px-1.5 py-0.5 rounded text-sm font-mono text-slate-800;
+  @apply bg-slate-100 px-1.5 py-0.5 rounded text-sm font-mono text-slate-800 dark:bg-slate-700 dark:text-slate-200;
 }
 
 .prose pre {
-  @apply bg-slate-900 text-slate-100 p-4 rounded-lg my-4 overflow-x-auto;
+  @apply bg-slate-900 text-slate-100 p-4 rounded-lg my-4 overflow-x-auto dark:bg-slate-950;
 }
 
 .prose pre code {
@@ -122,17 +184,58 @@ body {
 }
 
 .prose hr {
-  @apply my-8 border-slate-200;
+  @apply my-8 border-slate-200 dark:border-slate-700;
 }
 
 .prose a {
-  @apply text-blue-600 hover:text-blue-800 underline;
+  @apply text-blue-600 hover:text-blue-800 underline dark:text-blue-400 dark:hover:text-blue-300;
 }
 
 .prose strong {
-  @apply font-semibold text-slate-900;
+  @apply font-semibold text-slate-900 dark:text-slate-100;
 }
 
 .prose em {
   @apply italic;
 }
+
+/* MDEditor overrides - remove blue lines and borders */
+.w-md-editor {
+  border-color: rgb(226 232 240) !important; /* slate-200 */
+}
+
+.dark .w-md-editor {
+  border-color: rgb(51 65 85) !important; /* slate-700 */
+}
+
+.w-md-editor-text-pre,
+.w-md-editor-text-input,
+.w-md-editor-text-area {
+  border: none !important;
+}
+
+.w-md-editor-text-pre:focus,
+.w-md-editor-text-input:focus,
+.w-md-editor-text-area:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.w-md-editor-toolbar {
+  border-bottom: 1px solid rgb(226 232 240) !important; /* slate-200 */
+}
+
+.dark .w-md-editor-toolbar {
+  border-bottom: 1px solid rgb(51 65 85) !important; /* slate-700 */
+}
+
+.w-md-editor-toolbar button:focus-visible {
+  outline: 2px solid rgb(37 99 235) !important; /* blue-600 */
+  outline-offset: 2px !important;
+}
+
+/* Remove the blue separator line between toolbar and textarea */
+.w-md-editor .w-md-editor-toolbar + .w-md-editor-content {
+  border-top: none !important;
+}
+

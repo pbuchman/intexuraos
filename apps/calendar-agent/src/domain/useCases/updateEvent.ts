@@ -5,6 +5,7 @@
 import { err, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CalendarError } from '../errors.js';
+import { mapUserServiceError } from '../errors.js';
 import type { CalendarEvent, UpdateEventInput } from '../models.js';
 import type { GoogleCalendarClient, UserServiceClient } from '../ports.js';
 
@@ -30,10 +31,10 @@ export async function updateEvent(
 
   logger.info({ userId, calendarId, eventId, updates: Object.keys(event) }, 'updateEvent: entry');
 
-  const tokenResult = await userServiceClient.getOAuthToken(userId);
+  const tokenResult = await userServiceClient.getOAuthToken(userId, 'google');
   if (!tokenResult.ok) {
     logger.error({ userId, calendarId, eventId, error: tokenResult.error }, 'updateEvent: failed to get OAuth token');
-    return err(tokenResult.error);
+    return err(mapUserServiceError(tokenResult.error));
   }
 
   const result = await googleCalendarClient.updateEvent(

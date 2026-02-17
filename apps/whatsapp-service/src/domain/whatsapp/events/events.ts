@@ -144,6 +144,11 @@ export interface SendMessageEvent {
   replyToMessageId?: string;
 
   /**
+   * Optional: Interactive buttons to include with the message.
+   */
+  buttons?: WhatsAppInteractiveButton[];
+
+  /**
    * Correlation ID for tracing across services.
    */
   correlationId: string;
@@ -152,6 +157,17 @@ export interface SendMessageEvent {
    * Event timestamp (ISO 8601).
    */
   timestamp: string;
+}
+
+/**
+ * WhatsApp interactive button for reply messages.
+ */
+export interface WhatsAppInteractiveButton {
+  type: 'reply';
+  reply: {
+    id: string;
+    title: string;
+  };
 }
 
 /**
@@ -241,7 +257,7 @@ export interface ApprovalReplyEvent {
   type: 'action.approval.reply';
   /** The wamid of the original approval message being replied to */
   replyToWamid: string;
-  /** The user's reply text */
+  /** The user's reply text (for text-based replies) */
   replyText: string;
   /** The user ID */
   userId: string;
@@ -249,6 +265,10 @@ export interface ApprovalReplyEvent {
   timestamp: string;
   /** Optional action ID extracted from correlation ID (e.g., action-todo-approval-{actionId}) */
   actionId?: string;
+  /** Optional button response data (for interactive button clicks) */
+  buttonId?: string;
+  /** Optional button title (for interactive button clicks) */
+  buttonTitle?: string;
 }
 
 /**

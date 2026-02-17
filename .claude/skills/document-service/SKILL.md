@@ -1,12 +1,12 @@
 ---
 name: document-service
-description: Generate professional documentation for IntexuraOS services. Produces 5 doc files per service plus updates aggregated site content. Supports interactive mode (asks questions) and autonomous mode (infers from code). Use when documenting services, generating docs, or updating service documentation.
+description: Generate professional documentation for IntexuraOS services (apps, workers, packages). Produces 5 doc files per service, 3 per package, plus aggregated site content and cross-validation reports. Supports interactive, autonomous, and team-of-agents modes. Use when documenting services, generating docs, updating documentation, or validating doc consistency.
 argument-hint: '[service-name]'
 ---
 
 # Document Service
 
-Generate comprehensive documentation for IntexuraOS services.
+Generate comprehensive documentation for IntexuraOS services (apps, workers, and packages).
 
 ## Usage
 
@@ -17,6 +17,8 @@ Generate comprehensive documentation for IntexuraOS services.
 
 **Autonomous mode:** Use Task tool with `subagent_type: service-scribe` for batch documentation without user interaction.
 
+**Team mode:** Orchestrate parallel documentation agents for full monorepo coverage with cross-validation.
+
 ## Core Mandates
 
 1. **Code-First Analysis**: Always analyze actual code before generating docs
@@ -24,10 +26,11 @@ Generate comprehensive documentation for IntexuraOS services.
 3. **Incremental Updates**: Website content updates are additive, not full regenerations
 4. **Quality Assurance**: Self-critique before writing files to disk
 5. **Debt Tracking**: Archive resolved items, never delete history
+6. **Cross-Validation**: After generation, validate docs against code and other service docs
 
 ## Output Files
 
-Each service produces 5 documentation files:
+### Per Service (apps/workers) -- 5 files
 
 | File                | Purpose                                      | Audience              |
 | ------------------- | -------------------------------------------- | --------------------- |
@@ -37,31 +40,53 @@ Each service produces 5 documentation files:
 | `technical-debt.md` | Known issues, debt items, future plans       | Maintainers           |
 | `agent.md`          | Machine-readable interface (autonomous only) | AI agents             |
 
-Plus website content updates:
+### Per Package -- 3 files
 
-| File                | Purpose                |
-| ------------------- | ---------------------- |
-| `services/index.md` | Service catalog        |
-| `site-marketing.md` | Marketing pages source |
-| `site-developer.md` | Developer docs source  |
-| `site-index.json`   | Structured metadata    |
-| `overview.md`       | Project narrative      |
+| File                | Purpose                                | Audience    |
+| ------------------- | -------------------------------------- | ----------- |
+| `README.md`         | Overview, API, dependencies, usage     | Developers  |
+| `technical-debt.md` | Known issues, debt items, future plans | Maintainers |
+| `agent.md`          | Machine-readable interface             | AI agents   |
+
+### Aggregation files
+
+| File                    | Purpose             |
+| ----------------------- | ------------------- |
+| `services/index.md`     | Service catalog     |
+| `site-index.json`       | Structured metadata |
+| `overview.md`           | Project narrative   |
+| `documentation-runs.md` | Run history log     |
+
+### Cross-Validation reports
+
+| File                               | Purpose                          |
+| ---------------------------------- | -------------------------------- |
+| `validation/http-contracts-*.md`   | HTTP endpoint consistency        |
+| `validation/pubsub-contracts-*.md` | Pub/Sub topic/IAM consistency    |
+| `validation/ai-models-*.md`        | AI model registry consistency    |
+| `validation/firestore-*.md`        | Collection ownership consistency |
+| `validation/package-deps-*.md`     | Package dependency consistency   |
+| `validation/env-vars-*.md`         | Environment variable consistency |
+| `validation/v*-run-report.md`      | Comprehensive run report         |
 
 ## Mode Selection
 
-| Mode        | When to Use                          | Invocation                         |
-| ----------- | ------------------------------------ | ---------------------------------- |
-| Discovery   | List services, check doc status      | `/document-service` (no args)      |
-| Interactive | Document one service with user input | `/document-service <service-name>` |
-| Autonomous  | Batch document all/multiple services | Task tool → `service-scribe`       |
+| Mode        | When to Use                           | Invocation                                |
+| ----------- | ------------------------------------- | ----------------------------------------- |
+| Discovery   | List services, check doc status       | `/document-service` (no args)             |
+| Interactive | Document one service with user input  | `/document-service <service-name>`        |
+| Autonomous  | Batch document one/few services       | Task tool -> `service-scribe`             |
+| Team        | Full monorepo docs + cross-validation | Orchestrate parallel agents (see team.md) |
 
 ## Invocation Detection
 
-| Input Pattern                       | Workflow                                   |
-| ----------------------------------- | ------------------------------------------ |
-| `/document-service`                 | [discovery.md](workflows/discovery.md)     |
-| `/document-service <service>`       | [interactive.md](workflows/interactive.md) |
-| Task tool `service-scribe` subagent | [autonomous.md](workflows/autonomous.md)   |
+| Input Pattern                       | Workflow                                             |
+| ----------------------------------- | ---------------------------------------------------- |
+| `/document-service`                 | [discovery.md](workflows/discovery.md)               |
+| `/document-service <service>`       | [interactive.md](workflows/interactive.md)           |
+| Task tool `service-scribe` subagent | [autonomous.md](workflows/autonomous.md)             |
+| "Document all services" / team mode | [team.md](workflows/team.md)                         |
+| "Validate docs" / "cross-validate"  | [cross-validation.md](workflows/cross-validation.md) |
 
 ## References
 

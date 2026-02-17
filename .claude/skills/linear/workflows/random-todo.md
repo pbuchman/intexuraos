@@ -1,82 +1,117 @@
-# Random Todo Workflow (Cron Mode)
+# Random Todo Workflow
 
 **Trigger:** User calls `/linear` with no arguments.
+
+---
+
+## Purpose
+
+Select a Todo issue and delegate to [work-existing.md](work-existing.md) for execution.
+
+---
 
 ## Non-Interactive Contract (MANDATORY)
 
 **This mode operates WITHOUT user interaction. The following rules are absolute:**
 
-| Rule             | Description                                                                  |
-| ---------------- | ---------------------------------------------------------------------------- |
-| **NO PROMPTS**   | Never ask "what should I do?", "which task?", or "ready to start?"           |
-| **AUTO-PROCEED** | Always proceed with the selected Todo item automatically                     |
-| **NO TASKS**     | If Todo state is empty, print message and exit gracefully                    |
-| **BLOCKER PR**   | If task cannot be completed, create PR with explanation and consider it done |
+| Rule             | Description                                                        |
+| ---------------- | ------------------------------------------------------------------ |
+| **NO PROMPTS**   | Never ask "what should I do?", "which task?", or "ready to start?" |
+| **AUTO-PROCEED** | Always proceed with the selected Todo item automatically           |
+| **NO TASKS**     | If Todo state is empty, print message and exit gracefully          |
 
-**The command is designed for automated/cron usage. It MUST NOT block on user input.**
+---
 
-## Selection Algorithm
-
-```
-1. List issues where state is "Todo" (NOT from Backlog)
-2. Filter to team: "IntexuraOS"
-3. Sort by priority (High → Low) then createdAt (newest first)
-4. Pick first result
-5. If no items: Print "No items in Todo state." and exit
-```
-
-## Execution Steps
+## Verbose Transition Logging (MANDATORY)
 
 ```
-1. Verify tools (Linear, GitHub, GCloud) - fail fast if unavailable
-2. Fetch selected issue details
-3. Update Linear state to "In Progress" (CRITICAL: DO THIS FIRST)
-4. Create branch from origin/development (or origin/main)
-5. Implement the task (investigate, code, test)
-6. Run CI gate: pnpm run ci:tracked
-7. Merge latest base branch (resolve conflicts if any)
-8. Create PR with cross-links (or PR explaining blocker if task uncompletable)
-9. Update Linear state to "In Review"
+🔍 SEARCH: Looking for Todo issues in IntexuraOS...
+📋 FOUND: 3 issues in Todo state
+🎯 SELECTED: INT-456 "[feature] Add user preferences" (priority: High)
+🔀 ROUTING: Delegating to work-existing.md workflow
 ```
 
-## State Update Priority
+---
 
-**CRITICAL:** You MUST update the Linear issue state to "In Progress" BEFORE:
+## Steps
 
-- Reading any code
-- Planning implementation
-- Investigating the issue
-- Running any commands
+### 1. Tool Verification
 
-This signals that work has begun and prevents duplicate work.
+Verify Linear MCP, GitHub CLI, GCloud available. Fail fast if unavailable.
 
-## Branch Selection Logic
+### 2. Query Todo Issues
 
-```bash
-git fetch origin
-if git ls-remote --heads origin development | grep -q development; then
-  BASE_BRANCH="origin/development"
-else
-  BASE_BRANCH="origin/main"
-fi
-
-git checkout -b fix/INT-123 "$BASE_BRANCH"
+```
+Call mcp__linear__list_issues({
+  state: "Todo",
+  team: "IntexuraOS",
+  limit: 10
+})
 ```
 
-## When No Todo Items
+**Print:** `🔍 SEARCH: Looking for Todo issues in IntexuraOS...`
 
-**NON-INTERACTIVE:** Exit gracefully with message: "No items in Todo state."
+### 3. Selection Algorithm
 
-- Do NOT ask to create a new issue
-- Do NOT ask what to do instead
-- Do NOT pick from Backlog state
-- Simply print the message and exit
+```
+1. Filter to state: "Todo" (NOT Backlog)
+2. Sort by priority (High → Low) then createdAt (newest first)
+3. Pick first result
+```
 
-## Blocker Handling
+**Print:** `📋 FOUND: X issues in Todo state`
 
-When task cannot be completed (auth failure, missing info, blockers):
+### 4. Handle Empty Queue
 
-1. Create a PR explaining the blocker
-2. The PR serves as the deliverable documenting what needs to be resolved
-3. Include all investigation findings in the PR body
-4. Update Linear state to "In Review" and move on
+If no items in Todo state:
+
+```
+📋 FOUND: 0 issues in Todo state
+✅ COMPLETE: No items in Todo state. Nothing to do.
+```
+
+**STOP.** Do NOT:
+
+- Ask to create a new issue
+- Ask what to do instead
+- Pick from Backlog state
+
+### 5. Select and Delegate
+
+**Print:**
+
+```
+🎯 SELECTED: INT-XXX "<title>" (priority: <priority>)
+🔀 ROUTING: Delegating to work-existing.md workflow
+```
+
+**Then:** Execute [work-existing.md](work-existing.md) with the selected issue ID.
+
+> **Parameter passing:** The selected issue ID is passed to `work-existing.md` as if the user had typed `/linear INT-XXX`. The downstream workflow receives the issue identifier, not the raw UUID.
+
+---
+
+## What Happens Next
+
+The `work-existing.md` router will:
+
+1. Fetch full issue details
+2. Check labels for phase routing
+3. Execute Phase 1 or Phase 2 as appropriate
+
+This file does NOT execute the issue — it only selects it.
+
+---
+
+## Two-Cycle Pattern (Non-Ready Issues)
+
+If selected issue has NO `code-task` label:
+
+```
+Cycle 1: /linear → select issue → Phase 1 → enrich → add code-task → STOP
+Cycle 2: /linear → select same issue (now has code-task) → Phase 2 → execute → PR
+```
+
+**This is intentional.** Phase 1 prepares the issue, Phase 2 executes it. Cron naturally handles this over two runs.
+
+> ⚠️ **Assumption:** "Select same issue" assumes priority/recency sorting. If higher-priority issues exist in the queue, a different issue may be selected on Cycle 2. For guaranteed continuation, use `/linear INT-XXX` directly.

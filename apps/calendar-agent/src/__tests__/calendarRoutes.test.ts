@@ -12,7 +12,6 @@ import { resetServices, setServices } from '../services.js';
 import {
   FakeGoogleCalendarClient,
   FakeUserServiceClient,
-  FakeLlmUserServiceClient,
   FakeFailedEventRepository,
   FakeCalendarActionExtractionService,
   FakeProcessedActionRepository,
@@ -32,7 +31,6 @@ describe('Calendar Routes', () => {
   const issuer = `https://${AUTH_DOMAIN}/`;
 
   let fakeUserService: FakeUserServiceClient;
-  let fakeLlmUserService: FakeLlmUserServiceClient;
   let fakeCalendarClient: FakeGoogleCalendarClient;
   let fakeFailedEventRepository: FakeFailedEventRepository;
   let fakeCalendarActionExtractionService: FakeCalendarActionExtractionService;
@@ -81,7 +79,6 @@ describe('Calendar Routes', () => {
     clearJwksCache();
 
     fakeUserService = new FakeUserServiceClient();
-    fakeLlmUserService = new FakeLlmUserServiceClient();
     fakeCalendarClient = new FakeGoogleCalendarClient();
     fakeFailedEventRepository = new FakeFailedEventRepository();
     fakeCalendarActionExtractionService = new FakeCalendarActionExtractionService();
@@ -89,7 +86,6 @@ describe('Calendar Routes', () => {
 
     setServices({
       userServiceClient: fakeUserService,
-      llmUserServiceClient: fakeLlmUserService,
       googleCalendarClient: fakeCalendarClient,
       failedEventRepository: fakeFailedEventRepository,
       calendarActionExtractionService: fakeCalendarActionExtractionService,
@@ -164,7 +160,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Google Calendar not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Google Calendar not connected');
 
       const response = await app.inject({
         method: 'GET',
@@ -178,7 +174,7 @@ describe('Calendar Routes', () => {
 
     it('returns 401 on token error', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('TOKEN_ERROR', 'Token expired');
+      fakeUserService.setTokenError('TOKEN_REFRESH_FAILED', 'Token expired');
 
       const response = await app.inject({
         method: 'GET',
@@ -270,7 +266,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'GET',
@@ -390,7 +386,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'POST',
@@ -548,7 +544,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'PATCH',
@@ -625,7 +621,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'DELETE',
@@ -716,7 +712,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'POST',
@@ -761,7 +757,6 @@ describe('Calendar Routes', () => {
       clearJwksCache();
       setServices({
         userServiceClient: fakeUserService,
-        llmUserServiceClient: fakeLlmUserService,
         googleCalendarClient: fakeCalendarClient,
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,
@@ -784,7 +779,6 @@ describe('Calendar Routes', () => {
       clearJwksCache();
       setServices({
         userServiceClient: fakeUserService,
-        llmUserServiceClient: fakeLlmUserService,
         googleCalendarClient: fakeCalendarClient,
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,
@@ -1002,6 +996,324 @@ describe('Calendar Routes', () => {
       const body = response.json() as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+  });
+
+  describe('DELETE /calendar/failed-events/:id', () => {
+    it('returns 401 when not authenticated', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/calendar/failed-events/event-123',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when event not found', async () => {
+      const token = await createJwt('user-123');
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/calendar/failed-events/nonexistent',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json() as { success: boolean; error: { code: string } };
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 404 when event belongs to different user', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'other-user',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Test Event',
+        start: null,
+        end: null,
+        location: null,
+        description: null,
+        error: 'Test error',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('other-user');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/calendar/failed-events/${String(eventId)}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('deletes failed event and returns 204', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'user-123',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Test Event',
+        start: null,
+        end: null,
+        location: null,
+        description: null,
+        error: 'Test error',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('user-123');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/calendar/failed-events/${String(eventId)}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(204);
+
+      const afterDelete = await fakeFailedEventRepository.list('user-123');
+      expect(afterDelete.ok && afterDelete.value).toHaveLength(0);
+    });
+
+    it('returns 502 when get fails', async () => {
+      const token = await createJwt('user-123');
+      fakeFailedEventRepository.setGetResult(err({ code: 'INTERNAL_ERROR', message: 'DB error' }));
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/calendar/failed-events/event-123',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+    });
+
+    it('returns 502 when delete fails', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'user-123',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Test Event',
+        start: null,
+        end: null,
+        location: null,
+        description: null,
+        error: 'Test error',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('user-123');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      fakeFailedEventRepository.setDeleteResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Delete failed' })
+      );
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/calendar/failed-events/${String(eventId)}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json() as { success: boolean; error: { code: string } };
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+  });
+
+  describe('POST /calendar/failed-events/:id/retry', () => {
+    it('returns 401 when not authenticated', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/calendar/failed-events/event-123/retry',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when event not found', async () => {
+      const token = await createJwt('user-123');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/calendar/failed-events/nonexistent/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json() as { success: boolean; error: { code: string } };
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 404 when event belongs to different user', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'other-user',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Test Event',
+        start: '2025-01-15T10:00:00Z',
+        end: '2025-01-15T11:00:00Z',
+        location: null,
+        description: null,
+        error: 'Test error',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('other-user');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 422 when start or end is missing', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'user-123',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Test Event',
+        start: null,
+        end: null,
+        location: null,
+        description: null,
+        error: 'Missing time',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('user-123');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(422);
+      const body = response.json() as { success: boolean; error: { message: string } };
+      expect(body.error.message).toContain('missing start or end');
+    });
+
+    it('creates event and deletes failed event on success', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'user-123',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Retry Event',
+        start: '2025-01-15T10:00:00Z',
+        end: '2025-01-15T11:00:00Z',
+        location: 'Room A',
+        description: 'Test description',
+        error: 'Previous error',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('user-123');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { success: boolean; data: { event: { summary: string } } };
+      expect(body.success).toBe(true);
+      expect(body.data.event.summary).toBe('Retry Event');
+
+      const afterRetry = await fakeFailedEventRepository.list('user-123');
+      expect(afterRetry.ok && afterRetry.value).toHaveLength(0);
+    });
+
+    it('returns 422 when calendar API fails', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'user-123',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Test Event',
+        start: '2025-01-15T10:00:00Z',
+        end: '2025-01-15T11:00:00Z',
+        location: null,
+        description: null,
+        error: 'Previous error',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('user-123');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      fakeCalendarClient.setCreateResult(err({ code: 'INVALID_REQUEST', message: 'Invalid time' }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(422);
+      const body = response.json() as { success: boolean; error: { message: string } };
+      expect(body.error.message).toBe('Invalid time');
+    });
+
+    it('returns 502 when get fails', async () => {
+      const token = await createJwt('user-123');
+      fakeFailedEventRepository.setGetResult(err({ code: 'INTERNAL_ERROR', message: 'DB error' }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/calendar/failed-events/event-123/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+    });
+
+    it('succeeds but logs error when delete of failed event fails after retry', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'user-123',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Retry Event',
+        start: '2025-01-15T10:00:00Z',
+        end: '2025-01-15T11:00:00Z',
+        location: null,
+        description: null,
+        error: 'Previous error',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('user-123');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      fakeFailedEventRepository.setDeleteResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Delete failed' })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        success: boolean;
+        data: { event: { summary: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.event.summary).toBe('Retry Event');
+
+      const afterRetry = await fakeFailedEventRepository.list('user-123');
+      expect(afterRetry.ok && afterRetry.value).toHaveLength(1);
     });
   });
 });

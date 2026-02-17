@@ -77,12 +77,12 @@ export function ShareTargetPage(): React.JSX.Element {
         <Card>
           <div className="p-6">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
-                <Share2 className="h-5 w-5 text-blue-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
+                <Share2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-slate-900">Shared Content</h1>
-                <p className="text-sm text-slate-500">Review and save to your inbox</p>
+                <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Shared Content</h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Review and save to your inbox</p>
               </div>
             </div>
 
@@ -91,7 +91,7 @@ export function ShareTargetPage(): React.JSX.Element {
               onChange={(e): void => {
                 setContent(e.target.value);
               }}
-              className="mb-6 h-48 w-full resize-none rounded-lg border border-slate-300 p-3 text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="mb-6 h-48 w-full resize-none rounded-lg border border-slate-300 p-3 text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
               placeholder="Shared content..."
             />
 

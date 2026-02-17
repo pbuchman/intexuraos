@@ -15,9 +15,8 @@
 # ┌─────────────────────────────────────────────────────────────────────────┐
 # │ BATCH 1 - Foundation (DB migration + lightweight services)              │
 # │   1. deploy-firestore        (migration - runs first)                   │
-# │   2. promptvault-service                                                │
-# │   3. image-service                                                      │
-# │   4. api-docs-hub                                                       │
+# │   2. image-service                                                      │
+# │   3. api-docs-hub                                                       │
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 2 - Core Services A                                               │
 # │   1. notion-service                                                     │
@@ -39,18 +38,25 @@
 # │   2. todos-agent                                                        │
 # │   3. bookmarks-agent                                                    │
 # ├─────────────────────────────────────────────────────────────────────────┤
-# │ BATCH 6 - Final Services (add new services HERE)                        │
+# │ BATCH 6 - Agents C                                                      │
 # │   1. calendar-agent                                                     │
 # │   2. linear-agent                                                       │
 # │   3. web-agent                                                          │
 # ├─────────────────────────────────────────────────────────────────────────┤
-# │ BATCH 7 - Web Frontend                                                  │
+# │ BATCH 7 - Code Agent (add new services HERE)                            │
+# │   1. code-agent                                                         │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ BATCH 8 - Cloud Functions Workers (parallel with Batch 1-7)             │
+# │   1. vm-lifecycle                                                       │
+# │   2. log-cleanup                                                        │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ BATCH 9 - Web Frontend                                                  │
 # │   1. web (frontend - after all services deployed)                       │
 # └─────────────────────────────────────────────────────────────────────────┘
 #
 # ADDING NEW SERVICES:
-#   1. Add to Batch 6 if it has < 3 services
-#   2. If Batch 6 is full, create new batch before web frontend
+#   1. Add to Batch 7 if it has < 3 services
+#   2. If Batch 7 is full, create new batch before web frontend
 #   3. Update waitFor dependencies accordingly
 #
 # RETRY LOGIC:
@@ -63,18 +69,6 @@ steps:
   # ===========================================================================
   # PREP
   # ===========================================================================
-  - name: 'ubuntu'
-    id: 'diagnose-start'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        echo "=== INITIAL DISK USAGE ==="
-        df -h
-        echo "=== REPO SIZE ==="
-        du -sh .
-        chmod +x cloudbuild/scripts/build-push-monitored.sh
-
   - name: 'node:22-slim'
     id: 'pnpm-install'
     entrypoint: 'bash'
@@ -83,6 +77,23 @@ steps:
       - |
         npm install -g pnpm@10
         pnpm install --frozen-lockfile
+
+  # Build claude-worker Docker image (no deploy, runs in parallel with pnpm-install)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-claude-worker'
+    waitFor: ['-'] # Start immediately, no dependencies
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'claude-worker',
+        'workers/claude-worker/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
 
   # ===========================================================================
   # BATCH 1 - Foundation (Firestore + 3 lightweight services)
@@ -102,23 +113,7 @@ steps:
     env:
       - 'PROJECT_ID=$PROJECT_ID'
 
-  # --- Batch 1 Builds (3 parallel) ---
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-promptvault-service'
-    waitFor: ['pnpm-install']
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'promptvault-service',
-        'apps/promptvault-service/Dockerfile',
-      ]
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
+  # --- Batch 1 Builds (2 parallel) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-image-service'
     waitFor: ['pnpm-install']
@@ -149,17 +144,6 @@ steps:
 
   # --- Batch 1 Deploys (wait for builds + firestore) ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-promptvault-service'
-    waitFor: ['build-push-promptvault-service', 'deploy-firestore']
-    entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-promptvault-service.sh']
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'REGION=${_REGION}'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'ENVIRONMENT=${_ENVIRONMENT}'
-
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-image-service'
     waitFor: ['build-push-image-service', 'deploy-firestore']
     entrypoint: 'bash'
@@ -188,7 +172,7 @@ steps:
   # --- Batch 2 Builds (wait for Batch 1 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notion-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    waitFor: ['deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -204,7 +188,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-user-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    waitFor: ['deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -216,7 +200,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-whatsapp-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    waitFor: ['deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -533,7 +517,7 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 6 - Final Services (ADD NEW SERVICES HERE, max 3)
+  # BATCH 6 - Agents C (3 services)
   # ===========================================================================
 
   # --- Batch 6 Builds (wait for Batch 5 deploys) ---
@@ -611,12 +595,86 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 7 - Web Frontend (after all services deployed)
+  # BATCH 7 - Code Agent, Chat Agent (ADD NEW SERVICES HERE, max 3)
+  # ===========================================================================
+
+  # --- Batch 7 Builds (wait for Batch 6 deploys) ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-code-agent'
+    waitFor: ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'code-agent', 'apps/code-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-chat-agent'
+    waitFor: ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'chat-agent', 'apps/chat-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  # --- Batch 7 Deploys ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-code-agent'
+    waitFor: ['build-push-code-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-code-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-chat-agent'
+    waitFor: ['build-push-chat-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-chat-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===========================================================================
+  # BATCH 8 - Cloud Functions Workers (CONSOLIDATED)
+  # ===========================================================================
+
+  - name: 'node:22-slim'
+    id: 'build-all-workers'
+    waitFor: ['pnpm-install']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        corepack enable
+        bash cloudbuild/scripts/build-all-workers.sh
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-all-workers'
+    waitFor: ['build-all-workers']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/deploy-all-workers.sh']
+    env:
+      - 'REGION=${_REGION}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FUNCTIONS_SOURCE_BUCKET=${_FUNCTIONS_SOURCE_BUCKET}'
+
+  # ===========================================================================
+  # BATCH 9 - Web Frontend (after all services deployed)
   # ===========================================================================
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
+    waitFor: ['deploy-code-agent', 'deploy-chat-agent', 'deploy-all-workers']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -627,7 +685,6 @@ steps:
         # Cloud Run services to fetch URLs for
         CLOUD_RUN_SERVICES=(
           "user-service:USER_SERVICE"
-          "promptvault-service:PROMPTVAULT_SERVICE"
           "whatsapp-service:WHATSAPP_SERVICE"
           "notion-service:NOTION_SERVICE"
           "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
@@ -639,8 +696,10 @@ steps:
           "todos-agent:TODOS_AGENT"
           "bookmarks-agent:BOOKMARKS_AGENT"
           "calendar-agent:CALENDAR_AGENT"
+          "chat-agent:CHAT_AGENT"
           "app-settings-service:APP_SETTINGS_SERVICE"
           "linear-agent:LINEAR_AGENT"
+          "code-agent:CODE_AGENT"
         )
 
         # Fetch service URLs
@@ -708,7 +767,6 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_MEDIUM
   env:
     - 'DOCKER_BUILDKIT=1'
 

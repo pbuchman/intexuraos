@@ -9,6 +9,7 @@ export interface BookmarkContent {
 export interface SummaryError {
   code: 'NO_API_KEY' | 'USER_SERVICE_ERROR' | 'GENERATION_ERROR' | 'NO_CONTENT';
   message: string;
+  transient?: boolean;
 }
 
 export interface BookmarkSummaryService {

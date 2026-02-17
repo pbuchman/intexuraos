@@ -12,7 +12,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
-import { resetServices, type ServiceContainer, setServices } from '../services.js';
+import { getServices, resetServices, type ServiceContainer, setServices } from '../services.js';
 import {
   createFakeContextInferrer,
   createFakeInputValidator,
@@ -21,10 +21,13 @@ import {
   createFailingLlmResearchProvider,
   createFakeSynthesizer,
   createFakeTitleGenerator,
+  createFakeNotionExporter,
   FakeLlmCallPublisher,
   FakeNotificationSender,
+  FakeNotionServiceClient,
   FakeResearchEventPublisher,
   FakeResearchRepository,
+  FakeResearchExportSettings,
   FakeUserServiceClient,
 } from './fakes.js';
 import type { Research } from '../domain/research/index.js';
@@ -83,12 +86,14 @@ describe('Research Routes - Unauthenticated', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -98,6 +103,7 @@ describe('Research Routes - Unauthenticated', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -270,8 +276,8 @@ describe('Research Routes - Authenticated', () => {
   let fakeResearchEventPublisher: FakeResearchEventPublisher;
   let fakeNotificationSender: FakeNotificationSender;
 
-  async function createToken(sub: string): Promise<string> {
-    const builder = new jose.SignJWT({ sub })
+  async function createToken(sub: string, claims?: Record<string, unknown>): Promise<string> {
+    const builder = new jose.SignJWT({ sub, ...claims })
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
       .setIssuedAt()
       .setIssuer(issuer)
@@ -335,12 +341,14 @@ describe('Research Routes - Authenticated', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -350,6 +358,7 @@ describe('Research Routes - Authenticated', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -2020,12 +2029,14 @@ describe('Research Routes - Authenticated', () => {
       const newFakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: newFakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: newFakeResearchEventPublisher,
         llmCallPublisher: newFakeLlmCallPublisher,
         userServiceClient: newFakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: newFakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2035,6 +2046,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -2290,10 +2302,12 @@ describe('Research Routes - Authenticated', () => {
     it('returns 500 when synthesis fails during retry', async () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         generateId: () => 'new-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: new FakeNotificationSender(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         pricingContext: fakePricingContext,
@@ -2305,6 +2319,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -2421,12 +2436,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2436,6 +2453,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2464,12 +2482,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -2479,6 +2499,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -2506,12 +2527,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2521,6 +2544,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2549,12 +2573,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -2564,6 +2590,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -2592,12 +2619,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2607,6 +2636,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2635,12 +2665,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -2650,6 +2682,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -2677,12 +2710,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2692,6 +2727,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => failingValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2718,12 +2754,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -2733,6 +2771,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -2837,12 +2876,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2852,6 +2893,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => failingValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2877,12 +2919,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -2892,6 +2936,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -3103,12 +3148,14 @@ describe('System Endpoints', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -3118,6 +3165,7 @@ describe('System Endpoints', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -3144,6 +3192,11 @@ describe('System Endpoints', () => {
       url: '/openapi.json',
     });
 
+    if (response.statusCode !== 200) {
+      const body = JSON.parse(response.body);
+      // Error details are in the body for debugging
+      void body;
+    }
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { openapi: string };
     expect(body.openapi).toBeDefined();
@@ -3153,6 +3206,7 @@ describe('System Endpoints', () => {
 describe('Internal Routes', () => {
   let app: FastifyInstance;
   let fakeRepo: FakeResearchRepository;
+  let fakeUserServiceClient: FakeUserServiceClient;
   const TEST_INTERNAL_TOKEN = 'test-internal-auth-token';
 
   beforeEach(async () => {
@@ -3163,18 +3217,20 @@ describe('Internal Routes', () => {
     process.env['INTEXURAOS_WEB_APP_URL'] = 'https://app.example.com';
 
     fakeRepo = new FakeResearchRepository();
-    const fakeUserServiceClient = new FakeUserServiceClient();
+    fakeUserServiceClient = new FakeUserServiceClient();
     const fakeResearchEventPublisher = new FakeResearchEventPublisher();
     const fakeNotificationSender = new FakeNotificationSender();
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -3184,6 +3240,7 @@ describe('Internal Routes', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -3258,8 +3315,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when X-Internal-Auth header has wrong value', async () => {
@@ -3276,8 +3333,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured', async () => {
@@ -3296,8 +3353,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 500 on save failure', async () => {
@@ -3323,6 +3380,54 @@ describe('Internal Routes', () => {
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('failed');
       expect(body.data.errorCode).toBe('EXTERNAL_API_ERROR');
+    });
+
+    it('creates draft research with empty models when getApiKeys fails', async () => {
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          originalMessage: 'Research AI using gemini',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; resourceUrl?: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+    });
+
+    it('creates draft research with empty models when getLlmClient fails', async () => {
+      fakeUserServiceClient.setFailNextGetLlmClient(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          originalMessage: 'Research AI using gemini',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; resourceUrl?: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
     });
   });
 
@@ -3351,8 +3456,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('accepts Pub/Sub push with from header', async () => {
@@ -3380,7 +3485,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
-      expect(body.success).toBe(false);
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('accepts direct call with x-internal-auth header', async () => {
@@ -3424,9 +3530,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Invalid message format');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns 200 with error for unexpected event type', async () => {
@@ -3444,9 +3550,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Unexpected event type');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns 200 with error for non-existent research', async () => {
@@ -3469,9 +3575,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Research not found');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
   });
 
@@ -3549,7 +3655,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
-      expect(body.success).toBe(false);
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns 200 for unexpected event type', async () => {
@@ -3568,7 +3675,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
-      expect(body.success).toBe(false);
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
   });
 
@@ -3617,12 +3725,14 @@ describe('Internal Routes', () => {
       const fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -3632,6 +3742,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -3715,9 +3826,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Invalid message format');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns error for unexpected event type', async () => {
@@ -3735,9 +3846,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Unexpected event type');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns error when research not found', async () => {
@@ -3755,9 +3866,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Research not found');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('skips already completed LLM calls (idempotency)', async () => {
@@ -3847,9 +3958,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Failed to fetch API keys');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
 
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.llmResults[0]?.status).toBe('failed');
@@ -3874,9 +3985,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('API key missing');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
 
       const failures = fakeNotificationSender.getSentFailures();
       expect(failures.length).toBe(1);
@@ -4176,12 +4287,14 @@ describe('Internal Routes', () => {
       // Override createResearchProvider to return a failing provider
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4191,6 +4304,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -4247,9 +4361,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toContain('Unexpected repository error');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
 
       // Verify the LLM result was updated to failed status
       const updatedResearch = fakeRepo.getAll()[0];
@@ -4270,12 +4384,14 @@ describe('Internal Routes', () => {
       fakeUserServiceClient = new FakeUserServiceClient();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: new FakeNotificationSender(),
         shareStorage: null,
         shareConfig: null,
@@ -4285,6 +4401,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -4332,12 +4449,14 @@ describe('Internal Routes', () => {
       fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: new FakeNotificationSender(),
         shareStorage: null,
         shareConfig: null,
@@ -4347,6 +4466,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -4419,12 +4539,14 @@ describe('Internal Routes', () => {
       const fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4438,6 +4560,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -4519,12 +4642,14 @@ describe('Internal Routes', () => {
       const fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4535,6 +4660,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -4595,12 +4721,14 @@ describe('Internal Routes', () => {
       // Override to have first one succeed, second fail
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4613,6 +4741,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -4652,6 +4781,92 @@ describe('Internal Routes', () => {
       expect(updatedResearch?.status).toBe('awaiting_confirmation');
       expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.O4MiniDeepResearch);
     });
+
+    it('handles all_completed state when all LLMs succeed', async () => {
+      const fakeShareStorage = {
+        upload: async (): Promise<
+          Result<{ gcsPath: string }, { code: 'UPLOAD_FAILED'; message: string }>
+        > => ok({ gcsPath: 'gs://test-bucket/share/abc123.html' }),
+        delete: async (): Promise<
+          Result<void, { code: 'DELETE_FAILED'; message: string }>
+        > => ok(undefined),
+      };
+      const fakeShareConfig = {
+        shareBaseUrl: 'https://storage.example.com/share',
+        staticAssetsUrl: 'https://cdn.example.com/assets',
+      };
+
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        researchExportSettings: new FakeResearchExportSettings(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notionServiceClient: new FakeNotionServiceClient(),
+        notificationSender: fakeNotificationSender,
+        shareStorage: fakeShareStorage,
+        shareConfig: fakeShareConfig,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: () =>
+          createFakeLlmResearchProvider('Success response', {
+            usage: { inputTokens: 100, outputTokens: 200, costUsd: 0.005 },
+          }),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: () => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
+      };
+      setServices(services);
+
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'First LLM result',
+            completedAt: new Date().toISOString(),
+          },
+          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+        openai: 'openai-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })),
+            messageId: 'msg-complete',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updatedResearch = fakeRepo.getAll()[0];
+      expect(updatedResearch?.llmResults.every((r) => r.status === 'completed')).toBe(true);
+      const secondResult = updatedResearch?.llmResults.find(
+        (r) => r.model === LlmModels.O4MiniDeepResearch
+      );
+      expect(secondResult?.inputTokens).toBe(100);
+      expect(secondResult?.outputTokens).toBe(200);
+      expect(secondResult?.costUsd).toBe(0.005);
+    });
   });
 });
 
@@ -4672,8 +4887,8 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
   let fakeNotificationSender: FakeNotificationSender;
   let fakeLlmCallPublisher: import('./fakes.js').FakeLlmCallPublisher;
 
-  async function createToken(sub: string): Promise<string> {
-    const builder = new jose.SignJWT({ sub })
+  async function createToken(sub: string, claims?: Record<string, unknown>): Promise<string> {
+    const builder = new jose.SignJWT({ sub, ...claims })
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
       .setIssuedAt()
       .setIssuer(issuer)
@@ -4740,12 +4955,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -4756,6 +4973,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -4862,12 +5080,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a title generator that fails
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4883,6 +5103,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         },
         createContextInferrer: () => createFakeContextInferrer(),
         createInputValidator: () => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -4950,12 +5171,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a title generator that fails
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4971,6 +5194,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         },
         createContextInferrer: () => createFakeContextInferrer(),
         createInputValidator: () => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -5294,12 +5518,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a validator that fails
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -5315,6 +5541,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
             err({ code: 'API_ERROR', message: 'Validation service unavailable' });
           return validator;
         },
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -5342,12 +5569,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a validator that returns WEAK_BUT_VALID
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -5371,6 +5600,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
             });
           return validator;
         },
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -5446,12 +5676,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a validator that fails improvement
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -5467,6 +5699,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
             err({ code: 'API_ERROR', message: 'Improvement failed' });
           return validator;
         },
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -5537,6 +5770,37 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       expect(body.error.code).toBe('MISCONFIGURED');
       expect(body.error.message).toContain('API key required for synthesis');
     });
+
+    it('succeeds when has no models but has inputContexts (line 771)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'draft-123',
+        status: 'draft',
+        selectedModels: [],
+        inputContexts: [
+          {
+            id: 'ctx-1',
+            content: 'Input context content',
+            addedAt: '2024-01-01T00:00:00Z',
+            label: 'Context Label',
+          },
+        ],
+        synthesisModel: LlmModels.Gemini25Pro,
+        skipSynthesis: true,
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft-123/approve',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+    });
   });
 
   describe('POST /research/:id/enhance - Uncovered branches (additional)', () => {
@@ -5558,5 +5822,372 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('NOT_FOUND');
     });
+  });
+
+  describe('POST /research - JWT claims coverage (lines 105-114)', () => {
+    it('stores generatedBy with name claim when JWT contains name', async () => {
+      const token = await createToken(TEST_USER_ID, { name: 'Test User' });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for JWT name claim',
+          selectedModels: [LlmModels.Gemini25Flash],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.userName).toBe('Test User');
+      expect(body.data.userEmail).toBeUndefined();
+    });
+
+    it('stores generatedBy with email claim when JWT contains email', async () => {
+      const token = await createToken(TEST_USER_ID, { email: 'test@example.com' });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for JWT email claim',
+          selectedModels: [LlmModels.Gemini25Flash],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.userEmail).toBe('test@example.com');
+      expect(body.data.userName).toBeUndefined();
+    });
+
+    it('stores generatedBy with both name and email claims when JWT contains both', async () => {
+      const token = await createToken(TEST_USER_ID, {
+        name: 'Test User',
+        email: 'test@example.com',
+      });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for JWT both claims',
+          selectedModels: [LlmModels.Gemini25Flash],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.userName).toBe('Test User');
+      expect(body.data.userEmail).toBe('test@example.com');
+    });
+
+    it('stores generatedBy as undefined when JWT has no name or email claims', async () => {
+      const token = await createToken(TEST_USER_ID); // No claims
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt without JWT claims',
+          selectedModels: [LlmModels.Gemini25Flash],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.userName).toBeUndefined();
+      expect(body.data.userEmail).toBeUndefined();
+    });
+
+    it('uses selectedModels[0] as synthesisModel when synthesisModel not provided (line 175)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'test-key',
+        openai: 'test-openai-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for synthesisModel fallback',
+          selectedModels: [LlmModels.O4MiniDeepResearch, LlmModels.Gemini25Pro],
+          // synthesisModel not provided - should use selectedModels[0]
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.synthesisModel).toBe(LlmModels.O4MiniDeepResearch);
+    });
+  });
+
+  describe('POST /research/:id/retry - Action fallback (line 3868)', () => {
+    it('returns already_completed message when research is already completed', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'completed',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Completed result',
+          },
+        ],
+        completedAt: new Date().toISOString(),
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/research-123/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: string; message: string }
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('already_completed');
+      expect(body.data.message).toBe('Research is already completed');
+    });
+  });
+
+  describe('POST /research/:id/export-notion', () => {
+    let fakeNotionClient: FakeNotionServiceClient;
+    let fakeExportSettings: FakeResearchExportSettings;
+
+    beforeEach(() => {
+      fakeNotionClient = getServices().notionServiceClient as FakeNotionServiceClient;
+      fakeExportSettings = getServices().researchExportSettings as FakeResearchExportSettings;
+
+      // Set up default Notion configuration for successful export
+      fakeNotionClient.setToken('test-notion-token');
+      fakeExportSettings.setResearchPageId(TEST_USER_ID, 'notion-page-123');
+    });
+
+    function createCompletedResearchForExport(overrides?: Partial<Research>): Research {
+      return createTestResearch({
+        status: 'completed' as const,
+        synthesizedResult: 'Synthesized research result with detailed analysis.',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed' as const,
+            result: 'LLM result content',
+          },
+        ],
+        completedAt: '2024-01-01T00:05:00Z',
+        ...overrides,
+      });
+    }
+
+    it('exports research to Notion successfully', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { id: string; notionExportInfo?: { mainPageUrl: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe(research.id);
+      expect(body.data.notionExportInfo).toBeDefined();
+      expect(body.data.notionExportInfo?.mainPageUrl).toBe('https://notion.so/test-main-page-id');
+
+      // Verify notionExportInfo was saved
+      const updated = await fakeRepo.findById(research.id);
+      expect(updated.ok).toBe(true);
+      if (updated.ok) {
+        expect(updated.value?.notionExportInfo?.mainPageUrl).toBe('https://notion.so/test-main-page-id');
+      }
+    });
+
+    it('returns 404 for non-existent research', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/non-existent-id/export-notion',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 for research owned by other user', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport({ userId: OTHER_USER_ID });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 400 when Notion not connected', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+      fakeNotionClient.setToken(null); // Not connected
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOTION_NOT_CONNECTED');
+    });
+
+    it('returns 400 when research page not configured', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+      fakeExportSettings.clear(); // No page configured
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('PAGE_NOT_CONFIGURED');
+    });
+
+    it('returns 400 when research not completed', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'processing' as const });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('RESEARCH_NOT_COMPLETED');
+    });
+
+    it('returns 400 when research has no synthesis', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        status: 'completed' as const,
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed' as const,
+            result: 'LLM result',
+          },
+        ],
+        completedAt: '2024-01-01T00:05:00Z',
+      });
+      // Remove synthesizedResult to test the validation
+      const { synthesizedResult: _synthesizedResult, ...researchWithoutSynthesis } = research;
+      fakeRepo.addResearch(researchWithoutSynthesis);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NO_SYNTHESIS');
+    });
+
+    it('returns 409 when already exported', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport({
+        notionExportInfo: {
+          mainPageId: 'existing-page-id',
+          mainPageUrl: 'https://notion.so/existing-page',
+          llmReportPageIds: [{ model: LlmModels.Gemini25Pro, pageId: 'report-123' }],
+          exportedAt: '2024-01-01T00:00:00Z',
+        },
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('ALREADY_EXPORTED');
+    });
+
+    it('returns 401 without auth token', async () => {
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    // Note: Testing Notion API errors (rate limiting, unauthorized) requires integration tests
+    // with actual Notion API mocking. The exporter's error handling is tested in
+    // notionResearchExporter.test.ts. These tests focus on route-level validation.
   });
 });

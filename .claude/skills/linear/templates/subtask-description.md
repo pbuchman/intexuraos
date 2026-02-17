@@ -2,47 +2,47 @@
 
 Template for child issues created during plan splitting.
 
-## Template
+---
 
-````markdown
-## 🚨 MANDATORY EXECUTION RULES (NON-NEGOTIABLE)
+## Parent Execution Mode Variant
 
-### Branch Creation — TASK FAILS WITHOUT THIS
+When child issues are executed via the **parent execution workflow** (invoked with `/linear INT-<parent>`), include this header at the top of the description:
 
-**YOU MUST CREATE A NEW BRANCH BEFORE ANY WORK.** This is not optional.
+```markdown
+## 🚨 PARENT EXECUTION MODE
 
-```bash
-git fetch origin
-git checkout -b feature/INT-XXX origin/development
+This issue is part of **parent issue execution**. The workflow:
+
+1. Executes ALL children in tier order continuously
+2. Does **NOT** stop between children
+3. Creates **ONE PR** for the parent issue
+4. Uses **ONE branch** named after the parent
+
+**DO NOT STOP** after completing this task — the parent execution loop continues automatically to the next child.
+
+---
 ```
 
-If you start working on `development` or `main`, **THE TASK HAS FAILED BY DEFINITION**. Stop immediately and create the branch.
+**When to use:** Add this variant when the subtask will be executed as part of a parent issue batch, not as a standalone issue.
 
-### Full CI Verification — NON-NEGOTIABLE
+---
 
-**`pnpm run ci:tracked` MUST pass before marking this task complete.**
+## Template
 
-- Running only `vitest` or `tsc` is NOT sufficient
-- Running only workspace-level checks is NOT sufficient
-- The ONLY acceptable verification is `pnpm run ci:tracked` passing locally
-- If CI fails, fix ALL errors (even in other workspaces) — you OWN them
+`````markdown
+## Test Requirements (MANDATORY - implement first)
 
-### Test Coverage — 95% is MINIMUM, Not Target
+**Backend Tests (`apps/<service>/src/__tests__/`):**
 
-- You MUST implement ALL required tests listed in this issue
-- 95% branch coverage is the MINIMUM acceptable threshold
-- Do NOT simplify work to save tokens or time
-- Do NOT skip edge cases or "nice to have" tests
-- Every test scenario mentioned MUST be implemented
+| Test        | Endpoint/Function | Scenario          | Expected          |
+| ----------- | ----------------- | ----------------- | ----------------- |
+| <test name> | <what is tested>  | <input/condition> | <output/behavior> |
+| ...         | ...               | ...               | ...               |
 
-### Continuation — MANDATORY
+**Frontend Tests (if applicable):**
 
-**After completing this task, you MUST IMMEDIATELY proceed to the next task.**
-
-- Do NOT wait for user input
-- Do NOT stop to ask if you should continue
-- Do NOT claim you need a break or fresh context
-- Commit, verify CI passes, then MOVE ON to the next issue
+- <test case 1>
+- <test case 2>
 
 ---
 
@@ -62,6 +62,7 @@ Tier: X | Sequence: Y
 
 ## Acceptance Criteria
 
+- [ ] All tests in Test Requirements table pass
 - [ ] <Criterion 1>
 - [ ] <Criterion 2>
 - [ ] <Criterion 3>
@@ -128,37 +129,22 @@ describe('featureName', () => {
 1. <Edge case 1>
 2. <Edge case 2>
 3. ...
-````
-
-## Notes
-
-<Implementation hints, gotchas, or context from parent plan>
-
----
-
-## 🚨 AFTER COMPLETION — MANDATORY NEXT STEPS
-
-1. ✅ Verify `pnpm run ci:tracked` passes (NON-NEGOTIABLE)
-2. ✅ Commit all changes with message: `INT-XXX <task description>`
-3. ✅ **IMMEDIATELY proceed to INT-YYY** — DO NOT STOP
-
-**DO NOT STOP.** After completing this task and committing, immediately proceed to the next unblocked task without waiting for user input.
 
 ````
 
 ## Mandatory Sections
 
-| Section                  | Required     | Purpose                                    |
-| ------------------------ | ------------ | ------------------------------------------ |
-| Context                  | Yes          | Links to parent, shows tier/sequence       |
-| Scope                    | Yes          | What this specific task covers             |
-| Requirements             | Yes          | Specific deliverables                      |
-| Acceptance Criteria      | Yes          | How to verify completion                   |
-| Dependencies             | Yes          | What blocks this / what this blocks        |
-| Verification             | Yes          | Commands to run                            |
-| Implementation Suggestions | Conditional | Required for code changes (see below)     |
-| Testing Scenarios        | Conditional  | Required when tests are expected           |
-| Continuation             | Varies       | Include for all except final task          |
+| Section                    | Required    | Purpose                                       |
+| -------------------------- | ----------- | --------------------------------------------- |
+| Test Requirements          | Yes         | **QUALITY GATE** - exact tests to implement   |
+| Context                    | Yes         | Links to parent, shows tier/sequence          |
+| Scope                      | Yes         | What this specific task covers                |
+| Requirements               | Yes         | Specific deliverables                         |
+| Acceptance Criteria        | Yes         | How to verify completion (includes tests)     |
+| Dependencies               | Yes         | What blocks this / what this blocks           |
+| Verification               | Yes         | Commands to run                               |
+| Implementation Suggestions | Conditional | Required for code changes (see below)         |
+| Continuation               | Varies      | Include for all except final task             |
 
 ## When to Include Implementation Suggestions
 
@@ -181,7 +167,7 @@ Always include tier and sequence in context section:
 
 ```markdown
 Tier: 0 | Sequence: 1
-````
+```
 
 This helps quickly identify:
 
@@ -203,3 +189,5 @@ The continuation directive ensures uninterrupted execution through the entire ta
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to the next unblocked task without waiting for user input.
 ```
+````
+`````

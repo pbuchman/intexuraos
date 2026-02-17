@@ -181,6 +181,22 @@ export class FakeUserServiceClient implements UserServiceClient {
     // Best effort - silently ignore in tests
   }
 
+  async getOAuthToken(
+    _userId: string,
+    _provider: import('@intexuraos/internal-clients').OAuthProvider
+  ): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    if (this.shouldFail) {
+      return err({
+        code: this.failCode,
+        message: this.failMessage,
+      });
+    }
+    return err({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'OAuth not configured in fake',
+    });
+  }
+
   setLlmClient(client: LlmGenerateClient): void {
     this.llmClient = client;
   }

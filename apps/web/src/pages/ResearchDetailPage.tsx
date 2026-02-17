@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle,
   ChevronDown,
   Clock,
   Copy,
-  ExternalLink,
   FileText,
   Link2,
   Link2Off,
@@ -15,6 +14,7 @@ import {
   RefreshCw,
   Share2,
   Star,
+  StickyNote,
   Trash2,
   XCircle,
 } from 'lucide-react';
@@ -28,11 +28,11 @@ import {
   Layout,
   ModelSelector,
   PROVIDER_MODELS,
-  RefreshIndicator,
   getSelectedModelsList,
 } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys, useResearch } from '@/hooks';
+import { stripMarkdown } from '@/utils';
 import {
   approveResearch,
   confirmPartialFailure,
@@ -41,6 +41,7 @@ import {
   retryFromFailed,
   toggleResearchFavourite,
   unshareResearch,
+  exportToNotion,
 } from '@/services/researchAgentApi';
 import {
   getProviderForModel,
@@ -53,45 +54,7 @@ import {
   type SupportedModel,
 } from '@/services/researchAgentApi.types';
 
-/**
- * Format elapsed time in a human-readable format.
- */
-function formatElapsedTime(isoDate: string): string {
-  const date = new Date(isoDate);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffDays > 0) {
-    return `${String(diffDays)}d ago`;
-  }
-  if (diffHours > 0) {
-    return `${String(diffHours)}h ago`;
-  }
-  if (diffMinutes > 0) {
-    return `${String(diffMinutes)}m ago`;
-  }
-  return 'just now';
-}
-
-/**
- * Strip markdown formatting from text for clean display.
- * Handles bold, italic, headers, code markers, and surrounding quotes.
- */
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/\*\*/g, '') // Remove bold markers
-    .replace(/__/g, '') // Remove bold (underscore)
-    .replace(/(?<!\*)\*(?!\*)/g, '') // Remove italic markers (single asterisk)
-    .replace(/(?<!_)_(?!_)/g, '') // Remove italic (single underscore)
-    .replace(/^#+\s*/gm, '') // Remove headers
-    .replace(/`/g, '') // Remove code markers
-    .replace(/^["']|["']$/g, '') // Remove surrounding quotes
-    .trim();
-}
+import { formatRelative } from '@/utils/dateFormat';
 
 interface StatusBadgeProps {
   status: ResearchStatus;
@@ -100,7 +63,7 @@ interface StatusBadgeProps {
 function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   if (status === 'draft') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-sm font-medium text-amber-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-sm font-medium text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
         <FileText className="h-3.5 w-3.5" />
         Draft
       </span>
@@ -108,7 +71,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   }
   if (status === 'pending') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-sm font-medium text-slate-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-sm font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">
         <Clock className="h-3.5 w-3.5" />
         Pending
       </span>
@@ -116,7 +79,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   }
   if (status === 'processing') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
         <Clock className="h-3.5 w-3.5" />
         Processing
       </span>
@@ -124,7 +87,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   }
   if (status === 'awaiting_confirmation') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-2.5 py-1 text-sm font-medium text-orange-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-2.5 py-1 text-sm font-medium text-orange-700 dark:bg-orange-900/50 dark:text-orange-300">
         <AlertTriangle className="h-3.5 w-3.5" />
         Action Required
       </span>
@@ -132,7 +95,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   }
   if (status === 'retrying') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
         <RefreshCw className="h-3.5 w-3.5" />
         Retrying
       </span>
@@ -140,7 +103,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   }
   if (status === 'synthesizing') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-2.5 py-1 text-sm font-medium text-purple-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-2.5 py-1 text-sm font-medium text-purple-700 dark:bg-purple-900/50 dark:text-purple-300">
         <Clock className="h-3.5 w-3.5" />
         Synthesizing
       </span>
@@ -148,7 +111,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   }
   if (status === 'completed') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-sm font-medium text-green-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-sm font-medium text-green-700 dark:bg-green-900/50 dark:text-green-300">
         <CheckCircle className="h-3.5 w-3.5" />
         Completed
       </span>
@@ -156,7 +119,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   }
   // failed
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-1 text-sm font-medium text-red-700">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-1 text-sm font-medium text-red-700 dark:bg-red-900/50 dark:text-red-300">
       <XCircle className="h-3.5 w-3.5" />
       Failed
     </span>
@@ -169,7 +132,7 @@ interface MarkdownContentProps {
 
 function MarkdownContent({ content }: MarkdownContentProps): React.JSX.Element {
   return (
-    <div className="prose prose-slate max-w-none overflow-x-auto">
+    <div className="prose prose-slate dark:prose-invert max-w-none overflow-x-auto">
       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
         {content}
       </ReactMarkdown>
@@ -195,7 +158,7 @@ function renderPromptWithLinks(text: string): React.JSX.Element {
               href={part}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 underline hover:text-blue-800"
+              className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
             >
               {part}
             </a>
@@ -221,7 +184,7 @@ function getModelDisplayName(modelId: SupportedModel): string {
 
 export function ResearchDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { research, loading, refreshing, error, refresh } = useResearch(id ?? '');
+  const { research, loading, error, refresh } = useResearch(id ?? '');
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
   const navigate = useNavigate();
@@ -243,12 +206,18 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const [togglingFavourite, setTogglingFavourite] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState<{ mainPageUrl: string } | null>(null);
   const [enhanceModelSelections, setEnhanceModelSelections] = useState<
     Map<LlmProvider, SupportedModel | null>
   >(() => new Map());
   const [enhanceContexts, setEnhanceContexts] = useState<string[]>([]);
   const [removeContextIds, setRemoveContextIds] = useState<Set<string>>(() => new Set());
   const [enhanceSynthesisModel, setEnhanceSynthesisModel] = useState<SupportedModel | null>(null);
+  const [linksExpanded, setLinksExpanded] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches
+  );
 
   const configuredProviders: LlmProvider[] =
     keysLoading || keys === null
@@ -479,6 +448,35 @@ export function ResearchDetailPage(): React.JSX.Element {
     }
   };
 
+  const handleExportToNotion = async (): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    setExporting(true);
+    setExportError(null);
+    setExportSuccess(null);
+
+    try {
+      const token = await getAccessToken();
+      const updatedResearch = await exportToNotion(token, id);
+
+      if (updatedResearch.notionExportInfo !== undefined) {
+        setExportSuccess({ mainPageUrl: updatedResearch.notionExportInfo.mainPageUrl });
+      }
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to export to Notion';
+      if (message.includes('NOTION_NOT_CONNECTED')) {
+        setExportError('Please connect Notion first in Settings');
+      } else if (message.includes('PAGE_NOT_CONFIGURED')) {
+        setExportError('Please configure Research Export Page ID in Settings');
+      } else {
+        setExportError(message);
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const getExistingProviders = (): Set<LlmProvider> => {
     if (research === null) return new Set();
     return new Set(research.selectedModels.map(getProviderForModel));
@@ -513,12 +511,9 @@ export function ResearchDetailPage(): React.JSX.Element {
   if (error !== null || research === null) {
     return (
       <Layout>
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error ?? 'Research not found'}
         </div>
-        <Link to="/research" className="text-blue-600 underline">
-          Back to list
-        </Link>
       </Layout>
     );
   }
@@ -543,112 +538,33 @@ export function ResearchDetailPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mb-4">
-        <Link to="/research" className="text-sm text-blue-600 hover:underline">
-          ← Back to list
-        </Link>
-      </div>
-
-      <RefreshIndicator show={refreshing} />
-
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-2xl font-bold text-slate-900">{getDisplayTitle()}</h2>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{getDisplayTitle()}</h2>
           <ResearchStatusBadge status={research.status} />
           <button
             onClick={(): void => {
               void handleToggleFavourite();
             }}
             disabled={togglingFavourite}
-            className="p-2 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
             aria-label={research.favourite === true ? 'Unfavourite' : 'Favourite'}
           >
             <Star
               className={`h-5 w-5 ${research.favourite === true ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
             />
           </button>
-          <span className="text-sm text-slate-500">
+          <span className="text-sm text-slate-500 dark:text-slate-400 w-full sm:w-auto">
             {isProcessing || research.status === 'awaiting_confirmation'
-              ? `Started ${formatElapsedTime(research.startedAt)}`
+              ? `Started ${formatRelative(research.startedAt)}`
               : research.completedAt !== undefined
-                ? `Finished ${formatElapsedTime(research.completedAt)}`
-                : `Started ${formatElapsedTime(research.startedAt)}`}
+                ? `Finished ${formatRelative(research.completedAt)}`
+                : `Started ${formatRelative(research.startedAt)}`}
           </span>
         </div>
 
-        {research.shareInfo !== undefined ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <Link2 className="h-4 w-4 text-slate-500" />
-            <span className="flex-1 truncate text-sm text-slate-600">
-              {research.shareInfo.shareUrl}
-            </span>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                window.open(research.shareInfo?.shareUrl, '_blank', 'noopener,noreferrer');
-              }}
-            >
-              <ExternalLink className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Open</span>
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                void handleCopyShareUrl();
-              }}
-            >
-              <Copy className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Copy</span>
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                void handleShare();
-              }}
-            >
-              <Share2 className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Share</span>
-            </Button>
-            {showUnshareConfirm ? (
-              <>
-                <Button
-                  variant="danger"
-                  onClick={(): void => {
-                    void handleUnshare();
-                  }}
-                  disabled={unsharing}
-                  isLoading={unsharing}
-                >
-                  <span className="hidden sm:inline">Confirm</span>
-                  <CheckCircle className="h-4 w-4 sm:hidden" />
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={(): void => {
-                    setShowUnshareConfirm(false);
-                  }}
-                  disabled={unsharing}
-                >
-                  <span className="hidden sm:inline">Cancel</span>
-                  <XCircle className="h-4 w-4 sm:hidden" />
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="secondary"
-                onClick={(): void => {
-                  setShowUnshareConfirm(true);
-                }}
-              >
-                <Link2Off className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Unshare</span>
-              </Button>
-            )}
-          </div>
-        ) : null}
-
         {unshareError !== null && unshareError !== '' ? (
-          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
             {unshareError}
           </div>
         ) : null}
@@ -727,15 +643,89 @@ export function ResearchDetailPage(): React.JSX.Element {
               </Button>
             ) : null}
             {research.status === 'completed' ? (
-              <Button
-                onClick={(): void => {
-                  setShowEnhanceModal(true);
-                }}
-                disabled={deleting}
-              >
-                <Plus className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Enhance</span>
-              </Button>
+              <>
+                <Button
+                  onClick={(): void => {
+                    setShowEnhanceModal(true);
+                  }}
+                  disabled={deleting}
+                >
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Enhance</span>
+                </Button>
+                {research.notionExportInfo === undefined &&
+                research.synthesizedResult !== undefined &&
+                research.synthesizedResult !== '' ? (
+                  <Button
+                    onClick={(): void => {
+                      void handleExportToNotion();
+                    }}
+                    disabled={exporting || deleting}
+                    isLoading={exporting}
+                    variant="secondary"
+                  >
+                    {exporting ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 sm:mr-2 animate-spin" />
+                        <span className="hidden sm:inline">Exporting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <StickyNote className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Export to Notion</span>
+                      </>
+                    )}
+                  </Button>
+                ) : null}
+                {research.shareInfo !== undefined ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      onClick={(): void => {
+                        void handleShare();
+                      }}
+                    >
+                      <Share2 className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Share</span>
+                    </Button>
+                    {showUnshareConfirm ? (
+                      <>
+                        <Button
+                          variant="danger"
+                          onClick={(): void => {
+                            void handleUnshare();
+                          }}
+                          disabled={unsharing}
+                          isLoading={unsharing}
+                        >
+                          <span className="hidden sm:inline">Confirm Unshare</span>
+                          <CheckCircle className="h-4 w-4 sm:hidden" />
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={(): void => {
+                            setShowUnshareConfirm(false);
+                          }}
+                          disabled={unsharing}
+                        >
+                          <span className="hidden sm:inline">Cancel</span>
+                          <XCircle className="h-4 w-4 sm:hidden" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        onClick={(): void => {
+                          setShowUnshareConfirm(true);
+                        }}
+                      >
+                        <Link2Off className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Unshare</span>
+                      </Button>
+                    )}
+                  </>
+                ) : null}
+              </>
             ) : null}
             {showDeleteConfirm ? (
               <>
@@ -777,39 +767,155 @@ export function ResearchDetailPage(): React.JSX.Element {
         )}
 
         {approveError !== null && approveError !== '' ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
             {approveError}
           </div>
         ) : null}
 
         {deleteError !== null && deleteError !== '' ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
             {deleteError}
           </div>
         ) : null}
 
         {retryError !== null && retryError !== '' ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
             {retryError}
+          </div>
+        ) : null}
+
+        {exportError !== null && exportError !== '' ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
+            {exportError}
+          </div>
+        ) : null}
+
+        {exportSuccess !== null ? (
+          <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
+            Research exported to Notion!{' '}
+            <a
+              href={exportSuccess.mainPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium underline hover:text-green-800 dark:hover:text-green-300"
+            >
+              View in Notion
+            </a>
+          </div>
+        ) : null}
+
+        {/* Collapsible Links Section */}
+        {(research.shareInfo !== undefined || research.notionExportInfo !== undefined) &&
+        research.status === 'completed' ? (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={(): void => {
+                setLinksExpanded(!linksExpanded);
+              }}
+              className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+            >
+              <span className="flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Links
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${linksExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {linksExpanded ? (
+              <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+                {research.shareInfo !== undefined ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-16">Share:</span>
+                    <a
+                      href={research.shareInfo.shareUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 truncate text-sm text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      {research.shareInfo.shareUrl}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={(): void => {
+                        void copyToClipboard(research.shareInfo?.shareUrl ?? '', 'share-link');
+                      }}
+                      className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
+                      title={copiedSection === 'share-link' ? 'Copied!' : 'Copy link'}
+                    >
+                      {copiedSection === 'share-link' ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                ) : null}
+                {research.notionExportInfo !== undefined ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-16">Notion:</span>
+                    <a
+                      href={research.notionExportInfo.mainPageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 truncate text-sm text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      {research.notionExportInfo.mainPageUrl}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={(): void => {
+                        void copyToClipboard(research.notionExportInfo?.mainPageUrl ?? '', 'notion-link');
+                      }}
+                      className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
+                      title={copiedSection === 'notion-link' ? 'Copied!' : 'Copy link'}
+                    >
+                      {copiedSection === 'notion-link' ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
 
-      <Card
-        title={research.originalPrompt !== undefined ? 'Improved Prompt' : 'Prompt'}
-        className="mb-6"
-      >
-        <blockquote className="border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 italic">
-          <p className="whitespace-pre-wrap text-slate-700">
+      <Card className="mb-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {research.originalPrompt !== undefined ? 'Enhanced Topic' : 'Research Topic'}
+          </h3>
+          <button
+            type="button"
+            onClick={() => {
+              void copyToClipboard(research.prompt, 'research-topic');
+            }}
+            className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
+            title={copiedSection === 'research-topic' ? 'Copied!' : 'Copy'}
+          >
+            {copiedSection === 'research-topic' ? (
+              <CheckCircle className="h-4 w-4 text-green-500" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+        <blockquote className="rounded border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 italic dark:bg-slate-700">
+          <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">
             {renderPromptWithLinks(research.prompt)}
           </p>
         </blockquote>
         {research.originalPrompt !== undefined ? (
           <details className="mt-3">
-            <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700">
-              Show original prompt
+            <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
+              Show original topic
             </summary>
-            <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm italic text-slate-500">
+            <blockquote className="mt-2 rounded border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm italic text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
               <p className="whitespace-pre-wrap">{research.originalPrompt}</p>
             </blockquote>
           </details>
@@ -823,15 +929,15 @@ export function ResearchDetailPage(): React.JSX.Element {
           <div className="flex flex-wrap gap-6">
             {research.totalDurationMs !== undefined ? (
               <div>
-                <p className="text-sm text-slate-500">Duration</p>
-                <p className="text-lg font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Duration</p>
+                <p className="text-lg font-semibold dark:text-slate-100">
                   {(research.totalDurationMs / 1000).toFixed(1)}s
                 </p>
               </div>
             ) : null}
             <div>
-              <p className="text-sm text-slate-500">Input Tokens</p>
-              <p className="text-lg font-semibold">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Input Tokens</p>
+              <p className="text-lg font-semibold dark:text-slate-100">
                 {(
                   research.totalInputTokens ??
                   research.llmResults.reduce((sum, r) => sum + (r.inputTokens ?? 0), 0)
@@ -839,8 +945,8 @@ export function ResearchDetailPage(): React.JSX.Element {
               </p>
             </div>
             <div>
-              <p className="text-sm text-slate-500">Output Tokens</p>
-              <p className="text-lg font-semibold">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Output Tokens</p>
+              <p className="text-lg font-semibold dark:text-slate-100">
                 {(
                   research.totalOutputTokens ??
                   research.llmResults.reduce((sum, r) => sum + (r.outputTokens ?? 0), 0)
@@ -848,8 +954,8 @@ export function ResearchDetailPage(): React.JSX.Element {
               </p>
             </div>
             <div>
-              <p className="text-sm text-slate-500">Total Cost</p>
-              <p className="text-lg font-semibold text-green-600">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Total Cost</p>
+              <p className="text-lg font-semibold text-green-600 dark:text-green-400">
                 $
                 {(
                   research.totalCostUsd ??
@@ -877,7 +983,7 @@ export function ResearchDetailPage(): React.JSX.Element {
       {/* Show input contexts during processing (before LLM results are available) */}
       {isProcessing && research.inputContexts !== undefined && research.inputContexts.length > 0 ? (
         <Card title="Input Contexts" className="mb-6">
-          <p className="text-sm text-slate-500 mb-4">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
             {String(research.inputContexts.length)} context
             {research.inputContexts.length > 1 ? 's' : ''} will be included in synthesis
           </p>
@@ -908,24 +1014,30 @@ export function ResearchDetailPage(): React.JSX.Element {
 
         if (research.synthesizedResult !== undefined && research.synthesizedResult !== '') {
           return (
-            <Card title="Synthesis Report" className="mb-6">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm text-slate-500">
-                  Synthesized by {getModelDisplayName(research.synthesisModel)}
-                </span>
-                <Button
-                  variant="secondary"
+            <Card className="mb-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Synthesis Report</h3>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">
+                    Synthesized by {getModelDisplayName(research.synthesisModel)}
+                  </span>
+                </div>
+                <button
+                  type="button"
                   onClick={(): void => {
                     void copyToClipboard(research.synthesizedResult ?? '', 'synthesis');
                   }}
+                  className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
+                  title={copiedSection === 'synthesis' ? 'Copied!' : 'Copy'}
                 >
-                  <Copy className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">
-                    {copiedSection === 'synthesis' ? 'Copied!' : 'Copy'}
-                  </span>
-                </Button>
+                  {copiedSection === 'synthesis' ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </button>
               </div>
-              <div className="rounded-lg bg-slate-50 p-4">
+              <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-700">
                 <MarkdownContent content={research.synthesizedResult} />
               </div>
             </Card>
@@ -942,43 +1054,49 @@ export function ResearchDetailPage(): React.JSX.Element {
           const hasCost = singleResult.costUsd !== undefined;
 
           return (
-            <Card title="Research Report" className="mb-6">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                  <span>
-                    Generated by {getModelDisplayName(singleResult.model as SupportedModel)}
-                  </span>
-                  {hasTokenInfo ? (
-                    <span className="text-slate-400">
-                      in: {formatTokenCount(singleResult.inputTokens ?? 0)} / out:{' '}
-                      {formatTokenCount(singleResult.outputTokens ?? 0)}
+            <Card className="mb-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Research Report</h3>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                    <span>
+                      Generated by {getModelDisplayName(singleResult.model as SupportedModel)}
                     </span>
-                  ) : null}
-                  {hasCost ? (
-                    <span className="font-medium text-green-600">
-                      {formatCost(singleResult.costUsd ?? 0)}
-                    </span>
-                  ) : null}
+                    {hasTokenInfo ? (
+                      <span className="text-slate-400">
+                        in: {formatTokenCount(singleResult.inputTokens ?? 0)} / out:{' '}
+                        {formatTokenCount(singleResult.outputTokens ?? 0)}
+                      </span>
+                    ) : null}
+                    {hasCost ? (
+                      <span className="font-medium text-green-600 dark:text-green-400">
+                        {formatCost(singleResult.costUsd ?? 0)}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-                <Button
-                  variant="secondary"
+                <button
+                  type="button"
                   onClick={(): void => {
                     void copyToClipboard(singleResult.result ?? '', 'main-report');
                   }}
+                  className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
+                  title={copiedSection === 'main-report' ? 'Copied!' : 'Copy'}
                 >
-                  <Copy className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">
-                    {copiedSection === 'main-report' ? 'Copied!' : 'Copy'}
-                  </span>
-                </Button>
+                  {copiedSection === 'main-report' ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </button>
               </div>
-              <div className="rounded-lg bg-slate-50 p-4">
+              <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-700">
                 <MarkdownContent content={singleResult.result} />
               </div>
               {singleResult.sources !== undefined && singleResult.sources.length > 0 ? (
-                <div className="mt-4 border-t border-slate-200 pt-4">
-                  <h4 className="mb-2 text-sm font-medium">Sources</h4>
-                  <ul className="text-sm text-blue-600">
+                <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+                  <h4 className="mb-2 text-sm font-medium dark:text-slate-200">Sources</h4>
+                  <ul className="text-sm text-blue-600 dark:text-blue-400">
                     {singleResult.sources.map((source, i) => (
                       <li key={i}>
                         <a
@@ -1002,9 +1120,9 @@ export function ResearchDetailPage(): React.JSX.Element {
       })()}
 
       {research.synthesisError !== undefined && research.synthesisError !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
-          <h3 className="font-medium text-red-800">Synthesis Failed</h3>
-          <p className="mt-1 text-sm text-red-700">{research.synthesisError}</p>
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+          <h3 className="font-medium text-red-800 dark:text-red-300">Synthesis Failed</h3>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-400">{research.synthesisError}</p>
         </div>
       ) : null}
 
@@ -1025,7 +1143,7 @@ export function ResearchDetailPage(): React.JSX.Element {
 
         return (
           <div>
-            <h3 className="mb-4 text-xl font-bold text-slate-900">Individual LLM Results</h3>
+            <h3 className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">Individual LLM Results</h3>
             <div className="space-y-4">
               {/* Input Contexts */}
               {research.inputContexts !== undefined && research.inputContexts.length > 0
@@ -1057,16 +1175,16 @@ export function ResearchDetailPage(): React.JSX.Element {
       })()}
 
       {showEnhanceModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8">
-          <div className="mx-4 w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="mb-4 text-lg font-semibold">Enhance Research</h3>
-            <p className="mb-4 text-sm text-slate-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-lg bg-white p-6 shadow-xl dark:bg-slate-800">
+            <h3 className="mb-4 text-lg font-semibold dark:text-slate-100">Enhance Research</h3>
+            <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
               Add more AI models, change synthesis model, or modify context.
             </p>
 
             {/* Additional Models */}
             <div className="mb-6">
-              <p className="text-sm font-medium text-slate-700 mb-3">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-3">
                 Add models from new providers:
               </p>
               <ModelSelector
@@ -1077,16 +1195,16 @@ export function ResearchDetailPage(): React.JSX.Element {
                 failedProviders={failedProviders}
                 disabled={enhancing}
               />
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
                 Providers already in research are disabled. Select models from other providers.
               </p>
             </div>
 
             {/* Synthesis Model */}
             <div className="mb-6">
-              <p className="text-sm font-medium text-slate-700 mb-3">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-3">
                 Synthesis Model{' '}
-                <span className="font-normal text-slate-500">
+                <span className="font-normal text-slate-500 dark:text-slate-400">
                   (current:{' '}
                   {PROVIDER_MODELS.flatMap((p) => p.models).find(
                     (m) => m.id === research.synthesisModel
@@ -1117,10 +1235,10 @@ export function ResearchDetailPage(): React.JSX.Element {
                         isSelected
                           ? 'bg-green-600 text-white'
                           : isCurrent
-                            ? 'bg-slate-200 text-slate-600'
+                            ? 'bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-300'
                             : hasKey
-                              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                              : 'bg-slate-50 text-slate-400 cursor-not-allowed'
+                              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                              : 'bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-slate-700/50 dark:text-slate-500'
                       }`}
                       title={
                         !hasKey ? 'API key not configured' : isCurrent ? 'Current model' : undefined
@@ -1138,9 +1256,9 @@ export function ResearchDetailPage(): React.JSX.Element {
             {/* Existing Contexts */}
             {(research.inputContexts?.length ?? 0) > 0 ? (
               <div className="mb-4">
-                <p className="text-sm font-medium text-slate-700 mb-2">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
                   Existing contexts{' '}
-                  <span className="font-normal text-slate-500">
+                  <span className="font-normal text-slate-500 dark:text-slate-400">
                     ({String((research.inputContexts?.length ?? 0) - removeContextIds.size)} will be
                     kept)
                   </span>
@@ -1152,7 +1270,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                       <div
                         key={ctx.id}
                         className={`flex items-center gap-3 rounded-lg border p-3 ${
-                          isRemoved ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'
+                          isRemoved ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30' : 'border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700'
                         }`}
                       >
                         <input
@@ -1162,11 +1280,11 @@ export function ResearchDetailPage(): React.JSX.Element {
                             toggleRemoveContext(ctx.id);
                           }}
                           disabled={enhancing}
-                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-600"
                         />
                         <span
                           className={`flex-1 text-sm truncate ${
-                            isRemoved ? 'text-red-600 line-through' : 'text-slate-700'
+                            isRemoved ? 'text-red-600 line-through dark:text-red-400' : 'text-slate-700 dark:text-slate-200'
                           }`}
                         >
                           {ctx.label !== undefined && ctx.label !== ''
@@ -1182,9 +1300,9 @@ export function ResearchDetailPage(): React.JSX.Element {
 
             {/* New Contexts */}
             <div className="mb-4 space-y-2">
-              <p className="text-sm font-medium text-slate-700">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                 Add new context{' '}
-                <span className="font-normal text-slate-500">
+                <span className="font-normal text-slate-500 dark:text-slate-400">
                   (
                   {String(
                     (research.inputContexts?.length ?? 0) -
@@ -1205,7 +1323,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                       );
                     }}
                     placeholder="Paste additional reference content..."
-                    className="flex-1 rounded-lg border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="flex-1 rounded-lg border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
                     rows={2}
                     disabled={enhancing}
                   />
@@ -1215,7 +1333,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                       setEnhanceContexts((prev) => prev.filter((_, i) => i !== idx));
                     }}
                     disabled={enhancing}
-                    className="self-start rounded p-2 text-slate-400 hover:bg-slate-100 hover:text-red-500"
+                    className="self-start rounded p-2 text-slate-400 hover:bg-slate-100 hover:text-red-500 dark:hover:bg-slate-700"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -1232,7 +1350,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                     setEnhanceContexts((prev) => [...prev, '']);
                   }}
                   disabled={enhancing}
-                  className="w-full rounded-lg border-2 border-dashed border-slate-200 py-2 text-sm text-slate-500 hover:border-slate-300 hover:text-slate-600"
+                  className="w-full rounded-lg border-2 border-dashed border-slate-200 py-2 text-sm text-slate-500 hover:border-slate-300 hover:text-slate-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300"
                 >
                   + Add context
                 </button>
@@ -1240,7 +1358,7 @@ export function ResearchDetailPage(): React.JSX.Element {
             </div>
 
             {enhanceError !== null ? (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
                 {enhanceError}
               </div>
             ) : null}
@@ -1305,7 +1423,7 @@ function ProcessingStatus({
     }
     if (result.status === 'processing') {
       if (result.startedAt !== undefined) {
-        return `Started ${formatElapsedTime(result.startedAt)}, processing...`;
+        return `Started ${formatRelative(result.startedAt)}, processing...`;
       }
       return 'Processing...';
     }
@@ -1345,8 +1463,8 @@ function ProcessingStatus({
             return (
               <div key={model} className="flex items-center gap-3">
                 <StatusDot status="pending" />
-                <span>{modelName}</span>
-                <span className="text-sm text-slate-500">Waiting...</span>
+                <span className="dark:text-slate-200">{modelName}</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400">Waiting...</span>
               </div>
             );
           }
@@ -1355,8 +1473,8 @@ function ProcessingStatus({
             <div key={model} className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
                 <StatusDot status={result.status} />
-                <span>{modelName}</span>
-                <span className="text-sm text-slate-500">{getStatusText(result)}</span>
+                <span className="dark:text-slate-200">{modelName}</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400">{getStatusText(result)}</span>
               </div>
               {result.status === 'failed' && result.error !== undefined && result.error !== '' ? (
                 <ErrorDisplay error={result.error} className="ml-6" />
@@ -1366,14 +1484,14 @@ function ProcessingStatus({
         })}
 
         {willSynthesize ? (
-          <div className="mt-4 border-t border-slate-200 pt-4">
+          <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
             <div className="flex items-center gap-3">
               <StatusDot status={synthesisStatus.status} />
-              <span className="font-medium">Synthesis</span>
-              <span className="text-sm text-slate-500">
+              <span className="font-medium dark:text-slate-200">Synthesis</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400">
                 ({getModelDisplayName(synthesisModel)})
               </span>
-              <span className="text-sm text-slate-500">{synthesisStatus.text}</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400">{synthesisStatus.text}</span>
             </div>
           </div>
         ) : null}
@@ -1403,7 +1521,7 @@ function ErrorDisplay({
 }): React.JSX.Element {
   return (
     <div className={className}>
-      <p className="text-sm text-red-600">{error}</p>
+      <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
     </div>
   );
 }
@@ -1436,16 +1554,16 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
   const hasCost = result.costUsd !== undefined;
 
   return (
-    <div className="rounded-lg border border-slate-200">
+    <div className="rounded-lg border border-slate-200 dark:border-slate-700">
       <button
         onClick={(): void => {
           setExpanded(!expanded);
         }}
-        className="flex w-full cursor-pointer items-center justify-between p-4 hover:bg-slate-50"
+        className="flex w-full cursor-pointer items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50"
       >
         <div className="flex items-center gap-3">
           <StatusDot status={result.status} />
-          <span className="font-medium">{getModelDisplayName(result.model as SupportedModel)}</span>
+          <span className="font-medium dark:text-slate-100">{getModelDisplayName(result.model as SupportedModel)}</span>
           {hasTokenInfo ? (
             <span className="text-sm text-slate-400">
               in: {formatTokenCount(result.inputTokens ?? 0)} / out:{' '}
@@ -1453,7 +1571,7 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
             </span>
           ) : null}
           {hasCost ? (
-            <span className="text-sm font-medium text-green-600">
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">
               {formatCost(result.costUsd ?? 0)}
             </span>
           ) : null}
@@ -1462,45 +1580,50 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
       </button>
 
       {expanded && result.result !== undefined && result.result !== '' ? (
-        <div className="border-t border-slate-200 p-4">
+        <div className="border-t border-slate-200 p-4 dark:border-slate-700">
           {hasTokenInfo ? (
-            <div className="mb-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
+            <div className="mb-4 flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
               <span>
-                Input: <strong>{formatNumber(result.inputTokens ?? 0)}</strong> tokens
+                Input: <strong className="dark:text-slate-100">{formatNumber(result.inputTokens ?? 0)}</strong> tokens
               </span>
-              <span className="text-slate-300">|</span>
+              <span className="text-slate-300 dark:text-slate-600">|</span>
               <span>
-                Output: <strong>{formatNumber(result.outputTokens ?? 0)}</strong> tokens
+                Output: <strong className="dark:text-slate-100">{formatNumber(result.outputTokens ?? 0)}</strong> tokens
               </span>
               {hasCost ? (
                 <>
-                  <span className="text-slate-300">|</span>
+                  <span className="text-slate-300 dark:text-slate-600">|</span>
                   <span>
                     Cost:{' '}
-                    <strong className="text-green-600">{formatCost(result.costUsd ?? 0)}</strong>
+                    <strong className="text-green-600 dark:text-green-400">{formatCost(result.costUsd ?? 0)}</strong>
                   </span>
                 </>
               ) : null}
             </div>
           ) : null}
           <div className="mb-2 flex justify-end">
-            <Button
-              variant="secondary"
+            <button
+              type="button"
               onClick={(): void => {
                 onCopy(result.result ?? '');
               }}
+              className="rounded p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 flex-shrink-0 transition-colors"
+              title={copied ? 'Copied!' : 'Copy'}
             >
-              <Copy className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
-            </Button>
+              {copied ? (
+                <CheckCircle className="h-4 w-4 text-green-500" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
           </div>
-          <div className="rounded-lg bg-slate-50 p-4 text-sm">
+          <div className="rounded-lg bg-slate-50 p-4 text-sm dark:bg-slate-700">
             <MarkdownContent content={result.result} />
           </div>
           {result.sources !== undefined && result.sources.length > 0 ? (
-            <div className="mt-4 border-t border-slate-200 pt-4">
-              <h4 className="mb-2 text-sm font-medium">Sources</h4>
-              <ul className="text-sm text-blue-600">
+            <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+              <h4 className="mb-2 text-sm font-medium dark:text-slate-200">Sources</h4>
+              <ul className="text-sm text-blue-600 dark:text-blue-400">
                 {result.sources.map((source, i) => (
                   <li key={i}>
                     <a
@@ -1520,7 +1643,7 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
       ) : null}
 
       {expanded && result.error !== undefined && result.error !== '' ? (
-        <div className="border-t border-slate-200 bg-red-50 p-4">
+        <div className="border-t border-slate-200 bg-red-50 p-4 dark:border-slate-700 dark:bg-red-900/30">
           <ErrorDisplay error={result.error} />
         </div>
       ) : null}
@@ -1551,12 +1674,12 @@ function PartialFailureConfirmation({
   const canRetry = partialFailure.retryCount < 2;
 
   return (
-    <Card className="mb-6 border-orange-200 bg-orange-50">
+    <Card className="mb-6 border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-900/30">
       <div className="flex items-start gap-3">
-        <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-orange-600" />
+        <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-orange-600 dark:text-orange-400" />
         <div className="flex-1">
-          <h3 className="font-semibold text-orange-800">Partial Failure Detected</h3>
-          <p className="mt-1 text-sm text-orange-700">
+          <h3 className="font-semibold text-orange-800 dark:text-orange-300">Partial Failure Detected</h3>
+          <p className="mt-1 text-sm text-orange-700 dark:text-orange-300/90">
             {failedProvidersText !== ''
               ? `${failedProvidersText} failed during research.`
               : 'Some providers failed during research.'}{' '}
@@ -1564,7 +1687,7 @@ function PartialFailureConfirmation({
           </p>
 
           {partialFailure.retryCount > 0 ? (
-            <p className="mt-2 text-sm text-orange-600">
+            <p className="mt-2 text-sm text-orange-600 dark:text-orange-400">
               Retry attempts: {String(partialFailure.retryCount)}/2
             </p>
           ) : null}
@@ -1611,7 +1734,7 @@ function PartialFailureConfirmation({
           </div>
 
           {error !== null && error !== '' ? (
-            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
               {error}
             </div>
           ) : null}
@@ -1638,17 +1761,17 @@ function CollapsibleInputContext({
     ctx.label !== undefined && ctx.label !== '' ? ctx.label : `Context ${String(index + 1)}`;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-700">
       <button
         type="button"
         onClick={(): void => {
           setExpanded(!expanded);
         }}
-        className="flex w-full cursor-pointer items-center justify-between p-3 hover:bg-slate-100 transition-colors"
+        className="flex w-full cursor-pointer items-center justify-between p-3 hover:bg-slate-100 transition-colors dark:hover:bg-slate-600"
       >
         <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-slate-500" />
-          <span className="text-sm font-medium text-slate-700">{title}</span>
+          <FileText className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{title}</span>
           <span className="text-xs text-slate-400">
             {ctx.content.length.toLocaleString()} chars
           </span>
@@ -1659,11 +1782,11 @@ function CollapsibleInputContext({
       </button>
 
       {expanded ? (
-        <div className="border-t border-slate-200 p-4">
+        <div className="border-t border-slate-200 p-4 dark:border-slate-600">
           {showFull ? (
             <MarkdownContent content={ctx.content} />
           ) : (
-            <p className="break-words text-sm text-slate-600 whitespace-pre-wrap">{ctx.content}</p>
+            <p className="break-words text-sm text-slate-600 whitespace-pre-wrap dark:text-slate-300">{ctx.content}</p>
           )}
         </div>
       ) : null}

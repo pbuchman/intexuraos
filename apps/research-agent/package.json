@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/research-agent",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,7 +9,9 @@
   "scripts": {
     "build": "node ../../scripts/build-service.mjs research-agent",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
+    "start:local": "tsx src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
@@ -26,15 +28,17 @@
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-glm": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",
+    "@intexuraos/infra-notion": "workspace:*",
+    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-perplexity": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
-    "@intexuraos/llm-prompts": "workspace:*",
-    "@intexuraos/llm-utils": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
+    "@intexuraos/llm-prompts": "workspace:*",
+    "@intexuraos/llm-utils": "workspace:*",
     "fastify": "^5.1.0",
     "marked": "^15.0.6",
     "pino": "^10.1.0",

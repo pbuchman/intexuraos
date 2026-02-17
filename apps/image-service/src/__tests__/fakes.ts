@@ -14,7 +14,7 @@ import type {
   PromptGenerationError,
   ThumbnailPrompt,
 } from '../domain/index.js';
-import type { UserServiceClient, DecryptedApiKeys, UserServiceError } from '../infra/user/index.js';
+import type { UserServiceClient, DecryptedApiKeys, UserServiceError } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 export class FakeImageStorage implements ImageStorage {
@@ -161,6 +161,23 @@ export class FakeUserServiceClient implements UserServiceClient {
 
   async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
     // Best effort - silently ignore in tests
+  }
+
+  async getOAuthToken(
+    _userId: string,
+    _provider: import('@intexuraos/internal-clients').OAuthProvider
+  ): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      return err({
+        code: this.failErrorCode,
+        message: `Simulated getOAuthToken failure: ${this.failErrorCode}`,
+      });
+    }
+    return err({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'OAuth not configured in fake',
+    });
   }
 
   setApiKeys(keys: DecryptedApiKeys): void {

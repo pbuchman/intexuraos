@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback } from 'fastify';
-import { validateInternalAuth, logIncomingRequest, apiFail } from '@intexuraos/common-http';
+import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { IMAGE_PROMPT_MODELS, IMAGE_GENERATION_MODELS } from '../domain/index.js';
 import type { ImagePromptModel, ImageGenerationModel } from '../domain/index.js';
 import { getServices } from '../services.js';
@@ -51,8 +51,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for generate prompt');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for generate prompt');
       }
 
       const { text, model, userId } = request.body;
@@ -101,13 +100,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Prompt generation failed'
         );
         if (result.error.code === 'RATE_LIMITED') {
-          const errorResponse = apiFail('DOWNSTREAM_ERROR', result.error.message, {
-            requestId: request.requestId,
-            durationMs: Date.now() - request.startTime,
-          });
-          return await reply.status(429).send(errorResponse);
+          return await reply.fail('RATE_LIMITED', result.error.message);
         }
-        reply.status(502);
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
@@ -141,8 +135,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for generate image');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for generate image');
       }
 
       const { prompt, model, userId, title } = request.body;
@@ -261,8 +254,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for delete image');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for delete image');
       }
 
       const { imageStorage, generatedImageRepository } = getServices();

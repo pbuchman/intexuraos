@@ -4,6 +4,34 @@ GCloud authentication, Terraform operations, and Cloud Build deployment details.
 
 ---
 
+## Default Region
+
+**All GCP resources are located in `europe-central2` unless specified otherwise.**
+
+When using `gcloud` commands that require a region, always specify `--region=europe-central2`:
+
+```bash
+# Cloud Build
+gcloud builds list --region=europe-central2
+gcloud builds describe <BUILD_ID> --region=europe-central2
+gcloud builds log <BUILD_ID> --region=europe-central2
+gcloud builds triggers list --region=europe-central2
+gcloud builds triggers run <TRIGGER_NAME> --region=europe-central2 --sha=<COMMIT_SHA>
+
+# Cloud Run
+gcloud run services list --region=europe-central2
+gcloud run services describe <SERVICE> --region=europe-central2
+
+# Artifact Registry
+gcloud artifacts repositories list --location=europe-central2
+```
+
+**Project ID:** `intexuraos-dev-pbuchman`
+
+**Artifact Registry URL:** `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev`
+
+---
+
 ## GCloud Authentication
 
 **RULE:** NEVER claim "gcloud is not authenticated" without first verifying service account credentials.
@@ -11,7 +39,7 @@ GCloud authentication, Terraform operations, and Cloud Build deployment details.
 ### Service Account Credentials
 
 ```
-~/personal/gcloud-claude-code-dev.json
+~/.config/gcloud/sa-key.json
 ```
 
 ### Verification Steps
@@ -19,13 +47,13 @@ GCloud authentication, Terraform operations, and Cloud Build deployment details.
 1. **Check if credentials file exists:**
 
    ```bash
-   ls -la ~/personal/gcloud-claude-code-dev.json
+   ls -la ~/.config/gcloud/sa-key.json
    ```
 
 2. **Activate service account if needed:**
 
    ```bash
-   gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
+   gcloud auth activate-service-account --key-file=~/.config/gcloud/sa-key.json
    ```
 
 3. **Verify authentication:**
@@ -49,29 +77,28 @@ GCloud authentication, Terraform operations, and Cloud Build deployment details.
 
 **RULE:** Always use the service account for Terraform operations. Never rely on browser-based authentication.
 
-### Terraform Alias
+### Running Terraform Commands
 
-Use `tf` command instead of `terraform`. This alias clears emulator env vars that break Terraform:
-
-```bash
-alias tf='STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform'
-```
-
-Note: The alias may not be available in spawned subshells - if `tf` is not found, the user should run commands manually.
-
-### Commands with Service Account
+**Always clear emulator env vars and set credentials inline:**
 
 ```bash
-# Set credentials and clear emulator env vars
-GOOGLE_APPLICATION_CREDENTIALS=~/personal/gcloud-claude-code-dev.json \
+# Plan changes
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform plan
 
 # Apply changes
-GOOGLE_APPLICATION_CREDENTIALS=~/personal/gcloud-claude-code-dev.json \
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform apply
+
+# Init (when needed)
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform init
 ```
+
+**⚠️ Hook enforced:** Running bare `terraform` commands without env var clearing is blocked by `.claude/hooks/validate-terraform.sh`.
 
 ### Why Service Account Over Browser Auth
 
@@ -86,6 +113,28 @@ The service account `claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount
 - Cloud Run images managed by Cloud Build, not Terraform (uses `ignore_changes`)
 - "Image not found": run `./scripts/push-missing-images.sh` for new services
 - Web app: backend buckets need URL rewrite for `/` → `/index.html`
+
+---
+
+## Terraform-Only Resource Creation
+
+**RULE: ALL persistent infrastructure MUST be created via Terraform. Direct CLI resource creation is FORBIDDEN.**
+
+| Command                          | What It Creates        | Use Terraform Instead          |
+| -------------------------------- | ---------------------- | ------------------------------ |
+| `gsutil mb`                      | GCS buckets            | `google_storage_bucket`        |
+| `gcloud pubsub topics create`    | Pub/Sub topics         | `google_pubsub_topic`          |
+| `gcloud pubsub subscriptions`    | Pub/Sub subscriptions  | `google_pubsub_subscription`   |
+| `gcloud run deploy`              | Cloud Run services     | `google_cloud_run_service`     |
+| `gcloud secrets create`          | Secret Manager secrets | `google_secret_manager_secret` |
+| `gcloud sql instances create`    | Cloud SQL instances    | `google_sql_database_instance` |
+| `gcloud compute instances`       | Compute Engine VMs     | `google_compute_instance`      |
+| `gcloud iam service-accounts`    | Service accounts       | `google_service_account`       |
+| `gcloud projects add-iam-policy` | IAM bindings           | `google_*_iam_*`               |
+
+**Why:** Terraform tracks state, enables reproducibility, version control, drift detection. CLI creates "orphan" resources invisible to IaC.
+
+**Exception:** Truly ephemeral resources for debugging. Never new named resources.
 
 ---
 
