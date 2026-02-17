@@ -293,11 +293,32 @@ ${feedback.trim()}
     }
   }
 
-  // Step 10: Build webhook URL
+  // Step 10: Fetch fresh labels from Linear for dispatch
+  let linearIssueLabelsForDispatch: string[] = [];
+  let hasChildrenForDispatch = false;
+
+  if (originalTask.linearIssueId !== undefined) {
+    const validateIssueResult = await linearAgentClient.validateIssue({
+      userId,
+      identifier: originalTask.linearIssueId,
+    });
+
+    if (validateIssueResult.ok) {
+      linearIssueLabelsForDispatch = validateIssueResult.value.labels;
+      hasChildrenForDispatch = validateIssueResult.value.childCount > 0;
+    } else {
+      logger.warn(
+        { linearIssueId: originalTask.linearIssueId },
+        'Failed to fetch Linear issue labels for feedback dispatch'
+      );
+    }
+  }
+
+  // Step 11: Build webhook URL
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
   const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
 
-  // Step 11: Dispatch to worker
+  // Step 12: Dispatch to worker
   const dispatchRequest: {
     taskId: string;
     linearIssueId?: string;
@@ -324,10 +345,8 @@ ${feedback.trim()}
     webhookSecret,
     workerCredentials,
     parentTaskId: originalTask.id,
-    /* v8 ignore start -- ts-type: nullish coalescing for optional fields creates type narrowing branches @preserve */
-    linearIssueLabels: originalTask.linearIssueLabels ?? [],
-    hasChildren: originalTask.hasChildren ?? false,
-    /* v8 ignore stop @preserve */
+    linearIssueLabels: linearIssueLabelsForDispatch,
+    hasChildren: hasChildrenForDispatch,
   };
 
   // Add optional fields if defined
