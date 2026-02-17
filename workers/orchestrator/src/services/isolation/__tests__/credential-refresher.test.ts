@@ -67,7 +67,8 @@ describe('CredentialRefresher', () => {
     expect(mockDocker.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({
         Image: 'europe-central2-docker.pkg.dev/project/repo/claude-worker:latest',
-        Cmd: ['claude', '--print', '--model', 'haiku', 'reply ok'],
+        Entrypoint: ['claude'],
+        Cmd: ['--print', '--model', 'haiku', 'reply ok'],
         HostConfig: expect.objectContaining({
           Binds: expect.arrayContaining([
             '/home/user/.claude-orchestrator/claude-creds:/home/claude/.claude:rw',
