@@ -367,7 +367,7 @@ export class TaskDispatcher {
         `Message queued (${String(queue.length)} pending): ${message.length > 200 ? message.slice(0, 200) + '\u2026' : message}`
       );
       this.logger.info({ taskId }, 'Message queued for running task');
-      return { ok: true, value: { action: 'queued' } };
+      return { ok: true, value: { action: 'queued', pendingMessages: [...queue] } };
     }
 
     if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {

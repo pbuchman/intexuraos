@@ -100,7 +100,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
     task, logs, loading, error,
     listenerHealthy,
     cancelling, cancelError, retrying, retryError,
-    sending, sendError, messageStatus, queuedMessages,
+    sending, sendError, messageStatus,
     cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
@@ -175,7 +175,6 @@ export function CodeTaskViewPage(): React.JSX.Element {
         sending={sending}
         sendError={sendError}
         messageStatus={messageStatus}
-        queuedMessages={queuedMessages}
         workerOnline={isTaskWorkerOnline}
         workerName={task.workerLocation}
       />
@@ -484,12 +483,11 @@ interface LogStreamProps {
   sending: boolean;
   sendError: { code: string; message: string } | null;
   messageStatus: MessageStatus;
-  queuedMessages: string[];
   workerOnline: boolean;
   workerName: string;
 }
 
-function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage, sending, sendError, messageStatus, queuedMessages, workerOnline, workerName }: LogStreamProps): React.JSX.Element {
+function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage, sending, sendError, messageStatus, workerOnline, workerName }: LogStreamProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [followLogs, setFollowLogs] = useState(true);
@@ -617,7 +615,6 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
           sending={sending}
           sendError={sendError}
           messageStatus={messageStatus}
-          queuedMessages={queuedMessages}
           workerOnline={workerOnline}
           workerName={workerName}
         />
@@ -626,12 +623,11 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   );
 }
 
-function MessageInput({ onSendMessage, sending, sendError, messageStatus, queuedMessages, workerOnline, workerName }: {
+function MessageInput({ onSendMessage, sending, sendError, messageStatus, workerOnline, workerName }: {
   onSendMessage: (message: string) => Promise<void>;
   sending: boolean;
   sendError: { code: string; message: string } | null;
   messageStatus: MessageStatus;
-  queuedMessages: string[];
   workerOnline: boolean;
   workerName: string;
 }): React.JSX.Element {
@@ -714,21 +710,6 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, queued
         </button>
       </div>
 
-      {/* Queue display */}
-      {queuedMessages.length > 0 ? (
-        <div className="mt-1.5 rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1.5">
-          <p className="text-xs font-medium text-amber-400">
-            {String(queuedMessages.length)} message{queuedMessages.length !== 1 ? 's' : ''} queued — will be delivered when current step completes
-          </p>
-          <ul className="mt-1 space-y-0.5">
-            {queuedMessages.map((msg, i) => (
-              <li key={i} className="text-xs text-amber-300/70 truncate font-mono">
-                {msg.length > 80 ? msg.slice(0, 80) + '…' : msg}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
       {messageStatus === 'delivered' ? (
         <p className="mt-1 text-xs text-green-400">
           Message delivered — task resumed

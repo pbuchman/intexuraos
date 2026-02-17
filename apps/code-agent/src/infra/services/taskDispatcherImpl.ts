@@ -378,7 +378,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       }
       /* v8 ignore stop @preserve */
 
-      const data = (await response.json()) as { action: 'queued' | 'resumed' };
+      const data = (await response.json()) as { action: 'queued' | 'resumed'; pendingMessages?: string[] };
       return ok(data);
     } catch (error) {
       return err({

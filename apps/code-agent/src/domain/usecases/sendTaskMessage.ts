@@ -140,22 +140,23 @@ export async function sendTaskMessage(
     });
   }
 
-  const { action } = forwardResult.value;
+  const { action, pendingMessages } = forwardResult.value;
   logger.info({ taskId, action }, 'Message sent to task');
 
-  // Best-effort: write a status log line so the transcript shows what happened
-  const statusText =
+  // Best-effort: write status log lines so the transcript shows what happened
+  const statusLines =
     action === 'queued'
-      ? '[queued] Message queued \u2014 will be delivered when current work completes'
-      : `[resumed] Task resuming with your message: ${message}`;
+      ? [
+          { sequence: sequence + 1, text: '[queued] Message queued \u2014 will be delivered when current work completes', timestamp: Timestamp.now() },
+          ...(pendingMessages ?? [message]).map((m, i) => ({
+            sequence: sequence + 2 + i,
+            text: `[user] ${m}`,
+            timestamp: Timestamp.now(),
+          })),
+        ]
+      : [{ sequence: sequence + 1, text: `[resumed] Task resuming with your message: ${message}`, timestamp: Timestamp.now() }];
 
-  const statusLogResult = await logLineRepo.storeBatch(taskId, [
-    {
-      sequence: sequence + 1,
-      text: statusText,
-      timestamp: Timestamp.now(),
-    },
-  ]);
+  const statusLogResult = await logLineRepo.storeBatch(taskId, statusLines);
 
   if (!statusLogResult.ok) {
     logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');

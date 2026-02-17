@@ -266,7 +266,7 @@ export function registerRoutes(
         return;
       }
 
-      reply.send({ action: result.value.action });
+      reply.send(result.value);
     }
   );
 
