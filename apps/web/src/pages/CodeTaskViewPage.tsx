@@ -512,7 +512,10 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
 
     const onScroll = (): void => {
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-      if (!atBottom && followRef.current) {
+      if (atBottom && !followRef.current) {
+        followRef.current = true;
+        setFollowLogs(true);
+      } else if (!atBottom && followRef.current) {
         followRef.current = false;
         setFollowLogs(false);
       }

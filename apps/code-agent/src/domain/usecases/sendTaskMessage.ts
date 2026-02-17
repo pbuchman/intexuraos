@@ -147,7 +147,7 @@ export async function sendTaskMessage(
   const statusText =
     action === 'queued'
       ? '[queued] Message queued \u2014 will be delivered when current work completes'
-      : '[resumed] Task resuming with your message';
+      : `[resumed] Task resuming with your message: ${message}`;
 
   const statusLogResult = await logLineRepo.storeBatch(taskId, [
     {
