@@ -142,13 +142,21 @@ const SERVICE_ENV_MAPPINGS = {
   },
 };
 
+const path = require('path');
+
+// tsx CLI path — PM2 runs `node tsx/cli.mjs src/index.ts` directly.
+// Old chain: pnpm → sh → tsx → node (4 levels, orphan-prone).
+// New chain: tsx CLI → node (2 levels, treekill cleans both).
+const TSX_CLI = path.resolve(__dirname, 'node_modules/tsx/dist/cli.mjs');
+const WAIT_SCRIPT = path.resolve(__dirname, 'scripts/pm2-wait-start.mjs');
+
 /**
  * Create a service configuration for PM2
  *
- * Uses PM2's native file watching instead of tsx watch.
- * This ensures PM2 can detect crashes and trigger autorestart properly.
- * With tsx watch, the wrapper process stays alive even when the app crashes,
- * causing PM2 to report "online" for dead services.
+ * Runs tsx CLI directly via `interpreter: 'node'`. This collapses the
+ * old pnpm → sh → tsx → node chain into tsx → node (2 processes).
+ * PM2's treekill cleans both on restart — no orphan children.
+ * Uses PM2's native file watching for change detection.
  */
 function createServiceConfig(name, port, options = {}) {
   const { waitForService } = options;
@@ -156,6 +164,8 @@ function createServiceConfig(name, port, options = {}) {
   const baseConfig = {
     name,
     cwd: `./apps/${name}`,
+    script: TSX_CLI,
+    interpreter: 'node',
     env: {
       ...process.env,
       ...COMMON_SERVICE_ENV,
@@ -166,6 +176,7 @@ function createServiceConfig(name, port, options = {}) {
       NODE_OPTIONS: '--import @intexuraos/infra-otel/register',
     },
     autorestart: true,
+    kill_timeout: 5000,
     restart_delay: 5000,
     watch: ['src', '../../packages'],
     watch_delay: 1000,
@@ -175,20 +186,17 @@ function createServiceConfig(name, port, options = {}) {
   if (waitForService) {
     return {
       ...baseConfig,
-      script: 'bash',
-      args: [
-        '-c',
-        `n=0; until curl -sf ${waitForService} > /dev/null 2>&1 || [ $n -ge 30 ]; do sleep 1; n=$((n+1)); done && pnpm --filter ${name} start:local`,
-      ],
-      interpreter: 'none',
+      args: [WAIT_SCRIPT, 'src/index.ts'],
+      env: {
+        ...baseConfig.env,
+        WAIT_FOR_SERVICE: waitForService,
+      },
     };
   }
 
   return {
     ...baseConfig,
-    script: 'pnpm',
-    args: ['--filter', name, 'start:local'],
-    interpreter: 'none',
+    args: ['src/index.ts'],
   };
 }
 
@@ -223,9 +231,9 @@ module.exports = {
     {
       name: 'web',
       cwd: './apps/web',
-      script: 'pnpm',
-      args: ['--filter', 'web', 'dev'],
-      interpreter: 'none',
+      script: path.resolve(__dirname, 'node_modules/vite/bin/vite.js'),
+      args: ['--mode', 'development'],
+      interpreter: 'node',
       env: {
         ...process.env,
         ...COMMON_SERVICE_ENV,
@@ -236,6 +244,7 @@ module.exports = {
       },
       autorestart: true,
       max_restarts: 5,
+      kill_timeout: 5000,
       restart_delay: 2000,
       watch: ['src', '../../packages'],
       watch_delay: 1000,
