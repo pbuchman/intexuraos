@@ -7,6 +7,8 @@ import type { Result } from '@intexuraos/common-core';
 import type { CodeTask, TaskStatus } from '../models/codeTask.js';
 
 export interface CreateTaskInput {
+  /** Pre-generated task ID. Auto-generated if not provided. */
+  id?: string;
   userId: string;
   prompt: string;
   sanitizedPrompt: string;
@@ -40,8 +42,9 @@ export interface CreateTaskInput {
 export interface UpdateTaskInput {
   status?: TaskStatus;
   result?: CodeTask['result'];
-  error?: CodeTask['error'];
+  error?: CodeTask['error'] | null;
   statusSummary?: CodeTask['statusSummary'];
+  workerLocation?: string;
   callbackReceived?: boolean;
   dispatchedAt?: Date;
   completedAt?: Date;
@@ -53,8 +56,7 @@ export interface UpdateTaskInput {
   // Use null to explicitly clear the field, undefined means "don't change"
   cancelNonce?: string | null;
   cancelNonceExpiresAt?: string | null;
-  // Actual worker location after dispatch (may differ from initial placeholder)
-  workerLocation?: string;
+  pendingUserMessages?: string[];
 }
 
 export interface ListTasksInput {

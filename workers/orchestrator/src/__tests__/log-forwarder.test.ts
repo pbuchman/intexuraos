@@ -223,7 +223,7 @@ describe('LogForwarder', () => {
 
       // Verify chunk structure
       const chunk = data.chunks[0];
-      expect(chunk.sequence).toBe(0);
+      expect(chunk.sequence).toBeGreaterThan(1_000_000_000_000); // timestamp-based
       expect(chunk.content).toBe('Payload test\n');
       expect(chunk.timestamp).toBeDefined();
     });
@@ -518,7 +518,7 @@ describe('LogForwarder', () => {
   });
 
   describe('sequence numbering', () => {
-    it('should number chunks sequentially starting from 0', async () => {
+    it('should use timestamp-based sequences that are monotonically increasing', async () => {
       const forwarder = createMockForwarder();
       captureUploadedChunks();
 
@@ -537,11 +537,17 @@ describe('LogForwarder', () => {
       expect(taskUploads.length).toBeGreaterThan(0);
       const allChunks = taskUploads.flatMap((u) => u.chunks);
 
-      // Verify sequential numbering
+      // Verify timestamp-based sequences (monotonically increasing)
       for (let i = 0; i < allChunks.length; i++) {
         const chunk = allChunks[i];
         if (chunk) {
-          expect(chunk.sequence).toBe(i);
+          expect(chunk.sequence).toBeGreaterThan(1_000_000_000_000);
+          if (i > 0) {
+            const prev = allChunks[i - 1];
+            if (prev) {
+              expect(chunk.sequence).toBeGreaterThanOrEqual(prev.sequence);
+            }
+          }
         }
       }
     });

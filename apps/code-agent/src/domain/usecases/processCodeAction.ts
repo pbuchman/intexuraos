@@ -13,15 +13,14 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 
 /**
- * Generate a webhook secret for a task.
- * Format: whsec_{48 hex chars}
+ * Generate a deterministic webhook secret for a task.
+ * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
  */
-function generateWebhookSecret(): string {
-  const buffer = randomBytes(24);
-  return `whsec_${buffer.toString('hex')}`;
+function generateWebhookSecret(sharedSecret: string, taskId: string): string {
+  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
 }
 
 /**
@@ -91,6 +90,7 @@ export interface ProcessCodeActionDeps {
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  orchestratorSecret: string;
 }
 
 /**
@@ -186,11 +186,13 @@ export async function processCodeAction(
     'Linear issue processed'
   );
 
-  // Step 3: Generate webhook secret upfront so it can be stored with the task
-  const webhookSecret = generateWebhookSecret();
+  // Step 3: Pre-generate task ID and derive deterministic webhook secret
+  const taskId = `task_${randomUUID()}`;
+  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, taskId);
 
   // Step 4: Create code task with deduplication
   const createInput: {
+    id: string;
     userId: string;
     prompt: string;
     sanitizedPrompt: string;
@@ -205,10 +207,9 @@ export async function processCodeAction(
     webhookSecret: string;
     linearIssueId?: string;
     linearIssueTitle?: string;
-    linearIssueLabels?: string[];
-    hasChildren?: boolean;
     linearFallback?: boolean;
   } = {
+    id: taskId,
     userId,
     prompt,
     sanitizedPrompt: prompt, // TODO: Add sanitization
@@ -230,8 +231,6 @@ export async function processCodeAction(
   if (finalLinearIssueId !== undefined) {
     createInput.linearIssueId = finalLinearIssueId;
     createInput.linearIssueTitle = linearIssueTitle;
-    createInput.linearIssueLabels = linearIssueLabels;
-    createInput.hasChildren = hasChildren;
     createInput.linearFallback = linearFallback;
   }
   /* v8 ignore stop @preserve */
@@ -278,8 +277,8 @@ export async function processCodeAction(
     workerCredentials: DispatchWorkerCredentials;
   } = {
     taskId: task.id,
-    linearIssueLabels: task.linearIssueLabels ?? [],
-    hasChildren: task.hasChildren ?? false,
+    linearIssueLabels,
+    hasChildren,
     prompt: task.sanitizedPrompt,
     systemPromptHash: task.systemPromptHash,
     repository: task.repository,
@@ -332,6 +331,7 @@ export async function processCodeAction(
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(task.id, {
+    workerLocation: dispatchValue.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
   });

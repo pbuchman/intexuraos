@@ -953,15 +953,19 @@ describe('taskDispatcherImpl', () => {
   });
 
   describe('generateWebhookSecret', () => {
-    it('generates unique webhook secret per task', () => {
-      const secret1 = generateWebhookSecret();
-      const secret2 = generateWebhookSecret();
+    it('generates deterministic secret from sharedSecret and taskId', () => {
+      const secret1 = generateWebhookSecret('test-secret', 'task-1');
+      const secret2 = generateWebhookSecret('test-secret', 'task-1');
 
-      // Verify format: whsec_{48 hex chars}
-      expect(secret1).toMatch(/^whsec_[a-f0-9]{48}$/);
-      expect(secret2).toMatch(/^whsec_[a-f0-9]{48}$/);
+      // Same inputs produce same output
+      expect(secret1).toBe(secret2);
+      expect(secret1).toMatch(/^[a-f0-9]{64}$/); // SHA256 hex
+    });
 
-      // Verify uniqueness
+    it('generates different secrets for different taskIds', () => {
+      const secret1 = generateWebhookSecret('test-secret', 'task-1');
+      const secret2 = generateWebhookSecret('test-secret', 'task-2');
+
       expect(secret1).not.toBe(secret2);
     });
   });

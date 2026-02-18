@@ -16,7 +16,7 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 
 /**
  * Cool-off period before retry is allowed (1 minute).
@@ -24,11 +24,11 @@ import { randomBytes } from 'node:crypto';
 const RETRY_COOL_OFF_MS = 1 * 60 * 1000;
 
 /**
- * Generate a webhook secret for a task.
+ * Generate a deterministic webhook secret for a task.
+ * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
  */
-function generateWebhookSecret(): string {
-  const buffer = randomBytes(24);
-  return `whsec_${buffer.toString('hex')}`;
+function generateWebhookSecret(sharedSecret: string, taskId: string): string {
+  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
 }
 
 /**
@@ -90,6 +90,7 @@ export interface RetryTaskDeps {
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  orchestratorSecret: string;
 }
 
 /**
@@ -126,8 +127,6 @@ export async function retryTask(
   }
 
   const originalTask = originalTaskResult.value;
-  let linearIssueLabelsForDispatch = originalTask.linearIssueLabels ?? [];
-  let hasChildrenForDispatch = originalTask.hasChildren ?? false;
 
   // Step 2: Validate status is failed, cancelled, or interrupted
   if (!['failed', 'cancelled', 'interrupted'].includes(originalTask.status)) {
@@ -194,7 +193,10 @@ export async function retryTask(
     }
   }
 
-  // Refresh Linear issue metadata so retries use current phase labels/child state.
+  // Fetch fresh Linear issue metadata for dispatch (labels/child state not stored on task).
+  let linearIssueLabelsForDispatch: string[] = [];
+  let hasChildrenForDispatch = false;
+
   if (originalTask.linearIssueId !== undefined) {
     const validateIssueResult = await linearAgentClient.validateIssue({
       userId,
@@ -211,7 +213,7 @@ export async function retryTask(
           errorCode: validateIssueResult.error.code,
           errorMessage: validateIssueResult.error.message,
         },
-        'Failed to refresh Linear issue labels for retry; using stored task labels'
+        'Failed to refresh Linear issue labels for retry; dispatching with empty labels'
       );
     }
   }
@@ -262,11 +264,13 @@ ${additionalContext.trim()}
 `;
   }
 
-  // Step 7: Generate webhook secret
-  const webhookSecret = generateWebhookSecret();
+  // Step 7: Pre-generate task ID and derive deterministic webhook secret
+  const retryTaskId = `task_${randomUUID()}`;
+  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, retryTaskId);
 
   // Step 8: Create retry task with retriedFrom
   const createInput = {
+    id: retryTaskId,
     userId,
     prompt: retryPrompt,
     sanitizedPrompt: retryPrompt,

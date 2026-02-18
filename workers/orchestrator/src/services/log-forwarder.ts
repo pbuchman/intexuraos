@@ -10,20 +10,12 @@ export interface LogForwarderConfig {
   internalAuthToken: string;
 }
 
-export interface LogChunkData {
-  taskId: string;
-  sequence: number;
-  content: string;
-  timestamp: Date;
-}
-
 export interface ForwardingState {
   taskId: string;
   logFilePath: string;
   position: number;
   buffer: string;
   partialLine: string;
-  sequence: number;
   chunksSent: number;
   totalBytes: number;
   droppedChunks: number;
@@ -43,8 +35,6 @@ export class LogForwarder {
 
   private readonly taskSecrets = new Map<string, string>();
 
-  private readonly taskSequences = new Map<string, { produced: number; acked: number }>();
-
   constructor(
     private readonly config: LogForwarderConfig,
     private readonly logger: Logger
@@ -56,7 +46,6 @@ export class LogForwarder {
    */
   registerTask(taskId: string, webhookSecret: string): void {
     this.taskSecrets.set(taskId, webhookSecret);
-    this.taskSequences.set(taskId, { produced: 0, acked: 0 });
   }
 
   /**
@@ -106,13 +95,7 @@ export class LogForwarder {
 
     this.logger.info({ taskId, logFilePath }, 'Starting log forwarding');
 
-    const webhookSecret = this.taskSecrets.get(taskId) ?? '';
-    if (webhookSecret === '') {
-      this.logger.warn(
-        { taskId },
-        'No webhook secret registered - log upload signatures will fail'
-      );
-    }
+    const webhookSecret = this.taskSecrets.get(taskId) ?? this.deriveWebhookSecret(taskId);
 
     const state: ForwardingState = {
       taskId,
@@ -120,7 +103,6 @@ export class LogForwarder {
       position: 0,
       buffer: '',
       partialLine: '',
-      sequence: 0,
       chunksSent: 0,
       totalBytes: 0,
       droppedChunks: 0,
@@ -210,21 +192,13 @@ export class LogForwarder {
 
     // Create state if it doesn't exist (Docker mode doesn't call startForwarding)
     if (state === undefined) {
-      const webhookSecret = this.taskSecrets.get(taskId) ?? '';
-      if (webhookSecret === '') {
-        this.logger.warn(
-          { taskId },
-          'No webhook secret registered - log upload signatures will fail'
-        );
-      }
-      const existingSeq = this.taskSequences.get(taskId);
+      const webhookSecret = this.taskSecrets.get(taskId) ?? this.deriveWebhookSecret(taskId);
       state = {
         taskId,
         logFilePath: '',
         position: 0,
         buffer: '',
         partialLine: '',
-        sequence: existingSeq?.produced ?? 0,
         chunksSent: 0,
         totalBytes: 0,
         droppedChunks: 0,
@@ -364,10 +338,11 @@ export class LogForwarder {
 
   /* v8 ignore start -- upstream: early return for small chunks is the happy path @preserve */
   private async sendBatch(taskId: string, chunks: string[], state: ForwardingState): Promise<void> {
+    const now = Date.now();
     const chunkPayloads = chunks.map((chunk, index) => {
       const truncated = this.enforceChunkSize(chunk);
       return {
-        sequence: state.sequence + index,
+        sequence: now + index,
         content: truncated,
         timestamp: new Date().toISOString(),
       };
@@ -381,21 +356,8 @@ export class LogForwarder {
     const result = await this.sendWithRetry(payload, state.webhookSecret);
 
     if (result.success) {
-      state.sequence += chunks.length;
       state.chunksSent += chunks.length;
       state.totalBytes += chunks.reduce((sum, c) => sum + c.length, 0);
-
-      const seqState = this.taskSequences.get(taskId);
-      if (seqState !== undefined) {
-        seqState.produced = state.sequence;
-        if (result.acknowledgedSequences.length > 0) {
-          const maxAcked = Math.min(
-            Math.max(...result.acknowledgedSequences),
-            seqState.produced - 1
-          );
-          seqState.acked = Math.max(seqState.acked, maxAcked);
-        }
-      }
     } else {
       state.droppedChunks += chunks.length;
       this.logger.error(
@@ -412,7 +374,7 @@ export class LogForwarder {
       chunks: { sequence: number; content: string; timestamp: string }[];
     },
     webhookSecret: string
-  ): Promise<{ success: boolean; acknowledgedSequences: number[] }> {
+  ): Promise<{ success: boolean }> {
     const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
     const url = `${baseUrl}/internal/logs`;
     const jsonBody = JSON.stringify(payload);
@@ -435,21 +397,7 @@ export class LogForwarder {
         });
 
         if (response.ok) {
-          try {
-            const ackBody = (await response.json()) as {
-              acknowledgedSequences?: number[];
-            };
-            return {
-              success: true,
-              acknowledgedSequences: ackBody.acknowledgedSequences ?? [],
-            };
-          } catch (parseError) {
-            this.logger.warn(
-              { taskId: payload.taskId, error: parseError },
-              'Failed to parse ACK response JSON — delivery tracking degraded'
-            );
-            return { success: true, acknowledgedSequences: [] };
-          }
+          return { success: true };
         }
 
         if (response.status >= 400 && response.status < 500) {
@@ -457,7 +405,7 @@ export class LogForwarder {
             { taskId: payload.taskId, status: response.status, url },
             'Log upload rejected with client error - not retrying'
           );
-          return { success: false, acknowledgedSequences: [] };
+          return { success: false };
         }
 
         this.logger.warn(
@@ -482,7 +430,7 @@ export class LogForwarder {
       }
     }
 
-    return { success: false, acknowledgedSequences: [] };
+    return { success: false };
   }
 
   /**
@@ -504,6 +452,15 @@ export class LogForwarder {
       /* v8 ignore stop @preserve */
       return `${ts} ${line}`;
     });
+  }
+
+  /**
+   * Derive a deterministic webhook secret from orchestratorSecret + taskId.
+   * Used as fallback when the secret is not in the in-memory taskSecrets map
+   * (e.g. after orchestrator restart while containers survive).
+   */
+  private deriveWebhookSecret(taskId: string): string {
+    return createHmac('sha256', this.config.orchestratorSecret).update(taskId).digest('hex');
   }
 
   private signPayload(payload: string, timestamp: number, secret: string): string {
@@ -540,43 +497,8 @@ export class LogForwarder {
     await this.flushBuffer(taskId, true);
   }
 
-  async awaitDrain(taskId: string, timeoutMs: number): Promise<void> {
-    const startTime = Date.now();
-    const pollMs = 500;
-
-    while (Date.now() - startTime < timeoutMs) {
-      const seqState = this.taskSequences.get(taskId);
-      // produced = next sequence number (0-indexed), so highest sent = produced - 1
-      if (
-        seqState === undefined ||
-        seqState.produced === 0 ||
-        seqState.acked >= seqState.produced - 1
-      ) {
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, pollMs));
-    }
-
-    const seqState = this.taskSequences.get(taskId);
-    /* v8 ignore start -- test-infra: throw only reachable after real timeout expiry in awaitDrain polling loop @preserve */
-    throw new Error(
-      `Log drain timeout after ${String(timeoutMs)}ms: produced=${String(seqState?.produced ?? 0)} acked=${String(seqState?.acked ?? 0)}`
-    );
-    /* v8 ignore stop @preserve */
-  }
-
   close(taskId: string): void {
     this.forwarders.delete(taskId);
-    this.taskSequences.delete(taskId);
-  }
-
-  getDeliveryStats(taskId: string): { produced: number; acked: number; pending: number } {
-    const seqState = this.taskSequences.get(taskId);
-    if (seqState === undefined) return { produced: 0, acked: 0, pending: 0 };
-    /* v8 ignore start -- ts-type: ternary type narrowing for zero-produce guard @preserve */
-    const pending = seqState.produced > 0 ? seqState.produced - 1 - seqState.acked : 0;
-    /* v8 ignore stop @preserve */
-    return { produced: seqState.produced, acked: seqState.acked, pending: Math.max(0, pending) };
   }
 
   getActiveTaskIds(): string[] {

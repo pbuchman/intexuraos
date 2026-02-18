@@ -27,10 +27,12 @@ export function getOtelTransport(): NodeJS.WritableStream | undefined {
   // Set OTel-standard env vars for the transport worker thread
   process.env['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT'] = `${endpoint}/v1/logs`;
 
+  /* v8 ignore start -- module-init: only reached with live Dash0 endpoint @preserve */
   const authToken = process.env['INTEXURAOS_DASH0_AUTH_TOKEN'] ?? '';
   if (authToken !== '') {
     process.env['OTEL_EXPORTER_OTLP_LOGS_HEADERS'] = `Authorization=Bearer ${authToken}`;
   }
+  /* v8 ignore stop @preserve */
 
   cachedTransport = pino.transport({
     target: 'pino-opentelemetry-transport',

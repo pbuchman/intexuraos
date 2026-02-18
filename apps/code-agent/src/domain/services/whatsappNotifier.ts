@@ -61,4 +61,16 @@ export interface WhatsAppNotifier {
     userId: string,
     task: CodeTask
   ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when a terminal task is resumed with a user message.
+   *
+   * @param userId - User ID to send notification to
+   * @param task - Resumed task
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyTaskResumed(
+    userId: string,
+    task: CodeTask
+  ): Promise<Result<void, NotificationError>>;
 }

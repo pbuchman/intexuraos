@@ -45,7 +45,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
   return {
     create: async (input: CreateTaskInput): Promise<Result<CodeTask, RepositoryError>> => {
-      const taskId = `task_${randomUUID()}`;
+      const taskId = input.id ?? `task_${randomUUID()}`;
       const dedupKey = generateDedupKey(input.userId, input.prompt);
       const now = new Date();
       const dedupWindowStart = new Date(now.getTime() - DEDUP_WINDOW_MS);
@@ -300,10 +300,15 @@ export const createFirestoreCodeTaskRepository = (deps: {
           updateData['result'] = input.result;
         }
         if (input.error !== undefined) {
-          updateData['error'] = input.error;
+          updateData['error'] = input.error === null
+            ? FieldValue.delete()
+            : input.error;
         }
         if (input.statusSummary !== undefined) {
           updateData['statusSummary'] = input.statusSummary;
+        }
+        if (input.workerLocation !== undefined) {
+          updateData['workerLocation'] = input.workerLocation;
         }
         if (input.callbackReceived !== undefined) {
           updateData['callbackReceived'] = input.callbackReceived;
@@ -334,6 +339,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           updateData['cancelNonceExpiresAt'] = input.cancelNonceExpiresAt === null
             ? FieldValue.delete()
             : input.cancelNonceExpiresAt;
+        }
+        if (input.pendingUserMessages !== undefined) {
+          updateData['pendingUserMessages'] = input.pendingUserMessages;
         }
 
         await docRef.update(updateData);

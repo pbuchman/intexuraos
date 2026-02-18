@@ -12,6 +12,7 @@ import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
+import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
@@ -458,6 +459,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier: services.whatsappNotifier,
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
         },
         processRequest
       );
@@ -1147,11 +1149,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
-      // Generate webhook secret for this task
-      const webhookSecret = generateWebhookSecret();
+      // Pre-generate task ID and derive deterministic webhook secret
+      const taskId = `task_${randomUUID()}`;
+      const webhookSecret = generateWebhookSecret(loadConfig().orchestratorSecret, taskId);
 
       // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
       const createInput: {
+        id: string;
         userId: string;
         prompt: string;
         sanitizedPrompt: string;
@@ -1165,16 +1169,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueId?: string;
         linearIssueTitle?: string;
         linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
-        linearIssueLabels?: string[];
-        hasChildren?: boolean;
         linearFallback?: boolean;
       } = {
+        id: taskId,
         userId,
         prompt: body.prompt,
         sanitizedPrompt: body.prompt.trim().replace(/\s+/g, ' '),
         systemPromptHash: 'default', // TODO: Use actual system prompt hash
         workerType: body.workerType ?? 'auto',
-        workerLocation: 'pending', // Placeholder — overwritten after dispatch with actual worker
+        workerLocation: 'pending', // Updated after dispatch with actual worker location
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -1195,9 +1198,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
         createInput.linearIssueType = issueResult.linearIssueType;
       }
-      // Save linearIssueLabels and hasChildren
-      createInput.linearIssueLabels = issueResult.linearIssueLabels;
-      createInput.hasChildren = issueResult.hasChildren;
       // Save fallback flag
       /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
       if (issueResult.linearFallback) {
@@ -1322,8 +1322,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType: task.workerType,
         webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
         webhookSecret,
-        linearIssueLabels: task.linearIssueLabels ?? [],
-        hasChildren: task.hasChildren ?? false,
+        linearIssueLabels: issueResult.linearIssueLabels,
+        hasChildren: issueResult.hasChildren,
         workerCredentials,
       };
 
@@ -1347,10 +1347,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker');
       }
 
-      // Persist actual worker location after dispatch (may differ from placeholder)
+      // Save the actual worker location returned by the dispatcher
+      const actualWorkerLocation = dispatchResult.value.workerLocation;
       await codeTaskRepo.update(task.id, {
-        workerLocation: dispatchResult.value.workerLocation,
-        status: 'dispatched',
+        workerLocation: actualWorkerLocation,
         dispatchedAt: new Date(),
       });
 
@@ -1362,7 +1362,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         await linearIssueService.markInProgress(userId, issueResult.linearIssueId);
       }
 
-      request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');
+      request.log.info({ taskId: task.id, workerLocation: actualWorkerLocation }, 'Code task submitted successfully');
 
       return await reply.ok({
         status: 'submitted',
@@ -2948,6 +2948,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier,
           metricsClient,
           workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
         },
         retryRequest
       );
@@ -3138,6 +3139,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           whatsappNotifier,
           metricsClient,
           workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
         },
         {
           originalTaskId: taskId,
@@ -3252,6 +3254,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logLineRepo: services.logLineRepo,
           taskDispatcher: services.taskDispatcher,
           workerSettingsRepo: services.workerSettingsRepo,
+          statusMirrorService: services.statusMirrorService,
+          whatsappNotifier: services.whatsappNotifier,
         },
         { taskId, userId, message }
       );

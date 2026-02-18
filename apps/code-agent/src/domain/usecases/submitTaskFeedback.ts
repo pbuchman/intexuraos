@@ -16,14 +16,14 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 
 /**
- * Generate a webhook secret for a task.
+ * Generate a deterministic webhook secret for a task.
+ * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
  */
-function generateWebhookSecret(): string {
-  const buffer = randomBytes(24);
-  return `whsec_${buffer.toString('hex')}`;
+function generateWebhookSecret(sharedSecret: string, taskId: string): string {
+  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
 }
 
 /**
@@ -83,6 +83,7 @@ export interface SubmitTaskFeedbackDeps {
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  orchestratorSecret: string;
 }
 
 /**
@@ -199,11 +200,13 @@ export async function submitTaskFeedback(
 ${feedback.trim()}
 `;
 
-  // Step 6: Generate webhook secret
-  const webhookSecret = generateWebhookSecret();
+  // Step 6: Pre-generate task ID and derive deterministic webhook secret
+  const followUpTaskId = `task_${randomUUID()}`;
+  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, followUpTaskId);
 
   // Step 7: Create follow-up task with parentTaskId
   const createInput = {
+    id: followUpTaskId,
     userId,
     prompt: feedbackPrompt,
     sanitizedPrompt: feedbackPrompt,
@@ -290,11 +293,32 @@ ${feedback.trim()}
     }
   }
 
-  // Step 10: Build webhook URL
+  // Step 10: Fetch fresh labels from Linear for dispatch
+  let linearIssueLabelsForDispatch: string[] = [];
+  let hasChildrenForDispatch = false;
+
+  if (originalTask.linearIssueId !== undefined) {
+    const validateIssueResult = await linearAgentClient.validateIssue({
+      userId,
+      identifier: originalTask.linearIssueId,
+    });
+
+    if (validateIssueResult.ok) {
+      linearIssueLabelsForDispatch = validateIssueResult.value.labels;
+      hasChildrenForDispatch = validateIssueResult.value.childCount > 0;
+    } else {
+      logger.warn(
+        { linearIssueId: originalTask.linearIssueId },
+        'Failed to fetch Linear issue labels for feedback dispatch'
+      );
+    }
+  }
+
+  // Step 11: Build webhook URL
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
   const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
 
-  // Step 11: Dispatch to worker
+  // Step 12: Dispatch to worker
   const dispatchRequest: {
     taskId: string;
     linearIssueId?: string;
@@ -321,10 +345,8 @@ ${feedback.trim()}
     webhookSecret,
     workerCredentials,
     parentTaskId: originalTask.id,
-    /* v8 ignore start -- ts-type: nullish coalescing for optional fields creates type narrowing branches @preserve */
-    linearIssueLabels: originalTask.linearIssueLabels ?? [],
-    hasChildren: originalTask.hasChildren ?? false,
-    /* v8 ignore stop @preserve */
+    linearIssueLabels: linearIssueLabelsForDispatch,
+    hasChildren: hasChildrenForDispatch,
   };
 
   // Add optional fields if defined
@@ -368,6 +390,7 @@ ${feedback.trim()}
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(followUpTask.id, {
+    workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
   });

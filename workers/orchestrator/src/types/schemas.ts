@@ -50,6 +50,7 @@ export type CreateTaskRequestInput = z.infer<typeof CreateTaskRequestSchema>;
 // Send message result types
 export interface SendMessageResult {
   action: 'queued' | 'resumed';
+  pendingMessages?: string[];
 }
 
 export interface SendMessageError {
