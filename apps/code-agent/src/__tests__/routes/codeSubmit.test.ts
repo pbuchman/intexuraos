@@ -300,6 +300,35 @@ describe('POST /code/submit', () => {
       );
     });
 
+    it('sets executionPhase to execution when issue has code-task label', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-999',
+        linearIssueTitle: 'Phase 2 ready feature',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
+        ok: true,
+        value: { dispatched: true, workerLocation: 'home-dev' },
+      });
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Build phase 2 feature' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ executionPhase: 'execution' })
+      );
+    });
+
     it('uses provided workerType when specified', async () => {
       // Mock linearIssueService to create a new Linear issue
       const linearService = getServices().linearIssueService;

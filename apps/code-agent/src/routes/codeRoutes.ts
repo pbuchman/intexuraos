@@ -11,6 +11,8 @@ import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
+import { submitToPhase2 } from '../domain/usecases/submitToPhase2.js';
+import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
@@ -1170,6 +1172,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueTitle?: string;
         linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
         linearFallback?: boolean;
+        executionPhase: 'design' | 'execution';
       } = {
         id: taskId,
         userId,
@@ -1182,6 +1185,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         webhookSecret,
+        executionPhase: hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'design',
       };
 
       // Save linearIssueId if available (linking to existing issue)
@@ -3177,6 +3181,203 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         { originalTaskId: taskId, followUpTaskId: result.value.codeTaskId }, // @allow-result-access -- narrowed by !result.ok guard above
         'Follow-up task created from feedback'
       );
+
+      return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
+    }
+  );
+
+  // POST /code/tasks/:taskId/implement - Start Phase 2 implementation from a completed design task
+  fastify.post(
+    '/code/tasks/:taskId/implement',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'submitToPhase2',
+        summary: 'Start Phase 2 implementation from a completed design task',
+        description: 'Dispatches a Phase 2 strict-execution task from a completed Phase 1 design task. Requires Auth0 JWT.',
+        tags: ['public'],
+        params: {
+          type: 'object',
+          required: ['taskId'],
+          properties: {
+            taskId: {
+              type: 'string',
+              description: 'The ID of the completed Phase 1 design task',
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Phase 2 task dispatched successfully',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['codeTaskId', 'resourceUrl', 'workerLocation', 'implementationOf'],
+                properties: {
+                  codeTaskId: { type: 'string' },
+                  resourceUrl: { type: 'string' },
+                  workerLocation: { type: 'string' },
+                  implementationOf: { type: 'string' },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Bad request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          409: {
+            description: 'Conflict - implementation already exists or active task exists',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                  details: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      existingTaskId: { type: 'string' },
+                    },
+                  },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/tasks/:taskId/implement',
+      });
+
+      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo, rateLimitService } =
+        getServices();
+      const userId = request.user?.userId;
+
+      /* v8 ignore start -- test-infra: requires authenticated user @preserve */
+      if (userId === undefined) {
+        return reply.fail('UNAUTHORIZED', 'Authentication required');
+      }
+      /* v8 ignore stop @preserve */
+
+      const { taskId } = request.params as { taskId: string };
+
+      // Check rate limits before dispatching (prompt length 0 — reuses existing task prompt)
+      const limitCheck = await rateLimitService.checkLimits(userId, 0);
+      /* v8 ignore start -- test-infra: rate limit failure covered by rateLimitService unit tests @preserve */
+      if (!limitCheck.ok) {
+        const { error } = limitCheck;
+        request.log.warn({ userId, error }, 'Rate limit exceeded for implement request');
+        if (error.code === 'service_unavailable') {
+          return reply.fail('MISCONFIGURED', error.message);
+        }
+        return reply.fail('RATE_LIMITED', error.message);
+      }
+      /* v8 ignore stop @preserve */
+
+      request.log.info({ taskId, userId }, 'Processing Phase 2 implementation request');
+
+      const result = await submitToPhase2(
+        {
+          logger: request.log,
+          codeTaskRepo,
+          linearAgentClient,
+          taskDispatcher,
+          whatsappNotifier,
+          metricsClient,
+          workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
+        },
+        { originalTaskId: taskId, userId }
+      );
+
+      /* v8 ignore start -- test-infra: error handling paths covered by use case tests @preserve */
+      if (!result.ok) {
+        const error = result.error;
+        switch (error.code) {
+          case 'task_not_found':
+            return reply.fail('NOT_FOUND', error.message);
+          case 'invalid_status':
+          case 'no_linear_issue':
+          case 'label_not_ready':
+            return reply.fail('INVALID_REQUEST', error.message);
+          case 'worker_not_configured':
+            return reply.fail('WORKER_NOT_CONFIGURED', error.message);
+          case 'already_implemented':
+            // Include existingTaskId in details so frontend can navigate
+            return reply.code(409).send({
+              success: false,
+              error: {
+                code: error.code,
+                message: error.message,
+                details: { existingTaskId: error.existingTaskId },
+              },
+            }); // @allow-raw-send: 409 with structured error payload containing existingTaskId
+          case 'active_task_exists':
+            return reply.fail('CONFLICT', error.message);
+          case 'internal_error':
+          default:
+            return reply.fail('INTERNAL_ERROR', error.message);
+        }
+      }
+      /* v8 ignore stop @preserve */
+
+      // Record task start for rate limiting
+      await rateLimitService.recordTaskStart(userId);
 
       return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }

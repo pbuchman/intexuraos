@@ -7,6 +7,7 @@ import type {
   ListCodeTasksResponse,
   RetryCodeTaskRequest,
   RetryCodeTaskResponse,
+  StartImplementationResponse,
   SubmitCodeTaskRequest,
   SubmitCodeTaskResponse,
   WorkersStatusResponse,
@@ -112,6 +113,21 @@ export async function sendTaskMessage(
     { method: 'POST', body: request }
   );
   return response;
+}
+
+/**
+ * Start Phase 2 implementation from a completed Phase 1 design task
+ */
+export async function startImplementation(
+  accessToken: string,
+  taskId: string
+): Promise<StartImplementationResponse> {
+  return await apiRequest<StartImplementationResponse>(
+    config.codeAgentUrl,
+    `/code/tasks/${taskId}/implement`,
+    accessToken,
+    { method: 'POST' }
+  );
 }
 
 /**

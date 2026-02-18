@@ -2744,6 +2744,112 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('NOT_FOUND');
     });
 
+  });
+
+  describe('POST /code/tasks/:taskId/implement', () => {
+    it('returns 401 without JWT token', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/implement',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when task not found', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/non-existent-task/implement',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 200 with correct response shape on successful Phase 2 dispatch', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a completed Phase 1 design task owned by the test JWT user
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Design feature X',
+        sanitizedPrompt: 'Design feature X (sanitized)',
+        systemPromptHash: 'abc123',
+        workerType: 'auto',
+        workerLocation: 'home-dev',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-phase1',
+        executionPhase: 'design',
+        linearIssueId: 'INT-100',
+        linearIssueTitle: 'Feature X',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Mark task as completed
+      await repo.update(created.value.id, { status: 'completed' });
+
+      // Override linearAgentClient and workerSettingsRepo for this test
+      const mockLinearClient: LinearAgentClient = {
+        validateIssue: async () =>
+          ok({
+            id: 'INT-100',
+            identifier: 'INT-100',
+            title: 'Feature X',
+            url: 'https://linear.app/intexuraos/issue/INT-100',
+            labels: ['code-task'],
+            childCount: 0,
+          }),
+        updateIssueState: async () => ok({}),
+        addComment: async () => ok({}),
+      } as unknown as LinearAgentClient;
+
+      const mockWorkerSettings: WorkerSettingsRepository = {
+        getSettings: async () =>
+          ok({
+            workers: [
+              {
+                name: 'home-dev',
+                url: 'https://worker.dev',
+                enabled: true,
+                cfAccessClientId: '',
+                cfAccessClientSecret: '',
+                dispatchSigningSecret: '',
+              },
+            ],
+          }),
+      } as unknown as WorkerSettingsRepository;
+
+      setServices({
+        ...getServices(),
+        linearAgentClient: mockLinearClient,
+        workerSettingsRepo: mockWorkerSettings,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/code/tasks/${created.value.id}/implement`,
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(response.statusCode).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+      expect(body.data.implementationOf).toBe(created.value.id);
+      expect(body.data.resourceUrl).toContain('/code/tasks/');
+      expect(body.data.workerLocation).toBe('mac');
+    });
+  });
+
+  describe('POST /code/tasks/:taskId/messages (existing)', () => {
     it('successfully queues message for a running task', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
