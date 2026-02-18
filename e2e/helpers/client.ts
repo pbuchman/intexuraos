@@ -75,7 +75,7 @@ export interface CodeTask {
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+  status: 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;

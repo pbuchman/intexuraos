@@ -10,7 +10,7 @@ import type { CodeTask } from './client.js';
 /**
  * Terminal task statuses that won't change.
  */
-const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled', 'interrupted'] as const;
+const TERMINAL_STATUSES = ['designed', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
 
 /**
  * Poll until task reaches expected status or timeout.
