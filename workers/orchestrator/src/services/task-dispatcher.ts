@@ -879,6 +879,8 @@ export class TaskDispatcher {
       systemPrompt: buildSystemPrompt({
         taskId: task.taskId,
         ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+        ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
+        taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
         linearIssueLabels: task.linearIssueLabels,
         hasChildren: params.hasChildren,
       }),
