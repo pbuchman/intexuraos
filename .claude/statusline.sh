@@ -344,7 +344,15 @@ load_avg=$(uptime | sed -E 's/.*load averages?: ([0-9.]+)[, ]+([0-9.]+)[, ]+([0-
 mem_usage=$(free -m | awk '/^Mem:/ { printf "%.1fG/%.1fG", $3/1024, $2/1024 }')
 load_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
 hostname=$(uname -n)
-line3="📈 $(load_color)${hostname} ${load_avg}  🧮 ${mem_usage}$(rst)"
+hostname_display="$hostname"
+if [ "$use_color" -eq 1 ]; then
+  if [ "$hostname" = "home-dev" ]; then
+    hostname_display=$(printf '\033[30;48;5;150m %s \033[0m' "$hostname")
+  elif [ "$hostname" = "KHKW970X6K" ]; then
+    hostname_display=$(printf '\033[30;48;5;117m %s \033[0m' "$hostname")
+  fi
+fi
+line3="📈 ${hostname_display} $(load_color)${load_avg}  🧮 ${mem_usage}$(rst)"
 
 # Line 4: Cost and usage analytics (optional)
 line4=""
