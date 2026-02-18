@@ -5,7 +5,6 @@ describe('system-prompt', () => {
   describe('buildSystemPrompt', () => {
     const baseParams = {
       taskId: 'task-123',
-      worktreePath: '/tmp/worktree-task-123',
       linearIssueId: 'INT-123',
       linearIssueLabels: [] as string[],
       hasChildren: false,
@@ -30,7 +29,7 @@ describe('system-prompt', () => {
         });
 
         expect(result).toContain('Task ID: task-123');
-        expect(result).toContain('Worktree: /tmp/worktree-task-123');
+        expect(result).toContain('Worktree: /repo');
         expect(result).toContain('Linear Issue: INT-123');
       });
 
