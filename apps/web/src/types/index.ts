@@ -1170,6 +1170,10 @@ export interface CodeTask {
     commentCount: number;
     lastCommentAt: string | null;
   };
+  executionPhase?: 'design' | 'execution';
+  implementationTaskId?: string;
+  parentTaskId?: string;
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
   result?: CodeTaskResult;
   error?: CodeTaskError;
 }
@@ -1212,6 +1216,16 @@ export interface RetryCodeTaskResponse {
   resourceUrl: string;
   workerLocation: string;
   retriedFrom: string;
+}
+
+/**
+ * Response from starting Phase 2 implementation of a design task
+ */
+export interface StartImplementationResponse {
+  codeTaskId: string;
+  resourceUrl: string;
+  workerLocation: string;
+  implementationOf: string;
 }
 
 /**

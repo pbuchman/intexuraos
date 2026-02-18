@@ -17,6 +17,7 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
+import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 
 /**
  * Cool-off period before retry is allowed (1 minute).
@@ -285,6 +286,7 @@ ${additionalContext.trim()}
     traceId: `retry-${String(Date.now())}`,
     webhookSecret,
     retriedFrom: originalTaskId,
+    executionPhase: hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('design' as const),
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
   };

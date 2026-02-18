@@ -88,7 +88,8 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
           // Layer 2: Check dedupKey within 5-minute window (design lines 1543-1554)
           // Skip dedup for retried tasks — same prompt is intentional
-          if (input.retriedFrom === undefined) {
+          // Skip dedup for phase2_implement tasks — Phase 2 reuses Phase 1 prompt by design
+          if (input.retriedFrom === undefined && input.followUpReason !== 'phase2_implement') {
             const dedupQuery = collection
               .where('dedupKey', '==', dedupKey)
               .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
@@ -178,6 +179,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           }
           if (input.followUpReason !== undefined) {
             taskData.followUpReason = input.followUpReason;
+          }
+          if (input.executionPhase !== undefined) {
+            taskData.executionPhase = input.executionPhase;
           }
           /* v8 ignore stop @preserve */
 
@@ -342,6 +346,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         if (input.pendingUserMessages !== undefined) {
           updateData['pendingUserMessages'] = input.pendingUserMessages;
+        }
+        if (input.implementationTaskId !== undefined) {
+          updateData['implementationTaskId'] = input.implementationTaskId === null
+            ? FieldValue.delete()
+            : input.implementationTaskId;
         }
 
         await docRef.update(updateData);

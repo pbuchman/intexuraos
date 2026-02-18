@@ -16,6 +16,8 @@ export type WorkerType = 'opus' | 'auto' | 'glm';
  */
 export type WorkerLocation = string;
 
+export type ExecutionPhase = 'design' | 'execution';
+
 /**
  * Task status lifecycle.
  * Design reference: Lines 316, 1422
@@ -127,7 +129,9 @@ export interface CodeTask {
 
   // Resume/Follow-up tracking (for PR comment auto-response - INT-465)
   parentTaskId?: string;       // If this task is a follow-up to another
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
+  executionPhase?: ExecutionPhase;
+  implementationTaskId?: string;
 
   // Results
   result?: TaskResult;

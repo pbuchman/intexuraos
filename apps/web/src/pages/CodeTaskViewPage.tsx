@@ -8,6 +8,7 @@ import {
   GitBranch,
   GitCommit,
   Loader2,
+  Play,
   RotateCcw,
   Send,
   StopCircle,
@@ -110,6 +111,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
     listenerHealthy,
     cancelling, cancelError, retrying, retryError,
     sending, sendError, messageStatus,
+    implementing, implementError, startImplementation,
     cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
@@ -122,6 +124,15 @@ export function CodeTaskViewPage(): React.JSX.Element {
       // retryTask already sets retryError state
     }
   }, [retryTask, navigate]);
+
+  const handleImplement = useCallback(async () => {
+    try {
+      const newId = await startImplementation();
+      void navigate(`/code-tasks/${newId}`);
+    } catch {
+      // startImplementation already sets implementError state
+    }
+  }, [startImplementation, navigate]);
 
   if (loading) {
     return (
@@ -150,12 +161,20 @@ export function CodeTaskViewPage(): React.JSX.Element {
     : undefined;
   const isTaskWorkerOnline = taskWorkerStatus === undefined || taskWorkerStatus.healthy;
   const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
+  const isImplementable = task.status === 'completed' &&
+    task.executionPhase === 'design' &&
+    task.implementationTaskId === undefined &&
+    task.linearIssueId !== undefined;
 
   return (
     <Layout>
       <MemoTaskHeader task={task} workerStatusTag={workerStatusTag} />
 
       <MemoActiveProgress task={task} />
+
+      {task.parentTaskId !== undefined && task.followUpReason === 'phase2_implement' ? (
+        <DesignTaskBanner parentTaskId={task.parentTaskId} />
+      ) : null}
 
       <MemoTaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
 
@@ -173,6 +192,14 @@ export function CodeTaskViewPage(): React.JSX.Element {
         messageStatus={messageStatus}
         workerOnline={isTaskWorkerOnline}
         workerName={task.workerLocation}
+      />
+
+      <MemoNextSteps
+        isImplementable={isImplementable}
+        implementing={implementing}
+        implementError={implementError}
+        {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
+        onImplement={handleImplement}
       />
 
       <MemoTaskActions
@@ -216,6 +243,15 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
         <span>Created: {formatDateTime(task.createdAt)}</span>
         {!isActiveStatus(task.status) ? (
           <span>Updated: {formatRelative(task.updatedAt)}</span>
+        ) : null}
+        {task.executionPhase === 'design' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+            Design
+          </span>
+        ) : task.executionPhase === 'execution' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+            Execution
+          </span>
         ) : null}
         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
           {task.workerType}
@@ -370,6 +406,67 @@ const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTa
     </Card>
   );
 }, (prev, next) => prev.task.status === next.task.status && prev.task.error === next.task.error && prev.task.createdAt === next.task.createdAt);
+
+function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX.Element {
+  return (
+    <div className="mb-4 flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
+      <span>This task implements the design from</span>
+      <a
+        href={`/#/code-tasks/${parentTaskId}`}
+        className="font-medium underline hover:no-underline"
+      >
+        View Design Task
+      </a>
+    </div>
+  );
+}
+
+interface NextStepsProps {
+  isImplementable: boolean;
+  implementing: boolean;
+  implementError: string | null;
+  implementationTaskId?: string;
+  onImplement: () => Promise<void>;
+}
+
+function NextSteps({
+  isImplementable,
+  implementing,
+  implementError,
+  implementationTaskId,
+  onImplement,
+}: NextStepsProps): React.JSX.Element | null {
+  if (!isImplementable && implementationTaskId === undefined && implementError === null) return null;
+
+  return (
+    <div className="mt-4">
+      {implementationTaskId !== undefined ? (
+        <a
+          href={`/#/code-tasks/${implementationTaskId}`}
+          className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+        >
+          <Play className="h-4 w-4" />
+          View Implementation
+        </a>
+      ) : isImplementable ? (
+        <Button
+          onClick={(): void => { void onImplement(); }}
+          disabled={implementing}
+          isLoading={implementing}
+          loadingText="Starting Implementation..."
+        >
+          <Play className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Start Implementation</span>
+        </Button>
+      ) : null}
+      {implementError !== null ? (
+        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{implementError}</p>
+      ) : null}
+    </div>
+  );
+}
+
+const MemoNextSteps = memo(NextSteps);
 
 function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedPrompt: string }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
