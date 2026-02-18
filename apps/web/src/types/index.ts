@@ -1103,7 +1103,8 @@ export type CodeTaskWorkerLocation = string;
 export type CodeTaskStatus =
   | 'dispatched'
   | 'running'
-  | 'completed'
+  | 'designed'
+  | 'implemented'
   | 'failed'
   | 'interrupted'
   | 'cancelled';
@@ -1157,6 +1158,7 @@ export interface CodeTask {
   approvalEventId?: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueUrl?: string;
   linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
   linearFallback?: boolean;
   linearIssue?: {
@@ -1284,37 +1286,16 @@ export type GitHubPREventType =
   | 'push';
 
 /**
- * Valid actions for pull_request events
- */
-export type PRAction = 'opened' | 'closed' | 'edited' | 'synchronized';
-
-/**
- * Valid actions for pull_request_review events
- */
-export type ReviewAction = 'submitted' | 'edited' | 'dismissed';
-
-/**
  * GitHub Pull Request event from code-agent
  */
 export interface GitHubPREvent {
-  id: string;
-  githubEventId: number;
-  repository: string;
-  repositoryId: number;
   pullRequestNumber: number;
-  pullRequestId: number;
+  title: string | null;
+  repository: string;
   eventType: GitHubPREventType;
   action: string | null;
   senderLogin: string;
-  senderId: number;
-  senderType: string;
-  title: string | null;
-  body: string | null;
-  state: string | null;
-  mergedAt: string | null;
   createdAt: string;
-  processedAt: string | null;
-  payload: Record<string, unknown>;
 }
 
 /**
@@ -1322,4 +1303,27 @@ export interface GitHubPREvent {
  */
 export interface GitHubPREventsResponse {
   events: GitHubPREvent[];
+}
+
+/**
+ * Derived PR status for the summaries list view
+ */
+export type GitHubPRStatus = 'open' | 'closed' | 'merged';
+
+/**
+ * PR summary from the github-pr-summaries endpoint
+ */
+export interface GitHubPRSummary {
+  repository: string;
+  pullRequestNumber: number;
+  title: string | null;
+  status: GitHubPRStatus;
+  lastActivityAt: string;
+}
+
+/**
+ * Response from GitHub PR summaries endpoint
+ */
+export interface GitHubPRSummariesResponse {
+  prs: GitHubPRSummary[];
 }

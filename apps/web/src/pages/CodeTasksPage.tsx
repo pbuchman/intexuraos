@@ -1,36 +1,50 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  ExternalLink,
-  Loader2,
+  CheckCircle,
   Plus,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
-import { useCodeTasks } from '@/hooks';
+import { useCodeTasks, useWorkersStatus } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
-import type { CodeTask, CodeTaskStatus } from '@/types';
+import type { CodeTask, CodeTaskStatus, WorkerStatusTag, WorkersStatusResponse } from '@/types';
+
+const LINEAR_STATE_STYLES: Record<string, string> = {
+  completed: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300',
+  started: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+};
+
+const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+
+const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
+  healthy: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-700 dark:text-emerald-100',
+  'orchestrator-unreachable': 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100',
+  'tunnel-down': 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100',
+  unknown: 'bg-amber-200 text-amber-900 dark:bg-amber-700 dark:text-amber-100',
+};
 
 interface StatusStyle {
   bg: string;
   text: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
 }
 
 const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
-  dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched', icon: Clock },
-  running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running', icon: Loader2 },
-  completed: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Completed', icon: CheckCircle2 },
-  failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed', icon: XCircle },
-  interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted', icon: AlertCircle },
-  cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled', icon: XCircle },
+  dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched' },
+  running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running' },
+  designed: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Designed' },
+  implemented: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Implemented' },
+  failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed' },
+  interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted' },
+  cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled' },
 };
 
 export function CodeTasksPage(): React.JSX.Element {
-  const { tasks, loading, loadingMore, error, hasMore, loadMore } = useCodeTasks();
+  const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask } = useCodeTasks();
+  const { status: workersStatus } = useWorkersStatus();
 
   if (loading && tasks.length === 0) {
     return (
@@ -75,7 +89,7 @@ export function CodeTasksPage(): React.JSX.Element {
       ) : (
         <div className="space-y-4">
           {tasks.map((task) => (
-            <CodeTaskCard key={task.id} task={task} />
+            <CodeTaskCard key={task.id} task={task} workersStatus={workersStatus} onDelete={(): void => { void deleteTask(task.id); }} />
           ))}
 
           {hasMore ? (
@@ -106,13 +120,16 @@ export function CodeTasksPage(): React.JSX.Element {
 
 interface CodeTaskCardProps {
   task: CodeTask;
+  workersStatus: WorkersStatusResponse | null;
+  onDelete: () => void;
 }
 
-function CodeTaskCard({ task }: CodeTaskCardProps): React.JSX.Element {
+function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): React.JSX.Element {
   const navigate = useNavigate();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const status = STATUS_STYLES[task.status];
-  const StatusIcon = status.icon;
-  const isRunning = task.status === 'running';
+  const taskWorkerStatus = workersStatus?.workers.find((w) => w.name === task.workerLocation);
+  const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
 
   const handleCardClick = (): void => {
     void navigate(`/code-tasks/${task.id}`);
@@ -128,85 +145,119 @@ function CodeTaskCard({ task }: CodeTaskCardProps): React.JSX.Element {
       onClick={handleCardClick}
       className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
     >
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            {task.linearIssueId !== undefined ? (
-              <span className="text-sm font-medium text-blue-600 dark:text-blue-400">{task.linearIssueId}</span>
-            ) : null}
-            <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600 truncate dark:text-slate-100 dark:hover:text-blue-400">
-              {task.linearIssueTitle ?? truncatePrompt(task.sanitizedPrompt, 80)}
-            </h3>
-          </div>
-          <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">
-            {truncatePrompt(task.sanitizedPrompt)}
-          </p>
-        </div>
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text} flex-shrink-0`}
-        >
-          <StatusIcon className={`h-3.5 w-3.5 ${isRunning ? 'animate-spin' : ''}`} />
-          {status.label}
-        </span>
+      <div className="min-w-0">
+        <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">
+          {task.linearIssueId !== undefined ? (
+            (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+              <a
+                href={task.linearIssueUrl ?? task.linearIssue?.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e): void => { e.stopPropagation(); }}
+                className="mr-2 text-blue-600 hover:underline dark:text-blue-400"
+              >
+                {task.linearIssueId}
+              </a>
+            ) : (
+              <span className="mr-2 text-blue-600 dark:text-blue-400">{task.linearIssueId}</span>
+            )
+          ) : null}
+          {task.linearIssueTitle ?? truncatePrompt(task.sanitizedPrompt, 80)}
+        </h3>
+        <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">
+          {truncatePrompt(task.sanitizedPrompt)}
+        </p>
       </div>
 
-      {task.linearIssue !== undefined && (
-        <div className="mt-2 flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full ${
-            task.linearIssue.state.type === 'completed' ? 'bg-green-500' :
-            task.linearIssue.state.type === 'started' ? 'bg-blue-500' :
-            task.linearIssue.state.type === 'cancelled' ? 'bg-red-500' :
-            'bg-gray-400'
-          }`} />
-          <span className="text-xs text-gray-500">{task.linearIssue.state.name}</span>
-          {task.linearIssue.assignee !== null && (
-            <span className="text-xs text-gray-400">&middot; {task.linearIssue.assignee.name}</span>
-          )}
-        </div>
-      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}>
+          {status.label}
+        </span>
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+          {task.workerType}
+        </span>
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
+          {task.workerLocation}
+        </span>
+        {task.linearIssue !== undefined ? (
+          <>
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE}`}>
+              {task.linearIssue.state.name}
+            </span>
+            {task.linearIssue.assignee !== null ? (
+              <span className="text-xs text-green-600 dark:text-green-400">{task.linearIssue.assignee.name}</span>
+            ) : null}
+          </>
+        ) : null}
+        {task.linearIssueId !== undefined ? (
+          (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+            <a
+              href={task.linearIssueUrl ?? task.linearIssue?.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e): void => { e.stopPropagation(); }}
+              className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 hover:bg-violet-200 dark:bg-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-900/80"
+            >
+              {task.linearIssueId}
+            </a>
+          ) : (
+            <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 hover:bg-violet-200 dark:bg-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-900/80">
+              {task.linearIssueId}
+            </span>
+          )
+        ) : null}
+        {task.result?.prUrl !== undefined ? (
+          <a
+            href={task.result.prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e): void => { e.stopPropagation(); }}
+            className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900/80"
+          >
+            PR #{/\/pull\/(\d+)/.exec(task.result.prUrl)?.[1] ?? ''}
+          </a>
+        ) : null}
+      </div>
 
-      <div className="mt-4 flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
-        <div className="flex gap-4">
+      <div className="mt-3 flex items-center justify-between">
+        <div className="flex gap-4 text-sm text-slate-500 dark:text-slate-400">
           <span>Created: {formatDateTime(task.createdAt)}</span>
-          {task.status === 'completed' ? (
+          {(task.status === 'designed' || task.status === 'implemented') ? (
             <span>Completed: {formatDateTime(task.updatedAt)}</span>
           ) : null}
         </div>
-        <div className="flex gap-2">
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
-            {task.workerType}
-          </span>
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
-            {task.workerLocation}
-          </span>
-        </div>
-      </div>
-
-      {task.result !== undefined ? (
-        <div className="mt-3 flex items-center gap-4 text-sm">
-          {task.result.prUrl !== undefined ? (
-            <a
-              href={task.result.prUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+        <div className="flex items-center gap-2">
+          {showDeleteConfirm ? (
+            <div
+              className="flex gap-2"
+              onClick={(e): void => { e.stopPropagation(); }}
+            >
+              <Button variant="danger" onClick={onDelete}>
+                <CheckCircle className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Confirm</span>
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={(): void => { setShowDeleteConfirm(false); }}
+              >
+                <XCircle className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Cancel</span>
+              </Button>
+            </div>
+          ) : (
+            <button
               onClick={(e): void => {
                 e.stopPropagation();
+                setShowDeleteConfirm(true);
               }}
-              className="flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+              className="text-sm text-slate-400 hover:text-red-600 flex items-center gap-1 dark:hover:text-red-400"
             >
-              <ExternalLink className="h-3.5 w-3.5" />
-              View PR
-            </a>
-          ) : null}
-          <span className="text-slate-600 dark:text-slate-300">
-            {task.result.commits} commit{task.result.commits !== 1 ? 's' : ''} on{' '}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-700 dark:text-slate-300">{task.result.branch}</code>
-          </span>
-          {task.result.ciFailed === true ? (
-            <span className="text-amber-600 dark:text-amber-400">CI failed</span>
-          ) : null}
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Delete</span>
+            </button>
+          )}
         </div>
-      ) : null}
+      </div>
 
       {task.error !== undefined ? (
         <div className="mt-3 text-sm text-red-600 dark:text-red-400">
