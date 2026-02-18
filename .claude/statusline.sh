@@ -341,7 +341,16 @@ fi
 # Line 3: Port metrics and load average
 # Get all 3 load averages (1min, 5min, 15min)
 load_avg=$(uptime | sed -E 's/.*load averages?: ([0-9.]+)[, ]+([0-9.]+)[, ]+([0-9.]+).*/\1 \2 \3/')
-mem_usage=$(free -m | awk '/^Mem:/ { printf "%.1fG/%.1fG", $3/1024, $2/1024 }')
+if command -v free >/dev/null 2>&1; then
+  mem_usage=$(free -m | awk '/^Mem:/ { printf "%.1fG/%.1fG", $3/1024, $2/1024 }')
+else
+  mem_total_bytes=$(sysctl -n hw.memsize 2>/dev/null)
+  mem_pages_active=$(vm_stat 2>/dev/null | awk '/Pages active/ { gsub(/\./,"",$3); print $3 }')
+  mem_pages_wired=$(vm_stat 2>/dev/null | awk '/Pages wired/ { gsub(/\./,"",$4); print $4 }')
+  mem_pages_compressed=$(vm_stat 2>/dev/null | awk '/Pages occupied by compressor/ { gsub(/\./,"",$5); print $5 }')
+  mem_used_bytes=$(( (${mem_pages_active:-0} + ${mem_pages_wired:-0} + ${mem_pages_compressed:-0}) * 4096 ))
+  mem_usage=$(awk "BEGIN { printf \"%.1fG/%.1fG\", ${mem_used_bytes}/1073741824, ${mem_total_bytes:-0}/1073741824 }")
+fi
 load_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
 hostname=$(uname -n)
 hostname_display="$hostname"
