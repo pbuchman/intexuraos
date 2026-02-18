@@ -585,6 +585,17 @@ describe('POST /code/submit', () => {
     });
 
     it('allows submissions when within limits', async () => {
+      // Mock Linear issue service (required for submit flow)
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'This should be allowed',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
       // Mock successful dispatch
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
         ok: true,
@@ -636,6 +647,16 @@ describe('POST /code/submit', () => {
     it('calls recordTaskStart when task is submitted successfully', async () => {
       const { getServices } = await import('../../services.js');
       const services = getServices();
+
+      // Mock Linear issue service (required for submit flow)
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-456',
+        linearIssueTitle: 'Test prompt',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(services.linearIssueService, 'markInProgress').mockResolvedValueOnce(undefined);
 
       const recordStartSpy = vi.spyOn(services.rateLimitService, 'recordTaskStart');
 
