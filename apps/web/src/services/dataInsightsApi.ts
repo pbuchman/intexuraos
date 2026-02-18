@@ -14,7 +14,7 @@ export interface AnalyzeDataResponse {
  * Chart definition response (ephemeral, not persisted).
  */
 export interface ChartDefinition {
-  vegaLiteConfig: object;
+  vegaLiteConfig: Record<string, unknown>;
   dataTransformInstructions: string;
 }
 
