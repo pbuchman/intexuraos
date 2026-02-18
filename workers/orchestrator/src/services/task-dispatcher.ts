@@ -1239,7 +1239,7 @@ export class TaskDispatcher {
 
       let sizeStr: string;
       if (persisted) {
-        const match = text.match(/Output too large \(([^)]+)\)/);
+        const match = /Output too large \(([^)]+)\)/.exec(text);
         sizeStr = match?.[1] ?? this.formatBytes(text.length);
       } else {
         sizeStr = this.formatBytes(text.length);
