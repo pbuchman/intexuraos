@@ -349,7 +349,7 @@ if [ "$use_color" -eq 1 ]; then
   if [ "$hostname" = "home-dev" ]; then
     hostname_display=$(printf '\033[30;48;5;150m %s \033[0m' "$hostname")
   elif [ "$hostname" = "KHKW970X6K" ]; then
-    hostname_display=$(printf '\033[30;48;5;117m %s \033[0m' "$hostname")
+    hostname_display=$(printf '\033[30;48;5;7m mac-dev \033[0m')
   fi
 fi
 line3="📈 ${hostname_display} $(load_color)${load_avg}  🧮 ${mem_usage}$(rst)"
