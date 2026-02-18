@@ -28,16 +28,6 @@ style_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;245m'; fi; } #
 api_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;222m'; fi; }   # warm gold
 rst() { if [ "$use_color" -eq 1 ]; then printf '\033[0m'; fi; }
 
-# Terminal hyperlink helper (OSC 8)
-hyperlink() { printf '\033]8;;%s\033\\%s\033]8;;\033\\' "$1" "$2"; }
-
-# Colored hyperlink helper (works in command substitution)
-colored_hyperlink() {
-  local url="$1"
-  local text="$2"
-  local color_code="$3"
-  printf '\033]8;;%s\033\\%s%s\033]8;;\033\\%s' "$url" "$color_code" "$text" "$(rst)"
-}
 
 # ---- time helpers ----
 to_epoch() {
@@ -292,111 +282,6 @@ if [ -n "$hooks_dir" ]; then
   fi
 fi
 
-# ---- Port status check (fast, no PM2) ----
-check_port_status() {
-  local port="$1"
-  local pid=$(lsof -t -i :"$port" -sTCP:LISTEN 2>/dev/null | head -1)
-  if [ -n "$pid" ]; then
-    echo "up"
-  else
-    echo "down"
-  fi
-}
-
-get_worktree_from_port() {
-  local port="$1"
-  local pid=$(lsof -t -i :"$port" -sTCP:LISTEN 2>/dev/null | head -1)
-  if [ -n "$pid" ]; then
-    local cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | grep ^n | cut -c2-)
-    echo "$cwd" | grep -oE 'intexuraos-[0-9]+' || echo ""
-  fi
-}
-
-# Dev services (ports 8110-8128) - parallel arrays for bash 3.x compatibility
-DEV_NAMES="user notion whatsapp mobile research commands actions insights image notes settings todos bookmarks calendar linear web-agent code chat"
-DEV_PORTS="8110 8112 8113 8114 8116 8117 8118 8119 8120 8121 8122 8123 8124 8125 8126 8127 8128 8129"
-DEV_TOTAL=18
-
-# Check all dev services
-dev_up=0
-dev_down_list=""
-dev_worktree=""
-set -- $DEV_PORTS
-for name in $DEV_NAMES; do
-  port="$1"; shift
-  status=$(check_port_status "$port")
-  if [ "$status" = "up" ]; then
-    dev_up=$((dev_up + 1))
-    [ -z "$dev_worktree" ] && dev_worktree=$(get_worktree_from_port "$port")
-  else
-    [ -n "$dev_down_list" ] && dev_down_list="${dev_down_list},"
-    dev_down_list="${dev_down_list}${name}"
-  fi
-done
-
-# Build dev metrics display
-dev_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;150m'; fi; }  # green
-dev_warn_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;220m'; fi; }  # yellow
-dev_fail_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;203m'; fi; }  # red
-
-if [ "$dev_up" -eq 0 ]; then
-  dev_metrics=":dev 🔴"
-elif [ "$dev_up" -eq "$DEV_TOTAL" ]; then
-  wt_info=""
-  [ -n "$dev_worktree" ] && wt_info="${dev_worktree}, "
-  dev_metrics=":dev 🟢 (${wt_info}${dev_up}/${DEV_TOTAL})"
-else
-  wt_info=""
-  [ -n "$dev_worktree" ] && wt_info="${dev_worktree}, "
-  dev_metrics=":dev 🟡 (${wt_info}${dev_up}/${DEV_TOTAL})"
-fi
-
-# Docker services (from docker-compose.local.yaml)
-DOCKER_PORTS="8102 8105"
-DOCKER_TOTAL=2
-
-docker_up=0
-for port in $DOCKER_PORTS; do
-  status=$(check_port_status "$port")
-  [ "$status" = "up" ] && docker_up=$((docker_up + 1))
-done
-
-if [ "$docker_up" -eq 0 ]; then
-  docker_metrics=":docker 🔴"
-elif [ "$docker_up" -eq "$DOCKER_TOTAL" ]; then
-  docker_metrics=":docker 🟢 (${docker_up}/${DOCKER_TOTAL})"
-else
-  docker_metrics=":docker 🟡 (${docker_up}/${DOCKER_TOTAL})"
-fi
-
-# Individual port checks (3000=web, 8107=log-viewer, 8199=orchestrator)
-port_3000=$(check_port_status 3000)
-port_8107=$(check_port_status 8107)
-port_8199=$(check_port_status 8199)
-
-# Get color codes as strings
-dev_color_code=$(dev_color)
-dev_fail_color_code=$(dev_fail_color)
-
-if [ "$port_3000" = "up" ]; then
-  p3000="$(colored_hyperlink 'http://localhost:3000' ':3000' "$dev_color_code")"
-else
-  p3000="$(colored_hyperlink 'http://localhost:3000' ':3000' "$dev_fail_color_code")"
-fi
-
-if [ "$port_8107" = "up" ]; then
-  p8107="$(colored_hyperlink 'http://localhost:8107' ':8107' "$dev_color_code")"
-else
-  p8107="$(colored_hyperlink 'http://localhost:8107' ':8107' "$dev_fail_color_code")"
-fi
-
-if [ "$port_8199" = "up" ]; then
-  p8199="$(dev_color):8199$(rst)"
-else
-  p8199="$(dev_fail_color):8199$(rst)"
-fi
-
-port_metrics="🔌 ${docker_metrics}  ${dev_metrics}  ${p3000}  ${p8107}  ${p8199}"
 
 # ---- render statusline ----
 # Line 1: Core info (directory, git, model, claude code version, output style)
@@ -457,7 +342,7 @@ fi
 # Get all 3 load averages (1min, 5min, 15min)
 load_avg=$(uptime | sed -E 's/.*load averages?: ([0-9.]+)[, ]+([0-9.]+)[, ]+([0-9.]+).*/\1 \2 \3/')
 load_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
-line3="$port_metrics  📈 $(load_color)${load_avg}$(rst)"
+line3="📈 $(load_color)${load_avg}$(rst)"
 
 # Line 4: Cost and usage analytics (optional)
 line4=""
