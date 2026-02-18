@@ -175,7 +175,6 @@ export function CodeTaskViewPage(): React.JSX.Element {
       {task.parentTaskId !== undefined && task.followUpReason === 'phase2_implement' ? (
         <DesignTaskBanner
           parentTaskId={task.parentTaskId}
-          title={task.linearIssue?.title ?? task.linearIssueTitle}
         />
       ) : null}
 
@@ -421,7 +420,7 @@ const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTa
   );
 }, (prev, next) => prev.task.status === next.task.status && prev.task.error === next.task.error && prev.task.createdAt === next.task.createdAt);
 
-function DesignTaskBanner({ parentTaskId, title }: { parentTaskId: string; title: string | undefined }): React.JSX.Element {
+function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
       {'This task implements the IntexuraOS Two-Phase Code Task Execution Flow. '}
