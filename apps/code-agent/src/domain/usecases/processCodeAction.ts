@@ -14,6 +14,7 @@ import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
+import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 
 /**
  * Generate a deterministic webhook secret for a task.
@@ -208,6 +209,7 @@ export async function processCodeAction(
     linearIssueId?: string;
     linearIssueTitle?: string;
     linearFallback?: boolean;
+    executionPhase: 'design' | 'execution';
   } = {
     id: taskId,
     userId,
@@ -224,6 +226,7 @@ export async function processCodeAction(
     actionId,
     approvalEventId,
     webhookSecret,
+    executionPhase: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'design',
   };
 
   // Only include linear issue fields if we have them

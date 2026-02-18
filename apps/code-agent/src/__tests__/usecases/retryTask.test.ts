@@ -634,6 +634,10 @@ describe('retryTask use case', () => {
       expect(mockCodeTaskRepo.create).toHaveBeenCalled();
       const createCallInput = mockCodeTaskRepo.create.mock.calls[0]?.[0];
       expect(createCallInput?.retriedFrom).toBe(originalTaskId);
+
+      // Verify executionPhase is 'design' when validateIssue returns no 'code-task' label
+      // (default mock returns labels: ['unclear'])
+      expect(createCallInput?.executionPhase).toBe('design');
     });
 
     it('should update Linear issue state to In Progress', async () => {
@@ -711,6 +715,13 @@ describe('retryTask use case', () => {
         expect.objectContaining({
           linearIssueLabels: ['code-task'],
           hasChildren: true,
+        })
+      );
+
+      // Verify executionPhase is 'execution' when validateIssue returns 'code-task' label
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executionPhase: 'execution',
         })
       );
     });

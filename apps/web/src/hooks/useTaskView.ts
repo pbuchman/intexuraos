@@ -15,6 +15,7 @@ import {
   cancelCodeTask as cancelCodeTaskApi,
   retryCodeTask as retryCodeTaskApi,
   sendTaskMessage as sendTaskMessageApi,
+  startImplementation as startImplementationApi,
 } from '@/services/codeAgentApi';
 import { ApiError } from '@/services/apiClient';
 import type { CodeTask, CodeTaskStatus } from '@/types';
@@ -45,9 +46,12 @@ export interface TaskViewState {
   sending: boolean;
   sendError: { code: string; message: string } | null;
   messageStatus: MessageStatus;
+  implementing: boolean;
+  implementError: string | null;
   cancelTask: () => Promise<void>;
   retryTask: (additionalContext?: string) => Promise<string>;
   sendMessage: (message: string) => Promise<void>;
+  startImplementation: () => Promise<string>;
 }
 
 const ACTIVE_STATUSES: CodeTaskStatus[] = ['dispatched', 'running'];
@@ -73,6 +77,8 @@ export function useTaskView(taskId: string): TaskViewState {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<{ code: string; message: string } | null>(null);
   const [messageStatus, setMessageStatus] = useState<MessageStatus>('idle');
+  const [implementing, setImplementing] = useState(false);
+  const [implementError, setImplementError] = useState<string | null>(null);
   const [listenerHealthy, setListenerHealthy] = useState(false);
 
   const isMountedRef = useRef(true);
@@ -365,6 +371,33 @@ export function useTaskView(taskId: string): TaskViewState {
     }
   }, [task]);
 
+  const startImplementation = useCallback(async (): Promise<string> => {
+    if (task === null) throw new Error('No task to implement');
+    setImplementing(true);
+    setImplementError(null);
+    try {
+      const token = await getAccessTokenRef.current();
+      const result = await startImplementationApi(token, task.id);
+      return result.codeTaskId;
+    } catch (err) {
+      if (isMountedRef.current) {
+        // For already_implemented, extract existingTaskId from details and navigate
+        if (err instanceof ApiError && err.code === 'already_implemented') {
+          const existingTaskId = err.details?.['existingTaskId'];
+          if (typeof existingTaskId === 'string') {
+            return existingTaskId;
+          }
+        }
+        setImplementError(getErrorMessage(err, 'Failed to start implementation'));
+      }
+      throw err;
+    } finally {
+      if (isMountedRef.current) {
+        setImplementing(false);
+      }
+    }
+  }, [task]);
+
   return {
     task,
     logs,
@@ -378,8 +411,11 @@ export function useTaskView(taskId: string): TaskViewState {
     sending,
     sendError,
     messageStatus,
+    implementing,
+    implementError,
     cancelTask,
     retryTask,
     sendMessage,
+    startImplementation,
   };
 }
