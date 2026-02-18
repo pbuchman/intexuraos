@@ -5,6 +5,15 @@ set -euo pipefail
 # Claude Worker Container Entrypoint
 # ==============================================================================
 
+setup_git_identity() {
+    if [ -n "${GIT_USER_NAME:-}" ]; then
+        git config --global user.name "$GIT_USER_NAME"
+    fi
+    if [ -n "${GIT_USER_EMAIL:-}" ]; then
+        git config --global user.email "$GIT_USER_EMAIL"
+    fi
+}
+
 setup_github_token() {
     if [ -f "/secrets/github-token" ]; then
         export GITHUB_TOKEN=$(cat /secrets/github-token)
@@ -23,6 +32,7 @@ run_claude_attempt() {
     fi
 
     cd /repo
+    setup_git_identity
     setup_github_token
 
     if [ ! -f "/secrets/system-prompt.txt" ]; then
@@ -146,8 +156,9 @@ if [ -f "/secrets/gcp-sa.json" ]; then
 fi
 
 # ------------------------------------------------------------------------------
-# Set up GitHub token (refreshed by orchestrator)
+# Set up git identity and GitHub token
 # ------------------------------------------------------------------------------
+setup_git_identity
 setup_github_token
 
 # Watch for token refresh in background
