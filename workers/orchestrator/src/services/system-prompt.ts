@@ -16,8 +16,6 @@
 export interface SystemPromptParams {
   /** Unique task identifier */
   taskId: string;
-  /** Filesystem path to the git worktree */
-  worktreePath: string;
   /** Optional Linear issue ID for tracking */
   linearIssueId?: string;
   /** Labels from the validated Linear issue */
@@ -33,7 +31,7 @@ export interface SystemPromptParams {
  * The agent should analyze and enrich the issue IN-PLACE, NOT execute code.
  */
 function buildPhase1Prompt(params: SystemPromptParams): string {
-  const { taskId, worktreePath, linearIssueId } = params;
+  const { taskId, linearIssueId } = params;
 
   const issueId = linearIssueId ?? 'INT-UNKNOWN';
 
@@ -42,7 +40,7 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [PHASE:1]
 Task ID: ${taskId}
-Worktree: ${worktreePath}
+Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
 [PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]
@@ -111,7 +109,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
  * The agent should execute autonomously without confirmation prompts.
  */
 function buildPhase2Prompt(params: SystemPromptParams): string {
-  const { taskId, worktreePath, linearIssueId, hasChildren } = params;
+  const { taskId, linearIssueId, hasChildren } = params;
 
   const parentModeSection = hasChildren
     ? `
@@ -132,7 +130,7 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [PHASE:2]
 Task ID: ${taskId}
-Worktree: ${worktreePath}
+Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
 [PHASE 2: STRICT EXECUTION]

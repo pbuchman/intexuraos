@@ -878,7 +878,6 @@ export class TaskDispatcher {
       /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
       systemPrompt: buildSystemPrompt({
         taskId: task.taskId,
-        worktreePath: task.worktreePath,
         ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
         linearIssueLabels: task.linearIssueLabels,
         hasChildren: params.hasChildren,
