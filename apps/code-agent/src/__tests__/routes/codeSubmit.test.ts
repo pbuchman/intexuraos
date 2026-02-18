@@ -167,6 +167,7 @@ describe('POST /code/submit', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -191,6 +192,7 @@ describe('POST /code/submit', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 

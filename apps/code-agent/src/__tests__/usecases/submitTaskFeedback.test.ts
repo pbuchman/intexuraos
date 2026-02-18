@@ -118,7 +118,7 @@ describe('submitTaskFeedback use case', () => {
       workerLocation: 'home-mac',
       repository: 'pbuchman/intexuraos',
       baseBranch: 'development',
-      status: 'completed',
+      status: 'implemented',
       dedupKey: 'dedup-123',
       callbackReceived: true,
       createdAt: now,
