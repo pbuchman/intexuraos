@@ -1353,7 +1353,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Save the actual worker location returned by the dispatcher
       const actualWorkerLocation = dispatchResult.value.workerLocation;
-      await codeTaskRepo.update(task.id, { workerLocation: actualWorkerLocation });
+      await codeTaskRepo.update(task.id, {
+        workerLocation: actualWorkerLocation,
+        dispatchedAt: new Date(),
+      });
 
       // Record task start for rate limiting
       await rateLimitService.recordTaskStart(userId);
