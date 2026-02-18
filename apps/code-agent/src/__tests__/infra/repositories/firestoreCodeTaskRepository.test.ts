@@ -154,7 +154,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       // Update Phase 1 to completed so it does not trigger Layer 3 (active task)
       if (phase1.ok) {
-        await repo.update(phase1.value.id, { status: 'completed' });
+        await repo.update(phase1.value.id, { status: 'designed' });
       }
 
       // Create Phase 2 task with same prompt — must NOT be blocked by DUPLICATE_PROMPT
@@ -218,7 +218,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!first.ok) return;
 
       // Mark first task as completed
-      await repo.update(first.value.id, { status: 'completed' });
+      await repo.update(first.value.id, { status: 'designed' });
 
       // Now allow second task for same Linear issue
       // Use different user to bypass Layer 2 dedup (dedupKey check)
@@ -465,7 +465,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       const completedAt = new Date();
       const result = await repo.update(created.value.id, {
-        status: 'completed',
+        status: 'designed',
         completedAt,
         result: {
           branch: 'feature/test',
@@ -478,7 +478,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value.status).toBe('completed');
+      expect(result.value.status).toBe('designed');
       // Check that completedAt exists (fake Firestore may not handle Timestamp fields properly)
       if (result.value.completedAt !== undefined) {
         expect(result.value.completedAt.toDate()).toEqual(completedAt);
@@ -529,15 +529,15 @@ describe('firestoreCodeTaskRepository', () => {
       const task2 = await repo.create(createTaskInput({ prompt: 'Task 2' }));
       expect(task2.ok).toBe(true);
       if (!task2.ok) return;
-      await repo.update(task2.value.id, { status: 'completed' });
+      await repo.update(task2.value.id, { status: 'designed' });
 
-      const result = await repo.list({ userId: 'user-123', status: 'completed' });
+      const result = await repo.list({ userId: 'user-123', status: 'designed' });
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
       expect(result.value.tasks.length).toBe(1);
-      expect(result.value.tasks[0]?.status).toBe('completed');
+      expect(result.value.tasks[0]?.status).toBe('designed');
     });
 
     it('returns tasks', async () => {
@@ -604,7 +604,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 
-      await repo.update(created.value.id, { status: 'completed' });
+      await repo.update(created.value.id, { status: 'designed' });
 
       const result = await repo.hasActiveTaskForLinearIssue('LIN-123');
 
@@ -737,18 +737,18 @@ describe('firestoreCodeTaskRepository', () => {
       const task1 = await repo.create(createTaskInput({ userId: 'user-123' }));
       expect(task1.ok).toBe(true);
       if (task1.ok) {
-        await repo.update(task1.value.id, { status: 'completed' });
+        await repo.update(task1.value.id, { status: 'designed' });
       }
 
       await repo.create(createTaskInput({ userId: 'user-123' }));
 
-      const result = await repo.list({ userId: 'user-123', status: 'completed' });
+      const result = await repo.list({ userId: 'user-123', status: 'designed' });
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
       expect(result.value.tasks).toHaveLength(1);
-      expect(result.value.tasks[0]?.status).toBe('completed');
+      expect(result.value.tasks[0]?.status).toBe('designed');
     });
 
     it('paginates with limit', async () => {
@@ -799,7 +799,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!created.ok) return;
 
       const result = await repo.update(created.value.id, {
-        status: 'completed',
+        status: 'designed',
         result: {
           branch: 'fix-branch',
           commits: 3,
@@ -810,7 +810,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value.status).toBe('completed');
+      expect(result.value.status).toBe('designed');
       expect(result.value.result?.branch).toBe('fix-branch');
     });
 
@@ -820,7 +820,7 @@ describe('firestoreCodeTaskRepository', () => {
         logger,
       });
 
-      const result = await repo.update('non-existent-task', { status: 'completed' });
+      const result = await repo.update('non-existent-task', { status: 'designed' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -1004,7 +1004,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!created.ok) return;
 
       await repo.update(created.value.id, {
-        status: 'completed',
+        status: 'designed',
         completedAt: new Date('2024-01-01'),
       });
 
@@ -1054,7 +1054,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!created.ok) return;
 
       await repo.update(created.value.id, {
-        status: 'completed',
+        status: 'designed',
         completedAt: new Date(),
       });
 
@@ -1135,6 +1135,51 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
 
       expect(result.value).toBeNull();
+    });
+  });
+
+  describe('deleteTask', () => {
+    it('deletes task successfully', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ userId: 'user-abc' }));
+      if (!created.ok) throw new Error('Setup failed');
+
+      const result = await repo.deleteTask(created.value.id, 'user-abc');
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns NOT_FOUND when task does not exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.deleteTask('non-existent-id', 'user-abc');
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns NOT_FOUND when userId does not match', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ userId: 'user-abc' }));
+      if (!created.ok) throw new Error('Setup failed');
+
+      const result = await repo.deleteTask(created.value.id, 'different-user');
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('NOT_FOUND');
     });
   });
 });

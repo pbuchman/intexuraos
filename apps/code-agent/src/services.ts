@@ -40,6 +40,8 @@ import type { GitHubPREventRepository } from './domain/repositories/gitHubPREven
 import { createFirestoreGitHubPREventsRepository } from './infra/firestore/gitHubPREventsRepository.js';
 import type { PRTaskLockRepository } from './domain/repositories/prTaskLockRepository.js';
 import { createFirestorePRTaskLockRepository } from './infra/firestore/firestorePRTaskLockRepository.js';
+import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
+import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -61,6 +63,7 @@ export interface ServiceContainer {
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
   gitHubPREventRepo: GitHubPREventRepository;
+  gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   prTaskLockRepo: PRTaskLockRepository;
 }
 
@@ -245,6 +248,7 @@ export function initServices(config: ServiceConfig): void {
     workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
     workerHealthProbe: createWorkerHealthProbe(),
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+    gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     prTaskLockRepo: createFirestorePRTaskLockRepository({ firestore, logger }),
   };
 }

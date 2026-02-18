@@ -15,13 +15,14 @@ vi.mock('jose', () => ({
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../../server.js';
-import { resetServices, setServices } from '../../../services.js';
+import { resetServices, setServices, getServices } from '../../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from 'pino';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestoreGitHubPRSummariesRepository } from '../../../infra/firestore/gitHubPRSummariesRepository.js';
 import { mockWorkerHealthProbe } from '../../helpers/mockServices.js';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
@@ -149,8 +150,12 @@ describe('GET /code/github-pr-events', () => {
       logger,
     });
 
-    // Create the GitHub PR events repo
+    // Create the GitHub PR events and summaries repos
     const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({
+      logger,
+    });
+
+    const gitHubPRSummaryRepo = createFirestoreGitHubPRSummariesRepository({
       logger,
     });
 
@@ -189,6 +194,7 @@ describe('GET /code/github-pr-events', () => {
       }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo,
+      gitHubPRSummaryRepo,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -213,6 +219,7 @@ describe('GET /code/github-pr-events', () => {
       workerSettingsRepo: ReturnType<typeof createWorkerSettingsRepository>;
       workerHealthProbe: import('../../../domain/ports/workerHealthProbe.js').WorkerHealthProbe;
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
@@ -364,7 +371,7 @@ describe('GET /code/github-pr-events', () => {
     const body = JSON.parse(response.body);
     expect(body.success).toBe(true);
     expect(body.data.events).toHaveLength(1);
-    expect(body.data.events[0].githubEventId).toBe(12345678);
+    expect(body.data.events[0].pullRequestNumber).toBe(42);
     expect(body.data.events[0].repository).toBe('intexuraos/test-repo');
   });
 
@@ -414,5 +421,96 @@ describe('GET /code/github-pr-events', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.success).toBe(true);
+  });
+
+  it('should return events oldest-first when pullRequestNumber is provided', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    await repo.save({
+      githubEventId: 10001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 5,
+      pullRequestId: 5001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'user1',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 5',
+      body: null,
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+
+    await repo.save({
+      githubEventId: 10002,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 5,
+      pullRequestId: 5001,
+      eventType: 'pull_request_review',
+      action: 'submitted',
+      senderLogin: 'reviewer',
+      senderId: 2,
+      senderType: 'User',
+      title: null,
+      body: null,
+      state: null,
+      mergedAt: null,
+      createdAt: new Date('2024-01-02T00:00:00Z'),
+      payload: {},
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    // Oldest-first order
+    expect(body.data.events[0].eventType).toBe('pull_request');
+    expect(body.data.events[1].eventType).toBe('pull_request_review');
+  });
+
+  it('should return 400 when pullRequestNumber is provided without repository', async () => {
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?pullRequestNumber=5',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('should return 500 when per-PR repo fetch fails', async () => {
+    setServices({
+      ...getServices(),
+      gitHubPREventRepo: {
+        ...getServices().gitHubPREventRepo,
+        findByPullRequest: async () =>
+          err({ code: 'FIRESTORE_ERROR' as const, message: 'DB unavailable' }),
+      },
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
   });
 });

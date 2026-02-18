@@ -17,6 +17,7 @@ import {
 } from '../../infra/github-event-parser.js';
 import { handlePRComment } from '../../domain/usecases/handlePRComment.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
+import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import type { Logger } from 'pino';
 
 /**
@@ -167,7 +168,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
 
       // Get GitHub webhook secret from config
       const config = loadConfig();
-      const { gitHubPREventRepo, logger } = getServices();
+      const { gitHubPREventRepo, gitHubPRSummaryRepo, logger } = getServices();
 
       const signatureHeader = request.headers['x-hub-signature-256'];
       const eventType = request.headers['x-github-event'];
@@ -242,6 +243,27 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
       /* v8 ignore stop @preserve */
 
       const savedEvent = saveResult.value; // @allow-result-access -- narrowed by !saveResult.ok above
+
+      // Upsert PR summary — skip push/ping events (pullRequestNumber === 0)
+      if (parsedEvent.pullRequestNumber !== 0) {
+        const summaryInput: UpsertGitHubPRSummaryInput = {
+          repository: parsedEvent.repository,
+          pullRequestNumber: parsedEvent.pullRequestNumber,
+          lastActivityAt: parsedEvent.createdAt,
+          firstSeenAt: parsedEvent.createdAt,
+          ...(parsedEvent.eventType === 'pull_request' && {
+            title: parsedEvent.title,
+            state: parsedEvent.state,
+            mergedAt: parsedEvent.mergedAt ?? null,
+          }),
+        };
+        /* v8 ignore start -- upstream: non-critical summary upsert, does not affect webhook response @preserve */
+        const summaryResult = await gitHubPRSummaryRepo.upsert(summaryInput);
+        if (!summaryResult.ok) {
+          logger.warn({ error: summaryResult.error.message }, 'Failed to upsert PR summary'); // @allow-result-access -- narrowed by !summaryResult.ok
+        }
+        /* v8 ignore stop @preserve */
+      }
 
       logger.info(
         {

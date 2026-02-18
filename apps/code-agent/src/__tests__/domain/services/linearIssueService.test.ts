@@ -62,6 +62,7 @@ describe('linearIssueService', () => {
       expect(result).toEqual({
         linearIssueId: 'INT-123',
         linearIssueTitle: 'Fix auth bug',
+        linearIssueUrl: 'https://linear.app/intexuraos/INT-123',
         linearFallback: false,
         linearIssueLabels: [],
         hasChildren: false,
@@ -176,6 +177,7 @@ describe('linearIssueService', () => {
       expect(result).toEqual({
         linearIssueId: 'INT-456',
         linearIssueTitle: 'Fix login authentication for SSO users',
+        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-456',
         linearIssueType: 'bug',
         linearFallback: false,
         linearIssueLabels: ['Code Task'],

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Play, Link2, Sparkles, Pencil } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
@@ -17,6 +17,12 @@ const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string 
 ];
 
 type LinearMode = 'create' | 'link';
+
+const PHASE1_PLACEHOLDER =
+  'Describe what you want to build. Claude will analyse the instructions, create a Linear issue with acceptance criteria, and prepare a design — no code will be written prior to your approval.';
+
+const PHASE2_DEFAULT_PROMPT =
+  'Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.';
 
 const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: React.ReactNode }[] = [
   { id: 'create', name: 'Create New', description: 'Auto-generate title from task description', icon: <Sparkles className="h-4 w-4" /> },
@@ -39,6 +45,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [taskError, setTaskError] = useState<ApiError | null>(null);
   const [showIssueSelectorModal, setShowIssueSelectorModal] = useState(false);
+  const promptManuallyEdited = useRef(false);
 
   const { status: workersStatus, loading: workersLoading } = useWorkersStatus();
 
@@ -66,6 +73,20 @@ export function CodeTaskNewPage(): React.JSX.Element {
       setSelectedWorker(healthyWorkers[0]?.name ?? null);
     }
   }, [healthyWorkers, selectedWorker]);
+
+  // Sync default prompt when linearMode changes (only if user hasn't manually edited)
+  useEffect(() => {
+    if (promptManuallyEdited.current) return;
+    if (linearMode === 'link') {
+      setPrompt(PHASE2_DEFAULT_PROMPT);
+    } else {
+      setPrompt('');
+    }
+  }, [linearMode]);
+
+  const placeholderText = linearMode === 'create'
+    ? PHASE1_PLACEHOLDER
+    : 'Describe what you want Claude to build or fix...';
 
   // Form is valid when: has prompt AND has a healthy worker selected (or only 1 healthy worker auto-selected)
   const isValid =
@@ -182,7 +203,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
               <MDEditor
                 value={prompt}
                 onChange={(value: string | undefined): void => {
-                  // MDEditor returns null when cleared; convert to empty string for validation
+                  promptManuallyEdited.current = true;
                   setPrompt(value ?? '');
                 }}
                 preview="edit"
@@ -192,7 +213,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   rehypePlugins: [rehypeSanitize],
                 }}
                 textareaProps={{
-                  placeholder: 'Describe what you want Claude to build or fix...',
+                  placeholder: placeholderText,
                   disabled: submitting,
                 }}
               />
@@ -201,7 +222,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
               <MDEditor
                 value={prompt}
                 onChange={(value: string | undefined): void => {
-                  // MDEditor returns null when cleared; convert to empty string for validation
+                  promptManuallyEdited.current = true;
                   setPrompt(value ?? '');
                 }}
                 preview="edit"
@@ -211,7 +232,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   rehypePlugins: [rehypeSanitize],
                 }}
                 textareaProps={{
-                  placeholder: 'Describe what you want Claude to build or fix...',
+                  placeholder: placeholderText,
                   disabled: submitting,
                 }}
               />
@@ -347,6 +368,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   key={mode.id}
                   type="button"
                   onClick={(): void => {
+                    promptManuallyEdited.current = false;
                     if (mode.id === 'link') {
                       setLinearMode('link');
                       setShowIssueSelectorModal(true);

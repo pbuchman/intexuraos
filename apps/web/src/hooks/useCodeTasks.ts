@@ -4,6 +4,7 @@ import { useAuth } from '@/context';
 import {
   listCodeTasks as listCodeTasksApi,
   submitCodeTask as submitCodeTaskApi,
+  deleteCodeTask as deleteCodeTaskApi,
   getWorkersStatus as getWorkersStatusApi,
   refreshWorkersStatus as refreshWorkersStatusApi,
 } from '@/services/codeAgentApi';
@@ -22,6 +23,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
   submitTask: (request: SubmitCodeTaskRequest) => Promise<string>;
+  deleteTask: (id: string) => Promise<void>;
 } {
   const { getAccessToken } = useAuth();
   const [tasks, setTasks] = useState<CodeTask[]>([]);
@@ -127,6 +129,15 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
     [getAccessToken, refresh]
   );
 
+  const deleteTask = useCallback(
+    async (id: string): Promise<void> => {
+      const token = await getAccessToken();
+      await deleteCodeTaskApi(token, id);
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+    },
+    [getAccessToken]
+  );
+
   return {
     tasks,
     loading,
@@ -137,6 +148,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
     loadMore,
     refresh,
     submitTask,
+    deleteTask,
   };
 }
 

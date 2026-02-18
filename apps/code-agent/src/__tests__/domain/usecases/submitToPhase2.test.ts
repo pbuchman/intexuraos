@@ -73,7 +73,7 @@ describe('submitToPhase2', () => {
       workerLocation: 'home-dev',
       repository: 'pbuchman/intexuraos',
       baseBranch: 'development',
-      status: 'completed',
+      status: 'designed',
       executionPhase: 'design',
       dedupKey: 'dedup-abc',
       callbackReceived: true,
