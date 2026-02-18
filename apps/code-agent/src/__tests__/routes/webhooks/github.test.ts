@@ -21,6 +21,7 @@ import pino from 'pino';
 import type { Logger } from 'pino';
 import type { GitHubPREventRepository } from '../../../domain/repositories/gitHubPREventRepository.js';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
+import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import type { PRTaskLockRepository } from '../../../domain/repositories/prTaskLockRepository.js';
 
@@ -30,6 +31,7 @@ describe('POST /webhooks/github', () => {
   let app: FastifyInstance;
   let testSecret: string;
   let mockEventRepo: GitHubPREventRepository;
+  let mockSummaryRepo: GitHubPRSummaryRepository;
 
   beforeEach(async () => {
     testSecret = 'test-webhook-secret';
@@ -92,6 +94,13 @@ describe('POST /webhooks/github', () => {
       findArchivableTasks: vi.fn().mockResolvedValue(ok([])),
       archiveTaskLogs: vi.fn().mockResolvedValue(ok(undefined)),
       findByPR: vi.fn().mockResolvedValue(ok(null)),
+      deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+
+    // Create mock PR summary repo
+    mockSummaryRepo = {
+      upsert: vi.fn().mockResolvedValue(ok(undefined)),
+      findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
     };
 
     // Create mock prTaskLockRepo - returns NOT_ACTIONABLE for most comments
@@ -128,6 +137,7 @@ describe('POST /webhooks/github', () => {
       workerSettingsRepo: {} as never,
       workerHealthProbe: {} as never,
       gitHubPREventRepo: mockEventRepo,
+      gitHubPRSummaryRepo: mockSummaryRepo,
       prTaskLockRepo: mockPrTaskLockRepo,
     };
 

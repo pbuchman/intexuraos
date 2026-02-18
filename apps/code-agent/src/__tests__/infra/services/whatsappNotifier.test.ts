@@ -33,7 +33,7 @@ describe('WhatsAppNotifier', () => {
     baseBranch: 'main',
     workerType: 'opus',
     workerLocation: 'mac',
-    status: 'completed',
+    status: 'implemented',
     createdAt: Timestamp.fromDate(new Date()),
     updatedAt: Timestamp.fromDate(new Date()),
     traceId: 'trace-123',

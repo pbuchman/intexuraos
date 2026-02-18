@@ -204,6 +204,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -228,6 +229,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       workerSettingsRepo: WorkerSettingsRepository;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
@@ -496,7 +498,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       });
       expect(task1.ok).toBe(true);
       if (task1.ok) {
-        await repo.update(task1.value.id, { status: 'completed' });
+        await repo.update(task1.value.id, { status: 'implemented' });
       }
 
       await repo.create({
@@ -513,7 +515,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?status=completed',
+        url: '/code/tasks?status=implemented',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -523,7 +525,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.tasks.length).toBe(1);
-      expect(body.data.tasks[0].status).toBe('completed');
+      expect(body.data.tasks[0].status).toBe('implemented');
     });
 
     it('paginates results with limit', async () => {
@@ -726,7 +728,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       if (!created.ok) return;
 
       // Update to completed status
-      const updated = await repo.update(created.value.id, { status: 'completed' });
+      const updated = await repo.update(created.value.id, { status: 'implemented' });
       expect(updated.ok).toBe(true);
 
       const response = await server.inject({
@@ -811,7 +813,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'completed',
+          status: 'designed',
           result: {
             branch: 'fix-branch',
             commits: 3,
@@ -823,7 +825,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data.task.status).toBe('completed');
+      expect(body.data.task.status).toBe('designed');
     });
 
     it('returns 404 when task not found', async () => {
@@ -834,7 +836,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'completed',
+          status: 'designed',
         },
       });
 
@@ -848,7 +850,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'PATCH',
         url: '/internal/code-tasks/task-123',
         payload: {
-          status: 'completed',
+          status: 'designed',
         },
       });
 
@@ -876,7 +878,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'completed',
+          status: 'designed',
         },
       });
 
@@ -914,7 +916,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         url: `/internal/code-tasks/${task.id}`,
         headers: { 'x-internal-auth': 'test-internal-token' },
         payload: {
-          status: 'completed',
+          status: 'designed',
           result: { branch: 'test', commits: 1, summary: 'Done' },
         },
       });
@@ -955,7 +957,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         url: `/internal/code-tasks/${task.id}`,
         headers: { 'x-internal-auth': 'test-internal-token' },
         payload: {
-          status: 'completed',
+          status: 'designed',
           result: { branch: 'test', commits: 1, summary: 'Done', prUrl: 'https://github.com/test/pr/1' },
         },
       });
@@ -1440,7 +1442,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 
-      await repo.update(created.value.id, { status: 'completed' });
+      await repo.update(created.value.id, { status: 'implemented' });
 
       const response = await server.inject({
         method: 'POST',
@@ -1871,7 +1873,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       if (!created.ok) return;
 
       await repo.update(created.value.id, {
-        status: 'completed',
+        status: 'implemented',
         cancelNonce: 'abcd',
         cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       });
@@ -2793,8 +2795,8 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 
-      // Mark task as completed
-      await repo.update(created.value.id, { status: 'completed' });
+      // Mark task as designed (Phase 1 complete)
+      await repo.update(created.value.id, { status: 'designed' });
 
       // Override linearAgentClient and workerSettingsRepo for this test
       const mockLinearClient: LinearAgentClient = {
@@ -2907,6 +2909,48 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.action).toBe('queued');
+    });
+  });
+
+  describe('DELETE /code/tasks/:taskId', () => {
+    it('deletes a task owned by the authenticated user', async () => {
+      const { codeTaskRepo } = getServices();
+      const created = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-delete-1',
+      });
+      if (!created.ok) throw new Error('Setup failed');
+
+      const response = await server.inject({
+        method: 'DELETE',
+        url: `/code/tasks/${created.value.id}`,
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.deleted).toBe(true);
+    });
+
+    it('returns 404 when task does not exist', async () => {
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/code/tasks/non-existent-task-id',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
   });
 });

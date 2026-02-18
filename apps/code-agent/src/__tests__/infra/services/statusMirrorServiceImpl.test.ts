@@ -34,7 +34,7 @@ describe('statusMirrorService', () => {
 
       await service.mirrorStatus({
         actionId: 'action-123',
-        taskStatus: 'completed',
+        taskStatus: 'implemented',
         traceId: 'trace-123',
       });
 
@@ -74,7 +74,7 @@ describe('statusMirrorService', () => {
 
       await service.mirrorStatus({
         actionId: 'action-123',
-        taskStatus: 'completed',
+        taskStatus: 'implemented',
         resourceUrl: 'https://github.com/pr/123',
       });
 
@@ -148,7 +148,7 @@ describe('statusMirrorService', () => {
 
       await service.mirrorStatus({
         actionId: 'action-123',
-        taskStatus: 'completed',
+        taskStatus: 'implemented',
       });
 
       expect(getMockUpdateActionStatus()).toHaveBeenCalledWith('action-123', 'completed', undefined, undefined);
@@ -237,7 +237,8 @@ describe('statusMirrorService', () => {
     it.each([
       ['dispatched', 'dispatched'],
       ['running', 'running'],
-      ['completed', 'completed'],
+      ['designed', 'completed'],
+      ['implemented', 'completed'],
       ['failed', 'failed'],
       ['cancelled', 'cancelled'],
       ['interrupted', 'interrupted'],

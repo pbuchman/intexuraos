@@ -2841,6 +2841,103 @@ describe('TaskDispatcher', () => {
       expect(formatted).toContain(assistantJson);
     });
 
+    it('should summarize user tool_result as size line', async () => {
+      const onLog = await submitAndGetOnLog();
+      const userJson = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              tool_use_id: 'toolu_abc',
+              type: 'tool_result',
+              content: 'hello world',
+              is_error: false,
+            },
+          ],
+        },
+      });
+
+      onLog(userJson + '\n');
+
+      const formatted = findFormattedChunk('→ [result:');
+      expect(formatted).toContain('→ [result: 11B]');
+      expect(formatted).not.toContain('"type":"user"');
+    });
+
+    it('should show persisted flag and reported size for large tool results', async () => {
+      const onLog = await submitAndGetOnLog();
+      const persistedContent =
+        '<persisted-output>\nOutput too large (128.8KB). Full output saved to: /tmp/result.txt\n\nPreview:\nsome content\n</persisted-output>';
+      const userJson = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              tool_use_id: 'toolu_xyz',
+              type: 'tool_result',
+              content: persistedContent,
+              is_error: false,
+            },
+          ],
+        },
+      });
+
+      onLog(userJson + '\n');
+
+      const formatted = findFormattedChunk('→ [result:');
+      expect(formatted).toContain('128.8KB');
+      expect(formatted).toContain('persisted');
+      expect(formatted).not.toContain('"type":"user"');
+    });
+
+    it('should show error flag for failed tool results', async () => {
+      const onLog = await submitAndGetOnLog();
+      const userJson = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              tool_use_id: 'toolu_err',
+              type: 'tool_result',
+              content: 'command not found',
+              is_error: true,
+            },
+          ],
+        },
+      });
+
+      onLog(userJson + '\n');
+
+      const formatted = findFormattedChunk('→ [result:');
+      expect(formatted).toContain('error');
+      expect(formatted).not.toContain('"type":"user"');
+    });
+
+    it('should summarize multiple tool results in one user message', async () => {
+      const onLog = await submitAndGetOnLog();
+      const userJson = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            { tool_use_id: 'toolu_1', type: 'tool_result', content: 'ok', is_error: false },
+            { tool_use_id: 'toolu_2', type: 'tool_result', content: 'fail', is_error: true },
+          ],
+        },
+      });
+
+      onLog(userJson + '\n');
+
+      const formatted = findFormattedChunk('→ [result:');
+      const lines = formatted.split('\n').filter((l: string) => l.includes('→ [result:'));
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toContain('2B');
+      expect(lines[1]).toContain('error');
+    });
+
     it('should format init message with missing optional fields', async () => {
       const onLog = await submitAndGetOnLog();
       const initJson = JSON.stringify({

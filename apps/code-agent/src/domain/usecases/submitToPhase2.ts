@@ -127,11 +127,11 @@ export async function submitToPhase2(
 
   const originalTask = originalTaskResult.value;
 
-  // Step 2: Validate status is completed and executionPhase is design
-  if (originalTask.status !== 'completed' || originalTask.executionPhase !== 'design') {
+  // Step 2: Validate status is 'designed' and executionPhase is 'design'
+  if (originalTask.status !== 'designed' || originalTask.executionPhase !== 'design') {
     logger.warn(
       { taskId: originalTask.id, status: originalTask.status, executionPhase: originalTask.executionPhase },
-      'Attempted to start Phase 2 on non-completed or non-design task'
+      'Attempted to start Phase 2 on non-designed task'
     );
     return err({
       code: 'invalid_status',
@@ -292,6 +292,7 @@ export async function submitToPhase2(
     linearIssueId,
     /* v8 ignore start -- ts-type: optional field spread operators create type narrowing branches @preserve */
     ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
+    ...(originalTask.linearIssueUrl !== undefined && { linearIssueUrl: originalTask.linearIssueUrl }),
     ...(originalTask.linearFallback !== undefined && { linearFallback: originalTask.linearFallback }),
     /* v8 ignore stop @preserve */
   };

@@ -25,6 +25,8 @@ export interface EnsureIssueResult {
   linearIssueLabels: string[];
   /** Whether the issue has child issues */
   hasChildren: boolean;
+  /** Direct URL to the Linear issue */
+  linearIssueUrl?: string;
 }
 
 export interface LinearIssueService {
@@ -95,6 +97,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
           linearFallback: false,
           linearIssueLabels: validated.labels,
           hasChildren: validated.childCount > 0,
+          linearIssueUrl: validated.url,
         };
       }
 
@@ -152,6 +155,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
         linearFallback: false,
         linearIssueLabels: ['Code Task'],
         hasChildren: false,
+        linearIssueUrl: createResult.value.issueUrl,
       };
     },
 
