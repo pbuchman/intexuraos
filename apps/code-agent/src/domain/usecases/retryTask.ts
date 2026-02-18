@@ -127,8 +127,6 @@ export async function retryTask(
   }
 
   const originalTask = originalTaskResult.value;
-  let linearIssueLabelsForDispatch = originalTask.linearIssueLabels ?? [];
-  let hasChildrenForDispatch = originalTask.hasChildren ?? false;
 
   // Step 2: Validate status is failed, cancelled, or interrupted
   if (!['failed', 'cancelled', 'interrupted'].includes(originalTask.status)) {
@@ -195,7 +193,10 @@ export async function retryTask(
     }
   }
 
-  // Refresh Linear issue metadata so retries use current phase labels/child state.
+  // Fetch fresh Linear issue metadata for dispatch (labels/child state not stored on task).
+  let linearIssueLabelsForDispatch: string[] = [];
+  let hasChildrenForDispatch = false;
+
   if (originalTask.linearIssueId !== undefined) {
     const validateIssueResult = await linearAgentClient.validateIssue({
       userId,
@@ -212,7 +213,7 @@ export async function retryTask(
           errorCode: validateIssueResult.error.code,
           errorMessage: validateIssueResult.error.message,
         },
-        'Failed to refresh Linear issue labels for retry; using stored task labels'
+        'Failed to refresh Linear issue labels for retry; dispatching with empty labels'
       );
     }
   }
@@ -448,6 +449,7 @@ ${additionalContext !== undefined && additionalContext.trim().length > 0
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(retryTask.id, {
+    workerLocation: dispatchValue.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
   });

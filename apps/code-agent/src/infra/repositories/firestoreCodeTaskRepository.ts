@@ -300,10 +300,15 @@ export const createFirestoreCodeTaskRepository = (deps: {
           updateData['result'] = input.result;
         }
         if (input.error !== undefined) {
-          updateData['error'] = input.error;
+          updateData['error'] = input.error === null
+            ? FieldValue.delete()
+            : input.error;
         }
         if (input.statusSummary !== undefined) {
           updateData['statusSummary'] = input.statusSummary;
+        }
+        if (input.workerLocation !== undefined) {
+          updateData['workerLocation'] = input.workerLocation;
         }
         if (input.callbackReceived !== undefined) {
           updateData['callbackReceived'] = input.callbackReceived;
@@ -322,6 +327,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.lastHeartbeat !== undefined) {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
         }
+        if (input.workerLocation !== undefined) {
+          updateData['workerLocation'] = input.workerLocation;
+        }
         if (input.cancelNonce !== undefined) {
           updateData['cancelNonce'] = input.cancelNonce === null
             ? FieldValue.delete()
@@ -331,6 +339,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           updateData['cancelNonceExpiresAt'] = input.cancelNonceExpiresAt === null
             ? FieldValue.delete()
             : input.cancelNonceExpiresAt;
+        }
+        if (input.pendingUserMessages !== undefined) {
+          updateData['pendingUserMessages'] = input.pendingUserMessages;
         }
 
         await docRef.update(updateData);

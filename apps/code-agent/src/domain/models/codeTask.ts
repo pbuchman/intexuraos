@@ -119,8 +119,6 @@ export interface CodeTask {
   linearIssueId?: string;
   linearIssueTitle?: string;
   linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';  // LLM-classified issue type
-  linearIssueLabels?: string[];  // Label names from validated issue
-  hasChildren?: boolean;         // Whether the issue has child issues
   linearFallback?: boolean;     // True if Linear was unavailable (design lines 290-296)
 
   // PR Correlation (for linking tasks to PRs - INT-465)
@@ -153,6 +151,9 @@ export interface CodeTask {
 
   // Status summary (fallback when logs fail)
   statusSummary?: StatusSummary;
+
+  // Queued user messages (accumulated while task is running)
+  pendingUserMessages?: string[];
 
   // Deduplication key
   dedupKey: string;             // sha256(userId + prompt)[0:16] (design line 1547)

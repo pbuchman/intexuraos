@@ -10,9 +10,9 @@ import type { FormattedLogLine } from '../../../domain/models/logLine.js';
 
 describe('firestoreLogLineRepository', () => {
   let mockFirestore: Firestore;
-  let mockBatch: { set: ReturnType<typeof vi.fn>; commit: ReturnType<typeof vi.fn> };
-  let mockDocRef: { id: string };
-  let mockLinesCollection: { doc: ReturnType<typeof vi.fn> };
+  let mockBatch: { set: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn>; commit: ReturnType<typeof vi.fn> };
+  let mockDocRef: { id: string; ref?: unknown };
+  let mockLinesCollection: { doc: ReturnType<typeof vi.fn>; get: ReturnType<typeof vi.fn> };
   let mockTaskDoc: { collection: ReturnType<typeof vi.fn> };
   let mockTasksCollection: { doc: ReturnType<typeof vi.fn> };
   let logger: Logger;
@@ -27,6 +27,7 @@ describe('firestoreLogLineRepository', () => {
   beforeEach(() => {
     mockBatch = {
       set: vi.fn(),
+      delete: vi.fn(),
       commit: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -34,6 +35,7 @@ describe('firestoreLogLineRepository', () => {
 
     mockLinesCollection = {
       doc: vi.fn().mockReturnValue(mockDocRef),
+      get: vi.fn().mockResolvedValue({ docs: [] }),
     };
 
     mockTaskDoc = {
@@ -89,7 +91,7 @@ describe('firestoreLogLineRepository', () => {
       expect(mockFirestore.collection).toHaveBeenCalledWith('code_tasks');
       expect(mockTasksCollection.doc).toHaveBeenCalledWith('task-1');
       expect(mockTaskDoc.collection).toHaveBeenCalledWith('log_lines');
-      expect(mockLinesCollection.doc).toHaveBeenCalledWith('000000000005');
+      expect(mockLinesCollection.doc).toHaveBeenCalledWith('0000000000000005');
     });
 
     it('stores correct fields', async () => {
@@ -148,4 +150,5 @@ describe('firestoreLogLineRepository', () => {
       expect(mockBatch.set).toHaveBeenCalledTimes(500);
     });
   });
+
 });

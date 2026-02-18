@@ -1169,8 +1169,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueId?: string;
         linearIssueTitle?: string;
         linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
-        linearIssueLabels?: string[];
-        hasChildren?: boolean;
         linearFallback?: boolean;
       } = {
         id: taskId,
@@ -1179,7 +1177,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         sanitizedPrompt: body.prompt.trim().replace(/\s+/g, ' '),
         systemPromptHash: 'default', // TODO: Use actual system prompt hash
         workerType: body.workerType ?? 'auto',
-        workerLocation: 'mac', // Will be overridden by dispatcher
+        workerLocation: 'pending', // Updated after dispatch with actual worker location
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -1200,9 +1198,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
         createInput.linearIssueType = issueResult.linearIssueType;
       }
-      // Save linearIssueLabels and hasChildren
-      createInput.linearIssueLabels = issueResult.linearIssueLabels;
-      createInput.hasChildren = issueResult.hasChildren;
       // Save fallback flag
       /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
       if (issueResult.linearFallback) {
@@ -1327,8 +1322,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType: task.workerType,
         webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
         webhookSecret,
-        linearIssueLabels: task.linearIssueLabels ?? [],
-        hasChildren: task.hasChildren ?? false,
+        linearIssueLabels: issueResult.linearIssueLabels,
+        hasChildren: issueResult.hasChildren,
         workerCredentials,
       };
 
@@ -1352,6 +1347,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker');
       }
 
+      // Save the actual worker location returned by the dispatcher
+      const actualWorkerLocation = dispatchResult.value.workerLocation;
+      await codeTaskRepo.update(task.id, {
+        workerLocation: actualWorkerLocation,
+        dispatchedAt: new Date(),
+      });
+
       // Record task start for rate limiting
       await rateLimitService.recordTaskStart(userId);
 
@@ -1360,7 +1362,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         await linearIssueService.markInProgress(userId, issueResult.linearIssueId);
       }
 
-      request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');
+      request.log.info({ taskId: task.id, workerLocation: actualWorkerLocation }, 'Code task submitted successfully');
 
       return await reply.ok({
         status: 'submitted',
@@ -3252,6 +3254,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logLineRepo: services.logLineRepo,
           taskDispatcher: services.taskDispatcher,
           workerSettingsRepo: services.workerSettingsRepo,
+          statusMirrorService: services.statusMirrorService,
+          whatsappNotifier: services.whatsappNotifier,
         },
         { taskId, userId, message }
       );

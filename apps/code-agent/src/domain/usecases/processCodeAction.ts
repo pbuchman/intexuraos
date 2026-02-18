@@ -207,8 +207,6 @@ export async function processCodeAction(
     webhookSecret: string;
     linearIssueId?: string;
     linearIssueTitle?: string;
-    linearIssueLabels?: string[];
-    hasChildren?: boolean;
     linearFallback?: boolean;
   } = {
     id: taskId,
@@ -233,8 +231,6 @@ export async function processCodeAction(
   if (finalLinearIssueId !== undefined) {
     createInput.linearIssueId = finalLinearIssueId;
     createInput.linearIssueTitle = linearIssueTitle;
-    createInput.linearIssueLabels = linearIssueLabels;
-    createInput.hasChildren = hasChildren;
     createInput.linearFallback = linearFallback;
   }
   /* v8 ignore stop @preserve */
@@ -281,8 +277,8 @@ export async function processCodeAction(
     workerCredentials: DispatchWorkerCredentials;
   } = {
     taskId: task.id,
-    linearIssueLabels: task.linearIssueLabels ?? [],
-    hasChildren: task.hasChildren ?? false,
+    linearIssueLabels,
+    hasChildren,
     prompt: task.sanitizedPrompt,
     systemPromptHash: task.systemPromptHash,
     repository: task.repository,
@@ -335,6 +331,7 @@ export async function processCodeAction(
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
   const updateResult = await codeTaskRepo.update(task.id, {
+    workerLocation: dispatchValue.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
   });

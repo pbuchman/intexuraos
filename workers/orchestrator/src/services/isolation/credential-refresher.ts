@@ -30,7 +30,8 @@ export class CredentialRefresher {
       container = await this.docker.createContainer({
         Image: this.config.imageName,
         name: `claude-cred-refresh-${String(Date.now())}`,
-        Cmd: ['claude', '--print', '--model', 'haiku', 'reply ok'],
+        Entrypoint: ['claude'],
+        Cmd: ['--print', '--model', 'haiku', 'reply ok'],
         User: HOST_USER_STRING,
         Tty: false,
         HostConfig: {
