@@ -48,6 +48,7 @@ import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from './helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestorePRTaskLockRepository } from '../infra/firestore/firestorePRTaskLockRepository.js';
+import { createFirestoreGitHubPRSummariesRepository } from '../infra/firestore/gitHubPRSummariesRepository.js';
 
 describe('server configuration', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -145,6 +146,9 @@ describe('server configuration', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({
+        logger,
+      }),
       prTaskLockRepo: createFirestorePRTaskLockRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -169,6 +173,7 @@ describe('server configuration', () => {
       cleanupTaskLogs: import('../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
