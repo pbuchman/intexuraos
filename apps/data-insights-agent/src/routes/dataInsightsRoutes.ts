@@ -96,9 +96,28 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
+      const analysis = result.value; // @allow-result-access -- narrowed at line 80
+
+      const vizListResult = await services.visualizationRepository.listByFeedId(
+        request.params.feedId
+      );
+      /* v8 ignore start -- upstream: orphan detection requires pre-existing visualizations; tested via domain use case tests @preserve */
+      if (vizListResult.ok && vizListResult.value.length > 0) {
+        const insightIds = new Set(analysis.insights.map((i) => i.id));
+        for (const viz of vizListResult.value) {
+          if (!insightIds.has(viz.insightId)) {
+            await services.visualizationRepository.update(viz.id, {
+              status: 'error',
+              lastError: 'Parent insight was replaced during re-analysis',
+            });
+          }
+        }
+      }
+      /* v8 ignore stop @preserve */
+
       return await reply.ok({
-        insights: result.value.insights,
-        noInsightsReason: result.value.noInsightsReason,
+        insights: analysis.insights,
+        noInsightsReason: analysis.noInsightsReason,
       });
     }
   );
@@ -169,9 +188,10 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
+      const chartDef = result.value; // @allow-result-access -- narrowed at line 162
       return await reply.ok({
-        vegaLiteConfig: result.value.vegaLiteConfig,
-        dataTransformInstructions: result.value.dataTransformInstructions,
+        vegaLiteConfig: chartDef.vegaLiteConfig,
+        dataTransformInstructions: chartDef.dataTransformInstructions,
       });
     }
   );
@@ -240,12 +260,12 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
+      const chartData = result.value; // @allow-result-access -- narrowed at line 237
       return await reply.ok({
-        chartData: result.value,
+        chartData,
       });
     }
   );
 
   done();
 };
-

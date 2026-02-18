@@ -16,6 +16,7 @@ import { createMobileNotificationsClient } from './infra/http/mobileNotification
 import { createDataAnalysisService } from './infra/gemini/dataAnalysisService.js';
 import { createChartDefinitionService } from './infra/gemini/chartDefinitionService.js';
 import { createDataTransformService } from './infra/gemini/dataTransformService.js';
+import { FirestoreVisualizationRepository } from './infra/firestore/visualizationRepository.js';
 
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
@@ -81,6 +82,7 @@ async function main(): Promise<void> {
     dataAnalysisService: createDataAnalysisService(userServiceClient),
     chartDefinitionService: createChartDefinitionService(userServiceClient),
     dataTransformService: createDataTransformService(userServiceClient),
+    visualizationRepository: new FirestoreVisualizationRepository(),
   });
 
   const app = await buildServer();

@@ -11,12 +11,16 @@ import type {
 } from '../../compositeFeed/index.js';
 import type { DataSourceRepository } from '../../dataSource/index.js';
 import type { SnapshotRepository } from '../index.js';
+import type { VisualizationRepository } from '../../visualization/index.js';
+import type { DataTransformService } from '../../dataInsights/ports.js';
 import { refreshSnapshot } from './refreshSnapshot.js';
+import { refreshFeedVisualizations } from '../../visualization/index.js';
 
 interface BasicLogger {
   info: (obj: object, msg: string) => void;
   warn: (obj: object, msg: string) => void;
   error: (obj: object, msg: string) => void;
+  debug: (obj: object, msg: string) => void;
 }
 
 export interface RefreshAllSnapshotsDeps {
@@ -25,12 +29,16 @@ export interface RefreshAllSnapshotsDeps {
   dataSourceRepository: DataSourceRepository;
   mobileNotificationsClient: MobileNotificationsClient;
   logger: BasicLogger;
+  visualizationRepository?: VisualizationRepository;
+  dataTransformService?: DataTransformService;
 }
 
 export interface RefreshAllSnapshotsResult {
   refreshed: number;
   failed: number;
   errors: { feedId: string; error: string }[];
+  visualizationsRefreshed: number;
+  visualizationsFailed: number;
 }
 
 export async function refreshAllSnapshots(
@@ -53,6 +61,12 @@ export async function refreshAllSnapshots(
   let refreshed = 0;
   let failed = 0;
   const errors: { feedId: string; error: string }[] = [];
+  let visualizationsRefreshed = 0;
+  let visualizationsFailed = 0;
+
+  const { visualizationRepository, dataTransformService } = deps;
+  const canRefreshViz =
+    visualizationRepository !== undefined && dataTransformService !== undefined;
 
   for (const feed of feeds) {
     logger.info({ feedId: feed.id, feedName: feed.name, userId: feed.userId }, 'Processing feed');
@@ -61,6 +75,17 @@ export async function refreshAllSnapshots(
     if (result.ok) {
       refreshed++;
       logger.info({ feedId: feed.id }, 'Feed snapshot refreshed successfully');
+
+      if (canRefreshViz) {
+        const vizResult = await refreshFeedVisualizations(feed.id, feed.userId, {
+          visualizationRepository,
+          snapshotRepository: deps.snapshotRepository,
+          dataTransformService,
+          logger,
+        });
+        visualizationsRefreshed += vizResult.refreshed;
+        visualizationsFailed += vizResult.failed;
+      }
     } else {
       failed++;
       logger.error({ feedId: feed.id, error: result.error }, 'Feed snapshot refresh failed');
@@ -71,11 +96,16 @@ export async function refreshAllSnapshots(
     }
   }
 
-  logger.info({ refreshed, failed, errorCount: errors.length }, 'Batch snapshot refresh completed');
+  logger.info(
+    { refreshed, failed, errorCount: errors.length, visualizationsRefreshed, visualizationsFailed },
+    'Batch snapshot refresh completed'
+  );
 
   return ok({
     refreshed,
     failed,
     errors,
+    visualizationsRefreshed,
+    visualizationsFailed,
   });
 }

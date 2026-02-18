@@ -521,6 +521,42 @@ export interface CompositeFeedSnapshot extends CompositeFeedData {
 }
 
 /**
+ * Visualization status lifecycle.
+ */
+export type VisualizationStatus = 'pending' | 'ready' | 'refreshing' | 'error';
+
+/**
+ * Saved visualization from data-insights-agent.
+ */
+export interface Visualization {
+  id: string;
+  userId: string;
+  feedId: string;
+  feedName: string;
+  insightId: string;
+  insightTitle: string;
+  trackableMetric: string;
+  chartConfig: Record<string, unknown>;
+  transformInstructions: string;
+  chartData: unknown[] | null;
+  status: VisualizationStatus;
+  lastError?: string;
+  lastRefreshedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request to create a visualization.
+ */
+export interface CreateVisualizationRequest {
+  feedId: string;
+  insightId: string;
+  chartConfig: Record<string, unknown>;
+  transformInstructions: string;
+}
+
+/**
  * Note from notes-agent
  */
 export interface Note {
