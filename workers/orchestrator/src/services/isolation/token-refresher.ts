@@ -108,19 +108,19 @@ export class TokenRefresher {
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
     const tokenPath = path.join(taskSecretsPath, 'github-token');
 
-    try {
-      await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
-      const token = await this.mintGitHubToken();
-      await fs.promises.writeFile(tokenPath, token, { mode: 0o600 });
-      this.logger.info({ taskId }, 'GitHub token refreshed');
-    } catch (error) {
-      this.logger.error({ taskId, error }, 'Failed to refresh GitHub token');
-    }
+    await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+    const token = await this.mintGitHubToken();
+    await fs.promises.writeFile(tokenPath, token, { mode: 0o600 });
+    this.logger.info({ taskId }, 'GitHub token refreshed');
   }
 
   private async refreshAllTokens(): Promise<void> {
     for (const taskId of this.activeTaskIds) {
-      await this.refreshTokenForTask(taskId);
+      try {
+        await this.refreshTokenForTask(taskId);
+      } catch (error) {
+        this.logger.error({ taskId, error }, 'Failed to refresh GitHub token');
+      }
     }
   }
 }

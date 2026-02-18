@@ -42,8 +42,9 @@ export interface CreateTaskInput {
 export interface UpdateTaskInput {
   status?: TaskStatus;
   result?: CodeTask['result'];
-  error?: CodeTask['error'];
+  error?: CodeTask['error'] | null;
   statusSummary?: CodeTask['statusSummary'];
+  workerLocation?: string;
   callbackReceived?: boolean;
   dispatchedAt?: Date;
   completedAt?: Date;
@@ -55,6 +56,7 @@ export interface UpdateTaskInput {
   // Use null to explicitly clear the field, undefined means "don't change"
   cancelNonce?: string | null;
   cancelNonceExpiresAt?: string | null;
+  pendingUserMessages?: string[];
 }
 
 export interface ListTasksInput {

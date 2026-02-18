@@ -18,7 +18,7 @@ import { Button, Card, Layout } from '@/components';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import type { LogLine, MessageStatus } from '@/hooks';
 import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
-import type { CodeTask, CodeTaskStatus } from '@/types';
+import type { CodeTask, CodeTaskStatus, WorkerStatusTag } from '@/types';
 
 // --- Status badge config ---
 
@@ -55,17 +55,46 @@ const LINEAR_STATE_STYLES: Record<string, string> = {
 const DEFAULT_BADGE_STYLE = 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
 const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
 
+const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
+  healthy: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-700 dark:text-emerald-100',
+  'orchestrator-unreachable': 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100',
+  'tunnel-down': 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100',
+  unknown: 'bg-amber-200 text-amber-900 dark:bg-amber-700 dark:text-amber-100',
+};
+
 // --- Log line color mapping ---
 
+const TAG_RE = /^(?:\d{2}:\d{2}:\d{2}\.\d{3} )?\[(\w+)\]/;
+
+function extractTag(text: string): string | null {
+  return TAG_RE.exec(text)?.[1] ?? null;
+}
+
+interface TagStyle {
+  text: string;
+  border?: string;
+  bg?: string;
+}
+
+const TAG_STYLES: Record<string, TagStyle> = {
+  user:         { text: 'text-cyan-400',    border: 'border-cyan-800',    bg: 'bg-cyan-900/20' },
+  queued:       { text: 'text-amber-400',   border: 'border-amber-700',   bg: 'bg-amber-900/20' },
+  resumed:      { text: 'text-emerald-400', border: 'border-emerald-700', bg: 'bg-emerald-900/20' },
+  prompt:       { text: 'text-orange-300',  border: 'border-orange-700',  bg: 'bg-orange-900/20' },
+  instructions: { text: 'text-violet-300',  border: 'border-violet-700',  bg: 'bg-violet-900/20' },
+  claude:       { text: 'text-blue-300' },
+  tool:         { text: 'text-yellow-300' },
+  error:        { text: 'text-red-400' },
+  done:         { text: 'text-green-400' },
+  hook:         { text: 'text-purple-300' },
+  init:         { text: 'text-cyan-300' },
+  system:       { text: 'text-slate-500' },
+  orchestrator: { text: 'text-slate-500' },
+};
+
 function getLogLineClass(text: string): string {
-  if (text.startsWith('[user]')) return 'text-cyan-400';
-  if (text.startsWith('[claude]')) return 'text-blue-300';
-  if (text.startsWith('[tool]')) return 'text-yellow-300';
-  if (text.startsWith('[error]')) return 'text-red-400';
-  if (text.startsWith('[done]')) return 'text-green-400';
-  if (text.startsWith('[hook]')) return 'text-purple-300';
-  if (text.startsWith('[init]')) return 'text-cyan-300';
-  if (text.startsWith('[system]')) return 'text-slate-500';
+  const tag = extractTag(text);
+  if (tag !== null) return TAG_STYLES[tag]?.text ?? 'text-slate-300';
   // Tool result lines (indented with arrow or x)
   if (text.startsWith('  \u2192 ') || text.startsWith('  \u2717 ')) return 'text-slate-400';
   return 'text-slate-300';
@@ -116,28 +145,15 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
   const isActive = task.status === 'running' || task.status === 'dispatched';
   const isRetryable = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
-  const hasHealthyWorker = workersStatus?.workers.some((w) => w.healthy && w.priority > 0) === true;
-  const taskWorker = workersStatus !== null
-    ? workersStatus.workers.find((w) => w.name === task.workerLocation) ?? null
-    : undefined; // undefined = still loading, null = worker not found
-  const isTaskWorkerOnline = taskWorker === undefined ? true : taskWorker?.healthy === true;
+  const taskWorkerStatus = workersStatus !== null
+    ? workersStatus.workers.find((w) => w.name === task.workerLocation)
+    : undefined;
+  const isTaskWorkerOnline = taskWorkerStatus === undefined || taskWorkerStatus.healthy;
+  const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
 
   return (
     <Layout>
-      <MemoTaskHeader task={task} />
-
-      <MemoTaskActions
-        task={task}
-        isActive={isActive}
-        isRetryable={isRetryable}
-        hasHealthyWorker={hasHealthyWorker}
-        cancelling={cancelling}
-        cancelError={cancelError}
-        retrying={retrying}
-        retryError={retryError}
-        onCancel={cancelTask}
-        onRetry={handleRetry}
-      />
+      <MemoTaskHeader task={task} workerStatusTag={workerStatusTag} />
 
       <MemoActiveProgress task={task} />
 
@@ -158,13 +174,24 @@ export function CodeTaskViewPage(): React.JSX.Element {
         workerOnline={isTaskWorkerOnline}
         workerName={task.workerLocation}
       />
+
+      <MemoTaskActions
+        isActive={isActive}
+        cancelling={cancelling}
+        cancelError={cancelError}
+        onCancel={cancelTask}
+        isRetryable={isRetryable}
+        retrying={retrying}
+        retryError={retryError}
+        onRetry={handleRetry}
+      />
     </Layout>
   );
 }
 
 // --- Sub-components (inline, not exported) ---
 
-function TaskHeader({ task }: { task: CodeTask }): React.JSX.Element {
+function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag: WorkerStatusTag | null }): React.JSX.Element {
   const status = STATUS_MAP[task.status];
   const StatusIcon = status.icon;
 
@@ -190,10 +217,10 @@ function TaskHeader({ task }: { task: CodeTask }): React.JSX.Element {
         {!isActiveStatus(task.status) ? (
           <span>Updated: {formatRelative(task.updatedAt)}</span>
         ) : null}
-        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
+        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
           {task.workerType}
         </span>
-        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
           {task.workerLocation}
         </span>
 
@@ -253,65 +280,50 @@ function isActiveStatus(status: CodeTaskStatus): boolean {
   return status === 'dispatched' || status === 'running';
 }
 
-interface TaskActionsProps {
-  task: CodeTask;
+function TaskActions({
+  isActive, cancelling, cancelError, onCancel,
+  isRetryable, retrying, retryError, onRetry,
+}: {
   isActive: boolean;
-  isRetryable: boolean;
-  hasHealthyWorker: boolean;
   cancelling: boolean;
   cancelError: string | null;
+  onCancel: () => Promise<void>;
+  isRetryable: boolean;
   retrying: boolean;
   retryError: string | null;
-  onCancel: () => Promise<void>;
   onRetry: () => Promise<void>;
-}
-
-function TaskActions({
-  isActive, isRetryable, hasHealthyWorker,
-  cancelling, cancelError, retrying, retryError,
-  onCancel, onRetry,
-}: TaskActionsProps): React.JSX.Element | null {
-  const showActions = isActive || (isRetryable && hasHealthyWorker);
-  if (!showActions && cancelError === null && retryError === null && !(isRetryable && !hasHealthyWorker)) return null;
+}): React.JSX.Element | null {
+  if (!isActive && !isRetryable && cancelError === null && retryError === null) return null;
 
   return (
-    <div className="mb-6">
-      {showActions ? (
-        <div className="flex gap-3">
-          {isActive ? (
-            <Button
-              variant="danger"
-              onClick={(): void => { void onCancel(); }}
-              disabled={cancelling}
-              isLoading={cancelling}
-            >
-              <StopCircle className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Cancel Task</span>
-            </Button>
-          ) : null}
-          {isRetryable && hasHealthyWorker ? (
-            <Button
-              onClick={(): void => { void onRetry(); }}
-              disabled={retrying}
-              isLoading={retrying}
-              loadingText="Retrying..."
-            >
-              <RotateCcw className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Retry Task</span>
-            </Button>
-          ) : null}
-        </div>
+    <div className="mt-4 flex flex-wrap items-center gap-3">
+      {isActive ? (
+        <Button
+          variant="danger"
+          onClick={(): void => { void onCancel(); }}
+          disabled={cancelling}
+          isLoading={cancelling}
+        >
+          <StopCircle className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Cancel Task</span>
+        </Button>
       ) : null}
-      {isRetryable && !hasHealthyWorker ? (
-        <p className="text-sm text-amber-600 dark:text-amber-400">
-          No healthy workers available. Retry will be enabled when a worker is online.
-        </p>
+      {isRetryable ? (
+        <Button
+          onClick={(): void => { void onRetry(); }}
+          disabled={retrying}
+          isLoading={retrying}
+          loadingText="Retrying..."
+        >
+          <RotateCcw className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Retry Task</span>
+        </Button>
       ) : null}
       {cancelError !== null ? (
-        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{cancelError}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{cancelError}</p>
       ) : null}
       {retryError !== null ? (
-        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{retryError}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{retryError}</p>
       ) : null}
     </div>
   );
@@ -490,7 +502,10 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
 
     const onScroll = (): void => {
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-      if (!atBottom && followRef.current) {
+      if (atBottom && !followRef.current) {
+        followRef.current = true;
+        setFollowLogs(true);
+      } else if (!atBottom && followRef.current) {
         followRef.current = false;
         setFollowLogs(false);
       }
@@ -617,9 +632,14 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, worker
     setMessage('');
     // Reset textarea height
     if (textareaRef.current !== null) {
-      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = '';
     }
-    void onSendMessage(trimmed);
+    void onSendMessage(trimmed).finally(() => {
+      // Restore focus after React settles (resume path re-renders heavily)
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    });
   }, [message, sending, onSendMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -639,19 +659,14 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, worker
 
   const hasText = message.trim().length > 0;
 
-  if (!workerOnline) {
-    return (
-      <div className="rounded-b-lg border-t border-slate-700 bg-slate-800/90 px-3 py-2">
-        <div className="flex items-center gap-2 rounded bg-amber-900/30 border border-amber-800/50 px-2.5 py-1.5 text-xs text-amber-300">
-          <WifiOff className="h-3.5 w-3.5 shrink-0" />
-          <span>Worker is offline — task can only be continued when the worker is back online</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-b-lg border-t border-slate-700 bg-slate-800/90 px-3 py-2">
+      {!workerOnline ? (
+        <div className="flex items-center gap-2 rounded bg-amber-900/30 border border-amber-800/50 px-2.5 py-1.5 text-xs text-amber-300 mb-2">
+          <WifiOff className="h-3.5 w-3.5 shrink-0" />
+          <span>Worker may be offline — message will be delivered when the worker is back online</span>
+        </div>
+      ) : null}
       <div className="flex items-end gap-2">
         <span className={`pb-1.5 text-sm font-mono ${hasText ? 'text-blue-400' : 'text-slate-500'}`}>&rsaquo;</span>
         <textarea
@@ -660,7 +675,6 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, worker
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder="Send a message to Claude..."
-          disabled={sending}
           rows={1}
           className="flex-1 resize-none bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none font-mono leading-relaxed min-h-6 max-h-24"
         />
@@ -683,12 +697,6 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, worker
         </button>
       </div>
 
-      {/* Status feedback */}
-      {messageStatus === 'queued' ? (
-        <p className="mt-1 text-xs text-amber-400 italic">
-          Queued — will be delivered when current step completes
-        </p>
-      ) : null}
       {messageStatus === 'delivered' ? (
         <p className="mt-1 text-xs text-green-400">
           Message delivered — task resumed
@@ -711,9 +719,13 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, worker
 const MemoLogStream = memo(LogStream);
 
 const MemoLogLineRow = memo(function LogLineRow({ line }: { line: LogLine }): React.JSX.Element {
-  const isUserMessage = line.text.startsWith('[user]');
+  const tag = extractTag(line.text);
+  const style = tag !== null ? TAG_STYLES[tag] : undefined;
+  const border = style?.border;
+  const extraClass = border !== undefined ? ` border-l-2 ${border} ${style?.bg ?? ''} pl-2` : '';
+
   return (
-    <div className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}${isUserMessage ? ' border-l-2 border-cyan-800 pl-2' : ''}`}>
+    <div className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}${extraClass}`}>
       {line.text}
     </div>
   );
