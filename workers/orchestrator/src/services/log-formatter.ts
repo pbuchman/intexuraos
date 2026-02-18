@@ -2,6 +2,7 @@ const DOCKER_HEADER_SIZE = 8;
 
 // Matches ANSI/VT100 escape sequences: ESC [ ... final-byte
 // Covers SGR color codes, cursor movement, erase sequences, etc.
+// eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_RE = /\x1B\[[0-9;]*[A-Za-z]/g;
 
 /**
