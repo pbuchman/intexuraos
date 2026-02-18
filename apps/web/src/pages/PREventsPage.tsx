@@ -21,9 +21,10 @@ interface PREventItemProps {
   action: string | null;
   senderLogin: string;
   createdAt: string;
+  eventUrl: string | null;
 }
 
-function PREventItem({ eventType, action, senderLogin, createdAt }: PREventItemProps): React.JSX.Element {
+function PREventItem({ eventType, action, senderLogin, createdAt, eventUrl }: PREventItemProps): React.JSX.Element {
   const getEventDisplay = (): { icon: string; label: string; color: string } => {
     if (eventType === 'pull_request_review') {
       return {
@@ -78,6 +79,17 @@ function PREventItem({ eventType, action, senderLogin, createdAt }: PREventItemP
           {formatDateTime(createdAt)}
         </div>
       </div>
+      {eventUrl !== null ? (
+        <a
+          href={eventUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+          aria-label="Open on GitHub"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      ) : null}
     </div>
   );
 }

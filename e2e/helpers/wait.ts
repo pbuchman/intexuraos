@@ -10,7 +10,13 @@ import type { CodeTask } from './client.js';
 /**
  * Terminal task statuses that won't change.
  */
-const TERMINAL_STATUSES = ['designed', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
+const TERMINAL_STATUSES = [
+  'designed',
+  'implemented',
+  'failed',
+  'cancelled',
+  'interrupted',
+] as const;
 
 /**
  * Success terminal statuses (task completed a phase successfully).
@@ -115,9 +121,7 @@ export async function waitForSuccessStatus(
       }
 
       if (TERMINAL_STATUSES.includes(task.status as (typeof TERMINAL_STATUSES)[number])) {
-        throw new Error(
-          `Task reached terminal status "${task.status}" without success`
-        );
+        throw new Error(`Task reached terminal status "${task.status}" without success`);
       }
 
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
