@@ -160,7 +160,7 @@ describe('cancelTaskWithNonce', () => {
   });
 
   it('returns task_not_cancellable when task is already completed', async () => {
-    const completedTask = { ...baseTask, status: 'completed' as const };
+    const completedTask = { ...baseTask, status: 'designed' as const };
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(completedTask));
 
     const result = await cancelTaskWithNonce(
@@ -171,7 +171,7 @@ describe('cancelTaskWithNonce', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('task_not_cancellable');
-      expect(result.error.message).toContain('completed');
+      expect(result.error.message).toContain('designed');
     }
   });
 

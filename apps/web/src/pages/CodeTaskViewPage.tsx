@@ -33,7 +33,8 @@ interface StatusConfig {
 const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
   dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched', icon: Clock },
   running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running', icon: Loader2 },
-  completed: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Completed', icon: CheckCircle2 },
+  designed: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Designed', icon: CheckCircle2 },
+  implemented: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Implemented', icon: CheckCircle2 },
   failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed', icon: XCircle },
   interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted', icon: AlertCircle },
   cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled', icon: XCircle },
@@ -161,8 +162,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
     : undefined;
   const isTaskWorkerOnline = taskWorkerStatus === undefined || taskWorkerStatus.healthy;
   const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
-  const isImplementable = task.status === 'completed' &&
-    task.executionPhase === 'design' &&
+  const isImplementable = task.status === 'designed' &&
     task.implementationTaskId === undefined &&
     task.linearIssueId !== undefined;
 
@@ -173,7 +173,9 @@ export function CodeTaskViewPage(): React.JSX.Element {
       <MemoActiveProgress task={task} />
 
       {task.parentTaskId !== undefined && task.followUpReason === 'phase2_implement' ? (
-        <DesignTaskBanner parentTaskId={task.parentTaskId} />
+        <DesignTaskBanner
+          parentTaskId={task.parentTaskId}
+        />
       ) : null}
 
       <MemoTaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
@@ -226,9 +228,20 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
     <div className="mb-6">
       <div className="min-h-[2.5rem] mt-1 flex flex-wrap items-center gap-2">
         {task.linearIssueId !== undefined ? (
-          <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
-            {task.linearIssue?.identifier ?? task.linearIssueId}
-          </span>
+          (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+            <a
+              href={task.linearIssueUrl ?? task.linearIssue?.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-lg font-medium text-blue-600 hover:underline dark:text-blue-400"
+            >
+              {task.linearIssue?.identifier ?? task.linearIssueId}
+            </a>
+          ) : (
+            <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
+              {task.linearIssue?.identifier ?? task.linearIssueId}
+            </span>
+          )
         ) : null}
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {task.linearIssue?.title ?? task.linearIssueTitle ?? 'Code Task'}
@@ -290,9 +303,9 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
             href={task.linearIssue.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+            className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 hover:bg-violet-200 dark:bg-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-900/80"
           >
-            Linear
+            {task.linearIssue.identifier}
           </a>
         ) : null}
         {task.result?.prUrl !== undefined ? (
@@ -300,9 +313,9 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
             href={task.result.prUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+            className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900/80"
           >
-            Pull Request
+            PR #{/\/pull\/(\d+)/.exec(task.result.prUrl)?.[1] ?? ''}
           </a>
         ) : null}
       </div>
@@ -409,13 +422,13 @@ const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTa
 
 function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX.Element {
   return (
-    <div className="mb-4 flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
-      <span>This task implements the design from</span>
+    <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
+      {'This task implements the IntexuraOS Two-Phase Code Task Execution Flow. '}
       <a
         href={`/#/code-tasks/${parentTaskId}`}
         className="font-medium underline hover:no-underline"
       >
-        View Design Task
+        {'DESIGN'}
       </a>
     </div>
   );
@@ -460,7 +473,10 @@ function NextSteps({
         </Button>
       ) : null}
       {implementError !== null ? (
-        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{implementError}</p>
+        <div className="mt-3 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
+          <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600 dark:text-red-400" />
+          <p className="text-sm text-red-700 dark:text-red-400">{implementError}</p>
+        </div>
       ) : null}
     </div>
   );

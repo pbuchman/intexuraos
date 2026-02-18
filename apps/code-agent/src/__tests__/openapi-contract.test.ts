@@ -145,6 +145,7 @@ describe('OpenAPI contract', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -169,6 +170,7 @@ describe('OpenAPI contract', () => {
       cleanupTaskLogs: import('../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 

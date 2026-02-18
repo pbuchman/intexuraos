@@ -158,6 +158,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           if (input.linearIssueTitle !== undefined) {
             taskData.linearIssueTitle = input.linearIssueTitle;
           }
+          if (input.linearIssueUrl !== undefined) {
+            taskData.linearIssueUrl = input.linearIssueUrl;
+          }
           if (input.linearFallback !== undefined) {
             taskData.linearFallback = input.linearFallback;
           }
@@ -637,6 +640,30 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok({ logCount: totalLogCount, archivedAt });
       } catch (error) {
         logger.error({ error, taskId }, 'Failed to archive task logs');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    deleteTask: async (taskId: string, userId: string): Promise<Result<void, RepositoryError>> => {
+      try {
+        const doc = await collection.doc(taskId).get();
+
+        if (!doc.exists) {
+          return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
+        }
+
+        const data = doc.data();
+        if (data?.['userId'] !== userId) {
+          return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
+        }
+
+        await collection.doc(taskId).delete();
+        return ok(undefined);
+      } catch (error) {
+        logger.error({ error, taskId }, 'Failed to delete task');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

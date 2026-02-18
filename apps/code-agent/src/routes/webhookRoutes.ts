@@ -176,8 +176,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 3: Update task based on status
       if (status === 'completed') {
+        const resolvedStatus = task.executionPhase === 'execution' ? 'implemented' : 'designed';
         const updateResult = await codeTaskRepo.update(taskId, {
-          status: 'completed',
+          status: resolvedStatus,
           completedAt,
           ...(result !== undefined && { result }),
           callbackReceived: true,
@@ -205,7 +206,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         // Send WhatsApp notification (use updated task with result populated)
-        const completedTask = { ...task, status: 'completed' as const, ...(result !== undefined && { result }) };
+        /* v8 ignore start -- ts-type: spread with boolean shorthand creates complex type that requires assertion @preserve */
+        const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
+        /* v8 ignore stop @preserve */
         await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
 
         // Record task completion for rate limiting (fire and forget)
@@ -214,7 +217,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
 
         // Record metrics (fire and forget)
-        metricsClient.incrementTasksCompleted(task.workerType, 'completed').catch((err) => {
+        metricsClient.incrementTasksCompleted(task.workerType, resolvedStatus).catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });
         /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */

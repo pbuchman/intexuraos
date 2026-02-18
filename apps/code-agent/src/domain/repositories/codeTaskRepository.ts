@@ -22,6 +22,7 @@ export interface CreateTaskInput {
   approvalEventId?: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueUrl?: string;
   linearFallback?: boolean;
   webhookSecret?: string;
   /**
@@ -155,4 +156,10 @@ export interface CodeTaskRepository {
     repository: string,
     prNumber: number
   ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * Delete a task by ID, scoped to a user.
+   * Returns NOT_FOUND if the task does not exist or belongs to a different user.
+   */
+  deleteTask(taskId: string, userId: string): Promise<Result<void, RepositoryError>>;
 }

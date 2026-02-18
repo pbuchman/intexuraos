@@ -282,7 +282,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'internal/validateIssue: issue validated'
       );
 
-      return await reply.ok(result.value); // @allow-result-access -- guarded by if (!result.ok) at line 265
+      return await reply.ok({ // @allow-result-access -- guarded by if (!result.ok) at line 265
+        ...result.value,
+        labels: result.value.labels.map((l) => l.name),
+      });
     }
   );
 

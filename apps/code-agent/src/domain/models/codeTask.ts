@@ -22,13 +22,17 @@ export type ExecutionPhase = 'design' | 'execution';
  * Task status lifecycle.
  * Design reference: Lines 316, 1422
  *
- * Flow: dispatched → running → completed|failed|cancelled
+ * Flow: dispatched → running → designed|implemented|failed|cancelled
  *       dispatched → interrupted (if worker dies)
+ *
+ * 'designed'     = Phase 1 design task completed successfully
+ * 'implemented'  = Phase 2 execution task completed successfully
  */
 export type TaskStatus =
   | 'dispatched'   // Sent to worker, awaiting start
   | 'running'      // Worker actively processing
-  | 'completed'    // Successfully finished with PR
+  | 'designed'     // Phase 1 design task finished
+  | 'implemented'  // Phase 2 execution task finished
   | 'failed'       // Error occurred
   | 'interrupted'  // Worker died unexpectedly
   | 'cancelled';   // User cancelled
@@ -120,6 +124,7 @@ export interface CodeTask {
   // Linear integration
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueUrl?: string;
   linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';  // LLM-classified issue type
   linearFallback?: boolean;     // True if Linear was unavailable (design lines 290-296)
 

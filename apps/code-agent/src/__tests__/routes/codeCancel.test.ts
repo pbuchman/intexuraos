@@ -173,6 +173,7 @@ describe('POST /code/cancel', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -197,6 +198,7 @@ describe('POST /code/cancel', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
     });
 
@@ -342,7 +344,7 @@ describe('POST /code/cancel', () => {
       if (!createResult.ok) throw new Error('Failed to create task');
       const taskId = createResult.value.id;
 
-      await codeTaskRepo.update(taskId, { status: 'completed' });
+      await codeTaskRepo.update(taskId, { status: 'implemented' });
 
       const response = await app.inject({
         method: 'POST',

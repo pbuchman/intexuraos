@@ -175,6 +175,7 @@ export async function processCodeAction(
     linearIssueLabels,
     hasChildren,
     linearFallback,
+    linearIssueUrl,
   } = issueResult;
 
   logger.info(
@@ -208,6 +209,7 @@ export async function processCodeAction(
     webhookSecret: string;
     linearIssueId?: string;
     linearIssueTitle?: string;
+    linearIssueUrl?: string;
     linearFallback?: boolean;
     executionPhase: 'design' | 'execution';
   } = {
@@ -235,6 +237,9 @@ export async function processCodeAction(
     createInput.linearIssueId = finalLinearIssueId;
     createInput.linearIssueTitle = linearIssueTitle;
     createInput.linearFallback = linearFallback;
+    if (linearIssueUrl !== undefined) {
+      createInput.linearIssueUrl = linearIssueUrl;
+    }
   }
   /* v8 ignore stop @preserve */
 

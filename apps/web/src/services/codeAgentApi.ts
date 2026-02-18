@@ -4,6 +4,7 @@ import type {
   CodeTask,
   CodeTaskStatus,
   GitHubPREventsResponse,
+  GitHubPRSummariesResponse,
   ListCodeTasksResponse,
   RetryCodeTaskRequest,
   RetryCodeTaskResponse,
@@ -57,6 +58,15 @@ export async function submitCodeTask(
     method: 'POST',
     body: request,
     timeout: 90000, // 90s — submit can take 30+ seconds due to Linear API + worker dispatch
+  });
+}
+
+/**
+ * Delete a code task by ID
+ */
+export async function deleteCodeTask(accessToken: string, taskId: string): Promise<void> {
+  await apiRequest<{ deleted: boolean }>(config.codeAgentUrl, `/code/tasks/${taskId}`, accessToken, {
+    method: 'DELETE',
   });
 }
 
@@ -132,12 +142,13 @@ export async function startImplementation(
 }
 
 /**
- * Get GitHub PR events for a repository
+ * Get GitHub PR events for a repository or specific PR
  */
 export async function getGitHubPREvents(
   accessToken: string,
   options?: {
     repository?: string;
+    pullRequestNumber?: number;
     limit?: number;
   }
 ): Promise<GitHubPREventsResponse> {
@@ -145,10 +156,20 @@ export async function getGitHubPREvents(
   if (options?.repository !== undefined) {
     params.set('repository', options.repository);
   }
+  if (options?.pullRequestNumber !== undefined) {
+    params.set('pullRequestNumber', String(options.pullRequestNumber));
+  }
   if (options?.limit !== undefined) {
     params.set('limit', String(options.limit));
   }
   const query = params.toString();
   const path = query !== '' ? `/code/github-pr-events?${query}` : '/code/github-pr-events';
   return await apiRequest<GitHubPREventsResponse>(config.codeAgentUrl, path, accessToken);
+}
+
+/**
+ * Get GitHub PR summaries (last 30 days, sorted by PR number desc)
+ */
+export async function getGitHubPRSummaries(accessToken: string): Promise<GitHubPRSummariesResponse> {
+  return await apiRequest<GitHubPRSummariesResponse>(config.codeAgentUrl, '/code/github-pr-summaries', accessToken);
 }
