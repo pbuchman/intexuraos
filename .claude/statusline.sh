@@ -341,8 +341,10 @@ fi
 # Line 3: Port metrics and load average
 # Get all 3 load averages (1min, 5min, 15min)
 load_avg=$(uptime | sed -E 's/.*load averages?: ([0-9.]+)[, ]+([0-9.]+)[, ]+([0-9.]+).*/\1 \2 \3/')
+mem_usage=$(free -m | awk '/^Mem:/ { printf "%.1fG/%.1fG", $3/1024, $2/1024 }')
 load_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
-line3="📈 $(load_color)${load_avg}$(rst)"
+hostname=$(uname -n)
+line3="📈 $(load_color)${hostname} ${load_avg}  🧮 ${mem_usage}$(rst)"
 
 # Line 4: Cost and usage analytics (optional)
 line4=""
