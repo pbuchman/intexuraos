@@ -7,6 +7,13 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { refreshAllSnapshots } from '../domain/snapshot/index.js';
+import { computeVisualization } from '../domain/visualization/index.js';
+import { formatVisualization } from './visualizationRoutes.js';
+import { getVisualizationResponseSchema } from './visualizationSchemas.js';
+
+interface ComputeVisualizationBody {
+  visualizationId: string;
+}
 
 interface PubSubMessage {
   message: {
@@ -18,6 +25,65 @@ interface PubSubMessage {
 }
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+  fastify.post<{ Body: ComputeVisualizationBody }>(
+    '/internal/visualizations/compute',
+    {
+      schema: {
+        operationId: 'computeVisualization',
+        summary: 'Compute visualization data',
+        description: 'Internal endpoint for computing visualization data.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          required: ['visualizationId'],
+          properties: {
+            visualizationId: { type: 'string' },
+          },
+        },
+        response: {
+          200: getVisualizationResponseSchema,
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Body: ComputeVisualizationBody }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/visualizations/compute',
+        bodyPreviewLength: 200,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed');
+      }
+
+      const services = getServices();
+      const vizResult = await services.visualizationRepository.getByIdInternal(
+        request.body.visualizationId
+      );
+
+      if (!vizResult.ok || vizResult.value === null) {
+        void reply.status(404);
+        return await reply.fail('NOT_FOUND', 'Visualization not found');
+      }
+
+      const viz = vizResult.value;
+      const result = await computeVisualization(viz.id, viz.userId, {
+        visualizationRepository: services.visualizationRepository,
+        snapshotRepository: services.snapshotRepository,
+        dataTransformService: services.dataTransformService,
+      });
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(formatVisualization(result.value));
+    }
+  );
+
   fastify.post(
     '/internal/snapshots/refresh',
     {
@@ -65,6 +131,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     },
                   },
                   durationMs: { type: 'number' },
+                  visualizationsRefreshed: { type: 'number' },
+                  visualizationsFailed: { type: 'number' },
                 },
                 required: ['refreshed', 'failed', 'errors', 'durationMs'],
               },
@@ -147,6 +215,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         compositeFeedRepository: services.compositeFeedRepository,
         dataSourceRepository: services.dataSourceRepository,
         mobileNotificationsClient: services.mobileNotificationsClient,
+        visualizationRepository: services.visualizationRepository,
+        dataTransformService: services.dataTransformService,
         logger: request.log,
       });
 
@@ -163,7 +233,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error);
       }
 
-      const { refreshed, failed, errors } = result.value;
+      const { refreshed, failed, errors, visualizationsRefreshed, visualizationsFailed } = result.value;
 
       if (errors.length > 0) {
         request.log.warn(
@@ -191,6 +261,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         failed,
         errors,
         durationMs,
+        visualizationsRefreshed,
+        visualizationsFailed,
       });
     }
   );

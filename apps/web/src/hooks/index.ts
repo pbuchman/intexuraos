@@ -25,3 +25,5 @@ export { useTaskView, type LogLine, type MessageStatus, type TaskViewState } fro
 export { useWorkerSettings } from './useWorkerSettings.js';
 export { usePubSubEvents, type PubSubEvent } from './usePubSubEvents.js';
 export { usePm2Logs, type Pm2LogEntry } from './usePm2Logs.js';
+export { useVisualizations } from './useVisualizations.js';
+export { useCreateVisualization } from './useCreateVisualization.js';

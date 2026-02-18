@@ -44,6 +44,11 @@ import type {
   DataTransformError,
 } from '../infra/gemini/dataTransformService.js';
 import type { ParsedChartDefinition } from '@intexuraos/llm-prompts';
+import type {
+  Visualization,
+  VisualizationRepository,
+  VisualizationUpdateFields,
+} from '../domain/visualization/index.js';
 
 /**
  * Fake DataSource repository for testing.
@@ -586,20 +591,190 @@ export class FakeSnapshotRepository implements SnapshotRepository {
 }
 
 /**
- * Fake VisualizationRepository for testing (placeholder - visualizations deprecated).
+ * Fake VisualizationRepository for testing.
  */
-export class FakeVisualizationRepository {
-  private visualizations = new Map<string, object>();
+export class FakeVisualizationRepository implements VisualizationRepository {
+  private visualizations = new Map<string, Visualization>();
+  private idCounter = 1;
+  private shouldFailCreate = false;
+  private shouldFailGet = false;
+  private shouldFailList = false;
+  private shouldFailListByFeed = false;
+  private shouldFailUpdate = false;
+  private shouldFailDelete = false;
+  private shouldFailDeleteByFeed = false;
+
+  setFailNextCreate(fail: boolean): void {
+    this.shouldFailCreate = fail;
+  }
+
+  setFailNextGet(fail: boolean): void {
+    this.shouldFailGet = fail;
+  }
+
+  setFailNextList(fail: boolean): void {
+    this.shouldFailList = fail;
+  }
+
+  setFailNextListByFeed(fail: boolean): void {
+    this.shouldFailListByFeed = fail;
+  }
+
+  setFailNextUpdate(fail: boolean): void {
+    this.shouldFailUpdate = fail;
+  }
+
+  setFailNextDelete(fail: boolean): void {
+    this.shouldFailDelete = fail;
+  }
+
+  setFailNextDeleteByFeed(fail: boolean): void {
+    this.shouldFailDeleteByFeed = fail;
+  }
+
+  create(
+    viz: Omit<Visualization, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<Result<Visualization, string>> {
+    if (this.shouldFailCreate) {
+      this.shouldFailCreate = false;
+      return Promise.resolve(err('Simulated create failure'));
+    }
+
+    const id = `viz-${String(this.idCounter++)}`;
+    const now = new Date();
+    const visualization: Visualization = {
+      ...viz,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.visualizations.set(id, visualization);
+    return Promise.resolve(ok(visualization));
+  }
+
+  getById(id: string, userId: string): Promise<Result<Visualization | null, string>> {
+    if (this.shouldFailGet) {
+      this.shouldFailGet = false;
+      return Promise.resolve(err('Simulated get failure'));
+    }
+
+    const viz = this.visualizations.get(id);
+    if (viz === undefined || viz.userId !== userId) {
+      return Promise.resolve(ok(null));
+    }
+
+    return Promise.resolve(ok(viz));
+  }
+
+  getByIdInternal(id: string): Promise<Result<Visualization | null, string>> {
+    const viz = this.visualizations.get(id) ?? null;
+    return Promise.resolve(ok(viz));
+  }
+
+  listByUserId(userId: string): Promise<Result<Visualization[], string>> {
+    if (this.shouldFailList) {
+      this.shouldFailList = false;
+      return Promise.resolve(err('Simulated list failure'));
+    }
+
+    const vizs = Array.from(this.visualizations.values())
+      .filter((v) => v.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return Promise.resolve(ok(vizs));
+  }
+
+  listByFeedId(feedId: string): Promise<Result<Visualization[], string>> {
+    if (this.shouldFailListByFeed) {
+      this.shouldFailListByFeed = false;
+      return Promise.resolve(err('Simulated list by feed failure'));
+    }
+
+    const vizs = Array.from(this.visualizations.values())
+      .filter((v) => v.feedId === feedId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return Promise.resolve(ok(vizs));
+  }
+
+  update(
+    id: string,
+    fields: VisualizationUpdateFields
+  ): Promise<Result<Visualization, string>> {
+    if (this.shouldFailUpdate) {
+      this.shouldFailUpdate = false;
+      return Promise.resolve(err('Simulated update failure'));
+    }
+
+    const viz = this.visualizations.get(id);
+    if (viz === undefined) {
+      return Promise.resolve(err('Visualization not found'));
+    }
+
+    const updated: Visualization = {
+      ...viz,
+      ...(fields.status !== undefined && { status: fields.status }),
+      ...(fields.chartData !== undefined && { chartData: fields.chartData }),
+      ...(fields.lastRefreshedAt !== undefined && { lastRefreshedAt: fields.lastRefreshedAt }),
+      updatedAt: new Date(),
+    };
+
+    if (fields.lastError !== undefined) {
+      if (fields.lastError === null) {
+        delete updated.lastError;
+      } else {
+        updated.lastError = fields.lastError;
+      }
+    }
+
+    this.visualizations.set(id, updated);
+    return Promise.resolve(ok(updated));
+  }
+
+  delete(id: string, userId: string): Promise<Result<void, string>> {
+    if (this.shouldFailDelete) {
+      this.shouldFailDelete = false;
+      return Promise.resolve(err('Simulated delete failure'));
+    }
+
+    const viz = this.visualizations.get(id);
+    if (viz === undefined || viz.userId !== userId) {
+      return Promise.resolve(ok(undefined));
+    }
+
+    this.visualizations.delete(id);
+    return Promise.resolve(ok(undefined));
+  }
+
+  deleteByFeedId(feedId: string): Promise<Result<void, string>> {
+    if (this.shouldFailDeleteByFeed) {
+      this.shouldFailDeleteByFeed = false;
+      return Promise.resolve(err('Simulated delete by feed failure'));
+    }
+
+    for (const [id, viz] of this.visualizations) {
+      if (viz.feedId === feedId) {
+        this.visualizations.delete(id);
+      }
+    }
+
+    return Promise.resolve(ok(undefined));
+  }
+
   clear(): void {
     this.visualizations.clear();
+    this.idCounter = 1;
+  }
+
+  getAll(): Visualization[] {
+    return Array.from(this.visualizations.values());
+  }
+
+  addVisualization(viz: Visualization): void {
+    this.visualizations.set(viz.id, viz);
   }
 }
-
-/**
- * Fake VisualizationGenerationService for testing (placeholder - visualizations deprecated).
- */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class
-export class FakeVisualizationGenerationService {}
 
 /**
  * Fake DataAnalysisService for testing.
@@ -681,6 +856,7 @@ export class FakeLogger {
   info = vi.fn();
   warn = vi.fn();
   error = vi.fn();
+  debug = vi.fn();
 
   clear(): void {
     vi.clearAllMocks();

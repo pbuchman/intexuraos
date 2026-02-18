@@ -47,6 +47,7 @@ import {
   ShareHistoryPage,
   ShareTargetPage,
   TodosListPage,
+  VisualizationsListPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
   WorkerSettingsPage,
@@ -291,6 +292,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CompositeFeedFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/visualizations"
+        element={
+          <ProtectedRoute>
+            <VisualizationsListPage />
           </ProtectedRoute>
         }
       />

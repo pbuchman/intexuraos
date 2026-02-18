@@ -11,6 +11,7 @@ import {
   FakeTitleGenerationService,
   FakeFeedNameGenerationService,
   FakeMobileNotificationsClient,
+  FakeVisualizationRepository,
 } from './fakes.js';
 import type { DataInsight } from '../domain/dataInsights/types.js';
 
@@ -39,6 +40,7 @@ describe('dataInsightsRoutes', () => {
   let fakeTitleService: FakeTitleGenerationService;
   let fakeFeedNameService: FakeFeedNameGenerationService;
   let fakeMobileNotificationsClient: FakeMobileNotificationsClient;
+  let fakeVisualizationRepo: FakeVisualizationRepository;
 
   beforeEach(() => {
     fakeCompositeFeedRepo = new FakeCompositeFeedRepository();
@@ -50,6 +52,7 @@ describe('dataInsightsRoutes', () => {
     fakeTitleService = new FakeTitleGenerationService();
     fakeFeedNameService = new FakeFeedNameGenerationService();
     fakeMobileNotificationsClient = new FakeMobileNotificationsClient();
+    fakeVisualizationRepo = new FakeVisualizationRepository();
     setServices({
       compositeFeedRepository: fakeCompositeFeedRepo,
       snapshotRepository: fakeSnapshotRepo,
@@ -60,6 +63,7 @@ describe('dataInsightsRoutes', () => {
       titleGenerationService: fakeTitleService,
       feedNameGenerationService: fakeFeedNameService,
       mobileNotificationsClient: fakeMobileNotificationsClient,
+      visualizationRepository: fakeVisualizationRepo,
     });
   });
 
