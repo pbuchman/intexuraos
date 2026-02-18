@@ -1257,8 +1257,9 @@ export class TaskDispatcher {
 
   private formatBytes(bytes: number): string {
     if (bytes < 1024) return `${String(bytes)}B`;
-    /* v8 ignore next -- upstream: MB-sized tool results extremely rare; KB covers all practical cases @preserve */
+    /* v8 ignore start -- upstream: MB-sized tool results extremely rare; KB covers all practical cases @preserve */
     if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+    /* v8 ignore stop @preserve */
     return `${(bytes / 1024).toFixed(1)}KB`;
   }
 
