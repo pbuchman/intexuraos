@@ -424,7 +424,7 @@ const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTa
 function DesignTaskBanner({ parentTaskId, title }: { parentTaskId: string; title: string | undefined }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
-      {`This task implements the ${title ?? parentTaskId}. `}
+      {'This task implements the IntexuraOS Two-Phase Code Task Execution Flow. '}
       <a
         href={`/#/code-tasks/${parentTaskId}`}
         className="font-medium underline hover:no-underline"
