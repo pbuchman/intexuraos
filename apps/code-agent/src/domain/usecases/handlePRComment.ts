@@ -56,11 +56,6 @@ function buildOriginalTaskContext(originalTask: CodeTask): string {
     lines.push(`**Linear Issue:** ${originalTask.linearIssueId}${issueType}${title}`);
   }
 
-  // Labels if available
-  if (originalTask.linearIssueLabels !== undefined && originalTask.linearIssueLabels.length > 0) {
-    lines.push(`**Labels:** ${originalTask.linearIssueLabels.join(', ')}`);
-  }
-
   // Branch info
   const branch = originalTask.result?.branch ?? originalTask.prBranch;
   if (branch !== undefined) {

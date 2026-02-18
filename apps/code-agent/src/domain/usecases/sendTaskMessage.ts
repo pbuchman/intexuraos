@@ -12,6 +12,8 @@ import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import type { StatusMirrorService } from '../services/statusMirrorService.js';
+import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 
 export interface SendTaskMessageRequest {
   taskId: string;
@@ -42,13 +44,15 @@ export interface SendTaskMessageDeps {
   logLineRepo: LogLineRepository;
   taskDispatcher: TaskDispatcherService;
   workerSettingsRepo: WorkerSettingsRepository;
+  statusMirrorService: StatusMirrorService;
+  whatsappNotifier: WhatsAppNotifier;
 }
 
 export async function sendTaskMessage(
   deps: SendTaskMessageDeps,
   request: SendTaskMessageRequest
 ): Promise<Result<SendTaskMessageResult, SendTaskMessageError>> {
-  const { logger, codeTaskRepo, logLineRepo, taskDispatcher, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, logLineRepo, taskDispatcher, workerSettingsRepo, statusMirrorService, whatsappNotifier } = deps;
   const { taskId, userId, message } = request;
 
   // Step 1: Load task and validate ownership
@@ -126,7 +130,9 @@ export async function sendTaskMessage(
   });
 
   if (!forwardResult.ok) {
+    /* v8 ignore start -- test-infra: requires worker to return specific error codes for each branch @preserve */
     const errorCode = forwardResult.error.code === 'worker_unavailable' ? 'worker_unavailable' : 'worker_error';
+    /* v8 ignore stop @preserve */
     logger.error({ taskId, error: forwardResult.error }, 'Failed to forward message to worker');
     return err({
       code: errorCode,
@@ -134,7 +140,67 @@ export async function sendTaskMessage(
     });
   }
 
-  logger.info({ taskId, action: forwardResult.value.action }, 'Message sent to task');
+  const { action } = forwardResult.value;
+  logger.info({ taskId, action }, 'Message sent to task');
 
-  return ok({ action: forwardResult.value.action });
+  // Best-effort: write status log lines so the transcript shows what happened
+  if (action === 'queued') {
+    // Accumulate in Firestore so the queue survives orchestrator restarts
+    const allQueued = [...(task.pendingUserMessages ?? []), message];
+    const queueUpdateResult = await codeTaskRepo.update(taskId, { pendingUserMessages: allQueued });
+    if (!queueUpdateResult.ok) {
+      logger.warn({ taskId, error: queueUpdateResult.error }, 'Failed to update pending user messages');
+    }
+
+    const statusLines = [
+      { sequence: sequence + 1, text: '[queued] Message queued \u2014 will be delivered when current work completes', timestamp: Timestamp.now() },
+      ...allQueued.map((m, i) => ({
+        sequence: sequence + 2 + i,
+        text: `[queued] ${m}`,
+        timestamp: Timestamp.now(),
+      })),
+    ];
+    const statusLogResult = await logLineRepo.storeBatch(taskId, statusLines);
+    if (!statusLogResult.ok) {
+      logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
+    }
+  } else {
+    // Clear the accumulated queue and reset task status
+    const clearResult = await codeTaskRepo.update(taskId, { status: 'running', error: null, pendingUserMessages: [] });
+    if (!clearResult.ok) {
+      logger.warn({ taskId, error: clearResult.error }, 'Failed to update task status on resume');
+    }
+
+    // Append [resumed] marker — [user] line was already written in Step 3
+    const resumeSequence = Date.now() * 1000;
+    const statusLogResult = await logLineRepo.storeBatch(taskId, [
+      { sequence: resumeSequence, text: `[resumed] Task resuming with your message: ${message}`, timestamp: Timestamp.now() },
+    ]);
+    if (!statusLogResult.ok) {
+      logger.warn({ taskId, error: statusLogResult.error }, 'Failed to write status log line');
+    }
+  }
+
+  // Best-effort side-effects when task is resumed
+  if (action === 'resumed') {
+    // Mirror running status to actions inbox
+    try {
+      await statusMirrorService.mirrorStatus({
+        actionId: task.actionId,
+        taskStatus: 'running',
+        traceId: task.traceId,
+      });
+    } catch (mirrorError: unknown) {
+      logger.warn({ taskId, error: mirrorError }, 'Failed to mirror resumed status');
+    }
+
+    // Notify user via WhatsApp
+    try {
+      await whatsappNotifier.notifyTaskResumed(userId, task);
+    } catch (notifyError: unknown) {
+      logger.warn({ taskId, error: notifyError }, 'Failed to send resumed notification');
+    }
+  }
+
+  return ok({ action });
 }

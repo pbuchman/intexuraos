@@ -491,20 +491,10 @@ async function bootstrap(): Promise<void> {
     auditLogPath: llmAuditLogPath,
   });
 
-  const logDrainTimeoutMsRaw = parseInt(
-    getOptionalEnv('INTEXURAOS_LOG_DRAIN_TIMEOUT_MS', '30000'),
-    10
-  );
-  const logDrainTimeoutMs =
-    Number.isFinite(logDrainTimeoutMsRaw) && logDrainTimeoutMsRaw > 0
-      ? logDrainTimeoutMsRaw
-      : 30000;
-
   const completionControl: CompletionControlConfig = {
     maxAttempts: completionMaxAttemptsRaw,
     verifier: completionVerifier,
     preserveFailedContainers,
-    logDrainTimeoutMs,
   };
 
   logger.info(

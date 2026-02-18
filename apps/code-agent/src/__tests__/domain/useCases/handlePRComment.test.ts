@@ -469,26 +469,6 @@ describe('handlePRComment', () => {
       }
     });
 
-    it('includes labels in prompt when present', async () => {
-      const event = createMockEvent();
-      const originalTask = createMockTask({
-        linearIssueLabels: ['frontend', 'urgent', 'bug'],
-      });
-
-      mockCodeTaskRepo.findByPR.mockResolvedValue(ok(originalTask));
-
-      const result = await handlePRComment(
-        event,
-        'user-123',
-        createDeps(mockCodeTaskRepo, mockPrTaskLockRepo, mockLogger)
-      );
-
-      expect(result.ok).toBe(true);
-      if (result.ok === true) {
-        expect(result.value.prompt).toContain('**Labels:** frontend, urgent, bug');
-      }
-    });
-
     it('truncates long result summary in context', async () => {
       const event = createMockEvent();
       const longSummary = 'B'.repeat(400);

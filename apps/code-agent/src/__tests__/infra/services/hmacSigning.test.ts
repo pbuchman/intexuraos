@@ -34,25 +34,26 @@ describe('hmacSigning', () => {
   });
 
   describe('generateWebhookSecret', () => {
-    it('generates a webhook secret with whsec prefix', () => {
-      const secret = generateWebhookSecret();
+    it('generates a deterministic secret from sharedSecret and taskId', () => {
+      const secret1 = generateWebhookSecret('shared-secret', 'task_123');
+      const secret2 = generateWebhookSecret('shared-secret', 'task_123');
 
-      expect(secret).toMatch(/^whsec_[a-f0-9]+$/);
+      expect(secret1).toBe(secret2);
+      expect(secret1).toMatch(/^[a-f0-9]{64}$/); // SHA256 hex
     });
 
-    it('generates unique secrets each time', () => {
-      const secret1 = generateWebhookSecret();
-      const secret2 = generateWebhookSecret();
+    it('generates different secrets for different taskIds', () => {
+      const secret1 = generateWebhookSecret('shared-secret', 'task_123');
+      const secret2 = generateWebhookSecret('shared-secret', 'task_456');
 
       expect(secret1).not.toBe(secret2);
     });
 
-    it('generates 48 character hex after prefix (24 bytes)', () => {
-      const secret = generateWebhookSecret();
+    it('generates different secrets for different sharedSecrets', () => {
+      const secret1 = generateWebhookSecret('secret-a', 'task_123');
+      const secret2 = generateWebhookSecret('secret-b', 'task_123');
 
-      // Format: whsec_ + 48 hex chars
-      const hexPart = secret.replace('whsec_', '');
-      expect(hexPart).toHaveLength(48);
+      expect(secret1).not.toBe(secret2);
     });
   });
 

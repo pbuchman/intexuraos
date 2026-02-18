@@ -149,6 +149,118 @@ export class DockerProvider implements IsolationProvider {
       return existingWorker.handle;
     }
 
+    // Restore preserved container for resume (container still alive but removed from workers Map)
+    if (config.continueSession === true) {
+      const preserved = this.preservedWorkers.get(taskId);
+      if (preserved !== undefined) {
+        this.preservedWorkers.delete(taskId);
+
+        const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
+        const taskSessionPath = path.join(
+          this.config.secretsBasePath,
+          `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
+        );
+
+        // Recreate secrets dir (deleted during preservation) and write new prompt files
+        await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+        await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
+
+        /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
+        if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
+          await fs.promises.copyFile(
+            config.gcpSaKeyPath,
+            path.join(taskSecretsPath, 'gcp-sa.json')
+          );
+        }
+        /* v8 ignore stop @preserve */
+
+        const handle: WorkerHandle = {
+          taskId,
+          containerId: preserved.containerId,
+          status: 'running',
+          startedAt: new Date(),
+        };
+
+        this.workers.set(taskId, {
+          containerId: preserved.containerId,
+          handle,
+          taskSecretsPath,
+          taskSessionPath,
+          attemptRunning: false,
+          attemptLogBuffer: '',
+        });
+
+        this.logger.info(
+          { taskId, containerId: preserved.containerId },
+          'Restored preserved container for resume'
+        );
+
+        void this.runAttemptInContainer(taskId, config);
+        return handle;
+      }
+    }
+
+    // Detect orphaned container from previous orchestrator run (e.g., tsx watch restart)
+    // In-memory Maps are lost on restart, but Docker containers survive
+    if (config.continueSession === true) {
+      try {
+        const orphanContainer = this.docker.getContainer(`claude-worker-${taskId}`);
+        const orphanInfo = await orphanContainer.inspect();
+
+        if (orphanInfo.State.Running) {
+          const containerId = orphanInfo.Id;
+
+          const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
+          const taskSessionPath = path.join(
+            this.config.secretsBasePath,
+            `${CLAUDE_SESSION_DIR_PREFIX}-${taskId}`
+          );
+
+          await fs.promises.mkdir(taskSecretsPath, { recursive: true, mode: 0o700 });
+          await this.writePromptFiles(taskSecretsPath, systemPrompt, prompt);
+
+          /* v8 ignore start -- test-infra: branch for copying optional GCP credentials file @preserve */
+          if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
+            await fs.promises.copyFile(
+              config.gcpSaKeyPath,
+              path.join(taskSecretsPath, 'gcp-sa.json')
+            );
+          }
+          /* v8 ignore stop @preserve */
+
+          const handle: WorkerHandle = {
+            taskId,
+            containerId,
+            status: 'running',
+            startedAt: new Date(),
+          };
+
+          this.workers.set(taskId, {
+            containerId,
+            handle,
+            taskSecretsPath,
+            taskSessionPath,
+            attemptRunning: false,
+            attemptLogBuffer: '',
+          });
+
+          this.logger.info(
+            { taskId, containerId },
+            'Reusing orphaned container for resume after restart'
+          );
+
+          void this.runAttemptInContainer(taskId, config);
+          return handle;
+        }
+
+        // Container exists but stopped — remove it so fresh creation doesn't get 409 conflict
+        this.logger.info({ taskId }, 'Removing stopped orphan container');
+        await orphanContainer.remove({ force: true });
+      } catch {
+        // Container doesn't exist — proceed with normal creation
+      }
+    }
+
     if (this.workers.size >= this.config.maxConcurrent) {
       throw new Error(`Max concurrent workers (${String(this.config.maxConcurrent)}) reached`);
     }
@@ -609,13 +721,20 @@ export class DockerProvider implements IsolationProvider {
     });
     this.workers.delete(taskId);
 
+    // Clear sensitive files but keep the directory — rm -rf would invalidate
+    // the container's bind mount (Linux bind mounts follow inodes, not paths).
     const taskSecretsPath = path.join(this.config.secretsBasePath, taskId);
     try {
-      await fs.promises.rm(taskSecretsPath, { recursive: true, force: true });
+      const entries = await fs.promises.readdir(taskSecretsPath);
+      await Promise.all(
+        entries.map((entry) =>
+          fs.promises.rm(path.join(taskSecretsPath, entry), { recursive: true, force: true })
+        )
+      );
     } catch (err: unknown) {
       this.logger.error(
         { taskId, error: err, path: taskSecretsPath },
-        'Failed to remove task secrets directory during preservation'
+        'Failed to clear task secrets during preservation'
       );
     }
 

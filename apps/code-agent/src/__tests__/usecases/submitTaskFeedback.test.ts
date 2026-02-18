@@ -32,6 +32,7 @@ describe('submitTaskFeedback use case', () => {
   };
   let mockLinearAgentClient: {
     updateIssueState: ReturnType<typeof vi.fn>;
+    validateIssue: ReturnType<typeof vi.fn>;
     addComment: ReturnType<typeof vi.fn>;
   };
   let mockTaskDispatcher: {
@@ -79,6 +80,7 @@ describe('submitTaskFeedback use case', () => {
     // Mock Linear agent client
     mockLinearAgentClient = {
       updateIssueState: vi.fn(),
+      validateIssue: vi.fn(),
       addComment: vi.fn(),
     };
 
@@ -124,8 +126,6 @@ describe('submitTaskFeedback use case', () => {
       completedAt: now,
       linearIssueId,
       linearIssueTitle: 'Feedback mechanism test',
-      linearIssueLabels: ['feature', 'backend'],
-      hasChildren: false,
     };
 
     // Apply overrides, but skip undefined values to avoid exactOptionalPropertyTypes issues
@@ -147,6 +147,7 @@ describe('submitTaskFeedback use case', () => {
       whatsappNotifier: mockWhatsAppNotifier as unknown as SubmitTaskFeedbackDeps['whatsappNotifier'],
       metricsClient: mockMetricsClient as unknown as SubmitTaskFeedbackDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitTaskFeedbackDeps['workerSettingsRepo'],
+      orchestratorSecret: 'test-orchestrator-secret',
     };
   }
 
@@ -302,6 +303,16 @@ describe('submitTaskFeedback use case', () => {
           parentTaskId: originalTaskId,
         })
       );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['feature', 'backend'],
+          childCount: 0,
+        })
+      );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
       mockTaskDispatcher.dispatch.mockResolvedValue(
@@ -438,9 +449,105 @@ describe('submitTaskFeedback use case', () => {
         });
       }
     });
+
+    it('should dispatch with empty labels when task has no Linear issue', async () => {
+      const mockTask = createMockTask();
+      delete (mockTask as { linearIssueId?: string }).linearIssueId;
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+        })
+      );
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, {
+        originalTaskId,
+        userId,
+        feedback,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockLinearAgentClient.validateIssue).not.toHaveBeenCalled();
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueLabels: [],
+          hasChildren: false,
+        })
+      );
+    });
   });
 
   describe('graceful degradation', () => {
+    it('should dispatch with empty labels when validateIssue fails', async () => {
+      const mockTask = createMockTask();
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'https://worker.local',
+              enabled: true,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'signing-secret',
+            },
+          ],
+        })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+        })
+      );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        err({ code: 'LINEAR_ERROR', message: 'Failed to validate' })
+      );
+      mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
+      mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          cancelNonce: 'abc123',
+          cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        })
+      );
+      mockWhatsAppNotifier.notifyTaskStarted.mockResolvedValue(ok(undefined));
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, {
+        originalTaskId,
+        userId,
+        feedback,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ linearIssueId }),
+        expect.stringContaining('Failed to fetch Linear issue labels')
+      );
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueLabels: [],
+          hasChildren: false,
+        })
+      );
+    });
     it('should continue if Linear issue update fails', async () => {
       const mockTask = createMockTask();
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
@@ -466,6 +573,16 @@ describe('submitTaskFeedback use case', () => {
           ...mockTask,
           id: 'feedback-task-123',
           parentTaskId: originalTaskId,
+        })
+      );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['feature', 'backend'],
+          childCount: 0,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(
@@ -529,6 +646,16 @@ describe('submitTaskFeedback use case', () => {
           parentTaskId: originalTaskId,
         })
       );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['feature', 'backend'],
+          childCount: 0,
+        })
+      );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(
         err({ code: 'LINEAR_ERROR', message: 'Failed to comment' })
@@ -590,6 +717,16 @@ describe('submitTaskFeedback use case', () => {
           parentTaskId: originalTaskId,
         })
       );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['feature', 'backend'],
+          childCount: 0,
+        })
+      );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));
       mockLinearAgentClient.addComment.mockResolvedValue(ok({}));
       mockTaskDispatcher.dispatch.mockResolvedValue(
@@ -647,6 +784,16 @@ describe('submitTaskFeedback use case', () => {
           ...mockTask,
           id: 'feedback-task-123',
           parentTaskId: originalTaskId,
+        })
+      );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['feature', 'backend'],
+          childCount: 0,
         })
       );
       mockLinearAgentClient.updateIssueState.mockResolvedValue(ok({}));

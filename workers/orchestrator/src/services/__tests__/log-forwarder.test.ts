@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createHmac } from 'node:crypto';
 import { LogForwarder } from '../log-forwarder.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -16,13 +17,6 @@ const baseConfig = {
   orchestratorSecret: 'test-secret',
   internalAuthToken: 'test-token',
 };
-
-function ackResponse(sequences: number[]): Response {
-  return new Response(JSON.stringify({ acknowledgedSequences: sequences }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
 
 function okResponse(): Response {
   return new Response('{}', { status: 200 });
@@ -52,129 +46,62 @@ describe('LogForwarder', () => {
     vi.useRealTimers();
   });
 
-  describe('monotonic sequence across flushAndStop cycles', () => {
-    it('never resets sequence after flushAndStop and new appendChunk', async () => {
-      fetchSpy.mockResolvedValue(ackResponse([0]));
+  describe('timestamp-based sequences', () => {
+    it('uses Date.now() for chunk sequences', async () => {
+      vi.setSystemTime(new Date('2025-06-15T12:00:00Z'));
+      fetchSpy.mockResolvedValue(okResponse());
+      forwarder.registerTask('task-1', 'secret');
+      forwarder.appendChunk('task-1', 'line 1\n');
+      await forwarder.flush('task-1');
+
+      const call = fetchSpy.mock.calls[0];
+      const opts = call?.[1] ?? {};
+      const body = JSON.parse((opts as Record<string, unknown>)['body'] as string) as {
+        chunks: { sequence: number }[];
+      };
+      const chunk = body.chunks[0] ?? { sequence: -1 };
+      // Sequence should be based on Date.now(), not an incrementing counter
+      expect(chunk.sequence).toBeGreaterThan(1_000_000_000_000);
+    });
+
+    it('does not collide across flushAndStop cycles', async () => {
+      vi.setSystemTime(new Date('2025-06-15T12:00:00Z'));
+      fetchSpy.mockResolvedValue(okResponse());
       forwarder.registerTask('task-1', 'secret');
       forwarder.appendChunk('task-1', 'line 1\n');
       await forwarder.flushAndStop('task-1');
 
       const firstCall = fetchSpy.mock.calls[0];
-      const firstOpts = firstCall?.[1] ?? {};
-      const firstCallBody = JSON.parse(
-        (firstOpts as Record<string, unknown>)['body'] as string
+      const firstBody = JSON.parse(
+        ((firstCall?.[1] ?? {}) as Record<string, unknown>)['body'] as string
       ) as { chunks: { sequence: number }[] };
-      const firstChunk = firstCallBody.chunks[0] ?? { sequence: -1 };
-      expect(firstChunk.sequence).toBe(0);
+      const firstSeq = firstBody.chunks[0]?.sequence ?? -1;
 
-      fetchSpy.mockResolvedValue(ackResponse([1]));
+      // Advance time to simulate resume
+      vi.setSystemTime(new Date('2025-06-15T12:05:00Z'));
+      fetchSpy.mockResolvedValue(okResponse());
       forwarder.appendChunk('task-1', 'line 2\n');
       await forwarder.flush('task-1');
 
       const secondCall = fetchSpy.mock.calls[1];
-      const secondOpts = secondCall?.[1] ?? {};
-      const secondCallBody = JSON.parse(
-        (secondOpts as Record<string, unknown>)['body'] as string
+      const secondBody = JSON.parse(
+        ((secondCall?.[1] ?? {}) as Record<string, unknown>)['body'] as string
       ) as { chunks: { sequence: number }[] };
-      const secondChunk = secondCallBody.chunks[0] ?? { sequence: -1 };
-      expect(secondChunk.sequence).toBe(1);
-    });
-  });
+      const secondSeq = secondBody.chunks[0]?.sequence ?? -1;
 
-  describe('getDeliveryStats', () => {
-    it('returns zeros for unknown task', () => {
-      expect(forwarder.getDeliveryStats('unknown')).toEqual({
-        produced: 0,
-        acked: 0,
-        pending: 0,
-      });
-    });
-
-    it('returns correct stats after sending and acking', async () => {
-      fetchSpy.mockResolvedValue(ackResponse([0]));
-      forwarder.registerTask('task-1', 'secret');
-      forwarder.appendChunk('task-1', 'line 1\nline 2\n');
-      await forwarder.flush('task-1');
-
-      const stats = forwarder.getDeliveryStats('task-1');
-      expect(stats.produced).toBe(1);
-      expect(stats.acked).toBe(0);
-      expect(stats.pending).toBe(0);
-    });
-
-    it('tracks pending when no ack received', async () => {
-      fetchSpy.mockResolvedValue(okResponse());
-      forwarder.registerTask('task-1', 'secret');
-      forwarder.appendChunk('task-1', 'line 1\n');
-      await forwarder.flush('task-1');
-
-      const stats = forwarder.getDeliveryStats('task-1');
-      expect(stats.produced).toBe(1);
-      expect(stats.acked).toBe(0);
-      expect(stats.pending).toBe(0);
-    });
-
-    it('shows pending for multiple produced with partial ack', async () => {
-      fetchSpy.mockResolvedValueOnce(ackResponse([0]));
-      forwarder.registerTask('task-1', 'secret');
-      forwarder.appendChunk('task-1', 'line 1\n');
-      await forwarder.flush('task-1');
-
-      fetchSpy.mockResolvedValueOnce(okResponse());
-      forwarder.appendChunk('task-1', 'line 2\n');
-      await forwarder.flush('task-1');
-
-      const stats = forwarder.getDeliveryStats('task-1');
-      expect(stats.produced).toBe(2);
-      expect(stats.acked).toBe(0);
-      expect(stats.pending).toBe(1);
-    });
-  });
-
-  describe('awaitDrain', () => {
-    it('resolves immediately when no sequences produced', async () => {
-      vi.useRealTimers();
-      forwarder = new LogForwarder(baseConfig, mockLogger);
-      forwarder.registerTask('task-1', 'secret');
-      await forwarder.awaitDrain('task-1', 1000);
-    });
-
-    it('resolves immediately for unknown task', async () => {
-      vi.useRealTimers();
-      forwarder = new LogForwarder(baseConfig, mockLogger);
-      await forwarder.awaitDrain('unknown', 1000);
-    });
-
-    it('throws on timeout when not fully acked', async () => {
-      vi.useRealTimers();
-      fetchSpy = vi.spyOn(globalThis, 'fetch');
-      forwarder = new LogForwarder(baseConfig, mockLogger);
-      fetchSpy.mockResolvedValue(okResponse());
-      forwarder.registerTask('task-1', 'secret');
-      forwarder.appendChunk('task-1', 'first\n');
-      await forwarder.flush('task-1');
-
-      forwarder.appendChunk('task-1', 'second\n');
-      await forwarder.flush('task-1');
-
-      await expect(forwarder.awaitDrain('task-1', 100)).rejects.toThrow(/Log drain timeout/);
+      expect(secondSeq).toBeGreaterThan(firstSeq);
     });
   });
 
   describe('close', () => {
-    it('removes all tracking for a task', async () => {
-      fetchSpy.mockResolvedValue(ackResponse([0]));
+    it('removes forwarding state for a task', async () => {
+      fetchSpy.mockResolvedValue(okResponse());
       forwarder.registerTask('task-1', 'secret');
       forwarder.appendChunk('task-1', 'line\n');
       await forwarder.flush('task-1');
 
       forwarder.close('task-1');
 
-      expect(forwarder.getDeliveryStats('task-1')).toEqual({
-        produced: 0,
-        acked: 0,
-        pending: 0,
-      });
       expect(forwarder.getActiveTaskIds()).not.toContain('task-1');
     });
   });
@@ -195,26 +122,14 @@ describe('LogForwarder', () => {
     });
   });
 
-  describe('sendWithRetry ACK parsing', () => {
-    it('handles non-JSON response body gracefully', async () => {
-      fetchSpy.mockResolvedValue(new Response('not json', { status: 200 }));
+  describe('sendWithRetry', () => {
+    it('treats 200 response as success', async () => {
+      fetchSpy.mockResolvedValue(okResponse());
       forwarder.registerTask('task-1', 'secret');
       forwarder.appendChunk('task-1', 'line\n');
       await forwarder.flush('task-1');
 
-      const stats = forwarder.getDeliveryStats('task-1');
-      expect(stats.produced).toBe(1);
-      expect(stats.acked).toBe(0);
-    });
-
-    it('handles missing acknowledgedSequences field', async () => {
-      fetchSpy.mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
-      forwarder.registerTask('task-1', 'secret');
-      forwarder.appendChunk('task-1', 'line\n');
-      await forwarder.flush('task-1');
-
-      const stats = forwarder.getDeliveryStats('task-1');
-      expect(stats.acked).toBe(0);
+      expect(forwarder.getDroppedChunkCount('task-1')).toBe(0);
     });
   });
 
@@ -228,6 +143,34 @@ describe('LogForwarder', () => {
       await forwarder.flush('task-1');
 
       expect(forwarder.getDroppedChunkCount('task-1')).toBeGreaterThan(0);
+    });
+  });
+
+  describe('fallback secret derivation', () => {
+    it('derives webhook secret from orchestratorSecret when task not registered', async () => {
+      const expectedSecret = createHmac('sha256', baseConfig.orchestratorSecret)
+        .update('task-unregistered')
+        .digest('hex');
+
+      fetchSpy.mockImplementation(async (_url: string | URL | Request, init?: RequestInit) => {
+        const opts = init as Record<string, unknown>;
+        const sig = (opts['headers'] as Record<string, string>)['X-Request-Signature'];
+        const ts = (opts['headers'] as Record<string, string>)['X-Request-Timestamp'];
+        const body = opts['body'] as string;
+
+        // Verify the signature was computed with the derived secret
+        const message = `${ts}.${body}`;
+        const expected = createHmac('sha256', expectedSecret).update(message).digest('hex');
+        expect(sig).toBe(expected);
+
+        return okResponse();
+      });
+
+      // Do NOT call registerTask — simulate post-restart state
+      forwarder.appendChunk('task-unregistered', 'log line\n');
+      await forwarder.flush('task-unregistered');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -184,23 +184,54 @@ export function useTaskView(taskId: string): TaskViewState {
           // Live: stream log lines
           const linesRef = collection(db, 'code_tasks', taskId, 'log_lines');
           const linesQuery = query(linesRef, orderBy('sequence', 'asc'));
+          let isFirstSnapshot = true;
           const logsUnsub = onSnapshot(
             linesQuery,
             (snapshot) => {
               if (cancelled) return;
+
+              // First snapshot after (re-)attaching: replace all logs so resumed
+              // tasks don't miss lines when the orchestrator restarts sequencing.
+              if (isFirstSnapshot) {
+                isFirstSnapshot = false;
+                const all: LogLine[] = [];
+                for (const docSnap of snapshot.docs) {
+                  const data = docSnap.data() as LogLine;
+                  all.push({ sequence: data.sequence, text: data.text });
+                }
+                setLogs(all);
+                return;
+              }
+
               const added: LogLine[] = [];
+              const modified: LogLine[] = [];
               for (const change of snapshot.docChanges()) {
                 if (change.type === 'added') {
                   const data = change.doc.data() as LogLine;
                   added.push({ sequence: data.sequence, text: data.text });
+                } else if (change.type === 'modified') {
+                  const data = change.doc.data() as LogLine;
+                  modified.push({ sequence: data.sequence, text: data.text });
                 }
               }
-              if (added.length > 0) {
+              if (added.length > 0 || modified.length > 0) {
                 added.sort((a, b) => a.sequence - b.sequence);
                 setLogs((prev) => {
-                  const maxSeq = prev.length > 0 ? (prev[prev.length - 1]?.sequence ?? -1) : -1;
-                  const newLines = added.filter((l) => l.sequence > maxSeq);
-                  return newLines.length > 0 ? [...prev, ...newLines] : prev;
+                  let updated = prev;
+                  // Apply modifications (replace existing lines by sequence)
+                  if (modified.length > 0) {
+                    const modMap = new Map(modified.map((l) => [l.sequence, l]));
+                    updated = updated.map((l) => modMap.get(l.sequence) ?? l);
+                  }
+                  // Append new lines
+                  if (added.length > 0) {
+                    const maxSeq = updated.length > 0 ? (updated[updated.length - 1]?.sequence ?? -1) : -1;
+                    const newLines = added.filter((l) => l.sequence > maxSeq);
+                    if (newLines.length > 0) {
+                      updated = [...updated, ...newLines];
+                    }
+                  }
+                  return updated !== prev ? updated : prev;
                 });
               }
             },
@@ -307,6 +338,14 @@ export function useTaskView(taskId: string): TaskViewState {
       const result = await sendTaskMessageApi(token, task.id, { message });
       if (isMountedRef.current) {
         setMessageStatus(result.action === 'queued' ? 'queued' : 'delivered');
+
+        // When a terminal task is resumed, update local status so the
+        // Firestore effect re-runs and attaches live onSnapshot listeners.
+        if (result.action === 'resumed') {
+          setTask({ ...task, status: 'running' });
+          lastStatusRef.current = 'running';
+        }
+
         // Reset status after 3 seconds so user can send another message
         setTimeout(() => {
           if (isMountedRef.current) {

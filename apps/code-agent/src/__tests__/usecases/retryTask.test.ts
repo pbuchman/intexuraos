@@ -163,6 +163,7 @@ describe('retryTask use case', () => {
       whatsappNotifier: mockWhatsAppNotifier as unknown as RetryTaskDeps['whatsappNotifier'],
       metricsClient: mockMetricsClient as unknown as RetryTaskDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as RetryTaskDeps['workerSettingsRepo'],
+      orchestratorSecret: 'test-orchestrator-secret',
     };
   }
 
@@ -686,8 +687,6 @@ describe('retryTask use case', () => {
     it('should refresh Linear labels and children before dispatch', async () => {
       const mockTask = createMockTask({
         completedAt: sixMinutesAgo,
-        linearIssueLabels: ['stale-label'],
-        hasChildren: false,
       });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
       mockLinearAgentClient.validateIssue.mockResolvedValue(

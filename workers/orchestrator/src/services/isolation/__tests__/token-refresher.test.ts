@@ -184,32 +184,24 @@ describe('TokenRefresher', () => {
   });
 
   describe('error handling', () => {
-    it('logs error when GitHub API fails', async () => {
+    it('throws when GitHub API fails during registerTask', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
       });
 
-      await refresher.registerTask('task-123');
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        { taskId: 'task-123', error: expect.any(Error) },
-        'Failed to refresh GitHub token'
+      await expect(refresher.registerTask('task-123')).rejects.toThrow(
+        'GitHub token mint failed: 401'
       );
     });
 
-    it('logs error when private key read fails', async () => {
+    it('throws when private key read fails during registerTask', async () => {
       mockReadFile.mockRejectedValueOnce(new Error('ENOENT: no such file'));
 
-      await refresher.registerTask('task-123');
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        { taskId: 'task-123', error: expect.any(Error) },
-        'Failed to refresh GitHub token'
-      );
+      await expect(refresher.registerTask('task-123')).rejects.toThrow('ENOENT: no such file');
     });
 
-    it('continues refreshing other tasks when one fails', async () => {
+    it('continues refreshing other tasks when one fails in background', async () => {
       await refresher.registerTask('task-1');
       await refresher.registerTask('task-2');
 

@@ -113,7 +113,16 @@ export async function apiRequest<T>(
     return undefined as T;
   }
 
-  const json: unknown = await response.json();
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    const status = response.status;
+    const message = status >= 502 && status <= 504
+      ? 'Service is temporarily unavailable. Please try again in a moment.'
+      : `Unexpected response from server (${String(status)})`;
+    throw new ApiError('SERVICE_UNAVAILABLE', message, status);
+  }
 
   // Validate response structure defensively
   if (

@@ -55,7 +55,6 @@ export interface CompletionControlConfig {
   maxAttempts: number;
   verifier: CompletionVerifier;
   preserveFailedContainers?: boolean;
-  logDrainTimeoutMs?: number;
 }
 
 export class TaskDispatcher {
@@ -67,11 +66,10 @@ export class TaskDispatcher {
   private readonly claudeLogBuffers = new Map<string, string>();
   private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
-  private readonly pendingMessages = new Map<string, string>();
+  private readonly pendingMessages = new Map<string, string[]>();
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
   private readonly preserveFailedContainers: boolean;
-  private readonly logDrainTimeoutMs: number;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -87,7 +85,6 @@ export class TaskDispatcher {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
     this.preserveFailedContainers = completionControl.preserveFailedContainers ?? false;
-    this.logDrainTimeoutMs = completionControl.logDrainTimeoutMs ?? 30000;
   }
 
   async submitTask(request: CreateTaskRequest): Promise<Result<void, DispatchError>> {
@@ -239,7 +236,13 @@ export class TaskDispatcher {
       const promptPreview =
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
       /* v8 ignore stop @preserve */
-      this.appendOrchestratorTaskLog(taskId, `Prompt: ${promptPreview}`);
+      this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
+      const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'Phase 2' : 'Phase 1';
+      const phaseDesc =
+        phase === 'Phase 2'
+          ? 'Strict Execution \u2014 implement autonomously, run CI, create PR'
+          : 'Design & Validation \u2014 analyze and enrich the Linear issue, do not execute code';
+      this.appendTaggedTaskLog(taskId, 'instructions', `${phase}: ${phaseDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
       /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
@@ -362,24 +365,31 @@ export class TaskDispatcher {
     }
 
     if (task.status === 'running') {
-      this.pendingMessages.set(taskId, message);
+      const queue = this.pendingMessages.get(taskId) ?? [];
+      queue.push(message);
+      this.pendingMessages.set(taskId, queue);
       this.appendOrchestratorTaskLog(
         taskId,
-        `Message queued (task is running): ${message.length > 200 ? message.slice(0, 200) + '…' : message}`
+        `Message queued (${String(queue.length)} pending): ${message.length > 200 ? message.slice(0, 200) + '\u2026' : message}`
       );
       this.logger.info({ taskId }, 'Message queued for running task');
-      return { ok: true, value: { action: 'queued' } };
+      return { ok: true, value: { action: 'queued', pendingMessages: [...queue] } };
     }
 
     if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {
-      this.appendOrchestratorTaskLog(
-        taskId,
-        `Resuming task with message: ${message.length > 200 ? message.slice(0, 200) + '…' : message}`
-      );
-
       await this.teardownAttempt(taskId, true);
 
+      // Register secret BEFORE any appendOrchestratorTaskLog calls, because
+      // appendChunk creates a ForwardingState that captures the webhook secret
+      // at creation time and never refreshes it.
       this.logForwarder.registerTask(taskId, task.webhookSecret);
+
+      this.appendOrchestratorTaskLog(taskId, 'Resuming task with user message');
+      this.appendTaggedTaskLog(
+        taskId,
+        'prompt',
+        message.length > 200 ? message.slice(0, 200) + '\u2026' : message
+      );
 
       const resumeResult = await this.startWorkerAttempt(task, {
         prompt: message,
@@ -397,6 +407,9 @@ export class TaskDispatcher {
 
       task.status = 'running';
       task.containerId = resumeResult.containerId;
+      task.startedAt = new Date().toISOString();
+      task.attemptCount = 1;
+      task.verificationHistory = [];
       delete task.completedAt;
       await this.saveTask(task);
 
@@ -735,17 +748,23 @@ export class TaskDispatcher {
     }
 
     if (verification.passed) {
-      const pendingMessage = this.pendingMessages.get(task.taskId);
-      if (pendingMessage !== undefined) {
+      const pendingQueue = this.pendingMessages.get(task.taskId);
+      if (pendingQueue !== undefined && pendingQueue.length > 0) {
         this.pendingMessages.delete(task.taskId);
+        const combinedPrompt = pendingQueue.join('\n\n');
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Delivering queued message instead of finalizing: ${pendingMessage.length > 200 ? pendingMessage.slice(0, 200) + '…' : pendingMessage}`
+          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
+        );
+        this.appendTaggedTaskLog(
+          task.taskId,
+          'prompt',
+          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
         );
         await this.flushTaskLogs(task.taskId);
         await this.teardownAttempt(task.taskId, true);
         const resumeResult = await this.startWorkerAttempt(task, {
-          prompt: pendingMessage,
+          prompt: combinedPrompt,
           hasChildren: task.hasChildren ?? false,
           continueSession: true,
         });
@@ -758,7 +777,7 @@ export class TaskDispatcher {
         }
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Failed to deliver queued message, finalizing normally`
+          `Failed to deliver queued messages, finalizing normally`
         );
       }
 
@@ -927,7 +946,7 @@ export class TaskDispatcher {
     statusParam: TaskStatus,
     payload: { result?: TaskResult; error?: TaskError }
   ): Promise<void> {
-    let finalStatus = statusParam;
+    const finalStatus = statusParam;
     const shouldPreserve =
       this.preserveFailedContainers &&
       (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
@@ -944,23 +963,14 @@ export class TaskDispatcher {
 
     try {
       await this.logForwarder.flush(task.taskId);
-      await this.logForwarder.awaitDrain(task.taskId, this.logDrainTimeoutMs);
-    } catch (drainError) {
-      const drainStats = this.logForwarder.getDeliveryStats(task.taskId);
+    } catch (flushError) {
       this.logger.error(
-        { taskId: task.taskId, error: drainError, ...drainStats },
-        'Log drain failed'
+        { taskId: task.taskId, error: flushError },
+        'Log flush failed during finalization'
       );
-      if (payload.error === undefined) {
-        finalStatus = 'failed';
-        const drainMsg = drainError instanceof Error ? drainError.message : String(drainError);
-        payload.error = {
-          code: 'LOG_DELIVERY_FAILED',
-          message: `${drainMsg} (produced=${String(drainStats.produced)} acked=${String(drainStats.acked)} pending=${String(drainStats.pending)})`,
-        };
-      }
     }
-    const logStats = this.logForwarder.getDeliveryStats(task.taskId);
+
+    this.appendOrchestratorTaskLog(task.taskId, `Finalizing: flushed logs`);
     this.logForwarder.close(task.taskId);
 
     if (shouldPreserve) {
@@ -968,10 +978,6 @@ export class TaskDispatcher {
     } else {
       await this.teardownAttempt(task.taskId, false);
     }
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Log delivery stats: produced=${String(logStats.produced)} acked=${String(logStats.acked)} pending=${String(logStats.pending)}`
-    );
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
@@ -1223,9 +1229,13 @@ export class TaskDispatcher {
   }
 
   private appendOrchestratorTaskLog(taskId: string, message: string): void {
+    this.appendTaggedTaskLog(taskId, 'orchestrator', message);
+  }
+
+  private appendTaggedTaskLog(taskId: string, tag: string, message: string): void {
     this.logForwarder.appendChunk(
       taskId,
-      `${this.formatLocalTime(new Date())} [orchestrator] ${message}\n`
+      `${this.formatLocalTime(new Date())} [${tag}] ${message}\n`
     );
   }
 

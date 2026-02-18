@@ -123,6 +123,7 @@ vi.mock('node:fs', async (importOriginal) => {
       mkdir: vi.fn().mockResolvedValue(undefined),
       copyFile: vi.fn().mockResolvedValue(undefined),
       rm: vi.fn().mockResolvedValue(undefined),
+      readdir: vi.fn().mockResolvedValue(['system-prompt.txt', 'user-prompt.txt', 'github-token']),
       writeFile: vi.fn().mockResolvedValue(undefined),
     },
   };
@@ -333,6 +334,8 @@ describe('DockerProvider', () => {
     });
 
     it('sets CLAUDE_CONTINUE for resumed attempts', async () => {
+      // No orphan container exists — force creation path
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
       const config = createTestConfig({ continueSession: true });
       await provider.createWorker(config);
 
@@ -563,16 +566,20 @@ describe('DockerProvider', () => {
       expect(handle.taskId).toBe('task-3');
     });
 
-    it('cleans up secrets directory but not session directory', async () => {
+    it('clears files inside secrets directory but keeps the directory itself', async () => {
       const fs = await import('node:fs');
       await provider.createWorker(createTestConfig({ taskId: 'task-1' }));
 
       await provider.preserveWorker('task-1');
 
+      // Reads directory entries, then removes each file individually
+      expect(fs.promises.readdir).toHaveBeenCalledWith(expect.stringContaining('task-1'));
       const rmCalls = (fs.promises.rm as ReturnType<typeof vi.fn>).mock.calls;
-      expect(rmCalls).toHaveLength(1);
-      expect(rmCalls[0]?.[0]).toContain('task-1');
-      expect(rmCalls[0]?.[0]).not.toContain('claude-session');
+      // Each file entry is removed, but not the directory itself
+      expect(rmCalls.length).toBeGreaterThanOrEqual(3);
+      for (const call of rmCalls) {
+        expect(call[0]).toContain('task-1');
+      }
     });
 
     it('does not stop or remove the container', async () => {
@@ -593,7 +600,7 @@ describe('DockerProvider', () => {
 
     it('logs secrets cleanup failure without throwing', async () => {
       const fs = await import('node:fs');
-      (fs.promises.rm as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      (fs.promises.readdir as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('permission denied')
       );
 
@@ -601,8 +608,170 @@ describe('DockerProvider', () => {
       await expect(provider.preserveWorker('task-1')).resolves.not.toThrow();
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'task-1' }),
-        'Failed to remove task secrets directory during preservation'
+        'Failed to clear task secrets during preservation'
       );
+    });
+  });
+
+  describe('resume preserved worker', () => {
+    it('restores preserved container on continueSession instead of creating new one', async () => {
+      const config = createTestConfig({ taskId: 'preserved-task' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Preserve the worker (simulates task completion with preserve)
+      await provider.preserveWorker('preserved-task');
+
+      // Verify worker is preserved, not active
+      expect(await provider.listWorkers()).toHaveLength(0);
+      expect(await provider.listPreservedWorkers()).toHaveLength(1);
+
+      // Resume with continueSession — should reuse preserved container, not create new
+      const fs = await import('node:fs');
+      (fs.promises.rm as ReturnType<typeof vi.fn>).mockClear();
+      mocks.mockDocker.createContainer.mockClear();
+
+      const handle = await provider.createWorker(
+        createTestConfig({
+          taskId: 'preserved-task',
+          continueSession: true,
+          prompt: 'Resume prompt',
+          systemPrompt: 'Resume system prompt',
+        })
+      );
+
+      expect(handle.containerId).toBe('test-container-id');
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+
+      // Worker should be back in active map, removed from preserved
+      expect(await provider.listWorkers()).toHaveLength(1);
+      expect(await provider.listPreservedWorkers()).toHaveLength(0);
+    });
+
+    it('recreates secrets directory and writes prompt files when restoring preserved worker', async () => {
+      const fs = await import('node:fs');
+      const config = createTestConfig({ taskId: 'preserved-task-2' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('preserved-task-2');
+
+      (fs.promises.mkdir as ReturnType<typeof vi.fn>).mockClear();
+      (fs.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+      (fs.promises.copyFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'preserved-task-2',
+          continueSession: true,
+          prompt: 'New prompt',
+          systemPrompt: 'New system prompt',
+        })
+      );
+
+      // Should recreate secrets dir
+      expect(fs.promises.mkdir).toHaveBeenCalledWith(
+        expect.stringContaining('preserved-task-2'),
+        expect.objectContaining({ recursive: true })
+      );
+
+      // Should write new prompt files
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('system-prompt.txt'),
+        'New system prompt',
+        'utf-8'
+      );
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('user-prompt.txt'),
+        'New prompt',
+        'utf-8'
+      );
+
+      // Should copy GCP credentials
+      expect(fs.promises.copyFile).toHaveBeenCalled();
+    });
+  });
+
+  describe('orphaned container recovery after restart', () => {
+    it('reuses orphaned running container on continueSession after orchestrator restart', async () => {
+      // Simulate: orchestrator restarted, workers/preservedWorkers Maps empty,
+      // but Docker container still alive from previous run
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-container-id',
+      });
+      mocks.mockDocker.createContainer.mockClear();
+
+      const handle = await provider.createWorker(
+        createTestConfig({
+          continueSession: true,
+          prompt: 'Resume after restart',
+          systemPrompt: 'Resume system prompt',
+        })
+      );
+
+      expect(handle.containerId).toBe('orphan-container-id');
+      expect(handle.status).toBe('running');
+      expect(mocks.mockDocker.createContainer).not.toHaveBeenCalled();
+      expect(await provider.listWorkers()).toHaveLength(1);
+    });
+
+    it('writes prompt files and creates secrets dir when reusing orphaned container', async () => {
+      const fs = await import('node:fs');
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: true },
+        Id: 'orphan-container-id',
+      });
+      (fs.promises.mkdir as ReturnType<typeof vi.fn>).mockClear();
+      (fs.promises.writeFile as ReturnType<typeof vi.fn>).mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          continueSession: true,
+          prompt: 'Resume prompt',
+          systemPrompt: 'Resume system prompt',
+        })
+      );
+
+      expect(fs.promises.mkdir).toHaveBeenCalledWith(
+        expect.stringContaining('test-task-123'),
+        expect.objectContaining({ recursive: true })
+      );
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('system-prompt.txt'),
+        'Resume system prompt',
+        'utf-8'
+      );
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('user-prompt.txt'),
+        'Resume prompt',
+        'utf-8'
+      );
+    });
+
+    it('removes stopped orphan container before creating fresh one', async () => {
+      // First inspect: stopped orphan; subsequent: default (running)
+      mocks.mockContainer.inspect.mockResolvedValueOnce({
+        State: { Running: false },
+        Id: 'stopped-orphan-id',
+      });
+
+      const handle = await provider.createWorker(createTestConfig({ continueSession: true }));
+
+      // Should have removed the stopped container
+      expect(mocks.mockContainer.remove).toHaveBeenCalledWith({ force: true });
+      // Should have created a new container (fell through to normal creation)
+      expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
+      expect(handle.status).toBe('running');
+    });
+
+    it('falls through to normal creation when orphan container does not exist', async () => {
+      // Docker throws when container doesn't exist
+      mocks.mockContainer.inspect.mockRejectedValueOnce(new Error('No such container'));
+
+      const handle = await provider.createWorker(createTestConfig({ continueSession: true }));
+
+      expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
+      expect(handle.status).toBe('running');
     });
   });
 
