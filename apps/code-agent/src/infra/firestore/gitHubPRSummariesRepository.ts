@@ -1,7 +1,8 @@
 /**
  * Firestore repository for GitHub PR summaries.
  *
- * Doc ID: `${repository}#${pullRequestNumber}`
+ * Doc ID: `${repository.replace('/', '__')}#${pullRequestNumber}`
+ * Slash in repository is replaced with '__' since '/' is Firestore's path separator.
  * Uses set({ merge: true }) so partial updates preserve existing fields.
  */
 
@@ -55,7 +56,7 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
       input: UpsertGitHubPRSummaryInput
     ): Promise<Result<void, SummaryRepositoryError>> {
       try {
-        const docId = `${input.repository}#${String(input.pullRequestNumber)}`;
+        const docId = `${input.repository.replace('/', '__')}#${String(input.pullRequestNumber)}`;
         const docRef = collection.doc(docId);
 
         const data: Record<string, unknown> = {

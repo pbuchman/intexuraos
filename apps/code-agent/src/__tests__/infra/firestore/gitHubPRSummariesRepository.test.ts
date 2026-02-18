@@ -86,7 +86,7 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
       const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
       await repo.upsert(createUpsertInput());
 
-      expect(mockDoc).toHaveBeenCalledWith('intexuraos/test-repo#42');
+      expect(mockDoc).toHaveBeenCalledWith('intexuraos__test-repo#42');
     });
 
     it('should omit title/state/mergedAt when not provided', async () => {

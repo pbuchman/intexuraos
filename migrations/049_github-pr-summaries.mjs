@@ -40,7 +40,7 @@ export async function up(context) {
     // Skip push/ping events (pullRequestNumber === 0)
     if (pullRequestNumber === 0) continue;
 
-    const key = `${repository}#${String(pullRequestNumber)}`;
+    const key = `${repository.replace('/', '__')}#${String(pullRequestNumber)}`;
     const createdAt = data.createdAt instanceof Date ? data.createdAt : data.createdAt.toDate();
 
     const existing = summaryMap.get(key);
