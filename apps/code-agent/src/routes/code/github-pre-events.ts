@@ -10,6 +10,7 @@ import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
+import { extractEventUrl } from './extractEventUrl.js';
 
 export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
@@ -32,12 +33,13 @@ const gitHubPREventSchema = {
     pullRequestNumber: { type: 'number' },
     title: { type: ['string', 'null'] },
     repository: { type: 'string' },
-    eventType: { type: 'string', enum: ['pull_request', 'pull_request_review', 'pull_request_review_comment', 'push', 'ping'] },
+    eventType: { type: 'string', enum: ['pull_request', 'pull_request_review', 'pull_request_review_comment', 'issue_comment', 'push', 'ping'] },
     action: { type: ['string', 'null'], enum: ['opened', 'closed', 'edited', 'synchronized', 'ready_for_review', 'converted_to_draft', 'submitted', 'dismissed', 'created', 'deleted', null] },
     senderLogin: { type: 'string' },
     createdAt: { type: 'string', format: 'date-time' },
+    eventUrl: { type: ['string', 'null'] },
   },
-  required: ['pullRequestNumber', 'title', 'repository', 'eventType', 'action', 'senderLogin', 'createdAt'],
+  required: ['pullRequestNumber', 'title', 'repository', 'eventType', 'action', 'senderLogin', 'createdAt', 'eventUrl'],
 };
 
 // Response schema for the endpoint
@@ -155,6 +157,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           action: string | null;
           senderLogin: string;
           createdAt: string;
+          eventUrl: string | null;
         }[] = result.value.map((event: GitHubPREvent) => ({ // @allow-result-access -- narrowed by !result.ok check above
           pullRequestNumber: event.pullRequestNumber,
           title: event.title,
@@ -163,6 +166,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           action: event.action,
           senderLogin: event.senderLogin,
           createdAt: event.createdAt.toISOString(),
+          eventUrl: extractEventUrl(event.eventType, event.payload),
         }));
 
         request.log.info({ count: events.length }, 'Returning GitHub PR events');

@@ -1221,7 +1221,6 @@ export class TaskDispatcher {
     return `[claude] Session init: model=${model} tools=${String(tools)}${mcpPart} mode=${mode} v${version}`;
   }
 
-
   private formatLocalTime(date: Date): string {
     const h = String(date.getHours()).padStart(2, '0');
     const m = String(date.getMinutes()).padStart(2, '0');
