@@ -60,4 +60,23 @@ describe('stripDockerHeaders', () => {
     expect(result).toContain(String.fromCharCode(3));
     expect(result).toContain('rest');
   });
+
+  it('strips ANSI color codes from plain content', () => {
+    expect(stripDockerHeaders('\x1B[31mFAIL\x1B[39m')).toBe('FAIL');
+  });
+
+  it('strips ANSI codes from Docker-framed content', () => {
+    const raw = dockerFrame(1, '\x1B[32m✓\x1B[39m test passed');
+    expect(stripDockerHeaders(raw)).toBe('✓ test passed');
+  });
+
+  it('strips bold and background ANSI codes (vitest output)', () => {
+    const raw = dockerFrame(2, '\x1B[41m\x1B[1m FAIL \x1B[22m\x1B[49m src/server.test.ts');
+    expect(stripDockerHeaders(raw)).toBe(' FAIL  src/server.test.ts');
+  });
+
+  it('strips ANSI codes while preserving meaningful content', () => {
+    const raw = '\x1B[2mTest Files\x1B[22m \x1B[1m\x1B[31m1 failed\x1B[39m\x1B[22m';
+    expect(stripDockerHeaders(raw)).toBe('Test Files 1 failed');
+  });
 });

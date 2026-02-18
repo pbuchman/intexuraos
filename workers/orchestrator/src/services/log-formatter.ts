@@ -1,5 +1,9 @@
 const DOCKER_HEADER_SIZE = 8;
 
+// Matches ANSI/VT100 escape sequences: ESC [ ... final-byte
+// Covers SGR color codes, cursor movement, erase sequences, etc.
+const ANSI_ESCAPE_RE = /\x1B\[[0-9;]*[A-Za-z]/g;
+
 /**
  * Strip Docker multiplexed stream headers from raw log content.
  * Docker attach/logs streams prefix each frame with 8 bytes:
@@ -20,7 +24,7 @@ export function stripDockerHeaders(raw: string): string {
       i++;
     }
   }
-  return result;
+  return result.replace(ANSI_ESCAPE_RE, '');
 }
 
 function isDockerHeaderAt(str: string, pos: number): boolean {
