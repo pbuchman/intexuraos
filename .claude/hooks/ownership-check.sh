@@ -35,8 +35,10 @@ sleep 0.1
 # which would create an infinite loop once a violation is triggered.
 # NOTE: Use -s (slurp) because transcripts are JSONL format (one object per line).
 RECENT_RESPONSES=$(jq -rs '
-  [.[] | select(.type == "assistant")] | .[-1] |
-  .message.content // [] | map(.text // .thinking // empty) | join("\n")
+  [.[] | select(.type == "assistant")]
+  | map(select(.message.content[]? | .type == "text"))
+  | .[-1]
+  | .message.content // [] | map(select(.type == "text") | .text) | join("\n")
 ' "$TRANSCRIPT_PATH" 2>/dev/null) || true
 
 if [[ -z "$RECENT_RESPONSES" ]]; then
