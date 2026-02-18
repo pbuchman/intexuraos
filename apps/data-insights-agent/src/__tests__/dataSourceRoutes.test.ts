@@ -8,7 +8,6 @@ import {
   FakeFeedNameGenerationService,
   FakeMobileNotificationsClient,
   FakeVisualizationRepository,
-  FakeVisualizationGenerationService,
   FakeSnapshotRepository,
   FakeDataAnalysisService,
   FakeChartDefinitionService,
@@ -38,7 +37,6 @@ describe('dataSourceRoutes', () => {
   let fakeMobileNotificationsClient: FakeMobileNotificationsClient;
   let fakeSnapshotRepo: FakeSnapshotRepository;
   let fakeVisualizationRepo: FakeVisualizationRepository;
-  let fakeVisualizationGenerationService: FakeVisualizationGenerationService;
   let fakeDataAnalysisService: FakeDataAnalysisService;
   let fakeChartDefinitionService: FakeChartDefinitionService;
   let fakeDataTransformService: FakeDataTransformService;
@@ -51,7 +49,6 @@ describe('dataSourceRoutes', () => {
     fakeMobileNotificationsClient = new FakeMobileNotificationsClient();
     fakeSnapshotRepo = new FakeSnapshotRepository();
     fakeVisualizationRepo = new FakeVisualizationRepository();
-    fakeVisualizationGenerationService = new FakeVisualizationGenerationService();
     fakeDataAnalysisService = new FakeDataAnalysisService();
     fakeChartDefinitionService = new FakeChartDefinitionService();
     fakeDataTransformService = new FakeDataTransformService();
@@ -63,7 +60,6 @@ describe('dataSourceRoutes', () => {
       mobileNotificationsClient: fakeMobileNotificationsClient,
       snapshotRepository: fakeSnapshotRepo,
       visualizationRepository: fakeVisualizationRepo,
-      visualizationGenerationService: fakeVisualizationGenerationService,
       dataAnalysisService: fakeDataAnalysisService,
       chartDefinitionService: fakeChartDefinitionService,
       dataTransformService: fakeDataTransformService,

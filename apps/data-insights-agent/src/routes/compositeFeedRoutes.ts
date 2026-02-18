@@ -131,19 +131,21 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
-      refreshSnapshot(result.value.id, user.userId, {
+      const feed = result.value; // @allow-result-access -- narrowed at line 118
+
+      refreshSnapshot(feed.id, user.userId, {
         snapshotRepository: services.snapshotRepository,
         compositeFeedRepository: services.compositeFeedRepository,
         dataSourceRepository: services.dataSourceRepository,
         mobileNotificationsClient: services.mobileNotificationsClient,
         logger: request.log,
       }).catch((error: unknown) => {
-        request.log.warn({ error, feedId: result.value.id }, 'Failed to refresh snapshot after feed creation');
+        request.log.warn({ error, feedId: feed.id }, 'Failed to refresh snapshot after feed creation');
       });
 
       void reply.status(201);
       return await reply.ok({
-        ...formatCompositeFeed(result.value),
+        ...formatCompositeFeed(feed),
         diagnostics: {
           requestId: request.requestId,
           durationMs: Date.now() - request.startTime,
@@ -306,7 +308,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         request.log.warn({ error, feedId: request.params.id }, 'Failed to refresh snapshot after feed update');
       });
 
-      return await reply.ok(formatCompositeFeed(result.value));
+      return await reply.ok(formatCompositeFeed(result.value)); // @allow-result-access -- narrowed at line 294
     }
   );
 
@@ -366,6 +368,21 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
           'Failed to delete snapshot after feed deletion (non-fatal)'
         );
       }
+
+      const vizDeleteResult = await services.visualizationRepository.deleteByFeedId(
+        request.params.id
+      );
+      /* v8 ignore start -- upstream: fake repo deleteByFeedId never errors @preserve */
+      if (!vizDeleteResult.ok) {
+        request.log.warn(
+          {
+            feedId: request.params.id,
+            error: vizDeleteResult.error,
+          },
+          'Failed to delete visualizations after feed deletion (non-fatal)'
+        );
+      }
+      /* v8 ignore stop @preserve */
 
       return await reply.ok({});
     }

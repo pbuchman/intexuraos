@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
+  BarChart2,
   Bell,
   BellRing,
   Bookmark,
@@ -61,6 +62,7 @@ const researchAgentItems: NavItem[] = [
 const dataInsightsItems: NavItem[] = [
   { to: '/data-insights', label: 'Data Sources', icon: List },
   { to: '/data-insights/new', label: 'Add Source', icon: Plus },
+  { to: '/data-insights/visualizations', label: 'Visualizations', icon: BarChart2 },
 ];
 
 const codeTasksItems: NavItem[] = [
