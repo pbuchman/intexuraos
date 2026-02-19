@@ -1194,10 +1194,6 @@ export class TaskDispatcher {
           return jsonLine;
         }
 
-        if (type === 'user') {
-          return this.formatUserMessage(obj);
-        }
-
         return jsonLine;
       } catch {
         return jsonLine;
@@ -1223,46 +1219,6 @@ export class TaskDispatcher {
 
     const mcpPart = mcpServers !== '' ? ` mcp=[${mcpServers}]` : '';
     return `[claude] Session init: model=${model} tools=${String(tools)}${mcpPart} mode=${mode} v${version}`;
-  }
-
-  private formatUserMessage(obj: Record<string, unknown>): string {
-    const message = obj['message'] as Record<string, unknown> | undefined;
-    const content = message?.['content'];
-    if (!Array.isArray(content)) return '  → [result]';
-
-    const lines: string[] = [];
-    for (const item of content as Record<string, unknown>[]) {
-      if ((item['type'] as string | undefined) !== 'tool_result') continue;
-
-      const isError = item['is_error'] === true;
-      const raw = item['content'];
-      const text = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
-      const persisted = text.includes('<persisted-output>');
-
-      let sizeStr: string;
-      if (persisted) {
-        const match = /Output too large \(([^)]+)\)/.exec(text);
-        sizeStr = match?.[1] ?? this.formatBytes(text.length);
-      } else {
-        sizeStr = this.formatBytes(text.length);
-      }
-
-      const flags = [sizeStr];
-      if (persisted) flags.push('persisted');
-      if (isError) flags.push('error');
-
-      lines.push(`  → [result: ${flags.join(', ')}]`);
-    }
-
-    return lines.length > 0 ? lines.join('\n') : '  → [result]';
-  }
-
-  private formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${String(bytes)}B`;
-    /* v8 ignore start -- upstream: MB-sized tool results extremely rare; KB covers all practical cases @preserve */
-    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-    /* v8 ignore stop @preserve */
-    return `${(bytes / 1024).toFixed(1)}KB`;
   }
 
   private formatLocalTime(date: Date): string {

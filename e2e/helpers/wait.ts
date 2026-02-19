@@ -10,7 +10,21 @@ import type { CodeTask } from './client.js';
 /**
  * Terminal task statuses that won't change.
  */
-const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled', 'interrupted'] as const;
+const TERMINAL_STATUSES = [
+  'designed',
+  'implemented',
+  'failed',
+  'cancelled',
+  'interrupted',
+] as const;
+
+/**
+ * Success terminal statuses (task completed a phase successfully).
+ * Whether a task ends as 'designed' or 'implemented' depends on whether
+ * the Linear issue has the code-task label — don't hardcode one.
+ */
+const SUCCESS_STATUSES = ['designed', 'implemented'] as const;
+type SuccessStatus = (typeof SUCCESS_STATUSES)[number];
 
 /**
  * Poll until task reaches expected status or timeout.
@@ -70,6 +84,57 @@ export async function waitForTaskStatus(
 
   throw new Error(
     `Timeout waiting for task ${taskId} to reach status "${expectedStatus}". Last status: "${String(lastStatus)}"`
+  );
+}
+
+/**
+ * Poll until task reaches a success terminal status ('designed' or 'implemented').
+ *
+ * Use this instead of waitForTaskStatus when you don't know which phase will
+ * complete — it depends on whether the Linear issue has the code-task label.
+ *
+ * @throws Error if task reaches a failure terminal status or times out
+ */
+export async function waitForSuccessStatus(
+  client: AxiosInstance,
+  taskId: string,
+  timeoutMs = 60000,
+  pollIntervalMs = 1000
+): Promise<CodeTask> {
+  const startTime = Date.now();
+  let lastStatus: string | null = null;
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await client.get(`/code/tasks/${taskId}`);
+
+      if (response.status !== 200) {
+        throw new Error(`Failed to get task status: ${String(response.status)}`);
+      }
+
+      const responseData = response.data as { success: boolean; data: CodeTask };
+      const task = responseData.data;
+      lastStatus = task.status;
+
+      if (SUCCESS_STATUSES.includes(task.status as SuccessStatus)) {
+        return task;
+      }
+
+      if (TERMINAL_STATUSES.includes(task.status as (typeof TERMINAL_STATUSES)[number])) {
+        throw new Error(`Task reached terminal status "${task.status}" without success`);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('terminal status')) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+  }
+
+  throw new Error(
+    `Timeout waiting for task ${taskId} to succeed. Last status: "${String(lastStatus)}"`
   );
 }
 

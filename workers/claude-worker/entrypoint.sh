@@ -5,6 +5,15 @@ set -euo pipefail
 # Claude Worker Container Entrypoint
 # ==============================================================================
 
+setup_git_identity() {
+    if [ -n "${GIT_USER_NAME:-}" ]; then
+        git config --global user.name "$GIT_USER_NAME"
+    fi
+    if [ -n "${GIT_USER_EMAIL:-}" ]; then
+        git config --global user.email "$GIT_USER_EMAIL"
+    fi
+}
+
 setup_github_token() {
     if [ -f "/secrets/github-token" ]; then
         export GITHUB_TOKEN=$(cat /secrets/github-token)
@@ -23,6 +32,7 @@ run_claude_attempt() {
     fi
 
     cd /repo
+    setup_git_identity
     setup_github_token
 
     if [ ! -f "/secrets/system-prompt.txt" ]; then
@@ -146,8 +156,9 @@ if [ -f "/secrets/gcp-sa.json" ]; then
 fi
 
 # ------------------------------------------------------------------------------
-# Set up GitHub token (refreshed by orchestrator)
+# Set up git identity and GitHub token
 # ------------------------------------------------------------------------------
+setup_git_identity
 setup_github_token
 
 # Watch for token refresh in background
@@ -178,6 +189,31 @@ if [ -f "/repo/pnpm-lock.yaml" ]; then
     CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile --store-dir /home/claude/pnpm-store 2>&1
     echo "[entrypoint] Dependencies installed"
 fi
+
+# ------------------------------------------------------------------------------
+# Set randomized attribution for commits and PRs
+# ------------------------------------------------------------------------------
+VERBS=(
+    "Crafted" "Forged" "Engineered" "Sculpted" "Woven"
+    "Conjured" "Assembled" "Composed" "Distilled" "Fashioned"
+    "Architected" "Brewed" "Chiseled" "Designed" "Devised"
+    "Hammered" "Kindled" "Molded" "Orchestrated" "Refined"
+    "Shaped" "Sparked" "Stitched" "Tempered" "Wrought"
+)
+VERB=${VERBS[$((RANDOM % ${#VERBS[@]}))]}
+COMMIT_ATTR="${VERB} with love by 🤖 Intex <intex@intexuraos.cloud>"
+PR_ATTR="${VERB} with love by 🤖 [Intex](https://intexuraos.cloud) <intex@intexuraos.cloud>"
+
+mkdir -p /repo/.claude
+if [ -f "/repo/.claude/settings.local.json" ]; then
+    jq --arg commit "$COMMIT_ATTR" --arg pr "$PR_ATTR" \
+        '.attribution = { commit: $commit, pr: $pr }' /repo/.claude/settings.local.json > /tmp/settings.local.json \
+        && mv /tmp/settings.local.json /repo/.claude/settings.local.json
+else
+    jq -n --arg commit "$COMMIT_ATTR" --arg pr "$PR_ATTR" \
+        '{ attribution: { commit: $commit, pr: $pr } }' > /repo/.claude/settings.local.json
+fi
+echo "[entrypoint] Attribution set: ${COMMIT_ATTR}"
 
 echo "[entrypoint] Writing readiness marker"
 touch /tmp/worker-ready
