@@ -16,9 +16,11 @@ IntexuraOS reimagines personal productivity as an **AI-first system**. Instead o
 
 ## What's New in v3.0.0
 
-### Autonomous Code Execution Pipeline
+### The Self-Building System
 
-This release introduces a complete autonomous coding pipeline, an in-app AI assistant, worker orchestration infrastructure, and a 21-package shared library ecosystem:
+v3.0.0 is a paradigm shift: IntexuraOS can now **modify its own codebase autonomously**. Say "fix the login redirect" via WhatsApp, and receive a pull request with tests, CI passing, and Linear issue updated — without touching a keyboard. This is the culmination of the agent architecture: the platform that builds itself.
+
+### Autonomous Code Execution Pipeline
 
 **Code Agent (code-agent)**
 
@@ -26,7 +28,6 @@ This release introduces a complete autonomous coding pipeline, an in-app AI assi
 - Multi-layer deduplication (approval event, action ID, SHA-256 dedup key) prevents duplicate work
 - Per-user worker infrastructure with encrypted Cloudflare Access credentials and HMAC signing
 - Rate limiting with concurrent (3), hourly (10), daily ($20), and monthly ($200) caps
-- GitHub PR comment auto-response for `@claude` mentions
 - Retry and feedback loops with Linear issue tracking throughout the lifecycle
 
 **Chat Agent (chat-agent)**
@@ -77,6 +78,15 @@ This release introduces a complete autonomous coding pipeline, an in-app AI assi
 - `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity` provide standardized AI provider wrappers
 - `llm-audit`, `llm-contract`, `llm-factory`, `llm-pricing`, `llm-prompts`, `llm-utils` form the complete LLM management stack
 - `infra-otel` provides zero-code OpenTelemetry distributed tracing and metrics export to Dash0 via `--import` side-effect bootstrap
+
+**Platform Intelligence Improvements**
+
+- Research Notion export: fire-and-forget structured page export with hierarchical child pages and cover images
+- Platform API key fallbacks: users without personal keys get Gemini or Zai models automatically (user key → Gemini → Zai → error)
+- Default model selector: provider-grouped dropdown in Settings, inherited by all agents for quick generation
+- Distributed tracing: OpenTelemetry traces propagate across Pub/Sub, HTTP, and Firestore boundaries to Dash0
+- Prompt versioning: 26+ prompts with semver `version` field and CI-enforced version bumps on content changes
+- 100% branch coverage enforcement across all services with `v8 ignore` category validation
 
 ---
 
@@ -157,53 +167,6 @@ New 3-column layout optimized for workflow visibility:
 - **Planning** — Todo + Backlog (stacked)
 - **In Progress** — In Progress → In Review → To Test
 - **Recently Closed** — Done (last 7 days)
-
----
-
-## What's New Since v3.0.0
-
-### Distributed Tracing and Dev Logging (research-agent v2.4.0)
-
-Research-agent now emits distributed traces to Dash0 via OpenTelemetry and improves local development ergonomics:
-
-- Traces propagate across Pub/Sub, HTTP, and Firestore boundaries — enabled via `INTEXURAOS_DASH0_OTLP_ENDPOINT`
-- Powered by `@intexuraos/infra-otel` preloaded via `--import` flag (zero source-code changes)
-- PM2 log output colorized and human-readable in development; production JSON logging unchanged
-
-### Research Notion Export (v2.2.0)
-
-Completed research reports can be automatically exported to Notion as structured pages:
-
-- Fire-and-forget export triggers after synthesis completes (or manually via `POST /research/:id/export-notion`)
-- Hierarchical page structure: main research page with child LLM report pages
-- Markdown-to-Notion block conversion preserving headings, lists, code, bold, italic, and links
-- Cover images included in Notion pages
-- Configurable target page via export settings UI; duplicate export prevention enforced
-
-### Platform API Key Fallbacks (v2.3.0)
-
-Research-agent now serves users who have not configured their own LLM provider keys:
-
-- **Gemini primary fallback** — `INTEXURAOS_GEMINI_APP_API_KEY` enables `gemini-2.0-flash` for users without a Google API key
-- **Zai secondary fallback** — `INTEXURAOS_ZAI_APP_API_KEY` enables `glm-4.7-flash` when Gemini fallback is unavailable
-- Fallback ordering: user key → Gemini platform key → Zai platform key → error
-
-### Default Model Selection (user-service)
-
-Users can set a preferred fast model that all agents inherit for quick generation tasks:
-
-- Provider-grouped dropdown in Settings; validated against supported model list
-- All subsequent `generate()` calls across every agent default to that model unless overridden
-- Works with platform-owned keys — no personal API key required
-
-### OpenTelemetry Distributed Tracing (infra-otel)
-
-New `@intexuraos/infra-otel` package provides zero-code observability across all 20 services:
-
-- Loaded via PM2 `NODE_OPTIONS: '--import @intexuraos/infra-otel/register'` — no source-code changes
-- OTLP HTTP export of traces and metrics to Dash0 at 30-second intervals
-- Auto-instrumentation for Fastify routes, HTTP/undici calls, DNS, and TCP connections
-- Graceful SIGTERM shutdown; disabled entirely when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset
 
 ---
 
@@ -768,4 +731,4 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ---
 
-**Last updated:** 2026-02-19 (v3.0.0 + v2.4.0 distributed tracing + orchestrator completion verification)
+**Last updated:** 2026-02-19 (v3.0.0 — autonomous code execution, self-building system)
