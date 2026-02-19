@@ -113,6 +113,20 @@ describe('parseChartDefinition', () => {
     expect(() => parseChartDefinition(response)).toThrow('Chart config must be an object');
   });
 
+  it('throws when chart config is JSON null', () => {
+    const response = `
+      CHART_CONFIG_START
+      null
+      CHART_CONFIG_END
+
+      TRANSFORM_INSTRUCTIONS_START
+      Instructions
+      TRANSFORM_INSTRUCTIONS_END
+    `;
+
+    expect(() => parseChartDefinition(response)).toThrow('Chart config must be an object');
+  });
+
   it('throws when chart config includes data property', () => {
     const response = `
       CHART_CONFIG_START

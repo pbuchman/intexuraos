@@ -27,7 +27,7 @@ export const linearIssueTitlePrompt: PromptBuilder<
 > = {
   name: 'linear-issue-title',
   description: 'Generates value-focused Linear issue titles with product owner expertise',
-  version: '1.0.0',
+  version: '1.2.0',
 
   build(input: LinearIssueTitlePromptInput, deps?: LinearIssueTitlePromptDeps): string {
     const maxLength = deps?.maxLength ?? 80;
@@ -42,7 +42,12 @@ YOUR EXPERTISE:
 
 TASK: Generate a concise issue title (max ${String(maxLength)} characters) from this description.
 
+This title appears in the Linear issue list alongside other issues. It must differentiate this issue from siblings at a glance.
+
 RULES BY ISSUE TYPE:
+
+## Type Classification
+If the description spans multiple types (e.g., investigate AND fix), classify by the primary deliverable: fixing = bug, investigating without implementation = research, adding capability = feature.
 
 ## For NEW FEATURES:
 - Lead with the VALUE delivered to users
@@ -72,12 +77,15 @@ GOOD: "Fix calendar showing wrong timezone"   ← specific problem
 BAD:  "Update regex validation"               ← implementation
 GOOD: "Fix phone numbers rejected incorrectly" ← user impact
 
+BAD:  "Naprawić logowanie"                     ← too vague
+GOOD: "Naprawić błąd przekierowania po logowaniu OAuth" ← specific bug
+
 ## For REFACTORING / TECH DEBT:
 - Focus on the BENEFIT to the product/team
 - Use verbs: "Improve", "Simplify", "Accelerate", "Reduce"
 
 BAD:  "Refactor UserService to use repository pattern"
-GOOD: "Improve test coverage for user management"
+GOOD: "Simplify user management for faster onboarding"
 
 BAD:  "Migrate from REST to GraphQL"
 GOOD: "Reduce API response time for dashboard"
