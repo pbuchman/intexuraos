@@ -16,7 +16,7 @@ Complete documentation for all IntexuraOS services, workers, and packages.
 | **claude-worker** | New: Docker container image for isolated Claude Code execution      |
 | **log-cleanup**   | New: Cloud Function for scheduled log retention management          |
 | **vm-lifecycle**  | New: Cloud Functions for GCE VM start/stop lifecycle control        |
-| **21 packages**   | New: All shared packages documented (common, infra, LLM stack)      |
+| **22 packages**   | New: All shared packages documented (common, infra, LLM stack)      |
 
 ## v2.1.0 Highlights (Previous)
 
@@ -185,10 +185,10 @@ Cloud Functions and local services that run outside Cloud Run.
 
 | Worker                                               | Type            | Purpose                                                        | Trigger                     |
 | ---------------------------------------------------- | --------------- | -------------------------------------------------------------- | --------------------------- |
-| [orchestrator](../../workers/orchestrator/README.md) | Local service   | Spawns Claude Code sessions in Docker containers via worktrees | HTTP (HMAC-signed dispatch) |
-| claude-worker                                        | Docker image    | Isolated Claude Code execution environment with git and tools  | Started by orchestrator     |
-| [log-cleanup](../packages/log-cleanup)               | Cloud Function  | Deletes old task logs via code-agent cleanup API               | Pub/Sub (scheduled)         |
-| [vm-lifecycle](../packages/vm-lifecycle)             | Cloud Functions | Starts and stops GCE VM instances with health polling          | HTTP (internal auth)        |
+| [orchestrator](orchestrator/features.md)             | Local service   | Spawns Claude Code sessions in Docker containers via worktrees | HTTP (HMAC-signed dispatch) |
+| [claude-worker](claude-worker/features.md)           | Docker image    | Isolated Claude Code execution environment with git and tools  | Started by orchestrator     |
+| [log-cleanup](log-cleanup/features.md)               | Cloud Function  | Deletes old task logs via code-agent cleanup API               | Pub/Sub (scheduled)         |
+| [vm-lifecycle](vm-lifecycle/features.md)             | Cloud Functions | Starts and stops GCE VM instances with health polling          | HTTP (internal auth)        |
 
 ### Worker Details
 
@@ -224,6 +224,7 @@ Shared libraries used across apps and workers.
 | [infra-sentry](../packages/infra-sentry/README.md)       | Sentry error tracking, Pino log stream, logger factory |
 | [infra-whatsapp](../packages/infra-whatsapp/README.md)   | WhatsApp Cloud API client (send, media, read receipts) |
 | [infra-notion](../packages/infra-notion/README.md)       | Notion API client, token validation, page retrieval    |
+| [infra-otel](../packages/infra-otel/README.md)           | OpenTelemetry SDK bootstrap, distributed tracing and metrics export to Dash0 |
 
 ### LLM Provider Clients
 
@@ -376,13 +377,13 @@ graph TD
 | ---------------------- | -------- |
 | Total Apps             | 20       |
 | Total Workers          | 4        |
-| Total Packages         | 21       |
+| Total Packages         | 22       |
 | Apps with features.md  | 20       |
 | Apps with technical.md | 20       |
 | Apps with tutorial.md  | 10       |
 | Apps with tech-debt.md | 20       |
 | Apps with agent.md     | 20       |
-| Packages with README   | 21       |
+| Packages with README   | 22       |
 | Workers with docs      | 4        |
 | **Coverage**           | **100%** |
 
@@ -422,9 +423,10 @@ graph TD
 - **Error tracking**: [infra-sentry](../packages/infra-sentry/README.md)
 - **Database**: [infra-firestore](../packages/infra-firestore/README.md)
 - **Messaging**: [infra-pubsub](../packages/infra-pubsub/README.md) / [infra-whatsapp](../packages/infra-whatsapp/README.md)
+- **Observability**: [infra-otel](../packages/infra-otel/README.md) / [infra-sentry](../packages/infra-sentry/README.md)
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19
 
-**Components documented:** 20 apps + 4 workers + 21 packages = 45 total (100%)
+**Components documented:** 20 apps + 4 workers + 22 packages = 46 total (100%)

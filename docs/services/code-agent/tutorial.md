@@ -270,3 +270,21 @@ curl -X POST http://localhost:8128/internal/code/detect-zombies \
 ```
 
 **Solution verification:** The response includes `detected` (count of stale tasks) and `interrupted` (count successfully marked as interrupted).
+
+### Exercise 4: Explore PR event deduplication
+
+Fetch events for a specific PR and observe the deduplication in action:
+
+```bash
+curl "http://localhost:8128/code/github-pr-events?repository=intexuraos/intexuraos&pullRequestNumber=42" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+Look at the response:
+
+- Each comment appears **once** even if it was edited (body reflects the latest version).
+- The PR description (`body`) appears only on the **most recent** `pull_request` event.
+- `synchronize` events (new commits pushed) include a `eventUrl` compare link: `https://github.com/org/repo/compare/before...after`.
+- Other events include a direct link to the comment or review on GitHub.
+
+**Solution verification:** If the same PR received 3 commits (3 `synchronize` events) and 1 edited comment, you should see 3 synchronize events (each with a unique compare URL) and 1 comment entry (not 2).

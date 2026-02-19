@@ -66,6 +66,8 @@ interface GlmConfig {
   userId: string; // User ID for usage tracking
   pricing: ModelPricing; // Cost configuration per million tokens
   logger: Logger; // Pino logger for structured logging
+  auditSink?: AuditSink; // Optional audit sink override (defaults to Firestore)
+  usageSink?: UsageSink; // Optional usage sink override (defaults to Firestore)
 }
 ```
 

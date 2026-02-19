@@ -114,4 +114,4 @@ gcloud functions logs read intexuraos-log-cleanup-dev \
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

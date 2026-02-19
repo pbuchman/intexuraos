@@ -193,12 +193,13 @@ sequenceDiagram
 
 ### CommandClassification
 
-| Field          | Type        | Description                                                  |
-| -------------- | ----------- | ------------------------------------------------------------ |
-| `type`         | CommandType | todo, research, note, link, calendar, linear, reminder, code |
-| `confidence`   | number      | 0-1 confidence score                                         |
-| `reasoning`    | string      | LLM explanation for classification                           |
-| `classifiedAt` | string      | ISO 8601 classification timestamp                            |
+| Field           | Type        | Description                                                  |
+| --------------- | ----------- | ------------------------------------------------------------ |
+| `type`          | CommandType | todo, research, note, link, calendar, linear, reminder, code |
+| `confidence`    | number      | 0-1 confidence score                                         |
+| `reasoning`     | string      | LLM explanation for classification                           |
+| `promptVersion` | string      | Semver version of the prompt that produced this result       |
+| `classifiedAt`  | string      | ISO 8601 classification timestamp                            |
 
 ### Confidence Semantics
 
@@ -244,12 +245,14 @@ sequenceDiagram
 
 ### Packages
 
-| Package            | Purpose                         |
-| ------------------ | ------------------------------- |
-| `llm-prompts`      | Classification prompt builder   |
-| `llm-factory`      | LLM client abstraction          |
-| `internal-clients` | Shared user-service HTTP client |
-| `infra-sentry`     | Sentry-enabled logger factory   |
+| Package            | Purpose                                          |
+| ------------------ | ------------------------------------------------ |
+| `llm-prompts`      | Classification prompt builder                    |
+| `llm-factory`      | LLM client abstraction                           |
+| `llm-pricing`      | Fetch and cache LLM pricing from app-settings    |
+| `llm-contract`     | Shared `LlmModels` enum and type contracts       |
+| `internal-clients` | Shared user-service HTTP client                  |
+| `infra-sentry`     | Sentry-enabled logger factory                    |
 
 ### Infrastructure
 
@@ -268,14 +271,16 @@ sequenceDiagram
 
 ## Configuration
 
-| Environment Variable                  | Required | Description                              |
-| ------------------------------------- | -------- | ---------------------------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                    |
-| `INTEXURAOS_ACTIONS_AGENT_URL`        | Yes      | actions-agent base URL                   |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL            |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth          |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                  |
-| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events |
+| Environment Variable                  | Required | Description                                                   |
+| ------------------------------------- | -------- | ------------------------------------------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                                         |
+| `INTEXURAOS_ACTIONS_AGENT_URL`        | Yes      | actions-agent base URL                                        |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL (pricing data fetched at startup) |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                               |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                                       |
+| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                      |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform-level Zai fallback API key for classification        |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key for classification     |
 
 ## Gotchas
 
@@ -292,6 +297,8 @@ sequenceDiagram
 **Pub/Sub push authentication** - Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls.
 
 **Archive vs delete** - Classified commands can only be archived, not deleted. Only received/pending/failed can be deleted.
+
+**Pricing context at startup** - `initServices()` calls `fetchAllPricing()` from `app-settings-service` before accepting any requests. If app-settings-service is unavailable at startup, the service fails to initialize. The pricing context is passed to `createUserServiceClient` so it can select and cost-track LLM models.
 
 **Response contract** - All endpoints use `reply.ok(data)` and `reply.fail(code, message)`. Responses wrap data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
 
@@ -344,6 +351,10 @@ packages/llm-prompts/src/
 
 ## Recent Changes
 
+- **2026-02-19:** Persist `promptVersion` with each classification. `CommandClassification` and `ClassificationResult` now include a `promptVersion: string` field sourced from `commandClassifierPrompt.version`. Stored in Firestore alongside confidence and reasoning. Enables auditability of which prompt version produced each classification result.
+
+- **2026-02-16:** Add LLM pricing context to `initServices()`. `services.ts` now calls `fetchAllPricing()` from `app-settings-service` at startup and passes a `pricingContext` to `createUserServiceClient`. Add optional platform fallback API keys (`INTEXURAOS_ZAI_APP_API_KEY`, `INTEXURAOS_GEMINI_APP_API_KEY`). Add `@intexuraos/llm-pricing` and `@intexuraos/llm-contract` package dependencies.
+
 - **2026-02-08:** Add `code` command/action type for programming-related commands. Adopt standardized response contract (`reply.ok()`/`reply.fail()`). Migrate to Sentry-enabled logging via `createAppLogger()`. Remove local user service client adapter; import `UserServiceClient` directly from `@intexuraos/internal-clients`. Add `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` and `INTEXURAOS_APP_SETTINGS_SERVICE_URL` to required env vars. Delete `infra/user/` directory and `domain/ports/userServiceClient.ts`.
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

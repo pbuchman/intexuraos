@@ -61,6 +61,8 @@ API-docs-hub provides centralized documentation:
 
 ## Recent Changes
 
+- **Dash0 OpenTelemetry integration** - Log pipeline now forwards to Dash0 via OTLP when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is configured, enabling centralized observability across all services
+- **Dev-mode log formatting** - PM2 local runs now display human-readable log output instead of raw JSON, improving debugging experience
 - **PromptVault removed** - PromptVault Service spec removed from aggregated sources following the feature removal (INT-319)
 - **Chat Agent added** - New Chat Agent API spec added to the aggregated documentation hub
 - **15 service specs** - Now aggregates OpenAPI specs from 15 services (was 16, minus PromptVault, plus Chat Agent)

@@ -99,6 +99,8 @@ The factory also re-exports `LLMError` from `@intexuraos/llm-contract` for conve
 
 **Apps (10):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`
 
+**Workers (1):** `orchestrator`
+
 ## Recent Changes
 
 | Commit   | Description                                        | Age     |

@@ -1,6 +1,6 @@
 # Web Agent - Technical Debt
 
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-19
 **Analysis Run:** Development branch documentation update
 
 ---
@@ -116,20 +116,25 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 
 ## Resolved Issues
 
-| Date       | Issue                                      | Resolution                                           |
-| ---------- | ------------------------------------------ | ---------------------------------------------------- |
-| 2026-02-08 | INT-533 Summaries describing platforms     | Added CONTENT FOCUS section to summary prompts       |
-| 2026-02-08 | Response contract violations               | Migrated internalRoutes to reply.ok() / reply.fail() |
-| 2026-02-08 | Raw pino() logger usage                    | Migrated to createAppLogger() for Sentry integration |
-| 2026-02-08 | INT-408 Missing env var registration       | Added USER_SERVICE_URL and APP_SETTINGS_SERVICE_URL  |
-| 2026-02-08 | No specific error for Crawl4AI rate limits | Added RATE_LIMITED error code for HTTP 429           |
-| 2026-02-08 | INT-427 Coverage enforcement               | Strict 100% branch coverage with v8 ignore           |
-| 2026-02-08 | INT-301 User service client consolidation  | Removed local infra/user/ re-export wrapper          |
-| 2026-01-25 | Manual user-service client implementation  | Migrated to @intexuraos/internal-clients (INT-269)   |
-| 2026-01-24 | AI summaries returning raw JSON            | Added parseSummaryResponse + repair mechanism        |
-| 2026-01-21 | 403 errors not distinguished from others   | Added ACCESS_DENIED error code                       |
-| 2026-01-20 | Summaries losing source language           | Added "SAME LANGUAGE" instruction to prompt          |
-| 2026-01-18 | Using shared LLM infrastructure            | Switched to user's own LLM keys via user-service     |
+| Date       | Issue                                              | Resolution                                                  |
+| ---------- | -------------------------------------------------- | ----------------------------------------------------------- |
+| 2026-02-19 | PromptBuilder lacked version enforcement           | Added `version: '1.0.0'` to both prompts; CI-enforced      |
+| 2026-02-16 | No distributed tracing                             | Added Dash0 OpenTelemetry via transparent preload module    |
+| 2026-02-15 | `CRAWL4AI_API_KEY` nonstandard naming              | Renamed to `CRAWL4AI_APP_API_KEY` per APP convention        |
+| 2026-02-15 | Platform ZAI model too slow (29s) for summarization | Switched default platform fallback to Gemini 2.5 Flash      |
+| 2026-02-09 | No summarization fallback for users without API key | Added platform ZAI fallback (now secondary to Gemini)       |
+| 2026-02-08 | INT-533 Summaries describing platforms             | Added CONTENT FOCUS section to summary prompts              |
+| 2026-02-08 | Response contract violations                       | Migrated internalRoutes to reply.ok() / reply.fail()        |
+| 2026-02-08 | Raw pino() logger usage                            | Migrated to createAppLogger() for Sentry integration        |
+| 2026-02-08 | INT-408 Missing env var registration               | Added USER_SERVICE_URL and APP_SETTINGS_SERVICE_URL         |
+| 2026-02-08 | No specific error for Crawl4AI rate limits         | Added RATE_LIMITED error code for HTTP 429                  |
+| 2026-02-08 | INT-427 Coverage enforcement                       | Strict 100% branch coverage with v8 ignore                  |
+| 2026-02-08 | INT-301 User service client consolidation          | Removed local infra/user/ re-export wrapper                 |
+| 2026-01-25 | Manual user-service client implementation          | Migrated to @intexuraos/internal-clients (INT-269)          |
+| 2026-01-24 | AI summaries returning raw JSON                    | Added parseSummaryResponse + repair mechanism               |
+| 2026-01-21 | 403 errors not distinguished from others           | Added ACCESS_DENIED error code                              |
+| 2026-01-20 | Summaries losing source language                   | Added "SAME LANGUAGE" instruction to prompt                 |
+| 2026-01-18 | Using shared LLM infrastructure                    | Switched to user's own LLM keys via user-service            |
 
 ---
 
@@ -148,6 +153,18 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 
 **Trade-off:** Slightly more complex code, but better control and user experience.
 
+### Platform LLM Fallback Chain
+
+**Decision:** When user has no API key, fall back to platform Gemini 2.5 Flash → platform ZAI.
+
+**Rationale:**
+
+- ZAI's glm-4.7-flash took 29s for summarization, exceeding HTTP timeouts
+- Gemini 2.5 Flash is faster and already supported in llm-factory
+- Users without configured API keys still get summarization functionality
+
+**Trade-off:** Platform pays API costs for users without keys; keys are optional in `createUserServiceClient()` so services that don't want this behavior keep existing semantics.
+
 ### Browser-Like Headers (INT-191)
 
 **Decision:** OpenGraphFetcher sends Chrome-like headers including Sec-Fetch-\* headers.
@@ -159,6 +176,18 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 - Sec-Fetch headers signal "navigation" behavior
 
 **Trade-off:** May need periodic header updates as Chrome versions change.
+
+### Dash0 OpenTelemetry Preload
+
+**Decision:** Load OpenTelemetry instrumentation via `--import ./dist/otel-register.js` in the Dockerfile CMD.
+
+**Rationale:**
+
+- Transparent to application code — no imports or setup needed in `index.ts`
+- No-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset
+- All 19 services use the same `infra-otel` package pattern
+
+**Trade-off:** Requires `otel-register.js` to be built and copied alongside `index.js` in the Dockerfile.
 
 ---
 

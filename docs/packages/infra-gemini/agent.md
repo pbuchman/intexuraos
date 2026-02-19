@@ -47,6 +47,8 @@ interface GeminiConfig {
   pricing: ModelPricing;
   imagePricing?: ModelPricing;
   logger: Logger;
+  auditSink?: AuditSink; // optional, defaults to Firestore audit sink
+  usageSink?: UsageSink; // optional, defaults to Firestore usage sink
 }
 
 // GeminiError = LLMError from @intexuraos/llm-contract
@@ -107,8 +109,8 @@ if (!result.ok) {
 - `@intexuraos/common-core` -- Result types, getErrorMessage, Logger
 - `@intexuraos/llm-contract` -- LLMClient, NormalizedUsage, TokenUsage, ModelPricing, LlmModels, ImageSize
 - `@intexuraos/llm-prompts` -- buildResearchPrompt
-- `@intexuraos/llm-audit` -- createAuditContext
-- `@intexuraos/llm-pricing` -- createUsageLogger
+- `@intexuraos/llm-audit` -- createAuditContext, AuditSink
+- `@intexuraos/llm-pricing` -- createUsageLogger, UsageSink
 
 ## Constants
 

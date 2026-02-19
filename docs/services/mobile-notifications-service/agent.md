@@ -20,33 +20,33 @@
 
 ```typescript
 interface MobileNotificationsServiceTools {
-  // List notifications with filters
+  // List notifications for authenticated user
   listNotifications(params?: {
-    limit?: number;
-    cursor?: string;
-    source?: string; // Comma-separated
-    app?: string; // Comma-separated
-    title?: string; // Partial match
+    limit?: number;          // 1–100, default 50
+    cursor?: string;         // Pagination cursor
+    source?: string;         // Comma-separated for multiple
+    app?: string;            // Comma-separated for multiple
+    title?: string;          // Case-insensitive partial match
   }): Promise<NotificationsListResult>;
 
-  // Delete a notification (returns empty data object)
+  // Delete a notification (returns empty data object, 200)
   deleteNotification(
     notificationId: string
   ): Promise<{ success: true; data: Record<string, never> }>;
 
   // Get filter options and saved filters
-  getFilters(): Promise<FiltersData>;
+  getFilters(): Promise<NotificationFiltersData>;
 
-  // Create saved filter
+  // Create saved filter (returns 201)
   createSavedFilter(params: {
-    name: string;
+    name: string;          // Required, 1–100 chars
     app?: string[];
     device?: string[];
     source?: string;
     title?: string;
-  }): Promise<SavedFilter>;
+  }): Promise<SavedNotificationFilter>;
 
-  // Delete saved filter
+  // Delete saved filter (returns 204 No Content)
   deleteSavedFilter(filterId: string): Promise<void>;
 }
 ```
@@ -57,12 +57,15 @@ interface MobileNotificationsServiceTools {
 interface MobileNotification {
   id: string;
   userId: string;
-  app: string;
-  title: string;
-  text: string;
-  source: string;
-  device?: string;
-  receivedAt: string;
+  source: string;           // e.g., "tasker"
+  device: string;           // Device name
+  app: string;              // App package name
+  title: string;            // Notification title
+  text: string;             // Notification body content
+  timestamp: number;        // Unix milliseconds from device
+  postTime: string;         // Post time string from device
+  receivedAt: string;       // ISO 8601 server-side receipt time
+  notificationId: string;   // Device-provided idempotency key
 }
 
 interface NotificationsListResult {
@@ -70,19 +73,21 @@ interface NotificationsListResult {
   nextCursor?: string;
 }
 
-interface FiltersData {
+interface NotificationFilterOptions {
+  app: string[];     // App package names seen in notifications
+  device: string[];  // Device names seen in notifications
+  source: string[];  // Sources seen in notifications
+}
+
+interface NotificationFiltersData {
   userId: string;
-  options: {
-    app: string[]; // Available app package names
-    device: string[]; // Available device identifiers
-    source: string[]; // Available sources
-  };
-  savedFilters: SavedFilter[];
+  options: NotificationFilterOptions;
+  savedFilters: SavedNotificationFilter[];
   createdAt: string;
   updatedAt: string;
 }
 
-interface SavedFilter {
+interface SavedNotificationFilter {
   id: string;
   name: string;
   app?: string[];
@@ -103,6 +108,7 @@ interface SavedFilter {
 | **Pagination**     | Maximum 100 notifications per request             |
 | **Device Linked**  | Requires Tasker/Automate integration on Android   |
 | **Filter Options** | Populated dynamically from received notifications |
+| **Idempotency**    | Duplicate `notification_id` per user is silently ignored |
 
 ---
 
@@ -113,14 +119,14 @@ interface SavedFilter {
 ```typescript
 const result = await listNotifications({ limit: 50 });
 // result.notifications contains notification objects
-// result.nextCursor for pagination
+// result.nextCursor for pagination (undefined if no more pages)
 ```
 
 ### Filter by App
 
 ```typescript
 const result = await listNotifications({
-  app: 'com.whatsapp,com.telegram', // Comma-separated
+  app: 'com.whatsapp,com.telegram', // Comma-separated string
 });
 ```
 
@@ -131,7 +137,7 @@ const filter = await createSavedFilter({
   name: 'Work Apps',
   app: ['com.slack', 'com.microsoft.teams'],
 });
-// filter.id can be used for quick access
+// filter.id can be used for later deletion
 ```
 
 ### Get Available Filters
@@ -147,36 +153,53 @@ const filters = await getFilters();
 ## Data Flow
 
 ```
-┌─────────────────┐      ┌─────────────────────────┐      ┌─────────────────┐
-│  Android Device │──────│ Tasker/Automate Script  │──────│ Webhook Endpoint│
-│  (Notification) │      │ (HTTP POST)             │      │ /connect        │
-└─────────────────┘      └─────────────────────────┘      └────────┬────────┘
-                                                                   │
-                                                                   ▼
-                                                          ┌─────────────────┐
-                                                          │   Firestore     │
-                                                          │ notifications   │
-                                                          └─────────────────┘
+┌─────────────────┐      ┌─────────────────────────┐      ┌──────────────────────────┐
+│  Android Device │──────│ Tasker/Automate Script  │──────│ POST /webhooks           │
+│  (Notification) │      │ (HTTP POST + Signature) │      │ X-Mobile-Notifications-  │
+└─────────────────┘      └─────────────────────────┘      │ Signature: <sha256-hash> │
+                                                           └────────────┬─────────────┘
+                                                                        │ hash lookup
+                                                                        │ idempotency check
+                                                                        ▼
+                                                           ┌─────────────────┐
+                                                           │   Firestore     │
+                                                           │ notifications   │
+                                                           └─────────────────┘
 ```
 
 ---
 
 ## Internal Endpoints
 
-| Method | Path                      | Purpose                                             | Response Format                             |
-| ------ | ------------------------- | --------------------------------------------------- | ------------------------------------------- |
-| GET    | `/internal/notifications` | Query notifications (called by data-insights-agent) | `{ success, data }` or `{ success, error }` |
-| POST   | `/connect`                | Receive notifications from device                   | `{ success, data }` or `{ success, error }` |
+| Method | Path                                    | Purpose                                              | Body                                      | Response Format                             |
+| ------ | --------------------------------------- | ---------------------------------------------------- | ----------------------------------------- | ------------------------------------------- |
+| POST   | `/internal/mobile-notifications/query`  | Query notifications (called by data-insights-agent) | `{ userId, filter?, limit? }`             | `{ success, data }` or `{ success, error }` |
+
+Internal endpoint requires `X-Internal-Auth` header with shared secret.
+
+Internal response maps `text → body` and `receivedAt → timestamp` for compatibility:
+
+```typescript
+interface InternalNotification {
+  id: string;
+  app: string;
+  title: string;
+  body: string;      // mapped from notification.text
+  timestamp: string; // mapped from notification.receivedAt (ISO string)
+  source: string;
+}
+```
 
 ---
 
 ## Integration Notes
 
 - Requires Tasker or Automate app on Android device
-- HTTP Request task sends notification data to webhook
-- Device token validates the connection
+- HTTP Request task sends notification data to `/mobile-notifications/webhooks`
+- Device signature validates the connection (SHA-256, stored as hash)
 - Filter options auto-populate as notifications arrive
+- Duplicate detection uses device-provided `notification_id` per user
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

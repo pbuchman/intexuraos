@@ -11,9 +11,24 @@
 | Code Duplicates     | 0     | -        |
 | Deprecations        | 0     | -        |
 
-Last updated: 2026-02-08
+Last updated: 2026-02-19
 
 ## Recent Improvements
+
+### Dev-Mode Log Formatting for PM2 Readability
+
+Added development-mode log stream formatting in `server.ts`:
+
+- **Pattern:** `createLogStream()` from `@intexuraos/infra-sentry` wraps the Pino logger in dev environments
+- **Benefit:** Human-readable log output in PM2 instead of raw JSON, improving local debugging
+- **Change:** Applies only when `NODE_ENV !== 'test'`; production JSON logging unaffected
+
+### PM2 Ecosystem Migration to pnpm --filter
+
+Updated start:local scripts to use `tsx` instead of `node --experimental-strip-types`:
+
+- **Benefit:** More reliable local development startup, consistent with rest of monorepo
+- **Impact:** No runtime behavior change; tooling/DX improvement only
 
 ### INT-198: Pub/Sub Retry for Transient Errors
 

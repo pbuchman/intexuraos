@@ -86,6 +86,7 @@ common-core
        <- infra-claude, infra-gemini, infra-gpt, infra-glm, infra-perplexity
        <- internal-clients
        <- 14 apps
+       <- workers/orchestrator
 ```
 
 ## Usage Patterns

@@ -156,12 +156,12 @@ app.setErrorHandler(createValidationErrorHandler());
 
 ## Recent Changes
 
-| Commit   | Description                                      | Age     |
-| -------- | ------------------------------------------------ | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions   | 12 days |
-| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
-| 4f5a3f96 | Release v1.0.0                                   | 3 weeks |
+| Commit   | Description                                      | Age    |
+| -------- | ------------------------------------------------ | ------ |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner | recent |
+| 21c1528a | Fix release skill to bump all package versions   | recent |
+| 4fa0fed3 | Release v2.0.0                                   | recent |
+| 4f5a3f96 | Release v1.0.0                                   | recent |
 
 ## Source Files
 

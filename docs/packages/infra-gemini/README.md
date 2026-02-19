@@ -73,6 +73,8 @@ interface GeminiConfig {
   pricing: ModelPricing; // Cost configuration for text operations
   imagePricing?: ModelPricing; // Separate pricing for image generation
   logger: Logger; // Pino logger for structured logging
+  auditSink?: AuditSink; // Optional audit sink override (defaults to Firestore)
+  usageSink?: UsageSink; // Optional usage sink override (defaults to Firestore)
 }
 ```
 

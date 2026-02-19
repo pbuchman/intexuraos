@@ -107,7 +107,8 @@ Expected response:
   "capacity": 2,
   "running": 0,
   "available": 2,
-  "githubTokenExpiresAt": "2026-02-08T15:30:00.000Z"
+  "githubTokenExpiresAt": "2026-02-08T15:30:00.000Z",
+  "anthropicOAuth": { "status": "not_configured", "message": "Not configured" }
 }
 ```
 
@@ -314,3 +315,4 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `Image not found`                   | Claude worker image not pulled/built | `docker pull europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest` |
 | Tests skipped (E2E)                 | Docker network or test image missing | See Part 3 prerequisites                                                                                 |
 | `Cannot find module '@intexuraos'`  | Packages not built                   | Run `pnpm build` at repository root                                                                      |
+| Turn metrics always zero            | macOS host (no cgroup v2 exposure)   | Expected on macOS; metrics are non-fatal and show zeros when cgroup path is unavailable                  |

@@ -98,18 +98,16 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                   | Date         |
-| ---------- | ------------------------------------------------------------- | ------------ |
-| `7e4e6188` | Fix code-agent 500 errors and hook test failures              | 6 hours ago  |
-| `6e068bdd` | INT-520: Support retrying cancelled tasks                     | 12 hours ago |
-| `dec3e131` | Fix local orchestrator setup and failed task UI               | 14 hours ago |
-| `8dce7420` | INT-465 Phase 3/4: Task context and feedback endpoint         | 31 hours ago |
-| `38b22d63` | Fix flaky test timeout in codeProcess tests                   | 31 hours ago |
-| `0564c42a` | INT-465: Integrate GLM delegation into Linear + PR comments   | 33 hours ago |
-| `670cceb3` | INT-465 Phase 0: Fix PR event bugs, add issue_comment support | 35 hours ago |
-| `ad92b9c8` | INT-519: Block agents from moving Linear issues to QA/Done    | 2 days ago   |
-| `7b2d8d0c` | INT-486: Unified Linear templates and two-phase execution     | 2 days ago   |
-| `a0f86b66` | INT-524: Implement retry mechanism for failed tasks           | 3 days ago   |
+| Commit     | Description                                                        | Date         |
+| ---------- | ------------------------------------------------------------------ | ------------ |
+| `e5637ce5` | Deduplicate PR body across pull_request events in API response     | 2 hours ago  |
+| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)        | 3 hours ago  |
+| `c1bc9883` | Truncate oversized tool results and unparseable log lines          | 5 hours ago  |
+| `27ef6a7b` | Show compare URL for PR synchronize events in timeline             | 13 hours ago |
+| `60e029a8` | Deduplicate edited comments in PR events API response              | 13 hours ago |
+| `0a48ed4e` | Display comment body on PR events page in GitHub style             | 14 hours ago |
+| `5ead960d` | Add clickable GitHub links to PR event items                       | 16 hours ago |
+| `554b716c` | Add gitHubPRSummaryRepo to ServiceContainer                        | 17 hours ago |
 
 ## API Endpoints
 
@@ -255,9 +253,58 @@ interface UserWorkerSettings {
 }
 ```
 
+### TurnMetrics (subcollection: `code_tasks/{taskId}/turn_metrics`)
+
+Per-turn resource and performance metrics, automatically collected at turn end.
+
+```typescript
+interface TurnMetrics {
+  taskId: string;
+  attempt: number;
+  timestamp: string;
+  // Resource (cgroup-measured)
+  cpuTimeSeconds: number;
+  cpuCores: number;
+  peakMemoryMB: number;
+  // Time classification (session JSONL)
+  wallTimeSeconds: number;
+  apiWaitSeconds: number;
+  toolExecSeconds: number;
+  backgroundWaitSeconds: number;
+  overheadSeconds: number;
+  // Token accounting
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  apiCallCount: number;
+  // Derived
+  cpuUtilizationPercent: number;
+  idlePercent: number;
+}
+```
+
 ### GitHubPREvent (collection: `github-pr-events`)
 
 Normalized GitHub webhook events for PR timeline display.
+
+### GitHubPRSummary (collection: `github-pr-summaries`)
+
+One document per unique PR, upserted on every webhook event. Used for the 30-day PR list view — O(PRs) instead of O(events).
+
+```typescript
+interface GitHubPRSummary {
+  repository: string;
+  pullRequestNumber: number;
+  title: string | null;
+  state: string | null; // 'open' | 'closed'
+  mergedAt: Date | null;
+  lastActivityAt: Date;
+  firstSeenAt: Date;
+}
+```
+
+Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 
 ### PRTaskLock (collection: `pr_task_locks`)
 
@@ -265,14 +312,15 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 
 ## Firestore Collections Owned
 
-| Collection             | Description                                           |
-| ---------------------- | ----------------------------------------------------- |
-| `code_tasks`           | Code execution tasks (subcollection: `logs`)          |
-| `user_spend`           | User cost tracking for rate limiting                  |
-| `user_usage`           | Rate limiting counters (concurrent, hourly, cost)     |
-| `code_worker_settings` | Per-user worker configs with encrypted credentials    |
-| `github-pr-events`     | GitHub PR webhook events for timeline display         |
-| `pr_task_locks`        | Per-PR task locks preventing concurrent modifications |
+| Collection               | Description                                                                |
+| ------------------------ | -------------------------------------------------------------------------- |
+| `code_tasks`             | Code execution tasks (subcollections: `logs`, `turn_metrics`)              |
+| `user_spend`             | User cost tracking for rate limiting                                       |
+| `user_usage`             | Rate limiting counters (concurrent, hourly, cost)                          |
+| `code_worker_settings`   | Per-user worker configs with encrypted credentials                         |
+| `github-pr-events`       | GitHub PR webhook events for timeline display                              |
+| `github-pr-summaries`    | Per-PR rollup documents for O(PRs) list view (30-day window)               |
+| `pr_task_locks`          | Per-PR task locks preventing concurrent modifications                      |
 
 ## Use Cases
 
@@ -356,6 +404,8 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 4. **PR task locks have a 30-minute TTL.** Expired locks are automatically overwritten when a new task attempts to acquire the same lock.
 5. **Cancelled tasks bypass the 5-minute retry cool-off.** Only failed tasks enforce the cool-off period.
 6. **E2E mode replaces all external clients with no-ops.** Set `E2E_MODE=true` to use mock Linear, WhatsApp, and actions-agent clients.
+7. **PR events API applies two deduplication passes.** `GET /code/github-pr-events` runs `deduplicateCommentEvents` (keeps first occurrence, updates body to latest) then `deduplicatePRBody` (removes PR body from all but the most recent `pull_request` event) before returning results. The raw events in Firestore are unmodified.
+8. **`github-pr-summaries` documents use `__` instead of `/` in repository names.** Firestore path separator conflicts with repo slugs, so `owner/repo` becomes `owner__repo#prNumber` as the document ID.
 
 ## File Structure
 
@@ -369,9 +419,11 @@ apps/code-agent/src/
     models/
       codeTask.ts                   # CodeTask, TaskStatus, TaskResult, TaskError
       gitHubPREvent.ts              # GitHub webhook event model
+      gitHubPRSummary.ts            # Per-PR summary for list view
       logChunk.ts                   # Log chunk model
       prTaskLock.ts                 # PR task lock model
       signing.ts                    # Signing error types
+      turnMetrics.ts                # Per-turn CPU/memory/token metrics
       userSpend.ts                  # User spend tracking model
       userUsage.ts                  # User usage + DEFAULT_LIMITS
       worker.ts                    # WorkerConfig, WorkerHealth, WorkerError
@@ -384,8 +436,10 @@ apps/code-agent/src/
     repositories/
       codeTaskRepository.ts         # CodeTask CRUD + dedup interface
       gitHubPREventRepository.ts    # GitHub PR event repository interface
+      gitHubPRSummaryRepository.ts  # PR summary repository interface
       logChunkRepository.ts         # Log chunk storage interface
       prTaskLockRepository.ts       # PR task lock interface
+      turnMetricsRepository.ts      # Turn metrics storage interface
     services/
       linearIssueService.ts         # Linear issue management service
       metrics.ts                    # MetricsClient interface
@@ -413,6 +467,7 @@ apps/code-agent/src/
       encryption.ts                # AES-256-GCM encryption for worker creds
       firestorePRTaskLockRepository.ts  # PR task lock Firestore impl
       gitHubPREventsRepository.ts  # GitHub PR events Firestore impl
+      gitHubPRSummariesRepository.ts    # PR summary Firestore impl (upsert + list)
       userUsageFirestoreRepository.ts   # User usage Firestore impl
       workerSettingsRepository.ts  # Worker settings Firestore impl
     http/
@@ -420,6 +475,8 @@ apps/code-agent/src/
     repositories/
       firestoreCodeTaskRepository.ts    # CodeTask Firestore impl
       firestoreLogChunkRepository.ts    # LogChunk Firestore impl
+      firestoreLogLineRepository.ts     # LogLine Firestore impl
+      firestoreTurnMetricsRepository.ts # TurnMetrics subcollection impl
     services/
       hmacSigning.ts               # HMAC signing utilities
       statusMirrorServiceImpl.ts   # Action status mirroring impl
@@ -437,7 +494,8 @@ apps/code-agent/src/
     workerSettingsRoutes.ts        # Worker settings CRUD routes
     code/
       index.ts                     # Code route exports
-      github-pre-events.ts        # GitHub PR events query route
+      github-pre-events.ts        # GitHub PR events query route (with dedup passes)
+      extractEventUrl.ts           # Extract clickable GitHub URLs from webhook payloads
     webhooks/
       index.ts                     # Webhook route aggregator
       github.ts                    # GitHub webhook handler

@@ -33,11 +33,13 @@ Claude Worker wraps each Claude Code session in a purpose-built Docker container
 
 1. The orchestrator receives a task assignment from the code-agent service
 2. It creates a git worktree for the task's branch and prepares a per-task secrets directory
-3. A claude-worker container starts with the worktree mounted at `/repo` and secrets at `/secrets`
-4. The entrypoint authenticates GCP, loads the GitHub token, and launches Claude in interactive mode
-5. The orchestrator sends the system prompt via Docker attach stdin
-6. Claude executes the task within the sandboxed environment
-7. On completion or timeout, the orchestrator destroys the container and cleans up secrets
+3. The orchestrator writes `system-prompt.txt` and `user-prompt.txt` into the secrets directory
+4. A claude-worker container starts in managed mode (`CLAUDE_MANAGED_MODE=1`) and performs setup: GCP auth, pnpm install, git identity, attribution config
+5. The container writes `/tmp/worker-ready` once setup is complete
+6. The orchestrator invokes `docker exec <container> /entrypoint.sh run-attempt` to run Claude in `--print` mode
+7. Claude executes the task, reading prompts from `/secrets/system-prompt.txt` and `/secrets/user-prompt.txt`
+8. For resume attempts, the orchestrator updates the prompt files and calls `run-attempt` again with `CLAUDE_CONTINUE=1`
+9. On completion or timeout, the orchestrator destroys the container and cleans up secrets
 
 ### Multi-Model Worker Types
 
@@ -61,9 +63,17 @@ The `Dockerfile.test` builds a lightweight test image that replaces the real Cla
 
 **Automatic credential rotation** - GitHub tokens are refreshed every 30 minutes by the orchestrator's TokenRefresher and written to the container's `/secrets/github-token` file. The entrypoint watches for token changes in the background.
 
-**Pre-baked developer toolchain** - The image includes git, pnpm, ripgrep, fd, bat, jq, terraform, gcloud CLI, and GitHub CLI, matching the tools used across 1,935 analyzed commands from real development sessions.
+**Pre-baked developer toolchain** - The image includes git, pnpm, ripgrep, fd, bat, jq, terraform, gcloud CLI, GitHub CLI, and Chromium, matching the tools used across 1,935 analyzed commands from real development sessions.
+
+**Pre-installed MCP servers** - `@upstash/context7-mcp`, `@sentry/mcp-server`, and `@playwright/mcp` are globally installed at build time. On Alpine, `npx` downloads to noexec-restricted temp directories at runtime, causing permission errors; global installation avoids this entirely.
 
 **Onboarding-free startup** - Claude configuration defaults are baked into the image at `/opt/claude-defaults/` and copied into the tmpfs home directory at startup, skipping the interactive onboarding flow.
+
+**Managed execution mode** - With `CLAUDE_MANAGED_MODE=1`, the container stays alive after setup and accepts multiple work invocations via `docker exec /entrypoint.sh run-attempt`. This amortizes the startup cost (pnpm install, GCP auth) across retry and resume attempts.
+
+**Automatic dependency installation** - The entrypoint runs `pnpm install --frozen-lockfile` at startup if `pnpm-lock.yaml` is present in `/repo`, ensuring the repo's dependencies are available for CI commands without a separate install step.
+
+**Randomized AI attribution** - Each container generates a unique commit/PR attribution line (e.g. "Crafted with love by 🤖 Intex") from a list of 25 verbs, written to `/repo/.claude/settings.local.json` so every task has a distinct identity.
 
 ## Limitations
 
@@ -74,3 +84,5 @@ The `Dockerfile.test` builds a lightweight test image that replaces the real Cla
 **No persistent state** - The `/home/claude` tmpfs mount means all session state, caches, and MCP server data are lost when the container stops. Each task starts from a clean slate.
 
 **Host iptables required for full network isolation** - On production GCE VMs, iptables rules must be applied at the host level to block metadata server and private IP access. On macOS with Docker Desktop, network isolation relies on the VM layer.
+
+**pnpm store is container-local** - Dependencies are installed into `/home/claude/pnpm-store` on the tmpfs, so every container cold-starts without cache. A shared host-side pnpm store volume would speed up subsequent installs but is not yet implemented.

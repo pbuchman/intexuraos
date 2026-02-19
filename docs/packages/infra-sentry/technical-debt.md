@@ -34,19 +34,29 @@ This depends on an undocumented Pino internal. A Pino major version bump could b
 
 **Impact:** Medium. Breakage would be caught by tests, but the fix might require a different approach.
 
-### 4. No Sentry flush on process exit
+### 4. OTel transport singleton uses `process.env` mutation
+
+`otelTransport.ts` directly sets `process.env['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT']` and `process.env['OTEL_EXPORTER_OTLP_LOGS_HEADERS']` before starting the pino transport worker thread. This is necessary because the worker thread receives these env vars from the parent process, but it is a side effect with global scope.
+
+**Impact:** Low. Only runs once (singleton guard), and only when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is set. The `_resetOtelTransport()` internal function clears state for tests.
+
+**Recommendation:** Document the env var mutation explicitly so future maintainers understand why it is necessary.
+
+---
+
+### 5. No Sentry flush on process exit
 
 The package does not call `Sentry.close()` or `Sentry.flush()` during graceful shutdown. Events buffered in-memory at shutdown time may be lost.
 
 **Impact:** Medium in production. The last few error events before a crash or scale-to-zero could be silently dropped.
 
-### 5. `sanitizeHeaders` is not exported
+### 6. `sanitizeHeaders` is not exported
 
 The header sanitization function in `fastify.ts` is private. Other packages or middleware that need consistent header redaction cannot reuse it.
 
 **Impact:** Low. Could lead to inconsistent redaction if other modules implement their own.
 
-### 6. Sentry scope in stream does not set tags
+### 7. Sentry scope in stream does not set tags
 
 The stream-based `sendLogToSentry` function calls `scope.setExtras()` for structured context but does not set Sentry tags (like `service`, `userId`). The Fastify error handler does set tags. This inconsistency means logs captured via the stream have less structured metadata in Sentry.
 

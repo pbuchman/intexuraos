@@ -1,7 +1,7 @@
 # Commands Agent - Technical Debt
 
-**Last Updated:** 2026-02-08
-**Analysis Run:** Service documentation generation (v2.2.0 context)
+**Last Updated:** 2026-02-19
+**Analysis Run:** Service documentation generation (v2.3.0 context)
 
 ---
 
@@ -150,6 +150,10 @@ No deprecated API usage detected.
 
 Commands-agent creates actions via HTTP to actions-agent. If actions-agent is unavailable, commands fail with `failed` status. Consider circuit breaker pattern for resilience.
 
+### app-settings-service startup dependency
+
+`initServices()` now calls `fetchAllPricing()` from `app-settings-service` at startup before accepting requests. If app-settings-service is unreachable at boot, commands-agent fails to initialize entirely. This creates a hard coupling at startup that did not previously exist. Consider graceful degradation (e.g., cached/default pricing) to improve resilience.
+
 ### Prompt versioning
 
 Classification prompt lives in `packages/llm-prompts`. Changes require package rebuild and service redeploy. Consider runtime prompt loading for faster iteration.
@@ -160,4 +164,4 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

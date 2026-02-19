@@ -147,6 +147,31 @@ If Sentry itself fails, the error handler logs a warning and continues respondin
 
 ---
 
+### `createLogStream(): ReturnType<typeof pino.multistream>`
+
+Create the appropriate Pino log stream for the current environment. This is the recommended way to configure the Fastify logger stream in `server.ts`.
+
+```typescript
+import { createLogStream } from '@intexuraos/infra-sentry';
+
+const app = Fastify({
+  logger: {
+    level: 'info',
+    stream: createLogStream(),
+  },
+});
+```
+
+Behavior:
+- **Development (`NODE_ENV=development`):** Formatted, colorized output via `createDevOutputStream`
+- **Production:** Raw JSON to stdout (`pino.destination` async)
+- **Both modes:** Sentry stream attached when `INTEXURAOS_SENTRY_DSN` is set
+- **OTel transport:** `pino-opentelemetry-transport` stream added when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is set
+
+This function replaces the 3-line boilerplate previously required in every `server.ts`.
+
+---
+
 ### `sendToSentry(level, message, context?): void`
 
 Manually send an error or warning to Sentry outside of the automatic log integration.
@@ -181,8 +206,9 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 | ------------------------- | ------------------------------------------------------ |
 | `@intexuraos/common-core` | `getLogLevel`, `serializeError`, `Logger`              |
 | `@sentry/node`            | Sentry SDK (`init`, `captureException`, etc.)          |
-| `fastify`                 | Type definitions for `FastifyInstance`, `FastifyError` |
-| `pino`                    | Logger creation and multistream API                    |
+| `fastify`                      | Type definitions for `FastifyInstance`, `FastifyError` |
+| `pino`                         | Logger creation and multistream API                    |
+| `pino-opentelemetry-transport` | Pino transport that forwards logs to Dash0 via OTLP    |
 
 ---
 
@@ -247,14 +273,20 @@ packages/infra-sentry/
     index.ts                          # Package entry: re-exports all public API
     init.ts                           # initSentry(), SentryConfig
     transport.ts                      # createSentryStream(), sendToSentry(), isSentryConfigured(), createSentryTransport()
-    transport-types.d.ts              # LogEvent, TransportDestination type definitions
+    transport-types.d.ts              # LogEvent, TransportDestination [unused, legacy]
     fastify.ts                        # setupSentryErrorHandler(), sanitizeHeaders()
     appLogger.ts                      # createAppLogger(), AppLoggerConfig
+    logStream.ts                      # createLogStream() — unified stream factory
+    devStream.ts                      # createDevOutputStream() — colorized dev-mode formatter
+    otelTransport.ts                  # getOtelTransport() — pino-opentelemetry-transport singleton
     __tests__/
       init.test.ts                    # Tests for initSentry
       transport.test.ts               # Tests for stream and transport functions
       fastify.test.ts                 # Tests for Fastify error handler
       appLogger.test.ts               # Tests for createAppLogger
+      logStream.test.ts               # Tests for createLogStream
+      devStream.test.ts               # Tests for createDevOutputStream
+      otelTransport.test.ts           # Tests for getOtelTransport singleton
   package.json
   tsconfig.json
 ```

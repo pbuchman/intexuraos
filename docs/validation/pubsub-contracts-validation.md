@@ -1,529 +1,262 @@
 # Pub/Sub Contracts Cross-Validation Report
 
-**Generated:** 2026-02-08
+**Date:** 2026-02-19
 **Branch:** development
-**Methodology:** Documentation-first analysis, then code/Terraform validation
+**Scope:** All Pub/Sub topics, publishers, subscribers, and IAM permissions across IntexuraOS
 
 ---
 
-## Summary
+## Executive Summary
 
-| Metric                                  | Count |
-| --------------------------------------- | ----- |
-| Total unique Pub/Sub topics             | 14    |
-| Topics with matching docs + code        | 12    |
-| Discrepancies found (docs vs docs)      | 3     |
-| Discrepancies found (docs vs code)      | 5     |
-| Discrepancies found (code vs Terraform) | 1     |
-| Stale/obsolete references               | 2     |
+| Category                        | Count |
+| ------------------------------- | ----- |
+| Total Terraform topics          | 15    |
+| Topics with active publishers   | 14    |
+| Topics with active subscribers  | 15    |
+| CRITICAL discrepancies          | 0     |
+| HIGH discrepancies              | 1     |
+| MEDIUM discrepancies            | 3     |
+| LOW discrepancies               | 3     |
+
+**Overall health:** The IAM permission matrix is correct and all push subscription endpoints match active route handlers. One dead publisher class exists in the codebase and documentation topic names are systematically outdated.
 
 ---
 
 ## Complete Topic Inventory
 
-### All Topics (Terraform-defined)
+All topics use the `pubsub-push` Terraform module (HTTP push subscriptions with OIDC authentication). All topics include a dead-letter queue (DLQ) topic and pull subscription.
 
-| #   | Topic Name (Terraform)                      | Module                            | Push Endpoint                                                | Subscriber Service |
-| --- | ------------------------------------------- | --------------------------------- | ------------------------------------------------------------ | ------------------ |
-| 1   | `intexuraos-whatsapp-media-cleanup-{env}`   | `pubsub_media_cleanup`            | `whatsapp-service/internal/whatsapp/pubsub/media-cleanup`    | whatsapp-service   |
-| 2   | `intexuraos-whatsapp-webhook-process-{env}` | `pubsub_whatsapp_webhook_process` | `whatsapp-service/internal/whatsapp/pubsub/process-webhook`  | whatsapp-service   |
-| 3   | `intexuraos-whatsapp-transcription-{env}`   | `pubsub_whatsapp_transcription`   | `whatsapp-service/internal/whatsapp/pubsub/transcribe-audio` | whatsapp-service   |
-| 4   | `intexuraos-commands-ingest-{env}`          | `pubsub_commands_ingest`          | `commands-agent/internal/commands`                           | commands-agent     |
-| 5   | `intexuraos-actions-queue-{env}`            | `pubsub_actions_queue`            | `actions-agent/internal/actions/process`                     | actions-agent      |
-| 6   | `intexuraos-research-process-{env}`         | `pubsub_research_process`         | `research-agent/internal/llm/pubsub/process-research`        | research-agent     |
-| 7   | `intexuraos-llm-analytics-{env}`            | `pubsub_llm_analytics`            | `research-agent/internal/llm/pubsub/report-analytics`        | research-agent     |
-| 8   | `intexuraos-llm-call-{env}`                 | `pubsub_llm_call`                 | `research-agent/internal/llm/pubsub/process-llm-call`        | research-agent     |
-| 9   | `intexuraos-whatsapp-send-{env}`            | `pubsub_whatsapp_send`            | `whatsapp-service/internal/whatsapp/pubsub/send-message`     | whatsapp-service   |
-| 10  | `intexuraos-approval-reply-{env}`           | `pubsub_approval_reply`           | `actions-agent/internal/actions/approval-reply`              | actions-agent      |
-| 11  | `intexuraos-bookmark-enrich-{env}`          | `pubsub_bookmark_enrich`          | `bookmarks-agent/internal/bookmarks/pubsub/enrich`           | bookmarks-agent    |
-| 12  | `intexuraos-bookmark-summarize-{env}`       | `pubsub_bookmark_summarize`       | `bookmarks-agent/internal/bookmarks/pubsub/summarize`        | bookmarks-agent    |
-| 13  | `intexuraos-todos-processing-{env}`         | `pubsub_todos_processing`         | `todos-agent/internal/todos/pubsub/todos-processing`         | todos-agent        |
-| 14  | `intexuraos-calendar-preview-{env}`         | `pubsub_calendar_preview`         | `calendar-agent/internal/calendar/generate-preview`          | calendar-agent     |
+| # | Terraform Module                    | Topic Name                                      | Push Endpoint                                   | Ack Deadline | Subscriber SA       |
+| - | ----------------------------------- | ----------------------------------------------- | ----------------------------------------------- | ------------ | ------------------- |
+| 1 | `pubsub_actions_queue`              | `intexuraos-actions-queue-{env}`                | `/internal/actions/process`                     | 60s          | actions_agent       |
+| 2 | `pubsub_approval_reply`             | `intexuraos-approval-reply-{env}`               | `/internal/actions/approval-reply`              | 60s          | actions_agent       |
+| 3 | `pubsub_bookmark_enrich`            | `intexuraos-bookmark-enrich-{env}`              | `/internal/bookmarks/pubsub/enrich`             | 60s          | bookmarks_agent     |
+| 4 | `pubsub_bookmark_summarize`         | `intexuraos-bookmark-summarize-{env}`           | `/internal/bookmarks/pubsub/summarize`          | 120s ¹       | bookmarks_agent     |
+| 5 | `pubsub_calendar_preview`           | `intexuraos-calendar-preview-{env}`             | `/internal/calendar/generate-preview`           | 120s         | calendar_agent      |
+| 6 | `pubsub_commands_ingest`            | `intexuraos-commands-ingest-{env}`              | `/internal/commands`                            | 60s          | commands_agent      |
+| 7 | `pubsub_llm_analytics`              | `intexuraos-llm-analytics-{env}`                | `/internal/llm/pubsub/report-analytics`         | 300s         | research_agent      |
+| 8 | `pubsub_llm_call`                   | `intexuraos-llm-call-{env}`                     | `/internal/llm/pubsub/process-llm-call`         | 600s ²       | research_agent      |
+| 9 | `pubsub_media_cleanup`              | `intexuraos-whatsapp-media-cleanup-{env}`       | `/internal/whatsapp/pubsub/media-cleanup`       | 60s          | whatsapp_service    |
+| 10| `pubsub_research_process`           | `intexuraos-research-process-{env}`             | `/internal/llm/pubsub/process-research`         | 600s ²       | research_agent      |
+| 11| `pubsub_todos_processing`           | `intexuraos-todos-processing-{env}`             | `/internal/todos/pubsub/todos-processing`       | 60s          | todos_agent         |
+| 12| `pubsub_whatsapp_send`              | `intexuraos-whatsapp-send-{env}`                | `/internal/whatsapp/pubsub/send-message`        | 60s          | whatsapp_service    |
+| 13| `pubsub_whatsapp_transcription`     | `intexuraos-whatsapp-transcription-{env}`       | `/internal/whatsapp/pubsub/transcribe-audio`    | 600s ²       | whatsapp_service    |
+| 14| `pubsub_whatsapp_webhook_process`   | `intexuraos-whatsapp-webhook-process-{env}`     | `/internal/whatsapp/pubsub/process-webhook`     | 120s         | whatsapp_service    |
+| 15| `snapshot_refresh_pubsub`           | `snapshot-refresh-{env}`                        | `/internal/snapshots/refresh`                   | 600s ²       | data_insights_agent |
 
-### Non-module Topics (standalone resources)
-
-| Topic Name                          | Defined In                        | Purpose                                            |
-| ----------------------------------- | --------------------------------- | -------------------------------------------------- |
-| `intexuraos-code-log-cleanup-{env}` | `google_pubsub_topic.log_cleanup` | Cloud Scheduler triggers log cleanup in code-agent |
+¹ Custom retry: min 30s backoff, max 50 delivery attempts (Crawl4AI resilience window)
+² 600s = GCP maximum ack deadline (used for long-running AI tasks)
 
 ---
 
-## Publisher-to-Subscriber Mapping
+## Publisher–Subscriber Map
 
-### Topic: `intexuraos-whatsapp-media-cleanup-{env}`
+| Topic                                           | Publisher(s)                                                   | Subscriber          | Pattern                                     |
+| ----------------------------------------------- | -------------------------------------------------------------- | ------------------- | ------------------------------------------- |
+| `intexuraos-actions-queue-{env}`                | commands-agent, actions-agent                                  | actions-agent       | Fan-out + self-loop for deferred work       |
+| `intexuraos-approval-reply-{env}`               | whatsapp-service                                               | actions-agent       | User approval responses                     |
+| `intexuraos-bookmark-enrich-{env}`              | bookmarks-agent                                                | bookmarks-agent     | Self-loop: async link metadata fetch        |
+| `intexuraos-bookmark-summarize-{env}`           | bookmarks-agent                                                | bookmarks-agent     | Self-loop: async AI summarization           |
+| `intexuraos-calendar-preview-{env}`             | actions-agent                                                  | calendar-agent      | Cross-service preview generation            |
+| `intexuraos-commands-ingest-{env}`              | whatsapp-service                                               | commands-agent      | Entry point for user commands from WhatsApp |
+| `intexuraos-llm-analytics-{env}`                | *(dead code — see D-1)*                                        | research-agent      | **INACTIVE** — no active publisher          |
+| `intexuraos-llm-call-{env}`                     | research-agent                                                 | research-agent      | Self-loop: individual LLM call dispatch     |
+| `intexuraos-whatsapp-media-cleanup-{env}`       | whatsapp-service                                               | whatsapp-service    | Self-loop: deferred media expiry cleanup    |
+| `intexuraos-research-process-{env}`             | research-agent                                                 | research-agent      | Self-loop: async research task execution    |
+| `intexuraos-todos-processing-{env}`             | todos-agent                                                    | todos-agent         | Self-loop: AI todo item extraction          |
+| `intexuraos-whatsapp-send-{env}`                | actions-agent, research-agent, bookmarks-agent, code-agent    | whatsapp-service    | Multi-publisher notification bus            |
+| `intexuraos-whatsapp-transcription-{env}`       | whatsapp-service                                               | whatsapp-service    | Self-loop: audio-to-text transcription      |
+| `intexuraos-whatsapp-webhook-process-{env}`     | whatsapp-service                                               | whatsapp-service    | Self-loop: async webhook processing         |
+| `snapshot-refresh-{env}`                        | Cloud Scheduler                                                | data-insights-agent | Scheduled trigger (not a service publisher) |
 
-| Aspect         | Value                    |
-| -------------- | ------------------------ |
-| Event type     | `whatsapp.media.cleanup` |
-| Publisher(s)   | whatsapp-service         |
-| Subscriber     | whatsapp-service         |
-| TF permissions | `whatsapp_service`       |
-| Docs match     | YES                      |
+**Note:** `ExtractLinkPreviewsEvent` from whatsapp-service is published to `intexuraos-whatsapp-webhook-process-{env}` — it reuses the webhook-process topic, **not** a dedicated link-preview topic. See D-4.
 
-### Topic: `intexuraos-whatsapp-webhook-process-{env}`
+---
 
-| Aspect         | Value                                                      |
-| -------------- | ---------------------------------------------------------- |
-| Event types    | `whatsapp.webhook.process`, `whatsapp.linkpreview.extract` |
-| Publisher(s)   | whatsapp-service                                           |
-| Subscriber     | whatsapp-service                                           |
-| TF permissions | `whatsapp_service`                                         |
-| Docs match     | PARTIAL (see Discrepancy D1)                               |
+## IAM Permission Matrix
 
-### Topic: `intexuraos-whatsapp-transcription-{env}`
+All IAM grants use `roles/pubsub.publisher`. Verified against Terraform `publisher_service_accounts` maps in `terraform/environments/dev/main.tf`.
 
-| Aspect         | Value                       |
-| -------------- | --------------------------- |
-| Event type     | `whatsapp.audio.transcribe` |
-| Publisher(s)   | whatsapp-service            |
-| Subscriber     | whatsapp-service            |
-| TF permissions | `whatsapp_service`          |
-| Docs match     | YES                         |
+| Service Account  | Topics Granted Publisher IAM                                                                                  | Active in Code? |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- | --------------- |
+| whatsapp_service | media_cleanup, webhook_process, transcription, commands_ingest, whatsapp_send, approval_reply                | YES ✓           |
+| commands_agent   | actions_queue                                                                                                 | YES ✓           |
+| actions_agent    | actions_queue, whatsapp_send, calendar_preview                                                                | YES ✓           |
+| research_agent   | research_process, **llm_analytics** *(dead code)*, llm_call, whatsapp_send                                  | PARTIAL ⚠       |
+| bookmarks_agent  | bookmark_enrich, bookmark_summarize, whatsapp_send                                                            | YES ✓           |
+| code_agent       | whatsapp_send                                                                                                 | YES ✓           |
+| todos_agent      | todos_processing                                                                                              | YES ✓           |
+| cloud_scheduler  | snapshot_refresh                                                                                              | YES ✓           |
 
-### Topic: `intexuraos-commands-ingest-{env}`
+**research_agent IAM note:** Has publisher IAM for `llm_analytics` but `AnalyticsEventPublisherImpl` is not wired into the ServiceContainer. IAM grant is harmless but unnecessary. See D-1.
 
-| Aspect         | Value              |
-| -------------- | ------------------ |
-| Event type     | `command.ingest`   |
-| Publisher(s)   | whatsapp-service   |
-| Subscriber     | commands-agent     |
-| TF permissions | `whatsapp_service` |
-| Docs match     | YES                |
+---
 
-### Topic: `intexuraos-actions-queue-{env}`
+## REQUIRED_ENV Validation
 
-| Aspect         | Value                             |
-| -------------- | --------------------------------- |
-| Event type     | `action.created`                  |
-| Publisher(s)   | commands-agent, actions-agent     |
-| Subscriber     | actions-agent                     |
-| TF permissions | `commands_agent`, `actions_agent` |
-| Docs match     | YES                               |
+| Service          | Env Var                                    | REQUIRED_ENV? | Terraform env_vars? | Status  |
+| ---------------- | ------------------------------------------ | ------------- | ------------------- | ------- |
+| actions-agent    | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`          | YES           | YES                 | OK ✓    |
+| actions-agent    | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | YES           | YES                 | OK ✓    |
+| actions-agent    | `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC` | YES           | YES                 | OK ✓    |
+| bookmarks-agent  | `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`        | YES           | YES                 | OK ✓    |
+| bookmarks-agent  | `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`     | YES           | YES                 | OK ✓    |
+| bookmarks-agent  | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | YES           | YES                 | OK ✓    |
+| commands-agent   | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`          | YES           | YES                 | OK ✓    |
+| code-agent       | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | PROD_ONLY ³   | YES                 | OK ✓    |
+| research-agent   | `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | YES           | YES                 | OK ✓    |
+| research-agent   | `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | YES           | YES                 | OK ✓    |
+| research-agent   | `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC`    | **NO** ⚠     | YES                 | D-2 ⚠  |
+| research-agent   | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | YES           | YES                 | OK ✓    |
+| todos-agent      | `INTEXURAOS_TODOS_PROCESSING_TOPIC`        | YES           | YES                 | D-5 ⚠  |
+| whatsapp-service | `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`    | YES           | YES                 | OK ✓    |
+| whatsapp-service | `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`  | YES           | YES                 | OK ✓    |
+| whatsapp-service | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | YES           | YES                 | OK ✓    |
+| whatsapp-service | `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`  | YES           | YES                 | OK ✓    |
+| whatsapp-service | `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`    | YES           | YES                 | OK ✓    |
+| whatsapp-service | `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`   | YES           | YES                 | OK ✓    |
+| data-insights    | *(none — Cloud Scheduler pushes directly)* | N/A           | N/A                 | OK ✓    |
 
-### Topic: `intexuraos-research-process-{env}`
-
-| Aspect         | Value              |
-| -------------- | ------------------ |
-| Event type     | `research.process` |
-| Publisher(s)   | research-agent     |
-| Subscriber     | research-agent     |
-| TF permissions | `research_agent`   |
-| Docs match     | YES                |
-
-### Topic: `intexuraos-llm-analytics-{env}`
-
-| Aspect         | Value                               |
-| -------------- | ----------------------------------- |
-| Event type     | `llm.report`                        |
-| Publisher(s)   | research-agent (NOT WIRED - see D4) |
-| Subscriber     | research-agent                      |
-| TF permissions | `research_agent`                    |
-| Docs match     | PARTIAL (see Discrepancy D4)        |
-
-### Topic: `intexuraos-llm-call-{env}`
-
-| Aspect         | Value            |
-| -------------- | ---------------- |
-| Event type     | `llm.call`       |
-| Publisher(s)   | research-agent   |
-| Subscriber     | research-agent   |
-| TF permissions | `research_agent` |
-| Docs match     | YES              |
-
-### Topic: `intexuraos-whatsapp-send-{env}`
-
-| Aspect         | Value                                                      |
-| -------------- | ---------------------------------------------------------- |
-| Event type     | `whatsapp.message.send`                                    |
-| Publisher(s)   | actions-agent, research-agent, bookmarks-agent, code-agent |
-| Subscriber     | whatsapp-service                                           |
-| TF permissions | `actions_agent`, `research_agent`, `bookmarks_agent`       |
-| Docs match     | PARTIAL (see Discrepancy D5)                               |
-
-### Topic: `intexuraos-approval-reply-{env}`
-
-| Aspect         | Value                   |
-| -------------- | ----------------------- |
-| Event type     | `action.approval.reply` |
-| Publisher(s)   | whatsapp-service        |
-| Subscriber     | actions-agent           |
-| TF permissions | `whatsapp_service`      |
-| Docs match     | YES                     |
-
-### Topic: `intexuraos-bookmark-enrich-{env}`
-
-| Aspect         | Value              |
-| -------------- | ------------------ |
-| Event type     | `bookmarks.enrich` |
-| Publisher(s)   | bookmarks-agent    |
-| Subscriber     | bookmarks-agent    |
-| TF permissions | `bookmarks_agent`  |
-| Docs match     | YES                |
-
-### Topic: `intexuraos-bookmark-summarize-{env}`
-
-| Aspect         | Value                 |
-| -------------- | --------------------- |
-| Event type     | `bookmarks.summarize` |
-| Publisher(s)   | bookmarks-agent       |
-| Subscriber     | bookmarks-agent       |
-| TF permissions | `bookmarks_agent`     |
-| Docs match     | YES                   |
-
-### Topic: `intexuraos-todos-processing-{env}`
-
-| Aspect         | Value                      |
-| -------------- | -------------------------- |
-| Event type     | `todos.processing.created` |
-| Publisher(s)   | todos-agent                |
-| Subscriber     | todos-agent                |
-| TF permissions | `todos_agent`              |
-| Docs match     | YES                        |
-
-### Topic: `intexuraos-calendar-preview-{env}`
-
-| Aspect         | Value                       |
-| -------------- | --------------------------- |
-| Event type     | `calendar.preview.generate` |
-| Publisher(s)   | actions-agent               |
-| Subscriber     | calendar-agent              |
-| TF permissions | `actions_agent`             |
-| Docs match     | YES                         |
+³ `code-agent` uses `PRODUCTION_ONLY_ENV` — validated in prod, optional in E2E mode.
 
 ---
 
 ## Discrepancies
 
-### D1: whatsapp-service docs claim separate `whatsapp-linkpreview` topic (DOCS vs CODE)
+### D-1 · HIGH · Dead Analytics Publisher — Topic Receives No Messages
 
-**Severity:** MEDIUM (documentation inaccuracy)
+**Location:** `apps/research-agent/src/infra/pubsub/analyticsEventPublisher.ts`
 
-**In documentation** (`docs/services/whatsapp-service/technical.md`, line 248):
+**Description:** `AnalyticsEventPublisherImpl` is implemented and exported from `apps/research-agent/src/infra/pubsub/index.ts`, but is **not present in `ServiceContainer`** and not instantiated anywhere in `services.ts`. The Terraform infrastructure for this topic (topic, subscription, DLQ, IAM) fully exists but the topic is never published to.
 
-```
-| whatsapp.linkpreview.extract | whatsapp-linkpreview | Link preview extraction |
-```
+**Evidence:**
+- `apps/research-agent/src/services.ts`: `ServiceContainer` has `researchEventPublisher` and `llmCallPublisher` but no analytics publisher field
+- `apps/research-agent/src/infra/pubsub/index.ts`: exports `AnalyticsEventPublisherImpl`, `createAnalyticsEventPublisher`, `type AnalyticsEventPublisher`
+- `terraform/environments/dev/main.tf` line 719: `module "pubsub_llm_analytics"` exists with full push subscription
+- `terraform/environments/dev/main.tf` line 1039: `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` is set in research-agent env vars but never validated at startup
 
-The docs also list `INTEXURAOS_PUBSUB_WHATSAPP_LINKPREVIEW` as a required env var (line 317).
+**Impact:** LLM usage analytics are not being reported to this topic. Terraform resource is live but idle. The route handler at `/internal/llm/pubsub/report-analytics` receives no messages.
 
-**In code** (`apps/whatsapp-service/src/infra/pubsub/publisher.ts`, line 92):
-
-```typescript
-// publishExtractLinkPreviews uses this.webhookProcessTopic
-const result = await this.publishToTopic(
-  this.webhookProcessTopic, // <-- NOT a separate topic
-  event,
-  { messageId: event.messageId },
-  'extract link previews'
-);
-```
-
-**In Terraform:** No `pubsub_whatsapp_linkpreview` module exists. No `INTEXURAOS_PUBSUB_WHATSAPP_LINKPREVIEW` env var is set.
-
-**In code REQUIRED_ENV:** `INTEXURAOS_PUBSUB_WHATSAPP_LINKPREVIEW` is NOT in the `REQUIRED_ENV` array in `apps/whatsapp-service/src/index.ts`.
-
-**Actual behavior:** The `whatsapp.linkpreview.extract` event is published to the SAME topic as `whatsapp.webhook.process` (the webhook process topic). The subscriber handler at `/internal/whatsapp/pubsub/process-webhook` routes based on the event `type` field.
-
-**Fix needed:** Update `docs/services/whatsapp-service/technical.md`:
-
-- Published Events table: change topic for `whatsapp.linkpreview.extract` from `whatsapp-linkpreview` to `whatsapp-webhook-process`
-- Remove `INTEXURAOS_PUBSUB_WHATSAPP_LINKPREVIEW` from the Configuration env var table
+**Action items:**
+- [ ] **Option A:** Wire `AnalyticsEventPublisherImpl` into research-agent's `ServiceContainer`, add `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` to REQUIRED_ENV, and publish analytics events where appropriate
+- [ ] **Option B:** If analytics is intentionally abandoned, delete: publisher class, Terraform `pubsub_llm_analytics` module and IAM, `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` env var from research-agent
 
 ---
 
-### D2: pubsub-standards.md references non-existent services (DOCS vs DOCS)
+### D-2 · MEDIUM · Missing REQUIRED_ENV for LLM Analytics Topic Env Var
 
-**Severity:** LOW (stale documentation)
+**Location:** `apps/research-agent/src/index.ts`
 
-**In documentation** (`docs/architecture/pubsub-standards.md`, lines 100-101):
+**Description:** Terraform sets `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` in research-agent's `env_vars`, but `REQUIRED_ENV` in `index.ts` does not include it. No startup validation occurs if this var is removed from Terraform.
 
-```
-| INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC | llm-orchestrator | Research processing |
-| INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC | commands-router  | Research actions    |
-```
+**Impact:** If the env var were removed from Terraform, the service would start successfully with a missing var — violating the fail-fast startup principle. Low immediate risk, medium maintainability risk.
 
-**Issues:**
-
-1. `llm-orchestrator` is not a service. The `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` is used by `research-agent`.
-2. `commands-router` is not a service. `INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC` does not exist in any current code or Terraform. It appears in archived continuity docs (`continuity/archive/023-user-approval-workflow/`) as a historical artifact.
-
-**Fix needed:** Update the Environment Variables table in `docs/architecture/pubsub-standards.md`:
-
-- Change `llm-orchestrator` to `research-agent` for `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC`
-- Remove `INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC` / `commands-router` row entirely (this topic no longer exists)
-- Add missing entries for topics not listed (see D3)
+**Action item:** Resolved by D-1 — either add to REQUIRED_ENV (Option A) or remove the env var from Terraform (Option B).
 
 ---
 
-### D3: pubsub-standards.md env var table is incomplete (DOCS vs CODE)
+### D-3 · MEDIUM · Documentation Topic Names Systematically Outdated
 
-**Severity:** LOW (incomplete documentation)
+**Location:** `docs/services/*/technical.md` for 6 services
 
-**In documentation** (`docs/architecture/pubsub-standards.md`, lines 94-101), the Environment Variables table lists 6 entries.
+**Description:** All `technical.md` Published Events and Subscribed Events tables use topic name variants that differ from actual Terraform topic names. These are documentation-only errors with no runtime impact.
 
-**Actually in use** (from code and Terraform):
+| Service          | Documented Topic                                   | Actual Topic                                    |
+| ---------------- | -------------------------------------------------- | ----------------------------------------------- |
+| actions-agent    | `intexuraos-actions-{env}` (published)             | `intexuraos-actions-queue-{env}`                |
+| bookmarks-agent  | `intexuraos-bookmarks-enrich-{env}`                | `intexuraos-bookmark-enrich-{env}`              |
+| bookmarks-agent  | `intexuraos-bookmarks-summarize-{env}`             | `intexuraos-bookmark-summarize-{env}`           |
+| bookmarks-agent  | `intexuraos-whatsapp-message-send-{env}`           | `intexuraos-whatsapp-send-{env}`                |
+| commands-agent   | `intexuraos-actions-{env}` (published)             | `intexuraos-actions-queue-{env}`                |
+| commands-agent   | `intexuraos-command-ingest-{env}` (subscribed)     | `intexuraos-commands-ingest-{env}`              |
+| data-insights    | `Cloud Scheduler (intexuraos-data-insights-{env})` | `snapshot-refresh-{env}` via Cloud Scheduler    |
+| research-agent   | `intexuraos-llm-process-{env}` (published)         | `intexuraos-research-process-{env}`             |
+| research-agent   | `intexuraos-llm-report-{env}` (published)          | `intexuraos-llm-analytics-{env}`                |
+| research-agent   | `intexuraos-llm-process-queue-{env}` (subscribed)  | `intexuraos-research-process-{env}`             |
+| research-agent   | `intexuraos-llm-call-queue-{env}` (subscribed)     | `intexuraos-llm-call-{env}`                     |
+| whatsapp-service | `intexuraos-whatsapp-audio-transcribe-{env}`       | `intexuraos-whatsapp-transcription-{env}`       |
+| whatsapp-service | `intexuraos-command-ingest-{env}`                  | `intexuraos-commands-ingest-{env}`              |
+| whatsapp-service | `intexuraos-approval-replies-{env}` (plural)       | `intexuraos-approval-reply-{env}` (singular)    |
 
-| Variable                                   | Service(s)                    | Missing from table |
-| ------------------------------------------ | ----------------------------- | ------------------ |
-| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`          | commands-agent, actions-agent | YES                |
-| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`        | bookmarks-agent               | YES                |
-| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`     | bookmarks-agent               | YES                |
-| `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC` | actions-agent                 | YES                |
-| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | research-agent                | YES                |
-| `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC`    | research-agent                | YES                |
-| `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`   | whatsapp-service              | YES                |
-| `INTEXURAOS_TODOS_PROCESSING_TOPIC`        | todos-agent                   | YES                |
-| `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`  | whatsapp-service              | YES                |
+Documented push endpoint paths also differ from actual paths (docs use generic `/internal/webhooks/*`; code uses service-specific paths e.g. `/internal/bookmarks/pubsub/enrich`).
 
-**Note:** The `INTEXURAOS_TODOS_PROCESSING_TOPIC` env var does NOT follow the `INTEXURAOS_PUBSUB_*` prefix convention. All other Pub/Sub topic env vars use `INTEXURAOS_PUBSUB_*`.
-
-**Fix needed:** Update `docs/architecture/pubsub-standards.md` Environment Variables table to include all 14+ topic env vars.
-
----
-
-### D4: research-agent analytics publisher exists in code but is not wired (CODE inconsistency)
-
-**Severity:** LOW (unused code, infrastructure provisioned but unused)
-
-**Code exists:**
-
-- `apps/research-agent/src/infra/pubsub/analyticsEventPublisher.ts` - Full publisher implementation
-- `apps/research-agent/src/routes/internalRoutes.ts` - Subscription handler at `/internal/llm/pubsub/report-analytics`
-- Tests exist for the handler
-
-**But NOT wired:**
-
-- `apps/research-agent/src/services.ts` does NOT import or instantiate the `AnalyticsEventPublisher`
-- `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` is NOT in the `REQUIRED_ENV` array in `apps/research-agent/src/index.ts`
-- The `ServiceContainer` interface does NOT include `analyticsEventPublisher`
-
-**Terraform IS provisioned:**
-
-- `module.pubsub_llm_analytics` exists with push endpoint to research-agent
-- `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` IS set in Terraform env vars for research-agent
-
-**Documentation says it exists:**
-
-- `docs/services/research-agent/technical.md` lists `llm.report` as a published event type and `llm-analytics` as a subscribed topic
-
-**Actual behavior:** The Terraform topic and subscription exist and are properly configured. The subscription handler endpoint exists and will accept messages. However, NO code path currently publishes to the `llm-analytics` topic because the publisher is not instantiated in the service container. The subscriber handler will never receive messages.
+**Action item:** Re-run `document-service` on: actions-agent, bookmarks-agent, commands-agent, data-insights-agent, research-agent, whatsapp-service.
 
 ---
 
-### D5: code-agent publishes to whatsapp-send topic but lacks Terraform IAM permission (CODE vs TERRAFORM)
+### D-4 · MEDIUM · Link Preview Falsely Documented as a Separate Pub/Sub Topic
 
-**Severity:** HIGH (potential production permission error)
+**Location:** `docs/services/whatsapp-service/technical.md`
 
-**In code** (`apps/code-agent/src/index.ts`, line 31):
+**Description:** Documentation lists `intexuraos-whatsapp-linkpreview-extract-{env}` as a published event topic. This topic does not exist in Terraform. The `publishExtractLinkPreviews()` method in code publishes to `this.webhookProcessTopic` — it reuses `intexuraos-whatsapp-webhook-process-{env}`.
 
-```typescript
-'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',  // required env var
-```
+**Evidence:**
+- `apps/whatsapp-service/src/infra/pubsub/publisher.ts` lines 88–98: `publishExtractLinkPreviews()` passes `this.webhookProcessTopic` to `publishToTopic()`
+- No `pubsub_whatsapp_linkpreview` module exists in `terraform/environments/dev/main.tf`
 
-**In code** (`apps/code-agent/src/infra/services/whatsappNotifierImpl.ts`):
-The `WhatsAppNotifierImpl` uses `WhatsAppSendPublisher` from `@intexuraos/infra-pubsub` to publish to the whatsapp-send topic.
+**Impact:** Documentation only. Link preview events are correctly processed via the webhook-process pipeline. No missing infrastructure.
 
-**In Terraform** (`terraform/environments/dev/main.tf`, line 777-781):
-
-```hcl
-publisher_service_accounts = {
-  actions_agent   = module.iam.service_accounts["actions_agent"]
-  research_agent  = module.iam.service_accounts["research_agent"]
-  bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
-}
-```
-
-**Missing:** `code_agent` is NOT listed in `publisher_service_accounts` for the `pubsub_whatsapp_send` module.
-
-**In Terraform** (`terraform/environments/dev/main.tf`, line 1414):
-
-```hcl
-INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
-```
-
-The env var IS set for code-agent, but the service account lacks publish permission.
-
-**Impact:** In production, the code-agent's attempt to publish WhatsApp notifications will fail with `PERMISSION_DENIED`. This affects task start/complete/fail notifications sent via WhatsApp for code tasks.
-
-**Fix needed:** Add `code_agent` to the `publisher_service_accounts` map in `module "pubsub_whatsapp_send"`.
+**Action item:** Update whatsapp-service `technical.md` to clarify that link preview extraction events are dispatched through the `intexuraos-whatsapp-webhook-process-{env}` topic.
 
 ---
 
-### D6: whatsapp-service docs env var naming mismatch (DOCS vs CODE)
+### D-5 · LOW · todos-agent Env Var Missing `PUBSUB_` Prefix
 
-**Severity:** LOW (documentation inaccuracy)
+**Location:** `apps/todos-agent/src/index.ts`
 
-**In documentation** (`docs/services/whatsapp-service/technical.md`, lines 314-319):
+**Description:** todos-agent uses `INTEXURAOS_TODOS_PROCESSING_TOPIC` rather than `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC`, deviating from the `INTEXURAOS_PUBSUB_*` naming convention used by all other publishers.
 
-```
-| INTEXURAOS_PUBSUB_WHATSAPP_WEBHOOK_PROCESS  | webhook processing       |
-| INTEXURAOS_PUBSUB_WHATSAPP_AUDIO_TRANSCRIBE | audio transcription      |
-| INTEXURAOS_PUBSUB_COMMAND_INGEST            | command ingest           |
-| INTEXURAOS_PUBSUB_ACTION_APPROVAL_REPLY     | approval reply           |
-```
+**Impact:** No runtime issue. Terraform correctly matches the non-standard name. Minor inconsistency for tooling or automated checks that scan for `PUBSUB_` prefixed env vars.
 
-**In code** (`apps/whatsapp-service/src/index.ts`, REQUIRED_ENV array):
-
-```
-INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC    (not WHATSAPP_WEBHOOK_PROCESS)
-INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC      (not WHATSAPP_AUDIO_TRANSCRIBE)
-INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC    (not COMMAND_INGEST)
-INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC     (not ACTION_APPROVAL_REPLY)
-```
-
-**Fix needed:** Update the Configuration table in `docs/services/whatsapp-service/technical.md` to match actual env var names.
+**Action item:** Low priority — rename env var in lockstep across `apps/todos-agent/src/index.ts`, `apps/todos-agent/src/services.ts`, and `terraform/environments/dev/main.tf`.
 
 ---
 
-### D7: whatsapp-service docs list missing `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` subscription (DOCS inconsistency)
+### D-6 · LOW · snapshot-refresh Topic Deviates from Naming Convention
 
-**Severity:** LOW (documentation omission)
+**Location:** `terraform/environments/dev/main.tf` line 1751
 
-**In documentation** (`docs/services/whatsapp-service/technical.md`), the "Subscribed Events" table lists:
+**Description:** The data-insights snapshot refresh topic is named `snapshot-refresh-{env}` rather than following the `intexuraos-{purpose}-{env}` convention used by all 14 other topics.
 
-```
-| whatsapp.message.send     | /internal/whatsapp/pubsub/send-message     |
-```
+**Impact:** No runtime issue. May cause confusion in log analysis or monitoring dashboards that filter by `intexuraos-` prefix.
 
-But this event type is `whatsapp.message.send`, while the `SendMessageEvent` in code uses the type `whatsapp.message.send`. This is correct.
-
-However, the service also subscribes to its own `whatsapp-webhook-process` topic for both `whatsapp.webhook.process` AND `whatsapp.linkpreview.extract` events. The docs only list `whatsapp.webhook.process` in the subscribed events table but not the link preview routing.
+**Action item:** Low priority — rename to `intexuraos-snapshot-refresh-{env}` in Terraform if naming conventions are being enforced.
 
 ---
 
-## Services with No Pub/Sub (Confirmed)
+### D-7 · LOW · bookmarks-agent Env Vars Missing `_TOPIC` Suffix
 
-The following services correctly document having NO Pub/Sub involvement:
+**Location:** `apps/bookmarks-agent/src/index.ts`
 
-| Service       | Docs confirm no Pub/Sub  | Code confirms no Pub/Sub |
-| ------------- | ------------------------ | ------------------------ |
-| chat-agent    | YES (explicit)           | YES                      |
-| web-agent     | N/A (no Pub/Sub section) | YES (HTTP-only service)  |
-| image-service | N/A (no Pub/Sub section) | YES (HTTP-only service)  |
+**Description:** bookmarks-agent uses `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH` and `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` without the `_TOPIC` suffix that all other service pub/sub env vars use.
 
----
+**Impact:** No runtime issue. Terraform matches these names correctly. Minor inconsistency.
 
-## Cross-Service Event Flow Validation
-
-### Flow 1: WhatsApp Message to Action Processing
-
-```
-User -> WhatsApp API -> whatsapp-service
-  -> [webhook-process topic] -> whatsapp-service (async processing)
-  -> [commands-ingest topic] -> commands-agent (classification)
-  -> [actions-queue topic] -> actions-agent (action handling)
-  -> [whatsapp-send topic] -> whatsapp-service (notification)
-```
-
-**Status:** CONSISTENT across docs, code, and Terraform.
-
-### Flow 2: Research Processing
-
-```
-actions-agent -> research-agent (HTTP: POST /internal/research/draft)
-research-agent
-  -> [research-process topic] -> research-agent (self-subscribe for processing)
-  -> [llm-call topic] -> research-agent (self-subscribe for individual LLM calls)
-  -> [whatsapp-send topic] -> whatsapp-service (completion notification)
-```
-
-**Status:** CONSISTENT. Note: research-agent self-publishes and self-subscribes for both topics.
-
-### Flow 3: Bookmark Enrichment Pipeline
-
-```
-actions-agent -> bookmarks-agent (HTTP: POST /internal/bookmarks)
-bookmarks-agent
-  -> [bookmark-enrich topic] -> bookmarks-agent (OG metadata fetch)
-  -> [bookmark-summarize topic] -> bookmarks-agent (AI summary)
-  -> [whatsapp-send topic] -> whatsapp-service (summary delivery)
-```
-
-**Status:** CONSISTENT across docs, code, and Terraform.
-
-### Flow 4: Approval Reply Flow
-
-```
-User -> WhatsApp API -> whatsapp-service
-  -> [approval-reply topic] -> actions-agent (process approval)
-  -> [actions-queue topic] -> actions-agent (re-process approved action)
-```
-
-**Status:** CONSISTENT across docs, code, and Terraform.
-
-### Flow 5: Calendar Preview Generation
-
-```
-actions-agent
-  -> [calendar-preview topic] -> calendar-agent (generate preview)
-```
-
-**Status:** CONSISTENT across docs, code, and Terraform.
-
-### Flow 6: Todo Processing
-
-```
-todos-agent
-  -> [todos-processing topic] -> todos-agent (AI item extraction)
-```
-
-**Status:** CONSISTENT. Note: env var uses `INTEXURAOS_TODOS_PROCESSING_TOPIC` (without `PUBSUB_` prefix), which deviates from the naming convention.
-
-### Flow 7: Code Agent WhatsApp Notifications
-
-```
-code-agent
-  -> [whatsapp-send topic] -> whatsapp-service (task notifications)
-```
-
-**Status:** BROKEN IN TERRAFORM - code-agent lacks IAM publish permission (see D5).
+**Action item:** Low priority — rename env vars to add `_TOPIC` suffix for consistency.
 
 ---
 
-## Naming Convention Audit
+## Action Items Summary
 
-### Env Var Naming Convention: `INTEXURAOS_PUBSUB_*`
-
-| Env Var                                    | Service          | Follows Convention                 |
-| ------------------------------------------ | ---------------- | ---------------------------------- |
-| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`    | whatsapp-service | YES                                |
-| `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`  | whatsapp-service | YES                                |
-| `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`  | whatsapp-service | YES                                |
-| `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`    | whatsapp-service | YES                                |
-| `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`   | whatsapp-service | YES                                |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | multiple         | YES                                |
-| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`          | commands/actions | YES                                |
-| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | research-agent   | YES                                |
-| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | research-agent   | YES                                |
-| `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC`    | research-agent   | YES                                |
-| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`        | bookmarks-agent  | YES                                |
-| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`     | bookmarks-agent  | YES                                |
-| `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC` | actions-agent    | YES                                |
-| **`INTEXURAOS_TODOS_PROCESSING_TOPIC`**    | todos-agent      | **NO** (missing `PUBSUB_` segment) |
+| ID  | Severity | Service / Owner        | Action                                                                                           |
+| --- | -------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| D-1 | HIGH     | research-agent         | Wire `AnalyticsEventPublisherImpl` into ServiceContainer OR remove publisher + Terraform topic  |
+| D-2 | MEDIUM   | research-agent         | Add `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` to REQUIRED_ENV (resolved by D-1)                  |
+| D-3 | MEDIUM   | docs                   | Regenerate `technical.md` for 6 services with correct topic names and endpoint paths            |
+| D-4 | MEDIUM   | docs / whatsapp-service| Update technical.md: `publishExtractLinkPreviews` reuses `webhook-process` topic, not separate  |
+| D-5 | LOW      | todos-agent            | Consider renaming `INTEXURAOS_TODOS_PROCESSING_TOPIC` → `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC` |
+| D-6 | LOW      | infra                  | Consider renaming `snapshot-refresh-{env}` → `intexuraos-snapshot-refresh-{env}`               |
+| D-7 | LOW      | bookmarks-agent        | Consider adding `_TOPIC` suffix to bookmark pub/sub env var names                               |
 
 ---
 
-## Action Items
+## Sources
 
-### Critical (Production Impact)
-
-| #   | Issue                                                              | File(s) to Fix                                                                                               |
-| --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| 1   | D5: code-agent lacks IAM publish permission on whatsapp-send topic | `terraform/environments/dev/main.tf` (add `code_agent` to `pubsub_whatsapp_send.publisher_service_accounts`) |
-
-### Documentation Fixes
-
-| #   | Issue                                                       | File(s) to Fix                                |
-| --- | ----------------------------------------------------------- | --------------------------------------------- |
-| 2   | D1: linkpreview topic does not exist as separate topic      | `docs/services/whatsapp-service/technical.md` |
-| 3   | D2: stale service names in pubsub-standards                 | `docs/architecture/pubsub-standards.md`       |
-| 4   | D3: incomplete env var table in pubsub-standards            | `docs/architecture/pubsub-standards.md`       |
-| 5   | D6: env var names wrong in whatsapp-service docs            | `docs/services/whatsapp-service/technical.md` |
-| 6   | D7: missing linkpreview routing detail in subscribed events | `docs/services/whatsapp-service/technical.md` |
-
-### Code Cleanup (Low Priority)
-
-| #   | Issue                                                             | File(s)                                                                                                                    |
-| --- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 7   | D4: analytics publisher exists but not wired in service container | `apps/research-agent/src/services.ts`, `apps/research-agent/src/infra/pubsub/analyticsEventPublisher.ts`                   |
-| 8   | todos-agent uses non-standard env var name                        | `apps/todos-agent/src/index.ts` (`INTEXURAOS_TODOS_PROCESSING_TOPIC` should be `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC`) |
+| Source                                             | Purpose                                              |
+| -------------------------------------------------- | ---------------------------------------------------- |
+| `docs/services/*/technical.md` (23 files)         | Documented published/subscribed events per service   |
+| `terraform/environments/dev/main.tf`               | Authoritative topic definitions, subscriptions, IAM  |
+| `terraform/modules/pubsub-push/`                   | Module schema (topic + DLQ + push sub + IAM pattern) |
+| `apps/*/src/infra/pubsub/*.ts`                     | Publisher implementations and topic wiring           |
+| `apps/*/src/services.ts`                           | ServiceContainer wiring (publisher activation)       |
+| `apps/*/src/index.ts`                              | REQUIRED_ENV declarations per service                |

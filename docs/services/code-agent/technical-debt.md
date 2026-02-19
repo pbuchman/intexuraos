@@ -4,9 +4,9 @@
 
 | Category       | Count | Severity |
 | -------------- | ----- | -------- |
-| TODO comments  | 5     | Medium   |
+| TODO comments  | 3     | Medium   |
 | Code smells    | 4     | Low-Med  |
-| Future plans   | 3     | Medium   |
+| Future plans   | 2     | Medium   |
 | TS strictness  | 1     | Low      |
 | SRP violations | 1     | High     |
 
@@ -131,18 +131,15 @@ Module-level mutable state for deduplicating concurrent health probes. This map 
 
 The infrastructure for PR comment handling exists (event parsing, actionability detection, PR locking, context building). The remaining work is connecting the prepared task to the dispatch flow.
 
+**File:** `apps/code-agent/src/routes/webhooks/github.ts:74`
+
+```typescript
+// TODO (Phase 4): Dispatch the task to the worker
+```
+
 ### 2. Actual system prompt versioning
 
 Replace static hash placeholders with computed hashes from the real system prompt template. This enables prompt A/B testing and audit compliance.
-
-### 3. Prompt sanitization pipeline
-
-Implement the sanitization described in the design doc (lines 1130-1165):
-
-- Strip embedded secrets (API keys, tokens)
-- Remove PII patterns
-- Validate against prompt injection patterns
-- Track sanitization actions in the task document
 
 ## TypeScript Strictness Issues
 
@@ -168,12 +165,16 @@ Common exemption categories in this service:
 
 ## Resolved Issues
 
-| Issue   | Description                           | Resolution                               |
-| ------- | ------------------------------------- | ---------------------------------------- |
-| INT-372 | Zombie task detection                 | Heartbeat + 30-min threshold implemented |
-| INT-379 | WhatsApp cancel button                | Cancel nonce with 15-min TTL             |
-| INT-465 | PR comment auto-response (Phases 0-3) | Event parsing + locking + context build  |
-| INT-486 | Unified Linear issue templates        | Two-phase execution model                |
-| INT-519 | Block agents from QA/Done transitions | Validate-linear-state hook               |
-| INT-520 | Retry mechanism for failed tasks      | retryTask use case with cool-off         |
-| INT-524 | PR review feedback                    | Addressed in code review                 |
+| Issue   | Description                                    | Resolution                                              |
+| ------- | ---------------------------------------------- | ------------------------------------------------------- |
+| INT-372 | Zombie task detection                          | Heartbeat + 30-min threshold implemented                |
+| INT-379 | WhatsApp cancel button                         | Cancel nonce with 15-min TTL                            |
+| INT-465 | PR comment auto-response (Phases 0-3)          | Event parsing + locking + context build                 |
+| INT-486 | Unified Linear issue templates                 | Two-phase execution model                               |
+| INT-505 | Rich PR activity timeline                      | Clickable links, comment bodies, deduplication          |
+| INT-519 | Block agents from QA/Done transitions          | Validate-linear-state hook                              |
+| INT-520 | Retry mechanism for failed tasks               | retryTask use case with cool-off                        |
+| INT-524 | PR review feedback                             | Addressed in code review                                |
+| —       | Duplicate PR body in synchronize events        | deduplicatePRBody() pass in GET /code/github-pr-events  |
+| —       | Edited comment creates duplicate timeline entry | deduplicateCommentEvents() keeps first position, latest body |
+| —       | Turn-end metrics not collected                 | TurnMetrics subcollection + FirestoreTurnMetricsRepository |

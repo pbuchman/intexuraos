@@ -1,6 +1,7 @@
 # AI Models Cross-Validation Report
 
 **Generated:** 2026-02-08
+**Updated:** 2026-02-19
 **Scope:** All docs (overview.md, services/index.md, service technical.md files) cross-referenced against code (llm-contract, llm-factory, llm-pricing, service source files)
 
 ---
@@ -150,10 +151,12 @@ These are all shorthand names. The actual runtime code uses the full versioned m
 
 ### `chat-agent` and `code-agent` -- Missing from Overview/Index Entirely
 
-- **chat-agent:** Uses `Gemini 2.5 Flash`, `GLM-4.7`, `GLM-4.7-Flash` for chat, plus `text-embedding-3-small` for embeddings. Not listed in `docs/overview.md` or `docs/services/index.md` at all.
-- **code-agent:** Does not directly use LLM models (delegates to external workers), but is not listed in the services overview either.
+**Status: ✅ RESOLVED as of 2026-02-19**
 
-**Significance:** These are newer services (chat-agent created ~7 days ago, code-agent earlier) that have not been added to the overview or services index documentation.
+Both chat-agent and code-agent are now documented in `docs/overview.md` (Agent Architecture table) and `docs/services/index.md` (AI Agents section).
+
+- **chat-agent:** `GLM-4.7-Flash` (guest sessions), user-configured model (authenticated), `text-embedding-3-small` (embeddings). Now listed in overview.md line ~273 and index.md.
+- **code-agent:** No direct LLM calls; delegates to external Docker workers. Now listed in overview.md and index.md.
 
 ---
 
@@ -253,39 +256,41 @@ This means the `llm-factory` is only used by services that do classification/qui
 
 ### Critical Issues
 
-| #   | Issue                                                           | Impact                                                 |
-| --- | --------------------------------------------------------------- | ------------------------------------------------------ |
-| 1   | `gpt-4.1` not in llm-contract                                   | Model exists in production but not in central registry |
-| 2   | `text-embedding-3-small` not in llm-contract                    | Embedding model not tracked in central model inventory |
-| 3   | chat-agent and code-agent missing from overview.md and index.md | New services not discoverable via main documentation   |
-| 4   | overview.md says "17 models" then "16 models"                   | Self-contradicting model count                         |
+| #   | Issue                                                           | Status              | Impact                                                 |
+| --- | --------------------------------------------------------------- | ------------------- | ------------------------------------------------------ |
+| 1   | `gpt-4.1` not in llm-contract                                   | ❌ Open             | Model exists in production but not in central registry |
+| 2   | `text-embedding-3-small` not in llm-contract                    | ❌ Open             | Embedding model not tracked in central model inventory |
+| 3   | chat-agent and code-agent missing from overview.md and index.md | ✅ Resolved 2026-02-19 | Both services now documented in overview.md and index.md |
+| 4   | overview.md says "17 models" then "16 models"                   | ❌ Open             | Self-contradicting model count                         |
 
 ### Moderate Issues
 
-| #   | Issue                                                                                                       | Impact                                       |
-| --- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| 5   | Anthropic model IDs in docs use short names                                                                 | Developers may use wrong model IDs from docs |
-| 6   | index.md omits GLM-4.7-Flash from commands-agent                                                            | Incomplete capability documentation          |
-| 7   | index.md says todos-agent uses "Via commands-agent"                                                         | Incorrect -- todos-agent calls LLM directly  |
-| 8   | Overview omits Gemini 2.0 Flash, GPT-4o Mini, GPT-4.1 from provider table                                   | Incomplete model listing                     |
-| 9   | data-insights-agent and web-agent docs claim specific models when they actually use user's configured model | Misleading specificity                       |
+| #   | Issue                                                                                                       | Status  | Impact                                       |
+| --- | ----------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------- |
+| 5   | Anthropic model IDs in docs use short names                                                                 | ❌ Open | Developers may use wrong model IDs from docs |
+| 6   | index.md omits GLM-4.7-Flash from commands-agent                                                            | ❌ Open | Incomplete capability documentation          |
+| 7   | index.md says todos-agent uses "Via commands-agent"                                                         | ❌ Open | Incorrect -- todos-agent calls LLM directly  |
+| 8   | Overview omits Gemini 2.0 Flash, GPT-4o Mini, GPT-4.1 from provider table                                   | ❌ Open | Incomplete model listing                     |
+| 9   | data-insights-agent and web-agent docs claim specific models when they actually use user's configured model | ❌ Open | Misleading specificity                       |
 
 ### Minor Issues
 
-| #   | Issue                                                                          | Impact                             |
-| --- | ------------------------------------------------------------------------------ | ---------------------------------- |
-| 10  | Gemini Flash Image naming varies across docs                                   | Cosmetic inconsistency             |
-| 11  | GPT-Image-1 redundant parenthetical in index.md                                | Cosmetic                           |
-| 12  | overview.md "5 providers" claim does not count OpenAI embedding API separately | Technically correct but incomplete |
+| #   | Issue                                                                          | Status  | Impact                             |
+| --- | ------------------------------------------------------------------------------ | ------- | ---------------------------------- |
+| 10  | Gemini Flash Image naming varies across docs                                   | ❌ Open | Cosmetic inconsistency             |
+| 11  | GPT-Image-1 redundant parenthetical in index.md                                | ❌ Open | Cosmetic                           |
+| 12  | overview.md "5 providers" claim does not count OpenAI embedding API separately | ❌ Open | Technically correct but incomplete |
 
 ---
 
 ## 10. Recommendations
 
 1. **Add `gpt-4.1` and `text-embedding-3-small` to llm-contract** or document why they are excluded from the central model registry.
-2. **Update overview.md and index.md** to include chat-agent and code-agent services.
+2. ~~**Update overview.md and index.md** to include chat-agent and code-agent services.~~ ✅ Resolved 2026-02-19.
 3. **Fix model count** -- decide on a consistent count (16 in llm-contract, or 18 including `gpt-4.1` and `text-embedding-3-small`) and use it everywhere.
 4. **Standardize Anthropic model naming in docs** -- use display names for human-readable docs and full model IDs for technical references. Never use the hybrid short form `claude-opus-4.5`.
 5. **Fix todos-agent AI attribution** in index.md -- it uses its own LLM calls, not "Via commands-agent".
 6. **Add GLM-4.7-Flash** to commands-agent listing in index.md.
 7. **Clarify "user's configured model"** for data-insights-agent and web-agent instead of claiming specific models.
+8. **Add Gemini 2.0 Flash and GPT-4o Mini** to the AI Stack table in overview.md (currently only shows 3 per row for Google and OpenAI).
+9. **Check whether GLM-4.7 belongs in ValidationModel type** -- docs/services/index.md lists it as a validation model but the type definition excludes it (only has `Glm47Flash`).

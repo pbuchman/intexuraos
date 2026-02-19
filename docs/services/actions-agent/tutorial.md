@@ -7,7 +7,6 @@ This tutorial will help you get started with the actions-agent service, from bas
 - IntexuraOS development environment running
 - Auth0 access token for API requests
 - Familiarity with HTTP clients (curl, Postman, or similar)
-- (For WhatsApp approvals) A configured LLM API key in user-service
 
 ## Part 1: Hello World - List Your Actions
 
@@ -84,53 +83,51 @@ curl -X GET "https://actions-agent.intexuraos.com/actions?status=pending,awaitin
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-## Part 2: WhatsApp Approval Workflow (New in v2.0.0)
+## Part 2: WhatsApp Interactive Button Approval (v4.0.0)
 
-The most powerful feature of actions-agent is approving actions directly via WhatsApp replies.
+The most powerful feature of actions-agent is approving actions by tapping interactive WhatsApp buttons.
 
 ### How It Works
 
 1. Send a command via WhatsApp: "Research machine learning trends"
-2. Receive an approval notification: "New research ready for approval: 'Research machine learning trends'. Review here: [link] or reply to approve/reject."
-3. Reply "yes" to approve or "no" to reject
-4. Receive confirmation: "Approved! Processing your research..."
+2. Receive an approval notification with interactive buttons:
+   - **Approve** button
+   - **Reject** button
+3. Tap **Approve** to execute the action
+4. Receive confirmation: "✅ Approved! Processing your research: 'Research machine learning trends'"
 
 ### Understanding the Flow
 
 ```
 You: "Research machine learning trends"
-Bot: "New research ready for approval: 'Research machine learning trends'.
-      Review here: https://app.intexuraos.com/#/inbox?action=abc123
-      or reply to approve/reject."
-You: "yes please"
-Bot: "Approved! Processing your research: 'Research machine learning trends'"
+Bot: "📚 New research request ready for approval
+      Review: https://app.intexuraos.com/#/inbox?action=abc123"
+      [Approve] [Reject]
+You: *tap Approve*
+Bot: "✅ Approved! Processing your research: 'Research machine learning trends'"
 [Later]
 Bot: "Your research is ready! View it here: [link]"
 ```
 
-### Intent Classification
+### If Buttons Expire
 
-The LLM understands natural language, so you can reply:
+WhatsApp interactive buttons can expire. If you send a text reply instead of tapping a button, the system automatically re-sends fresh buttons:
 
-**Approval phrases:**
+```
+You: "yes please"
+Bot: "Please use the buttons to approve or reject. If buttons expired, here they are again:"
+     [Approve] [Reject]
+```
 
-- "yes", "yep", "ok", "approve", "go ahead", "do it", "sounds good"
-
-**Rejection phrases:**
-
-- "no", "nope", "cancel", "reject", "don't", "skip", "never mind"
-
-**Unclear phrases (will ask for clarification):**
-
-- "maybe", "what is this?", "huh?"
+> **Note:** As of v4.0.0, text-based approval (typing "yes"/"no") is no longer supported. The system always re-sends buttons if no button was tapped. No LLM API key is required.
 
 ### Checkpoint
 
-Send a command via WhatsApp and practice approving/rejecting via reply.
+Send a command via WhatsApp and practice approving/rejecting by tapping the buttons.
 
 ## Part 3: Update an Action Status
 
-Update an action's status to manually approve, reject, or archive it (alternative to WhatsApp).
+Update an action's status to manually approve, reject, or archive it (alternative to WhatsApp buttons).
 
 ### Approve an action
 
@@ -231,17 +228,6 @@ When processing Pub/Sub events, if the URL action type doesn't match the event:
 
 **Solution:** Verify Pub/Sub subscription endpoints match action types.
 
-### Error: LLM API key not configured (v2.0.0)
-
-When using WhatsApp approval replies without a configured LLM key:
-
-```
-"I couldn't process your reply because your LLM API key is not configured.
-Please add your API key in settings, then try again."
-```
-
-**Solution:** Configure your LLM API key in user-service settings.
-
 ## Part 6: Real-World Scenario - Duplicate Link Resolution
 
 When creating a bookmark action, if the URL already exists, the action fails with an `existingBookmarkId` in the payload. Here's how to handle it:
@@ -308,19 +294,19 @@ curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
 }
 ```
 
-## Part 8: Code Actions (New in v3.0.0)
+## Part 8: Code Actions (v3.0.0)
 
-Code actions dispatch tasks to code-agent (Claude Code). They use interactive WhatsApp buttons with nonce-based approval.
+Code actions dispatch tasks to code-agent (Claude Code). They use interactive WhatsApp buttons with three options.
 
 ### How Code Action Approval Works
 
 1. Send a command: "Fix the authentication bug in the login module"
 2. Receive a WhatsApp message with interactive buttons:
-   - **Approve: a3f2** (4-char hex nonce for security)
-   - **Cancel** (reject the action)
-   - **Convert to Issue** (create a Linear issue instead)
-3. Tap "Approve: a3f2" to approve
-4. Receive confirmation: "Code task created! View it here: [link]"
+   - **Approve** (approve and dispatch to Claude Code)
+   - **Reject** (cancel the action)
+   - **Convert to Issue** (reject this action but create a Linear issue instead)
+3. Tap **Approve** to dispatch to code-agent
+4. Receive confirmation and later a completion message with PR/branch details
 
 ### Approval Message Content
 
@@ -331,13 +317,22 @@ The approval message includes:
 - Estimated time: 30-60 min
 - Link to review in web UI
 
-### Text Fallback
+### Cancelling a Running Code Task
 
-If interactive buttons fail, you can type: `approve a3f2` (replacing `a3f2` with the nonce shown in the button).
+Once a code task starts, the code-agent sends a "task started" WhatsApp message with a **Cancel Task** button:
 
-### Nonce Expiration
+- Button ID format: `cancel-task:{taskId}:{nonce}`
+- The nonce provides a one-time cancellation token for security
 
-Approval nonces expire after 15 minutes. If you wait too long, you will need to re-approve the action from the web UI.
+Error codes returned when cancellation fails:
+
+| Error Code             | Description                                        |
+| ---------------------- | -------------------------------------------------- |
+| `TASK_NOT_FOUND`       | Task doesn't exist                                 |
+| `INVALID_NONCE`        | Cancel code already used                           |
+| `NONCE_EXPIRED`        | Cancel link has expired                            |
+| `NOT_OWNER`            | You are not the owner of this task (HTTP 403)      |
+| `TASK_NOT_CANCELLABLE` | Task has already completed or cannot be cancelled  |
 
 ### Execute a Code Action Manually
 
@@ -362,20 +357,20 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
 
 ## Troubleshooting
 
-| Issue                           | Symptom                            | Solution                                                     |
-| ------------------------------- | ---------------------------------- | ------------------------------------------------------------ |
-| Actions stuck in pending        | No handler processes action        | Check if handler is registered; reminder type has no handler |
-| Pub/Sub delivery failures       | Actions not processed              | Verify topic name matches `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`  |
-| Type correction not working     | Action stays same type after PATCH | Ensure action is in `pending` or `awaiting_approval` status  |
-| Batch returns wrong actions     | Actions from other users           | Security check filters by userId; verify correct IDs         |
-| WhatsApp notifications not sent | Action completes silently          | Check `whatsapp-send` topic configuration                    |
-| WhatsApp approval not working   | Reply not processed                | Ensure LLM API key is configured in user-service             |
-| Race condition errors           | Duplicate notifications            | System handles this automatically with `updateStatusIf`      |
-| Calendar preview returns null   | No preview available               | Wait for calendar-agent to generate preview                  |
-| Code action approval expired    | Nonce expired error                | Nonces expire after 15 min; re-approve from web UI           |
-| Code action worker unavailable  | Action marked as failed            | code-agent has no available workers; retry later             |
-| Duplicate code task             | Already exists message             | Task was already created (idempotent via approvalEventId)    |
-| Interactive buttons not showing | Plain text message instead         | WhatsApp client may not support interactive messages         |
+| Issue                           | Symptom                                   | Solution                                                     |
+| ------------------------------- | ----------------------------------------- | ------------------------------------------------------------ |
+| Actions stuck in pending        | No handler processes action               | Check if handler is registered; reminder type has no handler |
+| Pub/Sub delivery failures       | Actions not processed                     | Verify topic name matches `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`  |
+| Type correction not working     | Action stays same type after PATCH        | Ensure action is in `pending` or `awaiting_approval` status  |
+| Batch returns wrong actions     | Actions from other users                  | Security check filters by userId; verify correct IDs         |
+| WhatsApp notifications not sent | Action completes silently                 | Check `whatsapp-send` topic configuration                    |
+| WhatsApp approval not working   | Text reply ignored, buttons re-sent       | Expected behavior in v4.0.0 — tap a button instead          |
+| Race condition errors           | Duplicate notifications                   | System handles this automatically with `updateStatusIf`      |
+| Calendar preview returns null   | No preview available                      | Wait for calendar-agent to generate preview                  |
+| Code task worker unavailable    | Action marked as failed                   | code-agent has no available workers; retry later             |
+| Duplicate code task             | Already exists message                    | Task was already created (idempotent via approvalEventId)    |
+| Interactive buttons not showing | Plain text message instead of buttons    | WhatsApp client may not support interactive messages         |
+| Action deleted, approval fails  | WhatsApp message: "no longer available"  | Action was deleted or expired; this is handled gracefully    |
 
 ## Exercises
 
@@ -389,20 +384,20 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
 
 1. Create a batch request to fetch 10 specific action IDs
 2. Change an action type from `link` to `todo` and verify the transition was logged
-3. Send a command via WhatsApp and approve it via reply
+3. Send a command via WhatsApp and approve it by tapping the button
 
 ### Hard
 
 1. Implement a retry mechanism for failed actions using the `/internal/actions/retry-pending` endpoint
 2. Build a dashboard that polls for action status updates
-3. Test the race condition protection by sending multiple rapid approval replies
+3. Test the race condition protection by sending multiple rapid approval button taps
 
 ## Understanding Race Condition Protection
 
 The v2.0.0 release introduced atomic status transitions to prevent race conditions. Here's what happens:
 
 ```
-Scenario: Two WhatsApp approval replies arrive simultaneously
+Scenario: Two WhatsApp approval button taps arrive simultaneously
 
 Thread 1: updateStatusIf('pending', 'awaiting_approval')
 Thread 2: updateStatusIf('pending', 'awaiting_approval')
