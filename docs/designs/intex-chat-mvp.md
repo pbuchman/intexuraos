@@ -3,7 +3,7 @@
 > In-app AI assistant for IntexuraOS documentation and command creation.
 
 **Created:** 2026-01-31
-**Status:** Approved for implementation
+**Status:** COMPLETED — Implementation lives in `apps/chat-agent/`
 
 ---
 
