@@ -460,7 +460,6 @@ describe('LogForwarder', () => {
       const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-size');
       expect(taskUploads.length).toBeGreaterThan(0);
     });
-
   });
 
   describe('sequence numbering', () => {

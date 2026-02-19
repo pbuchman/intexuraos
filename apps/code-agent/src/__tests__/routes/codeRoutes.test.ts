@@ -50,6 +50,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 
 // Helper function to generate orchestrator HMAC signature for heartbeat endpoint
 function generateOrchestratorSignature(payload: object, secret: string): { timestamp: string; signature: string } {
@@ -209,6 +210,10 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -231,6 +236,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     // Set up worker settings for the test user

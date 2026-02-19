@@ -628,7 +628,32 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         /* v8 ignore stop @preserve */
 
-        const totalLogCount = logCount + logLinesSnapshot.docs.length + logEntriesSnapshot.docs.length;
+        const turnMetricsRef = taskRef.collection('turn_metrics');
+        const turnMetricsSnapshot = await turnMetricsRef.get();
+
+        /* v8 ignore start -- test-infra: batch delete logic for turn_metrics subcollection @preserve */
+        if (turnMetricsSnapshot.docs.length > 0) {
+          let metricsBatch = firestore.batch();
+          let metricsBatchCount = 0;
+
+          for (const metricsDoc of turnMetricsSnapshot.docs) {
+            metricsBatch.delete(metricsDoc.ref);
+            metricsBatchCount++;
+
+            if (metricsBatchCount >= batchSize) {
+              await metricsBatch.commit();
+              metricsBatch = firestore.batch();
+              metricsBatchCount = 0;
+            }
+          }
+
+          if (metricsBatchCount > 0) {
+            await metricsBatch.commit();
+          }
+        }
+        /* v8 ignore stop @preserve */
+
+        const totalLogCount = logCount + logLinesSnapshot.docs.length + logEntriesSnapshot.docs.length + turnMetricsSnapshot.docs.length;
         const archivedAt = new Date();
         await taskRef.update({
           logsArchived: true,

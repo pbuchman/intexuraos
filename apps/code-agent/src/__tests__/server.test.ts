@@ -49,6 +49,7 @@ import { mockWorkerHealthProbe } from './helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestorePRTaskLockRepository } from '../infra/firestore/firestorePRTaskLockRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../infra/firestore/gitHubPRSummariesRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../infra/repositories/firestoreTurnMetricsRepository.js';
 
 describe('server configuration', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -153,6 +154,10 @@ describe('server configuration', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -175,6 +180,7 @@ describe('server configuration', () => {
       gitHubPREventRepo: import('../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     app = await buildServer();
