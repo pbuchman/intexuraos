@@ -245,7 +245,7 @@ describe('createLinearAgentApiClient', () => {
         body: 'Test',
       });
 
-      expect(capturedAuth).toBe('lin_api_test_token_123');
+      expect(capturedAuth).toBe('Bearer lin_api_test_token_123');
     });
   });
 });

@@ -187,14 +187,16 @@ describe('POST /webhooks/linear', () => {
       expect(body.data.received).toBe(true);
     });
 
-    it('passes when webhookTimestamp is absent', async () => {
+    it('returns 400 when webhookTimestamp is absent', async () => {
       const payload = makePayload({ type: 'SomeOtherEvent' });
       delete payload['webhookTimestamp'];
       const res = await injectWebhook(payload);
 
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload) as { success: boolean; data: { received: boolean } };
-      expect(body.success).toBe(true);
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.payload) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toBe('Missing webhook timestamp');
     });
 
     it('returns 400 when webhookTimestamp is stale', async () => {
@@ -244,27 +246,30 @@ describe('POST /webhooks/linear', () => {
   });
 
   describe('AgentSessionEvent.created', () => {
-    it('returns ok when sessionId is missing', async () => {
+    it('returns 400 when sessionId is missing', async () => {
       const payload = makePayload({
         data: { id: 'data-id', issueId: 'INT-100', agentSession: {} },
       });
       const res = await injectWebhook(payload);
 
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload) as { success: boolean; data: { received: boolean } };
-      expect(body.success).toBe(true);
-      expect(body.data.received).toBe(true);
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.payload) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toBe('Missing agent session ID');
     });
 
-    it('returns ok when issueId is missing', async () => {
+    it('returns 400 when issueId is missing', async () => {
       const payload = makePayload({
         data: { id: 'data-id', agentSession: { id: 'session-456' } },
       });
       const res = await injectWebhook(payload);
 
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload) as { success: boolean; data: { received: boolean } };
-      expect(body.success).toBe(true);
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.payload) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toBe('Missing issue ID');
     });
 
     it('returns 401 when no OAuth credentials exist', async () => {
@@ -280,7 +285,7 @@ describe('POST /webhooks/linear', () => {
       expect(body.error.message).toBe('Linear app not installed');
     });
 
-    it('returns 401 when OAuth credential lookup fails', async () => {
+    it('returns 500 when OAuth credential lookup fails', async () => {
       vi.mocked(mockLinearOAuthRepo.get).mockResolvedValue(
         err({ code: 'internal_error' as const, message: 'Firestore error' })
       );
@@ -288,10 +293,11 @@ describe('POST /webhooks/linear', () => {
       const payload = makePayload();
       const res = await injectWebhook(payload);
 
-      expect(res.statusCode).toBe(401);
+      expect(res.statusCode).toBe(500);
       const body = JSON.parse(res.payload) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('UNAUTHORIZED');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Failed to verify Linear installation');
     });
 
     it('dispatches processCodeAction successfully', async () => {
@@ -315,7 +321,7 @@ describe('POST /webhooks/linear', () => {
       expect(mockProcessCodeAction).toHaveBeenCalledOnce();
     });
 
-    it('returns ok but logs warning when processCodeAction fails', async () => {
+    it('returns 500 when processCodeAction fails', async () => {
       vi.mocked(mockLinearOAuthRepo.get).mockResolvedValue(ok({
         accessToken: 'test-token',
         appUserId: 'app-user-123',
@@ -331,10 +337,11 @@ describe('POST /webhooks/linear', () => {
       const payload = makePayload();
       const res = await injectWebhook(payload);
 
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload) as { success: boolean; data: { received: boolean } };
-      expect(body.success).toBe(true);
-      expect(body.data.received).toBe(true);
+      expect(res.statusCode).toBe(500);
+      const body = JSON.parse(res.payload) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Failed to dispatch code task');
       expect(mockProcessCodeAction).toHaveBeenCalledOnce();
     });
 

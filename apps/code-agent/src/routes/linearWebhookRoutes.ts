@@ -16,28 +16,8 @@ import {
   validateWebhookTimestamp,
 } from '../infra/linearWebhookValidation.js';
 
-/**
- * In-memory set of processed webhook IDs for idempotency.
- * In production, this should be backed by Firestore with TTL.
- */
-const processedWebhookIds = new Set<string>();
-const MAX_PROCESSED_IDS = 10000;
-
-/**
- * Clean up processed webhook IDs to prevent unbounded growth.
- */
-/* v8 ignore start -- test-infra: cleanup threshold requires 10000+ entries, impractical in tests @preserve */
-function cleanupProcessedIds(): void {
-  if (processedWebhookIds.size > MAX_PROCESSED_IDS) {
-    // Clear oldest half
-    const entries = [...processedWebhookIds];
-    const toRemove = entries.slice(0, Math.floor(entries.length / 2));
-    for (const id of toRemove) {
-      processedWebhookIds.delete(id);
-    }
-  }
-}
-/* v8 ignore stop @preserve */
+const WEBHOOK_IDS_COLLECTION = 'linear_webhook_ids';
+const WEBHOOK_ID_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Webhook payload types from Linear.
@@ -147,6 +127,22 @@ export const linearWebhookRoutes: FastifyPluginCallback = (fastify, _opts, done)
             },
             required: ['success', 'error'],
           },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
         },
       },
     },
@@ -155,7 +151,7 @@ export const linearWebhookRoutes: FastifyPluginCallback = (fastify, _opts, done)
         message: 'Received request to POST /webhooks/linear',
       });
 
-      const { logger, linearOAuthRepo, linearActivityReporter } = getServices();
+      const { logger, linearOAuthRepo, linearActivityReporter, firestore } = getServices();
 
       // Step 1: Validate signature
       const signature = request.headers['linear-signature'];
@@ -181,27 +177,33 @@ export const linearWebhookRoutes: FastifyPluginCallback = (fastify, _opts, done)
         return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
       }
 
-      // Step 2: Validate timestamp (replay protection)
+      // Step 2: Validate timestamp (replay protection) — mandatory
       const body = request.body;
-      if (body.webhookTimestamp !== undefined) {
-        if (!validateWebhookTimestamp(body.webhookTimestamp)) {
-          logger.warn(
-            { webhookTimestamp: body.webhookTimestamp },
-            'Linear webhook timestamp outside acceptable window'
-          );
-          return await reply.fail('INVALID_REQUEST', 'Webhook timestamp outside acceptable window');
-        }
+      if (body.webhookTimestamp === undefined) {
+        logger.warn('Linear webhook missing webhookTimestamp');
+        return await reply.fail('INVALID_REQUEST', 'Missing webhook timestamp');
+      }
+      if (!validateWebhookTimestamp(body.webhookTimestamp)) {
+        logger.warn(
+          { webhookTimestamp: body.webhookTimestamp },
+          'Linear webhook timestamp outside acceptable window'
+        );
+        return await reply.fail('INVALID_REQUEST', 'Webhook timestamp outside acceptable window');
       }
 
-      // Step 3: Check idempotency
+      // Step 3: Check idempotency via Firestore
       const webhookId = body.webhookId ?? body.data?.id;
       if (webhookId !== undefined) {
-        if (processedWebhookIds.has(webhookId)) {
+        const idDoc = await firestore.collection(WEBHOOK_IDS_COLLECTION).doc(webhookId).get();
+        if (idDoc.exists) {
           logger.info({ webhookId }, 'Duplicate Linear webhook, skipping');
           return await reply.ok({ received: true });
         }
-        cleanupProcessedIds();
-        processedWebhookIds.add(webhookId);
+        const now = Date.now();
+        await firestore.collection(WEBHOOK_IDS_COLLECTION).doc(webhookId).set({
+          processedAt: now,
+          expiresAt: now + WEBHOOK_ID_TTL_MS,
+        });
       }
 
       // Step 4: Handle event types
@@ -226,7 +228,7 @@ export const linearWebhookRoutes: FastifyPluginCallback = (fastify, _opts, done)
 
         if (sessionId === undefined) {
           logger.warn('AgentSessionEvent.created missing session ID');
-          return await reply.ok({ received: true });
+          return await reply.fail('INVALID_REQUEST', 'Missing agent session ID');
         }
 
         // Emit thought activity immediately (< 10 sec requirement)
@@ -238,12 +240,19 @@ export const linearWebhookRoutes: FastifyPluginCallback = (fastify, _opts, done)
         // Extract issue context
         if (issueId === undefined) {
           logger.warn({ sessionId }, 'AgentSessionEvent.created missing issue ID');
-          return await reply.ok({ received: true });
+          return await reply.fail('INVALID_REQUEST', 'Missing issue ID');
         }
 
-        // Verify we have OAuth credentials
+        // Verify we have OAuth credentials (distinguish Firestore error from missing)
         const credResult = await linearOAuthRepo.get('default');
-        if (!credResult.ok || credResult.value === null) {
+        if (!credResult.ok) {
+          logger.error(
+            { error: credResult.error },
+            'Failed to look up Linear OAuth credentials'
+          );
+          return await reply.fail('INTERNAL_ERROR', 'Failed to verify Linear installation');
+        }
+        if (credResult.value === null) {
           logger.warn('No Linear OAuth credentials found, cannot process delegation');
           return await reply.fail('UNAUTHORIZED', 'Linear app not installed');
         }
@@ -284,7 +293,7 @@ export const linearWebhookRoutes: FastifyPluginCallback = (fastify, _opts, done)
         );
 
         if (!dispatchResult.ok) {
-          logger.warn(
+          logger.error(
             { issueId, sessionId, error: dispatchResult.error },
             'Failed to dispatch code task from Linear delegation'
           );
@@ -295,12 +304,14 @@ export const linearWebhookRoutes: FastifyPluginCallback = (fastify, _opts, done)
             sessionId,
             details: `Failed to dispatch: ${dispatchResult.error.message}`,
           });
-        } else {
-          logger.info(
-            { issueId, sessionId, codeTaskId: dispatchResult.value.codeTaskId },
-            'Code task dispatched from Linear delegation'
-          );
+
+          return await reply.fail('INTERNAL_ERROR', 'Failed to dispatch code task');
         }
+
+        logger.info(
+          { issueId, sessionId, codeTaskId: dispatchResult.value.codeTaskId },
+          'Code task dispatched from Linear delegation'
+        );
 
         return await reply.ok({ received: true });
       }

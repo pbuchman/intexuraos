@@ -189,7 +189,15 @@
     },
     "linear_oauth": {
       "owner": "code-agent",
-      "description": "Linear OAuth credentials for Agents Platform integration (workspace-level app install)"
+      "description": "Linear OAuth credentials for Agents Platform integration (AES-256-GCM encrypted, workspace-level app install)"
+    },
+    "linear_oauth_states": {
+      "owner": "code-agent",
+      "description": "OAuth CSRF state tokens with TTL-based expiry for Linear app installation flow"
+    },
+    "linear_webhook_ids": {
+      "owner": "code-agent",
+      "description": "Webhook idempotency tracking with TTL-based expiry for Linear webhook deduplication"
     }
   }
 }

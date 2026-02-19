@@ -24,12 +24,55 @@ export type TaskEventType =
   | 'task_error'
   | 'task_timeout';
 
-export interface TaskEvent {
-  type: TaskEventType;
+interface BaseTaskEvent {
   sessionId?: string;
+}
+
+export interface TaskDispatchedEvent extends BaseTaskEvent {
+  type: 'task_dispatched';
+}
+
+export interface Phase1StartEvent extends BaseTaskEvent {
+  type: 'phase1_start';
+}
+
+export interface Phase1CompleteEvent extends BaseTaskEvent {
+  type: 'phase1_complete';
   details?: string;
+}
+
+export interface Phase2StartEvent extends BaseTaskEvent {
+  type: 'phase2_start';
+}
+
+export interface PRCreatedEvent extends BaseTaskEvent {
+  type: 'pr_created';
   prUrl?: string;
 }
+
+export interface TaskCompletedEvent extends BaseTaskEvent {
+  type: 'task_completed';
+  details?: string;
+}
+
+export interface TaskErrorEvent extends BaseTaskEvent {
+  type: 'task_error';
+  details?: string;
+}
+
+export interface TaskTimeoutEvent extends BaseTaskEvent {
+  type: 'task_timeout';
+}
+
+export type TaskEvent =
+  | TaskDispatchedEvent
+  | Phase1StartEvent
+  | Phase1CompleteEvent
+  | Phase2StartEvent
+  | PRCreatedEvent
+  | TaskCompletedEvent
+  | TaskErrorEvent
+  | TaskTimeoutEvent;
 
 export interface ActivityMapping {
   type: ActivityType;
@@ -159,7 +202,7 @@ export function createLinearActivityReporter(
         });
 
         if (!activityResult.ok) {
-          logger.warn(
+          logger.error(
             { sessionId, eventType: event.type, error: activityResult.error },
             'Failed to emit Linear activity (non-fatal)'
           );
@@ -173,7 +216,7 @@ export function createLinearActivityReporter(
         });
 
         if (!planResult.ok) {
-          logger.warn(
+          logger.error(
             { sessionId, eventType: event.type, error: planResult.error },
             'Failed to update Linear session plan (non-fatal)'
           );
@@ -187,7 +230,7 @@ export function createLinearActivityReporter(
           });
 
           if (!urlResult.ok) {
-            logger.warn(
+            logger.error(
               { sessionId, prUrl: event.prUrl, error: urlResult.error },
               'Failed to update Linear session external URLs (non-fatal)'
             );

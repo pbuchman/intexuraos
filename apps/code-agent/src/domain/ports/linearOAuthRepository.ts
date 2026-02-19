@@ -14,7 +14,7 @@ export interface LinearOAuthCredentials {
 }
 
 export interface LinearOAuthError {
-  code: 'internal_error' | 'not_found';
+  code: 'internal_error';
   message: string;
 }
 

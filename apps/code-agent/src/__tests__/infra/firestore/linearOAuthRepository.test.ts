@@ -104,4 +104,75 @@ describe('createLinearOAuthRepository', () => {
       }
     });
   });
+
+  describe('document validation', () => {
+    it('rejects corrupted document missing accessToken on get', async () => {
+      // Write a malformed document directly to Firestore
+      await firestore.collection('linear_oauth').doc('corrupted').set({
+        appUserId: 'test',
+        workspaceId: 'corrupted',
+        installedAt: '2026-01-01',
+        installedBy: 'test',
+        // accessToken deliberately missing
+      });
+
+      const result = await repo.get('corrupted');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Corrupted credential document');
+      }
+    });
+
+    it('rejects corrupted document missing installedBy on get', async () => {
+      await firestore.collection('linear_oauth').doc('corrupted2').set({
+        accessToken: 'encrypted-value',
+        appUserId: 'test',
+        workspaceId: 'corrupted2',
+        installedAt: '2026-01-01',
+        // installedBy deliberately missing
+      });
+
+      const result = await repo.get('corrupted2');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+      }
+    });
+
+    it('rejects corrupted document on findByAppUserId', async () => {
+      // Write a malformed document directly to Firestore
+      await firestore.collection('linear_oauth').doc('corrupted-find').set({
+        appUserId: 'find-me',
+        workspaceId: 'corrupted-find',
+        installedAt: '2026-01-01',
+        // accessToken and installedBy deliberately missing
+      });
+
+      const result = await repo.findByAppUserId('find-me');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toBe('Corrupted credential document');
+      }
+    });
+
+    it('encrypts accessToken on save and decrypts on read', async () => {
+      await repo.save(testCredentials);
+
+      // Read raw document from Firestore to verify encryption
+      const doc = await firestore.collection('linear_oauth').doc('default').get();
+      const rawData = doc.data() as Record<string, unknown>;
+
+      // The raw stored value should NOT be the plaintext token
+      expect(rawData['accessToken']).not.toBe('lin_api_test_token_123');
+
+      // But reading through the repo should return the plaintext token
+      const result = await repo.get('default');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value?.accessToken).toBe('lin_api_test_token_123');
+      }
+    });
+  });
 });

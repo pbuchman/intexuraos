@@ -13,8 +13,24 @@ import type {
   LinearOAuthCredentials,
   LinearOAuthError,
 } from '../../domain/ports/linearOAuthRepository.js';
+import { encryptToken, decryptToken } from './encryption.js';
 
 const COLLECTION_NAME = 'linear_oauth';
+
+/**
+ * Validate that Firestore document data contains all required credential fields.
+ */
+function validateCredentialDoc(
+  data: Record<string, unknown>
+): data is Record<string, unknown> & LinearOAuthCredentials {
+  return (
+    typeof data['accessToken'] === 'string' &&
+    typeof data['appUserId'] === 'string' &&
+    typeof data['workspaceId'] === 'string' &&
+    typeof data['installedAt'] === 'string' &&
+    typeof data['installedBy'] === 'string'
+  );
+}
 
 export interface LinearOAuthRepositoryDeps {
   firestore: Firestore;
@@ -35,7 +51,7 @@ export function createLinearOAuthRepository(
       try {
         const docRef = collection.doc(credentials.workspaceId);
         await docRef.set({
-          accessToken: credentials.accessToken,
+          accessToken: encryptToken(credentials.accessToken),
           appUserId: credentials.appUserId,
           workspaceId: credentials.workspaceId,
           installedAt: credentials.installedAt,
@@ -66,8 +82,18 @@ export function createLinearOAuthRepository(
           return ok(null);
         }
 
-        const data = doc.data() as LinearOAuthCredentials;
-        return ok(data);
+        const rawData = doc.data() as Record<string, unknown>;
+        if (!validateCredentialDoc(rawData)) {
+          logger.error({ workspaceId }, 'Corrupted Linear OAuth credential document');
+          return err({
+            code: 'internal_error',
+            message: 'Corrupted credential document',
+          });
+        }
+        return ok({
+          ...rawData,
+          accessToken: decryptToken(rawData.accessToken),
+        });
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, workspaceId }, 'Failed to get Linear OAuth credentials');
@@ -95,8 +121,18 @@ export function createLinearOAuthRepository(
           return ok(null);
         }
         /* v8 ignore stop @preserve */
-        const data = doc.data() as LinearOAuthCredentials;
-        return ok(data);
+        const rawData = doc.data() as Record<string, unknown>;
+        if (!validateCredentialDoc(rawData)) {
+          logger.error({ appUserId }, 'Corrupted Linear OAuth credential document');
+          return err({
+            code: 'internal_error',
+            message: 'Corrupted credential document',
+          });
+        }
+        return ok({
+          ...rawData,
+          accessToken: decryptToken(rawData.accessToken),
+        });
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, appUserId }, 'Failed to find Linear OAuth credentials by appUserId');

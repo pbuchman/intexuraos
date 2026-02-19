@@ -218,6 +218,10 @@ export function initServices(config: ServiceConfig): void {
         logger: createAppLogger({ name: 'whatsapp-publisher' }),
       });
 
+  const linearOAuthRepo = createLinearOAuthRepository({ firestore, logger });
+  const linearAgentApiClient = createLinearAgentApiClientImpl({ linearOAuthRepo, logger });
+  const linearActivityReporter = createLinearActivityReporter({ linearAgentApiClient, logger });
+
   container = {
     firestore,
     logger,
@@ -259,18 +263,9 @@ export function initServices(config: ServiceConfig): void {
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     prTaskLockRepo: createFirestorePRTaskLockRepository({ firestore, logger }),
-    linearOAuthRepo: createLinearOAuthRepository({ firestore, logger }),
-    linearAgentApiClient: createLinearAgentApiClientImpl({
-      linearOAuthRepo: createLinearOAuthRepository({ firestore, logger }),
-      logger,
-    }),
-    linearActivityReporter: createLinearActivityReporter({
-      linearAgentApiClient: createLinearAgentApiClientImpl({
-        linearOAuthRepo: createLinearOAuthRepository({ firestore, logger }),
-        logger,
-      }),
-      logger,
-    }),
+    linearOAuthRepo,
+    linearAgentApiClient,
+    linearActivityReporter,
   };
 }
 

@@ -4,7 +4,7 @@
  * Tests:
  * - GET /oauth/linear/install - Redirect to Linear authorization URL
  * - GET /oauth/linear/callback - Exchange code for token, store credentials
- * - cleanExpiredStates() - Expired state cleanup
+ * - Firestore state expiry - TTL-based CSRF state validation
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -351,7 +351,7 @@ describe('Linear OAuth Routes', () => {
       expect(body.error.message).toBe('No access token in response');
     });
 
-    it('should return 500 when viewer ID query returns non-ok response', async () => {
+    it('should return 502 when viewer ID query returns non-ok response', async () => {
       const state = await getValidState();
 
       // Token exchange succeeds
@@ -366,17 +366,17 @@ describe('Linear OAuth Routes', () => {
         url: `/oauth/linear/callback?code=auth-code&state=${state}`,
       });
 
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(502);
       const body = JSON.parse(response.body) as {
         success: boolean;
         error: { code: string; message: string };
       };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
-      expect(body.error.message).toBe('OAuth callback processing failed');
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toContain('Linear API returned 401');
     });
 
-    it('should return 500 when viewer ID is undefined in response', async () => {
+    it('should return 502 when viewer ID is undefined in response', async () => {
       const state = await getValidState();
 
       // Token exchange succeeds
@@ -394,14 +394,35 @@ describe('Linear OAuth Routes', () => {
         url: `/oauth/linear/callback?code=auth-code&state=${state}`,
       });
 
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(502);
       const body = JSON.parse(response.body) as {
         success: boolean;
         error: { code: string; message: string };
       };
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
-      expect(body.error.message).toBe('OAuth callback processing failed');
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toContain('Failed to retrieve viewer ID');
+    });
+
+    it('should return 502 when fetch for token exchange throws network error', async () => {
+      const state = await getValidState();
+
+      // Token exchange network error
+      mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/oauth/linear/callback?code=auth-code&state=${state}`,
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Failed to connect to Linear token endpoint');
     });
 
     it('should return 500 when linearOAuthRepo.save returns an error', async () => {
@@ -465,11 +486,11 @@ describe('Linear OAuth Routes', () => {
     });
   });
 
-  // ─── cleanExpiredStates ──────────────────────────────────────────────
+  // ─── Firestore State Expiry ──────────────────────────────────────────
 
-  describe('cleanExpiredStates', () => {
-    it('should clean expired states when install endpoint is called', async () => {
-      // Create a first state
+  describe('Firestore state expiry', () => {
+    it('should reject expired states from Firestore', async () => {
+      // Create a state by calling install
       const firstInstallResponse = await app.inject({
         method: 'GET',
         url: '/oauth/linear/install',
@@ -482,18 +503,7 @@ describe('Linear OAuth Routes', () => {
       const baseTime = Date.now();
       vi.spyOn(Date, 'now').mockReturnValue(baseTime + 11 * 60 * 1000);
 
-      // Trigger install again - this calls cleanExpiredStates() internally
-      const secondInstallResponse = await app.inject({
-        method: 'GET',
-        url: '/oauth/linear/install',
-      });
-      const secondLocation = secondInstallResponse.headers['location'] as string;
-      const secondState = new URL(secondLocation).searchParams.get('state') as string;
-
-      // Restore Date.now so callback timestamp check works
-      vi.spyOn(Date, 'now').mockImplementation(realDateNow);
-
-      // The first state should have been cleaned (expired)
+      // The first state should be rejected as expired
       const expiredResponse = await app.inject({
         method: 'GET',
         url: `/oauth/linear/callback?code=auth-code&state=${firstState}`,
@@ -504,15 +514,28 @@ describe('Linear OAuth Routes', () => {
         error: { code: string; message: string };
       };
       expect(expiredBody.error.code).toBe('INVALID_REQUEST');
+      expect(expiredBody.error.message).toBe('State parameter has expired');
 
-      // The second state should still be valid (not expired)
+      // Restore Date.now
+      vi.spyOn(Date, 'now').mockImplementation(realDateNow);
+    });
+
+    it('should allow valid states within TTL', async () => {
+      const installResponse = await app.inject({
+        method: 'GET',
+        url: '/oauth/linear/install',
+      });
+      const location = installResponse.headers['location'] as string;
+      const state = new URL(location).searchParams.get('state') as string;
+
+      // Within TTL, state should be accepted
       mockFetch
         .mockResolvedValueOnce(makeTokenResponse())
         .mockResolvedValueOnce(makeViewerResponse());
 
       const validResponse = await app.inject({
         method: 'GET',
-        url: `/oauth/linear/callback?code=auth-code&state=${secondState}`,
+        url: `/oauth/linear/callback?code=auth-code&state=${state}`,
       });
       expect(validResponse.statusCode).toBe(200);
     });
