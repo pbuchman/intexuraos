@@ -21,6 +21,7 @@ export const chartDefinitionPrompt: PromptBuilder<
 > = {
   name: 'chart-definition',
   description: 'Generates chart configuration based on a specific data insight',
+  version: '1.0.0',
   build(input: ChartDefinitionPromptInput): string {
     const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
     const snapshotData = JSON.stringify(input.snapshotData, null, 2);

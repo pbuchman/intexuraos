@@ -34,6 +34,7 @@ function buildChartTypesTable(chartTypes: ChartTypeInfo[]): string {
 export const dataAnalysisPrompt: PromptBuilder<DataAnalysisPromptInput, DataAnalysisPromptDeps> = {
   name: 'data-analysis',
   description: 'Analyzes composite feed data and generates measurable, trackable insights',
+  version: '1.0.0',
   build(input: DataAnalysisPromptInput): string {
     const chartTypesTable = buildChartTypesTable(input.chartTypes);
     const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);

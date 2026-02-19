@@ -202,6 +202,21 @@ CI fails on any unaccounted branch. No exceptions.
 
 ---
 
+## Prompt Versioning
+
+**RULE:** All `PromptBuilder` prompts MUST have a `version` field following semver.
+
+When editing a prompt's content, bump the version:
+
+- **Major** (X.0.0): Behavior change (default inversion, category change, output format)
+- **Minor** (x.Y.0): New examples, refined instructions, edge cases
+- **Patch** (x.y.Z): Typos, formatting
+
+**Enforcement:** `pnpm run verify:prompt-versions` (CI Static Validation phase)
+**Reference:** `docs/patterns/prompt-versioning.md`
+
+---
+
 ## Code Auditing
 
 **RULE:** When fixing a pattern in one service, audit ALL other services for the same issue before committing.

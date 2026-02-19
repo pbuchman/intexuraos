@@ -96,6 +96,7 @@ CRITICAL: Output ONLY plain prose text
 export const summaryPrompt: PromptBuilder<SummaryPromptInput, SummaryPromptDeps> = {
   name: 'page-summary-generation',
   description: 'Generates concise prose summaries from web page content',
+  version: '1.0.0',
 
   build(input: SummaryPromptInput, deps?: SummaryPromptDeps): string {
     const wordsPerMinute = deps?.wordsPerMinute ?? 200;
@@ -126,6 +127,7 @@ export const summaryRepairPrompt: PromptBuilder<
 > = {
   name: 'page-summary-repair',
   description: 'Requests LLM to fix invalid summary response format',
+  version: '1.0.0',
 
   build(input: SummaryRepairPromptInput, deps?: SummaryRepairPromptDeps): string {
     const contentMaxLength = deps?.contentMaxLength ?? 5000;

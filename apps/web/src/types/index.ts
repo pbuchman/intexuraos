@@ -1283,6 +1283,8 @@ export interface WorkersStatusResponse {
 export type GitHubPREventType =
   | 'pull_request'
   | 'pull_request_review'
+  | 'pull_request_review_comment'
+  | 'issue_comment'
   | 'push';
 
 /**
@@ -1296,6 +1298,7 @@ export interface GitHubPREvent {
   action: string | null;
   senderLogin: string;
   createdAt: string;
+  eventUrl: string | null;
 }
 
 /**

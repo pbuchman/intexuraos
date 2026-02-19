@@ -22,6 +22,7 @@ export interface FeedNamePromptDeps extends PromptDeps {
 export const feedNamePrompt: PromptBuilder<FeedNamePromptInput, FeedNamePromptDeps> = {
   name: 'feed-name-generation',
   description: 'Generates descriptive names for composite data feeds',
+  version: '1.0.0',
 
   build(input: FeedNamePromptInput, deps?: FeedNamePromptDeps): string {
     const maxLength = deps?.maxLength ?? 100;

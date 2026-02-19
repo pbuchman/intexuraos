@@ -18,19 +18,19 @@ const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreated
 });
 
 describe('shouldAutoExecute', () => {
-  describe('link actions', () => {
+  describe('confidence threshold', () => {
     it('returns true when confidence is 100%', () => {
       const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 1 } });
       expect(shouldAutoExecute(event)).toBe(true);
     });
 
     it('returns true when confidence is exactly 90%', () => {
-      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.9 } });
+      const event = createEvent({ actionType: 'todo', payload: { prompt: 'test', confidence: 0.9 } });
       expect(shouldAutoExecute(event)).toBe(true);
     });
 
     it('returns true when confidence is above 90%', () => {
-      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.95 } });
+      const event = createEvent({ actionType: 'code', payload: { prompt: 'test', confidence: 0.95 } });
       expect(shouldAutoExecute(event)).toBe(true);
     });
 
@@ -40,51 +40,54 @@ describe('shouldAutoExecute', () => {
     });
 
     it('returns false when confidence is 0', () => {
-      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0 } });
+      const event = createEvent({ actionType: 'research', payload: { prompt: 'test', confidence: 0 } });
       expect(shouldAutoExecute(event)).toBe(false);
     });
 
     it('returns false when confidence is 0.5', () => {
-      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.5 } });
+      const event = createEvent({ actionType: 'note', payload: { prompt: 'test', confidence: 0.5 } });
       expect(shouldAutoExecute(event)).toBe(false);
     });
   });
 
-  describe('other action types never auto-execute', () => {
-    it('returns false for todo actions regardless of confidence', () => {
-      const event = createEvent({ actionType: 'todo', payload: { prompt: 'test', confidence: 1 } });
-      expect(shouldAutoExecute(event)).toBe(false);
+  describe('all action types auto-execute at high confidence', () => {
+    it.each([
+      'link',
+      'todo',
+      'research',
+      'note',
+      'calendar',
+      'reminder',
+      'code',
+      'linear',
+    ] as const)('returns true for %s actions at 95% confidence', (actionType) => {
+      const event = createEvent({ actionType, payload: { prompt: 'test', confidence: 0.95 } });
+      expect(shouldAutoExecute(event)).toBe(true);
     });
 
-    it('returns false for research actions regardless of confidence', () => {
-      const event = createEvent({ actionType: 'research', payload: { prompt: 'test', confidence: 1 } });
-      expect(shouldAutoExecute(event)).toBe(false);
-    });
-
-    it('returns false for note actions regardless of confidence', () => {
-      const event = createEvent({ actionType: 'note', payload: { prompt: 'test', confidence: 1 } });
-      expect(shouldAutoExecute(event)).toBe(false);
-    });
-
-    it('returns false for calendar actions regardless of confidence', () => {
-      const event = createEvent({ actionType: 'calendar', payload: { prompt: 'test', confidence: 1 } });
-      expect(shouldAutoExecute(event)).toBe(false);
-    });
-
-    it('returns false for reminder actions regardless of confidence', () => {
-      const event = createEvent({ actionType: 'reminder', payload: { prompt: 'test', confidence: 1 } });
+    it.each([
+      'link',
+      'todo',
+      'research',
+      'note',
+      'calendar',
+      'reminder',
+      'code',
+      'linear',
+    ] as const)('returns false for %s actions at 85% confidence', (actionType) => {
+      const event = createEvent({ actionType, payload: { prompt: 'test', confidence: 0.85 } });
       expect(shouldAutoExecute(event)).toBe(false);
     });
   });
 
   describe('edge cases', () => {
-    it('returns true for link action with confidence slightly below 100%', () => {
-      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.999 } });
+    it('returns true with confidence slightly below 100%', () => {
+      const event = createEvent({ actionType: 'code', payload: { prompt: 'test', confidence: 0.999 } });
       expect(shouldAutoExecute(event)).toBe(true);
     });
 
-    it('returns false for link action with confidence slightly below 90%', () => {
-      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.899 } });
+    it('returns false with confidence slightly below 90%', () => {
+      const event = createEvent({ actionType: 'code', payload: { prompt: 'test', confidence: 0.899 } });
       expect(shouldAutoExecute(event)).toBe(false);
     });
   });

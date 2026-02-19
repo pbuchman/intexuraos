@@ -63,6 +63,17 @@ function getOptionalEnv(name: string, defaultValue: string): string {
 }
 /* v8 ignore stop @preserve */
 
+/* v8 ignore start -- module-init: reads host git config at startup, requires git CLI @preserve */
+function readHostGitConfig(key: string): string | undefined {
+  try {
+    const value = execSync(`git config ${key}`, { encoding: 'utf-8', timeout: 5000 }).trim();
+    return value !== '' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+/* v8 ignore stop @preserve */
+
 /**
  * Validate GCP credentials are properly configured
  */
@@ -381,6 +392,13 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  // Resolve git identity for worker containers (env var → host git config → undefined)
+  const gitUserName =
+    process.env['INTEXURAOS_GIT_USER_NAME'] ?? readHostGitConfig('user.name');
+  const gitUserEmail =
+    process.env['INTEXURAOS_GIT_USER_EMAIL'] ?? readHostGitConfig('user.email');
+  logger.info({ gitUserName, gitUserEmail }, 'Git identity for worker containers');
+
   // Create Docker isolation provider
   const secretsBasePath = join(orchestratorDir, 'secrets');
   const workerImage = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE);
@@ -400,6 +418,8 @@ async function bootstrap(): Promise<void> {
       keepContainersAlive,
       imageName: workerImage,
       sharedCredsPath,
+      ...(gitUserName !== undefined ? { gitUserName } : {}),
+      ...(gitUserEmail !== undefined ? { gitUserEmail } : {}),
     },
     logger
   );

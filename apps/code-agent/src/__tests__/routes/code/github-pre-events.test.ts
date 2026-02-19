@@ -373,6 +373,44 @@ describe('GET /code/github-pr-events', () => {
     expect(body.data.events).toHaveLength(1);
     expect(body.data.events[0].pullRequestNumber).toBe(42);
     expect(body.data.events[0].repository).toBe('intexuraos/test-repo');
+    expect(body.data.events[0].eventUrl).toBeNull();
+  });
+
+  it('should return eventUrl when payload contains html_url', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    const commentUrl = 'https://github.com/intexuraos/test-repo/pull/10#issuecomment-999';
+
+    await repo.save({
+      githubEventId: 30001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'issue_comment',
+      action: 'created',
+      senderLogin: 'commenter',
+      senderId: 5,
+      senderType: 'User',
+      title: null,
+      body: null,
+      state: null,
+      mergedAt: null,
+      createdAt: new Date('2024-02-01T00:00:00Z'),
+      payload: { comment: { html_url: commentUrl } },
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=10',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.data.events).toHaveLength(1);
+    expect(body.data.events[0].eventUrl).toBe(commentUrl);
   });
 
   it('should pass limit parameter to repository', async () => {

@@ -177,6 +177,9 @@ export function CodeTaskViewPage(): React.JSX.Element {
           parentTaskId={task.parentTaskId}
         />
       ) : null}
+      {task.executionPhase === 'design' && task.implementationTaskId !== undefined ? (
+        <ImplementationLinkBanner implementationTaskId={task.implementationTaskId} />
+      ) : null}
 
       <MemoTaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
 
@@ -429,6 +432,20 @@ function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX
         className="font-medium underline hover:no-underline"
       >
         {'DESIGN'}
+      </a>
+    </div>
+  );
+}
+
+function ImplementationLinkBanner({ implementationTaskId }: { implementationTaskId: string }): React.JSX.Element {
+  return (
+    <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+      {'This task is the design phase of the IntexuraOS Two-Phase Code Task Execution Flow. '}
+      <a
+        href={`/#/code-tasks/${implementationTaskId}`}
+        className="font-medium underline hover:no-underline"
+      >
+        {'IMPLEMENTATION'}
       </a>
     </div>
   );

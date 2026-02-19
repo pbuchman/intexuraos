@@ -1007,6 +1007,48 @@ describe('DockerProvider', () => {
     });
   });
 
+  describe('git identity passthrough', () => {
+    it('passes GIT_USER_NAME and GIT_USER_EMAIL to container env when configured', async () => {
+      const gitProvider = new TestableDockerProvider(
+        { gitUserName: 'Test User', gitUserEmail: 'test@example.com' },
+        mockLogger,
+        mocks.mockDocker
+      );
+      await gitProvider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContainEqual('GIT_USER_NAME=Test User');
+      expect(envArr).toContainEqual('GIT_USER_EMAIL=test@example.com');
+    });
+
+    it('does not set GIT_USER_NAME or GIT_USER_EMAIL when not configured', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const hasGitName = envArr.some((e: string) => e.startsWith('GIT_USER_NAME='));
+      const hasGitEmail = envArr.some((e: string) => e.startsWith('GIT_USER_EMAIL='));
+      expect(hasGitName).toBe(false);
+      expect(hasGitEmail).toBe(false);
+    });
+
+    it('passes only GIT_USER_NAME when only name is configured', async () => {
+      const gitProvider = new TestableDockerProvider(
+        { gitUserName: 'Test User' },
+        mockLogger,
+        mocks.mockDocker
+      );
+      await gitProvider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContainEqual('GIT_USER_NAME=Test User');
+      const hasGitEmail = envArr.some((e: string) => e.startsWith('GIT_USER_EMAIL='));
+      expect(hasGitEmail).toBe(false);
+    });
+  });
+
   describe('getImageInfo', () => {
     it('returns configured image info with null digest before any pull', () => {
       const info = provider.getImageInfo();
