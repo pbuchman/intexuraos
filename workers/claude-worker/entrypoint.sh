@@ -201,8 +201,8 @@ VERBS=(
     "Shaped" "Sparked" "Stitched" "Tempered" "Wrought"
 )
 VERB=${VERBS[$((RANDOM % ${#VERBS[@]}))]}
-COMMIT_ATTR="${VERB} with love by 🤖 Intex <intex@intexuraos.cloud>"
-PR_ATTR="${VERB} with love by 🤖 [Intex](https://intexuraos.cloud) <intex@intexuraos.cloud>"
+COMMIT_ATTR="${VERB} with love by 🤖 <a href=\"mailto:intex@intexuraos.cloud\">Intex</a>"
+PR_ATTR="${VERB} with love by 🤖 <a href=\"mailto:intex@intexuraos.cloud\">Intex</a>"
 
 mkdir -p /repo/.claude
 if [ -f "/repo/.claude/settings.local.json" ]; then
