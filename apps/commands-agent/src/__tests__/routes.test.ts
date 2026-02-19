@@ -353,6 +353,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.95,
         title: 'Buy groceries',
         reasoning: 'Contains grocery shopping task',
+        promptVersion: '1.0.0',
       });
 
       const event = {
@@ -394,6 +395,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.3,
         title: 'Unknown',
         reasoning: 'No clear intent detected, defaulting to note',
+        promptVersion: '1.0.0',
       });
 
       const event = {
@@ -558,6 +560,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.9,
         title: 'Test Task',
         reasoning: 'Contains task indicator',
+        promptVersion: '1.0.0',
       });
 
       const event = {
@@ -639,6 +642,7 @@ describe('Commands Agent Routes', () => {
           type: 'note',
           confidence: 0.8,
           reasoning: 'Information storage request',
+          promptVersion: '1.0.0',
           classifiedAt: '2025-01-01T12:00:01.000Z',
         },
         createdAt: '2025-01-01T12:00:00.000Z',
@@ -716,6 +720,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.85,
         title: 'Shared Note',
         reasoning: 'General information to note',
+        promptVersion: '1.0.0',
       });
 
       const response = await app.inject({
@@ -746,6 +751,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.9,
         title: 'Research Topic',
         reasoning: 'Research request',
+        promptVersion: '1.0.0',
       });
 
       const response = await app.inject({
@@ -774,6 +780,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.95,
         title: 'Research AI trends',
         reasoning: 'Research query about AI trends',
+        promptVersion: '1.0.0',
       });
 
       const event = {
@@ -811,6 +818,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.3,
         title: 'Unknown',
         reasoning: 'No clear intent detected, defaulting to note',
+        promptVersion: '1.0.0',
       });
 
       const event = {
@@ -925,6 +933,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.9,
         title: 'Buy groceries',
         reasoning: 'Shopping task',
+        promptVersion: '1.0.0',
       });
 
       const response = await app.inject({
@@ -1071,6 +1080,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.9,
         title: 'Task',
         reasoning: 'General task',
+        promptVersion: '1.0.0',
       });
 
       const response = await app.inject({
@@ -1115,6 +1125,7 @@ describe('Commands Agent Routes', () => {
         confidence: 0.95,
         title: 'AI Trends Research',
         reasoning: 'Research query about AI trends',
+        promptVersion: '1.0.0',
       });
 
       await app.inject({
@@ -1312,6 +1323,7 @@ describe('Commands Agent Routes', () => {
           type: 'todo',
           confidence: 0.9,
           reasoning: 'Task detected',
+          promptVersion: '1.0.0',
           classifiedAt: '2025-01-01T12:00:01.000Z',
         },
         createdAt: '2025-01-01T12:00:00.000Z',
@@ -1374,6 +1386,7 @@ describe('Commands Agent Routes', () => {
           type: 'todo',
           confidence: 0.9,
           reasoning: 'Task detected',
+          promptVersion: '1.0.0',
           classifiedAt: '2025-01-01T12:00:01.000Z',
         },
         createdAt: '2025-01-01T12:00:00.000Z',
