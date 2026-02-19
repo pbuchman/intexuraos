@@ -99,6 +99,32 @@ function deduplicateCommentEvents(events: GitHubPREvent[]): GitHubPREvent[] {
   return result;
 }
 
+/**
+ * Show PR description body only on the most recent pull_request event.
+ * GitHub sends the full PR body on every synchronize event — this prevents
+ * the same "Summary" section from rendering multiple times in the timeline.
+ */
+function deduplicatePRBody(events: GitHubPREvent[]): GitHubPREvent[] {
+  // Find the index of the last pull_request event with a non-empty body
+  let lastPRBodyIndex = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event?.eventType === 'pull_request' && event.body !== null && event.body !== '') {
+      lastPRBodyIndex = i;
+      break;
+    }
+  }
+
+  if (lastPRBodyIndex === -1) return events;
+
+  return events.map((event, i) => {
+    if (event.eventType === 'pull_request' && i !== lastPRBodyIndex && event.body !== null && event.body !== '') {
+      return { ...event, body: null };
+    }
+    return event;
+  });
+}
+
 // Query params schema
 const githubPREventsQuerySchema = {
   type: 'object',
@@ -234,6 +260,8 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
 
         // Deduplicate comment events (created → edited) so each comment appears once
         const dedupedEvents = deduplicateCommentEvents(result.value); // @allow-result-access -- narrowed by !result.ok check above
+        // Deduplicate PR body so it only shows on the most recent pull_request event
+        const finalEvents = deduplicatePRBody(dedupedEvents);
 
         // Return only fields used by the UI
         const events: {
@@ -246,7 +274,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           createdAt: string;
           eventUrl: string | null;
           body: string | null;
-        }[] = dedupedEvents.map((event: GitHubPREvent) => ({
+        }[] = finalEvents.map((event: GitHubPREvent) => ({
           pullRequestNumber: event.pullRequestNumber,
           title: event.title,
           repository: event.repository,
