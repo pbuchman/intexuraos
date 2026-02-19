@@ -64,7 +64,7 @@ Both functions validate the `X-Internal-Auth` header before proceeding.
 {
   success: true;
   message: string; // "VM started and healthy" or "VM already running and healthy"
-  startupDurationMs: number; // Total time from invocation to healthy
+  startupDurationMs?: number; // Total time from invocation to healthy
 }
 ```
 
@@ -120,6 +120,16 @@ flowchart TD
     I -->|Timeout 3 min| J[Return failure]
 ```
 
+**VM state polling details:**
+
+The function polls the Compute API waiting for the VM to reach `RUNNING` or `TERMINATED` states after issuing start/stop commands.
+
+| Parameter     | Value                                                 |
+| ------------- | ----------------------------------------------------- |
+| Poll interval | 5 seconds (hardcoded, separate from health check)     |
+| Poll timeout  | 3 minutes (shares `HEALTH_POLL_TIMEOUT_MS`)           |
+| On timeout    | Throws an error caught by the outer try/catch         |
+
 **Health polling details:**
 
 | Parameter         | Value                                       |
@@ -127,8 +137,8 @@ flowchart TD
 | Health endpoint   | Configurable via `INTEXURAOS_VM_HEALTH_URL` |
 | Default URL       | `https://cc-vm.intexuraos.cloud/health`     |
 | Expected response | `{ "status": "ready" }`                     |
-| Poll interval     | 10 seconds                                  |
-| Poll timeout      | 3 minutes                                   |
+| Poll interval     | 10 seconds (from `HEALTH_POLL_INTERVAL_MS`) |
+| Poll timeout      | 3 minutes (from `HEALTH_POLL_TIMEOUT_MS`)   |
 | Request timeout   | 5 seconds per attempt                       |
 
 ## Shutdown Flow
@@ -198,6 +208,16 @@ The function polls the health endpoint during the grace period. It stops waiting
 | `SHUTDOWN_POLL_INTERVAL_MS`            | number | `30000` (30 seconds)                            |
 | `ORCHESTRATOR_UNRESPONSIVE_TIMEOUT_MS` | number | `120000` (2 minutes)                            |
 
+## Recent Changes
+
+| Commit     | Description                                   | Date       |
+| ---------- | --------------------------------------------- | ---------- |
+| `b82522d2` | Fix Cloud Functions deployment with esbuild bundling | 2026-02-01 |
+| `f10ebdbf` | Fix empty error objects in log output (INT-464) | 2026-01-31 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (INT-427) | 2026-01-29 |
+| `7a90db67` | Fix vitest v4 migration and improve branch coverage | 2026-01-28 |
+| `cd70bc3f` | Add Cloud Functions for VM lifecycle (INT-369/370) | 2026-01-25 |
+
 ## Dependencies
 
 | Service              | Purpose                               |
@@ -240,6 +260,8 @@ The function polls the health endpoint during the grace period. It stops waiting
 **Timeout budget** - The 120-second Cloud Function timeout must accommodate health polling (up to 3 minutes) and VM state transitions. In practice, cold starts are faster, but slow boots can cause the function to timeout before the health check passes.
 
 **Orchestrator optional** - If the orchestrator's shutdown endpoint is unreachable, the stop function waits 2 minutes then proceeds with forced shutdown. This is by design to avoid blocking VM shutdown on an unresponsive application.
+
+**esbuild bundling required** - Workers use `build-service.mjs` with esbuild instead of plain `tsc`. This bundles `@intexuraos/*` workspace packages into the output zip. Cloud Functions npm runtime cannot resolve `workspace:*` references, so plain TypeScript compilation breaks deployment.
 
 **Auth header format** - The function expects `X-Internal-Auth: Bearer <token>`, not the standard `Authorization` header. This matches the IntexuraOS internal auth pattern.
 

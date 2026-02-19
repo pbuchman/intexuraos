@@ -209,7 +209,7 @@ interface ChartDefinitionOutput {
 
 **Endpoint:** `POST /composite-feeds/{feedId}/preview`
 
-**When to use:** Transform snapshot data for chart rendering
+**When to use:** Transform snapshot data for chart rendering (one-time, not persisted)
 
 **Input Schema:**
 
@@ -249,6 +249,81 @@ interface Snapshot {
 }
 ```
 
+### Create Visualization
+
+**Endpoint:** `POST /visualizations`
+
+**When to use:** Save a chart configuration that persists and auto-refreshes with snapshot data
+
+**Input Schema:**
+
+```typescript
+interface CreateVisualizationInput {
+  feedId: string;
+  insightId: string;
+  chartConfig: object;         // Vega-Lite spec without data
+  transformInstructions: string;
+}
+```
+
+**Output Schema:**
+
+```typescript
+type VisualizationStatus = 'pending' | 'ready' | 'refreshing' | 'error';
+
+interface Visualization {
+  id: string;
+  userId: string;
+  feedId: string;
+  feedName: string;
+  insightId: string;
+  insightTitle: string;
+  trackableMetric: string;
+  chartConfig: object;
+  transformInstructions: string;
+  chartData: object[] | null;   // null until computation completes
+  status: VisualizationStatus;
+  lastError?: string;
+  lastRefreshedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+**Note:** Returns 201 immediately with `status: pending`. Poll `GET /visualizations/:id` until `status: ready` or `error`. Auto-refreshes when feed snapshot refreshes.
+
+### List Visualizations
+
+**Endpoint:** `GET /visualizations`
+
+**When to use:** Retrieve all saved visualizations for the authenticated user
+
+**Output Schema:**
+
+```typescript
+type ListVisualizationsOutput = Visualization[];
+```
+
+### Get Visualization
+
+**Endpoint:** `GET /visualizations/{id}`
+
+**When to use:** Poll for computation status or get current chart data
+
+### Delete Visualization
+
+**Endpoint:** `DELETE /visualizations/{id}`
+
+**When to use:** Remove a saved visualization
+
+### Refresh Visualization
+
+**Endpoint:** `POST /visualizations/{id}/refresh`
+
+**When to use:** Manually trigger chart data recomputation against current snapshot
+
+**Note:** Idempotent when already `refreshing` — returns current state without queuing duplicate computation.
+
 ---
 
 ## Constraints
@@ -258,6 +333,7 @@ interface Snapshot {
 - Exceed 5 static sources per composite feed
 - Exceed 3 notification filters per composite feed
 - Generate more than 5 insights per feed
+- Exceed 10 visualizations per composite feed
 - Access data sources owned by other users
 
 **Requires:**
@@ -265,6 +341,7 @@ interface Snapshot {
 - Valid Auth0 bearer token for all requests
 - Configured LLM API key in user-service for analysis operations
 - Existing snapshot before analysis (created automatically on feed creation)
+- Analyzed feed (with insights) before creating visualizations
 
 ---
 
@@ -278,10 +355,22 @@ interface Snapshot {
 3. GET /composite-feeds/:id/snapshot - Wait for snapshot generation
 4. POST /composite-feeds/:id/analyze - Extract insights
 5. POST /composite-feeds/:id/insights/:insightId/chart-definition - Get chart spec
-6. POST /composite-feeds/:id/preview - Get transformed chart data
+6. POST /composite-feeds/:id/preview - Get transformed chart data (ephemeral)
 ```
 
-### Pattern 2: Data Source Management
+### Pattern 2: Persistent Visualization Workflow
+
+```
+1. POST /data-sources - Store custom data
+2. POST /composite-feeds - Create feed
+3. POST /composite-feeds/:id/analyze - Extract insights
+4. POST /composite-feeds/:id/insights/:insightId/chart-definition - Get chart spec + instructions
+5. POST /visualizations - Save as persistent visualization (returns pending)
+6. GET /visualizations/:id - Poll until status: ready
+7. (Auto) Every 15 min snapshot refresh also recomputes chartData
+```
+
+### Pattern 3: Data Source Management
 
 ```
 1. POST /data-sources/generate-title - Get AI title for content
@@ -294,16 +383,17 @@ interface Snapshot {
 
 ## Error Handling
 
-| Error Code         | Meaning                             | Recovery Action                   |
-| ------------------ | ----------------------------------- | --------------------------------- |
-| `NOT_FOUND`        | Feed, source, or snapshot missing   | Verify ID exists                  |
-| `CONFLICT`         | Data source used by composite feeds | Remove from feeds before deleting |
-| `MISCONFIGURED`    | LLM API key not configured          | Configure API key in user-service |
-| `VALIDATION_ERROR` | Invalid request input               | Fix request payload               |
-| `NO_API_KEY`       | User LLM key missing                | Configure API key in user-service |
-| `GENERATION_ERROR` | LLM generation failed               | Retry or check API key quota      |
-| `PARSE_ERROR`      | LLM response parsing failed         | Automatically retries with repair |
-| `INTERNAL_ERROR`   | Server-side error                   | Retry with backoff                |
+| Error Code         | Meaning                                  | Recovery Action                   |
+| ------------------ | ---------------------------------------- | --------------------------------- |
+| `NOT_FOUND`        | Feed, source, visualization, or snapshot | Verify ID exists                  |
+| `CONFLICT`         | Data source used by composite feeds      | Remove from feeds before deleting |
+| `MISCONFIGURED`    | LLM API key not configured               | Configure API key in user-service |
+| `VALIDATION_ERROR` | Invalid request input                    | Fix request payload               |
+| `NO_API_KEY`       | User LLM key missing                     | Configure API key in user-service |
+| `GENERATION_ERROR` | LLM generation failed                    | Retry or check API key quota      |
+| `PARSE_ERROR`      | LLM response parsing failed              | Automatically retries with repair |
+| `INVALID_REQUEST`  | Limit exceeded (e.g., 10 viz per feed)   | Delete unused items first         |
+| `INTERNAL_ERROR`   | Server-side error                        | Retry with backoff                |
 
 ---
 
@@ -331,13 +421,13 @@ interface Snapshot {
 
 ## Dependencies
 
-| Service                           | Why Needed                             |
-| --------------------------------- | -------------------------------------- |
-| user-service                      | Get user's LLM API key                 |
-| mobile-notifications-service      | Query filtered notifications for feeds |
-| Firestore                         | Persist feeds, sources, snapshots      |
-| LLM Providers (Gemini, GLM, etc.) | Data analysis, title/chart generation  |
+| Service                           | Why Needed                                     |
+| --------------------------------- | ---------------------------------------------- |
+| user-service                      | Get user's LLM API key                         |
+| mobile-notifications-service      | Query filtered notifications for feeds         |
+| Firestore                         | Persist feeds, sources, snapshots, visualizations |
+| LLM Providers (Gemini, GLM, etc.) | Data analysis, title/chart generation, transform |
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

@@ -8,6 +8,8 @@ This tutorial will help you get started with the research-agent service, from cr
 - Auth0 access token for API requests
 - At least one LLM provider API key configured (Claude, OpenAI, Google, Perplexity, or Zai)
 
+**Note (v2.3.0):** If `INTEXURAOS_GEMINI_APP_API_KEY` or `INTEXURAOS_ZAI_APP_API_KEY` are configured on the server, users without their own API keys automatically get `gemini-2.0-flash` or `glm-4.7-flash` as fallback models.
+
 ## Part 1: Hello World - Create Research
 
 The simplest interaction is creating a new research query.

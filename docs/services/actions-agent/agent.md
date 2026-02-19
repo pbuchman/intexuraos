@@ -100,8 +100,6 @@ interface Action {
   payload: Record<string, unknown>;
   resource_status?: ResourceStatus;
   resource_error?: string;
-  approvalNonce?: string;
-  approvalNonceExpiresAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -124,17 +122,11 @@ interface CodeActionPayload {
   resource_url?: string;
 }
 
-// v2.0.0: Approval intent classification (also available via interactive buttons in v3.0.0)
+// v2.0.0: Approval intent (v4.0.0: resolved by buttons only, not LLM)
 type ApprovalIntent = 'approve' | 'reject' | 'unclear';
 
-interface ApprovalIntentResult {
-  intent: ApprovalIntent;
-  confidence: number;
-  reasoning: string;
-}
-
 // v2.0.0: Approval reply event from whatsapp-service
-// v3.0.0: Added buttonId/buttonTitle for interactive button responses
+// v4.0.0: LLM removed; buttonId resolves intent deterministically
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
   replyToWamid: string;
@@ -142,8 +134,15 @@ interface ApprovalReplyEvent {
   userId: string;
   timestamp: string;
   actionId?: string; // Optional, extracted from correlationId
-  buttonId?: string; // v3.0.0: Format "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
-  buttonTitle?: string; // v3.0.0: User-visible text of the button clicked
+  // Button ID formats (v4.0.0):
+  //   approve:{actionId}       - approve the action
+  //   reject:{actionId}        - reject the action
+  //   cancel:{actionId}        - cancel (same as reject)
+  //   convert:{actionId}       - reject + convert to Linear issue
+  //   cancel-task:{taskId}:{nonce} - cancel running code task
+  //   view-task:{taskId}       - view task URL
+  buttonId?: string;
+  buttonTitle?: string; // User-visible text of the button clicked
 }
 
 // v2.0.0: Atomic status update result
@@ -174,14 +173,14 @@ interface CalendarPreview {
 
 ## Constraints
 
-| Rule                        | Description                                                                |
-| --------------------------- | -------------------------------------------------------------------------- |
-| **Status Transitions**      | Can only set status to 'processing', 'rejected', or 'archived'             |
-| **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions          |
-| **Batch Limit**             | Maximum 50 action IDs per batch request                                    |
-| **Ownership**               | Users can only access their own actions                                    |
-| **Supported Types**         | Execute only supports: research, todo, note, link, linear, calendar, code  |
-| **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval reply |
+| Rule                        | Description                                                               |
+| --------------------------- | ------------------------------------------------------------------------- |
+| **Status Transitions**      | Can only set status to 'processing', 'rejected', or 'archived'            |
+| **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions         |
+| **Batch Limit**             | Maximum 50 action IDs per batch request                                   |
+| **Ownership**               | Users can only access their own actions                                   |
+| **Supported Types**         | Execute only supports: research, todo, note, link, code (calendar/linear require approval) |
+| **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval      |
 
 ---
 
@@ -242,7 +241,7 @@ if (preview?.status === 'ready') {
 | POST   | `/internal/actions/process`        | Process action from Pub/Sub (unified)       |
 | POST   | `/internal/actions/:actionType`    | Process action from Pub/Sub (type-specific) |
 | POST   | `/internal/actions/retry-pending`  | Retry stuck actions (Cloud Scheduler)       |
-| POST   | `/internal/actions/approval-reply` | Handle WhatsApp approval replies (v2.0.0)   |
+| POST   | `/internal/actions/approval-reply` | Handle WhatsApp button taps (v2.0.0)        |
 
 ---
 
@@ -256,36 +255,32 @@ commands-agent -> action.created -> actions-agent
                                 action.pending (Pub/Sub)
                                         |
                                 Action Handler
-                                (sends WhatsApp approval request)
+                                (sends WhatsApp with [Approve][Reject] buttons)
                                         |
                                 action.awaiting_approval
 ```
 
-### Approval Reply Flow (v2.0.0)
+### Approval Reply Flow (v4.0.0 — buttons only)
 
 ```
-User replies to WhatsApp message
+User taps WhatsApp button
         |
-whatsapp-service -> action.approval.reply -> actions-agent
+whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
                                                   |
-                                        Classify intent (LLM)
-|  |  |
-|  |
-|  |  |  |
-    approve          reject           unclear         error
-        |                |                |               |
-updateStatusIf    updateStatusIf    Send clarification  Send error
-(atomic)           (atomic)           request            message
-        |                |
-Publish action.created   Done
-        |
-Target Service executes
+                                        handleButtonResponse
+                                                  |
+                                    approve         reject/cancel      convert
+                                        |                |                |
+                                updateStatusIf    updateStatusIf    updateStatusIf
+                                (atomic)           (atomic)          (atomic)
+                                        |                |                |
+                                Execute action      Done           "Converting..."
 ```
 
 ### Race Condition Prevention (v2.0.0)
 
 ```
-Two concurrent approval replies arrive:
+Two concurrent approval button taps arrive:
 
 Thread 1: updateStatusIf('pending', 'awaiting_approval')
           -> Transaction: read status='awaiting_approval', matches, update to 'pending'
@@ -319,58 +314,45 @@ Thread 2: updateStatusIf('pending', 'awaiting_approval')
 
 ## Integration with whatsapp-service
 
-### Approval Request Message
+### Approval Request Message (v4.0.0)
 
-When an action handler sends an approval request:
+All action handlers send interactive buttons using `buildApprovalButtons()`:
 
 ```typescript
-await whatsappPublisher.publishSendMessage({
-  userId: event.userId,
-  message: `New research ready for approval: "${event.title}". Review here: ${actionLink} or reply to approve/reject.`,
-  correlationId: `action-research-approval-${event.actionId}`,
+// Standard (all types except code)
+buttons = buildApprovalButtons({ actionId });
+// → [{ id: 'approve:{actionId}', title: 'Approve' }, { id: 'reject:{actionId}', title: 'Reject' }]
+
+// Code actions (with Convert to Issue button)
+buttons = buildApprovalButtons({
+  actionId,
+  extraButtons: [{ type: 'reply', reply: { id: `convert:${actionId}`, title: 'Convert to Issue' } }],
 });
 ```
 
-The `correlationId` contains the action ID, which whatsapp-service extracts and includes in the approval reply event.
-
-### Approval Reply Message
-
-After processing an approval reply:
+### Approval Reply Messages
 
 ```typescript
 // Approval
-await whatsappPublisher.publishSendMessage({
-  userId,
-  message: `Approved! Processing your ${action.type}: "${action.title}"`,
-  correlationId: `approval-approved-${action.id}`,
-});
+message: `✅ Approved! Processing your ${action.type}: "${action.title}"`
 
-// Rejection
-await whatsappPublisher.publishSendMessage({
-  userId,
-  message: `Got it. Rejected the ${action.type}: "${action.title}"`,
-  correlationId: `approval-rejected-${action.id}`,
-});
+// Rejection/cancel
+message: `🛑 Got it. Cancelled the ${action.type}: "${action.title}"`
 
-// Unclear
-await whatsappPublisher.publishSendMessage({
-  userId,
-  message: `I didn't understand your reply. Please reply with "yes" to approve or "no" to cancel the ${action.type}: "${action.title}"`,
-  correlationId: `approval-unclear-${action.id}`,
-});
+// Convert to issue
+message: `🔀 Converting ${action.type} to Linear issue: "${action.title}"`
+
+// Text reply (no button) — re-send buttons
+message: `Please use the buttons to approve or reject. If buttons expired, here they are again:`
+buttons: buildApprovalButtons({ actionId })
+
+// Action not found
+message: `This action is no longer available. It may have been deleted or already processed.`
 ```
 
 ---
 
 ## Error Handling
-
-### LLM Classifier Errors (v2.0.0)
-
-| Error Code      | User Message                                                                    |
-| --------------- | ------------------------------------------------------------------------------- |
-| `NO_API_KEY`    | "I couldn't process your reply because your LLM API key is not configured..."   |
-| `INVALID_MODEL` | "I couldn't process your reply because your LLM model preference is invalid..." |
-| Other           | "I couldn't process your reply due to a temporary issue. Please reply with..."  |
 
 ### Status Mismatch (v2.0.0)
 
@@ -389,6 +371,16 @@ if (updateResult.outcome === 'status_mismatch') {
 }
 ```
 
+### Cancel-task Error Codes (v4.0.0 — UPPER_CASE)
+
+| Error Code             | HTTP Status | User Message                                      |
+| ---------------------- | ----------- | ------------------------------------------------- |
+| `TASK_NOT_FOUND`       | 404         | Task not found.                                   |
+| `INVALID_NONCE`        | 400         | Invalid cancel code. May have been used already.  |
+| `NONCE_EXPIRED`        | 400         | Cancel link has expired.                          |
+| `NOT_OWNER`            | 403         | You are not the owner of this task.               |
+| `TASK_NOT_CANCELLABLE` | 400         | Task cannot be cancelled (may have completed).    |
+
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

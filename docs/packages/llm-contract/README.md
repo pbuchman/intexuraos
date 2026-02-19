@@ -46,13 +46,13 @@ type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
 
 **Category types** narrow `LLMModel` for specific use cases:
 
-| Type              | Purpose                           | Models                                                              |
-| ----------------- | --------------------------------- | ------------------------------------------------------------------- |
-| `ImageModel`      | Image generation                  | `gpt-image-1`, `gemini-2.5-flash-image`                             |
-| `ResearchModel`   | Web search enhanced generation    | All models except image-only and validation-only                    |
-| `ValidationModel` | API key validation (cheap, fast)  | `claude-3-5-haiku`, `gemini-2.0-flash`, `gpt-4o-mini`, `sonar`, GLM |
-| `FastModel`       | Quick tasks (classification, etc) | `gemini-2.5-flash`, `gemini-2.0-flash`, `glm-4.7-flash`             |
-| `GenericModel`    | General-purpose                   | `gemini-2.5-pro`, `gpt-5.2`                                         |
+| Type              | Purpose                           | Models                                                                                               |
+| ----------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `ImageModel`      | Image generation                  | `gpt-image-1`, `gemini-2.5-flash-image`                                                              |
+| `ResearchModel`   | Web search enhanced generation    | All models except image-only and validation-only                                                     |
+| `ValidationModel` | API key validation (cheap, fast)  | `claude-3-5-haiku`, `gemini-2.0-flash`, `gpt-4o-mini`, `sonar`, `glm-4.7-flash`                     |
+| `FastModel`       | Quick tasks (classification, etc) | `gemini-2.5-flash`, `gemini-2.0-flash`, `glm-4.7-flash`, `claude-3-5-haiku-20241022`, `gpt-4o-mini` |
+| `GenericModel`    | General-purpose                   | `gemini-2.5-pro`, `gpt-5.2`                                                                          |
 
 ### Constants
 
@@ -85,7 +85,9 @@ const LlmModels = {
 } as const;
 
 const ALL_LLM_MODELS: LLMModel[];
+const ALL_FAST_MODELS: FastModel[];
 const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider>;
+const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string>;
 ```
 
 ### Runtime Helpers
@@ -93,6 +95,7 @@ const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider>;
 ```typescript
 function getProviderForModel(model: LLMModel): LlmProvider;
 function isValidModel(model: string): model is LLMModel;
+function isFastModel(model: string): model is FastModel;
 ```
 
 ### Client Interface (`types.ts`)
@@ -193,20 +196,22 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 ## Used By
 
-**Packages (7):** `llm-factory`, `llm-pricing`, `llm-audit`, `llm-prompts`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-glm`, `infra-perplexity`, `internal-clients`
+**Packages (10):** `llm-factory`, `llm-pricing`, `llm-audit`, `llm-prompts`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-glm`, `infra-perplexity`, `internal-clients`
 
 **Apps (14):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `user-service`, `web`, `web-agent`
 
+**Workers (1):** `orchestrator`
+
 ## Recent Changes
 
-| Commit   | Description                                      | Age     |
-| -------- | ------------------------------------------------ | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions   | 12 days |
-| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
-| 68ab051c | Break llm-contract -> llm-common dependency      | 2 weeks |
-| f5ea3d76 | Fix type errors for Glm47Flash model addition    | 3 weeks |
-| 2c3a98ce | Add GLM-4.7-Flash support as free Zai AI model   | 3 weeks |
+| Commit   | Description                                                               | Age     |
+| -------- | ------------------------------------------------------------------------- | ------- |
+| 0f69a74b | Extend FastModel with ClaudeHaiku35/GPT4oMini; add ALL_FAST_MODELS, isFastModel, FAST_MODEL_DISPLAY_NAMES | 10 days |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner                          | 17 days |
+| 21c1528a | Fix release skill to bump all package versions                            | 3 weeks |
+| 4fa0fed3 | Release v2.0.0                                                            | 3 weeks |
+| 68ab051c | Break llm-contract -> llm-common dependency                               | 3 weeks |
+| 2c3a98ce | Add GLM-4.7-Flash support as free Zai AI model                            | 4 weeks |
 
 ## Source Files
 

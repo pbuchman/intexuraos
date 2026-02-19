@@ -19,36 +19,40 @@
 ### Lifecycle Operations (via DockerProvider)
 
 ```typescript
-interface ClaudeWorkerLifecycle {
-  createWorker(config: {
-    taskId: string;
-    worktreePath: string;
-    prompt: string;
-    systemPrompt: string;
-    workerType: 'opus' | 'auto' | 'glm';
-    secrets: {
-      ANTHROPIC_API_KEY: string;
-      LINEAR_API_KEY: string;
-      SENTRY_AUTH_TOKEN: string;
-      ZAI_API_KEY: string;
-    };
-    gcpSaKeyPath: string;
-    githubAppKeyPath: string;
-    onLog?: (chunk: string) => void;
-    onComplete?: (exitCode: number) => void;
-  }): Promise<{
-    taskId: string;
-    containerId: string;
-    status: 'running';
-    startedAt: Date;
-  }>;
+interface WorkerSecrets {
+  ANTHROPIC_API_KEY: string;
+  LINEAR_API_KEY: string;
+  SENTRY_AUTH_TOKEN: string;
+  ZAI_API_KEY: string;
+}
+
+interface WorkerConfig {
+  taskId: string;
+  worktreePath: string;
+  prompt: string;          // User prompt content (written to secrets/user-prompt.txt)
+  systemPrompt: string;    // System prompt content (written to secrets/system-prompt.txt)
+  workerType: 'opus' | 'auto' | 'glm';
+  secrets: WorkerSecrets;
+  gcpSaKeyPath: string;
+  githubAppKeyPath: string;
+  continueSession?: boolean; // true = CLAUDE_CONTINUE=1 + restore preserved container
+  onLog?: (chunk: string) => void;
+  onComplete?: (exitCode: number) => void;
+}
+
+interface WorkerHandle {
+  taskId: string;
+  containerId: string;
+  status: 'starting' | 'running' | 'completed' | 'failed' | 'timeout';
+  startedAt: Date;
+}
+
+interface IsolationProvider {
+  // Create and start container. Writes prompt files, pulls image, waits for
+  // /tmp/worker-ready, then fires the first run-attempt via docker exec.
+  createWorker(config: WorkerConfig): Promise<WorkerHandle>;
 
   destroyWorker(taskId: string, forceKill?: boolean): Promise<void>;
-
-  sendInput(taskId: string, input: string): Promise<void>;
-
-  waitForCompletion(taskId: string, timeoutMs: number): Promise<number>;
-  // Returns: 0 = success, -1 = timeout, other = failure
 
   isWorkerRunning(taskId: string): Promise<boolean>;
 
@@ -56,27 +60,35 @@ interface ClaudeWorkerLifecycle {
 
   streamLogs(taskId: string, onChunk: (chunk: string) => void): Promise<void>;
 
+  // Returns: 0 = success, -1 = timeout, other = failure
+  waitForCompletion(taskId: string, timeoutMs: number): Promise<number>;
+
   getResourceUsage(taskId: string): Promise<{
     cpuPercent: number;
     memoryUsedMB: number;
     memoryLimitMB: number;
   }>;
 
-  attachTTY(taskId: string): Promise<{
-    stdin: NodeJS.WritableStream;
-    stdout: NodeJS.ReadableStream;
-    stderr: NodeJS.ReadableStream;
-    detach: () => void;
-  }>;
+  listWorkers(): Promise<WorkerHandle[]>;
 
-  listWorkers(): Promise<
-    Array<{
-      taskId: string;
-      containerId: string;
-      status: 'starting' | 'running' | 'completed' | 'failed' | 'timeout';
-      startedAt: Date;
-    }>
-  >;
+  // Remove per-task Claude session directory from host
+  cleanupTaskSession?(taskId: string): Promise<void>;
+
+  // Park container in preserved map (keeps alive, clears secrets)
+  preserveWorker?(taskId: string): Promise<void>;
+
+  listPreservedWorkers?(): Promise<Array<{
+    containerId: string;
+    taskId: string;
+    preservedAt: string;
+  }>>;
+
+  getImageInfo?(): {
+    configuredRef: string;
+    lastResolvedDigest: string | null;
+    pullPolicy: string;
+    managedAttemptsMode: boolean;
+  };
 }
 ```
 
@@ -113,14 +125,16 @@ const WORKER_TYPES: Record<
 
 ## Critical Rules and Constraints
 
-1. The orchestrator MUST call `attach()` BEFORE `start()` on the Docker container. Reversing this order causes missed startup output and hung ready-detection.
-2. The worker MUST run as non-root user UID 1001. The entrypoint exits with error code 1 if it detects UID 0.
+1. `createWorker()` is the only entry point. It pulls the image, creates the container, waits for `/tmp/worker-ready`, and fires the first `run-attempt` via `docker exec`. The caller does not need to manage prompt file paths or readiness polling.
+2. The worker runs as the host user (dynamic UID from `os.userInfo().uid`), not a fixed UID 1001. This ensures bind-mounted files are accessible without permission errors.
 3. Secrets mount MUST be read-only (`:ro`). The test stub verifies this and exits with error if `/secrets` is writable.
-4. The maximum state transition for a worker is: `starting` -> `running` -> `completed` | `failed` | `timeout`. There is no restart mechanism; create a new worker instead.
-5. After sending the system prompt via stdin, the orchestrator MUST NOT send additional input until Claude has processed the prompt (wait for output activity).
+4. The maximum state transition for a worker is: `starting` -> `running` -> `completed` | `failed` | `timeout`. There is no restart mechanism; call `createWorker` with `continueSession: true` to resume.
+5. `createWorker()` writes `system-prompt.txt` and `user-prompt.txt` to the per-task secrets directory automatically. The container reads these files — they are not passed via stdin or environment variables.
 6. The `waitForCompletion` method resolves with `-1` on timeout and automatically triggers `destroyWorker` with force kill.
 7. Concurrent workers are limited to `maxConcurrent` (default 4). Exceeding this limit throws an error; the caller must wait for an existing worker to finish.
-8. GitHub token refresh is handled by the orchestrator's `TokenRefresher`, not by the container itself. The token file at `/secrets/github-token` is updated externally.
+8. GitHub token refresh is handled by the orchestrator's `TokenRefresher`, not by the container itself. The token file at `/secrets/github-token` is updated externally; the entrypoint re-reads it at each `run-attempt` invocation.
+9. In managed mode (`CLAUDE_MANAGED_MODE=1`), the container does NOT exit after completing an attempt. The orchestrator must call `destroyWorker` explicitly when the task is done.
+10. When `continueSession: true` is passed to `createWorker`, it restores a preserved container (via `preservedWorkers` map) or reconnects to an orphaned container by name (`claude-worker-{taskId}`). This handles orchestrator restarts without losing in-flight containers.
 
 ---
 
@@ -135,23 +149,46 @@ interface ContainerMounts {
     content: 'git-repo'; // Must contain .git dir or file
   };
   '/secrets': {
-    source: string; // Host per-task secrets path
+    source: string; // Host per-task secrets path (secretsBasePath/{taskId})
     mode: 'ro'; // Read-only (enforced)
     required: true;
     files: {
       'gcp-sa.json': 'optional'; // GCP service account key
       'github-token': 'optional'; // Refreshed GitHub token
+      'system-prompt.txt': 'required-for-run-attempt'; // Claude system prompt
+      'user-prompt.txt': 'required-for-run-attempt'; // Claude user prompt (piped to stdin)
     };
+  };
+  '/home/claude/pnpm-store': {
+    source: string; // Host shared pnpm store (secretsBasePath/../pnpm-store)
+    mode: 'rw'; // Read-write — shared across containers
+    type: 'bind'; // Persists across container restarts
+  };
+  '/home/claude/.claude': {
+    source: string; // Host per-task session (secretsBasePath/claude-session-{taskId})
+    // OR sharedCredsPath when shared credentials are configured
+    mode: 'rw';
+    type: 'bind'; // Session history persists for --continue resumption
   };
   '/tmp': {
     type: 'tmpfs';
     size: '2g';
     options: 'rw,noexec,nosuid';
+    runtimeFiles: {
+      'worker-ready': 'written by entrypoint after setup'; // Readiness signal
+    };
   };
   '/home/claude': {
     type: 'tmpfs';
     size: '500m';
-    options: 'rw,noexec,nosuid,uid=1001,gid=1001';
+    options: 'rw,noexec,nosuid,uid={HOST_UID},gid={HOST_GID}';
+    // pnpm-store and .claude bind mounts overlay this tmpfs
+  };
+  '/repo/node_modules': {
+    type: 'tmpfs';
+    size: '4g';
+    options: 'rw,exec,nosuid,uid={HOST_UID},gid={HOST_GID}';
+    // Shadows Mac host node_modules; gives container empty writable dir for Linux-native pnpm install
   };
 }
 ```
@@ -160,33 +197,42 @@ interface ContainerMounts {
 
 ## Usage Patterns (Few-Shot)
 
-**Orchestrator: Start a new coding task**
+**Orchestrator: Start a new coding task in managed mode**
 
 ```typescript
+// 1. Create container, wait for ready, and fire first attempt — all in one call.
+//    createWorker writes prompt content to secrets dir, then calls docker exec run-attempt.
 const handle = await provider.createWorker({
   taskId: 'INT-500-implement-feature',
   worktreePath: '/home/user/.claude-orchestrator/worktrees/INT-500',
-  prompt: 'Implement the user profile page',
-  systemPrompt:
-    'You are a senior developer. Implement the following task:\n\nImplement the user profile page',
   workerType: 'auto',
+  systemPrompt: 'You are a coding agent working on IntexuraOS...',
+  prompt: 'Implement the feature described in INT-500.',
   secrets: {
     ANTHROPIC_API_KEY: 'sk-ant-...',
     LINEAR_API_KEY: 'lin_api_...',
     SENTRY_AUTH_TOKEN: 'sntrys_...',
     ZAI_API_KEY: '',
   },
-  gcpSaKeyPath: '/home/user/gcp-sa.json',
-  githubAppKeyPath: '/home/user/github-app.pem',
-  onLog: (chunk) => logForwarder.forward(taskId, chunk),
-  onComplete: (exitCode) => handleTaskCompletion(taskId, exitCode),
+  gcpSaKeyPath: '/home/user/.config/gcloud/sa-key.json',
+  githubAppKeyPath: '/home/user/.claude-orchestrator/secrets/INT-500/github-token',
+  onLog: (chunk) => logForwarder.forward('INT-500', chunk),
+  onComplete: (exitCode) => console.log('Attempt done:', exitCode),
 });
-```
 
-**Orchestrator: Send follow-up instruction**
+// 2. Resume if needed — createWorker with continueSession=true re-uses the existing container
+if (shouldResume) {
+  await provider.createWorker({
+    taskId: 'INT-500-implement-feature',
+    // ... same config ...
+    prompt: 'The previous attempt did not push a PR. Please push and open one.',
+    continueSession: true,
+  });
+}
 
-```typescript
-await provider.sendInput('INT-500-implement-feature', 'Now run the tests and fix any failures');
+// 3. Clean up
+await provider.destroyWorker('INT-500-implement-feature');
+await provider.cleanupTaskSession?.('INT-500-implement-feature');
 ```
 
 **Orchestrator: Monitor resource usage**
@@ -196,7 +242,7 @@ const usage = await provider.getResourceUsage('INT-500-implement-feature');
 // { cpuPercent: 45.2, memoryUsedMB: 2048, memoryLimitMB: 8192 }
 ```
 
-**Orchestrator: Wait for task with timeout**
+**Orchestrator: Wait for attempt with timeout**
 
 ```typescript
 const exitCode = await provider.waitForCompletion('INT-500-implement-feature', 2 * 60 * 60 * 1000);

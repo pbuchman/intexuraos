@@ -1,6 +1,6 @@
 # WhatsApp Service
 
-Bridge between WhatsApp messaging and IntexuraOS workflows - receive messages, approve actions via replies, and get AI-transcribed voice notes.
+Bridge between WhatsApp messaging and IntexuraOS workflows - receive messages, approve actions via buttons and replies, and get AI-transcribed voice notes.
 
 ## The Problem
 
@@ -22,11 +22,11 @@ Speak your thoughts naturally. Voice notes are transcribed using Speechmatics, t
 
 **Example:** Record a 90-second voice memo about a project status update. Within 30 seconds, you receive the full transcript plus a bullet-point summary highlighting "schedule meeting with vendor" and "review contract by Friday" as actionable items.
 
-### Approval via Buttons, Replies, and Reactions
+### Approval via Interactive Buttons and Replies
 
-Respond to action approval requests directly in WhatsApp. Tap interactive buttons (Approve, Cancel, Convert), reply with text ("yes", "no", "approve"), or use emoji reactions for instant decisions.
+Respond to action approval requests directly in WhatsApp. Tap interactive buttons (Approve, Cancel, Reject, Convert) or reply with text ("yes", "no") for instant decisions. The service correlates your response to the original action automatically.
 
-**Example:** The bookmarks-agent wants to add a URL to your reading list. You receive "Add 'AI Trends Report' to Reading List?" with Approve/Cancel buttons. Tap Approve to confirm instantly, or reply with text or react with thumbs-up -- all work seamlessly.
+**Example:** The bookmarks-agent wants to add a URL to your reading list. You receive "Add 'AI Trends Report' to Reading List?" with Approve/Cancel buttons. Tap Approve to confirm instantly — or reply "yes" as a text fallback.
 
 ### Image Handling with Thumbnails
 
@@ -42,7 +42,7 @@ URLs in your messages automatically trigger Open Graph metadata extraction, prov
 
 ### Phone Number Verification
 
-Before connecting a WhatsApp number, verify ownership via a 6-digit code. The service sends a verification code to the phone number, and you confirm it to prove ownership.
+Before connecting a WhatsApp number, verify ownership via a 6-digit code. The service sends a 🔐 verification code to the phone number, and you confirm it to prove ownership.
 
 **Example:** You enter your phone number in the IntexuraOS web app. A 6-digit code arrives via WhatsApp within seconds. Enter the code in the app, and your number is verified and ready to connect.
 
@@ -50,10 +50,10 @@ Before connecting a WhatsApp number, verify ownership via a 6-digit code. The se
 
 You're in transit when your todo-agent identifies a recurring task that should become automated:
 
-1. WhatsApp notification arrives with interactive buttons: "Create automation: 'Weekly team sync reminder' every Monday 9am?" [Approve] [Cancel]
-2. You tap the Approve button (or react with thumbs-up emoji, or reply "yes")
-3. Whatsapp-service correlates the button click to the original approval message
-4. ApprovalReplyEvent published to actions-agent with button intent and nonce
+1. WhatsApp notification arrives with interactive buttons: "👷 Create automation: 'Weekly team sync reminder' every Monday 9am?" [Approve] [Cancel]
+2. You tap the Approve button (or reply "yes" as text)
+3. Whatsapp-service marks the message as read (blue checkmarks appear) and shows a typing indicator
+4. ApprovalReplyEvent published to actions-agent with button intent and actionId
 5. Automation is created without any app-switching
 
 The entire interaction takes 2 seconds while you continue walking.
@@ -62,10 +62,11 @@ The entire interaction takes 2 seconds while you continue walking.
 
 - **Zero friction capture** - WhatsApp is always accessible, no app switching required
 - **Natural voice input** - AI transcription with smart summaries extracts actionable items
-- **Instant approvals** - Interactive buttons, emoji reactions, or text replies for sub-second decisions
+- **Instant approvals** - Interactive buttons or text replies for sub-second decisions
 - **Phone verification** - SMS-style code verification proves phone number ownership before connecting
 - **Automatic enrichment** - Link previews, thumbnails, and transcriptions happen automatically
 - **Message correlation** - Outbound messages tracked via wamid for reliable reply threading
+- **Immediate feedback** - Read receipts and typing indicator appear on button tap
 
 ## Limitations
 
@@ -76,6 +77,7 @@ The entire interaction takes 2 seconds while you continue walking.
 - **Single phone number per user** - Each user maps to one WhatsApp number (multiple not yet supported)
 - **Rate limits** - Subject to WhatsApp API rate limits (varies by tier)
 - **No message editing** - Sent messages cannot be modified
+- **No emoji reaction approvals** - Emoji reactions are no longer processed; use buttons or text replies
 
 ---
 

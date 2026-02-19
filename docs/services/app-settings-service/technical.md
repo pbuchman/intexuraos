@@ -17,8 +17,8 @@ graph TB
 
         Internal --> PricingRepo
 
-        PricingRepo --> FS1[(Firestore:<br/>pricing collection)]
-        UsageRepo --> FS2[(Firestore:<br/>usage_stats collection)]
+        PricingRepo --> FS1[(Firestore:<br/>settings/llm_pricing/providers)]
+        UsageRepo --> FS2[(Firestore:<br/>llm_usage_stats collection group)]
     end
 
     Services[Other Services] --> Internal
@@ -64,7 +64,8 @@ graph TB
 {
   totalCostUsd: number,
   totalCalls: number,
-  dailyBreakdown: DailyCost[],
+  totalInputTokens: number,
+  totalOutputTokens: number,
   monthlyBreakdown: MonthlyCost[],
   byModel: ModelCost[],
   byCallType: CallTypeCost[]
@@ -75,52 +76,98 @@ graph TB
 
 ### ProviderPricing
 
-| Field      | Type                         | Description       |
-| ---------- | ---------------------------- | ----------------- |
-| `provider` | string                       | Provider name     |
-| `models`   | Record<string, ModelPricing> | Per-model pricing |
+| Field       | Type                         | Description                  |
+| ----------- | ---------------------------- | ---------------------------- |
+| `provider`  | string                       | Provider name                |
+| `models`    | Record<string, ModelPricing> | Per-model pricing            |
+| `updatedAt` | string                       | ISO date of last price update |
 
 ### ModelPricing
 
-| Field              | Type   | Description                           |
-| ------------------ | ------ | ------------------------------------- |
-| `inputCostUsd`     | number | Cost per 1M input tokens              |
-| `outputCostUsd`    | number | Cost per 1M output tokens             |
-| `groundingCostUsd` | number | Cost per grounding request (optional) |
+| Field                    | Type                           | Description                                         |
+| ------------------------ | ------------------------------ | --------------------------------------------------- |
+| `inputPricePerMillion`   | number                         | Cost per 1M input tokens (USD)                      |
+| `outputPricePerMillion`  | number                         | Cost per 1M output tokens (USD)                     |
+| `cacheReadMultiplier`    | number (optional)              | Multiplier on input cost for cache reads             |
+| `cacheWriteMultiplier`   | number (optional)              | Multiplier on input cost for cache writes            |
+| `webSearchCostPerCall`   | number (optional)              | Fixed cost per web search call (USD)                |
+| `groundingCostPerRequest`| number (optional)              | Fixed cost per grounding request (USD)              |
+| `imagePricing`           | Record<ImageSize, number> (opt)| Cost per image generation by size                   |
+| `useProviderCost`        | boolean (optional)             | Use provider's reported cost instead of calculated  |
 
 ### AggregatedCosts
 
-| Field              | Type           | Description                 |
-| ------------------ | -------------- | --------------------------- |
-| `totalCostUsd`     | number         | Total cost across all calls |
-| `totalCalls`       | number         | Total number of calls       |
-| `dailyBreakdown`   | DailyCost[]    | Cost grouped by day         |
-| `monthlyBreakdown` | MonthlyCost[]  | Cost grouped by month       |
-| `byModel`          | ModelCost[]    | Cost grouped by model       |
-| `byCallType`       | CallTypeCost[] | Cost grouped by call type   |
+| Field               | Type           | Description                    |
+| ------------------- | -------------- | ------------------------------ |
+| `totalCostUsd`      | number         | Total cost across all calls    |
+| `totalCalls`        | number         | Total number of calls          |
+| `totalInputTokens`  | number         | Total input tokens consumed    |
+| `totalOutputTokens` | number         | Total output tokens consumed   |
+| `monthlyBreakdown`  | MonthlyCost[]  | Cost grouped by month (newest first) |
+| `byModel`           | ModelCost[]    | Cost grouped by model (highest cost first) |
+| `byCallType`        | CallTypeCost[] | Cost grouped by call type (highest cost first) |
+
+### MonthlyCost
+
+| Field          | Type   | Description                          |
+| -------------- | ------ | ------------------------------------ |
+| `month`        | string | Month key (e.g. "2026-01")           |
+| `costUsd`      | number | Total cost for the month             |
+| `calls`        | number | Total calls for the month            |
+| `inputTokens`  | number | Total input tokens for the month     |
+| `outputTokens` | number | Total output tokens for the month    |
+| `percentage`   | number | % of total cost (0-100, rounded)     |
+
+### ModelCost
+
+| Field        | Type   | Description                        |
+| ------------ | ------ | ---------------------------------- |
+| `model`      | string | Model identifier                   |
+| `costUsd`    | number | Total cost for this model          |
+| `calls`      | number | Total calls using this model       |
+| `percentage` | number | % of total cost (0-100, rounded)   |
+
+### CallTypeCost
+
+| Field        | Type   | Description                          |
+| ------------ | ------ | ------------------------------------ |
+| `callType`   | string | Call type identifier                 |
+| `costUsd`    | number | Total cost for this call type        |
+| `calls`      | number | Total calls of this type             |
+| `percentage` | number | % of total cost (0-100, rounded)     |
 
 ## Configuration
 
-| Environment Variable                | Required | Description                                |
-| ----------------------------------- | -------- | ------------------------------------------ |
-| `INTEXURAOS_PRICING_COLLECTION`     | Yes      | Firestore pricing collection name          |
-| `INTEXURAOS_USAGE_STATS_COLLECTION` | Yes      | Firestore usage stats collection name      |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Yes      | Shared secret for service-to-service calls |
+| Environment Variable            | Required | Description                                |
+| ------------------------------- | -------- | ------------------------------------------ |
+| `INTEXURAOS_GCP_PROJECT_ID`     | Yes      | GCP project ID for Firestore access        |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`| Yes      | Shared secret for service-to-service calls |
+| `INTEXURAOS_SENTRY_DSN`         | No       | Sentry DSN for error reporting             |
+
+> **Note:** Firestore collection paths are hardcoded in the repository implementations:
+> - Pricing: `settings/llm_pricing/providers/{provider}`
+> - Usage stats: collection group `by_user` within `llm_usage_stats/{model}/by_call_type/{callType}/by_period/{YYYY-MM-DD}/by_user/{userId}`
 
 ## Dependencies
 
 ### Infrastructure
 
-| Component                            | Purpose                 |
-| ------------------------------------ | ----------------------- |
-| Firestore (`pricing` collection)     | Provider pricing config |
-| Firestore (`usage_stats` collection) | User usage statistics   |
+| Component                                     | Purpose                          |
+| --------------------------------------------- | -------------------------------- |
+| Firestore (`settings/llm_pricing/providers`)  | Provider pricing config (document per provider) |
+| Firestore (`llm_usage_stats` collection group) | User usage statistics (written by other services) |
 
 ### Internal Services
 
-| Service    | Purpose                  |
-| ---------- | ------------------------ |
-| (multiple) | Fetch pricing on startup |
+| Service    | Purpose                                            |
+| ---------- | -------------------------------------------------- |
+| (multiple) | Fetch pricing via internal endpoint at startup     |
+
+## Startup Validation
+
+On startup, `validateAllModelPricing()` fetches pricing for all 5 providers and verifies that every model listed in `ALL_LLM_MODELS` (from `@intexuraos/llm-contract`) has pricing configured. If any model is missing, the service **refuses to start** and prints a detailed error listing the missing models and their providers.
+
+This ensures no service can boot with stale pricing data.
 
 ## Gotchas
 
@@ -128,26 +175,44 @@ graph TB
 
 **Sentry logging** - `FirestoreUsageStatsRepository` uses `createAppLogger()` from `@intexuraos/infra-sentry`, not direct `pino()`.
 
-**Missing providers**: Returns 500 with `reply.fail('INTERNAL_ERROR', ...)` if any provider pricing is missing from Firestore. All 5 providers (Google, OpenAI, Anthropic, Perplexity, Zai) must be present.
+**Missing providers** - Returns 500 with `reply.fail('INTERNAL_ERROR', ...)` if any provider pricing is missing from Firestore. All 5 providers (Google, OpenAI, Anthropic, Perplexity, Zai) must be present.
 
-**Default days**: Usage endpoint defaults to 90 days if not specified.
+**Default days** - Usage endpoint defaults to 90 days if not specified.
 
-**Max days**: Maximum 365 days. Requesting higher returns 400 error.
+**Max days** - Maximum 365 days. Requesting higher returns 400 error.
 
-**User scoping**: Usage costs automatically scoped to authenticated user via `requireAuth()`.
+**User scoping** - Usage costs automatically scoped to authenticated user via `requireAuth()`.
 
-**Internal vs Public**: Internal endpoint used by services to load pricing at startup. Public endpoint used by web UI.
+**Internal vs Public** - Internal endpoint used by services to load pricing at startup. Public endpoint used by web UI.
+
+**No per-day breakdown** - The usage response does NOT include a daily breakdown array. Aggregation is by month, model, and call type only.
+
+**Collection group queries** - Usage stats use a Firestore collection group query (`by_user`), not a standard collection query. This queries across all nested `by_user` subcollections regardless of model/call type path.
+
+**Price precision** - All cost values are rounded to 6 decimal places (`Math.round(cost * 1_000_000) / 1_000_000`).
+
+## Recent Changes
+
+- **Dash0 OpenTelemetry integration** - Added distributed tracing via Dash0 OTLP endpoint (2026-02-16)
+- **Dev-mode log formatting** - Added structured log formatting for PM2 readability in local development (2026-02-16)
+- **PM2 ecosystem migration** - Switched from direct node invocation to `pnpm --filter` with `start:local` scripts (2026-02-14)
+- **Response contract standardization** - Internal endpoints now use `reply.ok(data)` / `reply.fail(code, message)` (2026-02-01)
+- **Sentry-enabled logging** - `FirestoreUsageStatsRepository` migrated from direct `pino()` to `createAppLogger()` (2026-02-01)
+- **100% branch coverage** - Added v8 ignore exemptions for TypeScript-only safety branches (2026-02-02)
 
 ## File Structure
 
 ```
 apps/app-settings-service/src/
+  domain/ports/
+    index.ts                 # Port interfaces: PricingRepository, UsageStatsRepository, all types
   infra/firestore/
-    pricingRepository.ts     # Provider pricing data
-    usageStatsRepository.ts  # User analytics
+    index.ts                 # FirestorePricingRepository (reads settings/llm_pricing/providers)
+    usageStatsRepository.ts  # FirestoreUsageStatsRepository (collection group query)
   routes/
-    publicRoutes.ts          # Pricing and usage endpoints (Bearer auth)
-    internalRoutes.ts        # Internal endpoints (Internal auth)
-  services.ts                # DI container
-  server.ts                  # Fastify server
+    publicRoutes.ts          # GET /settings/pricing, GET /settings/usage-costs (Bearer auth)
+    internalRoutes.ts        # GET /internal/settings/pricing (Internal auth)
+  services.ts                # DI container (getServices, setServices, resetServices)
+  server.ts                  # Fastify server setup, OpenAPI schemas, health check
+  index.ts                   # Entry point: startup validation, env check, server start
 ```

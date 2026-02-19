@@ -97,6 +97,8 @@ function fail(
 ): ApiError;
 ```
 
+These are exported as `apiOk` and `apiFail` to avoid naming collision with `ok`/`err` from `common-core`.
+
 ### Request ID (`http/requestId.ts`)
 
 ```typescript
@@ -119,9 +121,9 @@ await app.register(fastifyAuthPlugin);
 
 **Environment variables:**
 
-- `INTEXURAOS_AUTH_JWKS_URL` -- JWKS endpoint URL
-- `INTEXURAOS_AUTH_ISSUER` -- Expected JWT issuer
-- `INTEXURAOS_AUTH_AUDIENCE` -- Expected JWT audience
+- `INTEXURAOS_AUTH_JWKS_URL` — JWKS endpoint URL
+- `INTEXURAOS_AUTH_ISSUER` — Expected JWT issuer
+- `INTEXURAOS_AUTH_AUDIENCE` — Expected JWT audience
 
 ```typescript
 interface AuthUser {
@@ -216,13 +218,12 @@ For convenience, this package re-exports from its dependencies:
 
 ## Recent Changes
 
-| Commit   | Description                                      | Age     |
-| -------- | ------------------------------------------------ | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions   | 12 days |
-| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
-| 8aad9098 | Migrate imports and delete llm-common            | 2 weeks |
-| 4f5a3f96 | Release v1.0.0                                   | 3 weeks |
+| Commit     | Description                                      | Age    |
+| ---------- | ------------------------------------------------ | ------ |
+| `8aad9098` | Migrate imports and delete llm-common            | recent |
+| `b32d75b7` | Handle worker 502 errors gracefully              | recent |
+| `44017d5c` | Fix ESLint OOM with batched parallel lint runner | recent |
+| `4fa0fed3` | Release v2.0.0                                   | recent |
 
 ## Source Files
 

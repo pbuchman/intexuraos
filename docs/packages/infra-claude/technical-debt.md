@@ -1,44 +1,86 @@
 # Technical Debt: @intexuraos/infra-claude
 
-## TODOs and FIXMEs
+**Last Updated:** 2026-02-19
 
-No TODO/FIXME markers found in source code.
+---
 
-## Code Quality Observations
+## Summary
 
-### Type Assertions for Cache Token Fields
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 3     | Low      |
+| Test Gaps   | 0     | —        |
+| Type Issues | 2     | Low      |
+| TODOs       | 0     | —        |
+| **Total**   | **5** | Low      |
 
-`client.ts` casts `Anthropic.Usage` to access `cache_read_input_tokens` and `cache_creation_input_tokens` because the Anthropic SDK types do not expose these fields directly:
+---
+
+## Future Plans
+
+- Extract the `createRequestContext` + `trackUsage` + error handling pattern into a shared `@intexuraos/llm-client-base` utility (shared across Claude, Gemini, GPT, GLM)
+- Add injectable `auditSink` / `usageSink` to match the API surface of `infra-gemini` and `infra-glm`
+- Add support for system message / instructions configuration
+- Add streaming support for long-running requests
+- Make `maxTokens` configurable via `ClaudeConfig`
+
+---
+
+## Code Smells
+
+### Low Priority
+
+| File              | Issue                                                                       | Impact                                    |
+| ----------------- | --------------------------------------------------------------------------- | ----------------------------------------- |
+| `src/client.ts`   | `MAX_TOKENS` constant (8192) hardcoded, not configurable                    | Incompatible with models supporting 128k+ |
+| `src/client.ts`   | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients | Maintenance overhead                      |
+| `src/client.ts`   | No injectable `auditSink`/`usageSink` unlike `infra-gemini` and `infra-glm` | Harder to test; must mock Firestore       |
+
+---
+
+## TypeScript Issues
+
+| File            | Issue                                                                                    | Count |
+| --------------- | ---------------------------------------------------------------------------------------- | ----- |
+| `src/client.ts` | `as` cast on `Anthropic.Usage` to access `cache_read_input_tokens`                       | 1     |
+| `src/client.ts` | `web_search_20250305` and `web_search` passed with `as const` bypassing tool type union | 1     |
+
+**Detail — Cache token fields:**
 
 ```ts
 const cacheReadTokens =
   (usage as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0;
 ```
 
-**Impact:** Low. The assertion is safe since the API returns these fields when prompt caching is active, but a future SDK version may expose them natively.
+The Anthropic SDK types do not expose cache fields natively. Cast is safe at runtime since the API returns them when prompt caching is active. Monitor `@anthropic-ai/sdk` releases.
 
-**Recommendation:** Monitor `@anthropic-ai/sdk` releases and replace casts when the SDK adds native type support.
-
-### Web Search Tool Type Assertion
-
-The `web_search_20250305` tool type and `web_search` name are passed with `as const` assertions because the SDK's tool type union may not include the web search variant:
+**Detail — Web search tool type:**
 
 ```ts
 tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const }],
 ```
 
-**Impact:** Low. Works at runtime but bypasses type safety.
+Works at runtime but bypasses type safety. Will resolve when Anthropic SDK adds web search types.
 
-**Recommendation:** Update when the Anthropic SDK adds web search tool types to its type definitions.
+---
 
-### Hardcoded MAX_TOKENS
+## TODOs / FIXMEs
 
-The `MAX_TOKENS` constant (8192) is hardcoded rather than configurable. Some models support larger output limits.
+No TODO/FIXME markers found in source code.
 
-**Recommendation:** Consider making `maxTokens` an optional field on `ClaudeConfig`.
+---
 
-## Future Improvements
+## Resolved Issues
 
-- Extract the `createRequestContext` + `trackUsage` + error handling pattern into a shared utility across all LLM clients (Claude, Gemini, GPT, GLM, Perplexity share identical boilerplate)
-- Add support for system message/instructions configuration
-- Add streaming support for long-running requests
+| Date       | Issue                                           | Resolution                                    |
+| ---------- | ----------------------------------------------- | --------------------------------------------- |
+| 2026-01-27 | Logger was optional, causing inconsistent usage | Made `logger` mandatory via ESLint rule       |
+| 2026-01-27 | Usage tracking used ad-hoc patterns             | Migrated to `UsageLogger` class from llm-pricing |
+
+---
+
+## Related
+
+- [README](README.md) — Developer reference
+- [Agent Reference](agent.md) — Machine-readable interface
+- [Documentation Run Log](../../documentation-runs.md)

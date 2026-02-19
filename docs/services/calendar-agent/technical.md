@@ -98,6 +98,11 @@ sequenceDiagram
 
 | Commit  | Description                                                   | Date       |
 | ------- | ------------------------------------------------------------- | ---------- |
+|         | Add dev-mode log formatting for PM2 readability               | 2026-02-16 |
+|         | Add Dash0 OpenTelemetry integration                           | 2026-02-16 |
+|         | Switch default LLM to Gemini 2.5 Flash + add fallbacks        | 2026-02-15 |
+|         | Standardize API key env vars to APP naming convention         | 2026-02-15 |
+|         | Add default model selector with platform Zai fallback         | 2026-02-08 |
 | INT-427 | Enable strict 100% coverage enforcement (Phase 3)             | 2026-01-31 |
 | INT-311 | Add delete/retry for failed issues and events                 | 2026-01-31 |
 | INT-422 | Fix Polish date parsing in calendar actions                   | 2026-01-29 |
@@ -267,18 +272,29 @@ interface GeneratePreviewMessage {
 
 ### External APIs
 
-| Service                | Purpose                           |
-| ---------------------- | --------------------------------- |
-| Google Calendar API v3 | Event CRUD and free/busy queries  |
-| Gemini LLM             | Natural language event extraction |
+| Service                | Purpose                                                               |
+| ---------------------- | --------------------------------------------------------------------- |
+| Google Calendar API v3 | Event CRUD and free/busy queries                                      |
+| Gemini 2.5 Flash       | Primary LLM for natural language event extraction                     |
+| Gemini 2.5 Pro         | Secondary LLM (fallback)                                              |
+| GLM-4.7 / GLM-4.7 Flash | Tertiary LLM via platform Zai (fallback when Gemini unavailable)    |
 
 ## Configuration
 
-| Environment Variable             | Required | Description                     |
-| -------------------------------- | -------- | ------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | GCP project ID                  |
-| `INTEXURAOS_USER_SERVICE_URL`    | Yes      | user-service base URL           |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth |
+| Environment Variable                  | Required | Description                             |
+| ------------------------------------- | -------- | --------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project ID                          |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWT key set URL for auth validation     |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer for auth validation          |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for auth validation        |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth         |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                   |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service URL for pricing    |
+| `INTEXURAOS_SENTRY_DSN`              | Yes      | Sentry DSN for error reporting          |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai LLM API key (fallback)     |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini LLM API key (fallback)  |
+| `INTEXURAOS_ENVIRONMENT`             | No       | Environment name (default: development) |
+| `PORT`                               | No       | Server port (default: 8125)             |
 
 ## Gotchas
 
@@ -351,4 +367,4 @@ apps/calendar-agent/src/
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

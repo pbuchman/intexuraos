@@ -1,63 +1,72 @@
 # Technical Debt: @intexuraos/infra-notion
 
-## TODOs and FIXMEs
+**Last Updated:** 2026-02-19
+**Analysis Run:** [2026-02-19 documentation run](../../documentation-runs.md)
 
-No TODO/FIXME markers found in source code.
+---
 
-## Code Quality Observations
+## Summary
 
-### Client Re-creation Per Operation
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 4     | Low      |
+| Test Gaps   | 0     | —        |
+| Type Issues | 1     | Low      |
+| TODOs       | 0     | —        |
+| **Total**   | **5** | —        |
 
-Both `validateNotionToken()` and `getPageWithPreview()` create a new `Client` instance on every call:
+---
 
-```ts
-const client = createNotionClient(token, logger);
-```
-
-**Impact:** Low. Notion client creation is lightweight (no connection pooling), but it means the logging fetch wrapper is recreated for each operation.
-
-**Recommendation:** Consider accepting a pre-created client as an alternative to token + logger for scenarios with multiple sequential operations.
-
-### Type Assertions for Block Content
-
-`getPageWithPreview` casts block data to extract rich text content:
-
-```ts
-const blockData = block[type as keyof typeof block] as
-  | { rich_text?: { plain_text?: string }[] }
-  | undefined;
-```
-
-**Impact:** Low. The Notion SDK's block types are complex discriminated unions, and this is the pragmatic approach. However, it skips blocks that do not have a `rich_text` array (e.g., images, embeds).
-
-**Recommendation:** Add support for more block types (images, embeds, code blocks) in `getPageWithPreview` as needed.
-
-### Headers Type Handling Complexity
-
-The `createLoggingFetch` function handles three possible `headers` formats (Headers object, array of tuples, plain object):
-
-```ts
-const headers =
-  init.headers instanceof Headers
-    ? Object.fromEntries(...)
-    : Array.isArray(init.headers)
-      ? Object.fromEntries(init.headers as [string, string][])
-      : (init.headers as Record<string, string>);
-```
-
-**Impact:** Low. This is defensive programming but increases code complexity.
-
-### Fixed Page Size for Preview
-
-`getPageWithPreview` hardcodes `page_size: 10` for block retrieval. This is not configurable.
-
-**Impact:** Low. 10 blocks is sufficient for a preview, but some pages may need more context.
-
-**Recommendation:** Accept an optional `blockLimit` parameter.
-
-## Future Improvements
+## Future Plans
 
 - Add database query support (`notion.databases.query`)
 - Add block content creation/update operations
 - Support pagination for pages with more than 10 blocks
 - Extract more block types in `getPageWithPreview` (code, image, embed, toggle, callout)
+- Accept optional `blockLimit` parameter in `getPageWithPreview`
+
+---
+
+## Code Smells
+
+### Low Priority
+
+| File           | Issue                                                                                    | Impact                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `src/notion.ts` | `validateNotionToken()` and `getPageWithPreview()` create a new `Client` on every call | Lightweight but logging wrapper is recreated; callers doing multiple ops create redundant instances |
+| `src/notion.ts` | Headers handling has 3 branches for `Headers`, array, and plain object formats         | Defensive but increases cyclomatic complexity in `createLoggingFetch`                     |
+| `src/notion.ts` | `page_size: 10` hardcoded in `getPageWithPreview` block retrieval                      | Not configurable; pages needing more context require a code change or direct SDK call      |
+| `src/notion.ts` | `calculateBodyLength` exported with `@internal` comment indicating test-only use        | Could cause confusion; consider unexported test double or `/* v8 ignore */` approach       |
+
+---
+
+## TypeScript Issues
+
+| File           | Issue                                                                         | Count |
+| -------------- | ----------------------------------------------------------------------------- | ----- |
+| `src/notion.ts` | Block data cast: `block[type as keyof typeof block] as ... \| undefined`     | 1     |
+
+The Notion SDK block type is a complex discriminated union; the cast is pragmatic. Non-`rich_text` blocks (images, embeds, code) yield empty content in the preview.
+
+---
+
+## TODOs / FIXMEs
+
+None found in source code.
+
+---
+
+## Resolved Issues
+
+| Date       | Issue                                               | Resolution                                           |
+| ---------- | --------------------------------------------------- | ---------------------------------------------------- |
+| 2026-01-29 | Logger was optional, allowing silent API calls      | Logger made mandatory in `createNotionClient` (v2.x) |
+| 2026-01-29 | Coverage below 95% threshold                        | Improved to 100% via comprehensive test suite        |
+
+---
+
+## Related
+
+- [README](README.md) — Package overview and API reference
+- [Agent Reference](agent.md) — Machine-readable interface
+- [Documentation Run Log](../../documentation-runs.md)

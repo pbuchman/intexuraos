@@ -130,7 +130,7 @@ All methods return `Result<T, WhatsAppError>`. Error codes:
 
 | Commit     | Description                                            | When        |
 | ---------- | ------------------------------------------------------ | ----------- |
-| `37551ab3` | Fix WhatsApp voice note transcription bugs             | 2 weeks ago |
-| `9f6505a7` | Address remaining PR #533 review feedback              | 2 weeks ago |
-| `f7004bdf` | Address PR #533 review issues                          | 2 weeks ago |
-| `16f6d0dc` | Replace 'message saved' confirmation with read receipt | 3 weeks ago |
+| `37551ab3` | Fix WhatsApp voice note transcription bugs             | 4 weeks ago |
+| `9f6505a7` | Address remaining PR #533 review feedback              | 4 weeks ago |
+| `f7004bdf` | Address PR #533 review issues                          | 4 weeks ago |
+| `16f6d0dc` | Replace 'message saved' confirmation with read receipt | 4 weeks ago |

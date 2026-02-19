@@ -6,26 +6,40 @@
 
 Image-service is an internal service with no public endpoints. This tutorial covers the internal endpoints used by other services like research-agent.
 
-**Version:** 2.2.0 (response contract migration)
+**Version:** 2.4.0
 
 ## Recent Updates
+
+**Dev-Mode Log Formatting (February 2026):**
+
+- PM2 logs now show colorized output: `service-name | HH:mm:ss | LEVEL | message | {extras}`
+- No behavior change required — `createLogStream()` handles the format transparently
+
+**Gemini Platform Fallback (February 2026):**
+
+- `INTEXURAOS_GEMINI_APP_API_KEY` added as primary platform fallback before ZAI
+- Gemini 2.5 Flash is now the default platform model (faster than ZAI GLM)
+
+**Dash0 OpenTelemetry Integration (February 2026):**
+
+- Distributed tracing enabled via `packages/infra-otel` preload module
+- No configuration needed — no-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset
+
+**API Key Naming Standardization (February 2026):**
+
+- Platform API key env vars renamed to `INTEXURAOS_<PROVIDER>_APP_API_KEY` convention
+- `INTEXURAOS_ZAI_APP_API_KEY` consolidates former guest/ZAI split keys
+
+**Platform Key Fallback (February 2026):**
+
+- Users without their own API keys fall back to platform-owned Gemini key first, then Zai
+- Image generation available to all users, not just those with personal API keys configured
 
 **Response Contract Migration (February 2026):**
 
 - All internal endpoints now use standardized `reply.ok()` / `reply.fail()` response format
 - Auth failures return `{ success: false, error: { code: 'UNAUTHORIZED', message } }`
 - Rate limits return proper 429 status with `RATE_LIMITED` error code
-- Sentry-enabled logging via `createAppLogger()`
-
-**INT-301 Direct Import Consolidation (January 2026):**
-
-- Local user service client re-export removed
-- All types imported directly from `@intexuraos/internal-clients`
-
-**INT-269 Internal-Clients Migration (January 2026):**
-
-- User service client migrated to `@intexuraos/internal-clients` package
-- API key retrieval now uses shared client implementation
 
 ---
 
@@ -33,7 +47,7 @@ Image-service is an internal service with no public endpoints. This tutorial cov
 
 - IntexuraOS development environment running
 - Internal auth token (`INTEXURAOS_INTERNAL_AUTH_TOKEN`)
-- User with configured API keys (OpenAI or Google)
+- User ID (API keys optional — platform fallback key used if user has none configured)
 
 ## Part 1: Hello World - Generate an Image Prompt
 
@@ -58,15 +72,25 @@ curl -X POST https://image-service.intexuraos.com/internal/images/prompts/genera
 {
   "success": true,
   "data": {
-    "prompt": "A futuristic digital artwork featuring neural networks and AI circuits, with glowing blue connections representing machine learning, in a clean minimalist style with a dark background",
-    "model": "gemini-2.5-pro"
+    "title": "AI and Machine Learning Research",
+    "visualSummary": "Interconnected neural network nodes representing machine learning patterns and data flow",
+    "prompt": "A professional visualization of artificial intelligence research, featuring glowing neural network nodes with luminous blue connections against a dark background, abstract data streams and gradient layers suggesting complexity and intelligence, minimalist scientific illustration with deep blue and purple tones",
+    "negativePrompt": "blurry, low quality, text on image, watermark, photorealistic people, corporate clipart, busy background",
+    "parameters": {
+      "aspectRatio": "16:9",
+      "framing": "centered composition with radial depth",
+      "textOnImage": "none",
+      "realism": "cinematic illustration",
+      "people": "no people",
+      "logosTrademarks": "none"
+    }
   }
 }
 ```
 
 ### Checkpoint
 
-You've generated an optimized prompt for image generation. The LLM has transformed the raw text into a detailed visual description.
+You've generated a full structured prompt. Note that the response includes a `title`, `visualSummary`, and `parameters` block in addition to the `prompt` itself — use `data.prompt` when calling the image generation endpoint.
 
 ## Part 2: Generate an Image
 
@@ -93,10 +117,8 @@ curl -X POST https://image-service.intexuraos.com/internal/images/generate \
   "success": true,
   "data": {
     "id": "img_xyz789",
-    "thumbnailUrl": "https://storage.googleapis.com/...",
-    "fullSizeUrl": "https://storage.googleapis.com/...",
-    "thumbnailGcsPath": "generated-images/thumbnails/img_xyz789.jpg",
-    "gcsPath": "generated-images/full/img_xyz789.png"
+    "thumbnailUrl": "https://storage.googleapis.com/bucket/images/img_xyz789-mountain-sunset-thumb.jpg",
+    "fullSizeUrl": "https://storage.googleapis.com/bucket/images/img_xyz789-mountain-sunset.png"
   }
 }
 ```

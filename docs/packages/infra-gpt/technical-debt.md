@@ -1,14 +1,52 @@
 # Technical Debt: @intexuraos/infra-gpt
 
-## TODOs and FIXMEs
+**Last Updated:** 2026-02-19
 
-No TODO/FIXME markers found in source code.
+---
 
-## Code Quality Observations
+## Summary
 
-### Type Assertions for Usage Details
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 4     | Medium   |
+| Test Gaps   | 0     | —        |
+| Type Issues | 1     | Low      |
+| TODOs       | 0     | —        |
+| **Total**   | **5** | Medium   |
 
-`extractUsageDetails` uses type assertions to access `input_tokens_details.cached_tokens` and `output_tokens_details.reasoning_tokens` because the OpenAI SDK types do not fully expose nested detail fields:
+---
+
+## Future Plans
+
+- Unify the Responses API and Chat Completions API code paths if OpenAI converges these APIs
+- Add `AbortController` timeout to image URL fetch (currently no timeout — can hang indefinitely)
+- Add streaming support for long-running requests
+- Make `maxTokens` configurable via `GptConfig` (some GPT models support 128k output tokens)
+- Add injectable `auditSink` / `usageSink` to match the API surface of `infra-gemini` and `infra-glm`
+- Extract `createRequestContext` / `trackUsage` boilerplate into `@intexuraos/llm-client-base`
+
+---
+
+## Code Smells
+
+### Medium Priority
+
+| File            | Issue                                                                                                   | Impact                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `src/client.ts` | Image URL fetch has no timeout: `const imageResponse = await fetch(imageUrl)` — can hang indefinitely  | Production risk if image CDN is slow or unresponsive |
+| `src/client.ts` | Dual API pattern (Responses + Chat Completions) requires two usage extraction code paths                | Complexity; must be maintained separately          |
+| `src/client.ts` | `MAX_TOKENS` constant (8192) hardcoded — incompatible with 128k output models                          | Cannot use full output capacity of GPT-4o         |
+| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients                      | Maintenance overhead                               |
+
+---
+
+## TypeScript Issues
+
+| File            | Issue                                                                                              | Count |
+| --------------- | -------------------------------------------------------------------------------------------------- | ----- |
+| `src/client.ts` | Type assertion on usage to access `input_tokens_details.cached_tokens` and `output_tokens_details.reasoning_tokens` | 1     |
+
+**Detail:**
 
 ```ts
 const cachedTokens =
@@ -18,50 +56,27 @@ const cachedTokens =
     : 0;
 ```
 
-**Impact:** Low. The assertion is safe for current API versions but fragile if the response shape changes.
+The OpenAI SDK types do not fully expose nested detail fields. The assertion is safe for current API versions. Monitor OpenAI SDK releases for improved type definitions.
 
-**Recommendation:** Monitor OpenAI SDK releases for improved type definitions.
+---
 
-### Dual API Pattern (Responses + Chat Completions)
+## TODOs / FIXMEs
 
-The client uses two different OpenAI APIs:
+No TODO/FIXME markers found in source code.
 
-- `research()` uses `client.responses.create` (Responses API with tool support)
-- `generate()` uses `client.chat.completions.create` (Chat Completions API)
+---
 
-This creates a dual code path for usage extraction since the two APIs return different response shapes (`ResponseUsage` vs `CompletionUsage`).
+## Resolved Issues
 
-**Impact:** Low. Both APIs are stable, but maintaining two code paths increases surface area.
+| Date       | Issue                                           | Resolution                                       |
+| ---------- | ----------------------------------------------- | ------------------------------------------------ |
+| 2026-01-27 | Logger was optional, causing inconsistent usage | Made `logger` mandatory via ESLint rule          |
+| 2026-01-27 | Usage tracking used ad-hoc patterns             | Migrated to `UsageLogger` class from llm-pricing |
 
-### Image URL Fallback
+---
 
-The `generateImage` method handles both `b64_json` and `url` response formats:
+## Related
 
-```ts
-const b64Data = imageData?.b64_json ?? imageData?.url;
-```
-
-When a URL is returned, it fetches the image data with a bare `fetch()` call without timeout or error handling beyond try/catch.
-
-**Impact:** Medium. The URL fetch has no timeout, so a slow image host could hang indefinitely.
-
-**Recommendation:** Add `AbortController` timeout to the image URL fetch, similar to the pattern used in `infra-whatsapp`.
-
-### Hardcoded MAX_TOKENS
-
-The `MAX_TOKENS` constant (8192) limits all text generation. Some GPT models support up to 128k output tokens.
-
-**Recommendation:** Make `maxTokens` configurable via `GptConfig`.
-
-## Shared Pattern Duplication
-
-The `createRequestContext`, `trackUsage`, and error handling boilerplate is nearly identical across all five LLM client packages.
-
-**Recommendation:** Extract into a shared `@intexuraos/llm-client-base` utility.
-
-## Future Improvements
-
-- Unify the Responses API and Chat Completions API code paths if OpenAI converges these APIs
-- Add `AbortController` timeout to image URL fetch
-- Add streaming support for long-running requests
-- Make `maxTokens` configurable
+- [README](README.md) — Developer reference
+- [Agent Reference](agent.md) — Machine-readable interface
+- [Documentation Run Log](../../documentation-runs.md)

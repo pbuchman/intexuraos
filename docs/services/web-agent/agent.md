@@ -166,7 +166,6 @@ interface SummarizePageResponse {
 
 **Do NOT:**
 
-- Call `/internal/page-summaries` without a valid userId (will fail with API_ERROR)
 - Batch more than 10 URLs in link preview requests
 - Expect summaries to work on paywalled/login-protected content
 - Assume all sites will return metadata (some block scrapers)
@@ -174,8 +173,10 @@ interface SummarizePageResponse {
 **Requires:**
 
 - `X-Internal-Auth` header with valid internal token
-- For summaries: User must have LLM API key configured in user-service
 - HTTP/HTTPS URLs only (no ftp://, file://, etc.)
+- For summaries: `userId` is required; LLM resolution: user's own key → platform Gemini 2.5 Flash → platform ZAI
+
+**Note on `API_ERROR` for summaries:** This error only surfaces if the user has no API key AND neither `INTEXURAOS_GEMINI_APP_API_KEY` nor `INTEXURAOS_ZAI_APP_API_KEY` are configured on the platform.
 
 ## Usage Patterns
 
@@ -194,8 +195,8 @@ interface SummarizePageResponse {
 1. User provides article URL to research-agent
 2. Call POST /internal/page-summaries with url and userId
 3. If success, include summary in research response
-4. If API_ERROR with "No API key", prompt user to add API key
-5. Summary will be in source language (Polish stays Polish)
+4. Summary will be in source language (Polish stays Polish)
+5. API_ERROR only if platform fallback keys are also unset
 ```
 
 ### Pattern 3: Batch Link Preview
@@ -209,16 +210,16 @@ interface SummarizePageResponse {
 
 ## Error Handling
 
-| Error Code    | Meaning                     | Recovery Action              |
-| ------------- | --------------------------- | ---------------------------- |
-| INVALID_URL   | Not HTTP/HTTPS or malformed | Validate URL format          |
-| ACCESS_DENIED | Site returned 403           | Accept no preview available  |
-| FETCH_FAILED  | Network or HTTP error       | Retry with backoff           |
-| TIMEOUT       | Request exceeded time limit | Retry or increase timeout    |
-| TOO_LARGE     | Response over 2MB           | Cannot process large pages   |
-| NO_CONTENT    | No text extracted from page | Page may be JS-only or empty |
-| API_ERROR     | LLM or user-service error   | Check user has API key       |
-| RATE_LIMITED  | Crawl4AI returned HTTP 429  | Wait and retry with backoff  |
+| Error Code    | Meaning                     | Recovery Action                            |
+| ------------- | --------------------------- | ------------------------------------------ |
+| INVALID_URL   | Not HTTP/HTTPS or malformed | Validate URL format                        |
+| ACCESS_DENIED | Site returned 403           | Accept no preview available                |
+| FETCH_FAILED  | Network or HTTP error       | Retry with backoff                         |
+| TIMEOUT       | Request exceeded time limit | Retry or increase timeout                  |
+| TOO_LARGE     | Response over 2MB           | Cannot process large pages                 |
+| NO_CONTENT    | No text extracted from page | Page may be JS-only or empty               |
+| API_ERROR     | LLM or user-service error   | Check platform fallback keys are configured |
+| RATE_LIMITED  | Crawl4AI returned HTTP 429  | Wait and retry with backoff                |
 
 ## Rate Limits
 
@@ -231,12 +232,14 @@ interface SummarizePageResponse {
 
 ## Dependencies
 
-| Service      | Why Needed                    | Failure Behavior    |
-| ------------ | ----------------------------- | ------------------- |
-| user-service | Get user's LLM model and keys | Return API_ERROR    |
-| Crawl4AI     | Fetch page content            | Return FETCH_FAILED |
-| User's LLM   | Generate summary              | Return API_ERROR    |
+| Service           | Why Needed                            | Failure Behavior    |
+| ----------------- | ------------------------------------- | ------------------- |
+| user-service      | Get user's LLM client (with fallback) | Return API_ERROR    |
+| Crawl4AI          | Fetch page content                    | Return FETCH_FAILED |
+| User's LLM        | Generate summary (primary)            | Fall back to Gemini |
+| Platform Gemini   | Summary fallback (no user key)        | Fall back to ZAI    |
+| Platform ZAI      | Summary secondary fallback            | Return API_ERROR    |
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

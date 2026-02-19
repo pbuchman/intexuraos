@@ -2,7 +2,7 @@
 
 ## Overview
 
-Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Version 2.2.0 adds Notion export integration with automatic and manual export, markdown-to-Notion block conversion, and research export settings management.
+Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Version 2.4.0 adds Dash0 OpenTelemetry distributed tracing and dev-mode log formatting. Version 2.3.0 added platform API key fallbacks (Gemini primary, Zai secondary), switched internal fast operations to `gemini-2.0-flash`, standardized API key naming, and improved LLM prompt quality.
 
 ## Architecture
 
@@ -45,6 +45,99 @@ graph TB
     InternalClients["@intexuraos/internal-clients"] --> UserSvc
     ExportSettings["Firestore:<br/>research_export_settings"] --> RA
 ```
+
+## Recent Changes (v2.4.0)
+
+### Dash0 OpenTelemetry Integration
+
+Distributed tracing, metrics, and log export via OTLP/HTTP to Dash0 added across all services including research-agent:
+
+- New `packages/infra-otel` package loaded as Node `--import` preload in Dockerfile
+- `OTEL_SERVICE_NAME=research-agent` baked into image at build time
+- Instrumentation is transparent — no code changes in service logic
+- No-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset (local dev)
+
+**Dockerfile changes:**
+
+```dockerfile
+# otel-register.js bundled alongside index.js during build
+CMD ["node", "--import", "./otel-register.js", "./index.js"]
+```
+
+### Dev-Mode Log Formatting
+
+`server.ts` now uses `createLogStream()` from `@intexuraos/http-server` for colorized, PM2-readable output in development:
+
+```
+research-agent | 10:30:00 | INFO | Research created | {id: "abc123"}
+```
+
+Production JSON logging unchanged.
+
+## Recent Changes (v2.3.0)
+
+### Platform API Key Fallbacks
+
+`createUserServiceClient` now accepts two optional platform-owned API keys to provide LLM access for users without their own provider keys:
+
+```typescript
+createUserServiceClient({
+  // ...
+  platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],     // Zai secondary fallback
+  platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'], // Gemini primary fallback
+});
+```
+
+**Fallback resolution order (inside `getLlmClient`):**
+
+1. User's own API key for the requested provider
+2. Platform Gemini key → `gemini-2.0-flash` (if `platformGeminiApiKey` set)
+3. Platform Zai key → `glm-4.7-flash` (if `platformZaiApiKey` set)
+4. Error: `NO_API_KEY`
+
+### Fast Model Switch: Gemini 2.0 Flash
+
+Title generation and context inference now use `LlmModels.Gemini20Flash` (`gemini-2.0-flash`):
+
+```typescript
+// REQUIRED_MODELS in index.ts
+const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
+  // ... research models ...
+  LlmModels.Gemini20Flash, // Fast model for title generation + context inference
+];
+```
+
+**Why:** `glm-4.7-flash` was taking 29s for title generation, exceeding the 10s HTTP timeout. `gemini-2.0-flash` is measurably faster and available via the platform Gemini key.
+
+### API Key Naming Convention
+
+All platform-owned API keys follow `INTEXURAOS_<PROVIDER>_APP_API_KEY`:
+
+| Old Variable                  | New Variable                    |
+| ----------------------------- | ------------------------------- |
+| `INTEXURAOS_GUEST_ZAI_API_KEY` | `INTEXURAOS_ZAI_APP_API_KEY`   |
+| `INTEXURAOS_ZAI_API_KEY`       | `INTEXURAOS_ZAI_APP_API_KEY`   |
+
+### LLM Prompt Improvements
+
+`ContextInferenceAdapter.repairSynthesisContext()` now passes `originalPrompt` directly to `buildSynthesisContextRepairPrompt`:
+
+```typescript
+// Before (v2.2.0):
+buildSynthesisContextRepairPrompt(
+  { originalPrompt: params.originalPrompt, reports: params.reports ?? [], ... },
+  invalidResponse, errorMessage
+)
+
+// After (v2.3.0):
+buildSynthesisContextRepairPrompt(params.originalPrompt, invalidResponse, errorMessage)
+```
+
+This matches the simplified API in `@intexuraos/llm-prompts` after the 27-prompt adversarial audit.
+
+### Previous Changes (v2.2.0)
+
+See v2.2.0 section below for Notion Export Integration, Research Export Settings, and Auth0 Namespaced Claims.
 
 ## Recent Changes (v2.2.0)
 
@@ -432,7 +525,7 @@ const RESEARCH_MODELS: ResearchModel[] = [
 | Component                                         | Purpose                              |
 | ------------------------------------------------- | ------------------------------------ |
 | Firestore (`researches` collection)               | Research persistence                 |
-| Firestore (`app_settings` collection)             | LLM pricing configuration            |
+| `app-settings-service` (HTTP)                     | LLM pricing configuration            |
 | Firestore (`llm_api_logs` collection)             | API call audit                       |
 | Firestore (`research_export_settings` collection) | Notion export configuration (v2.2.0) |
 | Pub/Sub (`llm-call-queue`)                        | LLM call distribution                |
@@ -442,20 +535,23 @@ const RESEARCH_MODELS: ResearchModel[] = [
 
 ### LLM Providers
 
-| Provider   | Models                                      |
-| ---------- | ------------------------------------------- |
-| Anthropic  | `claude-opus-4.5`, `claude-sonnet-4.5`      |
-| OpenAI     | `gpt-5.2`, `o4-mini-deep-research`          |
-| Google     | `gemini-2.5-pro`, `gemini-2.5-flash`        |
-| Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research` |
-| Zai        | `glm-4.7`, `glm-4.7-flash`                  |
+| Provider   | Models                                                                       |
+| ---------- | ---------------------------------------------------------------------------- |
+| Anthropic  | `claude-opus-4.5`, `claude-sonnet-4.5`                                       |
+| OpenAI     | `gpt-5.2`, `o4-mini-deep-research`                                           |
+| Google     | `gemini-2.5-pro`, `gemini-2.5-flash` (research); `gemini-2.0-flash` (fast)  |
+| Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research`                                  |
+| Zai        | `glm-4.7`, `glm-4.7-flash`                                                   |
 
-### Shared Packages (v2.2.0)
+**Fast model** (`gemini-2.0-flash`): Used for title generation and context inference via the platform Gemini key. Not available as a user-selectable research model.
+
+### Shared Packages (v2.4.0)
 
 | Package                        | Purpose                                         |
 | ------------------------------ | ----------------------------------------------- |
 | `@intexuraos/internal-clients` | User service client (NEW in v2.1.0)             |
 | `@intexuraos/infra-notion`     | Notion client and error mapping (NEW in v2.2.0) |
+| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry preload instrumentation (NEW in v2.4.0) |
 | `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                   |
 | `@intexuraos/llm-contract`     | Model types, provider mapping                   |
 | `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                    |
@@ -467,22 +563,27 @@ const RESEARCH_MODELS: ResearchModel[] = [
 
 ## Configuration
 
-| Environment Variable                       | Required | Description                          |
-| ------------------------------------------ | -------- | ------------------------------------ |
-| `INTEXURAOS_USER_SERVICE_URL`              | Yes      | User-service base URL                |
-| `INTEXURAOS_IMAGE_SERVICE_URL`             | Yes      | Image-service base URL               |
-| `INTEXURAOS_NOTION_SERVICE_URL`            | Yes      | Notion-service base URL (v2.2.0)     |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes      | Shared secret for service-to-service |
-| `INTEXURAOS_GCP_PROJECT_ID`                | Yes      | Google Cloud project ID              |
-| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Yes      | LLM call queue topic                 |
-| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | Yes      | Research process queue topic         |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes      | WhatsApp send topic                  |
-| `INTEXURAOS_WEB_APP_URL`                   | Yes      | Web app URL for notifications        |
-| `INTEXURAOS_SHARED_CONTENT_BUCKET`         | Yes      | GCS bucket for shared research       |
-| `INTEXURAOS_SHARE_BASE_URL`                | Yes      | Base URL for shared research         |
-| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Yes      | Public base URL for images           |
+| Environment Variable                        | Required | Description                                                        |
+| ------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| `INTEXURAOS_USER_SERVICE_URL`               | Yes      | User-service base URL                                              |
+| `INTEXURAOS_IMAGE_SERVICE_URL`              | Yes      | Image-service base URL                                             |
+| `INTEXURAOS_NOTION_SERVICE_URL`             | Yes      | Notion-service base URL (v2.2.0)                                   |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes      | Shared secret for service-to-service                               |
+| `INTEXURAOS_GCP_PROJECT_ID`                 | Yes      | Google Cloud project ID                                            |
+| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`          | Yes      | LLM call queue topic                                               |
+| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC`  | Yes      | Research process queue topic                                       |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`     | Yes      | WhatsApp send topic                                                |
+| `INTEXURAOS_WEB_APP_URL`                    | Yes      | Web app URL for notifications                                      |
+| `INTEXURAOS_SHARED_CONTENT_BUCKET`          | Yes      | GCS bucket for shared research                                     |
+| `INTEXURAOS_SHARE_BASE_URL`                 | Yes      | Base URL for shared research                                       |
+| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`          | Yes      | Public base URL for images                                         |
+| `INTEXURAOS_GEMINI_APP_API_KEY`             | No       | Platform Gemini key; enables `gemini-2.0-flash` fallback (v2.3.0) |
+| `INTEXURAOS_ZAI_APP_API_KEY`               | No       | Platform Zai key; enables `glm-4.7-flash` fallback (v2.3.0)       |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`           | No       | Dash0 OTLP endpoint; enables distributed tracing (v2.4.0)          |
 
 ## Gotchas
+
+**Platform API key fallbacks (v2.3.0)**: When a user has no API key for their preferred model's provider, `getLlmClient` in `@intexuraos/internal-clients` tries platform keys in order: Gemini (`gemini-2.0-flash`) → Zai (`glm-4.7-flash`). Both platform keys are optional. If neither is set, the service returns `NO_API_KEY` error as before.
 
 **Idempotent LLM calls**: The `process-llm-call` endpoint checks if an LLM result is already `completed` or `failed` and skips processing if so. This enables safe retry without duplication.
 
@@ -496,7 +597,7 @@ const RESEARCH_MODELS: ResearchModel[] = [
 
 **Attribution repair**: Synthesized content may have incomplete attribution. A repair process attempts to fix missing attribution lines before marking complete.
 
-**Cost calculation**: Costs are calculated from pricing data in `app_settings` collection. If pricing is missing, cost is not calculated but result is still saved.
+**Cost calculation**: Costs are calculated from pricing data fetched via `app-settings-service` HTTP. If pricing is missing, cost is not calculated but result is still saved.
 
 **Image cleanup**: When research is unshared, the cover image is deleted via call to image-service's internal endpoint.
 

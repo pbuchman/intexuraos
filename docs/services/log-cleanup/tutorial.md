@@ -64,14 +64,25 @@ These values pass through to code-agent. When unset, code-agent uses its own def
 
 ## Part 5: Local Development
 
-Run the worker locally with the Cloud Functions Framework:
+Run the worker locally with Node.js's built-in TypeScript support:
 
 ```bash
 cd workers/log-cleanup
 pnpm dev
 ```
 
-The function registers as a CloudEvent handler. To simulate a Pub/Sub event locally, use the Functions Framework's built-in event format.
+This uses `node --watch --experimental-strip-types src/index.ts`. No separate compilation step is needed. The function registers as a CloudEvent handler and reloads automatically on file changes.
+
+To simulate a Pub/Sub event locally, use the Cloud Functions Framework's built-in HTTP listener and send a CloudEvent-formatted POST request.
+
+## Part 6: Build for Deployment
+
+```bash
+cd workers/log-cleanup
+pnpm build
+```
+
+This bundles the source with esbuild into `dist/` and packages it as `function.zip` for Cloud Functions deployment. The esbuild step ensures all imports resolve correctly in the Cloud Functions runtime.
 
 ## Troubleshooting
 
@@ -82,3 +93,4 @@ The function registers as a CloudEvent handler. To simulate a Pub/Sub event loca
 | "API returned 503"                           | code-agent is down                | Check code-agent Cloud Run status |
 | "API returned success but no data"           | code-agent returned empty body    | Check code-agent cleanup endpoint |
 | Function never runs                          | Scheduler paused or misconfigured | Check Cloud Scheduler job status  |
+| Deployment fails at module resolution        | esbuild bundle missing or stale   | Run `pnpm build` before deploying |

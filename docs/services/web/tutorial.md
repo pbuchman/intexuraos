@@ -198,6 +198,33 @@ function MyComponent() {
 }
 ```
 
+### Task 3: Add a Linear Issue Selector
+
+Use `LinearIssueSelectorModal` when you need users to pick a Linear issue — it replaced the inline combobox for better mobile UX:
+
+```typescript
+import { LinearIssueSelectorModal } from '@/components/LinearIssueSelectorModal';
+
+function MyForm() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
+
+  return (
+    <>
+      <button onClick={() => setModalOpen(true)}>Select Linear Issue</button>
+      <LinearIssueSelectorModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSelect={(issue) => {
+          setSelectedIssue(issue.id);
+          setModalOpen(false);
+        }}
+      />
+    </>
+  );
+}
+```
+
 ---
 
 ## Part 4: Build for Production (5 minutes)
@@ -234,9 +261,11 @@ Serves the production build locally at `http://localhost:3000`
 | "CORS errors"                           | Ensure backend service allows requests from localhost                                      |
 | "Service worker not registering"        | Clear site data and reload in DevTools Application tab                                     |
 | "Vite HMR not working"                  | Check port 3000 is not already in use                                                      |
-| DevBar not showing                      | Only visible in dev mode (`pnpm dev`), not in production builds                            |
+| DevBar not showing                      | Only visible in dev mode (`pnpm dev`) or on `dev.intexuraos.cloud`, not in production      |
 | Chat not working as guest               | Guest sessions are rate-limited; clear `intex-guest-session-id` from localStorage to reset |
 | Dark mode not persisting                | Ensure localStorage is available (not in strict private mode)                              |
+| Linear board not updating               | Firestore listener may have expired; reload the page                                       |
+| Code task log stream blank              | Firebase auth may have failed; check the browser console for auth errors                   |
 
 ---
 
@@ -268,7 +297,8 @@ Now that you understand the basics:
 2. Read [`apiClient.ts`](../../../apps/web/src/services/apiClient.ts) for request handling
 3. Check [`App.tsx`](../../../apps/web/src/App.tsx) for routing structure
 4. Study the [`Chat`](../../../apps/web/src/components/Chat/Chat.tsx) component for the chat assistant architecture
-5. Review [`CodeTaskNewPage.tsx`](../../../apps/web/src/pages/CodeTaskNewPage.tsx) for a complex form with modals and API integration
+5. Review [`CodeTaskViewPage.tsx`](../../../apps/web/src/pages/CodeTaskViewPage.tsx) for the two-phase code task UI with LogStream, queued messaging, and design/implementation banners
+6. See [`PREventsPage.tsx`](../../../apps/web/src/pages/PREventsPage.tsx) for lazy-loaded summaries with `useGitHubPRSummaries` + `useGitHubPREvents`
 
 ---
 

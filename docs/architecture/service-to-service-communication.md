@@ -22,12 +22,28 @@ All internal endpoints follow the pattern:
 
 ### Service Prefixes
 
-| Service            | Prefix     | Description                   |
-| ------------------ | ---------- | ----------------------------- |
-| `notion-service`   | `notion`   | Notion integration operations |
-| `user-service`     | `user`     | User management and settings  |
-| `whatsapp-service` | `whatsapp` | WhatsApp operations           |
-| `llm-orchestrator` | `llm`      | LLM orchestration (future)    |
+| Service                        | Prefix                  | Description                                    |
+| ------------------------------ | ----------------------- | ---------------------------------------------- |
+| `actions-agent`                | `actions`               | Action processing, approval replies, retries   |
+| `app-settings-service`         | (no prefix — direct)    | Pricing and configuration lookup               |
+| `bookmarks-agent`              | `bookmarks`             | Bookmark management and enrichment             |
+| `calendar-agent`               | `calendar`              | Calendar event generation and preview          |
+| `chat-agent`                   | (no internal routes)    | RAG-based chat assistant                       |
+| `code-agent`                   | (no internal routes)    | Code execution and GitHub integration          |
+| `commands-agent`               | `commands`              | Command creation and status                    |
+| `data-insights-agent`          | `snapshots`, `visualizations` | Data snapshots and chart data            |
+| `image-service`                | `images`                | AI image generation and storage                |
+| `linear-agent`                 | `linear`                | Linear issue sync and action processing        |
+| `mobile-notifications-service` | `mobile-notifications`  | Push notification delivery                     |
+| `notes-agent`                  | `notes`                 | Note management                                |
+| `notion-service`               | `notion`                | Notion integration and page preview            |
+| `research-agent`               | `llm`, `research`       | LLM orchestration and research processing      |
+| `todos-agent`                  | `todos`                 | Todo management                                |
+| `user-service`                 | `users`                 | User settings, LLM API keys, OAuth tokens      |
+| `web-agent`                    | `link-previews`, `page-summaries` | Web scraping and link preview        |
+| `whatsapp-service`             | (webhook receiver)      | WhatsApp inbound webhook handling              |
+| `api-docs-hub`                 | (no internal routes)    | OpenAPI documentation aggregator              |
+| `web`                          | (frontend — no routes)  | React SPA                                      |
 
 ## Authentication
 

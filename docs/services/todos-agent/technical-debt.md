@@ -1,6 +1,6 @@
 # Todos Agent — Technical Debt
 
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-19
 **Analysis Run:** Autonomous documentation generation
 
 ---
@@ -120,6 +120,25 @@ No deprecated APIs or dependencies in use. All dependencies are current:
 
 ## Recent Improvements
 
+### Dash0 OpenTelemetry Integration (2026-02-16)
+
+Added Dash0 as an OpenTelemetry observability backend (PR #803). Provides distributed tracing alongside Sentry error reporting for full-stack visibility.
+
+### API Key Naming Standardization (2026-02-15)
+
+Standardized all LLM API key env vars to `APP` naming convention (PR #793):
+
+- `INTEXURAOS_ZAI_APP_API_KEY` — platform Zai key
+- `INTEXURAOS_GEMINI_APP_API_KEY` — platform Gemini key (new)
+
+### Default LLM Switch to Gemini 2.5 Flash (2026-02-15)
+
+Switched the default extraction model to Gemini 2.5 Flash (PR #792). Added platform Gemini as a fallback chain alongside Zai. Increased title generation timeout to accommodate the new model's response characteristics.
+
+### Dev-Mode Log Formatting (2026-02-16)
+
+Added PM2-friendly log formatting for local development. Structured JSON logs now pretty-print in `pm2 logs` output, significantly improving readability during local debugging.
+
 ### Sentry Logger Migration (2026-01-30)
 
 Migrated from direct `pino()` to `createAppLogger()` from `@intexuraos/infra-sentry`:
@@ -181,16 +200,18 @@ Improved test coverage across all use cases and routes.
 
 ### Historical Issues
 
-| Date       | Issue                               | Resolution                                  |
-| ---------- | ----------------------------------- | ------------------------------------------- |
-| 2026-01-31 | Branch coverage below 100%          | v8 ignore annotations + new tests (INT-427) |
-| 2026-01-30 | Direct pino() usage (no Sentry)     | Migrated to createAppLogger                 |
-| 2026-01-30 | Raw reply.send() in routes          | Migrated to reply.ok()/reply.fail()         |
-| 2026-01-26 | Local user client re-export barrel  | Removed infra/user/index.ts (INT-301)       |
-| 2026-01-24 | Manual LLM validation               | Migrated to Zod schemas (INT-218)           |
-| 2026-01-24 | Inconsistent user-service clients   | Unified via internal-clients (INT-269)      |
-| 2026-01-20 | Gaps in test coverage               | Additional test cases (INT-155)             |
-| 2026-01-18 | Non-standard ServiceFeedback format | Standardized contract (INT-126)             |
+| Date       | Issue                               | Resolution                                   |
+| ---------- | ----------------------------------- | -------------------------------------------- |
+| 2026-02-16 | No distributed tracing              | Added Dash0 OpenTelemetry integration (#803) |
+| 2026-02-15 | Inconsistent API key naming         | Standardized to APP convention (#793)        |
+| 2026-02-15 | Gemini 2.5 Flash not default        | Switched default LLM + added fallback (#792) |
+| 2026-01-31 | Branch coverage below 100%          | v8 ignore annotations + new tests (INT-427)  |
+| 2026-01-30 | Direct pino() usage (no Sentry)     | Migrated to createAppLogger                  |
+| 2026-01-30 | Raw reply.send() in routes          | Migrated to reply.ok()/reply.fail()          |
+| 2026-01-26 | Local user client re-export barrel  | Removed infra/user/index.ts (INT-301)        |
+| 2026-01-24 | Manual LLM validation               | Migrated to Zod schemas (INT-218)            |
+| 2026-01-24 | Inconsistent user-service clients   | Unified via internal-clients (INT-269)       |
+| 2026-01-20 | Gaps in test coverage               | Additional test cases (INT-155)              |
 
 ---
 

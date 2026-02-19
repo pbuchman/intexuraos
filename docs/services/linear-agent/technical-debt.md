@@ -1,7 +1,7 @@
 # Linear Agent - Technical Debt
 
-**Last Updated:** 2026-02-08
-**Analysis Run:** v3.0.0 documentation update (webhook sync, internal API, issue validation)
+**Last Updated:** 2026-02-19
+**Analysis Run:** v4.1.0 documentation update (label serialization fix, OpenTelemetry/Dash0 integration)
 
 ---
 
@@ -9,25 +9,17 @@
 
 | Category           | Count | Severity |
 | ------------------ | ----- | -------- |
-| TODOs/FIXMEs       | 1     | Medium   |
+| TODOs/FIXMEs       | 0     | -        |
 | Test Coverage Gaps | 0     | -        |
 | TypeScript Issues  | 0     | -        |
 | Code Smells        | 1     | Low      |
-| **Total**          | **2** | Medium   |
+| **Total**          | **1** | Low      |
 
 ---
 
 ## TODOs / FIXMEs
 
-### Hardcoded Team ID in Retry Endpoint
-
-| File                         | Line | Issue                                                            |
-| ---------------------------- | ---- | ---------------------------------------------------------------- |
-| `src/routes/linearRoutes.ts` | 313  | `teamId: 'TODO'` placeholder when retrying failed issue creation |
-
-**Impact:** The `POST /linear/failed-issues/:id/retry` endpoint creates issues with a hardcoded team ID instead of reading from the user's connection. This means retried issues may fail or be created in the wrong team.
-
-**Fix:** Fetch the user's `LinearConnection` and use `connection.teamId` when calling `linearApiClient.createIssue`.
+None. The previously tracked `teamId: 'TODO'` hardcoded placeholder in the retry endpoint has been resolved — see Resolved Issues.
 
 ---
 
@@ -42,6 +34,8 @@ Based on code analysis, git history, and domain patterns:
 5. **Multi-Issue Splitting**: Parse complex descriptions into multiple related issues
 6. **Assignee Suggestion**: Suggest assignee based on historical patterns or explicit mentions
 7. **Label Support in Internal API**: The `POST /internal/issues` endpoint accepts `labels` but does not pass them to the Linear API yet
+8. **completedAt in SyncedLinearIssue**: `SyncedLinearIssue` does not store `completedAt`; `updatedAt` is used as a proxy for the archive cutoff. Adding `completedAt` would improve accuracy for issues completed long after their last update.
+9. **Comment Full Sync**: Comments are only synced via webhooks; a comment full-sync capability for initial setup would be valuable
 
 ---
 
@@ -61,26 +55,7 @@ Based on code analysis, git history, and domain patterns:
 
 ## Test Coverage Gaps
 
-### Resolved in INT-166
-
-The INT-166 update significantly improved test coverage:
-
-- Added comprehensive tests for `mapStateToDashboardColumn` function
-- Added tests for all DashboardColumn values (todo, backlog, in_progress, in_review, to_test, done)
-- Added tests for state name pattern matching (review, test, qa, quality)
-- Added tests for edge cases (unknown state types, default behaviors)
-
-### Resolved in INT-486
-
-The INT-486 update added comprehensive test suites for all new use cases:
-
-- `issueMapper.test.ts` (172 lines) - Tests for `mapWebhookToSyncedIssue` and `mapApiIssueToSyncedIssue`
-- `fullSyncUseCase.test.ts` (391 lines) - Tests for `fullSync` and `fullSyncAllUsers` including error handling
-- `generateIssueTitle.test.ts` (429 lines) - Tests for LLM generation, fallback pipeline, code block handling
-- `syncSingleIssueUseCase.test.ts` (165 lines) - Tests for create/update/remove/unknown actions
-- `validateIssue.test.ts` (315 lines) - Tests for format validation, team ownership, not found, API errors
-
-**Current Coverage:** Meets 100% branch threshold with valid v8 ignore exemptions
+None identified. Current coverage meets the 100% branch threshold with valid v8 ignore exemptions.
 
 ---
 
@@ -89,13 +64,14 @@ The INT-486 update added comprehensive test suites for all new use cases:
 None identified. Service uses strict TypeScript with proper type definitions for:
 
 - Linear API types (`LinearIssue`, `LinearIssueWithTeam`, `LinearTeam`, `IssueStateCategory`)
-- Sync types (`SyncedLinearIssue`, `WorkflowState`)
+- Sync types (`SyncedLinearIssue`, `LinearComment`, `WorkflowState`)
 - Webhook types (`LinearWebhookEvent`, `LinearWebhookPayload`, `WebhookAction`)
 - Dashboard types (`DashboardColumn`, `GroupedIssues`)
 - Extraction types (`ExtractedIssueData`)
 - Validation types (`ValidatedIssue`, `ValidateIssueError`)
 - Title generation types (`GeneratedTitle`, `GenerateTitleError`)
 - Error types (`LinearError`, `LinearWebhookError`)
+- Label types (`LinearLabel` with id, name, color)
 
 ---
 
@@ -103,20 +79,21 @@ None identified. Service uses strict TypeScript with proper type definitions for
 
 None identified. Files are appropriately sized:
 
-| File                            | Lines | Status                           |
-| ------------------------------- | ----- | -------------------------------- |
-| `linearRoutes.ts`               | 673   | Borderline (12 endpoints)        |
-| `linearApiClient.ts`            | ~360  | OK (includes optimizations)      |
-| `internalIssuesRoutes.ts`       | 398   | OK                               |
-| `linearWebhookRoutes.ts`        | 298   | OK                               |
-| `processLinearAction.ts`        | 233   | OK                               |
-| `generateIssueTitle.ts`         | 129   | OK                               |
-| `fullSyncUseCase.ts`            | 158   | OK                               |
-| `validateIssue.ts`              | 108   | OK                               |
-| `syncSingleIssueUseCase.ts`     | 78    | OK                               |
-| `linearConnectionRepository.ts` | ~200  | OK (includes webhook secret ops) |
+| File                            | Lines  | Status                                   |
+| ------------------------------- | ------ | ---------------------------------------- |
+| `linearRoutes.ts`               | ~1005  | Borderline (14 endpoints). Watch closely |
+| `internalRoutes.ts`             | ~595   | OK (5 endpoints)                         |
+| `linearApiClient.ts`            | ~360   | OK (includes optimizations)              |
+| `internalIssuesRoutes.ts`       | ~400   | OK                                       |
+| `linearWebhookRoutes.ts`        | ~300   | OK                                       |
+| `processLinearAction.ts`        | ~233   | OK                                       |
+| `generateIssueTitle.ts`         | ~134   | OK                                       |
+| `fullSyncUseCase.ts`            | ~158   | OK                                       |
+| `validateIssue.ts`              | ~108   | OK                                       |
+| `syncSingleIssueUseCase.ts`     | ~78    | OK                                       |
+| `linearConnectionRepository.ts` | ~200   | OK (includes webhook secret ops)         |
 
-**Note:** `linearRoutes.ts` at 673 lines is the largest file due to 12 endpoints (connection CRUD, issues, failed issues CRUD + retry, sync, webhook config CRUD). Consider splitting into focused route modules if further endpoints are added.
+**Note:** `linearRoutes.ts` at ~1005 lines now handles 14 endpoints (connection CRUD, issues, issue detail, comments, failed issues CRUD + retry, sync, webhook config CRUD). Consider splitting into focused route modules (e.g., `linearIssueRoutes.ts`, `linearConnectionRoutes.ts`) if further endpoints are added.
 
 ---
 
@@ -148,20 +125,26 @@ None. The service uses current versions of:
 
 ## Resolved Issues
 
-| Date       | Issue                                    | Resolution                                    |
-| ---------- | ---------------------------------------- | --------------------------------------------- |
-| 2026-02-06 | No programmatic issue management         | INT-486: Internal API for issue CRUD + state  |
-| 2026-02-06 | No issue validation capability           | INT-486: validateIssue use case               |
-| 2026-02-06 | No AI title generation                   | INT-486: generateIssueTitle use case          |
-| 2026-02-03 | Single-tenant webhook support only       | Multi-tenant webhook routing by team ID       |
-| 2026-02-02 | No bidirectional sync with Linear        | INT-444: Webhook sync + full sync use cases   |
-| 2026-02-02 | No local issue storage                   | INT-444: SyncedLinearIssue + issue repository |
-| 2026-02-01 | Multi-user Linear support broken         | INT-443: Fixed multi-user connection handling |
-| 2026-01-24 | Test coverage gaps for dashboard columns | INT-166: Added comprehensive tests            |
-| 2026-01-24 | Missing todo/to_test columns             | INT-208: Added new column types               |
-| 2026-01-16 | Duplicate issue creation on retry        | INT-97: Added idempotency check               |
-| 2026-01-16 | Rate limiting from Linear API            | INT-95: Client caching + deduplication        |
-| 2026-01-17 | Silent success masking failures          | INT-125: ServiceFeedback contract             |
+| Date       | Issue                                     | Resolution                                                    |
+| ---------- | ----------------------------------------- | ------------------------------------------------------------- |
+| 2026-02-19 | validateIssue labels serialized as "[object Object]" | Map LinearLabel[] to string[] at HTTP boundary in internalRoutes |
+| 2026-02-15 | Silent title degradation on LLM failure   | Removed regex fallback, return err() after 2 retries          |
+| 2026-02-10 | Hardcoded `teamId: 'TODO'` in retry       | Fixed to use `connectionRepository.getFullConnection`         |
+| 2026-02-10 | Dashboard called Linear API on every load  | Switched to Firestore-first with local cache                  |
+| 2026-02-10 | No parent-child issue hierarchy            | Built in-memory tree in `listIssues` use case                 |
+| 2026-02-10 | Labels stored as strings only             | Labels now stored as `{ id, name, color }` objects            |
+| 2026-02-06 | No programmatic issue management         | INT-486: Internal API for issue CRUD + state         |
+| 2026-02-06 | No issue validation capability           | INT-486: validateIssue use case                      |
+| 2026-02-06 | No AI title generation                   | INT-486: generateIssueTitle use case                 |
+| 2026-02-03 | Single-tenant webhook support only       | Multi-tenant webhook routing by team ID              |
+| 2026-02-02 | No bidirectional sync with Linear        | INT-444: Webhook sync + full sync use cases          |
+| 2026-02-02 | No local issue storage                   | INT-444: SyncedLinearIssue + issue repository        |
+| 2026-02-01 | Multi-user Linear support broken         | INT-443: Fixed multi-user connection handling        |
+| 2026-01-24 | Test coverage gaps for dashboard columns | INT-166: Added comprehensive tests                   |
+| 2026-01-24 | Missing todo/to_test columns             | INT-208: Added new column types                      |
+| 2026-01-16 | Duplicate issue creation on retry        | INT-97: Added idempotency check                      |
+| 2026-01-16 | Rate limiting from Linear API            | INT-95: Client caching + deduplication               |
+| 2026-01-17 | Silent success masking failures          | INT-125: ServiceFeedback contract                    |
 
 ---
 
@@ -171,24 +154,28 @@ None. The service uses current versions of:
 
 1. **Idempotency**: ProcessedAction repository prevents duplicate issue creation (INT-97)
 2. **Graceful Degradation**: Failed extractions saved for manual review with retry capability
-3. **Type Safety**: Strict TypeScript types for Linear priority enum, state categories, webhook events, and sync models
+3. **Type Safety**: Strict TypeScript types including `LinearLabel` with color for full label fidelity
 4. **Error Mapping**: Consistent error code translation to HTTP status across all route files
 5. **Performance**: Client caching and request deduplication (INT-95)
 6. **Clean Separation**: Domain logic isolated from infrastructure with well-defined ports
-7. **Comprehensive Dashboard Grouping**: Smart state-to-column mapping (INT-208)
-8. **Multi-Tenant Webhooks**: Per-connection webhook secrets with team-based routing
-9. **Safe Parsing**: Issue mapper handles unknown state types and out-of-range priorities with defaults
-10. **Fallback Pipeline**: Title generation degrades gracefully through LLM -> regex -> "Code task" fallback
-11. **Signature Security**: HMAC-SHA256 with timing-safe comparison prevents timing attacks
+7. **Firestore-First Dashboard**: No Linear API call on dashboard load — fast and rate-limit-proof
+8. **Parent-Child Hierarchy**: In-memory tree built from Firestore data; subissues display correctly
+9. **Multi-Tenant Webhooks**: Per-connection webhook secrets with team-based routing
+10. **Safe Parsing**: Issue mapper handles unknown state types and out-of-range priorities with defaults
+11. **Retry Logic**: Title generation retries once before returning a clean error
+12. **OIDC + Internal Auth**: sync-all accepts both Cloud Scheduler OIDC and internal auth tokens
+13. **Signature Security**: HMAC-SHA256 with timing-safe comparison prevents timing attacks
+14. **Comment Sync**: Comments stored in Firestore and exposed via paginated API
+15. **HTTP Boundary Type Mapping**: `validateIssue` maps `LinearLabel[]` to `string[]` at the route layer — domain types stay clean
+16. **OpenTelemetry**: Distributed tracing and metrics via Dash0 loaded transparently at process start (no-op when unconfigured)
 
 ### Areas for Improvement
 
-1. **Retry Team ID**: Fix hardcoded `teamId: 'TODO'` in retry endpoint (see TODOs section)
-2. **Label Passthrough**: Internal API accepts labels but does not forward them to Linear
-3. **Batch Processing**: Currently processes one action at a time (could batch multiple actions)
-4. **Connection Caching**: Linear connection fetched per request (could cache briefly)
-5. **Module-Level State**: Client cache uses global state (isolated but harder to test)
-6. **Route File Size**: `linearRoutes.ts` at 673 lines could benefit from splitting if more endpoints are added
+1. **Label Passthrough**: Internal API accepts labels but does not forward them to Linear
+2. **completedAt Gap**: SyncedLinearIssue uses `updatedAt` as proxy for archive cutoff
+3. **Module-Level State**: Client cache uses global state (isolated but harder to test)
+4. **Route File Size**: `linearRoutes.ts` at ~1005 lines could benefit from splitting
+5. **Comment Full Sync**: No bulk comment reconciliation for initial setup
 
 ---
 
@@ -201,5 +188,5 @@ None. The service uses current versions of:
 
 ---
 
-**Last analyzed:** 2026-02-08
+**Last analyzed:** 2026-02-19 (v4.1.0)
 **Analyzed by:** service-scribe (autonomous)

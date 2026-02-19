@@ -1,6 +1,6 @@
 # @intexuraos/infra-glm
 
-Zai GLM API wrapper implementing the `LLMClient` interface from `@intexuraos/llm-contract`. Uses the OpenAI SDK pointed at Zai's API endpoint.
+Zai GLM API wrapper implementing the `LLMClient` interface from `@intexuraos/llm-contract`. Uses the OpenAI SDK pointed at Zai's OpenAI-compatible API endpoint.
 
 ## What It Wraps
 
@@ -61,11 +61,13 @@ Converts raw GLM usage data into `NormalizedUsage`. Optionally includes `cacheTo
 
 ```ts
 interface GlmConfig {
-  apiKey: string; // Zai GLM API key from open.bigmodel.cn
-  model: string; // e.g., 'glm-4.7'
-  userId: string; // User ID for usage tracking
-  pricing: ModelPricing; // Cost configuration per million tokens
-  logger: Logger; // Pino logger for structured logging
+  apiKey: string;         // Zai GLM API key from open.bigmodel.cn
+  model: string;          // e.g., 'glm-4.7'
+  userId: string;         // User ID for usage tracking
+  pricing: ModelPricing;  // Cost configuration per million tokens
+  logger: Logger;         // Pino logger for structured logging
+  auditSink?: AuditSink;  // Optional audit sink override (defaults to Firestore)
+  usageSink?: UsageSink;  // Optional usage sink override (defaults to Firestore)
 }
 ```
 
@@ -102,17 +104,18 @@ All methods return `Result<T, GlmError>`. Error mapping:
 
 ## Implementation Notes
 
-- Uses the OpenAI SDK with a custom `baseURL` to communicate with Zai's OpenAI-compatible API
-- Research uses a system message instructing the model to act as a senior research analyst
-- Web search is invoked via a custom tool type `web_search` with a `search_query` parameter
-- Source URLs are extracted from `web_search` tool call results
+- Uses the `openai` SDK with `baseURL: 'https://api.z.ai/api/paas/v4/'` to communicate with Zai's OpenAI-compatible API.
+- **Research:** Uses a system message instructing the model to act as a senior research analyst. Web search is invoked via a custom tool type `{ type: 'web_search', web_search: { search_query } }` — not part of OpenAI's type definitions; cast as `unknown as ChatCompletionTool`.
+- **Source extraction:** URLs are extracted from `web_search` tool call results via `toolCall.web_search.search_result[].link`.
+- **Cached tokens:** Extracted from `prompt_tokens_details.cached_tokens` in the response usage.
+- **MAX_TOKENS:** Hardcoded to 8192.
+- **Injectable sinks:** Supports `auditSink` and `usageSink` overrides for testing without Firestore.
 
 ## Cross-Cutting Concerns
 
 - **Audit trail:** Every request creates an `AuditContext` via `@intexuraos/llm-audit`
 - **Usage logging:** Automatic fire-and-forget logging via `@intexuraos/llm-pricing` `UsageLogger`
 - **Prompt building:** Research prompts built via `@intexuraos/llm-prompts` `buildResearchPrompt()`
-- **Max tokens:** Hardcoded to 8192
 
 ## Used By
 
@@ -124,11 +127,22 @@ All methods return `Result<T, GlmError>`. Error mapping:
 | `chat-agent`     | Chat completions             |
 | `llm-factory`    | Dynamic client creation      |
 
+## Dependencies
+
+| Package                    | Role                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| `openai` ^6.15.0           | OpenAI-compatible SDK (pointed at Zai API)                   |
+| `@intexuraos/common-core`  | `Result` types, `getErrorMessage`, `Logger`                  |
+| `@intexuraos/llm-contract` | `LLMClient`, `NormalizedUsage`, `TokenUsage`, `ModelPricing` |
+| `@intexuraos/llm-prompts`  | `buildResearchPrompt`                                        |
+| `@intexuraos/llm-audit`    | `createAuditContext`, `AuditSink`                            |
+| `@intexuraos/llm-pricing`  | `createUsageLogger`, `UsageSink`                             |
+
 ## Recent Changes
 
 | Commit     | Description                                       | When        |
 | ---------- | ------------------------------------------------- | ----------- |
-| `51b4a325` | Migrate LLM clients to UsageLogger class          | 2 weeks ago |
-| `8aad9098` | Migrate imports and delete llm-common             | 2 weeks ago |
-| `816afa55` | Add ESLint rule to ban optional logger parameters | 3 weeks ago |
-| `6ec4205e` | Make logger mandatory in all LLM configs          | 3 weeks ago |
+| `51b4a325` | Migrate LLM clients to UsageLogger class          | 4 weeks ago |
+| `8aad9098` | Migrate imports and delete llm-common             | 4 weeks ago |
+| `816afa55` | Add ESLint rule to ban optional logger parameters | 5 weeks ago |
+| `6ec4205e` | Make logger mandatory in all LLM configs          | 5 weeks ago |

@@ -269,18 +269,32 @@ const response = await fetch(`${BOOKMARKS_AGENT_URL}/internal/bookmarks`, {
 
 ### WhatsApp Delivery
 
-The service publishes to `whatsapp.message.send` topic after AI summarization. The message format:
+The service publishes to `whatsapp.message.send` topic after AI summarization. The message uses WhatsApp markdown formatting:
 
 ```
-[Page Title]
+📑 *Bookmark Summary*
+
+*[Page Title]*
 
 [AI Summary]
 
-[Original URL]
+🔗 [Original URL]
 ```
 
-whatsapp-service's SendMessageWorker handles delivery using the userId to look up the phone number.
+The title line is omitted if no title is available. `correlationId` is set to `bookmark-{bookmarkId}`. whatsapp-service's SendMessageWorker handles delivery using the userId to look up the phone number.
+
+### Internal Create Response Shape
+
+`POST /internal/bookmarks` returns `{ id, url, bookmark }` where `url` is the app deep link (not the bookmarked URL):
+
+```typescript
+interface CreateBookmarkInternalResponse {
+  id: string;          // bookmark ID
+  url: string;         // app deep link: "/#/bookmarks/{id}"
+  bookmark: Bookmark;  // full bookmark object
+}
+```
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19 (v2 documentation run)
