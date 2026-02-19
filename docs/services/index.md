@@ -2,7 +2,7 @@
 
 Complete documentation for all IntexuraOS services, workers, and packages.
 
-**Version 3.0.0** — February 8, 2026
+**Version 3.0.0** — February 19, 2026
 
 ---
 
@@ -317,6 +317,7 @@ graph TD
         WA[whatsapp-service]
         WEB[Web Dashboard]
         CHAT[chat-agent]
+        GH_PR[GitHub PR Webhooks]
     end
 
     subgraph "Routing"
@@ -334,6 +335,11 @@ graph TD
         CODE[code-agent]
     end
 
+    subgraph "Worker Layer"
+        ORCH[orchestrator]
+        CW[claude-worker]
+    end
+
     subgraph "Support"
         USER[user-service]
         IMG[image-service]
@@ -341,13 +347,9 @@ graph TD
         NOTIF[mobile-notifications]
     end
 
-    subgraph "Workers"
-        ORCH[orchestrator]
-        CW[claude-worker]
-    end
-
     WA --> CMD
     WEB --> CMD
+    CHAT --> CMD
     CMD --> ACT
 
     ACT --> RES
@@ -358,8 +360,10 @@ graph TD
     ACT --> LIN
     ACT --> CODE
 
+    GH_PR --> CODE
     CODE --> ORCH
     ORCH --> CW
+    CODE --> LIN
 
     RES --> USER
     RES --> IMG
@@ -367,6 +371,7 @@ graph TD
 
     RES --> NOTIF
     TODO --> NOTIF
+    CODE --> NOTIF
 ```
 
 ---
