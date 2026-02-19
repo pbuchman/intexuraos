@@ -29,7 +29,7 @@ function generateWebhookSecret(sharedSecret: string, taskId: string): string {
  * Generate a cancel nonce for task cancellation.
  */
 function generateCancelNonce(): string {
-  const buffer = randomBytes(2);
+  const buffer = randomBytes(4);
   return buffer.toString('hex');
 }
 
