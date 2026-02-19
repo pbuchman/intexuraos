@@ -3,7 +3,7 @@
  */
 
 import { setServices, type ServiceContainer } from '../../services.js';
-import { createFakeFirestore } from '@intexuraos/infra-firestore';
+import { createFakeFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
@@ -55,6 +55,7 @@ export const mockWorkerHealthProbe: WorkerHealthProbe = {
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
+  setFirestore(fakeFirestore);
   const logger = pino({ name: 'test', level: 'silent' });
 
   const rateLimitService: RateLimitService = {
