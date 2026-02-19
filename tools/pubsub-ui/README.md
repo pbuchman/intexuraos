@@ -4,12 +4,12 @@ Real-time web dashboard for monitoring Pub/Sub events during local development.
 
 ## Features
 
-- 🔴 **Live event stream** - See events as they arrive via Server-Sent Events (SSE)
-- 🎨 **Color-coded topics** - Each topic has a distinct color for easy identification
-- 🔍 **Expandable JSON** - Click any event to see full message payload
-- 🎯 **Topic filtering** - Show/hide events by topic
-- 📊 **Event statistics** - Track total event count in real-time
-- 🔌 **Auto-configured push subscriptions** - Automatically sets up push endpoints to service handlers
+- **Live event stream** - See events as they arrive via Server-Sent Events (SSE)
+- **Color-coded topics** - Each topic has a distinct color for easy identification
+- **Expandable JSON** - Click any event to see full message payload
+- **Topic filtering** - Show/hide events by topic
+- **Event statistics** - Track total event count in real-time
+- **Auto-configured push subscriptions** - Automatically sets up push endpoints to service handlers
 
 ## Quick Start
 

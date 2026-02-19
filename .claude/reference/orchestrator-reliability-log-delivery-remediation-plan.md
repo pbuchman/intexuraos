@@ -1,9 +1,31 @@
 # Orchestrator Reliability + Guaranteed Log Delivery Remediation Plan
 
-Date: 2026-02-13  
-Status: Approved for implementation  
-Scope: `workers/orchestrator`, `workers/claude-worker`, `apps/code-agent`  
+Date: 2026-02-13
+Status: PARTIALLY COMPLETED — Phase 1 done, Phase 2 partially done, Phase 3 not started
+Scope: `workers/orchestrator`, `workers/claude-worker`, `apps/code-agent`
 Goal: eliminate retry/runtime ambiguity and guarantee that all task logs are delivered to code-agent (or fail the task explicitly).
+
+## Implementation Status
+
+### Phase 1: Safety foundations — COMPLETED
+
+All four Phase 1 items are implemented:
+
+- **Concurrency split (I1):** `DockerProvider` uses separate `workers` (active, counts toward `maxConcurrent`) and `preservedWorkers` (non-counting) Maps. `preserveWorker(taskId)` method added. Dispatcher calls `preserveWorker` instead of `destroyWorker` for preserved failures. Tests cover preserved-worker non-counting behavior. (`docker-provider.ts:71`, `docker-provider.ts:721`)
+- **Readiness gate (I3):** `waitForWorkerReady` polls for `/tmp/worker-ready` via Docker exec with configurable `workerReadyTimeoutMs` (default 600 000 ms). First attempt only starts after readiness confirmed. Tests cover success and timeout paths. (`docker-provider.ts:835`, `docker-provider.ts:836`)
+- **Startup cleanup hardening (I4):** `createWorker` wraps setup in try/catch; on failure removes `taskSecretsPath`, `taskSessionPath`, and partially-created container before re-throwing. (`docker-provider.ts:484–509`)
+- **Image digest logging (I6):** `pullAndResolveImage` resolves and logs the digest after pull (`requested=<ref> resolved=<repo@sha256:...>`). Warns when `:latest` tag is used. `lastResolvedDigest` field stored on provider. (`docker-provider.ts:806–831`)
+
+### Phase 2: Log protocol v2 — PARTIALLY COMPLETED
+
+- **Code-agent ACK response:** `/internal/logs` returns `{ received, acknowledgedSequences, count }`. Deterministic zero-padded sequence doc IDs used in `FirestoreLogChunkRepository` (`padStart(12, '0')`). Tests verify ACK payload shape and idempotency. (`webhookRoutes.ts:489`, `firestoreLogChunkRepository.ts:40`) — DONE
+- **Orchestrator durable spool, monotonic sequence, `awaitDrain`, finalization barrier, restart recovery (I2):** NOT implemented. The log-forwarder still uses ephemeral in-memory state; sequence resets on `flushAndStop`/restart; no `log-spool` file, no drain barrier before terminal webhooks, no `LOG_DELIVERY_FAILED` error code. (`log-forwarder.ts:60–86`)
+
+### Phase 3: Operational hardening — NOT STARTED
+
+`GET /meta/worker-image` endpoint, deployment verification updates, and dashboards/alerts are not yet implemented.
+
+---
 
 ## 1) Locked Decisions
 
