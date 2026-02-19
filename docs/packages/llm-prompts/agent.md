@@ -103,7 +103,9 @@ function buildInferResearchContextPrompt(/* ... */): string;
 function buildResearchContextRepairPrompt(/* ... */): string;
 function buildModelExtractionPrompt(/* ... */): string;
 function parseModelExtractionResponse(/* ... */): ModelExtractionResponse | null;
-function parseModelExtractionResponseWithLogging(logger: Logger, /* ... */): ModelExtractionResponse | null;
+function parseModelExtractionResponseWithLogging(
+  logger: Logger /* ... */
+): ModelExtractionResponse | null;
 function parseAttributionLine(line: string): AttributionLine | null;
 function parseSections(content: string): ParsedSection[];
 function buildSourceMap(/* ... */): Map<SourceId, SourceMapItem>;
@@ -131,7 +133,9 @@ function buildInsightRepairPrompt(/* ... */): string;
 
 // approvals/
 function parseApprovalIntentResponse(/* ... */): ApprovalIntentResponse | null;
-function parseApprovalIntentResponseWithLogging(logger: Logger, /* ... */): ApprovalIntentResponse | null;
+function parseApprovalIntentResponseWithLogging(
+  logger: Logger /* ... */
+): ApprovalIntentResponse | null;
 
 // calendar/
 function buildCalendarExtractionRepairPrompt(/* ... */): string;

@@ -34,8 +34,8 @@ export type { OtelConfig };
 
 ```typescript
 interface OtelConfig {
-  readonly endpoint: string;    // OTLP base URL (e.g. https://ingress.eu1.dash0.com)
-  readonly authToken: string;   // Bearer token (empty string when not configured)
+  readonly endpoint: string; // OTLP base URL (e.g. https://ingress.eu1.dash0.com)
+  readonly authToken: string; // Bearer token (empty string when not configured)
   readonly environment: string; // Deployment env label (default: 'unknown')
 }
 ```
@@ -71,12 +71,12 @@ const instrumentations = getInstrumentations();
 
 ## Environment Variables
 
-| Variable                         | Read By             | Required |
-| -------------------------------- | ------------------- | -------- |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT` | `buildOtelConfig()` | No       |
-| `INTEXURAOS_DASH0_AUTH_TOKEN`    | `buildOtelConfig()` | No       |
-| `INTEXURAOS_ENVIRONMENT`         | `buildOtelConfig()` | No       |
-| `OTEL_SERVICE_NAME`              | `register.ts`       | No       |
+| Variable                         | Read By             | Required    |
+| -------------------------------- | ------------------- | ----------- |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT` | `buildOtelConfig()` | No          |
+| `INTEXURAOS_DASH0_AUTH_TOKEN`    | `buildOtelConfig()` | No          |
+| `INTEXURAOS_ENVIRONMENT`         | `buildOtelConfig()` | No          |
+| `OTEL_SERVICE_NAME`              | `register.ts`       | No          |
 | `npm_package_name`               | `register.ts`       | Auto (Node) |
 | `npm_package_version`            | `register.ts`       | Auto (Node) |
 
@@ -84,13 +84,13 @@ const instrumentations = getInstrumentations();
 
 ## Instrumentations
 
-| Name                                          | Class                    |
-| --------------------------------------------- | ------------------------ |
-| `@opentelemetry/instrumentation-http`         | `HttpInstrumentation`    |
-| `@opentelemetry/instrumentation-fastify`      | `FastifyInstrumentation` |
-| `@opentelemetry/instrumentation-undici`       | `UndiciInstrumentation`  |
-| `@opentelemetry/instrumentation-dns`          | `DnsInstrumentation`     |
-| `@opentelemetry/instrumentation-net`          | `NetInstrumentation`     |
+| Name                                     | Class                    |
+| ---------------------------------------- | ------------------------ |
+| `@opentelemetry/instrumentation-http`    | `HttpInstrumentation`    |
+| `@opentelemetry/instrumentation-fastify` | `FastifyInstrumentation` |
+| `@opentelemetry/instrumentation-undici`  | `UndiciInstrumentation`  |
+| `@opentelemetry/instrumentation-dns`     | `DnsInstrumentation`     |
+| `@opentelemetry/instrumentation-net`     | `NetInstrumentation`     |
 
 **Note:** `PinoInstrumentation` was removed (commit `0338e04f`). Pino log forwarding is handled by `@intexuraos/infra-sentry` via `pino-opentelemetry-transport` (direct OTLP HTTP) because Node loader hooks conflict with tsx.
 
@@ -121,7 +121,11 @@ if (config !== undefined) {
   });
 
   sdk.start();
-  process.on('SIGTERM', () => sdk.shutdown().catch(() => { /* best-effort */ }));
+  process.on('SIGTERM', () =>
+    sdk.shutdown().catch(() => {
+      /* best-effort */
+    })
+  );
 }
 
 // v8 ignore: module-init — requires live collector for integration testing

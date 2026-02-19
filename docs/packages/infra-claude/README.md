@@ -62,11 +62,11 @@ Converts raw Anthropic usage data into the standardized `NormalizedUsage` format
 
 ```ts
 interface ClaudeConfig {
-  apiKey: string;   // Anthropic API key
-  model: string;    // e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5'
-  userId: string;   // User ID for usage tracking
+  apiKey: string; // Anthropic API key
+  model: string; // e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5'
+  userId: string; // User ID for usage tracking
   pricing: ModelPricing; // Cost configuration per million tokens
-  logger: Logger;   // Pino logger for structured logging
+  logger: Logger; // Pino logger for structured logging
 }
 ```
 
@@ -123,14 +123,14 @@ All methods return `Result<T, ClaudeError>`. Error mapping:
 
 ## Dependencies
 
-| Package                      | Role                                                   |
-| ---------------------------- | ------------------------------------------------------ |
-| `@anthropic-ai/sdk` ^0.52.0  | Anthropic Messages API client                          |
-| `@intexuraos/common-core`    | `Result` types, `getErrorMessage`, `Logger`            |
-| `@intexuraos/llm-contract`   | `LLMClient` interface, `NormalizedUsage`, `ModelPricing` |
-| `@intexuraos/llm-prompts`    | `buildResearchPrompt`                                  |
-| `@intexuraos/llm-audit`      | `createAuditContext`                                   |
-| `@intexuraos/llm-pricing`    | `createUsageLogger`                                    |
+| Package                     | Role                                                     |
+| --------------------------- | -------------------------------------------------------- |
+| `@anthropic-ai/sdk` ^0.52.0 | Anthropic Messages API client                            |
+| `@intexuraos/common-core`   | `Result` types, `getErrorMessage`, `Logger`              |
+| `@intexuraos/llm-contract`  | `LLMClient` interface, `NormalizedUsage`, `ModelPricing` |
+| `@intexuraos/llm-prompts`   | `buildResearchPrompt`                                    |
+| `@intexuraos/llm-audit`     | `createAuditContext`                                     |
+| `@intexuraos/llm-pricing`   | `createUsageLogger`                                      |
 
 ## Recent Changes
 

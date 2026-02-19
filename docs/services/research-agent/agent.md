@@ -449,19 +449,19 @@ draft ──approve──> pending ──process──> processing ──all_com
 
 ## Dependencies (v2.4.0)
 
-| Package                        | Purpose                                                   |
-| ------------------------------ | --------------------------------------------------------- |
-| `@intexuraos/internal-clients` | User service client (v2.1.0)                              |
-| `@intexuraos/infra-notion`     | Notion client and error mapping (v2.2.0)                  |
-| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry preload instrumentation (v2.4.0)      |
-| `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                             |
-| `@intexuraos/llm-contract`     | Model types, provider mapping                             |
-| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                              |
-| `@intexuraos/llm-pricing`      | Pricing context interface                                 |
-| `@intexuraos/llm-utils`        | Parse error formatting                                    |
-| `@intexuraos/infra-gemini`     | Gemini client wrapper                                     |
-| `@intexuraos/common-http`      | HTTP utilities, auth                                      |
-| `@intexuraos/common-core`      | Result types, logging                                     |
+| Package                        | Purpose                                              |
+| ------------------------------ | ---------------------------------------------------- |
+| `@intexuraos/internal-clients` | User service client (v2.1.0)                         |
+| `@intexuraos/infra-notion`     | Notion client and error mapping (v2.2.0)             |
+| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry preload instrumentation (v2.4.0) |
+| `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                        |
+| `@intexuraos/llm-contract`     | Model types, provider mapping                        |
+| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                         |
+| `@intexuraos/llm-pricing`      | Pricing context interface                            |
+| `@intexuraos/llm-utils`        | Parse error formatting                               |
+| `@intexuraos/infra-gemini`     | Gemini client wrapper                                |
+| `@intexuraos/common-http`      | HTTP utilities, auth                                 |
+| `@intexuraos/common-core`      | Result types, logging                                |
 
 ---
 

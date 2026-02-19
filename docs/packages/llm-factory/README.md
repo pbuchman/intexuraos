@@ -74,8 +74,8 @@ interface LlmClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;  // from @intexuraos/llm-audit; defaults to Firestore sink
-  usageSink?: UsageSink;  // from @intexuraos/llm-pricing; defaults to Firestore sink
+  auditSink?: AuditSink; // from @intexuraos/llm-audit; defaults to Firestore sink
+  usageSink?: UsageSink; // from @intexuraos/llm-pricing; defaults to Firestore sink
 }
 
 interface GenerateResult {
@@ -105,14 +105,14 @@ The factory also re-exports `LLMError` from `@intexuraos/llm-contract` for conve
 
 ## Recent Changes
 
-| Commit   | Description                                                               | Age     |
-| -------- | ------------------------------------------------------------------------- | ------- |
-| 1c9d7ec9 | Orchestrator verification hardening and unified secrets sync workflow     | 10 days |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner                          | 17 days |
-| 21c1528a | Fix release skill to bump all package versions                            | 3 weeks |
-| 4fa0fed3 | Release v2.0.0                                                            | 3 weeks |
-| 8aad9098 | Migrate imports and delete llm-common                                     | 3 weeks |
-| 6ec4205e | Make logger mandatory in all LLM configs                                  | 4 weeks |
+| Commit   | Description                                                           | Age     |
+| -------- | --------------------------------------------------------------------- | ------- |
+| 1c9d7ec9 | Orchestrator verification hardening and unified secrets sync workflow | 10 days |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner                      | 17 days |
+| 21c1528a | Fix release skill to bump all package versions                        | 3 weeks |
+| 4fa0fed3 | Release v2.0.0                                                        | 3 weeks |
+| 8aad9098 | Migrate imports and delete llm-common                                 | 3 weeks |
+| 6ec4205e | Make logger mandatory in all LLM configs                              | 4 weeks |
 
 ## Source Files
 

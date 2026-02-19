@@ -60,9 +60,9 @@ No `any` types, `@ts-ignore`, or `@ts-expect-error` directives in source files.
 
 ### Historical Issues
 
-| Date       | Issue                                         | Resolution                                          |
-| ---------- | --------------------------------------------- | --------------------------------------------------- |
-| 2026-02-01 | Cloud Functions deployment failed at runtime  | Switched from `tsc` to esbuild bundling (b82522d2)  |
-| 2026-01-31 | Empty error objects in logs                   | Added error serializers (INT-464)                   |
-| 2026-01-29 | Branch coverage below 95%                     | Added v8 ignore annotations                         |
-| 2026-01-28 | Vitest v4 migration issues                    | Updated test patterns                               |
+| Date       | Issue                                        | Resolution                                         |
+| ---------- | -------------------------------------------- | -------------------------------------------------- |
+| 2026-02-01 | Cloud Functions deployment failed at runtime | Switched from `tsc` to esbuild bundling (b82522d2) |
+| 2026-01-31 | Empty error objects in logs                  | Added error serializers (INT-464)                  |
+| 2026-01-29 | Branch coverage below 95%                    | Added v8 ignore annotations                        |
+| 2026-01-28 | Vitest v4 migration issues                   | Updated test patterns                              |

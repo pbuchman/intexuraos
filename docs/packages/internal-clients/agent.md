@@ -39,7 +39,7 @@ interface UserServiceConfig {
   pricingContext: IPricingContext;
   logger: Logger;
   platformGeminiApiKey?: string | undefined; // fallback: Gemini 2.5 Flash when user has no key
-  platformZaiApiKey?: string | undefined;    // fallback: Glm47Flash when user has no key
+  platformZaiApiKey?: string | undefined; // fallback: Glm47Flash when user has no key
 }
 
 interface UserServiceClient {

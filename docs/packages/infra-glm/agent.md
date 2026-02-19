@@ -2,14 +2,14 @@
 
 ## Identity
 
-| Attribute | Value                                                            |
-| --------- | ---------------------------------------------------------------- |
-| Package   | `@intexuraos/infra-glm`                                          |
-| Version   | 2.1.0                                                            |
-| Purpose   | Zai GLM API wrapper implementing `LLMClient` via OpenAI SDK      |
-| Provider  | `LlmProviders.Zai`                                               |
-| SDK       | `openai` ^6.15.0 (with custom baseURL)                           |
-| API Base  | `https://api.z.ai/api/paas/v4/`                                  |
+| Attribute | Value                                                       |
+| --------- | ----------------------------------------------------------- |
+| Package   | `@intexuraos/infra-glm`                                     |
+| Version   | 2.1.0                                                       |
+| Purpose   | Zai GLM API wrapper implementing `LLMClient` via OpenAI SDK |
+| Provider  | `LlmProviders.Zai`                                          |
+| SDK       | `openai` ^6.15.0 (with custom baseURL)                      |
+| API Base  | `https://api.z.ai/api/paas/v4/`                             |
 
 ## Exports
 
@@ -42,13 +42,20 @@ interface GlmConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;  // defaults to Firestore audit sink
-  usageSink?: UsageSink;  // defaults to Firestore usage sink
+  auditSink?: AuditSink; // defaults to Firestore audit sink
+  usageSink?: UsageSink; // defaults to Firestore usage sink
 }
 
 // GlmError = LLMError from @intexuraos/llm-contract
 type GlmError = {
-  code: 'INVALID_KEY' | 'RATE_LIMITED' | 'OVERLOADED' | 'CONTEXT_LENGTH' | 'TIMEOUT' | 'CONTENT_FILTERED' | 'API_ERROR';
+  code:
+    | 'INVALID_KEY'
+    | 'RATE_LIMITED'
+    | 'OVERLOADED'
+    | 'CONTEXT_LENGTH'
+    | 'TIMEOUT'
+    | 'CONTENT_FILTERED'
+    | 'API_ERROR';
   message: string;
 };
 ```
@@ -95,42 +102,44 @@ if (result.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED':     // 429 — retry with backoff
-    case 'INVALID_KEY':      // 401 — do not retry
-    case 'OVERLOADED':       // 500+ — retry after delay
-    case 'CONTEXT_LENGTH':   // context_length_exceeded — reduce prompt
+    case 'RATE_LIMITED': // 429 — retry with backoff
+    case 'INVALID_KEY': // 401 — do not retry
+    case 'OVERLOADED': // 500+ — retry after delay
+    case 'CONTEXT_LENGTH': // context_length_exceeded — reduce prompt
     case 'CONTENT_FILTERED': // sensitive/filtered — do not retry
-    case 'TIMEOUT':          // retry
-    case 'API_ERROR':        // log and handle
+    case 'TIMEOUT': // retry
+    case 'API_ERROR': // log and handle
   }
 }
 ```
 
 ## Dependencies
 
-| Package                    | Role                                                         |
-| -------------------------- | ------------------------------------------------------------ |
-| `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                        |
-| `@intexuraos/llm-contract` | LLMClient, NormalizedUsage, TokenUsage, ModelPricing         |
-| `@intexuraos/llm-prompts`  | buildResearchPrompt                                          |
-| `@intexuraos/llm-audit`    | createAuditContext, AuditSink                                |
-| `@intexuraos/llm-pricing`  | createUsageLogger, UsageSink                                 |
+| Package                    | Role                                                 |
+| -------------------------- | ---------------------------------------------------- |
+| `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                |
+| `@intexuraos/llm-contract` | LLMClient, NormalizedUsage, TokenUsage, ModelPricing |
+| `@intexuraos/llm-prompts`  | buildResearchPrompt                                  |
+| `@intexuraos/llm-audit`    | createAuditContext, AuditSink                        |
+| `@intexuraos/llm-pricing`  | createUsageLogger, UsageSink                         |
 
 ## Constants
 
-| Constant       | Value                              |
-| -------------- | ---------------------------------- |
-| `MAX_TOKENS`   | 8192                               |
-| `GLM_API_BASE` | `https://api.z.ai/api/paas/v4/`    |
+| Constant       | Value                           |
+| -------------- | ------------------------------- |
+| `MAX_TOKENS`   | 8192                            |
+| `GLM_API_BASE` | `https://api.z.ai/api/paas/v4/` |
 
 ## Constraints
 
 **Do NOT:**
+
 - Call `generateImage` — not implemented on this client
 - Expect OpenAI-standard tool type safety — GLM uses custom `web_search` tool via `unknown` cast
 - Pass `reasoningTokens` to `normalizeUsage` as a non-undefined value — always pass `undefined` (parameter exists for API compatibility but GLM does not expose reasoning tokens)
 
 **Requires:**
+
 - Valid `INTEXURAOS_GLM_API_KEY` environment variable
 - `logger` field on config (mandatory, enforced by ESLint)
 

@@ -326,13 +326,13 @@ Once a code task starts, the code-agent sends a "task started" WhatsApp message 
 
 Error codes returned when cancellation fails:
 
-| Error Code             | Description                                        |
-| ---------------------- | -------------------------------------------------- |
-| `TASK_NOT_FOUND`       | Task doesn't exist                                 |
-| `INVALID_NONCE`        | Cancel code already used                           |
-| `NONCE_EXPIRED`        | Cancel link has expired                            |
-| `NOT_OWNER`            | You are not the owner of this task (HTTP 403)      |
-| `TASK_NOT_CANCELLABLE` | Task has already completed or cannot be cancelled  |
+| Error Code             | Description                                       |
+| ---------------------- | ------------------------------------------------- |
+| `TASK_NOT_FOUND`       | Task doesn't exist                                |
+| `INVALID_NONCE`        | Cancel code already used                          |
+| `NONCE_EXPIRED`        | Cancel link has expired                           |
+| `NOT_OWNER`            | You are not the owner of this task (HTTP 403)     |
+| `TASK_NOT_CANCELLABLE` | Task has already completed or cannot be cancelled |
 
 ### Execute a Code Action Manually
 
@@ -357,20 +357,20 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
 
 ## Troubleshooting
 
-| Issue                           | Symptom                                   | Solution                                                     |
-| ------------------------------- | ----------------------------------------- | ------------------------------------------------------------ |
-| Actions stuck in pending        | No handler processes action               | Check if handler is registered; reminder type has no handler |
-| Pub/Sub delivery failures       | Actions not processed                     | Verify topic name matches `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`  |
-| Type correction not working     | Action stays same type after PATCH        | Ensure action is in `pending` or `awaiting_approval` status  |
-| Batch returns wrong actions     | Actions from other users                  | Security check filters by userId; verify correct IDs         |
-| WhatsApp notifications not sent | Action completes silently                 | Check `whatsapp-send` topic configuration                    |
-| WhatsApp approval not working   | Text reply ignored, buttons re-sent       | Expected behavior in v4.0.0 — tap a button instead          |
-| Race condition errors           | Duplicate notifications                   | System handles this automatically with `updateStatusIf`      |
-| Calendar preview returns null   | No preview available                      | Wait for calendar-agent to generate preview                  |
-| Code task worker unavailable    | Action marked as failed                   | code-agent has no available workers; retry later             |
-| Duplicate code task             | Already exists message                    | Task was already created (idempotent via approvalEventId)    |
-| Interactive buttons not showing | Plain text message instead of buttons    | WhatsApp client may not support interactive messages         |
-| Action deleted, approval fails  | WhatsApp message: "no longer available"  | Action was deleted or expired; this is handled gracefully    |
+| Issue                           | Symptom                                 | Solution                                                     |
+| ------------------------------- | --------------------------------------- | ------------------------------------------------------------ |
+| Actions stuck in pending        | No handler processes action             | Check if handler is registered; reminder type has no handler |
+| Pub/Sub delivery failures       | Actions not processed                   | Verify topic name matches `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`  |
+| Type correction not working     | Action stays same type after PATCH      | Ensure action is in `pending` or `awaiting_approval` status  |
+| Batch returns wrong actions     | Actions from other users                | Security check filters by userId; verify correct IDs         |
+| WhatsApp notifications not sent | Action completes silently               | Check `whatsapp-send` topic configuration                    |
+| WhatsApp approval not working   | Text reply ignored, buttons re-sent     | Expected behavior in v4.0.0 — tap a button instead           |
+| Race condition errors           | Duplicate notifications                 | System handles this automatically with `updateStatusIf`      |
+| Calendar preview returns null   | No preview available                    | Wait for calendar-agent to generate preview                  |
+| Code task worker unavailable    | Action marked as failed                 | code-agent has no available workers; retry later             |
+| Duplicate code task             | Already exists message                  | Task was already created (idempotent via approvalEventId)    |
+| Interactive buttons not showing | Plain text message instead of buttons   | WhatsApp client may not support interactive messages         |
+| Action deleted, approval fails  | WhatsApp message: "no longer available" | Action was deleted or expired; this is handled gracefully    |
 
 ## Exercises
 

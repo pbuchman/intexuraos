@@ -29,8 +29,8 @@ interface WorkerSecrets {
 interface WorkerConfig {
   taskId: string;
   worktreePath: string;
-  prompt: string;          // User prompt content (written to secrets/user-prompt.txt)
-  systemPrompt: string;    // System prompt content (written to secrets/system-prompt.txt)
+  prompt: string; // User prompt content (written to secrets/user-prompt.txt)
+  systemPrompt: string; // System prompt content (written to secrets/system-prompt.txt)
   workerType: 'opus' | 'auto' | 'glm';
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
@@ -77,11 +77,13 @@ interface IsolationProvider {
   // Park container in preserved map (keeps alive, clears secrets)
   preserveWorker?(taskId: string): Promise<void>;
 
-  listPreservedWorkers?(): Promise<Array<{
-    containerId: string;
-    taskId: string;
-    preservedAt: string;
-  }>>;
+  listPreservedWorkers?(): Promise<
+    Array<{
+      containerId: string;
+      taskId: string;
+      preservedAt: string;
+    }>
+  >;
 
   getImageInfo?(): {
     configuredRef: string;

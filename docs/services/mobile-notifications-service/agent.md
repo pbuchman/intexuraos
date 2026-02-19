@@ -20,23 +20,21 @@
 
 ```typescript
 interface ConnectResponse {
-  connectionId: string;  // Firestore document ID for the connection
-  signature: string;     // Plaintext signature — store securely, shown only once
+  connectionId: string; // Firestore document ID for the connection
+  signature: string; // Plaintext signature — store securely, shown only once
 }
 
 interface MobileNotificationsServiceTools {
   // Create or replace signature connection (deletes previous signature for user)
-  connect(params?: {
-    deviceLabel?: string;
-  }): Promise<ConnectResponse>;
+  connect(params?: { deviceLabel?: string }): Promise<ConnectResponse>;
 
   // List notifications for authenticated user
   listNotifications(params?: {
-    limit?: number;          // 1–100, default 50
-    cursor?: string;         // Pagination cursor
-    source?: string;         // Comma-separated for multiple
-    app?: string;            // Comma-separated for multiple
-    title?: string;          // Case-insensitive partial match
+    limit?: number; // 1–100, default 50
+    cursor?: string; // Pagination cursor
+    source?: string; // Comma-separated for multiple
+    app?: string; // Comma-separated for multiple
+    title?: string; // Case-insensitive partial match
   }): Promise<NotificationsListResult>;
 
   // Delete a notification (returns empty data object, 200)
@@ -49,7 +47,7 @@ interface MobileNotificationsServiceTools {
 
   // Create saved filter (returns 201)
   createSavedFilter(params: {
-    name: string;          // Required, 1–100 chars
+    name: string; // Required, 1–100 chars
     app?: string[];
     device?: string[];
     source?: string;
@@ -67,15 +65,15 @@ interface MobileNotificationsServiceTools {
 interface MobileNotification {
   id: string;
   userId: string;
-  source: string;           // e.g., "tasker"
-  device: string;           // Device name
-  app: string;              // App package name
-  title: string;            // Notification title
-  text: string;             // Notification body content
-  timestamp: number;        // Unix milliseconds from device
-  postTime: string;         // Post time string from device
-  receivedAt: string;       // ISO 8601 server-side receipt time
-  notificationId: string;   // Device-provided idempotency key
+  source: string; // e.g., "tasker"
+  device: string; // Device name
+  app: string; // App package name
+  title: string; // Notification title
+  text: string; // Notification body content
+  timestamp: number; // Unix milliseconds from device
+  postTime: string; // Post time string from device
+  receivedAt: string; // ISO 8601 server-side receipt time
+  notificationId: string; // Device-provided idempotency key
 }
 
 interface NotificationsListResult {
@@ -84,9 +82,9 @@ interface NotificationsListResult {
 }
 
 interface NotificationFilterOptions {
-  app: string[];     // App package names seen in notifications
-  device: string[];  // Device names seen in notifications
-  source: string[];  // Sources seen in notifications
+  app: string[]; // App package names seen in notifications
+  device: string[]; // Device names seen in notifications
+  source: string[]; // Sources seen in notifications
 }
 
 interface NotificationFiltersData {
@@ -112,12 +110,12 @@ interface SavedNotificationFilter {
 
 ## Constraints
 
-| Rule               | Description                                       |
-| ------------------ | ------------------------------------------------- |
-| **Ownership**      | Users can only access their own notifications     |
-| **Pagination**     | Maximum 100 notifications per request             |
-| **Device Linked**  | Requires Tasker/Automate integration on Android   |
-| **Filter Options** | Populated dynamically from received notifications |
+| Rule               | Description                                              |
+| ------------------ | -------------------------------------------------------- |
+| **Ownership**      | Users can only access their own notifications            |
+| **Pagination**     | Maximum 100 notifications per request                    |
+| **Device Linked**  | Requires Tasker/Automate integration on Android          |
+| **Filter Options** | Populated dynamically from received notifications        |
 | **Idempotency**    | Duplicate `notification_id` per user is silently ignored |
 
 ---
@@ -181,9 +179,9 @@ const filters = await getFilters();
 
 ## Internal Endpoints
 
-| Method | Path                                    | Purpose                                              | Body                                      | Response Format                             |
-| ------ | --------------------------------------- | ---------------------------------------------------- | ----------------------------------------- | ------------------------------------------- |
-| POST   | `/internal/mobile-notifications/query`  | Query notifications (called by data-insights-agent) | `{ userId, filter?, limit? }`             | `{ success, data }` or `{ success, error }` |
+| Method | Path                                   | Purpose                                             | Body                          | Response Format                             |
+| ------ | -------------------------------------- | --------------------------------------------------- | ----------------------------- | ------------------------------------------- |
+| POST   | `/internal/mobile-notifications/query` | Query notifications (called by data-insights-agent) | `{ userId, filter?, limit? }` | `{ success, data }` or `{ success, error }` |
 
 Internal endpoint requires `X-Internal-Auth` header with shared secret.
 
@@ -194,7 +192,7 @@ interface InternalNotification {
   id: string;
   app: string;
   title: string;
-  body: string;      // mapped from notification.text
+  body: string; // mapped from notification.text
   timestamp: string; // mapped from notification.receivedAt (ISO string)
   source: string;
 }

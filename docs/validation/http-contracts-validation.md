@@ -10,15 +10,15 @@
 
 ## v3 Summary (2026-02-19)
 
-| Category                            | Count |
-| ----------------------------------- | ----- |
-| Services audited                    | 20    |
-| Total endpoints verified            | 181   |
-| Endpoints confirmed in code         | 181   |
-| Undocumented endpoints in code      | 2     |
-| Phantom endpoints (docs, no code)   | 0     |
-| Path mismatches (docs ≠ code)       | 0     |
-| **Open discrepancies**              | **2** |
+| Category                          | Count |
+| --------------------------------- | ----- |
+| Services audited                  | 20    |
+| Total endpoints verified          | 181   |
+| Endpoints confirmed in code       | 181   |
+| Undocumented endpoints in code    | 2     |
+| Phantom endpoints (docs, no code) | 0     |
+| Path mismatches (docs ≠ code)     | 0     |
+| **Open discrepancies**            | **2** |
 
 **Result: PASS with 2 documentation gaps (no phantom or broken endpoints)**
 
@@ -30,17 +30,17 @@ All routes verified against `apps/*/src/routes/`. Auth: `Bearer` = Auth0 JWT, `I
 
 ### actions-agent
 
-| Method | Path                                   | Auth                    | Route File               | Status |
-| ------ | -------------------------------------- | ----------------------- | ------------------------ | ------ |
-| GET    | `/actions`                             | Bearer                  | actionRoutes.ts          | OK     |
-| GET    | `/actions/:id`                         | Bearer                  | actionRoutes.ts          | OK     |
-| PATCH  | `/actions/:actionId`                   | Bearer                  | actionRoutes.ts          | OK     |
-| POST   | `/internal/actions`                    | Internal or OIDC        | internalRoutes.ts        | OK     |
-| POST   | `/internal/actions/:actionType`        | Pub/Sub OIDC            | internalRoutes.ts        | OK     |
-| POST   | `/internal/actions/process`            | Pub/Sub OIDC            | internalRoutes.ts        | OK     |
-| POST   | `/internal/actions/retry-pending`      | OIDC or Internal        | internalRoutes.ts        | OK     |
-| POST   | `/internal/actions/approval-reply`     | Pub/Sub OIDC            | internalRoutes.ts        | OK     |
-| PATCH  | `/internal/actions/:actionId/status`   | Internal                | internalRoutes.ts        | ⚠ D1  |
+| Method | Path                                 | Auth             | Route File        | Status |
+| ------ | ------------------------------------ | ---------------- | ----------------- | ------ |
+| GET    | `/actions`                           | Bearer           | actionRoutes.ts   | OK     |
+| GET    | `/actions/:id`                       | Bearer           | actionRoutes.ts   | OK     |
+| PATCH  | `/actions/:actionId`                 | Bearer           | actionRoutes.ts   | OK     |
+| POST   | `/internal/actions`                  | Internal or OIDC | internalRoutes.ts | OK     |
+| POST   | `/internal/actions/:actionType`      | Pub/Sub OIDC     | internalRoutes.ts | OK     |
+| POST   | `/internal/actions/process`          | Pub/Sub OIDC     | internalRoutes.ts | OK     |
+| POST   | `/internal/actions/retry-pending`    | OIDC or Internal | internalRoutes.ts | OK     |
+| POST   | `/internal/actions/approval-reply`   | Pub/Sub OIDC     | internalRoutes.ts | OK     |
+| PATCH  | `/internal/actions/:actionId/status` | Internal         | internalRoutes.ts | ⚠ D1   |
 
 ### api-docs-hub
 
@@ -51,30 +51,30 @@ All routes verified against `apps/*/src/routes/`. Auth: `Bearer` = Auth0 JWT, `I
 
 ### app-settings-service
 
-| Method | Path                      | Auth     | Route File        | Status |
-| ------ | ------------------------- | -------- | ----------------- | ------ |
-| GET    | `/settings/pricing`       | None     | publicRoutes.ts   | OK     |
-| GET    | `/settings/usage-costs`   | Bearer   | publicRoutes.ts   | OK     |
-| GET    | `/settings/pricing`       | Internal | internalRoutes.ts | OK     |
+| Method | Path                    | Auth     | Route File        | Status |
+| ------ | ----------------------- | -------- | ----------------- | ------ |
+| GET    | `/settings/pricing`     | None     | publicRoutes.ts   | OK     |
+| GET    | `/settings/usage-costs` | Bearer   | publicRoutes.ts   | OK     |
+| GET    | `/settings/pricing`     | Internal | internalRoutes.ts | OK     |
 
 ### bookmarks-agent
 
-| Method | Path                                     | Auth     | Route File        | Status |
-| ------ | ---------------------------------------- | -------- | ----------------- | ------ |
-| GET    | `/bookmarks`                             | Bearer   | bookmarkRoutes.ts | OK     |
-| POST   | `/bookmarks`                             | Bearer   | bookmarkRoutes.ts | OK     |
-| GET    | `/bookmarks/:id`                         | Bearer   | bookmarkRoutes.ts | OK     |
-| PATCH  | `/bookmarks/:id`                         | Bearer   | bookmarkRoutes.ts | OK     |
-| DELETE | `/bookmarks/:id`                         | Bearer   | bookmarkRoutes.ts | OK     |
-| POST   | `/bookmarks/:id/archive`                 | Bearer   | bookmarkRoutes.ts | OK     |
-| POST   | `/bookmarks/:id/unarchive`               | Bearer   | bookmarkRoutes.ts | OK     |
-| GET    | `/images/proxy`                          | None     | bookmarkRoutes.ts | OK     |
-| POST   | `/internal/bookmarks`                    | Internal | internalRoutes.ts | OK     |
-| GET    | `/internal/bookmarks/:id`                | Internal | internalRoutes.ts | OK     |
-| PATCH  | `/internal/bookmarks/:id`                | Internal | internalRoutes.ts | OK     |
-| POST   | `/internal/bookmarks/:id/force-refresh`  | Internal | internalRoutes.ts | OK     |
-| POST   | `/internal/bookmarks/pubsub/enrich`      | OIDC     | pubsubRoutes.ts   | OK     |
-| POST   | `/internal/bookmarks/pubsub/summarize`   | OIDC     | pubsubRoutes.ts   | OK     |
+| Method | Path                                    | Auth     | Route File        | Status |
+| ------ | --------------------------------------- | -------- | ----------------- | ------ |
+| GET    | `/bookmarks`                            | Bearer   | bookmarkRoutes.ts | OK     |
+| POST   | `/bookmarks`                            | Bearer   | bookmarkRoutes.ts | OK     |
+| GET    | `/bookmarks/:id`                        | Bearer   | bookmarkRoutes.ts | OK     |
+| PATCH  | `/bookmarks/:id`                        | Bearer   | bookmarkRoutes.ts | OK     |
+| DELETE | `/bookmarks/:id`                        | Bearer   | bookmarkRoutes.ts | OK     |
+| POST   | `/bookmarks/:id/archive`                | Bearer   | bookmarkRoutes.ts | OK     |
+| POST   | `/bookmarks/:id/unarchive`              | Bearer   | bookmarkRoutes.ts | OK     |
+| GET    | `/images/proxy`                         | None     | bookmarkRoutes.ts | OK     |
+| POST   | `/internal/bookmarks`                   | Internal | internalRoutes.ts | OK     |
+| GET    | `/internal/bookmarks/:id`               | Internal | internalRoutes.ts | OK     |
+| PATCH  | `/internal/bookmarks/:id`               | Internal | internalRoutes.ts | OK     |
+| POST   | `/internal/bookmarks/:id/force-refresh` | Internal | internalRoutes.ts | OK     |
+| POST   | `/internal/bookmarks/pubsub/enrich`     | OIDC     | pubsubRoutes.ts   | OK     |
+| POST   | `/internal/bookmarks/pubsub/summarize`  | OIDC     | pubsubRoutes.ts   | OK     |
 
 ### calendar-agent
 
@@ -150,32 +150,32 @@ Workers run as Cloud Functions, not Cloud Run. No HTTP endpoints — event-drive
 
 ### data-insights-agent
 
-| Method | Path                                                          | Auth     | Route File             | Status |
-| ------ | ------------------------------------------------------------- | -------- | ---------------------- | ------ |
-| POST   | `/data-sources`                                               | Bearer   | dataSourceRoutes.ts    | OK     |
-| GET    | `/data-sources`                                               | Bearer   | dataSourceRoutes.ts    | OK     |
-| GET    | `/data-sources/:id`                                           | Bearer   | dataSourceRoutes.ts    | OK     |
-| PATCH  | `/data-sources/:id`                                           | Bearer   | dataSourceRoutes.ts    | OK     |
-| DELETE | `/data-sources/:id`                                           | Bearer   | dataSourceRoutes.ts    | OK     |
-| POST   | `/data-sources/generate-title`                                | Bearer   | dataSourceRoutes.ts    | OK     |
-| POST   | `/composite-feeds`                                            | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds`                                            | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:id`                                        | Bearer   | compositeFeedRoutes.ts | OK     |
-| PATCH  | `/composite-feeds/:id`                                        | Bearer   | compositeFeedRoutes.ts | OK     |
-| DELETE | `/composite-feeds/:id`                                        | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:id/schema`                                 | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:id/data`                                   | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:id/snapshot`                               | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:feedId/preview`                            | Bearer   | compositeFeedRoutes.ts | OK     |
-| POST   | `/composite-feeds/:feedId/analyze`                            | Bearer   | dataInsightsRoutes.ts  | OK     |
-| POST   | `/composite-feeds/:feedId/insights/:insightId/chart-definition` | Bearer | dataInsightsRoutes.ts  | OK     |
-| POST   | `/visualizations`                                             | Bearer   | visualizationRoutes.ts | OK     |
-| GET    | `/visualizations`                                             | Bearer   | visualizationRoutes.ts | OK     |
-| GET    | `/visualizations/:id`                                         | Bearer   | visualizationRoutes.ts | OK     |
-| DELETE | `/visualizations/:id`                                         | Bearer   | visualizationRoutes.ts | OK     |
-| POST   | `/visualizations/:id/refresh`                                 | Bearer   | visualizationRoutes.ts | OK     |
-| POST   | `/internal/visualizations/compute`                            | Internal | internalRoutes.ts      | OK     |
-| POST   | `/internal/snapshots/refresh`                                 | OIDC     | internalRoutes.ts      | OK     |
+| Method | Path                                                            | Auth     | Route File             | Status |
+| ------ | --------------------------------------------------------------- | -------- | ---------------------- | ------ |
+| POST   | `/data-sources`                                                 | Bearer   | dataSourceRoutes.ts    | OK     |
+| GET    | `/data-sources`                                                 | Bearer   | dataSourceRoutes.ts    | OK     |
+| GET    | `/data-sources/:id`                                             | Bearer   | dataSourceRoutes.ts    | OK     |
+| PATCH  | `/data-sources/:id`                                             | Bearer   | dataSourceRoutes.ts    | OK     |
+| DELETE | `/data-sources/:id`                                             | Bearer   | dataSourceRoutes.ts    | OK     |
+| POST   | `/data-sources/generate-title`                                  | Bearer   | dataSourceRoutes.ts    | OK     |
+| POST   | `/composite-feeds`                                              | Bearer   | compositeFeedRoutes.ts | OK     |
+| GET    | `/composite-feeds`                                              | Bearer   | compositeFeedRoutes.ts | OK     |
+| GET    | `/composite-feeds/:id`                                          | Bearer   | compositeFeedRoutes.ts | OK     |
+| PATCH  | `/composite-feeds/:id`                                          | Bearer   | compositeFeedRoutes.ts | OK     |
+| DELETE | `/composite-feeds/:id`                                          | Bearer   | compositeFeedRoutes.ts | OK     |
+| GET    | `/composite-feeds/:id/schema`                                   | Bearer   | compositeFeedRoutes.ts | OK     |
+| GET    | `/composite-feeds/:id/data`                                     | Bearer   | compositeFeedRoutes.ts | OK     |
+| GET    | `/composite-feeds/:id/snapshot`                                 | Bearer   | compositeFeedRoutes.ts | OK     |
+| GET    | `/composite-feeds/:feedId/preview`                              | Bearer   | compositeFeedRoutes.ts | OK     |
+| POST   | `/composite-feeds/:feedId/analyze`                              | Bearer   | dataInsightsRoutes.ts  | OK     |
+| POST   | `/composite-feeds/:feedId/insights/:insightId/chart-definition` | Bearer   | dataInsightsRoutes.ts  | OK     |
+| POST   | `/visualizations`                                               | Bearer   | visualizationRoutes.ts | OK     |
+| GET    | `/visualizations`                                               | Bearer   | visualizationRoutes.ts | OK     |
+| GET    | `/visualizations/:id`                                           | Bearer   | visualizationRoutes.ts | OK     |
+| DELETE | `/visualizations/:id`                                           | Bearer   | visualizationRoutes.ts | OK     |
+| POST   | `/visualizations/:id/refresh`                                   | Bearer   | visualizationRoutes.ts | OK     |
+| POST   | `/internal/visualizations/compute`                              | Internal | internalRoutes.ts      | OK     |
+| POST   | `/internal/snapshots/refresh`                                   | OIDC     | internalRoutes.ts      | OK     |
 
 ### image-service
 
@@ -187,31 +187,31 @@ Workers run as Cloud Functions, not Cloud Run. No HTTP endpoints — event-drive
 
 ### linear-agent
 
-| Method | Path                                              | Auth          | Route File              | Status |
-| ------ | ------------------------------------------------- | ------------- | ----------------------- | ------ |
-| GET    | `/linear/connection`                              | Bearer        | linearRoutes.ts         | OK     |
-| POST   | `/linear/connection/validate`                     | Bearer        | linearRoutes.ts         | OK     |
-| POST   | `/linear/connection`                              | Bearer        | linearRoutes.ts         | OK     |
-| DELETE | `/linear/connection`                              | Bearer        | linearRoutes.ts         | OK     |
-| GET    | `/linear/issues`                                  | Bearer        | linearRoutes.ts         | OK     |
-| GET    | `/linear/issues/:identifier`                      | Bearer        | linearRoutes.ts         | OK     |
-| GET    | `/linear/issues/:identifier/comments`             | Bearer        | linearRoutes.ts         | OK     |
-| GET    | `/linear/failed-issues`                           | Bearer        | linearRoutes.ts         | OK     |
-| DELETE | `/linear/failed-issues/:id`                       | Bearer        | linearRoutes.ts         | OK     |
-| POST   | `/linear/failed-issues/:id/retry`                 | Bearer        | linearRoutes.ts         | OK     |
-| POST   | `/linear/sync`                                    | Bearer        | linearRoutes.ts         | OK     |
-| GET    | `/linear/webhook-config`                          | Bearer        | linearRoutes.ts         | OK     |
-| POST   | `/linear/webhook-config`                          | Bearer        | linearRoutes.ts         | OK     |
-| DELETE | `/linear/webhook-config`                          | Bearer        | linearRoutes.ts         | OK     |
-| POST   | `/linear/webhook`                                 | HMAC-SHA256   | linearWebhookRoutes.ts  | OK     |
-| POST   | `/internal/linear/process-action`                 | Internal      | internalRoutes.ts       | OK     |
-| GET    | `/internal/linear/issues/:identifier/validate`    | Internal      | internalRoutes.ts       | OK     |
-| POST   | `/internal/linear/issues/generate-title`          | Internal      | internalRoutes.ts       | OK     |
-| POST   | `/internal/linear/sync`                           | Internal      | internalRoutes.ts       | OK     |
-| POST   | `/internal/linear/sync-all`                       | Internal/OIDC | internalRoutes.ts       | OK     |
-| POST   | `/internal/issues`                                | Internal      | internalIssuesRoutes.ts | OK     |
-| PATCH  | `/internal/issues/:issueId/state`                 | Internal      | internalIssuesRoutes.ts | OK     |
-| GET    | `/internal/linear/issues/:identifier`             | Internal      | internalIssuesRoutes.ts | ⚠ D2  |
+| Method | Path                                           | Auth          | Route File              | Status |
+| ------ | ---------------------------------------------- | ------------- | ----------------------- | ------ |
+| GET    | `/linear/connection`                           | Bearer        | linearRoutes.ts         | OK     |
+| POST   | `/linear/connection/validate`                  | Bearer        | linearRoutes.ts         | OK     |
+| POST   | `/linear/connection`                           | Bearer        | linearRoutes.ts         | OK     |
+| DELETE | `/linear/connection`                           | Bearer        | linearRoutes.ts         | OK     |
+| GET    | `/linear/issues`                               | Bearer        | linearRoutes.ts         | OK     |
+| GET    | `/linear/issues/:identifier`                   | Bearer        | linearRoutes.ts         | OK     |
+| GET    | `/linear/issues/:identifier/comments`          | Bearer        | linearRoutes.ts         | OK     |
+| GET    | `/linear/failed-issues`                        | Bearer        | linearRoutes.ts         | OK     |
+| DELETE | `/linear/failed-issues/:id`                    | Bearer        | linearRoutes.ts         | OK     |
+| POST   | `/linear/failed-issues/:id/retry`              | Bearer        | linearRoutes.ts         | OK     |
+| POST   | `/linear/sync`                                 | Bearer        | linearRoutes.ts         | OK     |
+| GET    | `/linear/webhook-config`                       | Bearer        | linearRoutes.ts         | OK     |
+| POST   | `/linear/webhook-config`                       | Bearer        | linearRoutes.ts         | OK     |
+| DELETE | `/linear/webhook-config`                       | Bearer        | linearRoutes.ts         | OK     |
+| POST   | `/linear/webhook`                              | HMAC-SHA256   | linearWebhookRoutes.ts  | OK     |
+| POST   | `/internal/linear/process-action`              | Internal      | internalRoutes.ts       | OK     |
+| GET    | `/internal/linear/issues/:identifier/validate` | Internal      | internalRoutes.ts       | OK     |
+| POST   | `/internal/linear/issues/generate-title`       | Internal      | internalRoutes.ts       | OK     |
+| POST   | `/internal/linear/sync`                        | Internal      | internalRoutes.ts       | OK     |
+| POST   | `/internal/linear/sync-all`                    | Internal/OIDC | internalRoutes.ts       | OK     |
+| POST   | `/internal/issues`                             | Internal      | internalIssuesRoutes.ts | OK     |
+| PATCH  | `/internal/issues/:issueId/state`              | Internal      | internalIssuesRoutes.ts | OK     |
+| GET    | `/internal/linear/issues/:identifier`          | Internal      | internalIssuesRoutes.ts | ⚠ D2   |
 
 ### log-cleanup
 
@@ -327,24 +327,24 @@ Worker runs as Cloud Functions. No HTTP endpoints.
 
 ### whatsapp-service
 
-| Method | Path                                           | Auth   | Route File            | Status |
-| ------ | ---------------------------------------------- | ------ | --------------------- | ------ |
-| GET    | `/whatsapp/webhooks`                           | None   | webhookRoutes.ts      | OK     |
-| POST   | `/whatsapp/webhooks`                           | HMAC   | webhookRoutes.ts      | OK     |
-| POST   | `/whatsapp/connect`                            | Bearer | mappingRoutes.ts      | OK     |
-| GET    | `/whatsapp/status`                             | Bearer | mappingRoutes.ts      | OK     |
-| DELETE | `/whatsapp/disconnect`                         | Bearer | mappingRoutes.ts      | OK     |
-| GET    | `/whatsapp/messages`                           | Bearer | messageRoutes.ts      | OK     |
-| GET    | `/whatsapp/messages/:message_id/media`         | Bearer | messageRoutes.ts      | OK     |
-| GET    | `/whatsapp/messages/:message_id/thumbnail`     | Bearer | messageRoutes.ts      | OK     |
-| DELETE | `/whatsapp/messages/:message_id`               | Bearer | messageRoutes.ts      | OK     |
-| POST   | `/whatsapp/verify/send`                        | Bearer | verificationRoutes.ts | OK     |
-| POST   | `/whatsapp/verify/confirm`                     | Bearer | verificationRoutes.ts | OK     |
-| GET    | `/whatsapp/verify/status/:phone`               | Bearer | verificationRoutes.ts | OK     |
-| POST   | `/internal/whatsapp/pubsub/send-message`       | OIDC   | pubsubRoutes.ts       | OK     |
-| POST   | `/internal/whatsapp/pubsub/media-cleanup`      | OIDC   | pubsubRoutes.ts       | OK     |
-| POST   | `/internal/whatsapp/pubsub/transcribe-audio`   | OIDC   | pubsubRoutes.ts       | OK     |
-| POST   | `/internal/whatsapp/pubsub/process-webhook`    | OIDC   | pubsubRoutes.ts       | OK     |
+| Method | Path                                         | Auth   | Route File            | Status |
+| ------ | -------------------------------------------- | ------ | --------------------- | ------ |
+| GET    | `/whatsapp/webhooks`                         | None   | webhookRoutes.ts      | OK     |
+| POST   | `/whatsapp/webhooks`                         | HMAC   | webhookRoutes.ts      | OK     |
+| POST   | `/whatsapp/connect`                          | Bearer | mappingRoutes.ts      | OK     |
+| GET    | `/whatsapp/status`                           | Bearer | mappingRoutes.ts      | OK     |
+| DELETE | `/whatsapp/disconnect`                       | Bearer | mappingRoutes.ts      | OK     |
+| GET    | `/whatsapp/messages`                         | Bearer | messageRoutes.ts      | OK     |
+| GET    | `/whatsapp/messages/:message_id/media`       | Bearer | messageRoutes.ts      | OK     |
+| GET    | `/whatsapp/messages/:message_id/thumbnail`   | Bearer | messageRoutes.ts      | OK     |
+| DELETE | `/whatsapp/messages/:message_id`             | Bearer | messageRoutes.ts      | OK     |
+| POST   | `/whatsapp/verify/send`                      | Bearer | verificationRoutes.ts | OK     |
+| POST   | `/whatsapp/verify/confirm`                   | Bearer | verificationRoutes.ts | OK     |
+| GET    | `/whatsapp/verify/status/:phone`             | Bearer | verificationRoutes.ts | OK     |
+| POST   | `/internal/whatsapp/pubsub/send-message`     | OIDC   | pubsubRoutes.ts       | OK     |
+| POST   | `/internal/whatsapp/pubsub/media-cleanup`    | OIDC   | pubsubRoutes.ts       | OK     |
+| POST   | `/internal/whatsapp/pubsub/transcribe-audio` | OIDC   | pubsubRoutes.ts       | OK     |
+| POST   | `/internal/whatsapp/pubsub/process-webhook`  | OIDC   | pubsubRoutes.ts       | OK     |
 
 ---
 
@@ -352,35 +352,35 @@ Worker runs as Cloud Functions. No HTTP endpoints.
 
 Internal HTTP calls verified against both caller docs and callee code.
 
-| Caller                 | Method | Target Endpoint                                          | Callee            | Match |
-| ---------------------- | ------ | -------------------------------------------------------- | ----------------- | ----- |
-| orchestrator           | POST   | `/internal/research/draft`                               | research-agent    | OK    |
-| orchestrator           | POST   | `/internal/todos`                                        | todos-agent       | OK    |
-| orchestrator           | POST   | `/internal/notes`                                        | notes-agent       | OK    |
-| orchestrator           | POST   | `/internal/bookmarks`                                    | bookmarks-agent   | OK    |
-| orchestrator           | POST   | `/internal/actions`                                      | actions-agent     | OK    |
-| orchestrator           | POST   | `/internal/calendar/process-action`                      | calendar-agent    | OK    |
-| orchestrator           | POST   | `/internal/linear/process-action`                        | linear-agent      | OK    |
-| orchestrator           | POST   | `/internal/code/process`                                 | code-agent        | OK    |
-| actions-agent          | POST   | `/internal/whatsapp/pubsub/send-message`                 | whatsapp-service  | OK    |
-| actions-agent          | POST   | `/internal/calendar/process-action`                      | calendar-agent    | OK    |
-| actions-agent          | POST   | `/internal/linear/process-action`                        | linear-agent      | OK    |
-| actions-agent          | POST   | `/internal/code/process`                                 | code-agent        | OK    |
-| calendar-agent         | GET    | `/internal/users/:uid/oauth/google/token`                | user-service      | OK    |
-| research-agent         | GET    | `/internal/users/:uid/llm-keys`                          | user-service      | OK    |
-| image-service          | GET    | `/internal/users/:uid/llm-keys`                          | user-service      | OK    |
-| todos-agent            | GET    | `/internal/users/:uid/llm-keys`                          | user-service      | OK    |
-| linear-agent           | GET    | `/internal/users/:uid/llm-keys`                          | user-service      | OK    |
-| bookmarks-agent        | POST   | `/internal/link-previews`                                | web-agent         | OK    |
-| whatsapp-service       | POST   | `/internal/images/generate`                              | image-service     | OK    |
-| code-agent             | GET    | `/internal/linear/issues/:identifier/validate`           | linear-agent      | OK    |
-| code-agent             | POST   | `/internal/linear/issues/generate-title`                 | linear-agent      | OK    |
-| code-agent             | PATCH  | `/internal/issues/:issueId/state`                        | linear-agent      | OK    |
-| code-agent             | POST   | `/internal/issues`                                       | linear-agent      | OK    |
-| code-agent             | PATCH  | `/internal/actions/:actionId/status`                     | actions-agent     | ⚠ D1 |
-| code-agent             | GET    | `/internal/notion/users/:userId/context`                 | notion-service    | OK    |
-| code-agent             | POST   | `/internal/mobile-notifications/query`                   | mobile-notif.     | OK    |
-| various services       | GET    | `/settings/pricing`                                      | app-settings      | OK    |
+| Caller           | Method | Target Endpoint                                | Callee           | Match |
+| ---------------- | ------ | ---------------------------------------------- | ---------------- | ----- |
+| orchestrator     | POST   | `/internal/research/draft`                     | research-agent   | OK    |
+| orchestrator     | POST   | `/internal/todos`                              | todos-agent      | OK    |
+| orchestrator     | POST   | `/internal/notes`                              | notes-agent      | OK    |
+| orchestrator     | POST   | `/internal/bookmarks`                          | bookmarks-agent  | OK    |
+| orchestrator     | POST   | `/internal/actions`                            | actions-agent    | OK    |
+| orchestrator     | POST   | `/internal/calendar/process-action`            | calendar-agent   | OK    |
+| orchestrator     | POST   | `/internal/linear/process-action`              | linear-agent     | OK    |
+| orchestrator     | POST   | `/internal/code/process`                       | code-agent       | OK    |
+| actions-agent    | POST   | `/internal/whatsapp/pubsub/send-message`       | whatsapp-service | OK    |
+| actions-agent    | POST   | `/internal/calendar/process-action`            | calendar-agent   | OK    |
+| actions-agent    | POST   | `/internal/linear/process-action`              | linear-agent     | OK    |
+| actions-agent    | POST   | `/internal/code/process`                       | code-agent       | OK    |
+| calendar-agent   | GET    | `/internal/users/:uid/oauth/google/token`      | user-service     | OK    |
+| research-agent   | GET    | `/internal/users/:uid/llm-keys`                | user-service     | OK    |
+| image-service    | GET    | `/internal/users/:uid/llm-keys`                | user-service     | OK    |
+| todos-agent      | GET    | `/internal/users/:uid/llm-keys`                | user-service     | OK    |
+| linear-agent     | GET    | `/internal/users/:uid/llm-keys`                | user-service     | OK    |
+| bookmarks-agent  | POST   | `/internal/link-previews`                      | web-agent        | OK    |
+| whatsapp-service | POST   | `/internal/images/generate`                    | image-service    | OK    |
+| code-agent       | GET    | `/internal/linear/issues/:identifier/validate` | linear-agent     | OK    |
+| code-agent       | POST   | `/internal/linear/issues/generate-title`       | linear-agent     | OK    |
+| code-agent       | PATCH  | `/internal/issues/:issueId/state`              | linear-agent     | OK    |
+| code-agent       | POST   | `/internal/issues`                             | linear-agent     | OK    |
+| code-agent       | PATCH  | `/internal/actions/:actionId/status`           | actions-agent    | ⚠ D1  |
+| code-agent       | GET    | `/internal/notion/users/:userId/context`       | notion-service   | OK    |
+| code-agent       | POST   | `/internal/mobile-notifications/query`         | mobile-notif.    | OK    |
+| various services | GET    | `/settings/pricing`                            | app-settings     | OK    |
 
 ---
 
@@ -397,36 +397,36 @@ Internal HTTP calls verified against both caller docs and callee code.
 | Path      | `/internal/actions/:actionId/status`                                                                                                                 |
 | Code file | `apps/actions-agent/src/routes/internalRoutes.ts`                                                                                                    |
 | Auth      | X-Internal-Auth                                                                                                                                      |
-| Body      | `{ resource_status: 'dispatched' \| 'running' \| 'completed' \| 'failed' \| 'cancelled', resource_result?: { prUrl?: string; error?: string } }` |
+| Body      | `{ resource_status: 'dispatched' \| 'running' \| 'completed' \| 'failed' \| 'cancelled', resource_result?: { prUrl?: string; error?: string } }`     |
 | Purpose   | Updates action resource status — used as a callback by code-agent to report task lifecycle events                                                    |
-| Risk      | code-agent calls this endpoint in production; if actions-agent changes the path or body schema, there is no doc contract to signal a breaking change  |
+| Risk      | code-agent calls this endpoint in production; if actions-agent changes the path or body schema, there is no doc contract to signal a breaking change |
 | Fix       | Add to Internal Endpoints table in `docs/services/actions-agent/technical.md`                                                                        |
 
 ### D2 — linear-agent: Undocumented internal GET issue endpoint
 
-| Field        | Value                                                                                                                                                     |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Severity     | **HIGH**                                                                                                                                                  |
-| Service      | linear-agent                                                                                                                                              |
-| Type         | Undocumented endpoint (exists in code, absent from docs table)                                                                                            |
-| Method       | `GET`                                                                                                                                                     |
-| Path         | `/internal/linear/issues/:identifier`                                                                                                                     |
-| Code file    | `apps/linear-agent/src/routes/internalIssuesRoutes.ts` (operationId: `getLinearIssueInternal`)                                                           |
-| Auth         | X-Internal-Auth                                                                                                                                           |
-| Purpose      | Fetches a Linear issue with full detail + comment count for internal service consumption — distinct from the public `GET /linear/issues/:identifier`       |
+| Field          | Value                                                                                                                                                    |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Severity       | **HIGH**                                                                                                                                                 |
+| Service        | linear-agent                                                                                                                                             |
+| Type           | Undocumented endpoint (exists in code, absent from docs table)                                                                                           |
+| Method         | `GET`                                                                                                                                                    |
+| Path           | `/internal/linear/issues/:identifier`                                                                                                                    |
+| Code file      | `apps/linear-agent/src/routes/internalIssuesRoutes.ts` (operationId: `getLinearIssueInternal`)                                                           |
+| Auth           | X-Internal-Auth                                                                                                                                          |
+| Purpose        | Fetches a Linear issue with full detail + comment count for internal service consumption — distinct from the public `GET /linear/issues/:identifier`     |
 | Confusion risk | The docs table lists `GET /internal/linear/issues/:identifier/validate` — the plain GET at the same base path is easy to miss or confuse with that entry |
-| Risk         | Invisible coupling between services. Path is easily confused with the documented `/validate` variant.                                                     |
-| Fix          | Add to Internal Endpoints table in `docs/services/linear-agent/technical.md`                                                                             |
+| Risk           | Invisible coupling between services. Path is easily confused with the documented `/validate` variant.                                                    |
+| Fix            | Add to Internal Endpoints table in `docs/services/linear-agent/technical.md`                                                                             |
 
 ---
 
 ## v3 Action Items
 
-| Priority | Action                                                                                                              | File                                              |
-| -------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| HIGH     | Add `PATCH /internal/actions/:actionId/status` to actions-agent Internal Endpoints table                            | `docs/services/actions-agent/technical.md`        |
-| HIGH     | Add `GET /internal/linear/issues/:identifier` to linear-agent Internal Endpoints table                              | `docs/services/linear-agent/technical.md`         |
-| LOW      | Identify which service(s) call `GET /internal/linear/issues/:identifier` (internal) and add to cross-service matrix | Engineering investigation                         |
+| Priority | Action                                                                                                              | File                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| HIGH     | Add `PATCH /internal/actions/:actionId/status` to actions-agent Internal Endpoints table                            | `docs/services/actions-agent/technical.md` |
+| HIGH     | Add `GET /internal/linear/issues/:identifier` to linear-agent Internal Endpoints table                              | `docs/services/linear-agent/technical.md`  |
+| LOW      | Identify which service(s) call `GET /internal/linear/issues/:identifier` (internal) and add to cross-service matrix | Engineering investigation                  |
 
 ---
 

@@ -213,8 +213,8 @@ New `@intexuraos/infra-otel` package provides zero-code observability across all
 
 IntexuraOS integrates with **5 AI providers** and **17 models**, treating them as a **council of experts** rather than a single oracle:
 
-| Provider   | Models                                      | Capabilities                                              |
-| ---------- | ------------------------------------------- | --------------------------------------------------------- |
+| Provider   | Models                                        | Capabilities                                                    |
+| ---------- | --------------------------------------------- | --------------------------------------------------------------- |
 | Google     | Gemini 2.5 Pro, Flash, Flash-Image, 2.0 Flash | Reasoning, classification, images, fast internal ops (fallback) |
 | OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1   | Deep research, synthesis, images, embeddings (RAG)              |
 | Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5        | Analysis, research, validation, autonomous code execution       |
@@ -316,19 +316,19 @@ IntexuraOS deploys **20 apps**, **4 workers**, and **22 packages** — a total o
 
 ### AI Agents (Primary Intelligence)
 
-| Agent                   | AI Capabilities                                                                   |
-| ----------------------- | --------------------------------------------------------------------------------- |
+| Agent                   | AI Capabilities                                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
 | **research-agent**      | Multi-model orchestration, parallel queries, synthesis, Notion export, platform API key fallbacks (v2.3.0) |
-| **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)          |
-| **code-agent**          | Autonomous code execution, worker dispatch, deduplication, rate limiting (v3.0.0) |
-| **chat-agent**          | Documentation RAG Q&A, command creation, guest access (v3.0.0)                    |
-| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                          |
-| **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)           |
-| **todos-agent**         | Natural language task extraction, priority inference                              |
-| **calendar-agent**      | Preview generation before commit, duration/all-day detection (v2.0.0)             |
-| **linear-agent**        | 3-column dashboard, Todo/To Test categories (v2.0.0)                              |
-| **notes-agent**         | Content structuring, tag inference                                                |
-| **web-agent**           | Separated crawling from LLM summarization, parser+repair pattern (v2.0.0)         |
+| **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)                                   |
+| **code-agent**          | Autonomous code execution, worker dispatch, deduplication, rate limiting (v3.0.0)                          |
+| **chat-agent**          | Documentation RAG Q&A, command creation, guest access (v3.0.0)                                             |
+| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                                                   |
+| **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)                                    |
+| **todos-agent**         | Natural language task extraction, priority inference                                                       |
+| **calendar-agent**      | Preview generation before commit, duration/all-day detection (v2.0.0)                                      |
+| **linear-agent**        | 3-column dashboard, Todo/To Test categories (v2.0.0)                                                       |
+| **notes-agent**         | Content structuring, tag inference                                                                         |
+| **web-agent**           | Separated crawling from LLM summarization, parser+repair pattern (v2.0.0)                                  |
 
 ### Infrastructure Services
 
@@ -405,8 +405,8 @@ The monorepo contains **22 shared packages** organized into four layers:
 
 ### Infrastructure Packages
 
-| Package           | Purpose                                          |
-| ----------------- | ------------------------------------------------ |
+| Package           | Purpose                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
 | `infra-firestore` | Firestore singleton, fake implementation                               |
 | `infra-pubsub`    | Cloud Pub/Sub publisher base class and utilities                       |
 | `infra-sentry`    | Sentry integration, `createAppLogger()` factory, OTel log transport    |
@@ -757,14 +757,14 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ## Documentation Index
 
-| Document                                              | Purpose                            |
-| ----------------------------------------------------- | ---------------------------------- |
-| [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration     |
+| Document                                              | Purpose                                          |
+| ----------------------------------------------------- | ------------------------------------------------ |
+| [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration                   |
 | [Services Catalog](services/index.md)                 | All 20 apps + 4 workers + 22 packages documented |
-| [Architecture Patterns](architecture/)                | System design decisions            |
-| [Setup Guide](setup/01-gcp-project.md)                | Getting started                    |
-| [API Contracts](architecture/api-contracts.md)        | HTTP API standards                 |
-| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns           |
+| [Architecture Patterns](architecture/)                | System design decisions                          |
+| [Setup Guide](setup/01-gcp-project.md)                | Getting started                                  |
+| [API Contracts](architecture/api-contracts.md)        | HTTP API standards                               |
+| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns                         |
 
 ---
 

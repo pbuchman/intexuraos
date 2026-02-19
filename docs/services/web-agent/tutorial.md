@@ -386,16 +386,16 @@ export async function summarizePage(
 
 ## Troubleshooting
 
-| Problem                      | Symptom                    | Solution                                    |
-| ---------------------------- | -------------------------- | ------------------------------------------- |
-| "401 Unauthorized"           | Missing auth header        | Add `X-Internal-Auth` header                |
-| "ACCESS_DENIED"              | 403 from target site       | Site blocks scrapers; try different URL     |
+| Problem                      | Symptom                      | Solution                                     |
+| ---------------------------- | ---------------------------- | -------------------------------------------- |
+| "401 Unauthorized"           | Missing auth header          | Add `X-Internal-Auth` header                 |
+| "ACCESS_DENIED"              | 403 from target site         | Site blocks scrapers; try different URL      |
 | "No API key configured"      | Platform fallback also unset | Configure platform keys or user adds API key |
-| "Summary is JSON"            | Repair mechanism kicked in | Normal behavior - should auto-repair        |
-| "Summary in wrong language"  | Old version                | Update to v2.0.0 with language preservation |
-| "Timeout"                    | Slow site or Crawl4AI      | Increase `timeoutMs` parameter              |
-| "RATE_LIMITED"               | HTTP 429 from Crawl4AI     | Wait and retry with exponential backoff     |
-| "Summary describes platform" | Content focus missing      | Update to latest with content focus prompt  |
+| "Summary is JSON"            | Repair mechanism kicked in   | Normal behavior - should auto-repair         |
+| "Summary in wrong language"  | Old version                  | Update to v2.0.0 with language preservation  |
+| "Timeout"                    | Slow site or Crawl4AI        | Increase `timeoutMs` parameter               |
+| "RATE_LIMITED"               | HTTP 429 from Crawl4AI       | Wait and retry with exponential backoff      |
+| "Summary describes platform" | Content focus missing        | Update to latest with content focus prompt   |
 
 ---
 

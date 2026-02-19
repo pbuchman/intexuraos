@@ -42,11 +42,11 @@ The `providerToKeyField` helper uses an eslint-disable for `explicit-function-re
 
 ## Future Plans
 
-| Area                     | Description                                                                                                                          |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Additional clients       | Add clients for other internal services (e.g., notion-service, calendar-agent) following the same pattern                            |
-| Response validation      | Add runtime schema validation for API responses                                                                                      |
-| Retry logic              | Add configurable retry with exponential backoff to `fetchWithAuth`                                                                   |
+| Area                     | Description                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Additional clients       | Add clients for other internal services (e.g., notion-service, calendar-agent) following the same pattern                             |
+| Response validation      | Add runtime schema validation for API responses                                                                                       |
+| Retry logic              | Add configurable retry with exponential backoff to `fetchWithAuth`                                                                    |
 | OpenAI/Anthropic support | `getLlmClient` errors for OpenAI and Anthropic providers (no factory support yet). Platform fallback (Gemini/Zai) partially mitigates |
 
 ---

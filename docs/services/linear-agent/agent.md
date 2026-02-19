@@ -27,9 +27,9 @@
 ```typescript
 interface ProcessActionInput {
   action: {
-    id: string;       // Unique action ID (for idempotency)
-    userId: string;   // User ID
-    text: string;     // Natural language description
+    id: string; // Unique action ID (for idempotency)
+    userId: string; // User ID
+    text: string; // Natural language description
     summary?: string; // Optional pre-extracted summary
   };
 }
@@ -41,8 +41,8 @@ interface ProcessActionInput {
 interface ProcessActionOutput {
   status: 'completed' | 'failed';
   message: string;
-  resourceUrl?: string;  // Linear issue URL (success only)
-  errorCode?: string;    // Error code (failure only)
+  resourceUrl?: string; // Linear issue URL (success only)
+  errorCode?: string; // Error code (failure only)
 }
 ```
 
@@ -89,7 +89,7 @@ interface ValidatedIssue {
   identifier: string;
   title: string;
   url: string;
-  labels: string[];    // Label names only (color stripped for simplicity)
+  labels: string[]; // Label names only (color stripped for simplicity)
   childCount: number;
 }
 ```
@@ -132,7 +132,7 @@ interface GenerateIssueTitleInput {
 
 ```typescript
 interface GeneratedTitle {
-  title: string;                                         // Max 80 characters
+  title: string; // Max 80 characters
   issueType: 'bug' | 'feature' | 'refactor' | 'research'; // Classified issue type
 }
 ```
@@ -292,20 +292,20 @@ interface ListIssuesQuery {
 ```typescript
 interface ListIssuesOutput {
   issues: {
-    todo: LinearIssue[];       // Ready to start
-    backlog: LinearIssue[];    // Planned
+    todo: LinearIssue[]; // Ready to start
+    backlog: LinearIssue[]; // Planned
     in_progress: LinearIssue[]; // Being worked on
-    in_review: LinearIssue[];  // In code review
-    to_test: LinearIssue[];    // Awaiting QA
-    done: LinearIssue[];       // Completed (last 7 days)
-    archive: LinearIssue[];    // Older completed
+    in_review: LinearIssue[]; // In code review
+    to_test: LinearIssue[]; // Awaiting QA
+    done: LinearIssue[]; // Completed (last 7 days)
+    archive: LinearIssue[]; // Older completed
   };
   teamName: string;
 }
 
 interface LinearIssue {
   id: string;
-  identifier: string;           // e.g., "INT-123"
+  identifier: string; // e.g., "INT-123"
   title: string;
   description: string | null;
   priority: 0 | 1 | 2 | 3 | 4; // 0=none, 1=urgent, 4=low
@@ -319,8 +319,8 @@ interface LinearIssue {
   updatedAt: string;
   completedAt: string | null;
   parentId?: string | null;
-  childCount: number;           // Number of children
-  children: LinearIssue[];      // Populated for top-level issues
+  childCount: number; // Number of children
+  children: LinearIssue[]; // Populated for top-level issues
   labels: LinearLabel[];
 }
 
@@ -375,9 +375,9 @@ interface IssueDetailOutput {
 interface CommentsOutput {
   comments: {
     id: string;
-    userId: string;   // Linear user ID
+    userId: string; // Linear user ID
     userName: string;
-    body: string;     // Markdown
+    body: string; // Markdown
     createdAt: string;
     updatedAt: string;
   }[];
@@ -436,21 +436,21 @@ interface ConnectionOutput {
 
 ## Constraints
 
-| Rule                           | Description                                                              |
-| ------------------------------ | ------------------------------------------------------------------------ |
-| **Linear API Key Required**    | User must have Linear API key configured via `/linear/connection`        |
-| **Team Scope**                 | Issues created in user's configured team                                 |
-| **Priority Scale**             | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low              |
-| **Idempotency**                | Same `actionId` returns cached result, no duplicate issues               |
-| **Auth Required**              | Public endpoints require Bearer token, internal requires X-Internal-Auth |
-| **Internal API Auth**          | Internal issues endpoints also require X-User-Id header                  |
-| **Webhook Secret**             | Webhook events require HMAC-SHA256 signature validation per connection   |
-| **Issue Identifier Format**    | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)         |
-| **Title Length**               | Generated titles are max 80 characters                                   |
-| **Title Error on Failure**     | `generateIssueTitle` returns err() after 2 failed attempts — no fallback |
-| **Dashboard from Firestore**   | `GET /linear/issues` reads local cache; sync first if data looks stale   |
-| **Labels in POST /issues**     | `labels` field accepted but not forwarded to Linear API yet              |
-| **sync-all Auth**              | Accepts OIDC (Cloud Scheduler) or X-Internal-Auth                        |
+| Rule                         | Description                                                              |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| **Linear API Key Required**  | User must have Linear API key configured via `/linear/connection`        |
+| **Team Scope**               | Issues created in user's configured team                                 |
+| **Priority Scale**           | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low               |
+| **Idempotency**              | Same `actionId` returns cached result, no duplicate issues               |
+| **Auth Required**            | Public endpoints require Bearer token, internal requires X-Internal-Auth |
+| **Internal API Auth**        | Internal issues endpoints also require X-User-Id header                  |
+| **Webhook Secret**           | Webhook events require HMAC-SHA256 signature validation per connection   |
+| **Issue Identifier Format**  | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)         |
+| **Title Length**             | Generated titles are max 80 characters                                   |
+| **Title Error on Failure**   | `generateIssueTitle` returns err() after 2 failed attempts — no fallback |
+| **Dashboard from Firestore** | `GET /linear/issues` reads local cache; sync first if data looks stale   |
+| **Labels in POST /issues**   | `labels` field accepted but not forwarded to Linear API yet              |
+| **sync-all Auth**            | Accepts OIDC (Cloud Scheduler) or X-Internal-Auth                        |
 
 ---
 
@@ -542,19 +542,19 @@ Linear state names map to dashboard columns:
 
 ## Error Handling
 
-| Error Code          | HTTP  | Meaning                    | Recovery Action                    |
-| ------------------- | ----- | -------------------------- | ---------------------------------- |
-| `NOT_CONNECTED`     | 403   | No Linear connection       | Prompt user to connect Linear      |
-| `INVALID_API_KEY`   | 401   | Linear API key invalid     | Prompt user to reconnect           |
-| `RATE_LIMIT`        | 429   | Linear API rate limited    | Wait and retry with backoff        |
-| `EXTRACTION_FAILED` | 200\* | AI could not extract issue | Review failed issues manually      |
-| `API_ERROR`         | 500   | Linear API failure         | Retry with backoff                 |
-| `INTERNAL_ERROR`    | 500   | Database or processing err | Retry with backoff                 |
-| `INVALID_FORMAT`    | 400   | Bad issue identifier       | Fix identifier format              |
-| `NOT_FOUND`         | 404   | Issue not in workspace     | Verify identifier is correct       |
-| `WRONG_TEAM`        | 403   | Issue in different team    | Use correct team connection        |
-| `LLM_ERROR`         | 500   | Title generation failed    | Retry or use fallback title        |
-| `PARSE_ERROR`       | 500   | Title JSON invalid         | Retry or use fallback title        |
+| Error Code          | HTTP  | Meaning                    | Recovery Action               |
+| ------------------- | ----- | -------------------------- | ----------------------------- |
+| `NOT_CONNECTED`     | 403   | No Linear connection       | Prompt user to connect Linear |
+| `INVALID_API_KEY`   | 401   | Linear API key invalid     | Prompt user to reconnect      |
+| `RATE_LIMIT`        | 429   | Linear API rate limited    | Wait and retry with backoff   |
+| `EXTRACTION_FAILED` | 200\* | AI could not extract issue | Review failed issues manually |
+| `API_ERROR`         | 500   | Linear API failure         | Retry with backoff            |
+| `INTERNAL_ERROR`    | 500   | Database or processing err | Retry with backoff            |
+| `INVALID_FORMAT`    | 400   | Bad issue identifier       | Fix identifier format         |
+| `NOT_FOUND`         | 404   | Issue not in workspace     | Verify identifier is correct  |
+| `WRONG_TEAM`        | 403   | Issue in different team    | Use correct team connection   |
+| `LLM_ERROR`         | 500   | Title generation failed    | Retry or use fallback title   |
+| `PARSE_ERROR`       | 500   | Title JSON invalid         | Retry or use fallback title   |
 
 \*Note: `EXTRACTION_FAILED` returns 200 with `status: 'failed'` per ServiceFeedback contract.
 
@@ -562,12 +562,12 @@ Linear state names map to dashboard columns:
 
 ## Dependencies
 
-| Service              | Why Needed                | Failure Behavior         |
-| -------------------- | ------------------------- | ------------------------ |
-| user-service         | Get LLM API key for user  | Return NOT_CONNECTED     |
-| app-settings-service | LLM pricing context       | Use default pricing      |
-| Linear API           | Create/list/update issues | Return API_ERROR         |
-| Linear Webhooks      | Real-time issue events    | Retry by Linear          |
+| Service              | Why Needed                | Failure Behavior     |
+| -------------------- | ------------------------- | -------------------- |
+| user-service         | Get LLM API key for user  | Return NOT_CONNECTED |
+| app-settings-service | LLM pricing context       | Use default pricing  |
+| Linear API           | Create/list/update issues | Return API_ERROR     |
+| Linear Webhooks      | Real-time issue events    | Retry by Linear      |
 
 ---
 

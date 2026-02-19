@@ -168,18 +168,18 @@ Common exemption categories in this service:
 
 ## Resolved Issues
 
-| Issue   | Description                                     | Resolution                                                   |
-| ------- | ----------------------------------------------- | ------------------------------------------------------------ |
-| INT-372 | Zombie task detection                           | Heartbeat + 30-min threshold implemented                     |
-| INT-379 | WhatsApp cancel button                          | Cancel nonce with 15-min TTL                                 |
-| INT-465 | PR comment auto-response (Phases 0-3)           | Event parsing + locking + context build                      |
-| INT-486 | Unified Linear issue templates                  | Two-phase execution model (designed/implemented statuses)    |
-| INT-505 | Rich PR activity timeline                       | Clickable links, comment bodies, deduplication               |
-| INT-519 | Block agents from QA/Done transitions           | Validate-linear-state hook                                   |
-| INT-520 | Retry mechanism for failed tasks                | retryTask use case with cool-off                             |
-| INT-524 | PR review feedback                              | Addressed in code review                                     |
-| —       | Duplicate PR body in synchronize events         | deduplicatePRBody() pass in GET /code/github-pr-events       |
-| —       | Edited comment creates duplicate timeline entry | deduplicateCommentEvents() keeps first position, latest body |
-| —       | Turn-end metrics not collected                  | TurnMetrics subcollection + FirestoreTurnMetricsRepository   |
-| —       | No way to send mid-task messages or resume      | sendTaskMessage use case + POST /code/tasks/:id/messages     |
+| Issue   | Description                                     | Resolution                                                     |
+| ------- | ----------------------------------------------- | -------------------------------------------------------------- |
+| INT-372 | Zombie task detection                           | Heartbeat + 30-min threshold implemented                       |
+| INT-379 | WhatsApp cancel button                          | Cancel nonce with 15-min TTL                                   |
+| INT-465 | PR comment auto-response (Phases 0-3)           | Event parsing + locking + context build                        |
+| INT-486 | Unified Linear issue templates                  | Two-phase execution model (designed/implemented statuses)      |
+| INT-505 | Rich PR activity timeline                       | Clickable links, comment bodies, deduplication                 |
+| INT-519 | Block agents from QA/Done transitions           | Validate-linear-state hook                                     |
+| INT-520 | Retry mechanism for failed tasks                | retryTask use case with cool-off                               |
+| INT-524 | PR review feedback                              | Addressed in code review                                       |
+| —       | Duplicate PR body in synchronize events         | deduplicatePRBody() pass in GET /code/github-pr-events         |
+| —       | Edited comment creates duplicate timeline entry | deduplicateCommentEvents() keeps first position, latest body   |
+| —       | Turn-end metrics not collected                  | TurnMetrics subcollection + FirestoreTurnMetricsRepository     |
+| —       | No way to send mid-task messages or resume      | sendTaskMessage use case + POST /code/tasks/:id/messages       |
 | —       | PR list view requires O(events) query           | github-pr-summaries collection + GET /code/github-pr-summaries |

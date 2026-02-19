@@ -30,18 +30,18 @@
 
 ### Low Priority
 
-| File              | Issue                                                                  | Impact                                                                                        |
-| ----------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `src/register.ts` | Metric export interval hardcoded at `30_000` ms                       | Not configurable without a code change; 30s is reasonable but may not suit all traffic levels |
-| `src/register.ts` | Default sampler (`ParentBasedAlwaysOnSampler`) not documented         | High-volume services may unknowingly export 100% of traces; no guidance on sampling config    |
+| File              | Issue                                                         | Impact                                                                                        |
+| ----------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `src/register.ts` | Metric export interval hardcoded at `30_000` ms               | Not configurable without a code change; 30s is reasonable but may not suit all traffic levels |
+| `src/register.ts` | Default sampler (`ParentBasedAlwaysOnSampler`) not documented | High-volume services may unknowingly export 100% of traces; no guidance on sampling config    |
 
 ---
 
 ## Test Coverage Gaps
 
-| File/Module       | Coverage | Missing                                                                        |
-| ----------------- | -------- | ------------------------------------------------------------------------------ |
-| `src/register.ts` | 0%       | Full SDK startup path requires live OTLP collector; unit tests not feasible    |
+| File/Module       | Coverage | Missing                                                                     |
+| ----------------- | -------- | --------------------------------------------------------------------------- |
+| `src/register.ts` | 0%       | Full SDK startup path requires live OTLP collector; unit tests not feasible |
 
 ---
 
@@ -71,10 +71,10 @@ Traces and metrics are exported by this package. Pino log forwarding to Dash0 (l
 
 ## Resolved Issues
 
-| Date       | Issue                                                | Resolution                                        |
-| ---------- | ---------------------------------------------------- | ------------------------------------------------- |
-| 2026-02-16 | `PinoInstrumentation` not activating under tsx       | Removed; log forwarding moved to infra-sentry     |
-| 2026-02-16 | `./register` export pointed to `.ts` source file     | Fixed to point to compiled `dist/register.js`     |
+| Date       | Issue                                            | Resolution                                    |
+| ---------- | ------------------------------------------------ | --------------------------------------------- |
+| 2026-02-16 | `PinoInstrumentation` not activating under tsx   | Removed; log forwarding moved to infra-sentry |
+| 2026-02-16 | `./register` export pointed to `.ts` source file | Fixed to point to compiled `dist/register.js` |
 
 ---
 

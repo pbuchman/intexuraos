@@ -30,19 +30,19 @@
 
 ### Low Priority
 
-| File              | Issue                                                                       | Impact                                    |
-| ----------------- | --------------------------------------------------------------------------- | ----------------------------------------- |
-| `src/client.ts`   | `MAX_TOKENS` constant (8192) hardcoded, not configurable                    | Incompatible with models supporting 128k+ |
-| `src/client.ts`   | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients | Maintenance overhead                      |
-| `src/client.ts`   | No injectable `auditSink`/`usageSink` unlike `infra-gemini` and `infra-glm` | Harder to test; must mock Firestore       |
+| File            | Issue                                                                             | Impact                                    |
+| --------------- | --------------------------------------------------------------------------------- | ----------------------------------------- |
+| `src/client.ts` | `MAX_TOKENS` constant (8192) hardcoded, not configurable                          | Incompatible with models supporting 128k+ |
+| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients | Maintenance overhead                      |
+| `src/client.ts` | No injectable `auditSink`/`usageSink` unlike `infra-gemini` and `infra-glm`       | Harder to test; must mock Firestore       |
 
 ---
 
 ## TypeScript Issues
 
-| File            | Issue                                                                                    | Count |
-| --------------- | ---------------------------------------------------------------------------------------- | ----- |
-| `src/client.ts` | `as` cast on `Anthropic.Usage` to access `cache_read_input_tokens`                       | 1     |
+| File            | Issue                                                                                   | Count |
+| --------------- | --------------------------------------------------------------------------------------- | ----- |
+| `src/client.ts` | `as` cast on `Anthropic.Usage` to access `cache_read_input_tokens`                      | 1     |
 | `src/client.ts` | `web_search_20250305` and `web_search` passed with `as const` bypassing tool type union | 1     |
 
 **Detail — Cache token fields:**
@@ -72,9 +72,9 @@ No TODO/FIXME markers found in source code.
 
 ## Resolved Issues
 
-| Date       | Issue                                           | Resolution                                    |
-| ---------- | ----------------------------------------------- | --------------------------------------------- |
-| 2026-01-27 | Logger was optional, causing inconsistent usage | Made `logger` mandatory via ESLint rule       |
+| Date       | Issue                                           | Resolution                                       |
+| ---------- | ----------------------------------------------- | ------------------------------------------------ |
+| 2026-01-27 | Logger was optional, causing inconsistent usage | Made `logger` mandatory via ESLint rule          |
 | 2026-01-27 | Usage tracking used ad-hoc patterns             | Migrated to `UsageLogger` class from llm-pricing |
 
 ---

@@ -236,10 +236,10 @@ All endpoints return a standardized response contract:
 
 ## Troubleshooting
 
-| Issue                            | Solution                                              |
-| -------------------------------- | ----------------------------------------------------- |
-| Lost signature                   | Reconnect device (`POST /connect` → new signature)    |
-| Webhook 400 (missing header)     | Ensure `X-Mobile-Notifications-Signature` header sent |
-| Webhook 401 (invalid signature)  | Signature doesn't match stored hash; reconnect        |
-| Empty filter options             | No notifications received yet; options auto-populate  |
-| Duplicate notification ignored   | Normal; `notification_id` deduplication is intentional|
+| Issue                           | Solution                                               |
+| ------------------------------- | ------------------------------------------------------ |
+| Lost signature                  | Reconnect device (`POST /connect` → new signature)     |
+| Webhook 400 (missing header)    | Ensure `X-Mobile-Notifications-Signature` header sent  |
+| Webhook 401 (invalid signature) | Signature doesn't match stored hash; reconnect         |
+| Empty filter options            | No notifications received yet; options auto-populate   |
+| Duplicate notification ignored  | Normal; `notification_id` deduplication is intentional |

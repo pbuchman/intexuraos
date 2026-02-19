@@ -32,16 +32,16 @@
 
 ### Medium Priority
 
-| File         | Issue                                                                         | Impact                                                             |
-| ------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `src/client.ts` | `sendTextMessage` has no `AbortController` timeout unlike other methods    | Slow Facebook Graph API responses could block indefinitely         |
-| `src/client.ts` | `getMediaUrl` also lacks a timeout mechanism                               | Same hang risk as `sendTextMessage`                                |
-| `src/client.ts` | Duplicated `AbortController` + `clearTimeout` pattern in 3 method bodies  | Functional but verbose; `fetchWithTimeout` utility would reduce it |
+| File            | Issue                                                                    | Impact                                                             |
+| --------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `src/client.ts` | `sendTextMessage` has no `AbortController` timeout unlike other methods  | Slow Facebook Graph API responses could block indefinitely         |
+| `src/client.ts` | `getMediaUrl` also lacks a timeout mechanism                             | Same hang risk as `sendTextMessage`                                |
+| `src/client.ts` | Duplicated `AbortController` + `clearTimeout` pattern in 3 method bodies | Functional but verbose; `fetchWithTimeout` utility would reduce it |
 
 ### Low Priority
 
-| File         | Issue                                          | Impact                                                                             |
-| ------------ | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
+| File            | Issue                                      | Impact                                                                             |
+| --------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- |
 | `src/client.ts` | `WHATSAPP_API_VERSION = 'v22.0'` hardcoded | WhatsApp API versions are stable, but upgrading requires a code change             |
 | `src/client.ts` | No retry logic on any method               | Transient failures (network blips, 429 rate limits) propagated directly to callers |
 
@@ -67,10 +67,10 @@ None found in source code.
 
 ## Resolved Issues
 
-| Date       | Issue                                         | Resolution                                       |
-| ---------- | --------------------------------------------- | ------------------------------------------------ |
-| 2026-01-22 | WhatsApp voice note transcription bugs        | Fixed in commit `37551ab3`                       |
-| 2026-01-22 | `markAsReadWithTyping` added                  | Combined read receipt + typing indicator in v2.1 |
+| Date       | Issue                                  | Resolution                                       |
+| ---------- | -------------------------------------- | ------------------------------------------------ |
+| 2026-01-22 | WhatsApp voice note transcription bugs | Fixed in commit `37551ab3`                       |
+| 2026-01-22 | `markAsReadWithTyping` added           | Combined read receipt + typing indicator in v2.1 |
 
 ---
 

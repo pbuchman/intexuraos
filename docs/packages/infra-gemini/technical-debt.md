@@ -30,19 +30,19 @@
 
 ### Low Priority
 
-| File            | Issue                                                                                | Impact                                         |
-| --------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------- |
-| `src/client.ts` | `IMAGE_MODEL` hardcoded to `LlmModels.Gemini25FlashImage`, not configurable         | Must change code if Google releases new image models |
-| `src/client.ts` | No `max_tokens` set on `generate()` calls — uses model default                       | Inconsistent with other LLM clients using 8192  |
-| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients    | Maintenance overhead                            |
+| File            | Issue                                                                             | Impact                                               |
+| --------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `src/client.ts` | `IMAGE_MODEL` hardcoded to `LlmModels.Gemini25FlashImage`, not configurable       | Must change code if Google releases new image models |
+| `src/client.ts` | No `max_tokens` set on `generate()` calls — uses model default                    | Inconsistent with other LLM clients using 8192       |
+| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients | Maintenance overhead                                 |
 
 ---
 
 ## TypeScript Issues
 
-| File            | Issue                                                                           | Count |
-| --------------- | ------------------------------------------------------------------------------- | ----- |
-| `src/client.ts` | `imagePart.inlineData` accessed without MIME type validation on the image data  | 1     |
+| File            | Issue                                                                          | Count |
+| --------------- | ------------------------------------------------------------------------------ | ----- |
+| `src/client.ts` | `imagePart.inlineData` accessed without MIME type validation on the image data | 1     |
 
 **Detail:**
 

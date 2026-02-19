@@ -92,20 +92,20 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                 | Date       |
-| ---------- | ----------------------------------------------------------- | ---------- |
-| `884bc168` | Add semver `version` field to PromptBuilder (1.0.0)         | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability             | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (transparent preload)   | 2026-02-16 |
-| `e60eafc1` | Rename `CRAWL4AI_API_KEY` → `CRAWL4AI_APP_API_KEY`          | 2026-02-15 |
+| Commit     | Description                                                  | Date       |
+| ---------- | ------------------------------------------------------------ | ---------- |
+| `884bc168` | Add semver `version` field to PromptBuilder (1.0.0)          | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability              | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (transparent preload)    | 2026-02-16 |
+| `e60eafc1` | Rename `CRAWL4AI_API_KEY` → `CRAWL4AI_APP_API_KEY`           | 2026-02-15 |
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback | 2026-02-15 |
-| `0f69a74b` | Add platform ZAI fallback for users without API keys        | 2026-02-09 |
+| `0f69a74b` | Add platform ZAI fallback for users without API keys         | 2026-02-09 |
 | `3a5d9380` | INT-533 Add content focus instructions to summary prompt     | 2026-02-07 |
-| `d105688f` | Add RATE_LIMITED error code for Crawl4AI 429 responses      | 2026-01-30 |
-| `c3198407` | Fix response contract violations (reply.ok/reply.fail)      | 2026-01-30 |
-| `dfd702f1` | Migrate to Sentry-enabled createAppLogger                   | 2026-01-30 |
-| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement             | 2026-01-31 |
-| `73e8375f` | INT-408 Enforce mandatory env var registration              | 2026-01-28 |
+| `d105688f` | Add RATE_LIMITED error code for Crawl4AI 429 responses       | 2026-01-30 |
+| `c3198407` | Fix response contract violations (reply.ok/reply.fail)       | 2026-01-30 |
+| `dfd702f1` | Migrate to Sentry-enabled createAppLogger                    | 2026-01-30 |
+| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement              | 2026-01-31 |
+| `73e8375f` | INT-408 Enforce mandatory env var registration               | 2026-01-28 |
 
 ## API Endpoints
 
@@ -172,10 +172,10 @@ interface PageSummary {
 
 ### LinkPreview
 
-| Field         | Type                | Description                  |
-| ------------- | ------------------- | ---------------------------- |
-| `url`         | `string`            | Original URL                 |
-| `title`       | `string \| undefined` | og:title or HTML title     |
+| Field         | Type                  | Description                 |
+| ------------- | --------------------- | --------------------------- |
+| `url`         | `string`              | Original URL                |
+| `title`       | `string \| undefined` | og:title or HTML title      |
 | `description` | `string \| undefined` | og:description or meta desc |
 | `image`       | `string \| undefined` | Resolved absolute og:image  |
 | `favicon`     | `string \| undefined` | Favicon URL                 |
@@ -291,9 +291,9 @@ Fetches and parses OpenGraph metadata.
 
 ### Internal Services
 
-| Service      | Endpoint                        | Purpose                                      |
-| ------------ | ------------------------------- | -------------------------------------------- |
-| user-service | `getLlmClient(userId)`          | Get LLM client (user key or platform fallback) |
+| Service      | Endpoint               | Purpose                                        |
+| ------------ | ---------------------- | ---------------------------------------------- |
+| user-service | `getLlmClient(userId)` | Get LLM client (user key or platform fallback) |
 
 **Integration Note (v2.1.0):** web-agent uses `@intexuraos/internal-clients/user-service` for type-safe, validated communication with user-service. This package provides:
 
@@ -304,16 +304,16 @@ Fetches and parses OpenGraph metadata.
 
 ## Configuration
 
-| Variable                              | Purpose                              | Required |
-| ------------------------------------- | ------------------------------------ | -------- |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth                | Yes      |
-| `INTEXURAOS_CRAWL4AI_APP_API_KEY`     | Crawl4AI Cloud API key               | Yes      |
-| `INTEXURAOS_USER_SERVICE_URL`         | User service base URL                | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup                       | Yes      |
-| `INTEXURAOS_SENTRY_DSN`               | Error tracking                       | Yes      |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback   | Optional |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | Platform ZAI secondary fallback      | Optional |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | Dash0 OpenTelemetry endpoint         | Optional |
+| Variable                              | Purpose                            | Required |
+| ------------------------------------- | ---------------------------------- | -------- |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth              | Yes      |
+| `INTEXURAOS_CRAWL4AI_APP_API_KEY`     | Crawl4AI Cloud API key             | Yes      |
+| `INTEXURAOS_USER_SERVICE_URL`         | User service base URL              | Yes      |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup                     | Yes      |
+| `INTEXURAOS_SENTRY_DSN`               | Error tracking                     | Yes      |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback | Optional |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | Platform ZAI secondary fallback    | Optional |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | Dash0 OpenTelemetry endpoint       | Optional |
 
 All five required vars are validated at startup via `validateRequiredEnv()`. Optional fallback keys are passed to `createUserServiceClient()` and are no-ops when unset.
 

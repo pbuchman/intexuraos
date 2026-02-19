@@ -124,11 +124,11 @@ flowchart TD
 
 The function polls the Compute API waiting for the VM to reach `RUNNING` or `TERMINATED` states after issuing start/stop commands.
 
-| Parameter     | Value                                                 |
-| ------------- | ----------------------------------------------------- |
-| Poll interval | 5 seconds (hardcoded, separate from health check)     |
-| Poll timeout  | 3 minutes (shares `HEALTH_POLL_TIMEOUT_MS`)           |
-| On timeout    | Throws an error caught by the outer try/catch         |
+| Parameter     | Value                                             |
+| ------------- | ------------------------------------------------- |
+| Poll interval | 5 seconds (hardcoded, separate from health check) |
+| Poll timeout  | 3 minutes (shares `HEALTH_POLL_TIMEOUT_MS`)       |
+| On timeout    | Throws an error caught by the outer try/catch     |
 
 **Health polling details:**
 
@@ -210,13 +210,13 @@ The function polls the health endpoint during the grace period. It stops waiting
 
 ## Recent Changes
 
-| Commit     | Description                                   | Date       |
-| ---------- | --------------------------------------------- | ---------- |
+| Commit     | Description                                          | Date       |
+| ---------- | ---------------------------------------------------- | ---------- |
 | `b82522d2` | Fix Cloud Functions deployment with esbuild bundling | 2026-02-01 |
-| `f10ebdbf` | Fix empty error objects in log output (INT-464) | 2026-01-31 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (INT-427) | 2026-01-29 |
-| `7a90db67` | Fix vitest v4 migration and improve branch coverage | 2026-01-28 |
-| `cd70bc3f` | Add Cloud Functions for VM lifecycle (INT-369/370) | 2026-01-25 |
+| `f10ebdbf` | Fix empty error objects in log output (INT-464)      | 2026-01-31 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (INT-427)    | 2026-01-29 |
+| `7a90db67` | Fix vitest v4 migration and improve branch coverage  | 2026-01-28 |
+| `cd70bc3f` | Add Cloud Functions for VM lifecycle (INT-369/370)   | 2026-01-25 |
 
 ## Dependencies
 

@@ -143,16 +143,16 @@ Split system prompt into Phase 1 (Design & Validation) and Phase 2 (Strict Execu
 
 ## API Endpoints
 
-| Method | Path                   | Auth        | Request Body                        | Response                                       |
-| ------ | ---------------------- | ----------- | ----------------------------------- | ---------------------------------------------- |
-| POST   | `/tasks`               | HMAC signed | `CreateTaskRequest` (Zod-validated) | `202 { taskId, status: "accepted" }`           |
-| GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                            |
-| DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404` |
-| POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`         |
+| Method | Path                   | Auth        | Request Body                        | Response                                                       |
+| ------ | ---------------------- | ----------- | ----------------------------------- | -------------------------------------------------------------- |
+| POST   | `/tasks`               | HMAC signed | `CreateTaskRequest` (Zod-validated) | `202 { taskId, status: "accepted" }`                           |
+| GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                                            |
+| DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404`                 |
+| POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`                         |
 | GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available, anthropicOAuth }` |
-| GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable |
-| POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`              |
-| POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`  |
+| GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable          |
+| POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`                              |
+| POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`                  |
 
 ### HMAC Authentication
 
@@ -197,6 +197,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 ```
 
 **Behavior:**
+
 - If the task is `running`: the message is queued and delivered when the current attempt finishes
 - If the task is `completed`, `failed`, or `interrupted`: a new worker session is started with the message as the prompt (using `continueSession: true`)
 - Returns `409` if the task status does not allow messages (e.g., `cancelled`)
@@ -249,15 +250,15 @@ interface Task {
   webhookUrl: string;
   webhookSecret: string;
   actionId?: string;
-  retriedFrom?: string;           // Original task ID for retry chains
+  retriedFrom?: string; // Original task ID for retry chains
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
   containerId: string;
-  startedAt: string;              // ISO 8601
-  completedAt?: string;           // ISO 8601
-  attemptCount?: number;          // Current attempt (starts at 1)
-  maxAttempts?: number;           // Maximum attempts before terminal failure
-  lastExitCode?: number;          // Exit code from most recent worker attempt
+  startedAt: string; // ISO 8601
+  completedAt?: string; // ISO 8601
+  attemptCount?: number; // Current attempt (starts at 1)
+  maxAttempts?: number; // Maximum attempts before terminal failure
+  lastExitCode?: number; // Exit code from most recent worker attempt
   verificationHistory?: TaskVerificationRecord[]; // Completion verifier results per attempt
 }
 
@@ -417,12 +418,14 @@ Collects per-task resource and cost metrics after container exit:
 Evaluates whether a task attempt met its phase-specific contract using a two-stage pipeline:
 
 **Stage 1 — Deterministic checks:**
+
 - Non-zero worker exit code → `passed=false`
 - Missing assistant final message in logs → `passed=false`
 - Phase 1: validates `PHASE1_FINAL:` block with `Linear label set`, `Phase 2 ready`, `Linear issue URL`, and `Summary`
 - Phase 2: validates `PHASE2_FINAL:` block, presence of PR URL in task result, and absence of CI failures
 
 **Stage 2 — LLM adjudication (Gemini 2.5 Flash):**
+
 - Sends the original prompt, required contract template, deterministic signals, last assistant message, and last 120 log lines
 - Returns `{ passed, confidence, reasons, missingCriteria, resumeInstruction }` as JSON
 - Merges LLM and deterministic failure reasons if `passed=false`
@@ -467,23 +470,23 @@ Appends LLM audit records to a local JSONL file:
 
 ## Dependencies
 
-| Package                    | Version   | Purpose                                                    |
-| -------------------------- | --------- | ---------------------------------------------------------- |
-| `fastify`                  | ^5.6.2    | HTTP server                                                |
-| `@fastify/cors`            | ^10.1.0   | CORS support                                               |
-| `dockerode`                | ^4.0.9    | Docker Engine API client                                   |
-| `async-mutex`              | ^0.5.0    | Atomic capacity checking                                   |
-| `jose`                     | ^5.9.6    | JWT signing for TokenRefresher                             |
-| `jsonwebtoken`             | ^9.0.2    | JWT signing for GitHubTokenService                         |
-| `minimatch`                | ^10.1.1   | Glob pattern matching (SensitiveFileGuard)                 |
-| `pino`                     | ^9.6.0    | Structured logging                                         |
-| `pino-pretty`              | ^13.0.0   | Human-readable log output                                  |
-| `zod`                      | ^3.24.1   | Request schema validation                                  |
-| `@intexuraos/common-core`  | workspace | Result types, Logger, error serialization                  |
-| `@intexuraos/llm-audit`    | workspace | AuditSink interface for LLM audit logging                  |
-| `@intexuraos/llm-factory`  | workspace | LLM client creation for completion verifier                |
-| `@intexuraos/llm-contract` | workspace | Model enums and pricing types used by completion verifier  |
-| `@intexuraos/llm-pricing`  | workspace | StructuredLogUsageSink for verifier token cost logging     |
+| Package                    | Version   | Purpose                                                   |
+| -------------------------- | --------- | --------------------------------------------------------- |
+| `fastify`                  | ^5.6.2    | HTTP server                                               |
+| `@fastify/cors`            | ^10.1.0   | CORS support                                              |
+| `dockerode`                | ^4.0.9    | Docker Engine API client                                  |
+| `async-mutex`              | ^0.5.0    | Atomic capacity checking                                  |
+| `jose`                     | ^5.9.6    | JWT signing for TokenRefresher                            |
+| `jsonwebtoken`             | ^9.0.2    | JWT signing for GitHubTokenService                        |
+| `minimatch`                | ^10.1.1   | Glob pattern matching (SensitiveFileGuard)                |
+| `pino`                     | ^9.6.0    | Structured logging                                        |
+| `pino-pretty`              | ^13.0.0   | Human-readable log output                                 |
+| `zod`                      | ^3.24.1   | Request schema validation                                 |
+| `@intexuraos/common-core`  | workspace | Result types, Logger, error serialization                 |
+| `@intexuraos/llm-audit`    | workspace | AuditSink interface for LLM audit logging                 |
+| `@intexuraos/llm-factory`  | workspace | LLM client creation for completion verifier               |
+| `@intexuraos/llm-contract` | workspace | Model enums and pricing types used by completion verifier |
+| `@intexuraos/llm-pricing`  | workspace | StructuredLogUsageSink for verifier token cost logging    |
 
 ## Configuration
 
@@ -491,48 +494,48 @@ Appends LLM audit records to a local JSONL file:
 
 #### Required (startup fails if missing)
 
-| Variable                            | Description                                          |
-| ----------------------------------- | ---------------------------------------------------- |
-| `INTEXURAOS_REPOSITORY_URL`         | GitHub repo URL for clone/fetch                      |
-| `INTEXURAOS_CODE_AGENT_URL`         | Webhook callback URL (Cloud Run)                     |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`    | HMAC signing secret                                  |
-| `INTEXURAOS_PROJECT_ID`             | GCP project for Secret Manager                       |
-| `INTEXURAOS_GITHUB_APP_ID`          | GitHub App ID                                        |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID` | GitHub App installation ID                           |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Service-to-service auth token                        |
-| `INTEXURAOS_LINEAR_API_KEY`         | Linear API key (passed to workers)                   |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | Sentry auth token (passed to workers)                |
-| `INTEXURAOS_GEMINI_APP_API_KEY`     | Gemini API key for completion verifier               |
-| `INTEXURAOS_ZAI_APP_API_KEY`        | ZAI API key for GLM workers                          |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | GCP service account key path                         |
+| Variable                            | Description                            |
+| ----------------------------------- | -------------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL`         | GitHub repo URL for clone/fetch        |
+| `INTEXURAOS_CODE_AGENT_URL`         | Webhook callback URL (Cloud Run)       |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`    | HMAC signing secret                    |
+| `INTEXURAOS_PROJECT_ID`             | GCP project for Secret Manager         |
+| `INTEXURAOS_GITHUB_APP_ID`          | GitHub App ID                          |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID` | GitHub App installation ID             |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Service-to-service auth token          |
+| `INTEXURAOS_LINEAR_API_KEY`         | Linear API key (passed to workers)     |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | Sentry auth token (passed to workers)  |
+| `INTEXURAOS_GEMINI_APP_API_KEY`     | Gemini API key for completion verifier |
+| `INTEXURAOS_ZAI_APP_API_KEY`        | ZAI API key for GLM workers            |
+| `GOOGLE_APPLICATION_CREDENTIALS`    | GCP service account key path           |
 
 #### Optional
 
-| Variable                                          | Default                       | Description                                           |
-| ------------------------------------------------- | ----------------------------- | ----------------------------------------------------- |
-| `INTEXURAOS_REPOSITORY_PATH`                      | `~/.claude-orchestrator/repo` | Local repo clone path                                 |
-| `INTEXURAOS_WORKER_CAPACITY`                      | `2`                           | Max concurrent tasks                                  |
-| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`              | `3`                           | Max auto-continue attempts before terminal failure    |
-| `INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS`    | `1`                           | Keep containers alive after failure for debugging     |
-| `INTEXURAOS_CLAUDE_WORKER_IMAGE`                  | (GCR latest)                  | Override the Docker image used for workers            |
-| `INTEXURAOS_GIT_USER_NAME`                        | host git config               | Git user.name for commits inside worker containers    |
-| `INTEXURAOS_GIT_USER_EMAIL`                       | host git config               | Git user.email for commits inside worker containers   |
-| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`               | (Secret Manager)              | PEM key override for testing without Secret Manager   |
-| `KEEP_CONTAINERS_ALIVE`                           | `0`                           | `1` = never remove containers (debug mode)            |
-| `PORT`                                            | `8199`                        | HTTP server port                                      |
-| `LOG_LEVEL`                                       | `info`                        | Pino log level                                        |
+| Variable                                       | Default                       | Description                                         |
+| ---------------------------------------------- | ----------------------------- | --------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_PATH`                   | `~/.claude-orchestrator/repo` | Local repo clone path                               |
+| `INTEXURAOS_WORKER_CAPACITY`                   | `2`                           | Max concurrent tasks                                |
+| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`           | `3`                           | Max auto-continue attempts before terminal failure  |
+| `INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS` | `1`                           | Keep containers alive after failure for debugging   |
+| `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | (GCR latest)                  | Override the Docker image used for workers          |
+| `INTEXURAOS_GIT_USER_NAME`                     | host git config               | Git user.name for commits inside worker containers  |
+| `INTEXURAOS_GIT_USER_EMAIL`                    | host git config               | Git user.email for commits inside worker containers |
+| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`            | (Secret Manager)              | PEM key override for testing without Secret Manager |
+| `KEEP_CONTAINERS_ALIVE`                        | `0`                           | `1` = never remove containers (debug mode)          |
+| `PORT`                                         | `8199`                        | HTTP server port                                    |
+| `LOG_LEVEL`                                    | `info`                        | Pino log level                                      |
 
 ### Docker Container Defaults
 
-| Setting        | Value                                                                                              |
-| -------------- | -------------------------------------------------------------------------------------------------- |
-| Image          | `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`      |
-| Network        | `claude-worker-net`                                                                                |
-| Max concurrent | configurable (default 2, `INTEXURAOS_WORKER_CAPACITY`)                                            |
-| Memory limit   | 8 GB                                                                                               |
-| CPU count      | 4                                                                                                  |
-| Timeout        | 2 hours                                                                                            |
-| User           | 1001:1001                                                                                          |
+| Setting        | Value                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| Image          | `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest` |
+| Network        | `claude-worker-net`                                                                          |
+| Max concurrent | configurable (default 2, `INTEXURAOS_WORKER_CAPACITY`)                                       |
+| Memory limit   | 8 GB                                                                                         |
+| CPU count      | 4                                                                                            |
+| Timeout        | 2 hours                                                                                      |
+| User           | 1001:1001                                                                                    |
 
 ### Timer Intervals
 

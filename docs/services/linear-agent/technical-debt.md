@@ -79,19 +79,19 @@ None identified. Service uses strict TypeScript with proper type definitions for
 
 None identified. Files are appropriately sized:
 
-| File                            | Lines  | Status                                   |
-| ------------------------------- | ------ | ---------------------------------------- |
-| `linearRoutes.ts`               | ~1005  | Borderline (14 endpoints). Watch closely |
-| `internalRoutes.ts`             | ~595   | OK (5 endpoints)                         |
-| `linearApiClient.ts`            | ~360   | OK (includes optimizations)              |
-| `internalIssuesRoutes.ts`       | ~400   | OK                                       |
-| `linearWebhookRoutes.ts`        | ~300   | OK                                       |
-| `processLinearAction.ts`        | ~233   | OK                                       |
-| `generateIssueTitle.ts`         | ~134   | OK                                       |
-| `fullSyncUseCase.ts`            | ~158   | OK                                       |
-| `validateIssue.ts`              | ~108   | OK                                       |
-| `syncSingleIssueUseCase.ts`     | ~78    | OK                                       |
-| `linearConnectionRepository.ts` | ~200   | OK (includes webhook secret ops)         |
+| File                            | Lines | Status                                   |
+| ------------------------------- | ----- | ---------------------------------------- |
+| `linearRoutes.ts`               | ~1005 | Borderline (14 endpoints). Watch closely |
+| `internalRoutes.ts`             | ~595  | OK (5 endpoints)                         |
+| `linearApiClient.ts`            | ~360  | OK (includes optimizations)              |
+| `internalIssuesRoutes.ts`       | ~400  | OK                                       |
+| `linearWebhookRoutes.ts`        | ~300  | OK                                       |
+| `processLinearAction.ts`        | ~233  | OK                                       |
+| `generateIssueTitle.ts`         | ~134  | OK                                       |
+| `fullSyncUseCase.ts`            | ~158  | OK                                       |
+| `validateIssue.ts`              | ~108  | OK                                       |
+| `syncSingleIssueUseCase.ts`     | ~78   | OK                                       |
+| `linearConnectionRepository.ts` | ~200  | OK (includes webhook secret ops)         |
 
 **Note:** `linearRoutes.ts` at ~1005 lines now handles 14 endpoints (connection CRUD, issues, issue detail, comments, failed issues CRUD + retry, sync, webhook config CRUD). Consider splitting into focused route modules (e.g., `linearIssueRoutes.ts`, `linearConnectionRoutes.ts`) if further endpoints are added.
 
@@ -125,26 +125,26 @@ None. The service uses current versions of:
 
 ## Resolved Issues
 
-| Date       | Issue                                     | Resolution                                                    |
-| ---------- | ----------------------------------------- | ------------------------------------------------------------- |
+| Date       | Issue                                                | Resolution                                                       |
+| ---------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
 | 2026-02-19 | validateIssue labels serialized as "[object Object]" | Map LinearLabel[] to string[] at HTTP boundary in internalRoutes |
-| 2026-02-15 | Silent title degradation on LLM failure   | Removed regex fallback, return err() after 2 retries          |
-| 2026-02-10 | Hardcoded `teamId: 'TODO'` in retry       | Fixed to use `connectionRepository.getFullConnection`         |
-| 2026-02-10 | Dashboard called Linear API on every load  | Switched to Firestore-first with local cache                  |
-| 2026-02-10 | No parent-child issue hierarchy            | Built in-memory tree in `listIssues` use case                 |
-| 2026-02-10 | Labels stored as strings only             | Labels now stored as `{ id, name, color }` objects            |
-| 2026-02-06 | No programmatic issue management         | INT-486: Internal API for issue CRUD + state         |
-| 2026-02-06 | No issue validation capability           | INT-486: validateIssue use case                      |
-| 2026-02-06 | No AI title generation                   | INT-486: generateIssueTitle use case                 |
-| 2026-02-03 | Single-tenant webhook support only       | Multi-tenant webhook routing by team ID              |
-| 2026-02-02 | No bidirectional sync with Linear        | INT-444: Webhook sync + full sync use cases          |
-| 2026-02-02 | No local issue storage                   | INT-444: SyncedLinearIssue + issue repository        |
-| 2026-02-01 | Multi-user Linear support broken         | INT-443: Fixed multi-user connection handling        |
-| 2026-01-24 | Test coverage gaps for dashboard columns | INT-166: Added comprehensive tests                   |
-| 2026-01-24 | Missing todo/to_test columns             | INT-208: Added new column types                      |
-| 2026-01-16 | Duplicate issue creation on retry        | INT-97: Added idempotency check                      |
-| 2026-01-16 | Rate limiting from Linear API            | INT-95: Client caching + deduplication               |
-| 2026-01-17 | Silent success masking failures          | INT-125: ServiceFeedback contract                    |
+| 2026-02-15 | Silent title degradation on LLM failure              | Removed regex fallback, return err() after 2 retries             |
+| 2026-02-10 | Hardcoded `teamId: 'TODO'` in retry                  | Fixed to use `connectionRepository.getFullConnection`            |
+| 2026-02-10 | Dashboard called Linear API on every load            | Switched to Firestore-first with local cache                     |
+| 2026-02-10 | No parent-child issue hierarchy                      | Built in-memory tree in `listIssues` use case                    |
+| 2026-02-10 | Labels stored as strings only                        | Labels now stored as `{ id, name, color }` objects               |
+| 2026-02-06 | No programmatic issue management                     | INT-486: Internal API for issue CRUD + state                     |
+| 2026-02-06 | No issue validation capability                       | INT-486: validateIssue use case                                  |
+| 2026-02-06 | No AI title generation                               | INT-486: generateIssueTitle use case                             |
+| 2026-02-03 | Single-tenant webhook support only                   | Multi-tenant webhook routing by team ID                          |
+| 2026-02-02 | No bidirectional sync with Linear                    | INT-444: Webhook sync + full sync use cases                      |
+| 2026-02-02 | No local issue storage                               | INT-444: SyncedLinearIssue + issue repository                    |
+| 2026-02-01 | Multi-user Linear support broken                     | INT-443: Fixed multi-user connection handling                    |
+| 2026-01-24 | Test coverage gaps for dashboard columns             | INT-166: Added comprehensive tests                               |
+| 2026-01-24 | Missing todo/to_test columns                         | INT-208: Added new column types                                  |
+| 2026-01-16 | Duplicate issue creation on retry                    | INT-97: Added idempotency check                                  |
+| 2026-01-16 | Rate limiting from Linear API                        | INT-95: Client caching + deduplication                           |
+| 2026-01-17 | Silent success masking failures                      | INT-125: ServiceFeedback contract                                |
 
 ---
 

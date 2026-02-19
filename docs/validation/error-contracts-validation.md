@@ -8,14 +8,14 @@
 
 ## Summary
 
-| Metric | Count |
-|---|---|
-| Total `reply.fail()` calls (source) | 599 |
-| Total `reply.ok()` calls (source) | 272 |
-| Raw `reply.send()` calls (source) | 17 |
-| `@allow-raw-send` annotations | 33 |
-| Unannotated raw sends | 0 |
-| Official verifier result | PASS |
+| Metric                              | Count |
+| ----------------------------------- | ----- |
+| Total `reply.fail()` calls (source) | 599   |
+| Total `reply.ok()` calls (source)   | 272   |
+| Raw `reply.send()` calls (source)   | 17    |
+| `@allow-raw-send` annotations       | 33    |
+| Unannotated raw sends               | 0     |
+| Official verifier result            | PASS  |
 
 **Overall verdict:** Contract compliance is strong. All `reply.send()` calls are either annotated with `@allow-raw-send` or exempted by the verifier (empty sends / 204 No Content). No stack trace leaks detected.
 
@@ -25,56 +25,56 @@
 
 All error codes are defined in `packages/common-core/src/errors.ts` as the `ErrorCode` union type, with a deterministic HTTP status mapping via `ERROR_HTTP_STATUS`.
 
-| Error Code | HTTP Status | Semantic Meaning | Total Uses |
-|---|---|---|---|
-| `INTERNAL_ERROR` | 500 | Unexpected server-side failure | 155 |
-| `NOT_FOUND` | 404 | Resource does not exist | 103 |
-| `UNAUTHORIZED` | 401 | Missing or invalid authentication | 84 |
-| `INVALID_REQUEST` | 400 | Bad input from caller | 50 |
-| `FORBIDDEN` | 403 | Authenticated but not permitted | 46 |
-| `DOWNSTREAM_ERROR` | 502 | Third-party or internal service failure | 46 |
-| `CONFLICT` | 409 | State conflict (duplicate, version mismatch) | 17 |
-| `MISCONFIGURED` | 503 | Service is misconfigured (worker not ready) | 15 |
-| `RATE_LIMITED` | 429 | Caller exceeding rate limits | 6 |
-| `WORKER_NOT_CONFIGURED` | 424 | Worker is not yet configured | 3 |
-| `UNPROCESSABLE_ENTITY` | 422 | Input structurally valid but semantically invalid | 3 |
-| `LOCKED` | 423 | Resource is locked | 3 |
-| `GONE` | 410 | Resource permanently deleted | 2 |
-| `WORKER_UNHEALTHY` | 400 | Worker health check failed | 1 |
-| `WORKER_UNAVAILABLE` | 502 | Worker unavailable temporarily | 1 |
-| `RESEARCH_NOT_COMPLETED` | 400 | Research not in completed state | 1 |
-| `PAGE_NOT_CONFIGURED` | 400 | Notion page not configured | 1 |
-| `NOT_OWNER` | 403 | User does not own the resource | 1 |
-| `NOTION_NOT_CONNECTED` | 400 | Notion integration not set up | 1 |
-| `NO_SYNTHESIS` | 400 | No synthesis available | 1 |
-| `INVALID_WORKER` | 400 | Worker ID is not valid | 1 |
-| `INVALID_STATUS` | *(cast)* | Non-standard — see Consistency Issues | 1 |
-| `ALREADY_EXPORTED` | 409 | Research already exported to Notion | 1 |
+| Error Code               | HTTP Status | Semantic Meaning                                  | Total Uses |
+| ------------------------ | ----------- | ------------------------------------------------- | ---------- |
+| `INTERNAL_ERROR`         | 500         | Unexpected server-side failure                    | 155        |
+| `NOT_FOUND`              | 404         | Resource does not exist                           | 103        |
+| `UNAUTHORIZED`           | 401         | Missing or invalid authentication                 | 84         |
+| `INVALID_REQUEST`        | 400         | Bad input from caller                             | 50         |
+| `FORBIDDEN`              | 403         | Authenticated but not permitted                   | 46         |
+| `DOWNSTREAM_ERROR`       | 502         | Third-party or internal service failure           | 46         |
+| `CONFLICT`               | 409         | State conflict (duplicate, version mismatch)      | 17         |
+| `MISCONFIGURED`          | 503         | Service is misconfigured (worker not ready)       | 15         |
+| `RATE_LIMITED`           | 429         | Caller exceeding rate limits                      | 6          |
+| `WORKER_NOT_CONFIGURED`  | 424         | Worker is not yet configured                      | 3          |
+| `UNPROCESSABLE_ENTITY`   | 422         | Input structurally valid but semantically invalid | 3          |
+| `LOCKED`                 | 423         | Resource is locked                                | 3          |
+| `GONE`                   | 410         | Resource permanently deleted                      | 2          |
+| `WORKER_UNHEALTHY`       | 400         | Worker health check failed                        | 1          |
+| `WORKER_UNAVAILABLE`     | 502         | Worker unavailable temporarily                    | 1          |
+| `RESEARCH_NOT_COMPLETED` | 400         | Research not in completed state                   | 1          |
+| `PAGE_NOT_CONFIGURED`    | 400         | Notion page not configured                        | 1          |
+| `NOT_OWNER`              | 403         | User does not own the resource                    | 1          |
+| `NOTION_NOT_CONNECTED`   | 400         | Notion integration not set up                     | 1          |
+| `NO_SYNTHESIS`           | 400         | No synthesis available                            | 1          |
+| `INVALID_WORKER`         | 400         | Worker ID is not valid                            | 1          |
+| `INVALID_STATUS`         | _(cast)_    | Non-standard — see Consistency Issues             | 1          |
+| `ALREADY_EXPORTED`       | 409         | Research already exported to Notion               | 1          |
 
 **Usage by service:**
 
-| Service | `reply.fail()` calls | `reply.ok()` calls |
-|---|---|---|
-| code-agent | 98 | 35 |
-| research-agent | 86 | 37 |
-| whatsapp-service | 63 | 23 |
-| data-insights-agent | 60 | 25 |
-| user-service | 50 | 22 |
-| linear-agent | 47 | 29 |
-| todos-agent | 37 | 17 |
-| bookmarks-agent | 32 | 17 |
-| actions-agent | 31 | 15 |
-| calendar-agent | 22 | 11 |
-| app-settings-service | 13 | 3 |
-| notes-agent | 12 | 7 |
-| mobile-notifications-service | 11 | 8 |
-| image-service | 11 | 3 |
-| notion-service | 10 | 8 |
-| commands-agent | 10 | 6 |
-| chat-agent | 4 | 1 |
-| web-agent | 2 | 5 |
-| api-docs-hub | 0 | 0 |
-| web (frontend) | 0 | 0 |
+| Service                      | `reply.fail()` calls | `reply.ok()` calls |
+| ---------------------------- | -------------------- | ------------------ |
+| code-agent                   | 98                   | 35                 |
+| research-agent               | 86                   | 37                 |
+| whatsapp-service             | 63                   | 23                 |
+| data-insights-agent          | 60                   | 25                 |
+| user-service                 | 50                   | 22                 |
+| linear-agent                 | 47                   | 29                 |
+| todos-agent                  | 37                   | 17                 |
+| bookmarks-agent              | 32                   | 17                 |
+| actions-agent                | 31                   | 15                 |
+| calendar-agent               | 22                   | 11                 |
+| app-settings-service         | 13                   | 3                  |
+| notes-agent                  | 12                   | 7                  |
+| mobile-notifications-service | 11                   | 8                  |
+| image-service                | 11                   | 3                  |
+| notion-service               | 10                   | 8                  |
+| commands-agent               | 10                   | 6                  |
+| chat-agent                   | 4                    | 1                  |
+| web-agent                    | 2                    | 5                  |
+| api-docs-hub                 | 0                    | 0                  |
+| web (frontend)               | 0                    | 0                  |
 
 ---
 
@@ -84,14 +84,14 @@ All error codes are defined in `packages/common-core/src/errors.ts` as the `Erro
 
 All 17 non-test `reply.send()` calls are annotated. Grouped by reason:
 
-| Category | Services | Count | Reason |
-|---|---|---|---|
-| 204 No Content | calendar-agent, mobile-notifications-service, linear-agent | 3 | HTTP spec — body not permitted |
-| External webhook callback | code-agent (webhookRoutes) | 7 | Orchestrator expects `{ received: true }` contract |
-| Binary/image proxy | bookmarks-agent | 6 | Buffer responses and legacy image format |
-| WhatsApp Meta contract | whatsapp-service (webhookRoutes) | 2 | Meta webhook requires custom format |
-| OAuth2 spec | user-service (oauthRoutes) | 11 | RFC 6749 mandates flat `{ error, error_description }` |
-| Domain error codes | code-agent (codeRoutes, webhookRoutes) | 4 | Application-specific error payloads not supported by `reply.fail()` |
+| Category                  | Services                                                   | Count | Reason                                                              |
+| ------------------------- | ---------------------------------------------------------- | ----- | ------------------------------------------------------------------- |
+| 204 No Content            | calendar-agent, mobile-notifications-service, linear-agent | 3     | HTTP spec — body not permitted                                      |
+| External webhook callback | code-agent (webhookRoutes)                                 | 7     | Orchestrator expects `{ received: true }` contract                  |
+| Binary/image proxy        | bookmarks-agent                                            | 6     | Buffer responses and legacy image format                            |
+| WhatsApp Meta contract    | whatsapp-service (webhookRoutes)                           | 2     | Meta webhook requires custom format                                 |
+| OAuth2 spec               | user-service (oauthRoutes)                                 | 11    | RFC 6749 mandates flat `{ error, error_description }`               |
+| Domain error codes        | code-agent (codeRoutes, webhookRoutes)                     | 4     | Application-specific error payloads not supported by `reply.fail()` |
 
 ---
 
@@ -105,8 +105,8 @@ calendar-agent uses a centralized error-mapping helper that calls `reply.status(
 
 ```typescript
 // calendarRoutes.ts:89-90
-reply.status(500);                                   // Sets 500
-return await reply.fail('DOWNSTREAM_ERROR', error.message);  // Overrides to 502
+reply.status(500); // Sets 500
+return await reply.fail('DOWNSTREAM_ERROR', error.message); // Overrides to 502
 ```
 
 `DOWNSTREAM_ERROR` maps to **502 Bad Gateway**, not 500. The pre-set `status(500)` is misleading to readers even though Fastify will send 502. All other pre-sets happen to match their `ErrorCode` HTTP mappings (403→`FORBIDDEN`, 401→`UNAUTHORIZED`, 404→`NOT_FOUND`, 400→`INVALID_REQUEST`).
@@ -140,6 +140,7 @@ This pattern exists in two places in codeRoutes.ts (lines 3570–3581 region), b
 **Affected services:** calendar-agent, data-insights-agent, linear-agent, whatsapp-service, and others
 
 Pattern:
+
 ```typescript
 return await reply.fail('DOWNSTREAM_ERROR', error.message);
 ```
@@ -151,6 +152,7 @@ This propagates the downstream service's raw error message to the API caller. Fo
 - Be confusing to end-callers who should only see that a downstream service failed
 
 **Services with the most raw `error.message` propagation in DOWNSTREAM_ERROR:**
+
 - `whatsapp-service`: 10+ instances (verificationRoutes, mappingRoutes, messageRoutes)
 - `calendar-agent`: 8 instances (centralized handler)
 - `linear-agent`: 4 instances (centralized handler)
@@ -180,6 +182,7 @@ Domain error messages (e.g., from `Result` types) are typically clean human-read
 web-agent uses a partial-success pattern: failures are returned as `reply.ok({ result: { status: 'failed', error: { code, message } } })` rather than `reply.fail()`. This is intentional — the endpoint supports batch processing where individual URL failures don't constitute a 4xx/5xx response.
 
 The messages embedded in these inline errors include:
+
 - `contentResult.error.message` (from Crawl4AI client)
 - `llmClientResult.error.message` (from user-service)
 - `summaryResult.error.message` (from LLM summarizer)
@@ -190,38 +193,38 @@ These could potentially expose internal service messages to callers. However, th
 
 ## Contract Compliance by Service
 
-| Service | reply.ok | reply.fail | Raw sends | Annotated | Status |
-|---|---|---|---|---|---|
-| actions-agent | 15 | 31 | 0 | — | PASS |
-| api-docs-hub | 0 | 0 | 0 | — | PASS (health endpoint uses standard health format) |
-| app-settings-service | 3 | 13 | 0 | — | PASS |
-| bookmarks-agent | 17 | 32 | 6 | 6 | PASS |
-| calendar-agent | 11 | 22 | 0 | — | PASS (see consistency issue) |
-| chat-agent | 1 | 4 | 0 | — | PASS |
-| code-agent | 35 | 98 | 7 | 7+4 | PASS (see INVALID_STATUS issue) |
-| commands-agent | 6 | 10 | 0 | — | PASS |
-| data-insights-agent | 25 | 60 | 0 | — | PASS |
-| image-service | 3 | 11 | 0 | — | PASS |
-| linear-agent | 29 | 47 | 1 | 1 | PASS |
-| mobile-notifications-service | 8 | 11 | 1 | 1 | PASS |
-| notes-agent | 7 | 12 | 0 | — | PASS |
-| notion-service | 8 | 10 | 0 | — | PASS |
-| research-agent | 37 | 86 | 0 | — | PASS |
-| todos-agent | 17 | 37 | 0 | — | PASS |
-| user-service | 22 | 50 | 11 | 11 | PASS |
-| web-agent | 5 | 2 | 0 | — | PASS |
-| whatsapp-service | 23 | 63 | 2 | 2 | PASS |
+| Service                      | reply.ok | reply.fail | Raw sends | Annotated | Status                                             |
+| ---------------------------- | -------- | ---------- | --------- | --------- | -------------------------------------------------- |
+| actions-agent                | 15       | 31         | 0         | —         | PASS                                               |
+| api-docs-hub                 | 0        | 0          | 0         | —         | PASS (health endpoint uses standard health format) |
+| app-settings-service         | 3        | 13         | 0         | —         | PASS                                               |
+| bookmarks-agent              | 17       | 32         | 6         | 6         | PASS                                               |
+| calendar-agent               | 11       | 22         | 0         | —         | PASS (see consistency issue)                       |
+| chat-agent                   | 1        | 4          | 0         | —         | PASS                                               |
+| code-agent                   | 35       | 98         | 7         | 7+4       | PASS (see INVALID_STATUS issue)                    |
+| commands-agent               | 6        | 10         | 0         | —         | PASS                                               |
+| data-insights-agent          | 25       | 60         | 0         | —         | PASS                                               |
+| image-service                | 3        | 11         | 0         | —         | PASS                                               |
+| linear-agent                 | 29       | 47         | 1         | 1         | PASS                                               |
+| mobile-notifications-service | 8        | 11         | 1         | 1         | PASS                                               |
+| notes-agent                  | 7        | 12         | 0         | —         | PASS                                               |
+| notion-service               | 8        | 10         | 0         | —         | PASS                                               |
+| research-agent               | 37       | 86         | 0         | —         | PASS                                               |
+| todos-agent                  | 17       | 37         | 0         | —         | PASS                                               |
+| user-service                 | 22       | 50         | 11        | 11        | PASS                                               |
+| web-agent                    | 5        | 2          | 0         | —         | PASS                                               |
+| whatsapp-service             | 23       | 63         | 2         | 2         | PASS                                               |
 
 ---
 
 ## Action Items
 
-| ID | Severity | Service | Issue | Action |
-|---|---|---|---|---|
-| EC-01 | MEDIUM | code-agent | `INVALID_STATUS` cast bypasses `ErrorCode` type safety | Map `invalid_status` → `CONFLICT` in the error-mapping block (codeRoutes.ts ~3573) |
-| EC-02 | MEDIUM | calendar-agent | Redundant `reply.status(500)` before `reply.fail('DOWNSTREAM_ERROR')` misleads readers (actual sent status: 502) | Remove pre-set `status()` calls in centralized error handler; let `reply.fail()` own the status |
-| EC-03 | LOW | calendar-agent, linear-agent, whatsapp-service | Raw third-party error messages propagated via `DOWNSTREAM_ERROR` | Standardize with static messages; log originals server-side only |
-| EC-04 | LOW | web-agent | Internal error messages embedded in partial-success `reply.ok()` responses | Document as accepted design for internal-only batch endpoint |
+| ID    | Severity | Service                                        | Issue                                                                                                            | Action                                                                                          |
+| ----- | -------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| EC-01 | MEDIUM   | code-agent                                     | `INVALID_STATUS` cast bypasses `ErrorCode` type safety                                                           | Map `invalid_status` → `CONFLICT` in the error-mapping block (codeRoutes.ts ~3573)              |
+| EC-02 | MEDIUM   | calendar-agent                                 | Redundant `reply.status(500)` before `reply.fail('DOWNSTREAM_ERROR')` misleads readers (actual sent status: 502) | Remove pre-set `status()` calls in centralized error handler; let `reply.fail()` own the status |
+| EC-03 | LOW      | calendar-agent, linear-agent, whatsapp-service | Raw third-party error messages propagated via `DOWNSTREAM_ERROR`                                                 | Standardize with static messages; log originals server-side only                                |
+| EC-04 | LOW      | web-agent                                      | Internal error messages embedded in partial-success `reply.ok()` responses                                       | Document as accepted design for internal-only batch endpoint                                    |
 
 ---
 

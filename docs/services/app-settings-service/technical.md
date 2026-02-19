@@ -76,75 +76,76 @@ graph TB
 
 ### ProviderPricing
 
-| Field       | Type                         | Description                  |
-| ----------- | ---------------------------- | ---------------------------- |
-| `provider`  | string                       | Provider name                |
-| `models`    | Record<string, ModelPricing> | Per-model pricing            |
+| Field       | Type                         | Description                   |
+| ----------- | ---------------------------- | ----------------------------- |
+| `provider`  | string                       | Provider name                 |
+| `models`    | Record<string, ModelPricing> | Per-model pricing             |
 | `updatedAt` | string                       | ISO date of last price update |
 
 ### ModelPricing
 
-| Field                    | Type                           | Description                                         |
-| ------------------------ | ------------------------------ | --------------------------------------------------- |
-| `inputPricePerMillion`   | number                         | Cost per 1M input tokens (USD)                      |
-| `outputPricePerMillion`  | number                         | Cost per 1M output tokens (USD)                     |
-| `cacheReadMultiplier`    | number (optional)              | Multiplier on input cost for cache reads             |
-| `cacheWriteMultiplier`   | number (optional)              | Multiplier on input cost for cache writes            |
-| `webSearchCostPerCall`   | number (optional)              | Fixed cost per web search call (USD)                |
-| `groundingCostPerRequest`| number (optional)              | Fixed cost per grounding request (USD)              |
-| `imagePricing`           | Record<ImageSize, number> (opt)| Cost per image generation by size                   |
-| `useProviderCost`        | boolean (optional)             | Use provider's reported cost instead of calculated  |
+| Field                     | Type                            | Description                                        |
+| ------------------------- | ------------------------------- | -------------------------------------------------- |
+| `inputPricePerMillion`    | number                          | Cost per 1M input tokens (USD)                     |
+| `outputPricePerMillion`   | number                          | Cost per 1M output tokens (USD)                    |
+| `cacheReadMultiplier`     | number (optional)               | Multiplier on input cost for cache reads           |
+| `cacheWriteMultiplier`    | number (optional)               | Multiplier on input cost for cache writes          |
+| `webSearchCostPerCall`    | number (optional)               | Fixed cost per web search call (USD)               |
+| `groundingCostPerRequest` | number (optional)               | Fixed cost per grounding request (USD)             |
+| `imagePricing`            | Record<ImageSize, number> (opt) | Cost per image generation by size                  |
+| `useProviderCost`         | boolean (optional)              | Use provider's reported cost instead of calculated |
 
 ### AggregatedCosts
 
-| Field               | Type           | Description                    |
-| ------------------- | -------------- | ------------------------------ |
-| `totalCostUsd`      | number         | Total cost across all calls    |
-| `totalCalls`        | number         | Total number of calls          |
-| `totalInputTokens`  | number         | Total input tokens consumed    |
-| `totalOutputTokens` | number         | Total output tokens consumed   |
-| `monthlyBreakdown`  | MonthlyCost[]  | Cost grouped by month (newest first) |
-| `byModel`           | ModelCost[]    | Cost grouped by model (highest cost first) |
+| Field               | Type           | Description                                    |
+| ------------------- | -------------- | ---------------------------------------------- |
+| `totalCostUsd`      | number         | Total cost across all calls                    |
+| `totalCalls`        | number         | Total number of calls                          |
+| `totalInputTokens`  | number         | Total input tokens consumed                    |
+| `totalOutputTokens` | number         | Total output tokens consumed                   |
+| `monthlyBreakdown`  | MonthlyCost[]  | Cost grouped by month (newest first)           |
+| `byModel`           | ModelCost[]    | Cost grouped by model (highest cost first)     |
 | `byCallType`        | CallTypeCost[] | Cost grouped by call type (highest cost first) |
 
 ### MonthlyCost
 
-| Field          | Type   | Description                          |
-| -------------- | ------ | ------------------------------------ |
-| `month`        | string | Month key (e.g. "2026-01")           |
-| `costUsd`      | number | Total cost for the month             |
-| `calls`        | number | Total calls for the month            |
-| `inputTokens`  | number | Total input tokens for the month     |
-| `outputTokens` | number | Total output tokens for the month    |
-| `percentage`   | number | % of total cost (0-100, rounded)     |
+| Field          | Type   | Description                       |
+| -------------- | ------ | --------------------------------- |
+| `month`        | string | Month key (e.g. "2026-01")        |
+| `costUsd`      | number | Total cost for the month          |
+| `calls`        | number | Total calls for the month         |
+| `inputTokens`  | number | Total input tokens for the month  |
+| `outputTokens` | number | Total output tokens for the month |
+| `percentage`   | number | % of total cost (0-100, rounded)  |
 
 ### ModelCost
 
-| Field        | Type   | Description                        |
-| ------------ | ------ | ---------------------------------- |
-| `model`      | string | Model identifier                   |
-| `costUsd`    | number | Total cost for this model          |
-| `calls`      | number | Total calls using this model       |
-| `percentage` | number | % of total cost (0-100, rounded)   |
+| Field        | Type   | Description                      |
+| ------------ | ------ | -------------------------------- |
+| `model`      | string | Model identifier                 |
+| `costUsd`    | number | Total cost for this model        |
+| `calls`      | number | Total calls using this model     |
+| `percentage` | number | % of total cost (0-100, rounded) |
 
 ### CallTypeCost
 
-| Field        | Type   | Description                          |
-| ------------ | ------ | ------------------------------------ |
-| `callType`   | string | Call type identifier                 |
-| `costUsd`    | number | Total cost for this call type        |
-| `calls`      | number | Total calls of this type             |
-| `percentage` | number | % of total cost (0-100, rounded)     |
+| Field        | Type   | Description                      |
+| ------------ | ------ | -------------------------------- |
+| `callType`   | string | Call type identifier             |
+| `costUsd`    | number | Total cost for this call type    |
+| `calls`      | number | Total calls of this type         |
+| `percentage` | number | % of total cost (0-100, rounded) |
 
 ## Configuration
 
-| Environment Variable            | Required | Description                                |
-| ------------------------------- | -------- | ------------------------------------------ |
-| `INTEXURAOS_GCP_PROJECT_ID`     | Yes      | GCP project ID for Firestore access        |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`| Yes      | Shared secret for service-to-service calls |
-| `INTEXURAOS_SENTRY_DSN`         | No       | Sentry DSN for error reporting             |
+| Environment Variable             | Required | Description                                |
+| -------------------------------- | -------- | ------------------------------------------ |
+| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | GCP project ID for Firestore access        |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for service-to-service calls |
+| `INTEXURAOS_SENTRY_DSN`          | No       | Sentry DSN for error reporting             |
 
 > **Note:** Firestore collection paths are hardcoded in the repository implementations:
+>
 > - Pricing: `settings/llm_pricing/providers/{provider}`
 > - Usage stats: collection group `by_user` within `llm_usage_stats/{model}/by_call_type/{callType}/by_period/{YYYY-MM-DD}/by_user/{userId}`
 
@@ -152,16 +153,16 @@ graph TB
 
 ### Infrastructure
 
-| Component                                     | Purpose                          |
-| --------------------------------------------- | -------------------------------- |
-| Firestore (`settings/llm_pricing/providers`)  | Provider pricing config (document per provider) |
+| Component                                      | Purpose                                           |
+| ---------------------------------------------- | ------------------------------------------------- |
+| Firestore (`settings/llm_pricing/providers`)   | Provider pricing config (document per provider)   |
 | Firestore (`llm_usage_stats` collection group) | User usage statistics (written by other services) |
 
 ### Internal Services
 
-| Service    | Purpose                                            |
-| ---------- | -------------------------------------------------- |
-| (multiple) | Fetch pricing via internal endpoint at startup     |
+| Service    | Purpose                                        |
+| ---------- | ---------------------------------------------- |
+| (multiple) | Fetch pricing via internal endpoint at startup |
 
 ## Startup Validation
 

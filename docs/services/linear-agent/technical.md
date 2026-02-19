@@ -179,18 +179,18 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                              | Date       |
-| ---------- | ------------------------------------------------------------------------ | ---------- |
-| `75cc9eb7` | Fix validateIssue label serialization; map LinearLabel[] to string[]     | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting via createLogStream() for PM2 readability    | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (distributed tracing + metrics)      | 2026-02-16 |
-| `3f58c89f` | Switch Linear dashboard to Firestore with parent-child support           | 2026-02-10 |
-| `08dbaf84` | Show subissues under parent issues on Linear board                       | 2026-02-10 |
-| `55dd047d` | Add labels support to Linear Issues view                                 | 2026-02-10 |
-| `c1fe452d` | Remove regex fallback from title generation, always use LLM              | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback + longer timeout  | 2026-02-15 |
-| `1c7d6455` | Fix sync-all 401 by accepting OIDC tokens from Cloud Scheduler           | 2026-02-14 |
-| `151e93d4` | Fix Linear webhook signature validation                                  | 2026-02-10 |
+| Commit     | Description                                                            | Date       |
+| ---------- | ---------------------------------------------------------------------- | ---------- |
+| `75cc9eb7` | Fix validateIssue label serialization; map LinearLabel[] to string[]   | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting via createLogStream() for PM2 readability  | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (distributed tracing + metrics)    | 2026-02-16 |
+| `3f58c89f` | Switch Linear dashboard to Firestore with parent-child support         | 2026-02-10 |
+| `08dbaf84` | Show subissues under parent issues on Linear board                     | 2026-02-10 |
+| `55dd047d` | Add labels support to Linear Issues view                               | 2026-02-10 |
+| `c1fe452d` | Remove regex fallback from title generation, always use LLM            | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback + longer timeout | 2026-02-15 |
+| `1c7d6455` | Fix sync-all 401 by accepting OIDC tokens from Cloud Scheduler         | 2026-02-14 |
+| `151e93d4` | Fix Linear webhook signature validation                                | 2026-02-10 |
 
 ### Firestore-First Dashboard (0fa80ae6 + 3f58c89f)
 
@@ -259,22 +259,22 @@ The `POST /linear/failed-issues/:id/retry` endpoint previously used `teamId: 'TO
 
 ### Public Endpoints
 
-| Method | Path                                      | Purpose                           | Auth   |
-| ------ | ----------------------------------------- | --------------------------------- | ------ |
-| GET    | `/linear/connection`                      | Get user's connection status      | Bearer |
-| POST   | `/linear/connection/validate`             | Validate API key, get teams       | None   |
-| POST   | `/linear/connection`                      | Save connection configuration     | Bearer |
-| DELETE | `/linear/connection`                      | Disconnect from Linear            | Bearer |
-| GET    | `/linear/issues`                          | List issues grouped by column     | Bearer |
-| GET    | `/linear/issues/:identifier`              | Get single issue with comments    | Bearer |
-| GET    | `/linear/issues/:identifier/comments`     | List paginated issue comments     | Bearer |
-| GET    | `/linear/failed-issues`                   | List failed extractions           | Bearer |
-| DELETE | `/linear/failed-issues/:id`               | Delete a failed extraction        | Bearer |
-| POST   | `/linear/failed-issues/:id/retry`         | Retry a failed extraction         | Bearer |
-| POST   | `/linear/sync`                            | Trigger full issue sync           | Bearer |
-| GET    | `/linear/webhook-config`                  | Get webhook URL and secret status | Bearer |
-| POST   | `/linear/webhook-config`                  | Set webhook signing secret        | Bearer |
-| DELETE | `/linear/webhook-config`                  | Remove webhook signing secret     | Bearer |
+| Method | Path                                  | Purpose                           | Auth   |
+| ------ | ------------------------------------- | --------------------------------- | ------ |
+| GET    | `/linear/connection`                  | Get user's connection status      | Bearer |
+| POST   | `/linear/connection/validate`         | Validate API key, get teams       | None   |
+| POST   | `/linear/connection`                  | Save connection configuration     | Bearer |
+| DELETE | `/linear/connection`                  | Disconnect from Linear            | Bearer |
+| GET    | `/linear/issues`                      | List issues grouped by column     | Bearer |
+| GET    | `/linear/issues/:identifier`          | Get single issue with comments    | Bearer |
+| GET    | `/linear/issues/:identifier/comments` | List paginated issue comments     | Bearer |
+| GET    | `/linear/failed-issues`               | List failed extractions           | Bearer |
+| DELETE | `/linear/failed-issues/:id`           | Delete a failed extraction        | Bearer |
+| POST   | `/linear/failed-issues/:id/retry`     | Retry a failed extraction         | Bearer |
+| POST   | `/linear/sync`                        | Trigger full issue sync           | Bearer |
+| GET    | `/linear/webhook-config`              | Get webhook URL and secret status | Bearer |
+| POST   | `/linear/webhook-config`              | Set webhook signing secret        | Bearer |
+| DELETE | `/linear/webhook-config`              | Remove webhook signing secret     | Bearer |
 
 ### Webhook Endpoints
 
@@ -284,28 +284,28 @@ The `POST /linear/failed-issues/:id/retry` endpoint previously used `teamId: 'TO
 
 ### Internal Endpoints
 
-| Method | Path                                              | Purpose                               | Auth              |
-| ------ | ------------------------------------------------- | ------------------------------------- | ----------------- |
-| POST   | `/internal/linear/process-action`                 | Process action via AI extraction      | X-Internal        |
-| GET    | `/internal/linear/issues/:identifier/validate`    | Validate issue identifier             | X-Internal        |
-| POST   | `/internal/linear/issues/generate-title`          | Generate title from description       | X-Internal        |
-| POST   | `/internal/linear/sync`                           | Full sync for a user                  | X-Internal        |
-| POST   | `/internal/linear/sync-all`                       | Full sync for all users (Scheduler)   | X-Internal / OIDC |
-| POST   | `/internal/issues`                                | Create a Linear issue                 | X-Internal        |
-| PATCH  | `/internal/issues/:issueId/state`                 | Update issue workflow state           | X-Internal        |
+| Method | Path                                           | Purpose                             | Auth              |
+| ------ | ---------------------------------------------- | ----------------------------------- | ----------------- |
+| POST   | `/internal/linear/process-action`              | Process action via AI extraction    | X-Internal        |
+| GET    | `/internal/linear/issues/:identifier/validate` | Validate issue identifier           | X-Internal        |
+| POST   | `/internal/linear/issues/generate-title`       | Generate title from description     | X-Internal        |
+| POST   | `/internal/linear/sync`                        | Full sync for a user                | X-Internal        |
+| POST   | `/internal/linear/sync-all`                    | Full sync for all users (Scheduler) | X-Internal / OIDC |
+| POST   | `/internal/issues`                             | Create a Linear issue               | X-Internal        |
+| PATCH  | `/internal/issues/:issueId/state`              | Update issue workflow state         | X-Internal        |
 
 ### GET /linear/issues Response
 
 ```typescript
 interface ListIssuesResponse {
   issues: {
-    todo: LinearIssue[];       // Issues in "Todo" state
-    backlog: LinearIssue[];    // Issues in "Backlog" state
+    todo: LinearIssue[]; // Issues in "Todo" state
+    backlog: LinearIssue[]; // Issues in "Backlog" state
     in_progress: LinearIssue[]; // Issues being worked on
-    in_review: LinearIssue[];  // Issues in code review
-    to_test: LinearIssue[];    // Issues awaiting QA
-    done: LinearIssue[];       // Completed in last 7 days
-    archive: LinearIssue[];    // Older completed issues
+    in_review: LinearIssue[]; // Issues in code review
+    to_test: LinearIssue[]; // Issues awaiting QA
+    done: LinearIssue[]; // Completed in last 7 days
+    archive: LinearIssue[]; // Older completed issues
   };
   teamName: string;
 }
@@ -391,7 +391,7 @@ Used in `LinearIssue`, `LinearIssueWithTeam`, and `SyncedLinearIssue`. Note: lab
 ```typescript
 interface LinearIssue {
   id: string;
-  identifier: string;           // e.g., "INT-123"
+  identifier: string; // e.g., "INT-123"
   title: string;
   description: string | null;
   priority: 0 | 1 | 2 | 3 | 4; // 0=none, 1=urgent, 4=low
@@ -404,10 +404,10 @@ interface LinearIssue {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
-  parentId?: string | null;     // Parent issue UUID
-  childCount: number;           // Calculated from children array
-  children: LinearIssue[];      // Populated in listIssues use case
-  labels: LinearLabel[];        // Full label objects with color
+  parentId?: string | null; // Parent issue UUID
+  childCount: number; // Calculated from children array
+  children: LinearIssue[]; // Populated in listIssues use case
+  labels: LinearLabel[]; // Full label objects with color
 }
 ```
 
@@ -426,23 +426,23 @@ Used by `validateIssue` and `getIssueByIdentifier` for team ownership verificati
 
 ```typescript
 interface SyncedLinearIssue {
-  id: string;               // Linear UUID (document ID)
-  identifier: string;       // e.g., "INT-444"
+  id: string; // Linear UUID (document ID)
+  identifier: string; // e.g., "INT-444"
   title: string;
   description: string | null;
-  state: string;            // State name e.g., "In Progress"
+  state: string; // State name e.g., "In Progress"
   stateType: IssueStateCategory;
   priority: LinearPriority;
   assigneeId: string | null;
   assigneeName: string | null;
-  labels: LinearLabel[];    // Full objects with id, name, color
+  labels: LinearLabel[]; // Full objects with id, name, color
   url: string;
-  userId: string;           // Owner user ID (for multi-tenant)
-  parentId: string | null;  // Parent issue UUID (null for top-level)
+  userId: string; // Owner user ID (for multi-tenant)
+  parentId: string | null; // Parent issue UUID (null for top-level)
   createdAt: string;
   updatedAt: string;
   syncedAt: string;
-  teamId: string;           // Linear team ID (for webhook secret lookup)
+  teamId: string; // Linear team ID (for webhook secret lookup)
 }
 ```
 
@@ -452,12 +452,12 @@ Stored in Firestore. Created from webhook payloads via `mapWebhookToSyncedIssue`
 
 ```typescript
 interface LinearComment {
-  id: string;               // Linear UUID (document ID)
-  issueId: string;          // Linear issue UUID
-  issueIdentifier: string;  // e.g., "INT-444"
-  userId: string;           // Comment author Linear user ID
-  userName: string;         // Comment author display name
-  body: string;             // Comment body (markdown)
+  id: string; // Linear UUID (document ID)
+  issueId: string; // Linear issue UUID
+  issueIdentifier: string; // e.g., "INT-444"
+  userId: string; // Comment author Linear user ID
+  userName: string; // Comment author display name
+  body: string; // Comment body (markdown)
   createdAt: string;
   updatedAt: string;
   syncedAt: string;
@@ -717,18 +717,18 @@ The Linear API client includes performance optimizations (INT-95):
 
 ## Configuration
 
-| Variable                              | Required | Description                              |
-| ------------------------------------- | -------- | ---------------------------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys                |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth                  |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source               |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                      |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                             |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                           |
-| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                    |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key                  |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key                     |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint (no-op if unset)     |
+| Variable                              | Required | Description                          |
+| ------------------------------------- | -------- | ------------------------------------ |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys            |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth              |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source           |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                  |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                         |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                       |
+| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key              |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key                 |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint (no-op if unset) |
 
 ## Dependencies
 

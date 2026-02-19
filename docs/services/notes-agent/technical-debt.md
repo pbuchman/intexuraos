@@ -92,11 +92,11 @@ No deprecated APIs or dependencies in use.
 
 ### Recent Improvements
 
-| Date       | Improvement                                         | Detail                                             |
-| ---------- | --------------------------------------------------- | -------------------------------------------------- |
-| 2026-02-16 | Dash0 OpenTelemetry integration                     | Added distributed tracing via `@intexuraos/infra-dash0` |
-| 2026-02-16 | Dev-mode log formatting for PM2                     | Improved local log readability in PM2 output       |
-| 2026-02-14 | PM2 ecosystem uses pnpm --filter start:local        | Unified local start script across all services     |
+| Date       | Improvement                                  | Detail                                                  |
+| ---------- | -------------------------------------------- | ------------------------------------------------------- |
+| 2026-02-16 | Dash0 OpenTelemetry integration              | Added distributed tracing via `@intexuraos/infra-dash0` |
+| 2026-02-16 | Dev-mode log formatting for PM2              | Improved local log readability in PM2 output            |
+| 2026-02-14 | PM2 ecosystem uses pnpm --filter start:local | Unified local start script across all services          |
 
 ### Historical Issues
 

@@ -7,14 +7,14 @@
 
 ## Summary
 
-| Metric | Count |
-|---|---|
-| Services with URL env vars | 19 |
-| Consistent across ecosystem + terraform | 18 |
-| In terraform only (not in ecosystem) | 1 |
-| In ecosystem only (not in terraform) | 0 |
-| In internal-clients (as typed client) | 1 |
-| Discrepancies | 2 |
+| Metric                                  | Count |
+| --------------------------------------- | ----- |
+| Services with URL env vars              | 19    |
+| Consistent across ecosystem + terraform | 18    |
+| In terraform only (not in ecosystem)    | 1     |
+| In ecosystem only (not in terraform)    | 0     |
+| In internal-clients (as typed client)   | 1     |
+| Discrepancies                           | 2     |
 
 ---
 
@@ -22,27 +22,27 @@
 
 All service URLs follow the pattern `INTEXURAOS_<SERVICE>_URL`.
 
-| Service | Ecosystem (`COMMON_SERVICE_URLS`) | Terraform (`common_service_env_vars`) | Internal-Clients Usage | Status |
-|---|---|---|---|---|
-| user-service | `INTEXURAOS_USER_SERVICE_URL` (:8110) | `INTEXURAOS_USER_SERVICE_URL` | `createUserServiceClient` uses `config.baseUrl` | OK |
-| notion-service | `INTEXURAOS_NOTION_SERVICE_URL` (:8112) | `INTEXURAOS_NOTION_SERVICE_URL` | Direct fetch in research-agent | OK |
-| whatsapp-service | `INTEXURAOS_WHATSAPP_SERVICE_URL` (:8113) | `INTEXURAOS_WHATSAPP_SERVICE_URL` | Direct fetch in code-agent | OK |
-| mobile-notifications-service | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` (:8114) | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Direct fetch in data-insights-agent | OK |
-| research-agent | `INTEXURAOS_RESEARCH_AGENT_URL` (:8116) | `INTEXURAOS_RESEARCH_AGENT_URL` | Direct fetch in actions-agent | OK |
-| commands-agent | `INTEXURAOS_COMMANDS_AGENT_URL` (:8117) | `INTEXURAOS_COMMANDS_AGENT_URL` | Direct fetch in commands-agent/web | OK |
-| actions-agent | `INTEXURAOS_ACTIONS_AGENT_URL` (:8118) | `INTEXURAOS_ACTIONS_AGENT_URL` | Direct fetch in code-agent, commands-agent | OK |
-| data-insights-agent | `INTEXURAOS_DATA_INSIGHTS_AGENT_URL` (:8119) | `INTEXURAOS_DATA_INSIGHTS_AGENT_URL` | Direct fetch in web | OK |
-| image-service | `INTEXURAOS_IMAGE_SERVICE_URL` (:8120) | `INTEXURAOS_IMAGE_SERVICE_URL` | Direct fetch in research-agent | OK |
-| notes-agent | `INTEXURAOS_NOTES_AGENT_URL` (:8121) | `INTEXURAOS_NOTES_AGENT_URL` | Direct fetch in actions-agent | OK |
-| app-settings-service | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` (:8122) | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Direct fetch in multiple services | OK |
-| todos-agent | `INTEXURAOS_TODOS_AGENT_URL` (:8123) | `INTEXURAOS_TODOS_AGENT_URL` | Direct fetch in actions-agent | OK |
-| bookmarks-agent | `INTEXURAOS_BOOKMARKS_AGENT_URL` (:8124) | `INTEXURAOS_BOOKMARKS_AGENT_URL` | Direct fetch in actions-agent | OK |
-| calendar-agent | `INTEXURAOS_CALENDAR_AGENT_URL` (:8125) | `INTEXURAOS_CALENDAR_AGENT_URL` | Direct fetch in actions-agent | OK |
-| linear-agent | `INTEXURAOS_LINEAR_AGENT_URL` (:8126) | `INTEXURAOS_LINEAR_AGENT_URL` | Direct fetch in actions-agent, code-agent | OK |
-| web-agent | `INTEXURAOS_WEB_AGENT_URL` (:8127) | `INTEXURAOS_WEB_AGENT_URL` | Direct fetch in whatsapp-service, bookmarks-agent | OK |
-| code-agent | `INTEXURAOS_CODE_AGENT_URL` (:8128) | `INTEXURAOS_CODE_AGENT_URL` | Direct fetch in actions-agent | OK |
-| chat-agent | `INTEXURAOS_CHAT_AGENT_URL` (:8129) | `INTEXURAOS_CHAT_AGENT_URL` | Direct fetch in web | OK |
-| api-docs-hub | **MISSING** | `INTEXURAOS_API_DOCS_HUB_URL` | No code references found | DISCREPANCY |
+| Service                      | Ecosystem (`COMMON_SERVICE_URLS`)                     | Terraform (`common_service_env_vars`)         | Internal-Clients Usage                            | Status      |
+| ---------------------------- | ----------------------------------------------------- | --------------------------------------------- | ------------------------------------------------- | ----------- |
+| user-service                 | `INTEXURAOS_USER_SERVICE_URL` (:8110)                 | `INTEXURAOS_USER_SERVICE_URL`                 | `createUserServiceClient` uses `config.baseUrl`   | OK          |
+| notion-service               | `INTEXURAOS_NOTION_SERVICE_URL` (:8112)               | `INTEXURAOS_NOTION_SERVICE_URL`               | Direct fetch in research-agent                    | OK          |
+| whatsapp-service             | `INTEXURAOS_WHATSAPP_SERVICE_URL` (:8113)             | `INTEXURAOS_WHATSAPP_SERVICE_URL`             | Direct fetch in code-agent                        | OK          |
+| mobile-notifications-service | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` (:8114) | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Direct fetch in data-insights-agent               | OK          |
+| research-agent               | `INTEXURAOS_RESEARCH_AGENT_URL` (:8116)               | `INTEXURAOS_RESEARCH_AGENT_URL`               | Direct fetch in actions-agent                     | OK          |
+| commands-agent               | `INTEXURAOS_COMMANDS_AGENT_URL` (:8117)               | `INTEXURAOS_COMMANDS_AGENT_URL`               | Direct fetch in commands-agent/web                | OK          |
+| actions-agent                | `INTEXURAOS_ACTIONS_AGENT_URL` (:8118)                | `INTEXURAOS_ACTIONS_AGENT_URL`                | Direct fetch in code-agent, commands-agent        | OK          |
+| data-insights-agent          | `INTEXURAOS_DATA_INSIGHTS_AGENT_URL` (:8119)          | `INTEXURAOS_DATA_INSIGHTS_AGENT_URL`          | Direct fetch in web                               | OK          |
+| image-service                | `INTEXURAOS_IMAGE_SERVICE_URL` (:8120)                | `INTEXURAOS_IMAGE_SERVICE_URL`                | Direct fetch in research-agent                    | OK          |
+| notes-agent                  | `INTEXURAOS_NOTES_AGENT_URL` (:8121)                  | `INTEXURAOS_NOTES_AGENT_URL`                  | Direct fetch in actions-agent                     | OK          |
+| app-settings-service         | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` (:8122)         | `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Direct fetch in multiple services                 | OK          |
+| todos-agent                  | `INTEXURAOS_TODOS_AGENT_URL` (:8123)                  | `INTEXURAOS_TODOS_AGENT_URL`                  | Direct fetch in actions-agent                     | OK          |
+| bookmarks-agent              | `INTEXURAOS_BOOKMARKS_AGENT_URL` (:8124)              | `INTEXURAOS_BOOKMARKS_AGENT_URL`              | Direct fetch in actions-agent                     | OK          |
+| calendar-agent               | `INTEXURAOS_CALENDAR_AGENT_URL` (:8125)               | `INTEXURAOS_CALENDAR_AGENT_URL`               | Direct fetch in actions-agent                     | OK          |
+| linear-agent                 | `INTEXURAOS_LINEAR_AGENT_URL` (:8126)                 | `INTEXURAOS_LINEAR_AGENT_URL`                 | Direct fetch in actions-agent, code-agent         | OK          |
+| web-agent                    | `INTEXURAOS_WEB_AGENT_URL` (:8127)                    | `INTEXURAOS_WEB_AGENT_URL`                    | Direct fetch in whatsapp-service, bookmarks-agent | OK          |
+| code-agent                   | `INTEXURAOS_CODE_AGENT_URL` (:8128)                   | `INTEXURAOS_CODE_AGENT_URL`                   | Direct fetch in actions-agent                     | OK          |
+| chat-agent                   | `INTEXURAOS_CHAT_AGENT_URL` (:8129)                   | `INTEXURAOS_CHAT_AGENT_URL`                   | Direct fetch in web                               | OK          |
+| api-docs-hub                 | **MISSING**                                           | `INTEXURAOS_API_DOCS_HUB_URL`                 | No code references found                          | DISCREPANCY |
 
 ---
 
@@ -52,10 +52,10 @@ All service URLs follow the pattern `INTEXURAOS_<SERVICE>_URL`.
 
 `code-agent` uses two distinct URL variables:
 
-| Variable | Purpose | Ecosystem | Terraform |
-|---|---|---|---|
-| `INTEXURAOS_CODE_AGENT_URL` | Used by OTHER services to call code-agent | In `COMMON_SERVICE_URLS` | In `common_service_env_vars` |
-| `INTEXURAOS_SERVICE_URL` | Used BY code-agent itself (for webhook callback URLs) | In `SERVICE_ENV_MAPPINGS['code-agent']` | In code-agent-specific `env_vars` block |
+| Variable                    | Purpose                                               | Ecosystem                               | Terraform                               |
+| --------------------------- | ----------------------------------------------------- | --------------------------------------- | --------------------------------------- |
+| `INTEXURAOS_CODE_AGENT_URL` | Used by OTHER services to call code-agent             | In `COMMON_SERVICE_URLS`                | In `common_service_env_vars`            |
+| `INTEXURAOS_SERVICE_URL`    | Used BY code-agent itself (for webhook callback URLs) | In `SERVICE_ENV_MAPPINGS['code-agent']` | In code-agent-specific `env_vars` block |
 
 Both are consistent and intentional. `INTEXURAOS_SERVICE_URL` is deliberately not prefixed with the service name as it is a self-reference pattern.
 
@@ -71,13 +71,13 @@ The `packages/internal-clients` package contains only one typed client: `createU
 
 **Severity:** MEDIUM
 
-| Attribute | Value |
-|---|---|
-| Variable | `INTEXURAOS_API_DOCS_HUB_URL` |
-| In terraform `common_service_env_vars` | YES (line 285) |
-| In ecosystem `COMMON_SERVICE_URLS` | NO |
-| Code references in apps/ | None found |
-| `api-docs-hub` in PM2 ecosystem | NO (no `createServiceConfig` call) |
+| Attribute                              | Value                              |
+| -------------------------------------- | ---------------------------------- |
+| Variable                               | `INTEXURAOS_API_DOCS_HUB_URL`      |
+| In terraform `common_service_env_vars` | YES (line 285)                     |
+| In ecosystem `COMMON_SERVICE_URLS`     | NO                                 |
+| Code references in apps/               | None found                         |
+| `api-docs-hub` in PM2 ecosystem        | NO (no `createServiceConfig` call) |
 
 **Analysis:** The `api-docs-hub` service exists as an app (`apps/api-docs-hub/`) and is deployed to Cloud Run (terraform module at line 961), but it is not managed by PM2 in the local/dev environment (`ecosystem.config.cjs`). Because `INTEXURAOS_API_DOCS_HUB_URL` is in terraform's `common_service_env_vars`, it is distributed to all services in production — but no app currently reads this variable. This is an orphaned URL in terraform.
 
@@ -93,11 +93,11 @@ The `packages/internal-clients` package contains only one typed client: `createU
 
 **Severity:** LOW (architectural observation, not a functional bug)
 
-| Attribute | Value |
-|---|---|
-| Services with shared typed clients | 1 (user-service only) |
-| Services relying on direct fetch | 18 |
-| Consistency of env var names | All consistent between ecosystem and terraform |
+| Attribute                          | Value                                          |
+| ---------------------------------- | ---------------------------------------------- |
+| Services with shared typed clients | 1 (user-service only)                          |
+| Services relying on direct fetch   | 18                                             |
+| Consistency of env var names       | All consistent between ecosystem and terraform |
 
 **Analysis:** The `packages/internal-clients` package is not a comprehensive inter-service client library — it only covers user-service. All other inter-service calls use raw `fetch()` with `X-Internal-Auth` headers directly in app code. This is a structural pattern, not a bug, but it means there is no single place to verify URL env var usage for non-user services. The env var names are consistent between ecosystem.config.cjs and terraform for all 18 services.
 
@@ -107,11 +107,11 @@ The `packages/internal-clients` package contains only one typed client: `createU
 
 ## Action Items
 
-| Priority | Item | Severity |
-|---|---|---|
-| 1 | Confirm whether api-docs-hub should run locally via PM2; if yes, add to ecosystem.config.cjs | MEDIUM |
-| 2 | Determine if `INTEXURAOS_API_DOCS_HUB_URL` in terraform is forward-looking or orphaned; remove if no consumer is planned | MEDIUM |
-| 3 | Document that inter-service URL access pattern uses direct fetch (not internal-clients) for all non-user services | LOW |
+| Priority | Item                                                                                                                     | Severity |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ | -------- |
+| 1        | Confirm whether api-docs-hub should run locally via PM2; if yes, add to ecosystem.config.cjs                             | MEDIUM   |
+| 2        | Determine if `INTEXURAOS_API_DOCS_HUB_URL` in terraform is forward-looking or orphaned; remove if no consumer is planned | MEDIUM   |
+| 3        | Document that inter-service URL access pattern uses direct fetch (not internal-clients) for all non-user services        | LOW      |
 
 ---
 

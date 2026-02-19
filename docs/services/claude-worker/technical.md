@@ -42,15 +42,15 @@ graph TB
 
 ### Resource Limits
 
-| Resource | Limit                  | Enforcement         |
-| -------- | ---------------------- | ------------------- |
-| Memory   | 30 GB                  | Docker cgroup       |
-| CPU      | 20 cores (20e9 NanoCpu)| Docker cgroup       |
-| tmpfs    | /tmp: 2 GB             | Mount option        |
-| tmpfs    | /home/claude: 500 MB   | Mount option        |
-| tmpfs    | /repo/node_modules: 4 GB | Mount option      |
-| Timeout  | 2 hours                | Orchestrator timer  |
-| Max pool | 4 concurrent           | DockerProvider code |
+| Resource | Limit                    | Enforcement         |
+| -------- | ------------------------ | ------------------- |
+| Memory   | 30 GB                    | Docker cgroup       |
+| CPU      | 20 cores (20e9 NanoCpu)  | Docker cgroup       |
+| tmpfs    | /tmp: 2 GB               | Mount option        |
+| tmpfs    | /home/claude: 500 MB     | Mount option        |
+| tmpfs    | /repo/node_modules: 4 GB | Mount option        |
+| Timeout  | 2 hours                  | Orchestrator timer  |
+| Max pool | 4 concurrent             | DockerProvider code |
 
 ### Security Controls
 
@@ -79,48 +79,48 @@ Network: `claude-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquera
 
 ## Mount Points
 
-| Container Path        | Host Source                                      | Mode        | Purpose                                    |
-| --------------------- | ------------------------------------------------ | ----------- | ------------------------------------------ |
-| `/repo`               | `{secretsBasePath}/../worktrees/{taskId}`        | rw          | Git worktree for the task                  |
-| `/secrets`            | `{secretsBasePath}/{taskId}`                     | ro          | GCP SA key + GitHub token + prompt files   |
-| `/home/claude/pnpm-store` | `{secretsBasePath}/../pnpm-store`            | rw          | Shared pnpm content-addressable store      |
-| `/home/claude/.claude`| `{secretsBasePath}/claude-session-{taskId}`      | rw          | Claude session state (persists across attempts) |
-| `/tmp`                | tmpfs                                            | rw,noexec   | Ephemeral scratch + ready marker           |
-| `/home/claude`        | tmpfs (500 MB)                                   | rw,noexec   | Home directory (pnpm-store and .claude overlaid) |
-| `/repo/node_modules`  | tmpfs (4 GB)                                     | rw,exec     | Linux-native node_modules (shadows Mac host mount) |
-| `{mainGitDir}`        | Main `.git` directory (for worktrees)            | rw          | Git operations on worktrees                |
+| Container Path            | Host Source                                 | Mode      | Purpose                                            |
+| ------------------------- | ------------------------------------------- | --------- | -------------------------------------------------- |
+| `/repo`                   | `{secretsBasePath}/../worktrees/{taskId}`   | rw        | Git worktree for the task                          |
+| `/secrets`                | `{secretsBasePath}/{taskId}`                | ro        | GCP SA key + GitHub token + prompt files           |
+| `/home/claude/pnpm-store` | `{secretsBasePath}/../pnpm-store`           | rw        | Shared pnpm content-addressable store              |
+| `/home/claude/.claude`    | `{secretsBasePath}/claude-session-{taskId}` | rw        | Claude session state (persists across attempts)    |
+| `/tmp`                    | tmpfs                                       | rw,noexec | Ephemeral scratch + ready marker                   |
+| `/home/claude`            | tmpfs (500 MB)                              | rw,noexec | Home directory (pnpm-store and .claude overlaid)   |
+| `/repo/node_modules`      | tmpfs (4 GB)                                | rw,exec   | Linux-native node_modules (shadows Mac host mount) |
+| `{mainGitDir}`            | Main `.git` directory (for worktrees)       | rw        | Git operations on worktrees                        |
 
 ### Secrets Directory Files
 
-| File                      | Required | Description                                       |
-| ------------------------- | -------- | ------------------------------------------------- |
-| `gcp-sa.json`             | Optional | GCP service account key for gcloud auth           |
-| `github-token`            | Optional | GitHub access token (refreshed every 30 min)      |
-| `system-prompt.txt`       | Required | Claude system prompt (read at `run-attempt` time) |
-| `user-prompt.txt`         | Required | Claude user prompt (read via stdin redirect)      |
+| File                | Required | Description                                       |
+| ------------------- | -------- | ------------------------------------------------- |
+| `gcp-sa.json`       | Optional | GCP service account key for gcloud auth           |
+| `github-token`      | Optional | GitHub access token (refreshed every 30 min)      |
+| `system-prompt.txt` | Required | Claude system prompt (read at `run-attempt` time) |
+| `user-prompt.txt`   | Required | Claude user prompt (read via stdin redirect)      |
 
 ## Environment Variables
 
-| Variable                            | Source           | Description                                            |
-| ----------------------------------- | ---------------- | ------------------------------------------------------ |
-| `TASK_ID`                           | Orchestrator     | Unique task identifier                                 |
-| `ANTHROPIC_API_KEY`                 | Orchestrator env | API key for Anthropic (opus/auto types); omitted when shared credentials are used |
-| `ANTHROPIC_BASE_URL`                | Worker type map  | API endpoint URL; omitted when shared credentials are used |
-| `ANTHROPIC_MODEL`                   | Worker type map  | Model override (opus only)                             |
-| `LINEAR_API_KEY`                    | Orchestrator env | Linear integration key                                 |
-| `SENTRY_AUTH_TOKEN`                 | Orchestrator env | Sentry error tracking token                            |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | Fixed            | `/secrets/gcp-sa.json`                                 |
-| `CLAUDE_PROJECT_DIR`                | Fixed            | `/repo`                                                |
-| `CLAUDE_WORKER_MODE`                | Fixed            | `1` — identifies this as an automated worker process   |
-| `CLAUDE_MANAGED_MODE`               | Orchestrator     | `1` = stay alive, accept `run-attempt` via docker exec |
-| `CLAUDE_CONTINUE`                   | Orchestrator     | `1` = pass `--continue` to resume previous session     |
-| `GIT_USER_NAME`                     | Orchestrator env | Git commit author name                                 |
-| `GIT_USER_EMAIL`                    | Orchestrator env | Git commit author email                                |
-| `HOME`                              | Dockerfile       | `/home/claude`                                         |
-| `NODE_ENV`                          | Dockerfile       | `production` (or `test` in test image)                 |
-| `COREPACK_ENABLE_DOWNLOAD_PROMPT`   | Dockerfile/env   | `0` — suppress corepack prompts in CI                  |
-| `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD`  | Dockerfile       | `1` — use system Chromium                              |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Dockerfile     | `/usr/bin/chromium-browser`                            |
+| Variable                              | Source           | Description                                                                       |
+| ------------------------------------- | ---------------- | --------------------------------------------------------------------------------- |
+| `TASK_ID`                             | Orchestrator     | Unique task identifier                                                            |
+| `ANTHROPIC_API_KEY`                   | Orchestrator env | API key for Anthropic (opus/auto types); omitted when shared credentials are used |
+| `ANTHROPIC_BASE_URL`                  | Worker type map  | API endpoint URL; omitted when shared credentials are used                        |
+| `ANTHROPIC_MODEL`                     | Worker type map  | Model override (opus only)                                                        |
+| `LINEAR_API_KEY`                      | Orchestrator env | Linear integration key                                                            |
+| `SENTRY_AUTH_TOKEN`                   | Orchestrator env | Sentry error tracking token                                                       |
+| `GOOGLE_APPLICATION_CREDENTIALS`      | Fixed            | `/secrets/gcp-sa.json`                                                            |
+| `CLAUDE_PROJECT_DIR`                  | Fixed            | `/repo`                                                                           |
+| `CLAUDE_WORKER_MODE`                  | Fixed            | `1` — identifies this as an automated worker process                              |
+| `CLAUDE_MANAGED_MODE`                 | Orchestrator     | `1` = stay alive, accept `run-attempt` via docker exec                            |
+| `CLAUDE_CONTINUE`                     | Orchestrator     | `1` = pass `--continue` to resume previous session                                |
+| `GIT_USER_NAME`                       | Orchestrator env | Git commit author name                                                            |
+| `GIT_USER_EMAIL`                      | Orchestrator env | Git commit author email                                                           |
+| `HOME`                                | Dockerfile       | `/home/claude`                                                                    |
+| `NODE_ENV`                            | Dockerfile       | `production` (or `test` in test image)                                            |
+| `COREPACK_ENABLE_DOWNLOAD_PROMPT`     | Dockerfile/env   | `0` — suppress corepack prompts in CI                                             |
+| `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD`    | Dockerfile       | `1` — use system Chromium                                                         |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Dockerfile       | `/usr/bin/chromium-browser`                                                       |
 
 ## Worker Types
 
@@ -158,6 +158,7 @@ docker exec <container> /entrypoint.sh run-attempt
 ```
 
 The `run-attempt` handler:
+
 1. Verifies `/tmp/worker-ready` exists
 2. Checks `/secrets/system-prompt.txt` and `/secrets/user-prompt.txt` are present
 3. Sets up git identity and GitHub token for this attempt
@@ -206,44 +207,44 @@ If `/repo/.claude/settings.local.json` already exists, the entrypoint merges the
 
 ## Installed Toolchain
 
-| Tool                     | Install Source         | Purpose                            |
-| ------------------------ | ---------------------- | ---------------------------------- |
-| git                      | Alpine package         | Version control                    |
-| openssh-client           | Alpine package         | SSH keys for git operations        |
-| pnpm                     | Corepack               | Package management (CI)            |
-| ripgrep                  | Alpine edge/community  | Fast code search                   |
-| fd                       | Alpine edge/community  | Fast file finder                   |
-| bat                      | Alpine edge/community  | Syntax-highlighted file viewer     |
-| jq                       | Alpine package         | JSON processing                    |
-| gh                       | Alpine edge/community  | GitHub CLI (PR creation)           |
-| chromium                 | Alpine edge/community  | Browser for @playwright/mcp        |
-| terraform                | HashiCorp binary 1.7.0 | Infrastructure validation          |
-| gcloud                   | Google Cloud SDK       | GCP authentication and ops         |
-| python3 / py3-pip        | Alpine package         | gcloud CLI dependency + MCP deps   |
-| curl                     | Alpine package         | HTTP requests                      |
-| @upstash/context7-mcp    | npm global             | Context7 MCP server                |
-| @sentry/mcp-server       | npm global             | Sentry MCP server                  |
-| @playwright/mcp          | npm global             | Playwright MCP server (uses system Chromium) |
+| Tool                  | Install Source         | Purpose                                      |
+| --------------------- | ---------------------- | -------------------------------------------- |
+| git                   | Alpine package         | Version control                              |
+| openssh-client        | Alpine package         | SSH keys for git operations                  |
+| pnpm                  | Corepack               | Package management (CI)                      |
+| ripgrep               | Alpine edge/community  | Fast code search                             |
+| fd                    | Alpine edge/community  | Fast file finder                             |
+| bat                   | Alpine edge/community  | Syntax-highlighted file viewer               |
+| jq                    | Alpine package         | JSON processing                              |
+| gh                    | Alpine edge/community  | GitHub CLI (PR creation)                     |
+| chromium              | Alpine edge/community  | Browser for @playwright/mcp                  |
+| terraform             | HashiCorp binary 1.7.0 | Infrastructure validation                    |
+| gcloud                | Google Cloud SDK       | GCP authentication and ops                   |
+| python3 / py3-pip     | Alpine package         | gcloud CLI dependency + MCP deps             |
+| curl                  | Alpine package         | HTTP requests                                |
+| @upstash/context7-mcp | npm global             | Context7 MCP server                          |
+| @sentry/mcp-server    | npm global             | Sentry MCP server                            |
+| @playwright/mcp       | npm global             | Playwright MCP server (uses system Chromium) |
 
 ## Orchestrator Integration
 
 The `DockerProvider` class in the orchestrator manages the full container lifecycle:
 
-| Operation             | Method                                | Description                                                  |
-| --------------------- | ------------------------------------- | ------------------------------------------------------------ |
-| Create container      | `createWorker(config)`                | Creates, starts container; waits for ready marker; triggers first attempt |
-| Destroy container     | `destroyWorker(taskId, force?)`       | SIGTERM (10s grace) or SIGKILL, then remove + cleanup        |
-| Check status          | `isWorkerRunning(taskId)`             | Docker inspect on container state                            |
-| Get logs              | `getWorkerLogs(taskId)`               | Container stdout/stderr + buffered attempt logs              |
-| Stream logs           | `streamLogs(taskId, onChunk)`         | Real-time log streaming via Docker follow                    |
-| Wait for completion   | `waitForCompletion(taskId, ms)`       | Blocks until exit or timeout (returns exit code)             |
-| Get resource usage    | `getResourceUsage(taskId)`            | CPU%, memory used/limit from Docker stats                    |
-| List workers          | `listWorkers()`                       | All active worker handles                                    |
-| Cleanup orphans       | `cleanupOrphanedContainers()`         | Remove containers older than 24 hours from previous runs     |
-| Cleanup session       | `cleanupTaskSession(taskId)`          | Delete per-task Claude session directory                     |
-| Preserve worker       | `preserveWorker(taskId)`              | Park container in preserved map (keep alive for debugging)   |
-| List preserved        | `listPreservedWorkers()`              | Active preserved (not-yet-destroyed) worker entries          |
-| Image info            | `getImageInfo()`                      | Configured image ref, last pulled digest, pull policy        |
+| Operation           | Method                          | Description                                                               |
+| ------------------- | ------------------------------- | ------------------------------------------------------------------------- |
+| Create container    | `createWorker(config)`          | Creates, starts container; waits for ready marker; triggers first attempt |
+| Destroy container   | `destroyWorker(taskId, force?)` | SIGTERM (10s grace) or SIGKILL, then remove + cleanup                     |
+| Check status        | `isWorkerRunning(taskId)`       | Docker inspect on container state                                         |
+| Get logs            | `getWorkerLogs(taskId)`         | Container stdout/stderr + buffered attempt logs                           |
+| Stream logs         | `streamLogs(taskId, onChunk)`   | Real-time log streaming via Docker follow                                 |
+| Wait for completion | `waitForCompletion(taskId, ms)` | Blocks until exit or timeout (returns exit code)                          |
+| Get resource usage  | `getResourceUsage(taskId)`      | CPU%, memory used/limit from Docker stats                                 |
+| List workers        | `listWorkers()`                 | All active worker handles                                                 |
+| Cleanup orphans     | `cleanupOrphanedContainers()`   | Remove containers older than 24 hours from previous runs                  |
+| Cleanup session     | `cleanupTaskSession(taskId)`    | Delete per-task Claude session directory                                  |
+| Preserve worker     | `preserveWorker(taskId)`        | Park container in preserved map (keep alive for debugging)                |
+| List preserved      | `listPreservedWorkers()`        | Active preserved (not-yet-destroyed) worker entries                       |
+| Image info          | `getImageInfo()`                | Configured image ref, last pulled digest, pull policy                     |
 
 ### Shared Credentials Mode
 

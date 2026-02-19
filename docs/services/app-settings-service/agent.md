@@ -38,14 +38,14 @@ type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
 type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 interface ModelPricing {
-  inputPricePerMillion: number;   // USD per 1M input tokens
-  outputPricePerMillion: number;  // USD per 1M output tokens
-  cacheReadMultiplier?: number;   // Multiplier on input cost for cache reads
-  cacheWriteMultiplier?: number;  // Multiplier on input cost for cache writes
-  webSearchCostPerCall?: number;  // Fixed cost per web search call (USD)
+  inputPricePerMillion: number; // USD per 1M input tokens
+  outputPricePerMillion: number; // USD per 1M output tokens
+  cacheReadMultiplier?: number; // Multiplier on input cost for cache reads
+  cacheWriteMultiplier?: number; // Multiplier on input cost for cache writes
+  webSearchCostPerCall?: number; // Fixed cost per web search call (USD)
   groundingCostPerRequest?: number; // Fixed cost per grounding request (USD)
   imagePricing?: Record<ImageSize, number>; // Cost per image generation by size
-  useProviderCost?: boolean;      // Use provider's reported cost instead of calculated
+  useProviderCost?: boolean; // Use provider's reported cost instead of calculated
 }
 
 interface ProviderPricing {
@@ -63,26 +63,26 @@ interface AllProvidersPricing {
 }
 
 interface MonthlyCost {
-  month: string;        // "2026-01"
+  month: string; // "2026-01"
   costUsd: number;
   calls: number;
   inputTokens: number;
   outputTokens: number;
-  percentage: number;   // % of total cost (0-100, rounded)
+  percentage: number; // % of total cost (0-100, rounded)
 }
 
 interface ModelCost {
   model: string;
   costUsd: number;
   calls: number;
-  percentage: number;   // % of total cost (0-100, rounded)
+  percentage: number; // % of total cost (0-100, rounded)
 }
 
 interface CallTypeCost {
-  callType: string;     // e.g. "research", "classification"
+  callType: string; // e.g. "research", "classification"
   costUsd: number;
   calls: number;
-  percentage: number;   // % of total cost (0-100, rounded)
+  percentage: number; // % of total cost (0-100, rounded)
 }
 
 interface AggregatedCosts {
@@ -90,9 +90,9 @@ interface AggregatedCosts {
   totalCalls: number;
   totalInputTokens: number;
   totalOutputTokens: number;
-  monthlyBreakdown: MonthlyCost[];  // Sorted newest first
-  byModel: ModelCost[];             // Sorted by cost descending
-  byCallType: CallTypeCost[];       // Sorted by cost descending
+  monthlyBreakdown: MonthlyCost[]; // Sorted newest first
+  byModel: ModelCost[]; // Sorted by cost descending
+  byCallType: CallTypeCost[]; // Sorted by cost descending
 }
 ```
 
@@ -144,9 +144,9 @@ const estimatedCost =
 
 ## Internal Endpoints
 
-| Method | Path                          | Purpose                                           | Auth            |
-| ------ | ----------------------------- | ------------------------------------------------- | --------------- |
-| GET    | `/internal/settings/pricing`  | Get all LLM provider pricing (for service startup) | Internal header |
+| Method | Path                         | Purpose                                            | Auth            |
+| ------ | ---------------------------- | -------------------------------------------------- | --------------- |
+| GET    | `/internal/settings/pricing` | Get all LLM provider pricing (for service startup) | Internal header |
 
 ---
 

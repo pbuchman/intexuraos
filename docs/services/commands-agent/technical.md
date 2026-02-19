@@ -253,14 +253,14 @@ sequenceDiagram
 
 ### Packages
 
-| Package            | Purpose                                          |
-| ------------------ | ------------------------------------------------ |
-| `llm-prompts`      | Classification prompt builder                    |
-| `llm-factory`      | LLM client abstraction                           |
-| `llm-pricing`      | Fetch and cache LLM pricing from app-settings    |
-| `llm-contract`     | Shared `LlmModels` enum and type contracts       |
-| `internal-clients` | Shared user-service HTTP client                  |
-| `infra-sentry`     | Sentry-enabled logger factory                    |
+| Package            | Purpose                                       |
+| ------------------ | --------------------------------------------- |
+| `llm-prompts`      | Classification prompt builder                 |
+| `llm-factory`      | LLM client abstraction                        |
+| `llm-pricing`      | Fetch and cache LLM pricing from app-settings |
+| `llm-contract`     | Shared `LlmModels` enum and type contracts    |
+| `internal-clients` | Shared user-service HTTP client               |
+| `infra-sentry`     | Sentry-enabled logger factory                 |
 
 ### Infrastructure
 
@@ -279,16 +279,16 @@ sequenceDiagram
 
 ## Configuration
 
-| Environment Variable                  | Required | Description                                                   |
-| ------------------------------------- | -------- | ------------------------------------------------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                                         |
-| `INTEXURAOS_ACTIONS_AGENT_URL`        | Yes      | actions-agent base URL                                        |
+| Environment Variable                  | Required | Description                                                     |
+| ------------------------------------- | -------- | --------------------------------------------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                                           |
+| `INTEXURAOS_ACTIONS_AGENT_URL`        | Yes      | actions-agent base URL                                          |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL (pricing data fetched at startup) |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                               |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                                       |
-| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                      |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform-level Zai fallback API key for classification        |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key for classification     |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                                 |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                                         |
+| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                        |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform-level Zai fallback API key for classification          |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key for classification       |
 
 ## Gotchas
 

@@ -74,14 +74,14 @@ Failed or cancelled tasks can be retried with optional additional context. Compl
 
 ## Key Benefits
 
-| Benefit                  | Detail                                                                           |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| Your infrastructure      | Workers run on your machines. Code never leaves your environment.                |
-| End-to-end tracing       | Every task carries a `traceId` from submission through completion.               |
-| Cost controls            | Per-user daily ($20) and monthly ($200) caps with real-time enforcement.         |
-| Zombie detection         | Tasks inactive for 30 minutes are automatically interrupted.                     |
-| Log retention management | Logs older than 90 days are archived automatically.                              |
-| Turn-level metrics       | CPU time, memory, token counts, and API wait times recorded per worker turn.     |
+| Benefit                  | Detail                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| Your infrastructure      | Workers run on your machines. Code never leaves your environment.            |
+| End-to-end tracing       | Every task carries a `traceId` from submission through completion.           |
+| Cost controls            | Per-user daily ($20) and monthly ($200) caps with real-time enforcement.     |
+| Zombie detection         | Tasks inactive for 30 minutes are automatically interrupted.                 |
+| Log retention management | Logs older than 90 days are archived automatically.                          |
+| Turn-level metrics       | CPU time, memory, token counts, and API wait times recorded per worker turn. |
 
 ## Limitations
 

@@ -14,6 +14,7 @@
 **Location:** `apps/app-settings-service/src/infra/firestore/index.ts:23`, `usageStatsRepository.ts:67`
 
 **Issue:** Collection paths are hardcoded strings rather than environment variables:
+
 - Pricing: `'settings/llm_pricing/providers'`
 - Usage stats: collection group `'by_user'` with implied root `llm_usage_stats`
 

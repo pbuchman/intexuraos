@@ -36,9 +36,9 @@ The package re-exports over 100 symbols through its index. This makes it a compi
 
 ## Resolved
 
-| Item                                           | Resolution                                                          | Commit   |
-| ---------------------------------------------- | ------------------------------------------------------------------- | -------- |
-| Missing logging in approval/model extraction   | Added `parseApprovalIntentResponseWithLogging` and `parseModelExtractionResponseWithLogging` | f451d51a |
+| Item                                         | Resolution                                                                                   | Commit   |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------- | -------- |
+| Missing logging in approval/model extraction | Added `parseApprovalIntentResponseWithLogging` and `parseModelExtractionResponseWithLogging` | f451d51a |
 
 ## Future Plans
 

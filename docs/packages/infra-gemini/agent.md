@@ -2,13 +2,13 @@
 
 ## Identity
 
-| Attribute | Value                                                    |
-| --------- | -------------------------------------------------------- |
-| Package   | `@intexuraos/infra-gemini`                               |
-| Version   | 2.1.0                                                    |
-| Purpose   | Google Gemini API wrapper implementing `LLMClient`       |
-| Provider  | `LlmProviders.Google`                                    |
-| SDK       | `@google/genai` ^1.0.0                                   |
+| Attribute | Value                                              |
+| --------- | -------------------------------------------------- |
+| Package   | `@intexuraos/infra-gemini`                         |
+| Version   | 2.1.0                                              |
+| Purpose   | Google Gemini API wrapper implementing `LLMClient` |
+| Provider  | `LlmProviders.Google`                              |
+| SDK       | `@google/genai` ^1.0.0                             |
 
 ## Exports
 
@@ -29,8 +29,13 @@ export function normalizeUsage(
 // Types
 export type GeminiClient = LLMClient;
 export type {
-  GeminiConfig, GeminiError, ResearchResult, GenerateResult,
-  ImageGenerationResult, ImageGenerateOptions, SynthesisInput,
+  GeminiConfig,
+  GeminiError,
+  ResearchResult,
+  GenerateResult,
+  ImageGenerationResult,
+  ImageGenerateOptions,
+  SynthesisInput,
 };
 ```
 
@@ -42,10 +47,10 @@ interface GeminiConfig {
   model: string;
   userId: string;
   pricing: ModelPricing;
-  imagePricing?: ModelPricing;  // separate pricing for generateImage
+  imagePricing?: ModelPricing; // separate pricing for generateImage
   logger: Logger;
-  auditSink?: AuditSink;  // defaults to Firestore audit sink
-  usageSink?: UsageSink;  // defaults to Firestore usage sink
+  auditSink?: AuditSink; // defaults to Firestore audit sink
+  usageSink?: UsageSink; // defaults to Firestore usage sink
 }
 
 // GeminiError = LLMError from @intexuraos/llm-contract
@@ -97,40 +102,42 @@ if (result?.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED':     // quota exceeded — retry with backoff
+    case 'RATE_LIMITED': // quota exceeded — retry with backoff
     case 'CONTENT_FILTERED': // safety filter — do not retry
-    case 'INVALID_KEY':      // bad API key — do not retry
-    case 'TIMEOUT':          // retry
-    case 'API_ERROR':        // log and handle
+    case 'INVALID_KEY': // bad API key — do not retry
+    case 'TIMEOUT': // retry
+    case 'API_ERROR': // log and handle
   }
 }
 ```
 
 ## Dependencies
 
-| Package                    | Role                                                            |
-| -------------------------- | --------------------------------------------------------------- |
-| `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                           |
+| Package                    | Role                                                                       |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                                      |
 | `@intexuraos/llm-contract` | LLMClient, NormalizedUsage, TokenUsage, ModelPricing, LlmModels, ImageSize |
-| `@intexuraos/llm-prompts`  | buildResearchPrompt                                             |
-| `@intexuraos/llm-audit`    | createAuditContext, AuditSink                                   |
-| `@intexuraos/llm-pricing`  | createUsageLogger, UsageSink                                    |
+| `@intexuraos/llm-prompts`  | buildResearchPrompt                                                        |
+| `@intexuraos/llm-audit`    | createAuditContext, AuditSink                                              |
+| `@intexuraos/llm-pricing`  | createUsageLogger, UsageSink                                               |
 
 ## Constants
 
-| Constant             | Value                                  |
-| -------------------- | -------------------------------------- |
-| `IMAGE_MODEL`        | `LlmModels.Gemini25FlashImage`         |
-| `DEFAULT_IMAGE_SIZE` | `'1024x1024'`                          |
+| Constant             | Value                          |
+| -------------------- | ------------------------------ |
+| `IMAGE_MODEL`        | `LlmModels.Gemini25FlashImage` |
+| `DEFAULT_IMAGE_SIZE` | `'1024x1024'`                  |
 
 ## Constraints
 
 **Do NOT:**
+
 - Expect `reasoning_tokens` in usage — Gemini does not expose reasoning tokens
 - Pass a custom image model via config — `IMAGE_MODEL` is hardcoded
 - Expect `cacheTokens` in usage — Gemini does not report prompt cache token details
 
 **Requires:**
+
 - Valid `INTEXURAOS_GOOGLE_API_KEY` environment variable
 - `logger` field on config (mandatory, enforced by ESLint)
 - `imagePricing` config for accurate `generateImage` cost tracking

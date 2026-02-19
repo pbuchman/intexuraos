@@ -58,36 +58,36 @@ Stable error codes for API responses with HTTP status mapping.
 
 ```typescript
 type ErrorCode =
-  | 'INVALID_REQUEST'       // 400
-  | 'UNAUTHORIZED'          // 401
-  | 'FORBIDDEN'             // 403
-  | 'NOT_FOUND'             // 404
-  | 'CONFLICT'              // 409
-  | 'GONE'                  // 410
-  | 'PRECONDITION_FAILED'   // 412
-  | 'UNPROCESSABLE_ENTITY'  // 422
-  | 'RATE_LIMITED'          // 429
-  | 'LOCKED'                // 423
-  | 'DOWNSTREAM_ERROR'      // 502
-  | 'INTERNAL_ERROR'        // 500
-  | 'MISCONFIGURED'         // 503
+  | 'INVALID_REQUEST' // 400
+  | 'UNAUTHORIZED' // 401
+  | 'FORBIDDEN' // 403
+  | 'NOT_FOUND' // 404
+  | 'CONFLICT' // 409
+  | 'GONE' // 410
+  | 'PRECONDITION_FAILED' // 412
+  | 'UNPROCESSABLE_ENTITY' // 422
+  | 'RATE_LIMITED' // 429
+  | 'LOCKED' // 423
+  | 'DOWNSTREAM_ERROR' // 502
+  | 'INTERNAL_ERROR' // 500
+  | 'MISCONFIGURED' // 503
   // Worker lifecycle
   | 'WORKER_NOT_CONFIGURED' // 424
-  | 'INVALID_WORKER'        // 400
-  | 'WORKER_UNHEALTHY'      // 400
-  | 'WORKER_UNAVAILABLE'    // 502
+  | 'INVALID_WORKER' // 400
+  | 'WORKER_UNHEALTHY' // 400
+  | 'WORKER_UNAVAILABLE' // 502
   // Notion integration
-  | 'NOTION_NOT_CONNECTED'  // 400
-  | 'PAGE_NOT_CONFIGURED'   // 400
-  | 'NOTION_UNAUTHORIZED'   // 401
+  | 'NOTION_NOT_CONNECTED' // 400
+  | 'PAGE_NOT_CONFIGURED' // 400
+  | 'NOTION_UNAUTHORIZED' // 401
   // Research
-  | 'RESEARCH_NOT_COMPLETED'// 400
-  | 'NO_SYNTHESIS'          // 400
-  | 'ALREADY_EXPORTED'      // 409
+  | 'RESEARCH_NOT_COMPLETED' // 400
+  | 'NO_SYNTHESIS' // 400
+  | 'ALREADY_EXPORTED' // 409
   // Security / nonces
-  | 'INVALID_NONCE'         // 400
-  | 'NONCE_EXPIRED'         // 400
-  | 'NOT_OWNER'             // 403
+  | 'INVALID_NONCE' // 400
+  | 'NONCE_EXPIRED' // 400
+  | 'NOT_OWNER' // 403
   // Task management
   | 'TASK_NOT_CANCELLABLE'; // 400
 

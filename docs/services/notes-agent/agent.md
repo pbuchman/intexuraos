@@ -74,14 +74,14 @@ interface Note {
 
 ## Constraints
 
-| Rule                   | Description                                          |
-| ---------------------- | ---------------------------------------------------- |
-| **Ownership**          | Users can only access their own notes                |
-| **Title Required**     | Title must be non-empty                              |
-| **Content Required**   | Content must be present (can be empty string)        |
-| **No Status Update**   | Status cannot be changed after creation via PATCH    |
-| **No Tag Filtering**   | List endpoint returns all user notes; no filter support |
-| **List Order**         | Notes returned ordered by `updatedAt` descending (most recently updated first) |
+| Rule                 | Description                                                                    |
+| -------------------- | ------------------------------------------------------------------------------ |
+| **Ownership**        | Users can only access their own notes                                          |
+| **Title Required**   | Title must be non-empty                                                        |
+| **Content Required** | Content must be present (can be empty string)                                  |
+| **No Status Update** | Status cannot be changed after creation via PATCH                              |
+| **No Tag Filtering** | List endpoint returns all user notes; no filter support                        |
+| **List Order**       | Notes returned ordered by `updatedAt` descending (most recently updated first) |
 
 ---
 
@@ -127,9 +127,9 @@ const notes = await listNotes();
 
 ## Internal Endpoints
 
-| Method | Path              | Purpose                              |
-| ------ | ----------------- | ------------------------------------ |
-| POST   | `/internal/notes` | Create note from other services      |
+| Method | Path              | Purpose                         |
+| ------ | ----------------- | ------------------------------- |
+| POST   | `/internal/notes` | Create note from other services |
 
 **Internal response format:** `ServiceFeedback` (not a Note object):
 
@@ -138,7 +138,7 @@ interface ServiceFeedback {
   status: 'completed' | 'failed';
   message: string;
   resourceUrl?: string; // e.g. "/#/notes/<id>" on success
-  errorCode?: string;   // on failure
+  errorCode?: string; // on failure
 }
 ```
 

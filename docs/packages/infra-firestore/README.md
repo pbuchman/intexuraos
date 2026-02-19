@@ -105,10 +105,10 @@ This is the most widely used infrastructure package. Consumed by virtually every
 
 ## Recent Changes
 
-| Commit     | Description                                              | When        |
-| ---------- | -------------------------------------------------------- | ----------- |
-| `76b25770` | Enhance DevBar with tabs, persistence                    | Recent      |
-| `33bd4780` | Dev Environment with Scale-to-Zero Cloud Worker          | Recent      |
-| `b3a0e1fa` | Implement webhook routes and task dispatcher             | Recent      |
-| `adec8ed5` | Add logging to Firestore actionRepository error handling | Recent      |
-| `bfdc9581` | Fix duplicate WhatsApp messages when processing actions  | Recent      |
+| Commit     | Description                                              | When   |
+| ---------- | -------------------------------------------------------- | ------ |
+| `76b25770` | Enhance DevBar with tabs, persistence                    | Recent |
+| `33bd4780` | Dev Environment with Scale-to-Zero Cloud Worker          | Recent |
+| `b3a0e1fa` | Implement webhook routes and task dispatcher             | Recent |
+| `adec8ed5` | Add logging to Firestore actionRepository error handling | Recent |
+| `bfdc9581` | Fix duplicate WhatsApp messages when processing actions  | Recent |

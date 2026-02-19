@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                                                        |
-| -------- | -------------------------------------------------------------------------------------------- |
-| **Name** | whatsapp-service                                                                             |
-| **Role** | WhatsApp Integration Service with Approval Workflow Support                                  |
-| **Goal** | Receive WhatsApp messages, enable approval via buttons/replies, send notifications           |
+| Field    | Value                                                                              |
+| -------- | ---------------------------------------------------------------------------------- |
+| **Name** | whatsapp-service                                                                   |
+| **Role** | WhatsApp Integration Service with Approval Workflow Support                        |
+| **Goal** | Receive WhatsApp messages, enable approval via buttons/replies, send notifications |
 
 ---
 
@@ -27,18 +27,18 @@
 ```typescript
 interface SendMessageEvent {
   type: 'whatsapp.message.send';
-  userId: string;                        // IntexuraOS user ID (phone number looked up internally)
-  message: string;                       // Message text to send
-  replyToMessageId?: string;             // Optional: WhatsApp message ID to reply to
+  userId: string; // IntexuraOS user ID (phone number looked up internally)
+  message: string; // Message text to send
+  replyToMessageId?: string; // Optional: WhatsApp message ID to reply to
   buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons (v3.0.0)
-  correlationId: string;                 // For tracking; use approval format for approvals
-  timestamp: string;                     // ISO 8601
+  correlationId: string; // For tracking; use approval format for approvals
+  timestamp: string; // ISO 8601
 }
 
 interface WhatsAppInteractiveButton {
   type: 'reply';
   reply: {
-    id: string;    // Format: "intent:actionId"
+    id: string; // Format: "intent:actionId"
     title: string; // Max 20 characters (truncated by WhatsApp API)
   };
 }
@@ -69,9 +69,9 @@ interface WhatsAppInteractiveButton {
 interface ApprovalMessageEvent {
   type: 'whatsapp.message.send';
   userId: string;
-  message: string;                       // Approval prompt text
+  message: string; // Approval prompt text
   buttons?: WhatsAppInteractiveButton[]; // Interactive buttons (recommended)
-  correlationId: string;                 // MUST be: action-{type}-approval-{actionId}
+  correlationId: string; // MUST be: action-{type}-approval-{actionId}
   timestamp: string;
 }
 ```
@@ -113,7 +113,7 @@ view-task:{taskId}    -- View task status
 
 ```typescript
 interface ListMessagesParams {
-  limit?: number;  // Max 100, default 50
+  limit?: number; // Max 100, default 50
   cursor?: string; // Pagination cursor
 }
 ```
@@ -124,7 +124,7 @@ interface ListMessagesParams {
 interface MessagesListResult {
   messages: WhatsAppMessage[];
   fromNumber: string | null; // User's registered phone number
-  nextCursor?: string;       // For pagination
+  nextCursor?: string; // For pagination
 }
 ```
 
@@ -138,7 +138,7 @@ interface MessagesListResult {
 
 ```typescript
 interface SignedUrlResult {
-  url: string;       // GCS signed URL
+  url: string; // GCS signed URL
   expiresAt: string; // ISO 8601, valid for 15 minutes
 }
 ```
@@ -194,22 +194,22 @@ interface WhatsAppMessage {
 }
 
 interface OutboundMessage {
-  wamid: string;         // WhatsApp message ID
+  wamid: string; // WhatsApp message ID
   correlationId: string; // For reply correlation
   userId: string;
   sentAt: string;
-  expiresAt: number;     // Unix timestamp (7 day TTL)
+  expiresAt: number; // Unix timestamp (7 day TTL)
 }
 
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
-  replyToWamid: string;  // Original approval message wamid
-  replyText: string;     // "yes"/"no"/"convert"/"cancel-task"/"view-task"
+  replyToWamid: string; // Original approval message wamid
+  replyText: string; // "yes"/"no"/"convert"/"cancel-task"/"view-task"
   userId: string;
   timestamp: string;
-  actionId?: string;     // Extracted from buttonId or correlationId
-  buttonId?: string;     // Button ID if user tapped a button
-  buttonTitle?: string;  // Button title if user tapped a button
+  actionId?: string; // Extracted from buttonId or correlationId
+  buttonId?: string; // Button ID if user tapped a button
+  buttonTitle?: string; // Button title if user tapped a button
 }
 ```
 
@@ -217,17 +217,17 @@ interface ApprovalReplyEvent {
 
 ## Constraints
 
-| Rule                    | Description                                                      |
-| ----------------------- | ---------------------------------------------------------------- |
-| **Phone Number Mapped** | User must have WhatsApp number registered                        |
-| **Media Expiration**    | Signed URLs expire after 15 minutes                              |
-| **Ownership**           | Users can only access their own messages                         |
-| **Pagination**          | Maximum 100 messages per request                                 |
-| **OutboundMessage TTL** | Reply correlation data expires after 7 days                      |
-| **Approval Format**     | CorrelationId MUST match `action-{type}-approval-{id}`           |
-| **Button Title Limit**  | Button titles truncated to 20 characters                         |
-| **Phone Verification**  | Phone must be verified before connecting via `/whatsapp/connect` |
-| **No Emoji Reactions**  | Emoji reactions are ignored; use buttons or text replies (v4.0.0)|
+| Rule                    | Description                                                       |
+| ----------------------- | ----------------------------------------------------------------- |
+| **Phone Number Mapped** | User must have WhatsApp number registered                         |
+| **Media Expiration**    | Signed URLs expire after 15 minutes                               |
+| **Ownership**           | Users can only access their own messages                          |
+| **Pagination**          | Maximum 100 messages per request                                  |
+| **OutboundMessage TTL** | Reply correlation data expires after 7 days                       |
+| **Approval Format**     | CorrelationId MUST match `action-{type}-approval-{id}`            |
+| **Button Title Limit**  | Button titles truncated to 20 characters                          |
+| **Phone Verification**  | Phone must be verified before connecting via `/whatsapp/connect`  |
+| **No Emoji Reactions**  | Emoji reactions are ignored; use buttons or text replies (v4.0.0) |
 
 ---
 
@@ -364,13 +364,13 @@ To enable approval via WhatsApp with interactive buttons:
 
 ### Response Type Mapping (v4.0.0)
 
-| Response Type    | `replyText`   | `buttonId`        | `actionId`         |
-| ---------------- | ------------- | ----------------- | ------------------ |
-| Button "Approve" | "yes"         | `approve:id`      | from buttonId      |
-| Button "Cancel"  | "no"          | `cancel:id`       | from buttonId      |
-| Button "Reject"  | "no"          | `reject:id`       | from buttonId      |
-| Text reply       | raw text      | undefined         | from correlationId |
-| Emoji reactions  | not supported | not supported     | not published      |
+| Response Type    | `replyText`   | `buttonId`    | `actionId`         |
+| ---------------- | ------------- | ------------- | ------------------ |
+| Button "Approve" | "yes"         | `approve:id`  | from buttonId      |
+| Button "Cancel"  | "no"          | `cancel:id`   | from buttonId      |
+| Button "Reject"  | "no"          | `reject:id`   | from buttonId      |
+| Text reply       | raw text      | undefined     | from correlationId |
+| Emoji reactions  | not supported | not supported | not published      |
 
 ---
 

@@ -144,14 +144,14 @@ This manifest is the SINGLE source for all subsequent steps.
 
 Scan the manifest for:
 
-| Pattern                          | Detection Method                                                    |
-| -------------------------------- | ------------------------------------------------------------------- |
-| Explicit revert PRs              | PR title starts with `revert:` or `Revert "..."`                   |
-| Revert commits                   | Commit message starts with `Revert "..."`                          |
-| Add-then-remove on same resource | PR adds feature X, later PR removes/disables feature X             |
-| Feature flag on then off         | PR enables flag, later PR disables same flag                       |
-| Endpoint added then removed      | Route added in one PR, route removed in another                    |
-| Linear issue cancelled           | Linear issue state is `Cancelled` or has `won't-fix` label         |
+| Pattern                          | Detection Method                                           |
+| -------------------------------- | ---------------------------------------------------------- |
+| Explicit revert PRs              | PR title starts with `revert:` or `Revert "..."`           |
+| Revert commits                   | Commit message starts with `Revert "..."`                  |
+| Add-then-remove on same resource | PR adds feature X, later PR removes/disables feature X     |
+| Feature flag on then off         | PR enables flag, later PR disables same flag               |
+| Endpoint added then removed      | Route added in one PR, route removed in another            |
+| Linear issue cancelled           | Linear issue state is `Cancelled` or has `won't-fix` label |
 
 #### 4.2 Net Out Algorithm
 
@@ -199,9 +199,9 @@ Present this log to the user for verification before building the changelog.
 | --------------------------------- | ----------- | ------------- |
 | `breaking-change`, `BREAKING`     | Removed     | MAJOR         |
 | `feature`, `feat:`, `enhancement` | Added       | MINOR         |
-| `bug`, `fix:`, `[sentry]`        | Fixed       | PATCH         |
-| `improvement`, `perf:`           | Improved    | PATCH         |
-| `chore`, `refactor`              | Changed     | PATCH         |
+| `bug`, `fix:`, `[sentry]`         | Fixed       | PATCH         |
+| `improvement`, `perf:`            | Improved    | PATCH         |
+| `chore`, `refactor`               | Changed     | PATCH         |
 
 **Combining sources for richer descriptions:**
 
@@ -229,7 +229,7 @@ Based on the categorized changes (post-netting):
 | New feature             | MINOR         | Linear `feature` label, PR title `feat:`            |
 | New service             | MINOR         | PR describes new service, Linear mentions new       |
 | **Fixes & Maintenance** | **PATCH**     |                                                     |
-| Bug fix                 | PATCH         | Linear `bug` label, PR title `fix:`, `[sentry]`    |
+| Bug fix                 | PATCH         | Linear `bug` label, PR title `fix:`, `[sentry]`     |
 | Refactoring             | PATCH         | PR title `refactor:`, Linear `chore` label          |
 | Documentation           | PATCH         | PR title `docs:`, docs-only changes                 |
 

@@ -98,11 +98,11 @@ try {
 
 The sink determines where audit logs are persisted. Inject a custom sink via `createAuditContext(params, { sink })`.
 
-| Sink                      | Destination                    | Use Case                                      |
-| ------------------------- | ------------------------------ | --------------------------------------------- |
-| `FirestoreAuditSink`      | Firestore `llm_api_logs`       | Default for all production services           |
-| `StructuredLogAuditSink`  | Pino logger (structured JSON)  | Services without Firestore access             |
-| `NoopAuditSink`           | /dev/null                      | Tests, disabled auditing                      |
+| Sink                     | Destination                   | Use Case                            |
+| ------------------------ | ----------------------------- | ----------------------------------- |
+| `FirestoreAuditSink`     | Firestore `llm_api_logs`      | Default for all production services |
+| `StructuredLogAuditSink` | Pino logger (structured JSON) | Services without Firestore access   |
+| `NoopAuditSink`          | /dev/null                     | Tests, disabled auditing            |
 
 All sinks implement `AuditSink`:
 
@@ -224,9 +224,9 @@ interface CompleteAuditLogErrorParams {
 
 ## Source Files
 
-| File           | Purpose                                                       |
-| -------------- | ------------------------------------------------------------- |
-| `src/index.ts` | Re-exports all types, AuditContext, and isAuditEnabled        |
-| `src/types.ts` | LlmAuditLog, CreateAuditLogParams, completion params          |
-| `src/audit.ts` | AuditContext class, createAuditContext, isAuditEnabled        |
+| File           | Purpose                                                                        |
+| -------------- | ------------------------------------------------------------------------------ |
+| `src/index.ts` | Re-exports all types, AuditContext, and isAuditEnabled                         |
+| `src/types.ts` | LlmAuditLog, CreateAuditLogParams, completion params                           |
+| `src/audit.ts` | AuditContext class, createAuditContext, isAuditEnabled                         |
 | `src/sink.ts`  | AuditSink interface, FirestoreAuditSink, StructuredLogAuditSink, NoopAuditSink |

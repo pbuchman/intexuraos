@@ -68,4 +68,4 @@ No `any` types, `@ts-ignore`, or `@ts-expect-error` directives in source files.
 | ---------- | ---------------------------------------- | ------------------------------------------------- |
 | 2026-02-05 | Cloud Functions deployment module errors | Fixed with esbuild bundling via build-service.mjs |
 | 2026-01-31 | Empty error objects in logs              | Added error serializers (INT-464)                 |
-| 2026-01-29 | Branch coverage below 95%               | Added v8 ignore annotations                       |
+| 2026-01-29 | Branch coverage below 95%                | Added v8 ignore annotations                       |

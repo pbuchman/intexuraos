@@ -84,17 +84,17 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Hash       | Description                                              | Age      |
-| ---------- | -------------------------------------------------------- | -------- |
-| `6063175b` | Add dev-mode log formatting for PM2 readability          | 3 days   |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                      | 3 days   |
-| `e60eafc1` | Standardize API key secrets to APP naming convention     | 4 days   |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback | 4 days   |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local   | 5 days   |
-| `0f69a74b` | Add default model selector with platform Zai fallback    | 11 days  |
-| `63170e4a` | Remove "free" GLM terminology, use createLlmClient       | 12 days  |
-| `996c4179` | Add chat-agent to Cloud Build pipeline                   | 13 days  |
-| `ea6652f7` | Add guest chat sessions with rate limiting               | 13 days  |
+| Hash       | Description                                              | Age     |
+| ---------- | -------------------------------------------------------- | ------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability          | 3 days  |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                      | 3 days  |
+| `e60eafc1` | Standardize API key secrets to APP naming convention     | 4 days  |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback | 4 days  |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local   | 5 days  |
+| `0f69a74b` | Add default model selector with platform Zai fallback    | 11 days |
+| `63170e4a` | Remove "free" GLM terminology, use createLlmClient       | 12 days |
+| `996c4179` | Add chat-agent to Cloud Build pipeline                   | 13 days |
+| `ea6652f7` | Add guest chat sessions with rate limiting               | 13 days |
 
 ## API Endpoints
 
@@ -251,17 +251,17 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 
 ### Environment Variables
 
-| Variable                              | Required | Description                                         |
-| ------------------------------------- | -------- | --------------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project ID for Firestore                        |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS URL for JWT validation                         |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer for token validation                     |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for token validation                   |
-| `INTEXURAOS_OPENAI_APP_API_KEY`       | Yes      | OpenAI API key for embeddings                       |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | URL for user-service                                |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Token for internal service-to-service calls         |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | URL for app-settings-service (pricing data)         |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | Yes      | ZAI API key for guest chat sessions (GLM-4.7-Flash)          |
+| Variable                              | Required | Description                                                   |
+| ------------------------------------- | -------- | ------------------------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project ID for Firestore                                  |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS URL for JWT validation                                   |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer for token validation                               |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for token validation                             |
+| `INTEXURAOS_OPENAI_APP_API_KEY`       | Yes      | OpenAI API key for embeddings                                 |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | URL for user-service                                          |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Token for internal service-to-service calls                   |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | URL for app-settings-service (pricing data)                   |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | Yes      | ZAI API key for guest chat sessions (GLM-4.7-Flash)           |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for authenticated user model fallback |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                 |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (defaults to `development`)                  |

@@ -55,7 +55,14 @@ interface SubmitCodeTaskRequest {
 ```typescript
 // 'designed' = Phase 1 design task completed; 'implemented' = Phase 2 execution task completed
 // 'completed' is NOT used — tasks finish as 'designed' or 'implemented'
-type TaskStatus = 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
+type TaskStatus =
+  | 'dispatched'
+  | 'running'
+  | 'designed'
+  | 'implemented'
+  | 'failed'
+  | 'interrupted'
+  | 'cancelled';
 
 // Transitions:
 // dispatched -> running (on first log chunk)
@@ -323,6 +330,7 @@ Authorization: Bearer <auth0-jwt>
 ```
 
 Notes:
+
 - Returns PRs with any activity in the last 30 days
 - Sorted by PR number descending
 - O(PRs) query backed by `github-pr-summaries` collection
@@ -352,6 +360,7 @@ Authorization: Bearer <auth0-jwt>
 ```
 
 Notes:
+
 - `pullRequestNumber` requires `repository` to also be set
 - Per-PR queries return oldest-first; repository/all queries return newest-first
 - Comment `edited` events are merged with their original — same position, latest body

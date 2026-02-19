@@ -67,14 +67,14 @@ Converts raw Gemini usage data into `NormalizedUsage`. Includes `groundingEnable
 
 ```ts
 interface GeminiConfig {
-  apiKey: string;          // Google API key
-  model: string;           // e.g., 'gemini-2.5-pro', 'gemini-2.5-flash'
-  userId: string;          // User ID for usage tracking
-  pricing: ModelPricing;   // Cost configuration for text operations
+  apiKey: string; // Google API key
+  model: string; // e.g., 'gemini-2.5-pro', 'gemini-2.5-flash'
+  userId: string; // User ID for usage tracking
+  pricing: ModelPricing; // Cost configuration for text operations
   imagePricing?: ModelPricing; // Separate pricing for image generation
-  logger: Logger;          // Pino logger for structured logging
-  auditSink?: AuditSink;   // Optional audit sink override (defaults to Firestore)
-  usageSink?: UsageSink;   // Optional usage sink override (defaults to Firestore)
+  logger: Logger; // Pino logger for structured logging
+  auditSink?: AuditSink; // Optional audit sink override (defaults to Firestore)
+  usageSink?: UsageSink; // Optional usage sink override (defaults to Firestore)
 }
 ```
 
@@ -88,24 +88,24 @@ interface GeminiConfig {
 
 ### Pricing Fields
 
-| Field                     | Type   | Description                                     |
-| ------------------------- | ------ | ----------------------------------------------- |
-| `inputPricePerMillion`    | number | Cost per million input tokens                   |
-| `outputPricePerMillion`   | number | Cost per million output tokens                  |
-| `groundingCostPerRequest` | number | Flat cost per grounded research request         |
+| Field                     | Type   | Description                                          |
+| ------------------------- | ------ | ---------------------------------------------------- |
+| `inputPricePerMillion`    | number | Cost per million input tokens                        |
+| `outputPricePerMillion`   | number | Cost per million output tokens                       |
+| `groundingCostPerRequest` | number | Flat cost per grounded research request              |
 | `imagePricing`            | object | Size-to-cost map for image generation (per size key) |
 
 ## Error Handling
 
 All methods return `Result<T, GeminiError>`. Error mapping:
 
-| Condition                   | Error Code         | Description              |
-| --------------------------- | ------------------ | ------------------------ |
-| Contains "API_KEY"          | `INVALID_KEY`      | Invalid Google API key   |
-| Contains "429"/"quota"      | `RATE_LIMITED`     | Quota exceeded           |
-| Contains "timeout"          | `TIMEOUT`          | Request timed out        |
-| Contains "SAFETY"/"blocked" | `CONTENT_FILTERED` | Safety filter triggered  |
-| Other errors                | `API_ERROR`        | General API error        |
+| Condition                   | Error Code         | Description             |
+| --------------------------- | ------------------ | ----------------------- |
+| Contains "API_KEY"          | `INVALID_KEY`      | Invalid Google API key  |
+| Contains "429"/"quota"      | `RATE_LIMITED`     | Quota exceeded          |
+| Contains "timeout"          | `TIMEOUT`          | Request timed out       |
+| Contains "SAFETY"/"blocked" | `CONTENT_FILTERED` | Safety filter triggered |
+| Other errors                | `API_ERROR`        | General API error       |
 
 ## Implementation Notes
 
@@ -136,14 +136,14 @@ All methods return `Result<T, GeminiError>`. Error mapping:
 
 ## Dependencies
 
-| Package                     | Role                                                         |
-| --------------------------- | ------------------------------------------------------------ |
-| `@google/genai` ^1.0.0      | Google Generative AI SDK                                     |
-| `@intexuraos/common-core`   | `Result` types, `getErrorMessage`, `Logger`                  |
-| `@intexuraos/llm-contract`  | `LLMClient`, `NormalizedUsage`, `ModelPricing`, `LlmModels`, `ImageSize` |
-| `@intexuraos/llm-prompts`   | `buildResearchPrompt`                                        |
-| `@intexuraos/llm-audit`     | `createAuditContext`, `AuditSink`                            |
-| `@intexuraos/llm-pricing`   | `createUsageLogger`, `UsageSink`                             |
+| Package                    | Role                                                                     |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `@google/genai` ^1.0.0     | Google Generative AI SDK                                                 |
+| `@intexuraos/common-core`  | `Result` types, `getErrorMessage`, `Logger`                              |
+| `@intexuraos/llm-contract` | `LLMClient`, `NormalizedUsage`, `ModelPricing`, `LlmModels`, `ImageSize` |
+| `@intexuraos/llm-prompts`  | `buildResearchPrompt`                                                    |
+| `@intexuraos/llm-audit`    | `createAuditContext`, `AuditSink`                                        |
+| `@intexuraos/llm-pricing`  | `createUsageLogger`, `UsageSink`                                         |
 
 ## Recent Changes
 

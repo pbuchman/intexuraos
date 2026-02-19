@@ -192,15 +192,15 @@ Expose operational metrics (extends `TurnMetricsCollector` post-task data):
 
 ## Debt Resolution Tracking
 
-| ID  | Description                          | Created    | Resolved | Ticket |
-| --- | ------------------------------------ | ---------- | -------- | ------ |
-| 1   | Default repository hardcoded         | 2026-02-08 | -        | -      |
-| 2   | Admin shutdown not wired             | 2026-02-08 | -        | -      |
-| 3   | Duplicate JWT libraries              | 2026-02-08 | -        | -      |
-| 4   | No horizontal scaling                | 2026-02-08 | -        | -      |
-| 5   | Verifier has no circuit-breaker      | 2026-02-19 | -        | -      |
-| 6   | No graceful container cancel         | 2026-02-08 | -        | -      |
-| 7   | No orchestrator-side retry           | 2026-02-08 | -        | -      |
-| 8   | No worktree cleanup on completion    | 2026-02-08 | -        | -      |
-| 9   | No resource usage monitoring         | 2026-02-08 | -        | -      |
-| 10  | No local log persistence fallback    | 2026-02-08 | -        | -      |
+| ID  | Description                       | Created    | Resolved | Ticket |
+| --- | --------------------------------- | ---------- | -------- | ------ |
+| 1   | Default repository hardcoded      | 2026-02-08 | -        | -      |
+| 2   | Admin shutdown not wired          | 2026-02-08 | -        | -      |
+| 3   | Duplicate JWT libraries           | 2026-02-08 | -        | -      |
+| 4   | No horizontal scaling             | 2026-02-08 | -        | -      |
+| 5   | Verifier has no circuit-breaker   | 2026-02-19 | -        | -      |
+| 6   | No graceful container cancel      | 2026-02-08 | -        | -      |
+| 7   | No orchestrator-side retry        | 2026-02-08 | -        | -      |
+| 8   | No worktree cleanup on completion | 2026-02-08 | -        | -      |
+| 9   | No resource usage monitoring      | 2026-02-08 | -        | -      |
+| 10  | No local log persistence fallback | 2026-02-08 | -        | -      |
