@@ -1,12 +1,15 @@
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
+  Bot,
   Brain,
-  CheckSquare,
-  Database,
-  FileText,
-  Mail,
+  CheckCircle2,
+  Code2,
+  Container,
+  GitPullRequest,
   Layers,
+  Mail,
+  MessageSquare,
   Mic,
   Shield,
   Terminal,
@@ -14,15 +17,11 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
-// Custom icons since lucide-react brand icons are deprecated
+// --- Brand Icons ---
+
 function LinkedinIcon({ className }: { className?: string }): React.JSX.Element {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
       <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
     </svg>
   );
@@ -30,18 +29,13 @@ function LinkedinIcon({ className }: { className?: string }): React.JSX.Element 
 
 function GithubIcon({ className }: { className?: string }): React.JSX.Element {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
       <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
     </svg>
   );
 }
 
-// --- Components ---
+// --- Reusable Components ---
 
 function BrutalistCard({
   children,
@@ -56,12 +50,12 @@ function BrutalistCard({
 }): React.JSX.Element {
   return (
     <div
-      className={`relative border-2 border-black bg-white p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${className}`}
+      className={`relative border-2 border-black dark:border-white/20 bg-white dark:bg-slate-800 p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[6px_6px_0px_0px_rgba(255,255,255,0.15)] ${className}`}
     >
       {title && (
-        <div className="mb-4 flex items-center gap-3 border-b-2 border-black pb-3">
-          {Icon && <Icon className="h-6 w-6 stroke-[2.5px]" />}
-          <h3 className="font-mono text-lg font-bold uppercase tracking-tight">{title}</h3>
+        <div className="mb-4 flex items-center gap-3 border-b-2 border-black dark:border-white/20 pb-3">
+          {Icon && <Icon className="h-6 w-6 stroke-[2.5px] dark:text-white" />}
+          <h3 className="font-mono text-lg font-bold uppercase tracking-tight dark:text-white">{title}</h3>
         </div>
       )}
       {children}
@@ -69,19 +63,123 @@ function BrutalistCard({
   );
 }
 
-function SectionHeading({
-  children,
-  className = '',
+// --- Terminal Animation ---
+
+const TERMINAL_LINES = [
+  { text: '$ whatsapp: "Fix the Safari login redirect loop"', delay: 0, color: 'text-green-400' },
+  { text: '  → Intent classified: code (confidence: 0.96)', delay: 800, color: 'text-cyan-400' },
+  { text: '  → Code Agent: creating task...', delay: 1600, color: 'text-neutral-400' },
+  { text: '  → Dispatching to orchestrator (HMAC-signed)', delay: 2400, color: 'text-neutral-400' },
+  { text: '  → Docker container spawned (worktree: fix-safari-login)', delay: 3200, color: 'text-yellow-400' },
+  { text: '  → Phase 1: Design agent enriching Linear issue...', delay: 4000, color: 'text-purple-400' },
+  { text: '  → Phase 2: Execution agent writing code...', delay: 5000, color: 'text-blue-400' },
+  { text: '  → Running CI: typecheck ✓ lint ✓ tests ✓ (847 passed)', delay: 6200, color: 'text-green-400' },
+  { text: '  → PR #847 created → Linear INT-592 → In Review', delay: 7400, color: 'text-emerald-400' },
+  { text: '  → WhatsApp: "PR ready for review" ✓', delay: 8400, color: 'text-green-300' },
+];
+
+function AnimatedTerminal(): React.JSX.Element {
+  const [visibleLines, setVisibleLines] = useState(0);
+
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    for (const [index, line] of TERMINAL_LINES.entries()) {
+      const timer = setTimeout(() => {
+        setVisibleLines(index + 1);
+      }, line.delay);
+      timers.push(timer);
+    }
+
+    const resetTimer = setTimeout(() => {
+      setVisibleLines(0);
+      // Restart the animation
+      const restartTimer = setTimeout(() => {
+        for (const [index, line] of TERMINAL_LINES.entries()) {
+          const timer = setTimeout(() => {
+            setVisibleLines(index + 1);
+          }, line.delay);
+          timers.push(timer);
+        }
+      }, 500);
+      timers.push(restartTimer);
+    }, 11000);
+    timers.push(resetTimer);
+
+    return (): void => {
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
+    };
+  }, [visibleLines]);
+
+  return (
+    <div className="overflow-hidden rounded-none border-2 border-black dark:border-white/20 bg-neutral-950 font-mono text-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,0.1)]">
+      <div className="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900 px-4 py-2">
+        <div className="h-3 w-3 rounded-full bg-red-500" />
+        <div className="h-3 w-3 rounded-full bg-yellow-500" />
+        <div className="h-3 w-3 rounded-full bg-green-500" />
+        <span className="ml-2 text-xs text-neutral-500">intexuraos — autonomous pipeline</span>
+      </div>
+      <div className="p-4 md:p-6">
+        <div className="space-y-1">
+          {TERMINAL_LINES.slice(0, visibleLines).map((line, i) => (
+            <div
+              key={i}
+              className={`${line.color} transition-opacity duration-300`}
+            >
+              {line.text}
+              {i === visibleLines - 1 && <span className="animate-pulse">▊</span>}
+            </div>
+          ))}
+          {visibleLines === 0 && (
+            <div className="text-green-400">
+              <span className="animate-pulse">▊</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Stat Counter ---
+
+function StatBlock({ value, label }: { value: string; label: string }): React.JSX.Element {
+  return (
+    <div className="text-center">
+      <div className="text-4xl font-black tracking-tighter md:text-5xl">{value}</div>
+      <div className="mt-1 font-mono text-xs font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+// --- Pipeline Step ---
+
+function PipelineStep({
+  number,
+  title,
+  description,
+  icon: Icon,
+  accent,
 }: {
-  children: React.ReactNode;
-  className?: string;
+  number: string;
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  accent: string;
 }): React.JSX.Element {
   return (
-    <h2
-      className={`mb-12 text-4xl font-black uppercase tracking-tighter md:text-6xl ${className}`}
-    >
-      {children}
-    </h2>
+    <div className="group relative">
+      <div className={`mb-4 inline-flex items-center gap-3 border-2 border-black dark:border-white/20 ${accent} px-4 py-2 font-mono text-sm font-bold uppercase shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:shadow-[3px_3px_0px_0px_rgba(255,255,255,0.1)]`}>
+        <Icon className="h-4 w-4" />
+        {number}
+      </div>
+      <h3 className="mb-2 text-xl font-black uppercase tracking-tight dark:text-white">{title}</h3>
+      <p className="text-neutral-600 dark:text-neutral-400 leading-relaxed">{description}</p>
+    </div>
   );
 }
 
@@ -89,60 +187,72 @@ function SectionHeading({
 
 function HeroSection(): React.JSX.Element {
   return (
-    <section className="relative flex min-h-[90vh] flex-col justify-center border-b-4 border-black bg-gradient-to-br from-cyan-100 via-blue-50 to-white px-6 py-24 pattern-dots pattern-black pattern-bg-transparent pattern-size-4 pattern-opacity-10">
+    <section className="relative flex min-h-[95vh] flex-col justify-center border-b-4 border-black dark:border-white/10 bg-gradient-to-br from-cyan-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 px-6 py-24">
       <div className="mx-auto w-full max-w-7xl">
-        <div className="max-w-4xl">
-          <div className="mb-6 flex flex-wrap gap-3">
-            <a
-              href="https://www.linkedin.com/in/piotrbuchman/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
-            >
-              <LinkedinIcon className="h-4 w-4" /> LinkedIn
-            </a>
-            <a
-              href="https://github.com/pbuchman/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
-            >
-              <GithubIcon className="h-4 w-4" /> GitHub
-            </a>
-            <a
-              href="mailto:kontakt@pbuchman.com"
-              className="inline-flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
-            >
-              <Mail className="h-4 w-4" /> Email
-            </a>
-          </div>
-          <p className="mb-4 font-mono text-sm font-bold uppercase tracking-widest text-neutral-700">
-            The Self-Building Personal OS
-          </p>
-          <h1 className="mb-8 text-6xl font-black uppercase leading-[0.9] tracking-tighter text-black md:text-8xl lg:text-[7rem]">
-            Stop managing your <span className="bg-cyan-600 px-2 text-white">life.</span>
-            <br /> Start living it.
-          </h1>
-          <p className="mb-10 max-w-2xl text-xl font-medium leading-relaxed text-neutral-900 md:text-2xl">
-            IntexuraOS builds itself around you. AI agents handle the boring shit — scheduling,
-            research, reminders — while you focus on what actually matters.
-          </p>
+        <div className="grid gap-12 lg:grid-cols-2 lg:gap-16 items-center">
+          <div>
+            <div className="mb-6 flex flex-wrap gap-3">
+              <a
+                href="https://www.linkedin.com/in/piotrbuchman/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 border-2 border-black dark:border-white/20 bg-white dark:bg-slate-800 px-3 py-1.5 font-mono text-xs font-bold uppercase shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:shadow-[3px_3px_0px_0px_rgba(255,255,255,0.1)] transition-all hover:-translate-y-0.5 dark:text-white"
+              >
+                <LinkedinIcon className="h-3.5 w-3.5" /> LinkedIn
+              </a>
+              <a
+                href="https://github.com/pbuchman/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 border-2 border-black dark:border-white/20 bg-white dark:bg-slate-800 px-3 py-1.5 font-mono text-xs font-bold uppercase shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:shadow-[3px_3px_0px_0px_rgba(255,255,255,0.1)] transition-all hover:-translate-y-0.5 dark:text-white"
+              >
+                <GithubIcon className="h-3.5 w-3.5" /> GitHub
+              </a>
+              <a
+                href="mailto:kontakt@pbuchman.com"
+                className="inline-flex items-center gap-2 border-2 border-black dark:border-white/20 bg-white dark:bg-slate-800 px-3 py-1.5 font-mono text-xs font-bold uppercase shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:shadow-[3px_3px_0px_0px_rgba(255,255,255,0.1)] transition-all hover:-translate-y-0.5 dark:text-white"
+              >
+                <Mail className="h-3.5 w-3.5" /> Email
+              </a>
+            </div>
 
-          <div className="flex flex-col gap-4 sm:flex-row">
-            <Link
-              to="/login"
-              className="group flex items-center justify-center gap-2 border-2 border-black bg-cyan-600 px-8 py-4 text-lg font-bold text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-1 hover:bg-cyan-700 hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-            >
-              LOG IN <Terminal className="h-5 w-5" />
-            </Link>
-            <a
-              href="https://github.com/pbuchman/intexuraos"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-center justify-center gap-2 border-2 border-black bg-white px-8 py-4 text-lg font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-1 hover:bg-neutral-100 hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-            >
-              VIEW SOURCE CODE <GithubIcon className="h-5 w-5" />
-            </a>
+            <p className="mb-3 font-mono text-sm font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-400">
+              IntexuraOS v3.0.0
+            </p>
+
+            <h1 className="mb-8 text-5xl font-black uppercase leading-[0.9] tracking-tighter text-black dark:text-white md:text-7xl lg:text-[5.5rem]">
+              The software that{' '}
+              <span className="bg-cyan-600 px-2 text-white dark:bg-cyan-500">builds</span>
+              <br />
+              itself.
+            </h1>
+
+            <p className="mb-10 max-w-xl text-xl leading-relaxed text-neutral-700 dark:text-neutral-300">
+              Send a WhatsApp message describing a bug. Walk away.
+              Come back to a pull request — tests passing, Linear issue updated,
+              code review waiting. No keyboard required.
+            </p>
+
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <Link
+                to="/login"
+                className="group flex items-center justify-center gap-2 border-2 border-black bg-cyan-600 px-8 py-4 text-lg font-bold text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-1 hover:bg-cyan-700 hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+              >
+                LOG IN <Terminal className="h-5 w-5" />
+              </Link>
+              <a
+                href="https://github.com/pbuchman/intexuraos"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center justify-center gap-2 border-2 border-black dark:border-white/20 bg-white dark:bg-slate-800 px-8 py-4 text-lg font-bold text-black dark:text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] transition-all hover:-translate-y-1 hover:bg-neutral-100 dark:hover:bg-slate-700"
+              >
+                VIEW SOURCE <GithubIcon className="h-5 w-5" />
+              </a>
+            </div>
+          </div>
+
+          <div className="hidden lg:block">
+            <AnimatedTerminal />
           </div>
         </div>
       </div>
@@ -150,92 +260,89 @@ function HeroSection(): React.JSX.Element {
   );
 }
 
-function DemoSection(): React.JSX.Element {
-  const [step, setStep] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setStep((prev) => (prev + 1) % 4);
-    }, 2000);
-    return (): void => {
-      clearInterval(timer);
-    };
-  }, []);
-
+function StatsSection(): React.JSX.Element {
   return (
-    <section className="border-b-4 border-black bg-white px-6 py-24">
-      <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2">
-        <div className="flex flex-col justify-center">
-          <SectionHeading>
-            The Loop: <br />
-            <span className="text-blue-600">Capture</span> → <br />
-            <span className="text-cyan-600">Classify</span> → <br />
-            <span className="text-emerald-600">Execute</span>
-          </SectionHeading>
-          <p className="text-xl font-medium text-neutral-600">
-            18 specialized microservices route your intent to the right agent. Voice note becomes
-            research report. Link becomes summarized bookmark. Date mention becomes calendar event.
-          </p>
+    <section className="border-b-4 border-black dark:border-white/10 bg-white dark:bg-slate-900 px-6 py-16">
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-8 text-black dark:text-white">
+        <StatBlock value="20" label="Services" />
+        <StatBlock value="4" label="Workers" />
+        <StatBlock value="22" label="Packages" />
+        <StatBlock value="17" label="AI Models" />
+        <StatBlock value="100%" label="Branch Coverage" />
+        <StatBlock value="1" label="Developer" />
+      </div>
+    </section>
+  );
+}
+
+function SelfBuildingSection(): React.JSX.Element {
+  return (
+    <section className="border-b-4 border-black dark:border-white/10 bg-neutral-50 dark:bg-slate-950 px-6 py-24">
+      <div className="mx-auto max-w-7xl">
+        <p className="mb-4 font-mono text-sm font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-400">
+          The Self-Building System
+        </p>
+        <h2 className="mb-6 max-w-3xl text-4xl font-black uppercase leading-[0.95] tracking-tighter text-black dark:text-white md:text-6xl">
+          Describe the change. <br />
+          Receive a pull request.
+        </h2>
+        <p className="mb-16 max-w-2xl text-lg leading-relaxed text-neutral-600 dark:text-neutral-400">
+          Most AI coding tools wait for you to sit at a keyboard. IntexuraOS doesn&apos;t. You describe
+          what needs to change. The platform designs the approach, writes the code in a sandboxed Docker
+          container, runs CI, creates the PR, and updates the Linear issue. If verification fails,
+          it retries with preserved context.
+        </p>
+
+        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+          <PipelineStep
+            number="Phase 1"
+            title="Design"
+            description="A design agent analyzes the task, enriches the Linear issue with technical context, creates subissues for complex work, and labels it code-task when the plan is sound."
+            icon={Brain}
+            accent="bg-purple-100 dark:bg-purple-900/40 dark:text-purple-300"
+          />
+          <PipelineStep
+            number="Phase 2"
+            title="Execute"
+            description="A strict execution agent picks up the labeled issue, writes code in Docker with git worktree isolation, runs the full CI suite, and creates a pull request."
+            icon={Code2}
+            accent="bg-blue-100 dark:bg-blue-900/40 dark:text-blue-300"
+          />
+          <PipelineStep
+            number="Verify"
+            title="Check"
+            description="Gemini-powered completion verifier checks the work against a contract: correct files modified, tests passing, PR created. If not, the system resumes automatically."
+            icon={CheckCircle2}
+            accent="bg-green-100 dark:bg-green-900/40 dark:text-green-300"
+          />
+          <PipelineStep
+            number="Deliver"
+            title="Ship"
+            description="PR created, Linear issue moved to In Review, WhatsApp notification sent. You review and merge when ready. The platform did the rest."
+            icon={GitPullRequest}
+            accent="bg-cyan-100 dark:bg-cyan-900/40 dark:text-cyan-300"
+          />
         </div>
 
-        <div className="relative aspect-square max-h-[600px] w-full border-4 border-black bg-neutral-100 p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
-          {/* Step 1: Voice Input */}
-          <div
-            className={`absolute left-8 top-8 w-[80%] border-2 border-black bg-white p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-500 ${
-              step >= 0 ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0'
-            }`}
-          >
-            <div className="mb-2 flex items-center gap-2 font-mono text-sm font-bold text-neutral-500">
-              <Mic className="h-4 w-4" /> USER INPUT (WHATSAPP)
-            </div>
-            <p className="text-lg font-bold italic">
-              "Research the latest Hexagonal Architecture patterns and schedule a review meeting for
-              Friday."
+        <div className="mt-16 grid gap-6 md:grid-cols-3">
+          <BrutalistCard title="Docker Isolation" icon={Container}>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              Every task runs in its own container — capabilities dropped, non-root execution, read-only
+              secrets, network isolation blocking cloud metadata. No task can touch another.
             </p>
-          </div>
-
-          {/* Step 2: Synthesis */}
-          <div
-            className={`absolute right-8 top-1/3 w-[80%] border-2 border-black bg-purple-100 p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-500 ${
-              step >= 1 ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'
-            }`}
-          >
-            <div className="mb-2 flex items-center gap-2 font-mono text-sm font-bold text-purple-700">
-              <Brain className="h-4 w-4" /> COUNCIL OF AI
-            </div>
-            <div className="space-y-2 font-mono text-sm">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500" /> Intent: Research + Calendar
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500" /> Agents: ResearchAgent,
-                CalendarAgent
-              </div>
-            </div>
-          </div>
-
-          {/* Step 3: Execution */}
-          <div
-            className={`absolute bottom-8 left-8 w-[90%] border-2 border-black bg-green-100 p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-500 ${
-              step >= 2 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
-            }`}
-          >
-            <div className="mb-2 flex items-center gap-2 font-mono text-sm font-bold text-green-700">
-              <CheckSquare className="h-4 w-4" /> EXECUTION LOG
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 border border-black/10 bg-white p-2">
-                <Database className="h-4 w-4 text-neutral-400" />
-                <span className="font-mono text-xs font-bold">NOTION</span>
-                <span className="text-sm">Created page "Hexagonal Arch Research"</span>
-              </div>
-              <div className="flex items-center gap-3 border border-black/10 bg-white p-2">
-                <Layers className="h-4 w-4 text-neutral-400" />
-                <span className="font-mono text-xs font-bold">CALENDAR</span>
-                <span className="text-sm">Event created: "Arch Review" (Fri 2PM)</span>
-              </div>
-            </div>
-          </div>
+          </BrutalistCard>
+          <BrutalistCard title="HMAC-Signed Dispatch" icon={Shield}>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              Worker communication uses nonce + timestamp + HMAC-SHA256 through Cloudflare Access tunnels.
+              No exposed endpoints. No shared secrets between tasks.
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Automatic Retry" icon={Zap}>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              Failed tasks preserve full context and retry with a 1-minute cool-off. Messages queue
+              during execution and trigger resume on completed tasks.
+            </p>
+          </BrutalistCard>
         </div>
       </div>
     </section>
@@ -243,32 +350,101 @@ function DemoSection(): React.JSX.Element {
 }
 
 function CouncilSection(): React.JSX.Element {
+  const providers = [
+    { name: 'ANTHROPIC', models: 'Opus 4.5, Sonnet, Haiku', role: 'Analysis, validation, autonomous coding', color: 'border-orange-500/50' },
+    { name: 'OPENAI', models: 'GPT-5.2, o4-mini, Image 1', role: 'Deep research, synthesis, embeddings', color: 'border-green-500/50' },
+    { name: 'GOOGLE', models: 'Gemini 2.5 Pro, Flash', role: 'Classification, routing, image gen', color: 'border-blue-500/50' },
+    { name: 'PERPLEXITY', models: 'Sonar, Pro, Deep Research', role: 'Real-time web search, citations', color: 'border-purple-500/50' },
+    { name: 'ZAI', models: 'GLM-4.7, GLM-4.7-Flash', role: 'Multilingual, cost-efficient, guest access', color: 'border-cyan-500/50' },
+  ];
+
   return (
-    <section className="border-b-4 border-black bg-neutral-950 px-6 py-24 text-white">
-      <div className="mx-auto max-w-7xl text-center">
-        <h2 className="mb-6 font-mono text-3xl font-bold uppercase tracking-widest text-neutral-500">
+    <section className="border-b-4 border-black dark:border-white/10 bg-neutral-950 px-6 py-24 text-white">
+      <div className="mx-auto max-w-7xl">
+        <p className="mb-4 font-mono text-sm font-bold uppercase tracking-[0.2em] text-neutral-500">
           The Council of AI
-        </h2>
-        <p className="mx-auto mb-16 max-w-2xl text-lg text-neutral-400">
-          17 models across 5 providers, treated as a council of experts rather than a single oracle.
-          Each query is dispatched to multiple models in parallel, then synthesized with confidence
-          scoring. <span className="text-blue-400">v2.0.0: Natural language model selection — "research with Claude and GPT"</span>
         </p>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
-          {[
-            { name: 'ANTHROPIC', models: 'Opus 4.5, Sonnet 4.5', role: 'Analysis & Validation' },
-            { name: 'OPENAI', models: 'GPT-5.2, o4-mini', role: 'Deep Research & Images' },
-            { name: 'GOOGLE', models: 'Gemini 2.5 Pro/Flash', role: 'Classification & Routing' },
-            { name: 'PERPLEXITY', models: 'Sonar Pro/Deep', role: 'Real-time Web Search' },
-            { name: 'ZAI', models: 'GLM-4.7 / Flash', role: 'Multilingual Analysis' },
-          ].map((provider) => (
+        <h2 className="mb-6 max-w-3xl text-4xl font-black uppercase leading-[0.95] tracking-tighter md:text-6xl">
+          Five models debate. <br />
+          You get the truth.
+        </h2>
+        <p className="mb-16 max-w-2xl text-lg leading-relaxed text-neutral-400">
+          Single-model assistants hallucinate. A council of models cross-checks. When three agree and
+          two disagree, that disagreement is surfaced — not hidden. Every claim traces back to which
+          model said it and why.
+        </p>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {providers.map((provider) => (
             <div
               key={provider.name}
-              className="flex flex-col items-center justify-center border-2 border-neutral-800 p-6 transition-colors hover:border-white hover:bg-neutral-900"
+              className={`flex flex-col border-2 ${provider.color} bg-neutral-900/50 p-6 transition-all hover:bg-neutral-800/80 hover:border-white/40`}
             >
-              <div className="mb-2 text-2xl font-black">{provider.name}</div>
-              <div className="mb-2 font-mono text-xs text-neutral-400">{provider.models}</div>
-              <div className="font-mono text-xs text-neutral-500">{provider.role}</div>
+              <div className="mb-3 text-xl font-black tracking-tight">{provider.name}</div>
+              <div className="mb-2 font-mono text-xs leading-relaxed text-neutral-400">{provider.models}</div>
+              <div className="mt-auto font-mono text-xs text-neutral-600">{provider.role}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-12 border-t border-neutral-800 pt-8">
+          <p className="font-mono text-sm text-neutral-500">
+            Specify models in natural language: &quot;Research AI trends with Claude and GPT&quot; — or let
+            the system choose. Every LLM call is tracked: model, tokens, cost. Full transparency.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function VoiceSection(): React.JSX.Element {
+  const actions = [
+    { input: 'Fix the Safari login redirect', output: 'PR #847 created, CI passing, Linear updated', icon: Code2, tag: 'CODE' },
+    { input: 'Research quantum computing breakthroughs', output: '5-model synthesis with citations and confidence scores', icon: Brain, tag: 'RESEARCH' },
+    { input: 'Schedule sync with engineering Tuesday 2pm', output: 'Preview shown, approved via emoji, event created', icon: Layers, tag: 'CALENDAR' },
+    { input: 'Remind me to review Q4 report by Friday', output: 'Task extracted with priority and deadline', icon: CheckCircle2, tag: 'TODO' },
+    { input: 'Save this link about TypeScript 5.0', output: 'AI summary generated, metadata extracted, bookmarked', icon: MessageSquare, tag: 'LINK' },
+    { input: 'Create a Linear issue for the auth refactor', output: 'Issue filed with AI-generated title and description', icon: Bot, tag: 'LINEAR' },
+  ];
+
+  return (
+    <section className="border-b-4 border-black dark:border-white/10 bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-slate-900 dark:to-slate-950 px-6 py-24">
+      <div className="mx-auto max-w-7xl">
+        <p className="mb-4 font-mono text-sm font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-400">
+          Voice-First Intelligence
+        </p>
+        <h2 className="mb-6 max-w-3xl text-4xl font-black uppercase leading-[0.95] tracking-tighter text-black dark:text-white md:text-6xl">
+          Speak. <br />
+          It understands.
+        </h2>
+        <p className="mb-16 max-w-2xl text-lg leading-relaxed text-neutral-600 dark:text-neutral-400">
+          Seven action types. One interface. Send a WhatsApp voice note or text message.
+          The commands-agent classifies intent with a 5-step decision tree, routes to the right agent,
+          and executes. Polish and English supported.
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {actions.map((action) => (
+            <div
+              key={action.tag}
+              className="group border-2 border-black dark:border-white/20 bg-white dark:bg-slate-800 p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] transition-all hover:-translate-y-1"
+            >
+              <div className="mb-3 flex items-center gap-2">
+                <action.icon className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                <span className="font-mono text-xs font-bold tracking-wider text-cyan-700 dark:text-cyan-400">
+                  {action.tag}
+                </span>
+              </div>
+              <div className="mb-3 flex items-start gap-2">
+                <Mic className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
+                <p className="text-sm font-bold italic text-black dark:text-white">
+                  &quot;{action.input}&quot;
+                </p>
+              </div>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                → {action.output}
+              </p>
             </div>
           ))}
         </div>
@@ -277,217 +453,116 @@ function CouncilSection(): React.JSX.Element {
   );
 }
 
-function ManifestoSection(): React.JSX.Element {
+function EngineeringSection(): React.JSX.Element {
   return (
-    <section className="border-b-4 border-black bg-gradient-to-br from-cyan-200 to-blue-100 px-6 py-24">
+    <section className="border-b-4 border-black dark:border-white/10 bg-white dark:bg-slate-900 px-6 py-24">
       <div className="mx-auto max-w-7xl">
-        <div className="grid gap-16 lg:grid-cols-2">
-          <div>
-            <SectionHeading>Intelligence as Infrastructure</SectionHeading>
-            <p className="mb-8 text-xl font-bold leading-relaxed">
-              IntexuraOS reimagines productivity as an AI-first system. Instead of building another
-              app that uses AI as a feature, we build AI agents that use apps as tools.
-            </p>
-            <p className="text-lg font-medium leading-relaxed">
-              Your brain excels at creative thinking and decision-making. It struggles with
-              remembering, scheduling, aggregating, and cross-referencing. IntexuraOS handles the
-              cognitive load while you remain the commander.
-            </p>
-          </div>
+        <p className="mb-4 font-mono text-sm font-bold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
+          Engineering Philosophy
+        </p>
+        <h2 className="mb-6 max-w-3xl text-4xl font-black uppercase leading-[0.95] tracking-tighter text-black dark:text-white md:text-6xl">
+          Coverage is a gate. <br />
+          Not a target.
+        </h2>
+        <p className="mb-16 max-w-2xl text-lg leading-relaxed text-neutral-600 dark:text-neutral-400">
+          Every branch is tested or explicitly exempted. Every operation returns{' '}
+          <code className="bg-neutral-100 dark:bg-slate-800 px-1.5 py-0.5 text-sm font-bold">Result&lt;T, E&gt;</code>
+          . No silent failures. No <code className="bg-neutral-100 dark:bg-slate-800 px-1.5 py-0.5 text-sm font-bold">any</code> types.
+          The compiler and the test suite are both gates that must pass before code ships.
+        </p>
 
-          <div className="grid gap-6">
-            <BrutalistCard title="No Dummy Success" icon={Shield}>
-              <p className="text-neutral-700">
-                A function either succeeds with a verified result or fails explicitly. We never return{' '}
-                <code className="bg-neutral-200 px-1 py-0.5 text-sm">null</code> to silence an
-                error.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Hexagonal Architecture" icon={Layers}>
-              <p className="text-neutral-700">
-                Strict boundaries between Domain Logic and Infrastructure. Notion is just an adapter.
-                The core logic is pure.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Council Consensus" icon={Brain}>
-              <p className="text-neutral-700">
-                Five AI models debate independently. When they agree, you get certainty. When they
-                disagree, you see the confidence scores.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Source Attribution" icon={FileText}>
-              <p className="text-neutral-700">
-                Every claim links to which model said it. No black-box answers — trace any statement
-                back to its origin.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Cost Transparency" icon={Database}>
-              <p className="text-neutral-700">
-                Every LLM call tracked: model, tokens, cost. Know exactly what you're spending before
-                and after each query.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard title="Sleep-at-Night Reliability" icon={Zap}>
-              <p className="text-neutral-700">
-                95%+ coverage is not a target; it's a gate. If the code isn't proven to work, it
-                doesn't merge.
-              </p>
-            </BrutalistCard>
-            <BrutalistCard
-              title="Extreme Ownership"
-              icon={Shield}
-              className="hover:border-blue-600 hover:shadow-[6px_6px_0px_0px_rgba(37,99,235,1)]"
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <BrutalistCard title="100% Branch Coverage" icon={Shield}>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              CI fails on any unaccounted branch. Every exemption requires a category and justification.
+              The test suite is the specification.
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Strict TypeScript" icon={Layers}>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              <code className="text-xs">noUncheckedIndexedAccess</code>,{' '}
+              <code className="text-xs">exactOptionalPropertyTypes</code>,{' '}
+              <code className="text-xs">strictBooleanExpressions</code>. The compiler catches what tests might miss.
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Hexagonal Architecture" icon={Layers}>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              Domain logic is pure — no database imports, no HTTP frameworks. Firestore, WhatsApp, GitHub
+              are just adapters. Swap any without touching business rules.
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Extreme Ownership" icon={Shield}>
+            <p className="text-neutral-600 dark:text-neutral-400 mb-3">
+              Based on Jocko Willink&apos;s principles. CI failure = your problem. No &quot;other services
+              failed&quot; rationalizations. Discovery creates ownership.
+            </p>
+            <a
+              href="https://github.com/pbuchman/intexuraos/blob/main/docs/philosophy/extreme-ownership.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 font-mono text-xs font-bold text-cyan-700 dark:text-cyan-400 hover:underline"
             >
-              <p className="mb-3 text-neutral-700">
-                Our engineering philosophy based on Jocko Willink&apos;s book. CI failure = your problem.
-                No &quot;other services failed&quot; rationalizations. Own it, fix it, ship it.
-              </p>
-              <a
-                href="https://github.com/pbuchman/intexuraos/blob/main/docs/philosophy/extreme-ownership.md"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-blue-600 underline"
-              >
-                Read Philosophy <ArrowRight className="h-4 w-4" />
-              </a>
-            </BrutalistCard>
-          </div>
+              Read Philosophy <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </BrutalistCard>
+          <BrutalistCard title="AI-Native Development" icon={Bot}>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              AI isn&apos;t a feature — it&apos;s a team member. Custom skills for Linear issues, Sentry triage,
+              documentation generation. Cross-linking between all artifacts is automatic.
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Infrastructure as Code" icon={Terminal}>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              Everything in Terraform. Cloud Run, Cloud Functions, Pub/Sub, IAM — reproducible, auditable,
+              version-controlled. No manual console clicks.
+            </p>
+          </BrutalistCard>
         </div>
       </div>
     </section>
   );
 }
 
-function RecentUpdatesSection(): React.JSX.Element {
+function AboutSection(): React.JSX.Element {
   return (
-    <section className="border-b-4 border-black bg-blue-50 px-6 py-24">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-12 flex items-center justify-between max-w-2xl">
-          <SectionHeading className="mb-0">
-            What's New
-          </SectionHeading>
+    <section className="border-b-4 border-black dark:border-white/10 bg-neutral-950 px-6 py-24 text-white">
+      <div className="mx-auto max-w-4xl text-center">
+        <h2 className="mb-8 text-4xl font-black uppercase tracking-tighter md:text-6xl">
+          One developer. <br />
+          Zero excuses.
+        </h2>
+        <p className="mx-auto mb-8 max-w-2xl text-lg leading-relaxed text-neutral-400">
+          IntexuraOS is what happens when a single engineer refuses to accept that one person can&apos;t
+          build and maintain a 46-component distributed system with enterprise-grade reliability.
+          The answer isn&apos;t working harder. It&apos;s building agents that work for you — then building
+          agents that build agents.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <a
+            href="https://www.linkedin.com/in/piotrbuchman/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 border-2 border-white/20 bg-white/5 px-6 py-3 font-mono text-sm font-bold uppercase transition-all hover:bg-white/10 hover:border-white/40"
+          >
+            <LinkedinIcon className="h-4 w-4" /> Piotr Buchman
+          </a>
+          <a
+            href="https://github.com/pbuchman/intexuraos"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 border-2 border-white/20 bg-white/5 px-6 py-3 font-mono text-sm font-bold uppercase transition-all hover:bg-white/10 hover:border-white/40"
+          >
+            <GithubIcon className="h-4 w-4" /> Source Code
+          </a>
           <a
             href="https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-blue-600 underline"
+            className="inline-flex items-center gap-2 border-2 border-white/20 bg-white/5 px-6 py-3 font-mono text-sm font-bold uppercase transition-all hover:bg-white/10 hover:border-white/40"
           >
-            View Changelog <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-4 w-4" /> Changelog
           </a>
         </div>
-        <p className="mb-12 max-w-2xl text-lg font-medium text-neutral-700">
-          Major improvements to approval workflows, classification accuracy, and user control.
-        </p>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <BrutalistCard title="WhatsApp Approval" icon={CheckSquare} className="bg-green-50">
-            <p className="mb-3 text-neutral-700">
-              Approve or reject actions directly from WhatsApp. Reply with text (&quot;yes&quot;, &quot;ok&quot;, &quot;reject&quot;)
-              or react with emoji — 👍 to approve, 👎 to reject. No app switching required.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              LLM-based intent classification for natural replies.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Calendar Preview" icon={Layers} className="bg-yellow-50">
-            <p className="mb-3 text-neutral-700">
-              See exactly what will be created before approving. Event title, time, duration,
-              and all-day detection — full visibility before commit.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              &quot;Meeting Tuesday 2pm&quot; → Preview → 👍 → Created
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Smart Classification" icon={Brain} className="bg-purple-50">
-            <p className="mb-3 text-neutral-700">
-              5-step decision tree with URL keyword isolation. &quot;Save bookmark example.com/todo-list&quot;
-              correctly saves as link, not todo. Explicit intent always wins.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              Polish language support: &quot;zapisz&quot;, &quot;notatka&quot;, &quot;zadanie&quot;
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Model Selection" icon={Zap} className="bg-cyan-50">
-            <p className="mb-3 text-neutral-700">
-              Specify which AI models to use in natural language. &quot;Research AI trends with Claude
-              and GPT&quot; or &quot;all models except Perplexity&quot; — you&apos;re in control.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              GLM-4.7-Flash: Fast, lightweight model for cost-conscious queries.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Linear Dashboard" icon={Database} className="bg-orange-50">
-            <p className="mb-3 text-neutral-700">
-              New 3-column layout: Planning → Work → Closed. Todo and To Test categories with
-              smart state-to-column mapping for visual workflow tracking.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              Optimized for daily standup and sprint planning.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Race Prevention" icon={Shield} className="bg-red-50">
-            <p className="mb-3 text-neutral-700">
-              Atomic status transitions via Firestore transactions. No more double-approvals or
-              lost updates when multiple agents process the same action.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              updateStatusIf() — optimistic locking pattern.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Trust & Verify" icon={Shield} className="bg-green-50">
-            <p className="mb-3 text-neutral-700">
-              We believe in AI models, but validation builds trust. Every LLM response is verified
-              with structured schemas — catching errors before they affect your data.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              Zod schemas: Runtime safety + TypeScript types in one
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="No More Duplicates" icon={CheckSquare} className="bg-purple-50">
-            <p className="mb-3 text-neutral-700">
-              Fixed duplicate WhatsApp approval notifications. Now you receive exactly one message
-              per action — clean, predictable, and clutter-free.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              One notification per action. Period.
-            </p>
-          </BrutalistCard>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function VersionHistorySection(): React.JSX.Element {
-  const [showHistory, setShowHistory] = useState(false);
-
-  return (
-    <section className="border-b-4 border-black bg-neutral-100 px-6 py-24">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8">
-          <button
-            onClick={() => {
-              setShowHistory(!showHistory);
-            }}
-            className="flex items-center gap-3 font-mono text-lg font-bold uppercase hover:text-blue-600"
-          >
-            <ArrowRight className={`h-5 w-5 transition-transform ${
-              showHistory ? 'rotate-90' : ''
-            }`} />
-            Previous Versions
-          </button>
-        </div>
-
-        {showHistory && (
-          <div className="border-2 border-black bg-white p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <h3 className="mb-4 font-mono text-xl font-bold">v1.x — Launch</h3>
-            <p className="text-lg font-medium leading-relaxed text-neutral-800">
-              End-to-end AI autonomy: From your mobile to the cloud and back. IntexuraOS went from
-              architecture document to handling live traffic — voice to research, links to bookmarks,
-              dates to calendar events. The full AI agent pipeline is now processing real user
-              requests in production.
-            </p>
-          </div>
-        )}
       </div>
     </section>
   );
@@ -495,34 +570,20 @@ function VersionHistorySection(): React.JSX.Element {
 
 function Footer(): React.JSX.Element {
   return (
-    <footer className="bg-white px-6 py-12">
+    <footer className="bg-white dark:bg-slate-900 px-6 py-12">
       <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 md:flex-row md:items-center">
         <div>
-          <h3 className="mb-2 text-2xl font-black uppercase tracking-tighter">IntexuraOS</h3>
-          <p className="font-mono text-sm text-neutral-500">
-            © {new Date().getFullYear()} <a href="https://pbuchman.com" className="hover:text-blue-600">Piotr Buchman</a>. Open Source.
+          <h3 className="mb-1 text-2xl font-black uppercase tracking-tighter dark:text-white">IntexuraOS</h3>
+          <p className="font-mono text-xs text-neutral-500 dark:text-neutral-400">
+            The software that builds itself. v3.0.0
           </p>
         </div>
-        <div className="flex gap-8 font-mono text-sm font-bold uppercase">
-          <a
-            href="https://github.com/pbuchman/intexuraos"
-            className="flex items-center gap-1 hover:text-blue-600"
-          >
-            GitHub <ArrowRight className="h-4 w-4" />
+        <p className="font-mono text-xs text-neutral-400">
+          &copy; {new Date().getFullYear()}{' '}
+          <a href="https://pbuchman.com" className="hover:text-cyan-600 dark:hover:text-cyan-400">
+            Piotr Buchman
           </a>
-          <a
-            href="https://www.linkedin.com/in/piotrbuchman/"
-            className="flex items-center gap-1 hover:text-blue-600"
-          >
-            LinkedIn <ArrowRight className="h-4 w-4" />
-          </a>
-          <a
-            href="mailto:kontakt@pbuchman.com"
-            className="flex items-center gap-1 hover:text-blue-600"
-          >
-            Email <ArrowRight className="h-4 w-4" />
-          </a>
-        </div>
+        </p>
       </div>
     </footer>
   );
@@ -532,13 +593,14 @@ function Footer(): React.JSX.Element {
 
 export function HomePage(): React.JSX.Element {
   return (
-    <div className="min-h-screen bg-neutral-100 font-sans text-black selection:bg-blue-200 selection:text-black">
+    <div className="min-h-screen bg-neutral-100 dark:bg-slate-950 font-sans text-black dark:text-white selection:bg-cyan-200 selection:text-black dark:selection:bg-cyan-800 dark:selection:text-white">
       <HeroSection />
-      <DemoSection />
+      <StatsSection />
+      <SelfBuildingSection />
       <CouncilSection />
-      <ManifestoSection />
-      <RecentUpdatesSection />
-      <VersionHistorySection />
+      <VoiceSection />
+      <EngineeringSection />
+      <AboutSection />
       <Footer />
     </div>
   );

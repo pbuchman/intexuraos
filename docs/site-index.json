@@ -4,7 +4,7 @@
       "id": "actions-agent",
       "name": "Actions Agent",
       "category": "infrastructure",
-      "summary": "Central action lifecycle with atomic status transitions, button-based WhatsApp approval, and race condition prevention (v4.0.0)",
+      "summary": "Central action lifecycle with atomic status transitions, button-based WhatsApp approval, and race condition prevention (v3.0.0)",
       "features": [
         "Atomic status transitions via Firestore transactions (v2.0.0)",
         "Button-based WhatsApp approval — LLM removed, buttonId resolves intent deterministically (v4.0.0)",
@@ -130,7 +130,7 @@
         "URL keyword isolation - keywords in URLs ignored (v2.0.0)",
         "Explicit intent priority detection (v2.0.0)",
         "Polish language support (v2.0.0)",
-        "6 action types (todo, research, note, link, calendar, linear)",
+        "7 action types (todo, research, note, link, calendar, linear, code)",
         "Model preference detection",
         "Idempotency by source"
       ],
@@ -299,7 +299,7 @@
       "features": [
         "Submit-and-forget code tasks from web UI or WhatsApp",
         "Multi-layer deduplication (approval event, action ID, sha256 dedup key)",
-        "GitHub PR comment auto-response with per-PR locking",
+        "GitHub PR event tracking with Firestore persistence",
         "Per-user worker infrastructure with encrypted credentials",
         "Retry and feedback loops with cool-off periods",
         "Rate limiting (3 concurrent, 10/hour, $20/day, $200/month)",
