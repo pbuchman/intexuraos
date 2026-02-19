@@ -16,7 +16,6 @@ export interface ForwardingState {
   position: number;
   buffer: string;
   partialLine: string;
-  chunksSent: number;
   totalBytes: number;
   droppedChunks: number;
   timer: NodeJS.Timeout | null;
@@ -25,7 +24,6 @@ export interface ForwardingState {
 }
 
 const MAX_CHUNK_SIZE = 64 * 1024; // 64KB — must exceed largest single JSON message (hook_response with build output)
-const MAX_CHUNKS_PER_TASK = 500;
 const MAX_TOTAL_LOG_SIZE = 4 * 1024 * 1024; // 4MB
 const CHUNK_INTERVAL_MS = 3 * 1000; // 3 seconds
 const MAX_BATCH_SIZE = 5;
@@ -103,7 +101,6 @@ export class LogForwarder {
       position: 0,
       buffer: '',
       partialLine: '',
-      chunksSent: 0,
       totalBytes: 0,
       droppedChunks: 0,
       timer: null,
@@ -199,7 +196,6 @@ export class LogForwarder {
         position: 0,
         buffer: '',
         partialLine: '',
-        chunksSent: 0,
         totalBytes: 0,
         droppedChunks: 0,
         timer: null,
@@ -268,19 +264,7 @@ export class LogForwarder {
     const state = this.forwarders.get(taskId);
     if (!state || state.buffer.length === 0) return;
 
-    // Check size limits (skipped when force=true, e.g. final flush from flushAndStop)
-    /* v8 ignore start -- test-infra: requires sending 500 chunks to trigger, impractical in unit tests @preserve */
-    if (!force && state.chunksSent >= MAX_CHUNKS_PER_TASK) {
-      this.logger.warn(
-        { taskId, chunksSent: state.chunksSent },
-        'Max chunks per task reached, stopping uploads'
-      );
-      state.droppedChunks += 1;
-      state.buffer = '';
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
+    // Check size limit (skipped when force=true, e.g. final flush from flushAndStop)
     /* v8 ignore start -- test-infra: requires sending 4MB of log data to trigger, impractical in unit tests @preserve */
     if (!force && state.totalBytes >= MAX_TOTAL_LOG_SIZE) {
       this.logger.warn(
@@ -356,7 +340,6 @@ export class LogForwarder {
     const result = await this.sendWithRetry(payload, state.webhookSecret);
 
     if (result.success) {
-      state.chunksSent += chunks.length;
       state.totalBytes += chunks.reduce((sum, c) => sum + c.length, 0);
     } else {
       state.droppedChunks += chunks.length;
