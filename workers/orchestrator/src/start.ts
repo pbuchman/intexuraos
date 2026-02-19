@@ -393,10 +393,8 @@ async function bootstrap(): Promise<void> {
   );
 
   // Resolve git identity for worker containers (env var → host git config → undefined)
-  const gitUserName =
-    process.env['INTEXURAOS_GIT_USER_NAME'] ?? readHostGitConfig('user.name');
-  const gitUserEmail =
-    process.env['INTEXURAOS_GIT_USER_EMAIL'] ?? readHostGitConfig('user.email');
+  const gitUserName = process.env['INTEXURAOS_GIT_USER_NAME'] ?? readHostGitConfig('user.name');
+  const gitUserEmail = process.env['INTEXURAOS_GIT_USER_EMAIL'] ?? readHostGitConfig('user.email');
   logger.info({ gitUserName, gitUserEmail }, 'Git identity for worker containers');
 
   // Create Docker isolation provider

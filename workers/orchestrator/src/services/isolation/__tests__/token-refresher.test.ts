@@ -188,10 +188,40 @@ describe('TokenRefresher', () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
+        text: () => Promise.resolve('Bad credentials'),
       });
 
       await expect(refresher.registerTask('task-123')).rejects.toThrow(
         'GitHub token mint failed: 401'
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        {
+          url: 'https://api.github.com/app/installations/test-installation-id/access_tokens',
+          status: 401,
+          body: 'Bad credentials',
+        },
+        'GitHub token mint HTTP error'
+      );
+    });
+
+    it('logs network-level cause when fetch throws TypeError', async () => {
+      const cause = new Error('getaddrinfo ENOTFOUND api.github.com');
+      (cause as NodeJS.ErrnoException).code = 'ENOTFOUND';
+      (cause as NodeJS.ErrnoException).syscall = 'getaddrinfo';
+      const fetchError = new TypeError('fetch failed');
+      fetchError.cause = cause;
+      mockFetch.mockRejectedValueOnce(fetchError);
+
+      await expect(refresher.registerTask('task-123')).rejects.toThrow('fetch failed');
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        {
+          url: 'https://api.github.com/app/installations/test-installation-id/access_tokens',
+          errorMessage: 'fetch failed',
+          causeMessage: 'getaddrinfo ENOTFOUND api.github.com',
+          causeCode: 'ENOTFOUND',
+          causeSyscall: 'getaddrinfo',
+        },
+        'GitHub token mint fetch failed'
       );
     });
 
@@ -211,7 +241,7 @@ describe('TokenRefresher', () => {
 
       // First task fails, second succeeds
       mockFetch
-        .mockResolvedValueOnce({ ok: false, status: 500 })
+        .mockResolvedValueOnce({ ok: false, status: 500, text: () => Promise.resolve('Internal Server Error') })
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'new-token' }) });
 
       await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);

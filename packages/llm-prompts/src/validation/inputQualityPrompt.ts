@@ -15,6 +15,7 @@ export type InputQualityPromptDeps = PromptDeps;
 export const inputQualityPrompt: PromptBuilder<InputQualityPromptInput> = {
   name: 'input-quality-validation',
   description: 'Validates research prompt quality and returns quality score with reason',
+  version: '1.0.0',
 
   build(input: InputQualityPromptInput): string {
     return `You are a research prompt quality analyzer. Evaluate the following research prompt.

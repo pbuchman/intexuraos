@@ -5,6 +5,7 @@ describe('thumbnailPrompt', () => {
   it('has correct metadata', () => {
     expect(thumbnailPrompt.name).toBe('thumbnail-prompt');
     expect(thumbnailPrompt.description).toContain('thumbnail generation');
+    expect(thumbnailPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('builds prompt with default deps', () => {

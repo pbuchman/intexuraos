@@ -1,8 +1,11 @@
 #!/bin/bash
 
-# Session Start Hook: Build packages
-# Ensures all buildable packages have dist/ at session start.
-# This prevents the ~2,400 no-unsafe-* lint errors caused by unresolved types.
+# Session Start Hook: Build packages + verify environment
+# 1. Ensures all buildable packages have dist/ at session start.
+#    This prevents the ~2,400 no-unsafe-* lint errors caused by unresolved types.
+# 2. Ensures direnv is allowed and critical env vars are loadable.
+#    Bash tool calls use login shells (zsh -c -l) which trigger the direnv hook,
+#    but direnv won't load .envrc unless it's been `direnv allow`-ed.
 
 set -euo pipefail
 
@@ -27,13 +30,44 @@ else
 fi
 echo "[${TIMESTAMP_ISO}] Session started" >> "$LOG_FILE"
 
-# Check if node_modules exists
+# ── Phase 1: Ensure direnv is allowed ──────────────────────────────────────
+# direnv won't load .envrc unless explicitly allowed. Run `direnv allow` to
+# ensure subsequent Bash tool calls (login shells) pick up the vars.
+if command -v direnv &>/dev/null && [ -f ".envrc" ]; then
+  direnv allow . 2>/dev/null || true
+fi
+
+# ── Phase 2: Verify critical env vars are loadable ─────────────────────────
+# Source .envrc + .envrc.local in a subshell to test without affecting parent.
+# This catches issues like missing .envrc.local or broken variable references.
+CRITICAL_VARS="INTEXURAOS_GCP_PROJECT_ID INTEXURAOS_INTERNAL_AUTH_TOKEN INTEXURAOS_AUTH_JWKS_URL INTEXURAOS_ZAI_APP_API_KEY INTEXURAOS_OPENAI_APP_API_KEY INTEXURAOS_SENTRY_DSN"
+
+missing_vars=$(
+  # Source in subshell to avoid polluting hook environment
+  set +u
+  source .envrc 2>/dev/null || true
+  for var in $CRITICAL_VARS; do
+    eval "val=\${$var:-}"
+    if [ -z "$val" ]; then
+      echo "$var"
+    fi
+  done
+)
+
+if [ -n "$missing_vars" ]; then
+  echo "⚠ Env vars missing after sourcing .envrc: $missing_vars" >&2
+  echo "  Check .envrc and .envrc.local exist and are correct." >&2
+else
+  echo "✓ All critical env vars verified" >&2
+fi
+
+# ── Phase 3: Check if node_modules exists ──────────────────────────────────
 if [ ! -d "node_modules" ]; then
   echo "CONTINUE"
   exit 0
 fi
 
-# Check if any buildable package is missing dist/
+# ── Phase 4: Build packages if dist/ is missing ───────────────────────────
 # Only check packages that have a "build" script in package.json
 missing_dist=false
 for pkg in packages/*/; do

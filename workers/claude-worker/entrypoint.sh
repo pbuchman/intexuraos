@@ -190,6 +190,31 @@ if [ -f "/repo/pnpm-lock.yaml" ]; then
     echo "[entrypoint] Dependencies installed"
 fi
 
+# ------------------------------------------------------------------------------
+# Set randomized attribution for commits and PRs
+# ------------------------------------------------------------------------------
+VERBS=(
+    "Crafted" "Forged" "Engineered" "Sculpted" "Woven"
+    "Conjured" "Assembled" "Composed" "Distilled" "Fashioned"
+    "Architected" "Brewed" "Chiseled" "Designed" "Devised"
+    "Hammered" "Kindled" "Molded" "Orchestrated" "Refined"
+    "Shaped" "Sparked" "Stitched" "Tempered" "Wrought"
+)
+VERB=${VERBS[$((RANDOM % ${#VERBS[@]}))]}
+COMMIT_ATTR="${VERB} with love by 🤖 <a href=\"mailto:intex@intexuraos.cloud\">Intex</a>"
+PR_ATTR="${VERB} with love by 🤖 <a href=\"mailto:intex@intexuraos.cloud\">Intex</a>"
+
+mkdir -p /repo/.claude
+if [ -f "/repo/.claude/settings.local.json" ]; then
+    jq --arg commit "$COMMIT_ATTR" --arg pr "$PR_ATTR" \
+        '.attribution = { commit: $commit, pr: $pr }' /repo/.claude/settings.local.json > /tmp/settings.local.json \
+        && mv /tmp/settings.local.json /repo/.claude/settings.local.json
+else
+    jq -n --arg commit "$COMMIT_ATTR" --arg pr "$PR_ATTR" \
+        '{ attribution: { commit: $commit, pr: $pr } }' > /repo/.claude/settings.local.json
+fi
+echo "[entrypoint] Attribution set: ${COMMIT_ATTR}"
+
 echo "[entrypoint] Writing readiness marker"
 touch /tmp/worker-ready
 

@@ -15,6 +15,7 @@ export type InputImprovementPromptDeps = PromptDeps;
 export const inputImprovementPrompt: PromptBuilder<InputImprovementPromptInput> = {
   name: 'input-improvement',
   description: 'Improves a research prompt while preserving intent and language',
+  version: '1.0.0',
 
   build(input: InputImprovementPromptInput): string {
     return `You are a research prompt improvement specialist. Improve the following research prompt.
