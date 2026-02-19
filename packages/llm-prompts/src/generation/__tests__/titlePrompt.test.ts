@@ -5,6 +5,7 @@ describe('titlePrompt', () => {
   it('has correct metadata', () => {
     expect(titlePrompt.name).toBe('title-generation');
     expect(titlePrompt.description).toContain('concise titles');
+    expect(titlePrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('builds prompt with default deps', () => {

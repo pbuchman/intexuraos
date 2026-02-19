@@ -18,6 +18,7 @@ export interface ThumbnailPromptDeps extends PromptDeps {
 export const thumbnailPrompt: PromptBuilder<ThumbnailPromptInput, ThumbnailPromptDeps> = {
   name: 'thumbnail-prompt',
   description: 'Generates structured image prompts from text content for thumbnail generation',
+  version: '1.0.0',
 
   build(input: ThumbnailPromptInput, deps?: ThumbnailPromptDeps): string {
     const maxTextLength = deps?.maxTextLength ?? 60000;

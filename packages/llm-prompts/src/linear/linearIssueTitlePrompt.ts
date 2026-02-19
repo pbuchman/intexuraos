@@ -27,6 +27,7 @@ export const linearIssueTitlePrompt: PromptBuilder<
 > = {
   name: 'linear-issue-title',
   description: 'Generates value-focused Linear issue titles with product owner expertise',
+  version: '1.0.0',
 
   build(input: LinearIssueTitlePromptInput, deps?: LinearIssueTitlePromptDeps): string {
     const maxLength = deps?.maxLength ?? 80;

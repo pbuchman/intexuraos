@@ -27,6 +27,7 @@ export const calendarExtractionRepairPrompt: PromptBuilder<
 > = {
   name: 'calendar-extraction-repair',
   description: 'Repairs invalid calendar event extraction responses',
+  version: '1.0.0',
 
   build(
     input: CalendarExtractionRepairPromptInput,

@@ -5,6 +5,7 @@ describe('inputImprovementPrompt', () => {
   it('has correct metadata', () => {
     expect(inputImprovementPrompt.name).toBe('input-improvement');
     expect(inputImprovementPrompt.description).toContain('prompt');
+    expect(inputImprovementPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('builds prompt with user input', () => {

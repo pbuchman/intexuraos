@@ -243,6 +243,7 @@ describe('intelligentClassifierPrompt', () => {
       expect(intelligentClassifierPrompt.description).toContain(
         'Classifies user messages using historical examples'
       );
+      expect(intelligentClassifierPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
     });
   });
 });
