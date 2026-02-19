@@ -129,12 +129,14 @@ describe('commandClassifierPrompt', () => {
       const prompt = commandClassifierPrompt.build({ message: 'test' });
 
       expect(prompt).toContain('CRITICAL: Linear vs Code Distinction');
-      expect(prompt).toContain('linear** = DOCUMENT/TRACK/CREATE an issue');
-      expect(prompt).toContain('code** = EXECUTE/IMPLEMENT/DO the work NOW');
-      expect(prompt).toContain('prefer "linear" (documenting) unless');
+      expect(prompt).toContain(
+        'linear** = ONLY when user EXPLICITLY wants to create/track a Linear issue'
+      );
+      expect(prompt).toContain('code** = ANY engineering task describing work to do');
+      expect(prompt).toContain('prefer "code"');
     });
 
-    it('includes Linear document intent phrases', () => {
+    it('includes Linear explicit tracking intent phrases', () => {
       const prompt = commandClassifierPrompt.build({ message: 'test' });
 
       expect(prompt).toContain('"linear issue"');
@@ -145,29 +147,29 @@ describe('commandClassifierPrompt', () => {
       expect(prompt).toContain('"document this"');
     });
 
-    it('includes Code execute intent phrases requiring explicit action', () => {
+    it('includes Code as default for engineering tasks', () => {
       const prompt = commandClassifierPrompt.build({ message: 'test' });
 
-      expect(prompt).toContain('"execute this"');
-      expect(prompt).toContain('"implement this now"');
+      expect(prompt).toContain('"fix X"');
+      expect(prompt).toContain('"implement X"');
       expect(prompt).toContain('"start working on"');
-      expect(prompt).toContain('"execute linear issue"');
+      expect(prompt).toContain('"execute this"');
     });
 
-    it('shows that engineering terms without execute default to linear', () => {
+    it('shows that engineering terms default to code', () => {
       const prompt = commandClassifierPrompt.build({ message: 'test' });
 
-      expect(prompt).toContain('"fix the login bug" → linear');
-      expect(prompt).toContain('"implement dark mode" → linear');
-      expect(prompt).toContain('no explicit execution = documenting');
+      expect(prompt).toContain('"fix the login bug" → code');
+      expect(prompt).toContain('"implement dark mode" → code');
+      expect(prompt).toContain('engineering task');
     });
 
-    it('shows explicit execution commands classify as code', () => {
+    it('shows explicit linear intent classifies as linear', () => {
       const prompt = commandClassifierPrompt.build({ message: 'test' });
 
-      expect(prompt).toContain('"execute: fix the login bug" → code');
-      expect(prompt).toContain('"start working on dark mode" → code');
-      expect(prompt).toContain('explicit "execute"');
+      expect(prompt).toContain('"linear issue: fix the login bug" → linear');
+      expect(prompt).toContain('"create issue for auth bug" → linear');
+      expect(prompt).toContain('"track this: mobile menu broken" → linear');
     });
   });
 
@@ -177,6 +179,7 @@ describe('commandClassifierPrompt', () => {
       expect(commandClassifierPrompt.description).toContain(
         'Classifies user messages into command categories'
       );
+      expect(commandClassifierPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
     });
   });
 });

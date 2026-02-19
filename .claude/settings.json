@@ -13,6 +13,10 @@
     "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/statusline.sh",
     "padding": 0
   },
+  "attribution": {
+    "commit": "Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+    "pr": "Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+  },
   "hooks": {
     "SessionStart": [
       {

@@ -20,6 +20,7 @@ export interface LabelPromptDeps extends PromptDeps {
 export const labelPrompt: PromptBuilder<LabelPromptInput, LabelPromptDeps> = {
   name: 'label-generation',
   description: 'Generates short labels (3-6 words) summarizing content',
+  version: '1.0.0',
 
   build(input: LabelPromptInput, deps?: LabelPromptDeps): string {
     const contentPreviewLimit = deps?.contentPreviewLimit ?? 2000;

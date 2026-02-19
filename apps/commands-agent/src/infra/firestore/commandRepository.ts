@@ -15,6 +15,7 @@ interface CommandDoc {
     type: string;
     confidence: number;
     reasoning: string;
+    promptVersion: string;
     classifiedAt: string;
   };
   actionId?: string;
@@ -41,6 +42,7 @@ function toCommand(id: string, doc: CommandDoc): Command {
       type: doc.classification.type as CommandClassification['type'],
       confidence: doc.classification.confidence,
       reasoning: doc.classification.reasoning,
+      promptVersion: doc.classification.promptVersion,
       classifiedAt: doc.classification.classifiedAt,
     };
   }
