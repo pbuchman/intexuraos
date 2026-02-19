@@ -1299,6 +1299,7 @@ export interface GitHubPREvent {
   senderLogin: string;
   createdAt: string;
   eventUrl: string | null;
+  body: string | null;
 }
 
 /**

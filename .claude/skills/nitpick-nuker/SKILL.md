@@ -49,18 +49,35 @@ The skill processes three types of comments:
 - `review_body` — The overall review summary text
 - `review_comment` — Inline code comments within a review
 
+### Bot Comments Are High-Value
+
+**Bot comments (e.g. "Claude finished task", "Codex Review") are the PRIMARY source of review feedback.** Bots post their full code reviews as `issue_comment` or `review_body` — these are NOT noise to skip. Always read the full body of bot comments; they typically contain detailed review findings, suggestions, and inline code feedback.
+
+### Issue Comments May Contain Instructions
+
+**Every `issue_comment` must be read and verified.** General comments may contain:
+
+- User instructions to the nuker (e.g., "skip the auth changes", "focus on the API routes")
+- Bot-posted review reports with actionable findings embedded in the body
+- Scope narrowing or prioritization directives
+
+Never auto-skip an `issue_comment` based on author alone. Read the body first.
+
 ## Decision Framework
 
 For each comment, decide:
 
-| Criteria                                   | Action                          |
-| ------------------------------------------ | ------------------------------- |
-| Clear actionable fix (typo, style, naming) | FIX                             |
-| Code change with clear intent              | FIX                             |
-| Question or discussion                     | SKIP - "Discussion/question"    |
-| Disagree with suggestion                   | SKIP - "Intentional design"     |
-| Already addressed elsewhere                | SKIP - "Addressed in other fix" |
-| Outside PR scope                           | SKIP - "Out of scope"           |
+| Criteria                                        | Action                           |
+| ----------------------------------------------- | -------------------------------- |
+| Clear actionable fix (typo, style, naming)      | FIX                              |
+| Code change with clear intent                   | FIX                              |
+| Bot review with actionable findings in body     | FIX (extract and address each)   |
+| User instruction (skip X, focus on Y)           | FOLLOW — adjust processing scope |
+| Question or discussion                          | SKIP - "Discussion/question"     |
+| Disagree with suggestion                        | SKIP - "Intentional design"      |
+| Already addressed elsewhere                     | SKIP - "Addressed in other fix"  |
+| Outside PR scope                                | SKIP - "Out of scope"            |
+| Pure status/coverage report with no suggestions | SKIP - "Automated report"        |
 
 ## CI Loop
 

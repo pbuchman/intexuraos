@@ -131,6 +131,7 @@ describe('retryPendingCommands usecase', () => {
       confidence: 0.95,
       title: 'AI Trends Research',
       reasoning: 'Research task',
+      promptVersion: '1.0.0',
     });
 
     const usecase = createRetryPendingCommandsUseCase({
@@ -161,6 +162,7 @@ describe('retryPendingCommands usecase', () => {
       confidence: 0.95,
       title: 'AI Trends Research',
       reasoning: 'Research task',
+      promptVersion: '1.0.0',
     });
     actionsAgentClient.setFailNext(true);
 
@@ -188,6 +190,7 @@ describe('retryPendingCommands usecase', () => {
       confidence: 0.3,
       title: 'Unknown',
       reasoning: 'Cannot determine type, defaulting to note',
+      promptVersion: '1.0.0',
     });
 
     const usecase = createRetryPendingCommandsUseCase({
@@ -252,6 +255,7 @@ describe('retryPendingCommands usecase', () => {
       confidence: 0.9,
       title: 'Task',
       reasoning: 'Todo task',
+      promptVersion: '1.0.0',
     });
 
     const usecase = createRetryPendingCommandsUseCase({
