@@ -80,7 +80,7 @@ function createMockTask(overrides: Partial<CodeTask> = {}): CodeTask {
     prompt: 'Implement the feature from INT-123',
     sanitizedPrompt: 'implement-feature',
     systemPromptHash: 'hash123',
-    status: 'completed',
+    status: 'designed',
     workerType: 'opus',
     workerLocation: 'us-central1',
     repository: 'pbuchman/intexuraos',

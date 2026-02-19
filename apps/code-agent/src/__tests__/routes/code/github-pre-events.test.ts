@@ -15,13 +15,14 @@ vi.mock('jose', () => ({
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../../server.js';
-import { resetServices, setServices } from '../../../services.js';
+import { resetServices, setServices, getServices } from '../../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from 'pino';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestoreGitHubPRSummariesRepository } from '../../../infra/firestore/gitHubPRSummariesRepository.js';
 import { mockWorkerHealthProbe } from '../../helpers/mockServices.js';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
@@ -41,6 +42,7 @@ import type { TaskDispatcherService, DispatchResult } from '../../../domain/serv
 import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createFirestorePRTaskLockRepository } from '../../../infra/firestore/firestorePRTaskLockRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
 
 describe('GET /code/github-pr-events', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -149,8 +151,12 @@ describe('GET /code/github-pr-events', () => {
       logger,
     });
 
-    // Create the GitHub PR events repo
+    // Create the GitHub PR events and summaries repos
     const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({
+      logger,
+    });
+
+    const gitHubPRSummaryRepo = createFirestoreGitHubPRSummariesRepository({
       logger,
     });
 
@@ -189,7 +195,12 @@ describe('GET /code/github-pr-events', () => {
       }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo,
+      gitHubPRSummaryRepo,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
@@ -213,7 +224,9 @@ describe('GET /code/github-pr-events', () => {
       workerSettingsRepo: ReturnType<typeof createWorkerSettingsRepository>;
       workerHealthProbe: import('../../../domain/ports/workerHealthProbe.js').WorkerHealthProbe;
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     server = await buildServer();
@@ -364,8 +377,46 @@ describe('GET /code/github-pr-events', () => {
     const body = JSON.parse(response.body);
     expect(body.success).toBe(true);
     expect(body.data.events).toHaveLength(1);
-    expect(body.data.events[0].githubEventId).toBe(12345678);
+    expect(body.data.events[0].pullRequestNumber).toBe(42);
     expect(body.data.events[0].repository).toBe('intexuraos/test-repo');
+    expect(body.data.events[0].eventUrl).toBeNull();
+  });
+
+  it('should return eventUrl when payload contains html_url', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    const commentUrl = 'https://github.com/intexuraos/test-repo/pull/10#issuecomment-999';
+
+    await repo.save({
+      githubEventId: 30001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'issue_comment',
+      action: 'created',
+      senderLogin: 'commenter',
+      senderId: 5,
+      senderType: 'User',
+      title: null,
+      body: null,
+      state: null,
+      mergedAt: null,
+      createdAt: new Date('2024-02-01T00:00:00Z'),
+      payload: { comment: { html_url: commentUrl } },
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=10',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.data.events).toHaveLength(1);
+    expect(body.data.events[0].eventUrl).toBe(commentUrl);
   });
 
   it('should pass limit parameter to repository', async () => {
@@ -414,5 +465,467 @@ describe('GET /code/github-pr-events', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.success).toBe(true);
+  });
+
+  it('should return events oldest-first when pullRequestNumber is provided', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    await repo.save({
+      githubEventId: 10001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 5,
+      pullRequestId: 5001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'user1',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 5',
+      body: null,
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+
+    await repo.save({
+      githubEventId: 10002,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 5,
+      pullRequestId: 5001,
+      eventType: 'pull_request_review',
+      action: 'submitted',
+      senderLogin: 'reviewer',
+      senderId: 2,
+      senderType: 'User',
+      title: null,
+      body: null,
+      state: null,
+      mergedAt: null,
+      createdAt: new Date('2024-01-02T00:00:00Z'),
+      payload: {},
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    // Oldest-first order
+    expect(body.data.events[0].eventType).toBe('pull_request');
+    expect(body.data.events[1].eventType).toBe('pull_request_review');
+  });
+
+  it('should return 400 when pullRequestNumber is provided without repository', async () => {
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?pullRequestNumber=5',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('should deduplicate edited comments showing latest body at original position', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    // PR opened
+    await repo.save({
+      githubEventId: 20001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 7,
+      pullRequestId: 7001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 7',
+      body: 'PR description',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: { pull_request: { html_url: 'https://github.com/intexuraos/test-repo/pull/7' } },
+    });
+
+    // Comment created
+    await repo.save({
+      githubEventId: 20002,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 7,
+      pullRequestId: 7001,
+      eventType: 'issue_comment',
+      action: 'created',
+      senderLogin: 'reviewer',
+      senderId: 2,
+      senderType: 'User',
+      title: null,
+      body: 'Original comment text',
+      state: null,
+      mergedAt: null,
+      createdAt: new Date('2024-01-02T00:00:00Z'),
+      payload: { comment: { id: 555, html_url: 'https://github.com/intexuraos/test-repo/pull/7#issuecomment-555' } },
+    });
+
+    // Same comment edited (same comment.id, later timestamp)
+    await repo.save({
+      githubEventId: 20003,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 7,
+      pullRequestId: 7001,
+      eventType: 'issue_comment',
+      action: 'edited',
+      senderLogin: 'reviewer',
+      senderId: 2,
+      senderType: 'User',
+      title: null,
+      body: 'Updated comment text',
+      state: null,
+      mergedAt: null,
+      createdAt: new Date('2024-01-03T00:00:00Z'),
+      payload: { comment: { id: 555, html_url: 'https://github.com/intexuraos/test-repo/pull/7#issuecomment-555' } },
+    });
+
+    // Push event after (should not be affected by dedup)
+    await repo.save({
+      githubEventId: 20004,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 7,
+      pullRequestId: 7001,
+      eventType: 'push',
+      action: null,
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'Push to feature-branch',
+      body: null,
+      state: null,
+      mergedAt: null,
+      createdAt: new Date('2024-01-04T00:00:00Z'),
+      payload: { ref: 'refs/heads/feature-branch' },
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=7',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+
+    // Should have 3 events: PR opened, comment (deduped), push
+    expect(body.data.events).toHaveLength(3);
+
+    // First event: PR opened (unchanged)
+    expect(body.data.events[0].eventType).toBe('pull_request');
+
+    // Second event: comment at original position with latest body
+    expect(body.data.events[1].eventType).toBe('issue_comment');
+    expect(body.data.events[1].action).toBe('created');
+    expect(body.data.events[1].createdAt).toBe('2024-01-02T00:00:00.000Z');
+    expect(body.data.events[1].body).toBe('Updated comment text');
+
+    // Third event: push (unchanged)
+    expect(body.data.events[2].eventType).toBe('push');
+  });
+
+  it('should deduplicate review comments by review.id', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    // Review submitted
+    await repo.save({
+      githubEventId: 30001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 8,
+      pullRequestId: 8001,
+      eventType: 'pull_request_review',
+      action: 'submitted',
+      senderLogin: 'reviewer',
+      senderId: 2,
+      senderType: 'User',
+      title: null,
+      body: 'Original review',
+      state: null,
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: { review: { id: 777, html_url: 'https://github.com/intexuraos/test-repo/pull/8#pullrequestreview-777' } },
+    });
+
+    // Review edited
+    await repo.save({
+      githubEventId: 30002,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 8,
+      pullRequestId: 8001,
+      eventType: 'pull_request_review',
+      action: 'edited',
+      senderLogin: 'reviewer',
+      senderId: 2,
+      senderType: 'User',
+      title: null,
+      body: 'Updated review',
+      state: null,
+      mergedAt: null,
+      createdAt: new Date('2024-01-02T00:00:00Z'),
+      payload: { review: { id: 777, html_url: 'https://github.com/intexuraos/test-repo/pull/8#pullrequestreview-777' } },
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=8',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+
+    // One event: deduped review
+    expect(body.data.events).toHaveLength(1);
+    expect(body.data.events[0].action).toBe('submitted');
+    expect(body.data.events[0].body).toBe('Updated review');
+  });
+
+  it('should show PR body only on the most recent pull_request event', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    // PR opened
+    await repo.save({
+      githubEventId: 40001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 10',
+      body: '## Summary\nPR description table',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+
+    // synchronize 1
+    await repo.save({
+      githubEventId: 40002,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'pull_request',
+      action: 'synchronize',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 10',
+      body: '## Summary\nPR description table',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-02T00:00:00Z'),
+      payload: {},
+    });
+
+    // synchronize 2
+    await repo.save({
+      githubEventId: 40003,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'pull_request',
+      action: 'synchronize',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 10',
+      body: '## Summary\nPR description table',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-03T00:00:00Z'),
+      payload: {},
+    });
+
+    // synchronize 3 (most recent)
+    await repo.save({
+      githubEventId: 40004,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'pull_request',
+      action: 'synchronize',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 10',
+      body: '## Summary\nPR description table',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-04T00:00:00Z'),
+      payload: {},
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=10',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.events).toHaveLength(4);
+
+    // First 3 events should have null body (deduped)
+    expect(body.data.events[0].body).toBeNull();
+    expect(body.data.events[1].body).toBeNull();
+    expect(body.data.events[2].body).toBeNull();
+
+    // Last event keeps the body
+    expect(body.data.events[3].body).toBe('## Summary\nPR description table');
+  });
+
+  it('should show latest PR body when body changes between pushes', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    // PR opened with original body
+    await repo.save({
+      githubEventId: 50001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 11,
+      pullRequestId: 11001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 11',
+      body: 'Version 1 of description',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+
+    // synchronize with updated body
+    await repo.save({
+      githubEventId: 50002,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 11,
+      pullRequestId: 11001,
+      eventType: 'pull_request',
+      action: 'synchronize',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 11',
+      body: 'Version 2 of description',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-02T00:00:00Z'),
+      payload: {},
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=11',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.data.events).toHaveLength(2);
+
+    // First event body nulled out
+    expect(body.data.events[0].body).toBeNull();
+
+    // Last event shows latest body
+    expect(body.data.events[1].body).toBe('Version 2 of description');
+  });
+
+  it('should keep PR body when there is only one pull_request event', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    await repo.save({
+      githubEventId: 60001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 12,
+      pullRequestId: 12001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 12',
+      body: 'Single event body',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=12',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.data.events).toHaveLength(1);
+
+    // Single event keeps its body
+    expect(body.data.events[0].body).toBe('Single event body');
+  });
+
+  it('should return 500 when per-PR repo fetch fails', async () => {
+    setServices({
+      ...getServices(),
+      gitHubPREventRepo: {
+        ...getServices().gitHubPREventRepo,
+        findByPullRequest: async () =>
+          err({ code: 'FIRESTORE_ERROR' as const, message: 'DB unavailable' }),
+      },
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=5',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
   });
 });

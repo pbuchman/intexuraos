@@ -226,7 +226,7 @@ curl -X POST https://web-agent.intexuraos.com/internal/page-summaries \
 
 ## Part 4: Handle Errors (5 minutes)
 
-### Error: No API Key Configured
+### Error: No API Key Configured (Platform Fallback Exhausted)
 
 ```json
 {
@@ -241,7 +241,9 @@ curl -X POST https://web-agent.intexuraos.com/internal/page-summaries \
 }
 ```
 
-**Solution:** User needs to add their LLM API key via user-service settings.
+**Note:** This error only occurs if the user has no API key AND the platform fallback keys (`INTEXURAOS_GEMINI_APP_API_KEY` / `INTEXURAOS_ZAI_APP_API_KEY`) are not configured on the platform. In normal operation, the platform Gemini 2.5 Flash fallback handles users without API keys automatically.
+
+**Solution:** Either configure platform fallback keys in the service environment, or have the user add their LLM API key via user-service settings.
 
 ### Error: Invalid URL
 
@@ -384,16 +386,16 @@ export async function summarizePage(
 
 ## Troubleshooting
 
-| Problem                      | Symptom                    | Solution                                    |
-| ---------------------------- | -------------------------- | ------------------------------------------- |
-| "401 Unauthorized"           | Missing auth header        | Add `X-Internal-Auth` header                |
-| "ACCESS_DENIED"              | 403 from target site       | Site blocks scrapers; try different URL     |
-| "No API key configured"      | Missing user LLM key       | User must add API key in settings           |
-| "Summary is JSON"            | Repair mechanism kicked in | Normal behavior - should auto-repair        |
-| "Summary in wrong language"  | Old version                | Update to v2.0.0 with language preservation |
-| "Timeout"                    | Slow site or Crawl4AI      | Increase `timeoutMs` parameter              |
-| "RATE_LIMITED"               | HTTP 429 from Crawl4AI     | Wait and retry with exponential backoff     |
-| "Summary describes platform" | Content focus missing      | Update to latest with content focus prompt  |
+| Problem                      | Symptom                      | Solution                                     |
+| ---------------------------- | ---------------------------- | -------------------------------------------- |
+| "401 Unauthorized"           | Missing auth header          | Add `X-Internal-Auth` header                 |
+| "ACCESS_DENIED"              | 403 from target site         | Site blocks scrapers; try different URL      |
+| "No API key configured"      | Platform fallback also unset | Configure platform keys or user adds API key |
+| "Summary is JSON"            | Repair mechanism kicked in   | Normal behavior - should auto-repair         |
+| "Summary in wrong language"  | Old version                  | Update to v2.0.0 with language preservation  |
+| "Timeout"                    | Slow site or Crawl4AI        | Increase `timeoutMs` parameter               |
+| "RATE_LIMITED"               | HTTP 429 from Crawl4AI       | Wait and retry with exponential backoff      |
+| "Summary describes platform" | Content focus missing        | Update to latest with content focus prompt   |
 
 ---
 

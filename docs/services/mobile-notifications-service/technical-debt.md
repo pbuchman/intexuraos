@@ -9,10 +9,11 @@
 
 ## Future Plans
 
-1. **Push provider integration** - Direct FCM/APNs integration
-2. **Rich notifications** - Images, actions, sounds
+1. **Push provider integration** - Direct FCM/APNs integration to push back to devices (currently only stores for polling)
+2. **Rich notifications** - Images, actions, sounds in webhook payloads
 3. **Scheduled delivery** - Time-based push scheduling
-4. **Batch operations** - Bulk notification management
+4. **Batch operations** - Bulk notification management (bulk delete, bulk read)
+5. **iOS support** - Expand beyond Android/Tasker to iOS shortcuts
 
 ## Resolved Issues
 

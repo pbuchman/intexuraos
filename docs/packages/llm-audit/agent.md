@@ -115,7 +115,9 @@ class AuditContext {
 common-core, llm-contract, infra-firestore
   <- llm-audit
        <- infra-claude, infra-gemini, infra-glm, infra-gpt, infra-perplexity
+       <- llm-factory (AuditSink type import)
        <- image-service
+       <- workers/orchestrator (AuditSink type import)
 ```
 
 ## Usage Patterns

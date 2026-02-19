@@ -41,12 +41,17 @@ type ErrorCode =
   | 'WORKER_NOT_CONFIGURED'
   | 'INVALID_WORKER'
   | 'WORKER_UNHEALTHY'
+  | 'WORKER_UNAVAILABLE'
   | 'NOTION_NOT_CONNECTED'
   | 'PAGE_NOT_CONFIGURED'
   | 'RESEARCH_NOT_COMPLETED'
   | 'NO_SYNTHESIS'
   | 'ALREADY_EXPORTED'
-  | 'NOTION_UNAUTHORIZED';
+  | 'NOTION_UNAUTHORIZED'
+  | 'INVALID_NONCE'
+  | 'NONCE_EXPIRED'
+  | 'NOT_OWNER'
+  | 'TASK_NOT_CANCELLABLE';
 
 interface SerializedError {
   message: string;
@@ -113,8 +118,12 @@ function toDateOrNull(isoString: string | null | undefined): Date | null;
 function toISOStringOrNull(date: Date | null | undefined): string | null;
 
 // serviceFeedback.ts
-function isSuccessFeedback(feedback: ServiceFeedback): boolean;
-function isFailureFeedback(feedback: ServiceFeedback): boolean;
+function isSuccessFeedback(
+  feedback: ServiceFeedback
+): feedback is ServiceFeedback & { status: 'completed' };
+function isFailureFeedback(
+  feedback: ServiceFeedback
+): feedback is ServiceFeedback & { status: 'failed'; errorCode: string };
 function successFeedback(message: string, resourceUrl?: string): ServiceFeedback;
 function failureFeedback(message: string, errorCode: string): ServiceFeedback;
 
@@ -129,7 +138,15 @@ function traceIdHeaders(traceId: string): Record<string, string>;
 const ERROR_HTTP_STATUS: Record<ErrorCode, number>;
 const ServiceErrorCodes: {
   TIMEOUT: 'TIMEOUT';
-  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE'; /* ... */
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE';
+  AUTH_FAILED: 'AUTH_FAILED';
+  UNAUTHORIZED: 'UNAUTHORIZED';
+  VALIDATION_ERROR: 'VALIDATION_ERROR';
+  INVALID_INPUT: 'INVALID_INPUT';
+  DUPLICATE: 'DUPLICATE';
+  NOT_FOUND: 'NOT_FOUND';
+  EXTRACTION_FAILED: 'EXTRACTION_FAILED';
+  EXTERNAL_API_ERROR: 'EXTERNAL_API_ERROR';
 };
 const TRACE_ID_HEADER: 'X-Trace-Id';
 ```
@@ -157,7 +174,7 @@ common-core (leaf)
   <- infra-notion, infra-perplexity, infra-sentry, infra-whatsapp
   <- llm-utils, llm-prompts, llm-pricing, llm-factory, llm-audit, llm-contract
   <- internal-clients
-  <- all apps (18) and workers (3)
+  <- all apps (19) and workers (3)
 ```
 
 ## Test Mock Pattern

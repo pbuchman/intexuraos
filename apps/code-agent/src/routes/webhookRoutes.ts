@@ -4,8 +4,10 @@ import { Timestamp } from '@google-cloud/firestore';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import { validateWebhookSignature } from '../infra/webhookValidation.js';
+import { validateWebhookSignature, validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { formatLogChunk, createFormatterState, type FormatterState } from '../domain/services/logFormatter.js';
+import { loadConfig } from '../config.js';
+import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
@@ -176,8 +178,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 3: Update task based on status
       if (status === 'completed') {
+        const resolvedStatus = task.executionPhase === 'execution' ? 'implemented' : 'designed';
         const updateResult = await codeTaskRepo.update(taskId, {
-          status: 'completed',
+          status: resolvedStatus,
           completedAt,
           ...(result !== undefined && { result }),
           callbackReceived: true,
@@ -205,7 +208,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         // Send WhatsApp notification (use updated task with result populated)
-        const completedTask = { ...task, status: 'completed' as const, ...(result !== undefined && { result }) };
+        /* v8 ignore start -- ts-type: spread with boolean shorthand creates complex type that requires assertion @preserve */
+        const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
+        /* v8 ignore stop @preserve */
         await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
 
         // Record task completion for rate limiting (fire and forget)
@@ -214,7 +219,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
 
         // Record metrics (fire and forget)
-        metricsClient.incrementTasksCompleted(task.workerType, 'completed').catch((err) => {
+        metricsClient.incrementTasksCompleted(task.workerType, resolvedStatus).catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });
         /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
@@ -603,6 +608,99 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request.log.debug({ taskId, count: chunks.length, lines: allLines.length }, 'Log chunks stored successfully');
       // @allow-raw-send: external webhook callback - orchestrator expects ACK with acknowledged sequences
       return await reply.send({ received: true, acknowledgedSequences, count: acknowledgedSequences.length });
+    }
+  );
+
+  // POST /internal/turn-metrics - Turn metrics from orchestrator
+  fastify.post<{
+    Body: TurnMetrics;
+  }>(
+    '/internal/turn-metrics',
+    {
+      schema: {
+        operationId: 'turnMetricsUpload',
+        summary: 'Turn metrics upload from orchestrator',
+        description: 'Internal endpoint for uploading turn-end metrics from orchestrator. Requires orchestrator HMAC signature.',
+        tags: ['internal', 'webhooks'],
+        body: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string' },
+            attempt: { type: 'number' },
+            timestamp: { type: 'string' },
+            cpuTimeSeconds: { type: 'number' },
+            cpuCores: { type: 'number' },
+            peakMemoryMB: { type: 'number' },
+            wallTimeSeconds: { type: 'number' },
+            apiWaitSeconds: { type: 'number' },
+            toolExecSeconds: { type: 'number' },
+            backgroundWaitSeconds: { type: 'number' },
+            overheadSeconds: { type: 'number' },
+            totalInputTokens: { type: 'number' },
+            totalOutputTokens: { type: 'number' },
+            totalCacheReadTokens: { type: 'number' },
+            totalCacheCreationTokens: { type: 'number' },
+            apiCallCount: { type: 'number' },
+            cpuUtilizationPercent: { type: 'number' },
+            idlePercent: { type: 'number' },
+          },
+          required: ['taskId', 'attempt', 'timestamp'],
+        },
+        response: {
+          200: {
+            description: 'Metrics stored successfully',
+            type: 'object',
+            properties: {
+              received: { type: 'boolean', enum: [true] },
+            },
+            required: ['received'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: TurnMetrics }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/turn-metrics',
+      });
+
+      // Step 1: Validate internal auth
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for turn-metrics');
+        return reply.fail('UNAUTHORIZED', 'Internal authentication failed');
+      }
+
+      // Step 2: Validate orchestrator HMAC signature
+      const signatureResult = validateOrchestratorSignature(request, {
+        orchestratorSecret: loadConfig().orchestratorSecret,
+      });
+
+      if (!signatureResult.ok) {
+        request.log.warn({ error: signatureResult.error }, 'Orchestrator signature validation failed for turn-metrics');
+        return reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      // Step 3: Store metrics
+      const { turnMetricsRepo } = getServices();
+      const metrics = request.body;
+
+      const storeResult = await turnMetricsRepo.store(
+        metrics.taskId,
+        metrics.attempt,
+        metrics
+      );
+
+      if (!storeResult.ok) {
+        request.log.error({ taskId: metrics.taskId, error: storeResult.error }, 'Failed to store turn metrics');
+        return reply.fail('INTERNAL_ERROR', storeResult.error.message);
+      }
+
+      request.log.info(
+        { taskId: metrics.taskId, attempt: metrics.attempt },
+        'Turn metrics stored'
+      );
+      // @allow-raw-send: internal webhook callback - orchestrator expects { received: true }
+      return await reply.send({ received: true });
     }
   );
 

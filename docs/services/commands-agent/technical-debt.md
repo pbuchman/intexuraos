@@ -1,7 +1,7 @@
 # Commands Agent - Technical Debt
 
-**Last Updated:** 2026-02-08
-**Analysis Run:** Service documentation generation (v2.2.0 context)
+**Last Updated:** 2026-02-19
+**Analysis Run:** Service documentation generation (v2.3.0 context)
 
 ---
 
@@ -40,18 +40,16 @@ Based on code analysis and git history:
 
 **Recommendation:** Use structured output mode when available (Gemini function calling, OpenAI JSON mode).
 
-### 2. Magic numbers for truncation limits
+### 2. Log preview length is a magic number
 
 **File:** `apps/commands-agent/src/infra/llm/classifier.ts`
 
-**Issue:** Title sliced to 100 chars, reasoning to 500 chars without named constants.
+**Issue:** The `.slice(0, 500)` in `rawResponsePreview` log fields uses a bare number for the log preview length. `PWA_SHARED_LINK_CONFIDENCE_BOOST` and Zod-enforced title max (50 chars) are already named constants.
 
-**Recommendation:** Extract to constants:
+**Recommendation:** Extract to a named constant:
 
 ```typescript
-const MAX_TITLE_LENGTH = 100;
-const MAX_REASONING_LENGTH = 500;
-const PWA_SHARED_LINK_CONFIDENCE_BOOST = 0.1;
+const LOG_RESPONSE_PREVIEW_LENGTH = 500;
 ```
 
 ## Resolved Issues (v2.0.0 - v2.1.0)
@@ -150,6 +148,10 @@ No deprecated API usage detected.
 
 Commands-agent creates actions via HTTP to actions-agent. If actions-agent is unavailable, commands fail with `failed` status. Consider circuit breaker pattern for resilience.
 
+### app-settings-service startup dependency
+
+`initServices()` now calls `fetchAllPricing()` from `app-settings-service` at startup before accepting requests. If app-settings-service is unreachable at boot, commands-agent fails to initialize entirely. This creates a hard coupling at startup that did not previously exist. Consider graceful degradation (e.g., cached/default pricing) to improve resilience.
+
 ### Prompt versioning
 
 Classification prompt lives in `packages/llm-prompts`. Changes require package rebuild and service redeploy. Consider runtime prompt loading for faster iteration.
@@ -160,4 +162,4 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

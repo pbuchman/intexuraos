@@ -6,13 +6,123 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { Result } from '@intexuraos/common-core';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
+import type { RepositoryError } from '../../domain/repositories/gitHubPREventRepository.js';
+import { extractEventUrl } from './extractEventUrl.js';
 
 export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
+}
+
+type PayloadObject = Record<string, unknown>;
+
+/**
+ * Extract the comment/review ID from a webhook payload so we can
+ * deduplicate created → edited sequences for the same comment.
+ */
+function extractCommentKey(eventType: string, payload: unknown): string | null {
+  /* v8 ignore start -- ts-type: defensive guard on unknown webhook payload @preserve */
+  if (typeof payload !== 'object' || payload === null) return null;
+  /* v8 ignore stop @preserve */
+  const p = payload as PayloadObject;
+
+  if (eventType === 'issue_comment' || eventType === 'pull_request_review_comment') {
+    const comment = p['comment'];
+    /* v8 ignore start -- ts-type: defensive type narrowing on webhook payload field @preserve */
+    if (typeof comment === 'object' && comment !== null) {
+      /* v8 ignore stop @preserve */
+      const id = (comment as PayloadObject)['id'];
+      if (typeof id === 'number') return `${eventType}:${String(id)}`;
+    }
+  }
+
+  if (eventType === 'pull_request_review') {
+    const review = p['review'];
+    if (typeof review === 'object' && review !== null) {
+      const id = (review as PayloadObject)['id'];
+      /* v8 ignore start -- ts-type: defensive type check on review id field @preserve */
+      if (typeof id === 'number') return `${eventType}:${String(id)}`;
+      /* v8 ignore stop @preserve */
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Deduplicate comment events so each comment appears once at its
+ * original position but with the latest body content.
+ */
+function deduplicateCommentEvents(events: GitHubPREvent[]): GitHubPREvent[] {
+  // First pass: find the latest version of each comment
+  const latestByKey = new Map<string, GitHubPREvent>();
+  for (const event of events) {
+    const key = extractCommentKey(event.eventType, event.payload);
+    if (key !== null) {
+      latestByKey.set(key, event);
+    }
+  }
+
+  // Second pass: emit each comment once (first occurrence position, latest body)
+  const seen = new Set<string>();
+  const result: GitHubPREvent[] = [];
+
+  for (const event of events) {
+    const key = extractCommentKey(event.eventType, event.payload);
+    if (key === null) {
+      result.push(event);
+      continue;
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const latest = latestByKey.get(key);
+    /* v8 ignore start -- ts-type: latest is always defined since key came from the same map @preserve */
+    if (latest === undefined) {
+      result.push(event);
+      continue;
+    }
+    /* v8 ignore stop @preserve */
+
+    // Keep original position and action, use latest body and payload
+    result.push({
+      ...event,
+      body: latest.body,
+      payload: latest.payload,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Show PR description body only on the most recent pull_request event.
+ * GitHub sends the full PR body on every synchronize event — this prevents
+ * the same "Summary" section from rendering multiple times in the timeline.
+ */
+function deduplicatePRBody(events: GitHubPREvent[]): GitHubPREvent[] {
+  // Find the index of the last pull_request event with a non-empty body
+  let lastPRBodyIndex = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event?.eventType === 'pull_request' && event.body !== null && event.body !== '') {
+      lastPRBodyIndex = i;
+      break;
+    }
+  }
+
+  if (lastPRBodyIndex === -1) return events;
+
+  return events.map((event, i) => {
+    if (event.eventType === 'pull_request' && i !== lastPRBodyIndex && event.body !== null && event.body !== '') {
+      return { ...event, body: null };
+    }
+    return event;
+  });
 }
 
 // Query params schema
@@ -20,34 +130,26 @@ const githubPREventsQuerySchema = {
   type: 'object',
   properties: {
     repository: { type: 'string', description: 'Optional repository name (e.g., "intexuraos/code-agent"). If omitted, returns events from all repositories.' },
-    limit: { type: 'number', minimum: 1, maximum: 100, default: 50, description: 'Maximum number of events to return' },
+    pullRequestNumber: { type: 'number', minimum: 1, description: 'Optional PR number. Requires repository to also be set. Returns events for the specific PR oldest-first.' },
+    limit: { type: 'number', minimum: 1, maximum: 200, default: 50, description: 'Maximum number of events to return' },
   },
 };
 
-// Response schema for a single event
+// Response schema for a single event (only fields used by the UI)
 const gitHubPREventSchema = {
   type: 'object',
   properties: {
-    id: { type: 'string' },
-    githubEventId: { type: 'number' },
-    repository: { type: 'string' },
-    repositoryId: { type: 'number' },
     pullRequestNumber: { type: 'number' },
-    pullRequestId: { type: 'number' },
-    eventType: { type: 'string', enum: ['pull_request', 'pull_request_review', 'pull_request_review_comment', 'push', 'ping'] },
+    title: { type: ['string', 'null'] },
+    repository: { type: 'string' },
+    eventType: { type: 'string', enum: ['pull_request', 'pull_request_review', 'pull_request_review_comment', 'issue_comment', 'push', 'ping'] },
     action: { type: ['string', 'null'], enum: ['opened', 'closed', 'edited', 'synchronized', 'ready_for_review', 'converted_to_draft', 'submitted', 'dismissed', 'created', 'deleted', null] },
     senderLogin: { type: 'string' },
-    senderId: { type: 'number' },
-    senderType: { type: 'string' },
-    title: { type: ['string', 'null'] },
-    body: { type: ['string', 'null'] },
-    state: { type: ['string', 'null'] },
-    mergedAt: { type: ['string', 'null'], format: 'date-time' },
     createdAt: { type: 'string', format: 'date-time' },
-    processedAt: { type: 'string', format: 'date-time' },
-    payload: { type: 'object' },
+    eventUrl: { type: ['string', 'null'] },
+    body: { type: ['string', 'null'] },
   },
-  required: ['id', 'githubEventId', 'repository', 'repositoryId', 'pullRequestNumber', 'pullRequestId', 'eventType', 'action', 'senderLogin', 'senderId', 'senderType', 'title', 'body', 'state', 'mergedAt', 'createdAt', 'processedAt', 'payload'],
+  required: ['pullRequestNumber', 'title', 'repository', 'eventType', 'action', 'senderLogin', 'createdAt', 'eventUrl', 'body'],
 };
 
 // Response schema for the endpoint
@@ -95,7 +197,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
     fastify.addHook('onRequest', jwtValidator);
 
     fastify.get<{
-      Querystring: { repository?: string; limit?: number };
+      Querystring: { repository?: string; pullRequestNumber?: number; limit?: number };
     }>(
       '/code/github-pr-events',
       {
@@ -109,12 +211,12 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           },
         },
       },
-      async (request: FastifyRequest<{ Querystring: { repository?: string; limit?: number } }>, reply: FastifyReply) => {
+      async (request: FastifyRequest<{ Querystring: { repository?: string; pullRequestNumber?: number; limit?: number } }>, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to GET /code/github-pr-events',
         });
 
-        const { repository, limit = 50 } = request.query;
+        const { repository, pullRequestNumber, limit = 50 } = request.query;
 
         // Validate repository format if provided
         if (repository !== undefined && !REPOSITORY_PATTERN.test(repository)) {
@@ -122,15 +224,32 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           return await reply.fail('INVALID_REQUEST', 'Repository must be in format "owner/repo"');
         }
 
+        // pullRequestNumber requires repository
+        if (pullRequestNumber !== undefined && repository === undefined) {
+          return await reply.fail('INVALID_REQUEST', 'pullRequestNumber requires repository to also be set');
+        }
+
         const { gitHubPREventRepo } = getServices();
 
-        request.log.info({ repository: repository ?? 'all', limit }, 'Fetching GitHub PR events');
+        request.log.info({ repository: repository ?? 'all', pullRequestNumber, limit }, 'Fetching GitHub PR events');
 
-        // Use findAll when no repository filter, otherwise findByRepository
-        const result =
-          repository !== undefined
-            ? await gitHubPREventRepo.findByRepository(repository, limit)
-            : await gitHubPREventRepo.findAll(limit);
+        let result: Result<GitHubPREvent[], RepositoryError>;
+        if (repository !== undefined && pullRequestNumber !== undefined) {
+          // Per-PR fetch: returns events oldest-first (reversed from stored desc order)
+          const prResult = await gitHubPREventRepo.findByPullRequest(repository, pullRequestNumber);
+          if (!prResult.ok) {
+            request.log.error({ error: prResult.error.message }, 'Failed to fetch GitHub PR events'); // @allow-result-access -- narrowed by !prResult.ok
+            return await reply.fail('INTERNAL_ERROR', 'Failed to fetch events');
+          }
+          // Reverse to get oldest-first (findByPullRequest returns desc)
+          result = { ok: true as const, value: [...prResult.value].reverse() };
+        } else {
+          // Repository or all-repos fetch
+          result =
+            repository !== undefined
+              ? await gitHubPREventRepo.findByRepository(repository, limit)
+              : await gitHubPREventRepo.findAll(limit);
+        }
 
         /* v8 ignore start -- upstream: error handling for external database failures @preserve */
         if (!result.ok) {
@@ -139,47 +258,32 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
         }
         /* v8 ignore stop @preserve */
 
-        // Transform dates to ISO strings for JSON serialization
+        // Deduplicate comment events (created → edited) so each comment appears once
+        const dedupedEvents = deduplicateCommentEvents(result.value); // @allow-result-access -- narrowed by !result.ok check above
+        // Deduplicate PR body so it only shows on the most recent pull_request event
+        const finalEvents = deduplicatePRBody(dedupedEvents);
+
+        // Return only fields used by the UI
         const events: {
-          id: string;
-          githubEventId: number;
-          repository: string;
-          repositoryId: number;
           pullRequestNumber: number;
-          pullRequestId: number;
+          title: string | null;
+          repository: string;
           eventType: string;
           action: string | null;
           senderLogin: string;
-          senderId: number;
-          senderType: string;
-          title: string | null;
-          body: string | null;
-          state: string | null;
-          mergedAt: string | null;
           createdAt: string;
-          processedAt: string;
-          payload: unknown;
-        }[] = result.value.map((event: GitHubPREvent) => ({ // @allow-result-access -- narrowed by !result.ok check above
-          id: event.id,
-          githubEventId: event.githubEventId,
-          repository: event.repository,
-          repositoryId: event.repositoryId,
+          eventUrl: string | null;
+          body: string | null;
+        }[] = finalEvents.map((event: GitHubPREvent) => ({
           pullRequestNumber: event.pullRequestNumber,
-          pullRequestId: event.pullRequestId,
+          title: event.title,
+          repository: event.repository,
           eventType: event.eventType,
           action: event.action,
           senderLogin: event.senderLogin,
-          senderId: event.senderId,
-          senderType: event.senderType,
-          title: event.title,
-          body: event.body,
-          state: event.state,
-          /* v8 ignore start -- upstream: mergedAt serialization branch for optional Date field @preserve */
-          mergedAt: event.mergedAt ? event.mergedAt.toISOString() : null,
-          /* v8 ignore stop @preserve */
           createdAt: event.createdAt.toISOString(),
-          processedAt: event.processedAt.toISOString(),
-          payload: event.payload,
+          eventUrl: extractEventUrl(event.eventType, event.payload),
+          body: event.body,
         }));
 
         request.log.info({ count: events.length }, 'Returning GitHub PR events');

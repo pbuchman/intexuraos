@@ -1,6 +1,6 @@
 {
   "name": "intexuraos",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -54,6 +54,7 @@
     "verify:sentry-logging": "node scripts/verify-sentry-logging.mjs",
     "verify:v8-ignore": "node scripts/verify-v8-ignore.mjs",
     "verify:error-serializers": "node scripts/verify-error-serializers.mjs",
+    "verify:prompt-versions": "node scripts/verify-prompt-versions.mjs",
     "verify:llm-architecture": "pnpm tsx scripts/verify-llm-architecture.ts",
     "verify:workspace": "./scripts/verify-workspace.sh",
     "verify:workspace:tracked": "node scripts/verify-workspace-tracked.mjs",

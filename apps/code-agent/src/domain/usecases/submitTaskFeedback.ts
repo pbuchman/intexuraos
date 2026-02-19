@@ -17,6 +17,7 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
+import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 
 /**
  * Generate a deterministic webhook secret for a task.
@@ -121,7 +122,7 @@ export async function submitTaskFeedback(
   const originalTask = originalTaskResult.value;
 
   // Step 2: Validate status is completed
-  if (originalTask.status !== 'completed') {
+  if (originalTask.status !== 'designed' && originalTask.status !== 'implemented') {
     logger.warn({ taskId: originalTask.id, status: originalTask.status }, 'Attempted to provide feedback on non-completed task');
     return err({
       code: 'invalid_status',
@@ -204,7 +205,30 @@ ${feedback.trim()}
   const followUpTaskId = `task_${randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, followUpTaskId);
 
-  // Step 7: Create follow-up task with parentTaskId
+  // Step 7: Fetch fresh labels from Linear to determine executionPhase before create
+  let linearIssueLabelsForDispatch: string[] = [];
+  let hasChildrenForDispatch = false;
+
+  if (originalTask.linearIssueId !== undefined) {
+    const validateIssueResult = await linearAgentClient.validateIssue({
+      userId,
+      identifier: originalTask.linearIssueId,
+    });
+
+    if (validateIssueResult.ok) {
+      linearIssueLabelsForDispatch = validateIssueResult.value.labels;
+      hasChildrenForDispatch = validateIssueResult.value.childCount > 0;
+    } else {
+      logger.warn(
+        { linearIssueId: originalTask.linearIssueId },
+        'Failed to fetch Linear issue labels for feedback dispatch'
+      );
+    }
+  }
+
+  const executionPhase: 'design' | 'execution' = hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'design';
+
+  // Step 8: Create follow-up task with parentTaskId
   const createInput = {
     id: followUpTaskId,
     userId,
@@ -229,6 +253,7 @@ ${feedback.trim()}
     ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
     ...(originalTask.prNumber !== undefined && { prNumber: originalTask.prNumber }),
     /* v8 ignore stop @preserve */
+    executionPhase,
   };
 
   const createResult = await codeTaskRepo.create(createInput);
@@ -250,7 +275,7 @@ ${feedback.trim()}
     'Follow-up task created from feedback'
   );
 
-  // Step 8: Update Linear issue to In Progress (if exists)
+  // Step 9: Update Linear issue to In Progress (if exists)
   /* v8 ignore start -- ts-type: optional field check for linearIssueId creates type narrowing branch @preserve */
   if (originalTask.linearIssueId !== undefined) {
     /* v8 ignore stop @preserve */
@@ -293,32 +318,11 @@ ${feedback.trim()}
     }
   }
 
-  // Step 10: Fetch fresh labels from Linear for dispatch
-  let linearIssueLabelsForDispatch: string[] = [];
-  let hasChildrenForDispatch = false;
-
-  if (originalTask.linearIssueId !== undefined) {
-    const validateIssueResult = await linearAgentClient.validateIssue({
-      userId,
-      identifier: originalTask.linearIssueId,
-    });
-
-    if (validateIssueResult.ok) {
-      linearIssueLabelsForDispatch = validateIssueResult.value.labels;
-      hasChildrenForDispatch = validateIssueResult.value.childCount > 0;
-    } else {
-      logger.warn(
-        { linearIssueId: originalTask.linearIssueId },
-        'Failed to fetch Linear issue labels for feedback dispatch'
-      );
-    }
-  }
-
-  // Step 11: Build webhook URL
+  // Step 10: Build webhook URL
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
   const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
 
-  // Step 12: Dispatch to worker
+  // Step 11: Dispatch to worker
   const dispatchRequest: {
     taskId: string;
     linearIssueId?: string;

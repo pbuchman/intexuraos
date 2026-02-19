@@ -19,6 +19,7 @@ export interface CommandClassification {
   type: CommandType;
   confidence: number;
   reasoning: string;
+  promptVersion: string;
   classifiedAt: string;
 }
 

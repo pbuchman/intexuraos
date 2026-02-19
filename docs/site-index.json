@@ -4,10 +4,10 @@
       "id": "actions-agent",
       "name": "Actions Agent",
       "category": "infrastructure",
-      "summary": "Central action lifecycle with atomic status transitions, race condition prevention, and WhatsApp approval (v2.1.0)",
+      "summary": "Central action lifecycle with atomic status transitions, button-based WhatsApp approval, and race condition prevention (v3.0.0)",
       "features": [
         "Atomic status transitions via Firestore transactions (v2.0.0)",
-        "WhatsApp approval reply handling with LLM intent (v2.0.0)",
+        "Button-based WhatsApp approval — LLM removed, buttonId resolves intent deterministically (v4.0.0)",
         "Race condition prevention via updateStatusIf (v2.0.0)",
         "Centralized user service client via @intexuraos/internal-clients (v2.1.0)",
         "Unified action queue",
@@ -22,7 +22,7 @@
       "id": "research-agent",
       "name": "Research Agent",
       "category": "ai-research",
-      "summary": "Multi-LLM research orchestration with natural language model selection (v2.1.0)",
+      "summary": "Multi-LLM research orchestration with Notion export, platform API key fallbacks, and natural language model selection (v2.3.0)",
       "features": [
         "5 LLM providers (Claude, OpenAI, Google, Perplexity, Zai)",
         "Natural language model selection (v2.0.0)",
@@ -30,9 +30,11 @@
         "Parallel query execution via Pub/Sub",
         "Public sharing via GCS with cover images",
         "Input validation with Zod schemas (v2.1.0)",
-        "User service client via @intexuraos/internal-clients (v2.1.0)"
+        "User service client via @intexuraos/internal-clients (v2.1.0)",
+        "Notion export with per-model report pages (v2.2.0)",
+        "Platform API key fallbacks for Gemini and Zai when user has no key (v2.3.0)"
       ],
-      "endpoints": 15,
+      "endpoints": 19,
       "docs": "services/research-agent"
     },
     {
@@ -128,7 +130,7 @@
         "URL keyword isolation - keywords in URLs ignored (v2.0.0)",
         "Explicit intent priority detection (v2.0.0)",
         "Polish language support (v2.0.0)",
-        "6 action types (todo, research, note, link, calendar, linear)",
+        "7 action types (todo, research, note, link, calendar, linear, code)",
         "Model preference detection",
         "Idempotency by source"
       ],
@@ -297,7 +299,7 @@
       "features": [
         "Submit-and-forget code tasks from web UI or WhatsApp",
         "Multi-layer deduplication (approval event, action ID, sha256 dedup key)",
-        "GitHub PR comment auto-response with per-PR locking",
+        "GitHub PR event tracking with Firestore persistence",
         "Per-user worker infrastructure with encrypted credentials",
         "Retry and feedback loops with cool-off periods",
         "Rate limiting (3 concurrent, 10/hour, $20/day, $200/month)",
@@ -674,6 +676,21 @@
       ],
       "endpoints": 0,
       "docs": "packages/llm-audit"
+    },
+    {
+      "id": "infra-otel",
+      "name": "Infra OpenTelemetry",
+      "category": "packages",
+      "summary": "OpenTelemetry SDK integration with automatic HTTP/Fastify/Undici instrumentation via --import startup hook",
+      "features": [
+        "NodeSDK bootstrap via Node.js --import startup hook (side-effect, not application import)",
+        "OTLP trace and metric export to Dash0 or any OTLP-compatible collector",
+        "Auto-instrumentation: HTTP, Fastify, Undici, DNS, Net via getInstrumentations()",
+        "Graceful no-op when INTEXURAOS_DASH0_OTLP_ENDPOINT is not configured",
+        "Library API for infra-sentry otelTransport integration"
+      ],
+      "endpoints": 0,
+      "docs": "packages/infra-otel"
     }
   ],
   "categories": {
@@ -750,15 +767,20 @@
         "llm-utils",
         "llm-prompts",
         "llm-pricing",
-        "llm-audit"
+        "llm-audit",
+        "infra-otel"
       ]
     }
   },
   "stats": {
-    "total": 45,
-    "documented": 45,
+    "total": 46,
+    "totalServices": 20,
+    "totalWorkers": 4,
+    "totalPackages": 22,
+    "documented": 46,
+    "documentedServices": 46,
     "completion": 100,
     "version": "3.0.0",
-    "lastUpdated": "2026-02-08"
+    "lastUpdated": "2026-02-19"
   }
 }

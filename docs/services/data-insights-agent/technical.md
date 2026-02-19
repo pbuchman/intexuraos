@@ -2,7 +2,7 @@
 
 ## Overview
 
-AI-powered data analysis service that combines static data sources with mobile notifications into composite feeds, performs LLM-driven analysis using user's configured API keys, and generates Vega-Lite chart definitions. Runs on Cloud Run with Firestore persistence.
+AI-powered data analysis service that combines static data sources with mobile notifications into composite feeds, performs LLM-driven analysis using user's configured API keys, and generates Vega-Lite chart definitions. Supports persistent visualizations that auto-refresh with snapshot data. Runs on Cloud Run with Firestore persistence.
 
 ## Architecture
 
@@ -71,26 +71,29 @@ sequenceDiagram
     LLM-->>DataInsights: Insights + chart types
     DataInsights->>Firestore: Store insights
     DataInsights-->>-Client: Analysis results
+
+    Client->>+DataInsights: POST /visualizations
+    DataInsights->>Firestore: Create visualization (pending)
+    DataInsights-->>Client: Visualization created
+    DataInsights->>LLM: Transform data (fire-and-forget)
+    DataInsights->>Firestore: Update visualization (ready)
 ```
 
 ## Recent Changes
 
-| Commit     | Description                                            | Date       |
-| ---------- | ------------------------------------------------------ | ---------- |
-| `c3198407` | Fix response contract violations (reply.ok/reply.fail) | 2026-01-30 |
-| `dfd702f1` | Migrate to Sentry-enabled createAppLogger              | 2026-01-30 |
-| `73e8375f` | INT-408 Enforce mandatory env var registration         | 2026-01-28 |
-| `1faa1d3b` | INT-301 Consolidate user service client architecture   | 2026-01-26 |
-| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement        | 2026-01-31 |
-| `88cec45`  | INT-269 Migrate to `@intexuraos/internal-clients`      | 2025-01-25 |
-| `b1c7a4b`  | INT-269 Create internal-clients package                | 2025-01-24 |
-| `8aad909`  | INT-241/242 Migrate imports, delete llm-common         | 2025-01-21 |
-| `2c3a98c`  | Add GLM-4.7-Flash support as Zai AI model              | 2025-01-21 |
-| `a68f5fd`  | INT-160 Fix empty chart definition                     | 2025-01-19 |
-| `06b1361`  | INT-137 Relax LM response sentence count validation    | 2025-01-17 |
-| `0664d57`  | INT-79 Add LLM response repair pattern for insights    | 2025-01-15 |
-| `0e238abb` | INT-77 Return success for no insights instead of error | 2025-01-15 |
-| `df6aaa35` | Enforce Clean Architecture domain->infra boundary      | 2025-01-15 |
+| Commit     | Description                                                 | Date       |
+| ---------- | ----------------------------------------------------------- | ---------- |
+| `f00798da` | Add saved visualizations feature (full CRUD + auto-refresh) | 2026-02-17 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability             | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                         | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention        | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback       | 2026-02-15 |
+| `0f69a74b` | Add default model selector with platform Zai fallback       | 2026-02-08 |
+| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement             | 2026-01-31 |
+| `c3198407` | Fix response contract violations (reply.ok/reply.fail)      | 2026-01-30 |
+| `dfd702f1` | Migrate to Sentry-enabled createAppLogger                   | 2026-01-30 |
+| `73e8375f` | INT-408 Enforce mandatory env var registration              | 2026-01-28 |
+| `1faa1d3b` | INT-301 Consolidate user service client architecture        | 2026-01-26 |
 
 ## API Endpoints
 
@@ -115,12 +118,18 @@ sequenceDiagram
 | POST   | `/composite-feeds/:feedId/analyze`                              | Analyze feed with AI             | Bearer |
 | POST   | `/composite-feeds/:feedId/insights/:insightId/chart-definition` | Generate chart config            | Bearer |
 | POST   | `/composite-feeds/:feedId/preview`                              | Transform data for chart preview | Bearer |
+| POST   | `/visualizations`                                               | Create visualization             | Bearer |
+| GET    | `/visualizations`                                               | List user's visualizations       | Bearer |
+| GET    | `/visualizations/:id`                                           | Get visualization (poll status)  | Bearer |
+| DELETE | `/visualizations/:id`                                           | Delete visualization             | Bearer |
+| POST   | `/visualizations/:id/refresh`                                   | Manually refresh visualization   | Bearer |
 
 ### Internal Endpoints
 
-| Method | Path                          | Purpose                    | Caller                    |
-| ------ | ----------------------------- | -------------------------- | ------------------------- |
-| POST   | `/internal/snapshots/refresh` | Refresh all feed snapshots | Cloud Scheduler (Pub/Sub) |
+| Method | Path                               | Purpose                    | Caller                    |
+| ------ | ---------------------------------- | -------------------------- | ------------------------- |
+| POST   | `/internal/snapshots/refresh`      | Refresh all feed snapshots | Cloud Scheduler (Pub/Sub) |
+| POST   | `/internal/visualizations/compute` | Compute visualization data | Internal services         |
 
 ## Domain Model
 
@@ -137,17 +146,17 @@ sequenceDiagram
 
 ### CompositeFeed
 
-| Field | Type | Description |
-| --------------------- | -------------------------- | --------------------------- | |
-| `id` | string | Unique identifier |
-| `userId` | string | Owner user ID |
-| `name` | string | AI-generated feed name |
-| `purpose` | string | User-provided feed purpose |
-| `staticSourceIds` | string[] | Data source IDs (max 5) |
+| Field                 | Type                       | Description                 |
+| --------------------- | -------------------------- | --------------------------- |
+| `id`                  | string                     | Unique identifier           |
+| `userId`              | string                     | Owner user ID               |
+| `name`                | string                     | AI-generated feed name      |
+| `purpose`             | string                     | User-provided feed purpose  |
+| `staticSourceIds`     | string[]                   | Data source IDs (max 5)     |
 | `notificationFilters` | NotificationFilterConfig[] | Notification filter configs |
-| `dataInsights` | DataInsight[] \ | null | AI analysis results |
-| `createdAt` | Date | Creation timestamp |
-| `updatedAt` | Date | Last update timestamp |
+| `dataInsights`        | DataInsight[] \| null      | AI analysis results         |
+| `createdAt`           | Date                       | Creation timestamp          |
+| `updatedAt`           | Date                       | Last update timestamp       |
 
 ### NotificationFilterConfig
 
@@ -193,13 +202,37 @@ sequenceDiagram
 | `expiresAt`   | Date   | Snapshot expiration (15 min) |
 | `data`        | object | Aggregated feed data         |
 
+### Visualization
+
+| Field                   | Type                                            | Description                     |
+| ----------------------- | ----------------------------------------------- | ------------------------------- |
+| `id`                    | string                                          | Unique identifier               |
+| `userId`                | string                                          | Owner user ID                   |
+| `feedId`                | string                                          | Associated composite feed ID    |
+| `feedName`              | string                                          | Feed name at creation time      |
+| `insightId`             | string                                          | Associated insight ID           |
+| `insightTitle`          | string                                          | Insight title at creation time  |
+| `trackableMetric`       | string                                          | Metric being tracked            |
+| `chartConfig`           | object                                          | Vega-Lite spec (without data)   |
+| `transformInstructions` | string                                          | LLM data transform instructions |
+| `chartData`             | unknown[] \| null                               | Computed chart data             |
+| `status`                | `pending` \| `ready` \| `refreshing` \| `error` | Computation lifecycle status    |
+| `lastError`             | string?                                         | Last error message if any       |
+| `lastRefreshedAt`       | Date?                                           | Timestamp of last data refresh  |
+| `createdAt`             | Date                                            | Creation timestamp              |
+| `updatedAt`             | Date                                            | Last update timestamp           |
+
+**Status Lifecycle:** `pending` → `ready` (or `error`). Manual and scheduled refreshes use `refreshing` as intermediate state.
+
+**Limit:** Max 10 visualizations per composite feed.
+
 ## Pub/Sub
 
 ### Subscribed Events
 
-| Topic       | Handler                       | Action                     |
-| ----------- | ----------------------------- | -------------------------- |
-| (scheduled) | `/internal/snapshots/refresh` | Refresh all feed snapshots |
+| Topic       | Handler                       | Action                                           |
+| ----------- | ----------------------------- | ------------------------------------------------ |
+| (scheduled) | `/internal/snapshots/refresh` | Refresh all feed snapshots + feed visualizations |
 
 ## Dependencies
 
@@ -220,16 +253,20 @@ sequenceDiagram
 
 ## Configuration
 
-| Variable                                      | Required | Description                         |
-| --------------------------------------------- | -------- | ----------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`                   | Yes      | GCP project ID                      |
-| `INTEXURAOS_AUTH_JWKS_URL`                    | Yes      | Auth0 JWKS endpoint                 |
-| `INTEXURAOS_AUTH_ISSUER`                      | Yes      | Auth0 issuer URL                    |
-| `INTEXURAOS_AUTH_AUDIENCE`                    | Yes      | Auth0 audience                      |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Internal service auth token         |
-| `INTEXURAOS_USER_SERVICE_URL`                 | Yes      | user-service base URL               |
-| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | mobile-notifications base URL       |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Yes      | app-settings base URL (for pricing) |
+| Variable                                      | Required | Description                                           |
+| --------------------------------------------- | -------- | ----------------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`                   | Yes      | GCP project ID                                        |
+| `INTEXURAOS_AUTH_JWKS_URL`                    | Yes      | Auth0 JWKS endpoint                                   |
+| `INTEXURAOS_AUTH_ISSUER`                      | Yes      | Auth0 issuer URL                                      |
+| `INTEXURAOS_AUTH_AUDIENCE`                    | Yes      | Auth0 audience                                        |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Internal service auth token                           |
+| `INTEXURAOS_USER_SERVICE_URL`                 | Yes      | user-service base URL                                 |
+| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | mobile-notifications base URL                         |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Yes      | app-settings base URL (for pricing)                   |
+| `INTEXURAOS_SENTRY_DSN`                       | No       | Sentry DSN for error tracking (omit to disable)       |
+| `INTEXURAOS_ENVIRONMENT`                      | No       | Environment name for Sentry (default: `development`)  |
+| `INTEXURAOS_ZAI_APP_API_KEY`                  | No       | Platform-level Zai API key (fallback LLM provider)    |
+| `INTEXURAOS_GEMINI_APP_API_KEY`               | No       | Platform-level Gemini API key (fallback LLM provider) |
 
 ## Gotchas
 
@@ -238,10 +275,13 @@ sequenceDiagram
 - **Empty insights**: Returns success with empty array and `noInsightsReason` instead of error (INT-77)
 - **Chart type IDs**: Use compact format (C1-C6) not full names in storage
 - **Snapshot expiration**: Snapshots expire after 15 minutes, scheduled job refreshes all feeds
+- **Visualization async compute**: `POST /visualizations` returns 201 immediately with `status: pending`; poll `GET /visualizations/:id` until `status: ready` or `error`
+- **Visualization auto-refresh**: Every scheduled snapshot refresh also recomputes all feed visualizations via `refreshFeedVisualizations`
+- **Visualization limit**: Max 10 per feed; creation returns 400 `INVALID_REQUEST` when exceeded
+- **Default LLM**: Gemini 2.5 Flash (with Gemini fallback); Zai available as alternative platform
 - **Internal client**: Uses `@intexuraos/internal-clients` package for user-service access (INT-269)
 - **Response contract**: All routes use `reply.ok()` / `reply.fail()` instead of raw `reply.send()`
 - **Sentry logging**: Uses `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`)
-- **OAuth token support**: UserServiceClient mock includes `getOAuthToken` method
 
 ## File Structure
 
@@ -259,17 +299,23 @@ apps/data-insights-agent/src/
 │   ├── snapshot/            # Snapshot caching
 │   │   ├── models/          # Snapshot entity
 │   │   ├── ports/           # SnapshotRepository interface
-│   │   └── usecases/        # refreshSnapshot, getDataInsightSnapshot
-│   └── dataInsights/        # AI analysis capabilities
-│       ├── types.ts         # DataInsight, ChartTypeDefinition
-│       ├── chartTypes.ts    # CHART_TYPES array (C1-C6)
-│       ├── ports.ts         # Service interfaces
-│       └── usecases/        # analyzeData, generateChartDefinition, transformDataForPreview
+│   │   └── usecases/        # refreshSnapshot, refreshAllSnapshots, getDataInsightSnapshot
+│   ├── dataInsights/        # AI analysis capabilities
+│   │   ├── types.ts         # DataInsight, ChartTypeDefinition
+│   │   ├── chartTypes.ts    # CHART_TYPES array (C1-C6)
+│   │   ├── ports.ts         # Service interfaces
+│   │   └── usecases/        # analyzeData, generateChartDefinition, transformDataForPreview
+│   └── visualization/       # Saved visualization management
+│       ├── models/          # Visualization entity, VisualizationStatus
+│       ├── ports/           # VisualizationRepository interface
+│       └── usecases/        # createVisualization, computeVisualization, refreshFeedVisualizations
+│                            # listVisualizations, getVisualization, deleteVisualization
 ├── infra/
 │   ├── firestore/           # Repository implementations
 │   │   ├── dataSourceRepository.ts
 │   │   ├── compositeFeedRepository.ts
-│   │   └── snapshotRepository.ts
+│   │   ├── snapshotRepository.ts
+│   │   └── visualizationRepository.ts
 │   ├── gemini/              # LLM service implementations
 │   │   ├── dataAnalysisService.ts
 │   │   ├── chartDefinitionService.ts
@@ -282,7 +328,8 @@ apps/data-insights-agent/src/
 │   ├── dataSourceRoutes.ts
 │   ├── compositeFeedRoutes.ts
 │   ├── dataInsightsRoutes.ts
-│   └── internalRoutes.ts    # Scheduled snapshot refresh
+│   ├── visualizationRoutes.ts  # Full visualization CRUD + refresh
+│   └── internalRoutes.ts    # Scheduled snapshot refresh + compute visualization
 ├── services.ts              # DI container
 ├── config.ts                # Environment configuration
 ├── server.ts                # Fastify app builder
@@ -291,9 +338,9 @@ apps/data-insights-agent/src/
 
 ## Firestore Collections
 
-| Collection                 | Owner               | Access Pattern            |
-| -------------------------- | ------------------- | ------------------------- |
-| `custom_data_sources`      | data-insights-agent | By userId, by id          |
-| `composite_feeds`          | data-insights-agent | By userId, by id          |
-| `composite_feed_snapshots` | data-insights-agent | By feedId+userId, TTL 15m |
-| `visualizations`           | data-insights-agent | By feedId (future use)    |
+| Collection                 | Owner               | Access Pattern              |
+| -------------------------- | ------------------- | --------------------------- |
+| `custom_data_sources`      | data-insights-agent | By userId, by id            |
+| `composite_feeds`          | data-insights-agent | By userId, by id            |
+| `composite_feed_snapshots` | data-insights-agent | By feedId+userId, TTL 15m   |
+| `visualizations`           | data-insights-agent | By userId, by feedId, by id |

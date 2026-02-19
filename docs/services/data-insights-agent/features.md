@@ -26,29 +26,37 @@ Get ready-to-use Vega-Lite chart specifications matched to your data type. Six c
 
 **Example:** An insight about revenue trends gets a line chart with proper time-series encoding. A category comparison gets a bar chart.
 
+### Saved Visualizations for Live Dashboards
+
+Save chart configurations as persistent visualizations that automatically refresh with your latest data. Create a visualization once from a chart definition, and it stays current without any manual work — every time the feed snapshot refreshes, your saved charts recompute automatically.
+
+**Example:** Create a revenue trend visualization and pin it to your dashboard. Every 15 minutes, the chart recomputes against fresh snapshot data without any action on your part.
+
 ### Snapshots for Fast Performance
 
 Analysis results are cached as 15-minute snapshots, so repeated queries return instantly without re-running AI analysis.
 
 ## Use Case
 
-You're tracking sales data across three sources: a monthly CSV export, inventory alerts from your mobile app, and custom notes about promotions. You create a composite feed with all three sources. The service aggregates the data and generates a snapshot. You click "Analyze" and get 5 insights: one shows seasonal trends (line chart), another compares product categories (bar chart), and a third correlates low inventory with sales spikes (scatter plot). Each insight includes the trackable metric and a ready-to-render chart definition.
+You're tracking sales data across three sources: a monthly CSV export, inventory alerts from your mobile app, and custom notes about promotions. You create a composite feed with all three sources. The service aggregates the data and generates a snapshot. You click "Analyze" and get 5 insights: one shows seasonal trends (line chart), another compares product categories (bar chart), and a third correlates low inventory with sales spikes (scatter plot). Each insight includes the trackable metric and a ready-to-render chart definition. You save the revenue trend chart as a visualization — it now automatically recomputes every 15 minutes with the latest snapshot data.
 
 ## Key Benefits
 
 - **Zero SQL required** — AI extracts insights from raw data
 - **Multi-source aggregation** — Combine datasets with live notifications
 - **Smart chart recommendations** — AI picks the best visualization type
+- **Persistent visualizations** — Save charts that auto-refresh with every snapshot
 - **Cached snapshots** — Fast responses on repeated queries
 - **Vega-Lite output** — Charts render anywhere the spec is supported
 
 ## Limitations
 
 - **Text-based data only** — Binary formats (images, PDFs) not supported
-- **LLM API key required** — Analysis needs a configured Gemini, GLM, or other supported LLM key
+- **LLM API key required** — Analysis needs a configured Gemini or Zai key
 - **15-minute cache window** — Snapshots refresh every 15 minutes via scheduled job
 - **Max 5 insights per feed** — Keeps analysis focused and actionable
 - **5 static sources per feed** — Ensures performance on large datasets
+- **10 visualizations per feed** — Maximum saved charts per composite feed
 
 ---
 

@@ -5,6 +5,7 @@ describe('labelPrompt', () => {
   it('has correct metadata', () => {
     expect(labelPrompt.name).toBe('label-generation');
     expect(labelPrompt.description).toContain('short labels');
+    expect(labelPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('builds prompt with default deps', () => {

@@ -13,6 +13,7 @@ import type { OrchestratorState } from '../types/state.js';
 import type { IsolationProvider, WorkerHandle } from '../services/isolation/types.js';
 import type { TokenRefresher } from '../services/isolation/token-refresher.js';
 import type { ApiKeyValidator } from '../services/api-key-validator.js';
+import type { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
 
 const flushAsync = async (): Promise<void> => {
   await new Promise((resolve) => {
@@ -2855,6 +2856,85 @@ describe('TaskDispatcher', () => {
       expect(formatted).toContain('tools=0');
       expect(formatted).toContain('mode=unknown');
       expect(formatted).toContain('v?');
+    });
+  });
+
+  describe('turn metrics collection', () => {
+    it('calls collectAndPublish on task completion', async () => {
+      vi.useFakeTimers();
+
+      const mockCollector: TurnMetricsCollector = {
+        collectAndPublish: vi.fn().mockResolvedValue(undefined),
+      } as unknown as TurnMetricsCollector;
+
+      const metricsDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl,
+        mockCollector
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'metrics-test',
+        workerType: 'auto',
+        prompt: 'Test metrics collection',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await metricsDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate container stop
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockCollector.collectAndPublish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'metrics-test',
+          attempt: 1,
+          containerId: expect.any(String),
+          startedAt: expect.any(String),
+          completedAt: expect.any(String),
+        })
+      );
+
+      vi.useRealTimers();
+    });
+
+    it('does not call collectAndPublish when collector is not provided', async () => {
+      vi.useFakeTimers();
+
+      // dispatcher (from beforeEach) has no turnMetricsCollector
+      const request: CreateTaskRequest = {
+        taskId: 'no-metrics-test',
+        workerType: 'auto',
+        prompt: 'Test without metrics',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      // No error thrown, task completes normally without metrics
+      const task = await dispatcher.getTask('no-metrics-test');
+      expect(task?.status).toBe('completed');
+
+      vi.useRealTimers();
     });
   });
 });

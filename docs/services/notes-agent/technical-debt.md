@@ -10,18 +10,33 @@
 | SRP Violations      | 0     | -        |
 | Code Duplicates     | 0     | -        |
 | Deprecations        | 0     | -        |
+| Feature Gaps        | 2     | Low      |
 
-Last updated: 2026-02-08
+Last updated: 2026-02-19
+
+## Feature Gaps
+
+### Tag Filtering Not Implemented
+
+The `listNotes` use case accepts only `userId` and returns all notes without any filtering. Tag filtering has been planned since the initial release but is not yet implemented. Clients must filter client-side.
+
+**Impact:** API consumers cannot request a filtered list; all notes must be transferred and filtered locally.
+**Fix:** Add optional `tags?: string[]` param to `NoteRepository.findByUserId()`, implement Firestore `array-contains-any` query, and expose via the route query string.
+
+### Status Not Returned in Public API
+
+The `formatNote()` serializer in `noteRoutes.ts` omits the `status` field from all public responses, even though the field is stored in Firestore and part of the domain model. The draft/active distinction is invisible to public API consumers.
+
+**Impact:** Clients cannot differentiate draft from active notes.
+**Fix:** Add `status: note.status` to the `formatNote()` return object and update response schemas.
 
 ## Future Plans
 
 ### Planned Features
 
-Features that are planned but not yet implemented:
-
-- **Tag filtering** - Filter notes by tag in list endpoint
-- **Full-text search** - Search across note content
-- **Note sharing** - Share notes with other users
+- **Tag filtering** — Filter notes by tag in the list endpoint (server-side)
+- **Full-text search** — Search across note content
+- **Note sharing** — Share notes with other users
 
 ### Proposed Enhancements
 
@@ -71,19 +86,17 @@ No significant code duplication patterns identified.
 
 No deprecated APIs or dependencies in use.
 
-## Recent Improvements
-
-### Response Contract Compliance (2026-01-30)
-
-Migrated internal routes to use `reply.fail()` for authentication failures instead of raw `reply.status(401); return { error: 'Unauthorized' }`.
-
-### Legacy Document Status Default (2026-01-31)
-
-Added default `status: 'active'` for Firestore documents missing the `status` field, ensuring backward compatibility with legacy notes that predate the status feature.
-
 ---
 
 ## Resolved Issues
+
+### Recent Improvements
+
+| Date       | Improvement                                  | Detail                                                  |
+| ---------- | -------------------------------------------- | ------------------------------------------------------- |
+| 2026-02-16 | Dash0 OpenTelemetry integration              | Added distributed tracing via `@intexuraos/infra-dash0` |
+| 2026-02-16 | Dev-mode log formatting for PM2              | Improved local log readability in PM2 output            |
+| 2026-02-14 | PM2 ecosystem uses pnpm --filter start:local | Unified local start script across all services          |
 
 ### Historical Issues
 

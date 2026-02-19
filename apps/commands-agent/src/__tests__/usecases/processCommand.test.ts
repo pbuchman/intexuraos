@@ -52,6 +52,7 @@ describe('processCommand usecase', () => {
         confidence: 0.95,
         title: 'AI Research',
         reasoning: 'Research task',
+        promptVersion: '1.0.0',
       });
 
       // Set actions agent to fail on next call
@@ -92,6 +93,7 @@ describe('processCommand usecase', () => {
         confidence: 0.9,
         title: 'Test Task',
         reasoning: 'Todo task',
+        promptVersion: '1.0.0',
       });
 
       // Set event publisher to fail on next call
@@ -139,6 +141,7 @@ describe('processCommand usecase', () => {
         confidence: 0.95,
         title: 'AI Research',
         reasoning: 'Research task',
+        promptVersion: '1.0.0',
       });
 
       const usecase = createProcessCommandUseCase({
@@ -189,6 +192,7 @@ describe('processCommand usecase', () => {
           type: 'todo' as const,
           confidence: 0.9,
           reasoning: 'Test',
+          promptVersion: '1.0.0',
           classifiedAt: '2025-01-01T12:00:00.000Z',
         },
       };
@@ -225,6 +229,7 @@ describe('processCommand usecase', () => {
         confidence: 0.95,
         title: 'AI Research',
         reasoning: 'Research task',
+        promptVersion: '1.0.0',
       });
 
       const usecase = createProcessCommandUseCase({
@@ -262,6 +267,7 @@ describe('processCommand usecase', () => {
         confidence: 0.3,
         title: 'Unknown',
         reasoning: 'Cannot determine intent, defaulting to note',
+        promptVersion: '1.0.0',
       });
 
       const usecase = createProcessCommandUseCase({

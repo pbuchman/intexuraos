@@ -8,9 +8,10 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
-import { Card, Layout } from '@/components';
-import { useGitHubPREvents } from '@/hooks';
+import { Card, Layout, MarkdownContent } from '@/components';
+import { useGitHubPREvents, useGitHubPRSummaries } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
+import type { GitHubPRStatus } from '@/types';
 
 /**
  * Individual event item within a PR group
@@ -20,9 +21,11 @@ interface PREventItemProps {
   action: string | null;
   senderLogin: string;
   createdAt: string;
+  eventUrl: string | null;
+  body: string | null;
 }
 
-function PREventItem({ eventType, action, senderLogin, createdAt }: PREventItemProps): React.JSX.Element {
+function PREventItem({ eventType, action, senderLogin, createdAt, eventUrl, body }: PREventItemProps): React.JSX.Element {
   const getEventDisplay = (): { icon: string; label: string; color: string } => {
     if (eventType === 'pull_request_review') {
       return {
@@ -52,7 +55,14 @@ function PREventItem({ eventType, action, senderLogin, createdAt }: PREventItemP
         color: 'text-blue-700 dark:text-blue-400',
       };
     }
-    // pull_request
+    // pull_request — give synchronize a distinct treatment
+    if (action === 'synchronize') {
+      return {
+        icon: '📤',
+        label: 'Pushed commits',
+        color: 'text-blue-700 dark:text-blue-400',
+      };
+    }
     return {
       icon: '🔀',
       label: action ?? 'PR Event',
@@ -62,47 +72,89 @@ function PREventItem({ eventType, action, senderLogin, createdAt }: PREventItemP
 
   const { icon, label, color } = getEventDisplay();
 
+  const hasBody = body !== null && body !== '';
+
   return (
-    <div className="flex items-center gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800">
-      <span className="text-base" aria-hidden="true">
-        {icon}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className={`font-medium ${color}`}>{label}</span>
-          <span className="text-slate-500">by</span>
-          <span className="truncate text-slate-700 dark:text-slate-300">@{senderLogin}</span>
+    <div className="rounded-md bg-slate-50 text-sm dark:bg-slate-800">
+      <div className="flex items-center gap-3 px-3 py-2">
+        <span className="text-base" aria-hidden="true">
+          {icon}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`font-medium ${color}`}>{label}</span>
+            <span className="text-slate-500">by</span>
+            <span className="truncate text-slate-700 dark:text-slate-300">@{senderLogin}</span>
+          </div>
+          <div className="text-xs text-slate-500">
+            {formatDateTime(createdAt)}
+          </div>
         </div>
-        <div className="text-xs text-slate-500">
-          {formatDateTime(createdAt)}
-        </div>
+        {eventUrl !== null ? (
+          <a
+            href={eventUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+            aria-label="Open on GitHub"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        ) : null}
       </div>
+      {hasBody ? (
+        <div className="mx-3 mb-2 rounded border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-900">
+          <div className="border-b border-slate-200 bg-slate-100 px-3 py-1 text-xs text-slate-500 dark:border-slate-600 dark:bg-slate-800">
+            @{senderLogin} commented
+          </div>
+          <div className="px-3 py-2 text-sm">
+            <MarkdownContent content={body} allowHtml />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 /**
- * Collapsible group of events for a single PR
+ * Status badge colors for PR states
+ */
+function StatusBadge({ status }: { status: GitHubPRStatus }): React.JSX.Element {
+  const classMap: Record<GitHubPRStatus, string> = {
+    merged: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+    closed: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+    open: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  };
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${classMap[status]}`}>
+      {status}
+    </span>
+  );
+}
+
+/**
+ * Collapsible group for a single PR — loads events lazily when expanded
  */
 interface PREventsGroupProps {
   pullRequestNumber: number;
   title: string | null;
   repository: string;
-  events: {
-    eventType: string;
-    action: string | null;
-    senderLogin: string;
-    createdAt: string;
-  }[];
+  status: GitHubPRStatus;
 }
 
 function PREventsGroup({
   pullRequestNumber,
   title,
   repository,
-  events,
+  status,
 }: PREventsGroupProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const { events, loading: eventsLoading } = useGitHubPREvents({
+    repository,
+    pullRequestNumber,
+    enabled: isExpanded,
+  });
 
   const prUrl = `https://github.com/${repository}/pull/${String(pullRequestNumber)}`;
 
@@ -129,9 +181,7 @@ function PREventsGroup({
           </div>
           <div className="text-xs text-slate-500">{repository}</div>
         </div>
-        <span className="text-sm text-slate-500">
-          {events.length} event{events.length !== 1 ? 's' : ''}
-        </span>
+        <StatusBadge status={status} />
         <a
           href={prUrl}
           target="_blank"
@@ -147,11 +197,20 @@ function PREventsGroup({
       </button>
       {isExpanded ? (
         <div className="border-t border-slate-200 p-3 dark:border-slate-700">
-          <div className="space-y-2">
-            {events.map((event) => (
-              <PREventItem key={`${event.createdAt}-${event.eventType}`} {...event} />
-            ))}
-          </div>
+          {eventsLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {events.map((event) => (
+                <PREventItem key={`${event.createdAt}-${event.eventType}`} {...event} />
+              ))}
+              {events.length === 0 ? (
+                <p className="py-2 text-center text-sm text-slate-500">No events found</p>
+              ) : null}
+            </div>
+          )}
         </div>
       ) : null}
     </div>
@@ -159,18 +218,18 @@ function PREventsGroup({
 }
 
 /**
- * Main page for GitHub PR Events
+ * Main page for GitHub PR Events — last 30 days, loaded from summaries
  */
 export function PREventsPage(): React.JSX.Element {
   const {
-    groupedEvents,
+    prs,
     loading,
     refreshing,
     error,
     refresh,
-  } = useGitHubPREvents({ limit: 100 });
+  } = useGitHubPRSummaries();
 
-  if (loading && groupedEvents.length === 0) {
+  if (loading && prs.length === 0) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -184,7 +243,7 @@ export function PREventsPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">GitHub PR Events</h2>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Github Pull Request Events (last 30 days)</h2>
           <p className="text-slate-600 dark:text-slate-300">View pull request activity</p>
         </div>
         <div className="flex items-center gap-2">
@@ -211,36 +270,31 @@ export function PREventsPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      {groupedEvents.length === 0 && !loading ? (
+      {prs.length === 0 && !loading ? (
         <Card>
           <div className="py-12 text-center">
             <GitPullRequest className="mx-auto mb-4 h-12 w-12 text-slate-400" />
             <p className="mb-2 text-slate-600 dark:text-slate-300">No PR events found</p>
             <p className="text-sm text-slate-500">
-              No webhook events have been received yet.
+              No webhook events have been received in the last 30 days.
             </p>
           </div>
         </Card>
       ) : (
         <div className="space-y-4">
-          {groupedEvents.map((group) => (
+          {prs.map((pr) => (
             <PREventsGroup
-              key={group.pullRequestNumber}
-              pullRequestNumber={group.pullRequestNumber}
-              title={group.title}
-              repository={group.repository}
-              events={group.events.map((e) => ({
-                eventType: e.eventType,
-                action: e.action,
-                senderLogin: e.senderLogin,
-                createdAt: e.createdAt,
-              }))}
+              key={`${pr.repository}#${String(pr.pullRequestNumber)}`}
+              pullRequestNumber={pr.pullRequestNumber}
+              title={pr.title}
+              repository={pr.repository}
+              status={pr.status}
             />
           ))}
         </div>
       )}
 
-      {loading && groupedEvents.length > 0 ? (
+      {loading && prs.length > 0 ? (
         <div className="mt-4 flex justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
         </div>

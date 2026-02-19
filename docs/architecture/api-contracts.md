@@ -199,12 +199,8 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 │                                                                 │
 │  GET /docs → Swagger UI with service selector dropdown          │
 │                                                                 │
-│  Fetches specs at runtime from:                                 │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │ INTEXURAOS_USER_SERVICE_OPENAPI_URL → User Service /openapi.json       ││
-│  │ INTEXURAOS_NOTION_SERVICE_OPENAPI_URL → Notion Service /openapi.json   ││
-│  │ INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL → WhatsApp Service /openapi.json│
-│  └─────────────────────────────────────────────────────────────┘│
+│  Fetches specs at runtime from all registered services          │
+│  (see Environment Variables table below)                        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -218,13 +214,25 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 
 #### Environment Variables
 
-| Variable                                  | Description                          |
-| ----------------------------------------- | ------------------------------------ |
-| `INTEXURAOS_USER_SERVICE_OPENAPI_URL`     | URL to user-service OpenAPI JSON     |
-| `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`   | URL to notion-service OpenAPI JSON   |
-| `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL` | URL to whatsapp-service OpenAPI JSON |
+| Variable                                              | Service                      |
+| ----------------------------------------------------- | ---------------------------- |
+| `INTEXURAOS_USER_SERVICE_OPENAPI_URL`                 | user-service                 |
+| `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`               | notion-service               |
+| `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`             | whatsapp-service             |
+| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL` | mobile-notifications-service |
+| `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`               | research-agent               |
+| `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`               | commands-agent               |
+| `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                | actions-agent                |
+| `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL`          | data-insights-agent          |
+| `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                | image-service                |
+| `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                  | notes-agent                  |
+| `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                  | todos-agent                  |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`         | app-settings-service         |
+| `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`              | bookmarks-agent              |
+| `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`               | calendar-agent               |
+| `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                   | chat-agent                   |
 
-These values are constructed by Terraform from Cloud Run service URLs and injected as plain environment variables (not secrets).
+These values are constructed by Terraform from Cloud Run service URLs and injected as plain environment variables (not secrets). The full list of registered services is defined in `apps/api-docs-hub/src/config.ts`.
 
 ### Schema Components
 

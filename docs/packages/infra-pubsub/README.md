@@ -223,16 +223,16 @@ if (!result.ok) {
 
 ## Recent Changes
 
-| Commit   | Description                                            | Age     |
-| -------- | ------------------------------------------------------ | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner       | 7 days  |
-| dfd702f1 | Add Sentry-enabled logger factory and migrate all apps | 9 days  |
-| 4404b004 | Add tests to meet coverage threshold                   | 12 days |
-| a9847b66 | Add WhatsApp approval buttons with nonces              | 12 days |
-| 766ae429 | Add tests for branch coverage gaps in packages         | 13 days |
-| 6890b482 | Add tests for calendarPreviewPublisher                 | 13 days |
-| 4fa0fed3 | Release v2.0.0                                         | 2 weeks |
-| 60bb9396 | Add Pub/Sub infrastructure for calendar preview        | 2 weeks |
+| Commit   | Description                                            | Age    |
+| -------- | ------------------------------------------------------ | ------ |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner       | Recent |
+| dfd702f1 | Add Sentry-enabled logger factory and migrate all apps | Recent |
+| 4404b004 | Add tests to meet coverage threshold                   | Recent |
+| a9847b66 | Add WhatsApp approval buttons with nonces              | Recent |
+| 766ae429 | Add tests for branch coverage gaps in packages         | Recent |
+| 6890b482 | Add tests for calendarPreviewPublisher                 | Recent |
+| 4fa0fed3 | Release v2.0.0                                         | Recent |
+| 60bb9396 | Add Pub/Sub infrastructure for calendar preview        | Recent |
 
 ## Source Files
 

@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestClient, type CodeTask } from '../helpers/client.js';
-import { waitForTaskStatus, sleep } from '../helpers/wait.js';
+import { waitForTaskStatus, waitForSuccessStatus, sleep } from '../helpers/wait.js';
 import { cleanupBranches, cleanupPRs } from '../helpers/cleanup.js';
 
 describe('Code Tasks E2E', () => {
@@ -63,8 +63,8 @@ describe('Code Tasks E2E', () => {
       expect(codeTaskId).toBeDefined();
 
       // Wait for task to complete
-      const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
-      expect(task.status).toBe('completed');
+      const task = await waitForSuccessStatus(client, codeTaskId, 60000);
+      expect(['designed', 'implemented']).toContain(task.status);
       expect(task.result?.prUrl).toBeDefined();
       expect(task.result?.branch).toBeDefined();
       expect(task.result?.commits).toBeGreaterThan(0);
@@ -87,7 +87,7 @@ describe('Code Tasks E2E', () => {
       expect(submitResult.status).toBe(200);
       const { codeTaskId } = submitResult.data.data;
 
-      const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
+      const task = await waitForSuccessStatus(client, codeTaskId, 60000);
 
       // Linear issue should be created (format: INT-XXX)
       // Note: This may be empty in test environment without Linear API
@@ -116,8 +116,8 @@ describe('Code Tasks E2E', () => {
       expect(submitResult.status).toBe(200);
       const { codeTaskId } = submitResult.data.data;
 
-      const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
-      expect(task.status).toBe('completed');
+      const task = await waitForSuccessStatus(client, codeTaskId, 60000);
+      expect(['designed', 'implemented']).toContain(task.status);
 
       // Should have the Linear issue we provided
       expect(task.linearIssueId).toBe(testLinearIssueId);
@@ -213,7 +213,7 @@ describe('Code Tasks E2E', () => {
       });
 
       const { codeTaskId } = submitResult.data.data;
-      await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
+      await waitForSuccessStatus(client, codeTaskId, 60000);
 
       // Try to cancel completed task
       const cancelResult = await client.post('/code/cancel', { taskId: codeTaskId });
@@ -232,9 +232,9 @@ describe('Code Tasks E2E', () => {
       expect(submitResult.status).toBe(200);
       const { codeTaskId } = submitResult.data.data;
 
-      const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
+      const task = await waitForSuccessStatus(client, codeTaskId, 60000);
 
-      expect(task.status).toBe('completed');
+      expect(['designed', 'implemented']).toContain(task.status);
       expect(task.result?.ciFailed).toBe(true);
       expect(task.result?.prUrl).toBeDefined();
 
@@ -259,7 +259,7 @@ describe('Code Tasks E2E', () => {
 
     it('filters tasks by status', async () => {
       const response = await client.get('/code/tasks', {
-        params: { status: 'completed' },
+        params: { status: 'designed' },
       });
 
       expect(response.status).toBe(200);
@@ -267,7 +267,7 @@ describe('Code Tasks E2E', () => {
 
       // All returned tasks should have the filtered status
       response.data.data.tasks.forEach((task: CodeTask) => {
-        expect(task.status).toBe('completed');
+        expect(task.status).toBe('designed');
       });
     });
 
@@ -334,8 +334,9 @@ describe('Code Tasks E2E', () => {
       });
 
       const { codeTaskId } = submitResult.data.data;
-      const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
+      const task = await waitForSuccessStatus(client, codeTaskId, 60000);
 
+      expect(['designed', 'implemented']).toContain(task.status);
       expect(task.result).toBeDefined();
       expect(task.result?.branch).toBeDefined();
       expect(task.result?.commits).toBeGreaterThan(0);
@@ -367,8 +368,8 @@ describe('Code Tasks E2E', () => {
       expect(['dispatched', 'running']).toContain(initialStatus);
 
       // Wait for completion
-      const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
-      expect(task.status).toBe('completed');
+      const task = await waitForSuccessStatus(client, codeTaskId, 60000);
+      expect(['designed', 'implemented']).toContain(task.status);
 
       // Track for cleanup
       if (task.result?.branch !== undefined) {

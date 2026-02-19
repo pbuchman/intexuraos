@@ -88,7 +88,8 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
           // Layer 2: Check dedupKey within 5-minute window (design lines 1543-1554)
           // Skip dedup for retried tasks — same prompt is intentional
-          if (input.retriedFrom === undefined) {
+          // Skip dedup for phase2_implement tasks — Phase 2 reuses Phase 1 prompt by design
+          if (input.retriedFrom === undefined && input.followUpReason !== 'phase2_implement') {
             const dedupQuery = collection
               .where('dedupKey', '==', dedupKey)
               .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))
@@ -157,6 +158,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           if (input.linearIssueTitle !== undefined) {
             taskData.linearIssueTitle = input.linearIssueTitle;
           }
+          if (input.linearIssueUrl !== undefined) {
+            taskData.linearIssueUrl = input.linearIssueUrl;
+          }
           if (input.linearFallback !== undefined) {
             taskData.linearFallback = input.linearFallback;
           }
@@ -178,6 +182,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           }
           if (input.followUpReason !== undefined) {
             taskData.followUpReason = input.followUpReason;
+          }
+          if (input.executionPhase !== undefined) {
+            taskData.executionPhase = input.executionPhase;
           }
           /* v8 ignore stop @preserve */
 
@@ -342,6 +349,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         if (input.pendingUserMessages !== undefined) {
           updateData['pendingUserMessages'] = input.pendingUserMessages;
+        }
+        if (input.implementationTaskId !== undefined) {
+          updateData['implementationTaskId'] = input.implementationTaskId === null
+            ? FieldValue.delete()
+            : input.implementationTaskId;
         }
 
         await docRef.update(updateData);
@@ -616,7 +628,32 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         /* v8 ignore stop @preserve */
 
-        const totalLogCount = logCount + logLinesSnapshot.docs.length + logEntriesSnapshot.docs.length;
+        const turnMetricsRef = taskRef.collection('turn_metrics');
+        const turnMetricsSnapshot = await turnMetricsRef.get();
+
+        /* v8 ignore start -- test-infra: batch delete logic for turn_metrics subcollection @preserve */
+        if (turnMetricsSnapshot.docs.length > 0) {
+          let metricsBatch = firestore.batch();
+          let metricsBatchCount = 0;
+
+          for (const metricsDoc of turnMetricsSnapshot.docs) {
+            metricsBatch.delete(metricsDoc.ref);
+            metricsBatchCount++;
+
+            if (metricsBatchCount >= batchSize) {
+              await metricsBatch.commit();
+              metricsBatch = firestore.batch();
+              metricsBatchCount = 0;
+            }
+          }
+
+          if (metricsBatchCount > 0) {
+            await metricsBatch.commit();
+          }
+        }
+        /* v8 ignore stop @preserve */
+
+        const totalLogCount = logCount + logLinesSnapshot.docs.length + logEntriesSnapshot.docs.length + turnMetricsSnapshot.docs.length;
         const archivedAt = new Date();
         await taskRef.update({
           logsArchived: true,
@@ -628,6 +665,30 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok({ logCount: totalLogCount, archivedAt });
       } catch (error) {
         logger.error({ error, taskId }, 'Failed to archive task logs');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    deleteTask: async (taskId: string, userId: string): Promise<Result<void, RepositoryError>> => {
+      try {
+        const doc = await collection.doc(taskId).get();
+
+        if (!doc.exists) {
+          return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
+        }
+
+        const data = doc.data();
+        if (data?.['userId'] !== userId) {
+          return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
+        }
+
+        await collection.doc(taskId).delete();
+        return ok(undefined);
+      } catch (error) {
+        logger.error({ error, taskId }, 'Failed to delete task');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

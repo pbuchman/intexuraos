@@ -40,11 +40,23 @@ Each user configures their own worker machines (Mac Mini, VM, etc.) with Cloudfl
 
 **Example:** You configure a Mac Mini at home (`home-mac`) as primary and a cloud VM (`cloud-vm`) as fallback. When `home-mac` returns HTTP 503 (busy), Code Agent automatically falls back to `cloud-vm`.
 
-### 5. Retry and Feedback Loops
+### 5. Rich GitHub PR Activity Timeline
 
-Failed or cancelled tasks can be retried with optional additional context. Completed tasks can receive follow-up feedback that creates a new task linked to the original, carrying forward the Linear issue, branch, and prior work summary.
+Every pull request created by Code Agent gets a live activity feed on your dashboard. The timeline shows PR opens, pushes, reviews, and comments -- each with a clickable link directly to that event on GitHub. When someone pushes new commits to the branch, a compare link shows exactly what changed.
 
-**Example:** A task fails because a test was flaky. You click "Retry" and add context: "The flaky test is in `auth.test.ts` -- skip it and add a note." Code Agent creates a retry task with a 5-minute cool-off period, updates the Linear issue to In Progress, and adds a comment documenting the retry.
+Comment edits are automatically deduplicated: you see each comment once at its original position, but with the latest text. The PR description appears only on the most recent event so it does not repeat with every push.
+
+**Example:** You push three commits to a Code Agent PR over the course of a review cycle. The timeline shows the original PR open (with description), three "synchronize" entries each linking to the exact diff for that push, two reviewer comments (showing the latest text if edited), and a review approval -- all in chronological order without repetition.
+
+### 6. Retry, Feedback, and Mid-Task Messaging
+
+Failed or cancelled tasks can be retried with optional additional context. Completed tasks can receive follow-up feedback that creates a new task linked to the original, carrying forward the Linear issue, branch, and prior work summary. Running tasks can receive mid-session messages that are queued and delivered at the next turn boundary.
+
+**Example (retry):** A task fails because a test was flaky. You click "Retry" and add context: "The flaky test is in `auth.test.ts` -- skip it and add a note." Code Agent creates a retry task with a 5-minute cool-off period, updates the Linear issue to In Progress, and adds a comment documenting the retry.
+
+**Example (mid-task message):** While a task is running, you realize the implementation needs a constraint. You send "Also validate that the limit parameter is between 1 and 100." Code Agent queues the message in Firestore. When the worker finishes its current turn, it picks up the queued message and continues with the additional instruction.
+
+**Example (resume):** A task completed but you want one more change. You send a message to the completed task. Code Agent re-dispatches it to the worker with `--continue`, picking up where it left off on the same branch.
 
 ## Use Case Walkthrough: From WhatsApp to PR
 
@@ -62,13 +74,14 @@ Failed or cancelled tasks can be retried with optional additional context. Compl
 
 ## Key Benefits
 
-| Benefit                  | Detail                                                                   |
-| ------------------------ | ------------------------------------------------------------------------ |
-| Your infrastructure      | Workers run on your machines. Code never leaves your environment.        |
-| End-to-end tracing       | Every task carries a `traceId` from submission through completion.       |
-| Cost controls            | Per-user daily ($20) and monthly ($200) caps with real-time enforcement. |
-| Zombie detection         | Tasks inactive for 30 minutes are automatically interrupted.             |
-| Log retention management | Logs older than 90 days are archived automatically.                      |
+| Benefit                  | Detail                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| Your infrastructure      | Workers run on your machines. Code never leaves your environment.            |
+| End-to-end tracing       | Every task carries a `traceId` from submission through completion.           |
+| Cost controls            | Per-user daily ($20) and monthly ($200) caps with real-time enforcement.     |
+| Zombie detection         | Tasks inactive for 30 minutes are automatically interrupted.                 |
+| Log retention management | Logs older than 90 days are archived automatically.                          |
+| Turn-level metrics       | CPU time, memory, token counts, and API wait times recorded per worker turn. |
 
 ## Limitations
 
@@ -76,7 +89,8 @@ Failed or cancelled tasks can be retried with optional additional context. Compl
 - Maximum 3 concurrent tasks per user.
 - Prompt sanitization is not yet implemented (uses raw prompt).
 - System prompt hash is currently a static placeholder.
-- PR comment auto-dispatch (Phase 4) is logged but not yet fully wired to worker dispatch.
+- PR comment auto-dispatch (`handlePRComment`, Phase 4) prepares tasks and logs them but does not yet dispatch to a worker.
+- Tasks complete as `designed` (Phase 1) or `implemented` (Phase 2), not as a generic `completed` status.
 - Workers require Cloudflare Access tunnels for secure connectivity.
 - GLM model support (`workerType: 'glm'`) depends on external Z.ai availability.
 

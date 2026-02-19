@@ -105,8 +105,10 @@ No TODO or FIXME comments found in the codebase.
 
 ## Resolved Issues
 
-| Issue      | Description                                   | Resolution                                         |
-| ---------- | --------------------------------------------- | -------------------------------------------------- |
-| `e6782f64` | INTEXURAOS_LLM_MODEL env var no longer needed | Removed; model selection via user-service          |
-| `332fd990` | EmbeddingClient had tight OpenAI coupling     | Refactored to function injection pattern           |
-| `0f37ed41` | Shared LLM client across all users            | Refactored to per-request client from user-service |
+| Issue      | Description                                           | Resolution                                                       |
+| ---------- | ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `e6782f64` | INTEXURAOS_LLM_MODEL env var no longer needed         | Removed; model selection via user-service                        |
+| `332fd990` | EmbeddingClient had tight OpenAI coupling             | Refactored to function injection pattern                         |
+| `0f37ed41` | Shared LLM client across all users                    | Refactored to per-request client from user-service               |
+| `63170e4a` | Inconsistent GLM "free" terminology in LLM factory    | Removed; all clients now created via `createLlmClient` uniformly |
+| `c72b7c53` | Default LLM (GLM) had no Gemini fallback for platform | Switched default to Gemini 2.5 Flash; added Gemini platform key  |

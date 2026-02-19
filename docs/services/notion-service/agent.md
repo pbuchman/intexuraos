@@ -43,13 +43,22 @@ interface ConnectResult {
 interface StatusResult {
   configured: boolean;
   connected: boolean;
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 interface PagePreview {
   title: string;
   url: string;
+}
+
+interface NotionContext {
+  connected: boolean;
+  token: string | null;
+}
+
+interface WebhookResult {
+  received: boolean;
 }
 ```
 
@@ -57,11 +66,12 @@ interface PagePreview {
 
 ## Constraints
 
-| Rule                      | Description                                      |
-| ------------------------- | ------------------------------------------------ |
-| **Notion Token Required** | User must provide valid Notion integration token |
-| **Single Workspace**      | One Notion workspace per user                    |
-| **Token Validation**      | Token validated with Notion API before storing   |
+| Rule                      | Description                                         |
+| ------------------------- | --------------------------------------------------- |
+| **Notion Token Required** | User must provide valid Notion integration token    |
+| **Single Workspace**      | One Notion workspace per user                       |
+| **Token Validation**      | Token validated with Notion API before storing      |
+| **Webhook Stub**          | Webhook endpoint accepts events but takes no action |
 
 ---
 
@@ -119,6 +129,12 @@ await disconnectNotion();
 | GET    | `/internal/notion/users/:userId/context`               | Get connection context and token |
 | GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | Get page preview (title and URL) |
 
+## Webhook Endpoints
+
+| Method | Path               | Purpose                                 | Auth |
+| ------ | ------------------ | --------------------------------------- | ---- |
+| POST   | `/notion-webhooks` | Receive Notion events (stub, logs only) | None |
+
 ---
 
 ## Used By
@@ -127,4 +143,4 @@ await disconnectNotion();
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

@@ -43,6 +43,7 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
@@ -167,7 +168,12 @@ describe('POST /code/submit', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
@@ -191,7 +197,9 @@ describe('POST /code/submit', () => {
       workerSettingsRepo: WorkerSettingsRepository;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     // Set up worker settings for the test user
@@ -297,6 +305,35 @@ describe('POST /code/submit', () => {
         expect.objectContaining({
           workerType: 'auto',
         })
+      );
+    });
+
+    it('sets executionPhase to execution when issue has code-task label', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-999',
+        linearIssueTitle: 'Phase 2 ready feature',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
+        ok: true,
+        value: { dispatched: true, workerLocation: 'home-dev' },
+      });
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Build phase 2 feature' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ executionPhase: 'execution' })
       );
     });
 
@@ -556,6 +593,17 @@ describe('POST /code/submit', () => {
     });
 
     it('allows submissions when within limits', async () => {
+      // Mock Linear issue service (required for submit flow)
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'This should be allowed',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
       // Mock successful dispatch
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
         ok: true,
@@ -607,6 +655,16 @@ describe('POST /code/submit', () => {
     it('calls recordTaskStart when task is submitted successfully', async () => {
       const { getServices } = await import('../../services.js');
       const services = getServices();
+
+      // Mock Linear issue service (required for submit flow)
+      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-456',
+        linearIssueTitle: 'Test prompt',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(services.linearIssueService, 'markInProgress').mockResolvedValueOnce(undefined);
 
       const recordStartSpy = vi.spyOn(services.rateLimitService, 'recordTaskStart');
 

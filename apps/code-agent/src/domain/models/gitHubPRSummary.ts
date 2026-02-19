@@ -1,0 +1,31 @@
+/**
+ * GitHub Pull Request Summary domain model.
+ *
+ * One document per unique PR, upserted on every webhook event.
+ * Used for the 30-day list view — O(PRs) instead of O(events).
+ */
+
+export interface GitHubPRSummary {
+  repository: string;
+  pullRequestNumber: number;
+  title: string | null;
+  state: string | null; // 'open' | 'closed' from GitHub
+  mergedAt: Date | null;
+  lastActivityAt: Date;
+  firstSeenAt: Date;
+}
+
+/**
+ * Input for upserting a PR summary.
+ * title/state/mergedAt are only present for pull_request events.
+ */
+export interface UpsertGitHubPRSummaryInput {
+  repository: string;
+  pullRequestNumber: number;
+  lastActivityAt: Date;
+  firstSeenAt: Date;
+  // Only present for pull_request events (not review/comment events)
+  title?: string | null;
+  state?: string | null;
+  mergedAt?: Date | null;
+}

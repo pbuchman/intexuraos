@@ -42,15 +42,13 @@ describe('processCodeAction', () => {
     } as unknown as TaskDispatcherService;
 
     linearIssueService = {
-      ensureIssueExists: vi.fn().mockResolvedValue(
-        ok({
-          linearIssueId: 'INT-123',
-          linearIssueTitle: 'Test Issue',
-          linearIssueLabels: [],
-          hasChildren: false,
-          linearFallback: false,
-        })
-      ),
+      ensureIssueExists: vi.fn().mockResolvedValue({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Test Issue',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      }),
     } as unknown as LinearIssueService;
 
     whatsappNotifier = {
@@ -241,6 +239,14 @@ describe('processCodeAction', () => {
       expect(result.value.resourceUrl).toBe('/#/code-tasks/new-task-123');
       expect(result.value.workerLocation).toBe('mac');
     }
+
+    // Verify executionPhase is 'design' when linear issue has no 'code-task' label
+    // (linearIssueService mock returns linearIssueLabels: [] — no code-task label)
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionPhase: 'design',
+      })
+    );
 
     // Verify worker location and cancel nonce were set
     expect(codeTaskRepo.update).toHaveBeenCalledWith('new-task-123', {
@@ -516,6 +522,92 @@ describe('processCodeAction', () => {
     );
 
     expect(whatsappNotifier.notifyTaskStarted).not.toHaveBeenCalled();
+  });
+
+  it('sets executionPhase to execution when linear issue has code-task label', async () => {
+    // Override linearIssueService to return code-task label
+    vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
+      linearIssueId: 'INT-123',
+      linearIssueTitle: 'Test Issue',
+      linearIssueLabels: ['code-task'],
+      hasChildren: false,
+      linearFallback: false,
+    });
+
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-execution',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'hash-123',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        executionPhase: 'execution',
+      })
+    );
+
+    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+      ok({
+        dispatched: true,
+        workerLocation: 'mac',
+      })
+    );
+
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-execution',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'hash-123',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        executionPhase: 'execution',
+        cancelNonce: 'abcd',
+        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      })
+    );
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        workerType: 'auto',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+
+    // Verify executionPhase is 'execution' when linear issue has 'code-task' label
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionPhase: 'execution',
+      })
+    );
   });
 
   it('succeeds even if notification fails (graceful degradation)', async () => {

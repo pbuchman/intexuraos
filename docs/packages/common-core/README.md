@@ -58,20 +58,38 @@ Stable error codes for API responses with HTTP status mapping.
 
 ```typescript
 type ErrorCode =
-  | 'INVALID_REQUEST'     // 400
-  | 'UNAUTHORIZED'        // 401
-  | 'FORBIDDEN'           // 403
-  | 'NOT_FOUND'           // 404
-  | 'CONFLICT'            // 409
-  | 'GONE'                // 410
+  | 'INVALID_REQUEST' // 400
+  | 'UNAUTHORIZED' // 401
+  | 'FORBIDDEN' // 403
+  | 'NOT_FOUND' // 404
+  | 'CONFLICT' // 409
+  | 'GONE' // 410
   | 'PRECONDITION_FAILED' // 412
-  | 'UNPROCESSABLE_ENTITY'// 422
-  | 'RATE_LIMITED'        // 429
-  | 'LOCKED'              // 423
-  | 'DOWNSTREAM_ERROR'    // 502
-  | 'INTERNAL_ERROR'      // 500
-  | 'MISCONFIGURED'       // 503
-  | /* ...domain-specific codes */;
+  | 'UNPROCESSABLE_ENTITY' // 422
+  | 'RATE_LIMITED' // 429
+  | 'LOCKED' // 423
+  | 'DOWNSTREAM_ERROR' // 502
+  | 'INTERNAL_ERROR' // 500
+  | 'MISCONFIGURED' // 503
+  // Worker lifecycle
+  | 'WORKER_NOT_CONFIGURED' // 424
+  | 'INVALID_WORKER' // 400
+  | 'WORKER_UNHEALTHY' // 400
+  | 'WORKER_UNAVAILABLE' // 502
+  // Notion integration
+  | 'NOTION_NOT_CONNECTED' // 400
+  | 'PAGE_NOT_CONFIGURED' // 400
+  | 'NOTION_UNAUTHORIZED' // 401
+  // Research
+  | 'RESEARCH_NOT_COMPLETED' // 400
+  | 'NO_SYNTHESIS' // 400
+  | 'ALREADY_EXPORTED' // 409
+  // Security / nonces
+  | 'INVALID_NONCE' // 400
+  | 'NONCE_EXPIRED' // 400
+  | 'NOT_OWNER' // 403
+  // Task management
+  | 'TASK_NOT_CANCELLABLE'; // 400
 
 const ERROR_HTTP_STATUS: Record<ErrorCode, number>;
 
@@ -204,21 +222,21 @@ Nearly every package and app in the monorepo depends on `common-core`:
 
 **Packages (13):** `common-http`, `http-server`, `infra-pubsub`, `infra-firestore`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-glm`, `infra-notion`, `infra-perplexity`, `infra-sentry`, `infra-whatsapp`, `internal-clients`, `llm-utils`, `llm-prompts`, `llm-pricing`, `llm-factory`, `llm-audit`, `llm-contract`
 
-**Apps (18):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `code-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `todos-agent`, `user-service`, `web-agent`, `whatsapp-service`
+**Apps (19):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `code-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `todos-agent`, `user-service`, `web`, `web-agent`, `whatsapp-service`
 
 **Workers (3):** `orchestrator`, `vm-lifecycle`, `log-cleanup`
 
 ## Recent Changes
 
-| Commit   | Description                                      | Age     |
-| -------- | ------------------------------------------------ | ------- |
-| 474ea6d1 | Validate workerLocation exists and is healthy    | 5 days  |
-| f10ebdbf | Fix empty error objects in log output            | 7 days  |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
-| af5442c2 | Implement per-user worker configuration          | 8 days  |
-| 186f7ad8 | Enforce standardized HTTP response contract      | 9 days  |
-| b4aaafdf | Add distributed tracing with X-Trace-Id header   | 13 days |
-| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
+| Commit     | Description                                              | Age    |
+| ---------- | -------------------------------------------------------- | ------ |
+| `b32d75b7` | Handle worker 502 errors gracefully (WORKER_UNAVAILABLE) | recent |
+| `0a6b7b8f` | Normalize cancel-with-nonce error codes                  | recent |
+| `474ea6d1` | Validate workerLocation exists and is healthy            | recent |
+| `f10ebdbf` | Fix empty error objects in log output                    | recent |
+| `af5442c2` | Implement per-user worker configuration                  | recent |
+| `186f7ad8` | Enforce standardized HTTP response contract              | recent |
+| `b4aaafdf` | Add distributed tracing with X-Trace-Id header           | recent |
 
 ## Source Files
 

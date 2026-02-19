@@ -182,20 +182,22 @@ fakePricing.getPricing('gemini-2.5-flash');
 
 ## Used By
 
-**Packages (6):** `llm-factory`, `internal-clients`, `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity`
+**Packages (7):** `llm-factory`, `internal-clients`, `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity`
 
 **Apps (12):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `user-service`, `web-agent`
 
+**Workers (1):** `orchestrator`
+
 ## Recent Changes
 
-| Commit   | Description                                      | Age     |
-| -------- | ------------------------------------------------ | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions   | 12 days |
-| 6acb3fc0 | Add tests for 95% branch coverage                | 13 days |
-| 4fa0fed3 | Release v2.0.0                                   | 2 weeks |
-| 2c3a98ce | Add GLM-4.7-Flash support as free Zai AI model   | 3 weeks |
-| a87cf2b5 | Make logger mandatory in llm-pricing package     | 3 weeks |
+| Commit   | Description                                                           | Age     |
+| -------- | --------------------------------------------------------------------- | ------- |
+| 1c9d7ec9 | Orchestrator verification hardening and unified secrets sync workflow | 10 days |
+| 641eee12 | Fix duplicate Content-Type header in predev gateway proxy             | 12 days |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner                      | 17 days |
+| 21c1528a | Fix release skill to bump all package versions                        | 3 weeks |
+| 6acb3fc0 | Add tests for 95% branch coverage                                     | 3 weeks |
+| 4fa0fed3 | Release v2.0.0                                                        | 3 weeks |
 
 ## Source Files
 

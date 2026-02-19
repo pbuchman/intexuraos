@@ -11,6 +11,7 @@ export { ChartPreview } from './ChartPreview.js';
 export { CommandDetailModal } from './CommandDetailModal.js';
 export { ConfigurableActionButton } from './ConfigurableActionButton.js';
 export { DataInsightCard } from './DataInsightCard.js';
+export { DataInsightsTabs } from './DataInsightsTabs.js';
 export { Header } from './Header.js';
 export { Sidebar } from './Sidebar.js';
 export { Layout } from './Layout.js';

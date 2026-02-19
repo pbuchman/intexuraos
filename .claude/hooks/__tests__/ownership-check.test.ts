@@ -56,7 +56,7 @@ describe.sequential('Claude Hooks - Ownership Check', () => {
 
   describe('ownership-check.sh', () => {
     describe('forbidden ownership language detection', () => {
-      it('blocks "pre-existing" pattern', () => {
+      it('blocks "pre-existing" pattern with updated message', () => {
         const transcriptPath = createTranscript([
           { type: 'user', message: { content: [{ type: 'text', text: 'What went wrong?' }] } },
           {
@@ -81,6 +81,9 @@ describe.sequential('Claude Hooks - Ownership Check', () => {
         expectJsonOutput(result, {
           decision: 'block',
           reasonIncludes: 'pre-existing',
+        });
+        expectJsonOutput(result, {
+          reasonIncludes: "Don't piss the user off",
         });
 
         cleanupTranscript(transcriptPath);
@@ -229,6 +232,39 @@ describe.sequential('Claude Hooks - Ownership Check', () => {
 
         // Should not block
         expectAllowed(result);
+
+        cleanupTranscript(transcriptPath);
+      });
+
+      it('blocks when pattern appears both in code block and outside', () => {
+        const transcriptPath = createTranscript([
+          { type: 'user', message: { content: [{ type: 'text', text: 'What happened?' }] } },
+          {
+            type: 'assistant',
+            message: {
+              content: [
+                {
+                  type: 'text',
+                  text: '```bash\n# pre-existing comment\n```\nThis was a pre-existing issue in the codebase.',
+                },
+              ],
+            },
+          },
+        ]);
+
+        const result = executeHookSync({
+          hookName: 'ownership-check',
+          input: {
+            tool_name: 'PostToolUse',
+            tool_input: {},
+            transcript_path: transcriptPath,
+          },
+        });
+
+        expectJsonOutput(result, {
+          decision: 'block',
+          reasonIncludes: 'pre-existing',
+        });
 
         cleanupTranscript(transcriptPath);
       });

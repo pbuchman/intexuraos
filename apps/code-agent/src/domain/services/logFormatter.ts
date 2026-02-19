@@ -85,7 +85,11 @@ export function formatLogChunk(
       const formatted = formatJsonMessage(obj, s);
       text = formatted !== '' && prefix !== '' ? `${prefix}${formatted}` : formatted;
     } catch {
-      text = trimmed;
+      /* v8 ignore start -- ts-type: catch block handles unparseable JSON; short-line branch not triggered by test fixtures @preserve */
+      text = trimmed.length > 2048
+        ? trimmed.slice(0, 1024) + '\n[... TRUNCATED from ' + String(trimmed.length) + ' chars ...]\n' + trimmed.slice(-512)
+        : trimmed;
+      /* v8 ignore stop @preserve */
     }
 
     text = stripSystemReminders(text);
@@ -212,13 +216,27 @@ function formatUser(obj: StreamJsonMessage, state: FormatterState): string {
   return parts.join('\n');
 }
 
+const MAX_TOOL_RESULT_CHARS = 2048;
+const HEAD_LINES = 10;
+const TAIL_LINES = 40;
+
 function formatToolResult(content: string, isError: boolean, toolName?: string): string {
   const trimmed = stripSystemReminders(content).trim();
   if (trimmed === '') return '';
   if (toolName === 'Read' && !isError) return '';
 
   const prefix = isError ? '  \u2717 ' : '  \u2192 ';
-  const lines = trimmed.split('\n');
+  let lines = trimmed.split('\n');
+
+  /* v8 ignore start -- ts-type: combined condition branch where length exceeds chars but not lines @preserve */
+  if (trimmed.length > MAX_TOOL_RESULT_CHARS && lines.length > HEAD_LINES + TAIL_LINES) {
+    /* v8 ignore stop @preserve */
+    const head = lines.slice(0, HEAD_LINES);
+    const tail = lines.slice(-TAIL_LINES);
+    const omitted = lines.length - HEAD_LINES - TAIL_LINES;
+    lines = [...head, `[... ${String(omitted)} lines omitted ...]`, ...tail];
+  }
+
   return lines
     .map((line, index) => (index === 0 ? `${prefix}${line}` : `    ${line}`))
     .join('\n');

@@ -16,10 +16,12 @@
 export interface SystemPromptParams {
   /** Unique task identifier */
   taskId: string;
-  /** Filesystem path to the git worktree */
-  worktreePath: string;
   /** Optional Linear issue ID for tracking */
   linearIssueId?: string;
+  /** Optional Linear issue title (for PR descriptions) */
+  linearIssueTitle?: string;
+  /** Full URL to the IntexuraOS task page (for PR descriptions) */
+  taskUrl?: string;
   /** Labels from the validated Linear issue */
   linearIssueLabels: string[];
   /** Whether the issue has child issues */
@@ -33,7 +35,7 @@ export interface SystemPromptParams {
  * The agent should analyze and enrich the issue IN-PLACE, NOT execute code.
  */
 function buildPhase1Prompt(params: SystemPromptParams): string {
-  const { taskId, worktreePath, linearIssueId } = params;
+  const { taskId, linearIssueId } = params;
 
   const issueId = linearIssueId ?? 'INT-UNKNOWN';
 
@@ -42,7 +44,7 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [PHASE:1]
 Task ID: ${taskId}
-Worktree: ${worktreePath}
+Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
 [PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]
@@ -111,7 +113,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
  * The agent should execute autonomously without confirmation prompts.
  */
 function buildPhase2Prompt(params: SystemPromptParams): string {
-  const { taskId, worktreePath, linearIssueId, hasChildren } = params;
+  const { taskId, linearIssueId, linearIssueTitle, taskUrl, hasChildren } = params;
 
   const parentModeSection = hasChildren
     ? `
@@ -132,7 +134,7 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [PHASE:2]
 Task ID: ${taskId}
-Worktree: ${worktreePath}
+Worktree: /repo
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
 [PHASE 2: STRICT EXECUTION]
@@ -156,6 +158,32 @@ Follow all instructions from the Linear issue description and the user prompt.
     - Create PR.
     - Update Linear to "In Review".
 3.  **On CI Failure:** Fix the issue, re-run CI, continue. Stop only if unable to resolve after 3 attempts.
+
+### PR Description Format
+
+When creating a PR, the body MUST include these links:
+
+1. **Linear issue link** (with issue ID and title as link text):
+   \`[${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})\`
+
+2. **IntexuraOS task link**:
+   ${taskUrl !== undefined ? `[View task](${taskUrl})` : `Include the task URL if available.`}
+
+Example PR body format:
+\`\`\`
+## Summary
+<concise description of changes>
+
+## References
+- Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
+${taskUrl !== undefined ? `- Task: [View task](${taskUrl})` : ''}
+
+## Changes
+<bullet list of key changes>
+
+## Test Plan
+<how changes were verified>
+\`\`\`
 
 ### Resource Limits
 **NONE.** Complete the task regardless of token usage.${parentModeSection}

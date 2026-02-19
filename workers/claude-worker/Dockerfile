@@ -21,11 +21,13 @@ RUN apk add --no-cache \
     && rm -rf /var/cache/apk/*
 
 # Install ripgrep, fd, bat from edge/community (not in main repos)
+# chromium: required for @playwright/mcp (can't download browsers at runtime)
 RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
     ripgrep \
     fd \
     bat \
-    github-cli
+    github-cli \
+    chromium
 
 # Install terraform from hashicorp
 RUN curl -fsSL https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_amd64.zip -o /tmp/terraform.zip \
@@ -45,6 +47,16 @@ ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
 RUN curl -fsSL https://claude.ai/install.sh | bash \
     && cp /root/.local/bin/claude /usr/local/bin/claude \
     && chmod +x /usr/local/bin/claude
+
+# Pre-install MCP server packages globally.
+# Claude plugins invoke these via `npx -y <package>`. On Alpine, npx downloads to a
+# temp cache with noexec-restricted permissions, causing "Permission denied" at startup.
+# Global install puts binaries in /usr/local/bin with proper execute permissions;
+# npx finds the global install and skips the download entirely.
+RUN npm install -g \
+    @upstash/context7-mcp \
+    @sentry/mcp-server \
+    @playwright/mcp
 
 # Create non-root user (use UID 1001 since 1000 is taken by 'node' in base image)
 RUN addgroup -S claude && adduser -S claude -G claude -u 1001
@@ -70,6 +82,9 @@ ENV HOME=/home/claude
 ENV NODE_ENV=production
 ENV GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+# Playwright: use system Chromium installed via apk, skip browser download
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Switch to non-root user
 USER claude

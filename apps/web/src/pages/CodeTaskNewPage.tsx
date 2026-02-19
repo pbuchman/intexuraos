@@ -1,14 +1,16 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Play, Link2, Sparkles, Pencil } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal, LinearIssueSelectorModal } from '@/components';
 import type { ConflictReason } from '@/components';
-import { useCodeTasks, useLinearIssueOptions, useWorkersStatus } from '@/hooks';
+import { useCodeTasks, useLinearIssueOptions, useWorkersStatus, findRecentTask } from '@/hooks';
 import type { CodeTaskWorkerType } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 import { ApiError, parseConflictError } from '@/services/apiClient';
+import { listCodeTasks } from '@/services/codeAgentApi';
+import { useAuth } from '@/context';
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = [
   { id: 'auto', name: 'Auto', description: 'Automatically select the best model' },
@@ -18,14 +20,24 @@ const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string 
 
 type LinearMode = 'create' | 'link';
 
+const PHASE1_PLACEHOLDER =
+  'Describe what you want to build. Claude will analyse the instructions, create a Linear issue with acceptance criteria, and prepare a design — no code will be written prior to your approval.';
+
+const PHASE2_DEFAULT_PROMPT =
+  'Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.';
+
 const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: React.ReactNode }[] = [
   { id: 'create', name: 'Create New', description: 'Auto-generate title from task description', icon: <Sparkles className="h-4 w-4" /> },
   { id: 'link', name: 'Link Existing', description: 'Link to an existing Linear issue', icon: <Link2 className="h-4 w-4" /> },
 ];
 
+/** Delay after which loading text changes to reassure users */
+const LONG_SUBMIT_DELAY_MS = 10000;
+
 export function CodeTaskNewPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { submitTask } = useCodeTasks();
+  const { getAccessToken } = useAuth();
   const { groupedOptions, loading: linearLoading, error: linearError } = useLinearIssueOptions();
 
   const [prompt, setPrompt] = useState('');
@@ -33,12 +45,36 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [linearMode, setLinearMode] = useState<LinearMode>('create');
   const [selectedIssue, setSelectedIssue] = useState<LinearIssueOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingText, setLoadingText] = useState('Submitting...');
   const [error, setError] = useState<string | null>(null);
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [conflictInfo, setConflictInfo] = useState<{ taskId: string; reason: ConflictReason } | null>(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [taskError, setTaskError] = useState<ApiError | null>(null);
   const [showIssueSelectorModal, setShowIssueSelectorModal] = useState(false);
+  const longSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const promptManuallyEdited = useRef(false);
+
+  /** Clear the phased loading timer */
+  const clearLongSubmitTimer = useCallback((): void => {
+    if (longSubmitTimerRef.current !== null) {
+      clearTimeout(longSubmitTimerRef.current);
+      longSubmitTimerRef.current = null;
+    }
+  }, []);
+
+  /** Start phased loading: after LONG_SUBMIT_DELAY_MS, update the text */
+  const startLongSubmitTimer = useCallback((): void => {
+    clearLongSubmitTimer();
+    longSubmitTimerRef.current = setTimeout(() => {
+      setLoadingText('Still processing, please wait...');
+    }, LONG_SUBMIT_DELAY_MS);
+  }, [clearLongSubmitTimer]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return clearLongSubmitTimer;
+  }, [clearLongSubmitTimer]);
 
   const { status: workersStatus, loading: workersLoading } = useWorkersStatus();
 
@@ -67,6 +103,20 @@ export function CodeTaskNewPage(): React.JSX.Element {
     }
   }, [healthyWorkers, selectedWorker]);
 
+  // Sync default prompt when linearMode changes (only if user hasn't manually edited)
+  useEffect(() => {
+    if (promptManuallyEdited.current) return;
+    if (linearMode === 'link') {
+      setPrompt(PHASE2_DEFAULT_PROMPT);
+    } else {
+      setPrompt('');
+    }
+  }, [linearMode]);
+
+  const placeholderText = linearMode === 'create'
+    ? PHASE1_PLACEHOLDER
+    : 'Describe what you want Claude to build or fix...';
+
   // Form is valid when: has prompt AND has a healthy worker selected (or only 1 healthy worker auto-selected)
   const isValid =
     prompt.trim().length > 0 &&
@@ -90,9 +140,11 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
   const handleConfirmSubmit = async (): Promise<void> => {
     setSubmitting(true);
+    setLoadingText('Submitting...');
     setError(null);
     setShowConflictModal(false);
     setShowErrorModal(false);
+    startLongSubmitTimer();
 
     try {
       const requestData: {
@@ -117,12 +169,34 @@ export function CodeTaskNewPage(): React.JSX.Element {
       }
 
       const taskId = await submitTask(requestData);
+      clearLongSubmitTimer();
       void navigate(`/code-tasks/${taskId}`);
     } catch (err) {
+      clearLongSubmitTimer();
       setSubmitting(false);
       setShowConfirmModal(false);
 
       if (err instanceof ApiError) {
+        // Timeout recovery: check if task was created server-side despite timeout
+        if (err.code === 'TIMEOUT') {
+          try {
+            const token = await getAccessToken();
+            const { tasks } = await listCodeTasks(token, {});
+            const recentTask = findRecentTask(tasks, prompt.trim());
+            if (recentTask !== null) {
+              // Task was created successfully — navigate to it
+              void navigate(`/code-tasks/${recentTask.id}`);
+              return;
+            }
+          } catch {
+            // Recovery check failed — fall through to show timeout error
+          }
+          // No task found — show timeout-specific error
+          setTaskError(err);
+          setShowErrorModal(true);
+          return;
+        }
+
         if (err.code === 'CONFLICT') {
           const parsedConflict = parseConflictError(err.message);
           if (parsedConflict !== null) {
@@ -182,7 +256,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
               <MDEditor
                 value={prompt}
                 onChange={(value: string | undefined): void => {
-                  // MDEditor returns null when cleared; convert to empty string for validation
+                  promptManuallyEdited.current = true;
                   setPrompt(value ?? '');
                 }}
                 preview="edit"
@@ -192,7 +266,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   rehypePlugins: [rehypeSanitize],
                 }}
                 textareaProps={{
-                  placeholder: 'Describe what you want Claude to build or fix...',
+                  placeholder: placeholderText,
                   disabled: submitting,
                 }}
               />
@@ -201,7 +275,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
               <MDEditor
                 value={prompt}
                 onChange={(value: string | undefined): void => {
-                  // MDEditor returns null when cleared; convert to empty string for validation
+                  promptManuallyEdited.current = true;
                   setPrompt(value ?? '');
                 }}
                 preview="edit"
@@ -211,7 +285,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   rehypePlugins: [rehypeSanitize],
                 }}
                 textareaProps={{
-                  placeholder: 'Describe what you want Claude to build or fix...',
+                  placeholder: placeholderText,
                   disabled: submitting,
                 }}
               />
@@ -347,6 +421,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   key={mode.id}
                   type="button"
                   onClick={(): void => {
+                    promptManuallyEdited.current = false;
                     if (mode.id === 'link') {
                       setLinearMode('link');
                       setShowIssueSelectorModal(true);
@@ -434,7 +509,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
           onClick={handleSubmitClick}
           disabled={!isValid}
           isLoading={submitting}
-          loadingText="Submitting..."
+          loadingText={loadingText}
         >
           <Play className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Submit Task</span>

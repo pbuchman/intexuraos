@@ -2,7 +2,7 @@
 
 > **The AI-Native Personal Operating System** — An autonomous agent platform that transforms fragmented information into structured intelligence.
 
-**Version 3.0.0** — February 8, 2026
+**Version 3.0.0** — Updated February 19, 2026
 
 ---
 
@@ -16,9 +16,11 @@ IntexuraOS reimagines personal productivity as an **AI-first system**. Instead o
 
 ## What's New in v3.0.0
 
-### Autonomous Code Execution Pipeline
+### The Self-Building System
 
-This release introduces a complete autonomous coding pipeline, an in-app AI assistant, worker orchestration infrastructure, and a 21-package shared library ecosystem:
+v3.0.0 is a paradigm shift: IntexuraOS can now **modify its own codebase autonomously**. Say "fix the login redirect" via WhatsApp, and receive a pull request with tests, CI passing, and Linear issue updated — without touching a keyboard. This is the culmination of the agent architecture: the platform that builds itself.
+
+### Autonomous Code Execution Pipeline
 
 **Code Agent (code-agent)**
 
@@ -26,7 +28,6 @@ This release introduces a complete autonomous coding pipeline, an in-app AI assi
 - Multi-layer deduplication (approval event, action ID, SHA-256 dedup key) prevents duplicate work
 - Per-user worker infrastructure with encrypted Cloudflare Access credentials and HMAC signing
 - Rate limiting with concurrent (3), hourly (10), daily ($20), and monthly ($200) caps
-- GitHub PR comment auto-response for `@claude` mentions
 - Retry and feedback loops with Linear issue tracking throughout the lifecycle
 
 **Chat Agent (chat-agent)**
@@ -42,10 +43,14 @@ This release introduces a complete autonomous coding pipeline, an in-app AI assi
 - PM2-based local worker orchestration engine running behind Cloudflare Tunnel
 - Docker container isolation with dropped capabilities, memory limits, and read-only secrets
 - Git worktree parallelism for concurrent task execution (default: 2 slots)
-- Real-time log forwarding to code-agent in 8KB chunks at 3-second intervals
+- Real-time log forwarding to code-agent in 64KB chunks at 3-second intervals
 - System prompt phases: Phase 1 (design validation) vs Phase 2 (autonomous execution) based on Linear issue labels
 - HMAC-signed webhooks with 3 retries, exponential backoff, and pending queue with 24-hour TTL
 - Crash-safe state persistence with startup recovery
+- LLM-backed completion verification: Gemini 2.5 Flash checks phase contract blocks, PR presence, and CI status after each attempt
+- Per-task turn metrics collection: CPU time, peak memory, token counts from cgroups
+- Git identity propagation: host git config injected into containers for correct commit authorship
+- Mid-task message injection: messages queued while task runs, delivered at next turn boundary
 
 **Claude Worker (worker)**
 
@@ -67,11 +72,21 @@ This release introduces a complete autonomous coding pipeline, an in-app AI assi
 - Scheduled daily cleanup of execution logs older than 90 days
 - Runs at 3 AM UTC via Cloud Scheduler with configurable retention and batch size
 
-**Package Ecosystem (21 packages)**
+**Package Ecosystem (22 packages)**
 
-- Grew from 6 to 21 shared packages covering core types, HTTP infrastructure, 6 AI provider clients, Pub/Sub, Sentry, and the full LLM toolchain
+- Grew from 6 to 22 shared packages covering core types, HTTP infrastructure, 6 AI provider clients, Pub/Sub, Sentry, OpenTelemetry, and the full LLM toolchain
 - `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity` provide standardized AI provider wrappers
 - `llm-audit`, `llm-contract`, `llm-factory`, `llm-pricing`, `llm-prompts`, `llm-utils` form the complete LLM management stack
+- `infra-otel` provides zero-code OpenTelemetry distributed tracing and metrics export to Dash0 via `--import` side-effect bootstrap
+
+**Platform Intelligence Improvements**
+
+- Research Notion export: fire-and-forget structured page export with hierarchical child pages and cover images
+- Platform API key fallbacks: users without personal keys get Gemini or Zai models automatically (user key → Gemini → Zai → error)
+- Default model selector: provider-grouped dropdown in Settings, inherited by all agents for quick generation
+- Distributed tracing: OpenTelemetry traces propagate across Pub/Sub, HTTP, and Firestore boundaries to Dash0
+- Prompt versioning: 26+ prompts with semver `version` field and CI-enforced version bumps on content changes
+- 100% branch coverage enforcement across all services with `v8 ignore` category validation
 
 ---
 
@@ -161,13 +176,13 @@ New 3-column layout optimized for workflow visibility:
 
 IntexuraOS integrates with **5 AI providers** and **17 models**, treating them as a **council of experts** rather than a single oracle:
 
-| Provider   | Models                                      | Capabilities                                              |
-| ---------- | ------------------------------------------- | --------------------------------------------------------- |
-| Google     | Gemini 2.5 Pro, Flash, Flash-Image          | Reasoning, classification, images                         |
-| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, images, embeddings (RAG)        |
-| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Analysis, research, validation, autonomous code execution |
-| Perplexity | Sonar, Sonar Pro, Sonar Deep Research       | Web search, real-time information                         |
-| Zai        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, lightweight, cost-efficient code tasks      |
+| Provider   | Models                                        | Capabilities                                                    |
+| ---------- | --------------------------------------------- | --------------------------------------------------------------- |
+| Google     | Gemini 2.5 Pro, Flash, Flash-Image, 2.0 Flash | Reasoning, classification, images, fast internal ops (fallback) |
+| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1   | Deep research, synthesis, images, embeddings (RAG)              |
+| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5        | Analysis, research, validation, autonomous code execution       |
+| Perplexity | Sonar, Sonar Pro, Sonar Deep Research         | Web search, real-time information                               |
+| Zai        | GLM-4.7, GLM-4.7-Flash                        | Multilingual, lightweight, cost-efficient code tasks            |
 
 ### Intelligent Routing
 
@@ -260,23 +275,23 @@ graph TB
 
 ## Agent Architecture
 
-IntexuraOS deploys **20 apps**, **4 workers**, and **21 packages** — a total of **45 components** across three architectural layers:
+IntexuraOS deploys **20 apps**, **4 workers**, and **22 packages** — a total of **46 components** across three architectural layers:
 
 ### AI Agents (Primary Intelligence)
 
-| Agent                   | AI Capabilities                                                                   |
-| ----------------------- | --------------------------------------------------------------------------------- |
-| **research-agent**      | Multi-model orchestration, parallel queries, synthesis, Zod validation (v2.0.0)   |
-| **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)          |
-| **code-agent**          | Autonomous code execution, worker dispatch, deduplication, rate limiting (v3.0.0) |
-| **chat-agent**          | Documentation RAG Q&A, command creation, guest access (v3.0.0)                    |
-| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                          |
-| **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)           |
-| **todos-agent**         | Natural language task extraction, priority inference                              |
-| **calendar-agent**      | Preview generation before commit, duration/all-day detection (v2.0.0)             |
-| **linear-agent**        | 3-column dashboard, Todo/To Test categories (v2.0.0)                              |
-| **notes-agent**         | Content structuring, tag inference                                                |
-| **web-agent**           | Separated crawling from LLM summarization, parser+repair pattern (v2.0.0)         |
+| Agent                   | AI Capabilities                                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **research-agent**      | Multi-model orchestration, parallel queries, synthesis, Notion export, platform API key fallbacks (v2.3.0) |
+| **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)                                   |
+| **code-agent**          | Autonomous code execution, worker dispatch, deduplication, rate limiting (v3.0.0)                          |
+| **chat-agent**          | Documentation RAG Q&A, command creation, guest access (v3.0.0)                                             |
+| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                                                   |
+| **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)                                    |
+| **todos-agent**         | Natural language task extraction, priority inference                                                       |
+| **calendar-agent**      | Preview generation before commit, duration/all-day detection (v2.0.0)                                      |
+| **linear-agent**        | 3-column dashboard, Todo/To Test categories (v2.0.0)                                                       |
+| **notes-agent**         | Content structuring, tag inference                                                                         |
+| **web-agent**           | Separated crawling from LLM summarization, parser+repair pattern (v2.0.0)                                  |
 
 ### Infrastructure Services
 
@@ -339,7 +354,7 @@ graph LR
 
 ## Package Ecosystem
 
-The monorepo contains **21 shared packages** organized into four layers:
+The monorepo contains **22 shared packages** organized into four layers:
 
 ### Core Packages
 
@@ -353,13 +368,14 @@ The monorepo contains **21 shared packages** organized into four layers:
 
 ### Infrastructure Packages
 
-| Package           | Purpose                                          |
-| ----------------- | ------------------------------------------------ |
-| `infra-firestore` | Firestore singleton, fake implementation         |
-| `infra-pubsub`    | Cloud Pub/Sub publisher base class and utilities |
-| `infra-sentry`    | Sentry integration, `createAppLogger()` factory  |
-| `infra-whatsapp`  | WhatsApp Business API client                     |
-| `infra-notion`    | Notion client, error mapping, connection repo    |
+| Package           | Purpose                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
+| `infra-firestore` | Firestore singleton, fake implementation                               |
+| `infra-pubsub`    | Cloud Pub/Sub publisher base class and utilities                       |
+| `infra-sentry`    | Sentry integration, `createAppLogger()` factory, OTel log transport    |
+| `infra-whatsapp`  | WhatsApp Business API client                                           |
+| `infra-notion`    | Notion client, error mapping, connection repo                          |
+| `infra-otel`      | OpenTelemetry bootstrap: traces + metrics to Dash0 via `--import` hook |
 
 ### AI Provider Packages
 
@@ -482,6 +498,7 @@ Each service owns its collections (enforced by CI):
 | `github-pr-events`           | code-agent          | v3.0.0  |
 | `pr_task_locks`              | code-agent          | v3.0.0  |
 | `doc_embeddings`             | chat-agent          | v3.0.0  |
+| `research_export_settings`   | research-agent      | v2.2.0  |
 
 ---
 
@@ -630,7 +647,8 @@ User API Keys → AES-256-GCM Encryption → Firestore
 | Transcription  | Speechmatics                                       |
 | Authentication | Auth0, Google OAuth, Cloudflare Access             |
 | Infrastructure | Terraform, GCE Spot VMs, Cloudflare Tunnels        |
-| Monorepo       | pnpm workspaces (21 packages)                      |
+| Observability  | OpenTelemetry (traces + metrics), Dash0, Sentry    |
+| Monorepo       | pnpm workspaces (22 packages)                      |
 | Language       | TypeScript 5.7 (strict mode)                       |
 
 ---
@@ -702,15 +720,15 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ## Documentation Index
 
-| Document                                              | Purpose                            |
-| ----------------------------------------------------- | ---------------------------------- |
-| [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration     |
-| [Services Catalog](services/index.md)                 | All 20 apps + 4 workers documented |
-| [Architecture Patterns](architecture/)                | System design decisions            |
-| [Setup Guide](setup/01-gcp-project.md)                | Getting started                    |
-| [API Contracts](architecture/api-contracts.md)        | HTTP API standards                 |
-| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns           |
+| Document                                              | Purpose                                          |
+| ----------------------------------------------------- | ------------------------------------------------ |
+| [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration                   |
+| [Services Catalog](services/index.md)                 | All 20 apps + 4 workers + 22 packages documented |
+| [Architecture Patterns](architecture/)                | System design decisions                          |
+| [Setup Guide](setup/01-gcp-project.md)                | Getting started                                  |
+| [API Contracts](architecture/api-contracts.md)        | HTTP API standards                               |
+| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns                         |
 
 ---
 
-**Last updated:** 2026-02-08 (v3.0.0)
+**Last updated:** 2026-02-19 (v3.0.0 — autonomous code execution, self-building system)

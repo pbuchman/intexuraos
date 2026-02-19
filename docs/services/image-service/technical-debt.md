@@ -1,6 +1,6 @@
 # Image Service - Technical Debt
 
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-19 (re-run)
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -109,6 +109,56 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### 2026-02-16: Dev-Mode Log Formatting
+
+**Issue:** Raw pino JSON output in PM2 logs was unreadable during local development.
+
+**Resolution:**
+
+- `server.ts` updated to use `createLogStream()` from `@intexuraos/infra-sentry`
+- Colorized format: `service-name | HH:mm:ss | LEVEL | message | {extras}`
+- Applied across all 18 service `server.ts` files via `6063175b`
+
+### 2026-02-15: Gemini Platform Fallback Added
+
+**Issue:** Platform fallback only supported ZAI (GLM-4.7-flash), which was taking 29s for title generation and exceeding the 10s HTTP timeout.
+
+**Resolution:**
+
+- `platformGeminiApiKey` added to `createUserServiceClient()` in `internal-clients`
+- `INTEXURAOS_GEMINI_APP_API_KEY` used as primary fallback before ZAI
+- Gemini 2.5 Flash is now the default platform model for faster responses
+
+### 2026-02-16: Dash0 OpenTelemetry Integration
+
+**Issue:** No distributed tracing or OpenTelemetry metrics across services.
+
+**Resolution:**
+
+- New `packages/infra-otel` package with preload module loaded via `--import` in Dockerfile
+- All 19 services instrumented transparently; no-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` unset
+- Traces, metrics, and logs exported via OTLP/HTTP to Dash0
+
+### 2026-02-15: API Key Naming Standardization
+
+**Issue:** Platform API key env vars used inconsistent naming (`GUEST_ZAI`, `ZAI`, `OPENAI_API_KEY`).
+
+**Resolution:**
+
+- `INTEXURAOS_ZAI_APP_API_KEY` consolidates `INTEXURAOS_GUEST_ZAI_API_KEY` + `INTEXURAOS_ZAI_API_KEY`
+- All platform keys now follow `INTEXURAOS_<PROVIDER>_APP_API_KEY` pattern
+- `services.ts` updated to use `platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY']`
+
+### 2026-02-09: Platform Key Fallback for User Service Client
+
+**Issue:** Users without personal API keys could not generate images.
+
+**Resolution:**
+
+- `createUserServiceClient()` now accepts `platformZaiApiKey` and `platformGeminiApiKey`
+- `getApiKeys()` returns platform-owned keys as fallback when user has none configured
+- Image generation available to all users without requiring personal API key setup
 
 ### 2026-02-08: Standardized Response Contract Migration
 
