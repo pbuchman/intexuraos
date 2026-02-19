@@ -18,7 +18,7 @@ export const dataTransformPrompt: PromptBuilder<DataTransformPromptInput, DataTr
   {
     name: 'data-transform',
     description: 'Transforms snapshot data according to chart definition instructions',
-    version: '1.0.0',
+    version: '1.0.1',
     build(input: DataTransformPromptInput): string {
       const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
       const snapshotData = JSON.stringify(input.snapshotData, null, 2);
@@ -60,6 +60,7 @@ RULES:
 - Do NOT include any text outside the markers
 - Do NOT modify the schema, only transform data
 - Ensure field names exactly match what the chart expects
-- All values must be properly typed (strings, numbers, dates, etc.)`;
+- All values must be properly typed (strings, numbers, dates, etc.)
+- Do NOT wrap output in markdown code blocks (\`\`\`)`;
     },
   };

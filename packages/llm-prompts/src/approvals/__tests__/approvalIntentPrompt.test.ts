@@ -11,14 +11,14 @@ import {
 
 describe('approvalIntentPrompt', () => {
   it('builds prompt with user reply', () => {
-    const prompt = approvalIntentPrompt({ input: { userReply: 'yes please' } });
+    const prompt = approvalIntentPrompt.build({ userReply: 'yes please' });
 
     expect(prompt).toContain('yes please');
     expect(prompt).toContain('User replied:');
   });
 
   it('includes approve intent examples', () => {
-    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+    const prompt = approvalIntentPrompt.build({ userReply: 'test' });
 
     expect(prompt).toContain('"approve"');
     expect(prompt).toContain('yes');
@@ -27,7 +27,7 @@ describe('approvalIntentPrompt', () => {
   });
 
   it('includes reject intent examples', () => {
-    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+    const prompt = approvalIntentPrompt.build({ userReply: 'test' });
 
     expect(prompt).toContain('"reject"');
     expect(prompt).toContain('no');
@@ -36,25 +36,47 @@ describe('approvalIntentPrompt', () => {
   });
 
   it('includes unclear intent examples', () => {
-    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+    const prompt = approvalIntentPrompt.build({ userReply: 'test' });
 
     expect(prompt).toContain('"unclear"');
     expect(prompt).toContain('ambiguous');
   });
 
+  it('includes Polish keywords', () => {
+    const prompt = approvalIntentPrompt.build({ userReply: 'test' });
+
+    expect(prompt).toContain('tak');
+    expect(prompt).toContain('nie');
+    expect(prompt).toContain('anuluj');
+  });
+
+  it('classifies deferral as unclear, not reject', () => {
+    const prompt = approvalIntentPrompt.build({ userReply: 'test' });
+
+    expect(prompt).toContain('"later"');
+    expect(prompt).toContain('"not now"');
+    expect(prompt).toMatch(/unclear.*later|later.*unclear/s);
+  });
+
   it('includes emoji guidance', () => {
-    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+    const prompt = approvalIntentPrompt.build({ userReply: 'test' });
 
     expect(prompt).toContain('Emojis count');
   });
 
   it('includes JSON format instructions', () => {
-    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+    const prompt = approvalIntentPrompt.build({ userReply: 'test' });
 
     expect(prompt).toContain('Respond with ONLY valid JSON');
     expect(prompt).toContain('"intent"');
     expect(prompt).toContain('"confidence"');
     expect(prompt).toContain('"reasoning"');
+  });
+
+  it('has PromptBuilder metadata', () => {
+    expect(approvalIntentPrompt.name).toBe('approval-intent');
+    expect(approvalIntentPrompt.version).toBe('1.0.0');
+    expect(approvalIntentPrompt.description).toBeTruthy();
   });
 });
 

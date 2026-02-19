@@ -32,7 +32,9 @@ function buildSynthesisGoalsSection(ctx: SynthesisContext): string {
   return ctx.synthesis_goals
     .map(
       (goal) =>
-        `- **${goal.replace(/_/g, ' ').toUpperCase()}**: ${goalDescriptions[goal] as string}`
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback @preserve */
+        `- **${goal.replace(/_/g, ' ').toUpperCase()}**: ${goalDescriptions[goal] ?? 'Apply this synthesis strategy'}`
+      /* v8 ignore stop @preserve */
     )
     .join('\n');
 }
@@ -210,11 +212,7 @@ ${ATTRIBUTION_RULES}
 - ${ctx.source_preference.prefer_official_over_aggregators ? 'Prefer official sources over aggregators when information conflicts' : 'Weight all sources equally'}
 - ${ctx.source_preference.prefer_recent_when_time_sensitive ? 'Prefer more recent sources for time-sensitive information' : 'Consider all timeframes equally'}
 
-${additionalSourcesSection}## LLM Reports
-
-${formattedReports}
-
-## Synthesis Goals
+${additionalSourcesSection}## Synthesis Goals
 
 ${buildSynthesisGoalsSection(ctx)}
 ${buildConflictsSection(ctx)}${buildMissingSectionsSection(ctx)}${safetySection}${redFlagsSection}${outputFormatSection}
@@ -228,6 +226,10 @@ Create a unified synthesis that:
 4. **Address gaps**: Acknowledge missing coverage areas
 5. **Conclude**: Provide a balanced summary
 6. **Attribute sources**: End each ## section with an Attribution line using IDs from the Source ID Map
+
+## LLM Reports
+
+${formattedReports}
 
 ## Citation Rules (CRITICAL)
 

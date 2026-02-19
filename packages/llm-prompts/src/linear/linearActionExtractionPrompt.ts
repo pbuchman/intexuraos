@@ -41,7 +41,7 @@ export const linearActionExtractionPrompt: PromptBuilder<
 > = {
   name: 'linear-action-extraction',
   description: 'Extracts structured Linear issue data from natural language text',
-  version: '1.0.0',
+  version: '1.1.0',
 
   build(input: LinearIssueExtractionPromptInput, deps?: LinearIssueExtractionPromptDeps): string {
     const maxLength = deps?.maxDescriptionLength ?? 2000;
@@ -67,10 +67,10 @@ RULES:
    - Remove filler words like "please", "I want to"
 
 3. PRIORITY DETECTION:
-   - 0 = No priority (default if not mentioned)
+   - 0 = No priority (default if not mentioned or unclear)
    - 1 = Urgent (keywords: urgent, asap, critical, immediately, pilne, natychmiast)
    - 2 = High (keywords: high priority, important, ważne, priorytet)
-   - 3 = Normal (default for most tasks)
+   - 3 = Normal (keywords: standard, routine, regular, zwykły)
    - 4 = Low (keywords: when you have time, low priority, niska priorytet)
 
 4. DESCRIPTION EXTRACTION:

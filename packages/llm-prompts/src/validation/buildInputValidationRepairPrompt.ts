@@ -35,12 +35,6 @@ REQUIREMENTS:
 4. No trailing commas
 5. No comments in JSON
 
-EXPECTED SCHEMA:
-{
-  "quality": "<number: 0 (poor), 1 (okay), 2 (good)>",
-  "reason": "<string explanation for the quality score>"
-}
-
 EXAMPLES:
 {
   "quality": 2,

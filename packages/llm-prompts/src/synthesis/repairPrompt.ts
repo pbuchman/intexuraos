@@ -4,28 +4,22 @@
  */
 
 export function buildSynthesisContextRepairPrompt(
-  params: {
-    originalPrompt: string;
-    reports: { model: string; content: string }[];
-    additionalSources: { content: string; label?: string }[];
-  },
+  originalPrompt: string,
   invalidResponse: string,
   errorMessage: string
 ): string {
   return `The previous response was invalid. Please fix it.
 
-ORIGINAL QUERY:
-"""
-${params.originalPrompt}
-"""
+<original_query>
+${originalPrompt}
+</original_query>
 
 ERROR DETAILS:
 ${errorMessage}
 
-INVALID RESPONSE:
-"""
+<invalid_response>
 ${invalidResponse}
-"""
+</invalid_response>
 
 REQUIREMENTS:
 1. Output ONLY valid JSON (no markdown code blocks, no explanation text)

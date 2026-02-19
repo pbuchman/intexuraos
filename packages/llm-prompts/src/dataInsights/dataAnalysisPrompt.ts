@@ -34,7 +34,7 @@ function buildChartTypesTable(chartTypes: ChartTypeInfo[]): string {
 export const dataAnalysisPrompt: PromptBuilder<DataAnalysisPromptInput, DataAnalysisPromptDeps> = {
   name: 'data-analysis',
   description: 'Analyzes composite feed data and generates measurable, trackable insights',
-  version: '1.0.0',
+  version: '1.1.0',
   build(input: DataAnalysisPromptInput): string {
     const chartTypesTable = buildChartTypesTable(input.chartTypes);
     const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
@@ -69,7 +69,8 @@ RULES:
 - ChartType must be one of: C1, C2, C3, C4, C5, C6
 - Do NOT include chart configuration or data transformation
 - Do NOT include any text outside the specified format
-- Description must be 2-3 sentences maximum
+- Description must be 2-3 sentences (up to 6 allowed)
+- Do NOT use semicolons (;) in Title or Description text — semicolons are field delimiters
 - Each INSIGHT line must be on a single line (no line breaks within the line)`;
   },
 };

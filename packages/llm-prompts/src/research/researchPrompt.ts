@@ -42,7 +42,9 @@ function buildDomainGuidelines(ctx: ResearchContext): string {
     unknown: 'Provide balanced, factual information with appropriate depth.',
   };
 
-  return domainGuides[ctx.domain] as string;
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback @preserve */
+  return domainGuides[ctx.domain] ?? domainGuides['general'] ?? '';
+  /* v8 ignore stop @preserve */
 }
 
 function buildOutputFormatGuidelines(ctx: ResearchContext): string {
@@ -118,7 +120,7 @@ ${buildOutputFormatGuidelines(ctx)}
 
 ## Research Guidelines
 
-- **Time scope**: Focus on sources from ${ctx.time_scope.as_of_date.substring(0, 4)} and ${String(ctx.time_scope.prefers_recent_years)} years prior${ctx.time_scope.is_time_sensitive ? ' (TIME-SENSITIVE: prefer most recent sources)' : ''}
+- **Time scope**: Focus on sources from the last ${String(ctx.time_scope.prefers_recent_years)} years (${String(Number(ctx.time_scope.as_of_date.substring(0, 4)) - ctx.time_scope.prefers_recent_years)}-${ctx.time_scope.as_of_date.substring(0, 4)})${ctx.time_scope.is_time_sensitive ? ' (TIME-SENSITIVE: prefer most recent sources)' : ''}
 - **Geographic focus**: ${ctx.locale_scope.country_or_region} (jurisdiction: ${ctx.locale_scope.jurisdiction}, currency: ${ctx.locale_scope.currency})
 - **Source preferences**: ${ctx.research_plan.preferred_source_types.join(', ')}
 - **Avoid**: ${ctx.research_plan.avoid_source_types.join(', ')}

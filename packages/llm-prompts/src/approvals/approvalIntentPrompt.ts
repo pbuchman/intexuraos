@@ -6,6 +6,7 @@
  */
 
 import type { Logger } from 'pino';
+import type { PromptBuilder, PromptDeps } from '../types.js';
 
 /**
  * Input for building the approval intent prompt.
@@ -15,12 +16,7 @@ export interface ApprovalIntentPromptInput {
   userReply: string;
 }
 
-/**
- * Dependencies for building the approval intent prompt.
- */
-export interface ApprovalIntentPromptDeps {
-  input: ApprovalIntentPromptInput;
-}
+export type ApprovalIntentPromptDeps = PromptDeps;
 
 /**
  * Expected response format from the LLM.
@@ -31,28 +27,27 @@ export interface ApprovalIntentResponse {
   reasoning: string;
 }
 
-/**
- * Build the prompt for classifying approval intent from user reply text.
- */
-export function approvalIntentPrompt(deps: ApprovalIntentPromptDeps): string {
-  const { userReply } = deps.input;
+export const approvalIntentPrompt: PromptBuilder<ApprovalIntentPromptInput> = {
+  name: 'approval-intent',
+  description: 'Classifies user reply to approval request as approve, reject, or unclear',
+  version: '1.0.0',
 
-  return `Analyze this user reply to an action approval request.
+  build(input: ApprovalIntentPromptInput): string {
+    return `Analyze this user reply to an action approval request.
 
-User replied: "${userReply}"
+User replied: "${input.userReply}"
 
 Determine the user's intent:
-- "approve": User wants to proceed (e.g., "yes", "ok", "approve", "go ahead", "👍", "do it", "sure", "yep", "yeah", "fine", "confirmed", "proceed", "let's do it")
-- "reject": User wants to cancel (e.g., "no", "reject", "cancel", "don't", "stop", "👎", "nope", "skip", "not now", "later", "remove", "delete")
-- "unclear": Cannot determine intent (questions like "what?", unrelated text, ambiguous responses like "maybe", empty text)
+- "approve": User wants to proceed (e.g., "yes", "ok", "approve", "go ahead", "do it", "sure", "yep", "yeah", "fine", "confirmed", "proceed", "let's do it", "tak", "okej", "dawaj", "zatwierdź", "zrób to")
+- "reject": User wants to cancel (e.g., "no", "reject", "cancel", "don't", "stop", "nope", "skip", "remove", "delete", "nie", "anuluj", "odrzuć", "usuń", "pomiń")
+- "unclear": Cannot determine intent (e.g., "what?", unrelated text, "maybe", "later", "not now", empty text, questions)
 
 Guidelines:
-- Be lenient with approval - if the user seems positive or agreeable, classify as approve
-- Be lenient with rejection - if the user seems negative or dismissive, classify as reject
-- Only use "unclear" when genuinely ambiguous or when the response is a question
+- Default to "unclear" when the response is genuinely ambiguous
 - Emojis count: 👍, ✅, ✔️ = approve; 👎, ❌, ✖️ = reject
-- Single word affirmations (yes, ok, sure, fine, yep) = approve
-- Single word negations (no, nope, nah) = reject
+- Single word affirmations (yes, ok, sure, fine, yep, tak) = approve
+- Single word negations (no, nope, nah, nie) = reject
+- Deferral words ("later", "not now", "może później") = unclear (NOT reject)
 - Empty or whitespace-only text = unclear
 
 Respond with ONLY valid JSON in this exact format:
@@ -63,53 +58,27 @@ Respond with ONLY valid JSON in this exact format:
 }
 
 Do not include any text before or after the JSON.`;
-}
+  },
+};
 
 /**
  * Parse the LLM response into a typed approval intent result.
  *
- * Expected JSON format in the response:
- * ```json
- * {
- *   "intent": "approve" | "reject" | "unclear",
- *   "confidence": 0.0-1.0,
- *   "reasoning": "brief explanation"
- * }
- * ```
- *
  * The parser is lenient and extracts the first {...} block from the response,
  * allowing for surrounding text or markdown formatting from the LLM.
  *
- * @param response - Raw LLM response text (may contain JSON or JSON with surrounding text)
- * @returns Parsed approval intent, or null if:
- *   - No JSON object found in response
- *   - JSON parsing fails
- *   - `intent` is not one of: 'approve', 'reject', 'unclear'
- *   - `confidence` is not a number between 0 and 1
- *   - `reasoning` is not a string
- *
- * @example
- * // Valid response
- * parseApprovalIntentResponse('{"intent":"approve","confidence":0.9,"reasoning":"yes"}')
- * // => { intent: 'approve', confidence: 0.9, reasoning: 'yes' }
- *
- * @example
- * // Invalid response
- * parseApprovalIntentResponse('I cannot determine...')
- * // => null
+ * @param response - Raw LLM response text
+ * @returns Parsed approval intent, or null if parsing/validation fails
  */
 export function parseApprovalIntentResponse(response: string): ApprovalIntentResponse | null {
   try {
-    // Try to extract JSON from response (may have surrounding text)
-    const jsonMatch = /\{[\s\S]*\}/.exec(response);
+    const jsonMatch = /\{[\s\S]*?\}/.exec(response);
     if (jsonMatch === null) {
       return null;
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as unknown;
 
-    // The regex only matches {...} patterns, which always parse to objects.
-    // The typeof check is defensive but unreachable in practice.
     /* v8 ignore start -- test-infra: block coverage @preserve */
     if (typeof parsed !== 'object' || parsed === null) {
       return null;
@@ -118,13 +87,11 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
 
     const obj = parsed as Record<string, unknown>;
 
-    // Validate intent
     const intent = obj['intent'];
     if (intent !== 'approve' && intent !== 'reject' && intent !== 'unclear') {
       return null;
     }
 
-    // Validate confidence
     const confidence = obj['confidence'];
     if (
       typeof confidence !== 'number' ||
@@ -135,7 +102,6 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
       return null;
     }
 
-    // Validate reasoning
     const reasoning = obj['reasoning'];
     if (typeof reasoning !== 'string') {
       return null;
@@ -143,8 +109,6 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
 
     return { intent, confidence, reasoning };
   } catch (_error) {
-    // Silently return null for lenient parsing
-    // TODO: Add logging version for production debugging
     return null;
   }
 }
@@ -159,14 +123,6 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
  * @param logger - Pino logger instance for error logging
  * @returns Parsed approval intent
  * @throws {Error} When parsing fails (error is logged before throwing)
- *
- * @example
- * try {
- *   const result = parseApprovalIntentResponseWithLogging(llmResponse, logger);
- *   // Use result
- * } catch {
- *   // Error already logged to Sentry/logging system
- * }
  */
 export function parseApprovalIntentResponseWithLogging(
   response: string,

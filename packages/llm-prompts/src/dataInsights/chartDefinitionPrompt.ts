@@ -21,7 +21,7 @@ export const chartDefinitionPrompt: PromptBuilder<
 > = {
   name: 'chart-definition',
   description: 'Generates chart configuration based on a specific data insight',
-  version: '1.0.0',
+  version: '1.0.1',
   build(input: ChartDefinitionPromptInput): string {
     const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
     const snapshotData = JSON.stringify(input.snapshotData, null, 2);
@@ -75,6 +75,7 @@ RULES:
 - Chart config must match the target Vega-Lite schema structure
 - Transform instructions must be detailed and unambiguous
 - Do NOT include actual data values in the config
-- Ensure field names in encoding match what will be in transformed data`;
+- Ensure field names in encoding match what will be in transformed data
+- Do NOT wrap output in markdown code blocks (\`\`\`)`;
   },
 };
