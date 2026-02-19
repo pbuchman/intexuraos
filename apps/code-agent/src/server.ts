@@ -16,6 +16,7 @@ import { createJwtValidator } from './infra/auth/jwtValidator.js';
 export async function buildServer(): Promise<FastifyInstance> {
   const app = fastify({
     logger: false,
+    requestTimeout: 120000, // 120s — safety net above client's 90s timeout
   });
 
   // Global error handler - logs to Pino, sends to Sentry, returns structured response

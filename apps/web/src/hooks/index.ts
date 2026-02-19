@@ -6,10 +6,11 @@ export {
 } from './useBookmarkChanges.js';
 export { useBookmarks } from './useBookmarks.js';
 export { useCalendarEvents } from './useCalendarEvents.js';
-export { useCodeTasks, useWorkersStatus } from './useCodeTasks.js';
+export { useCodeTasks, useWorkersStatus, findRecentTask } from './useCodeTasks.js';
 export { useFailedCalendarEvents } from './useFailedCalendarEvents.js';
 export { useFailedLinearIssues } from './useFailedLinearIssues.js';
-export { useGitHubPREvents, type GroupedPREvents } from './useGitHubPREvents.js';
+export { useGitHubPREvents } from './useGitHubPREvents.js';
+export { useGitHubPRSummaries } from './useGitHubPRSummaries.js';
 export { useLinearIssueOptions } from './useLinearIssueOptions.js';
 export { useChartDefinition } from './useChartDefinition.js';
 export { useChartPreview } from './useChartPreview.js';
@@ -25,3 +26,5 @@ export { useTaskView, type LogLine, type MessageStatus, type TaskViewState } fro
 export { useWorkerSettings } from './useWorkerSettings.js';
 export { usePubSubEvents, type PubSubEvent } from './usePubSubEvents.js';
 export { usePm2Logs, type Pm2LogEntry } from './usePm2Logs.js';
+export { useVisualizations } from './useVisualizations.js';
+export { useCreateVisualization } from './useCreateVisualization.js';

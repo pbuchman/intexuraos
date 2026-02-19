@@ -3,7 +3,7 @@
  */
 
 import { setServices, type ServiceContainer } from '../../services.js';
-import { createFakeFirestore } from '@intexuraos/infra-firestore';
+import { createFakeFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
@@ -24,7 +24,9 @@ import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestore/gitHubPRSummariesRepository.js';
 import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
 
@@ -53,6 +55,7 @@ export const mockWorkerHealthProbe: WorkerHealthProbe = {
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
+  setFirestore(fakeFirestore);
   const logger = pino({ name: 'test', level: 'silent' });
 
   const rateLimitService: RateLimitService = {
@@ -147,7 +150,14 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
       logger,
     }),
+    gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({
+      logger,
+    }),
     prTaskLockRepo: createFirestorePRTaskLockRepository({
+      firestore: fakeFirestore,
+      logger,
+    }),
+    turnMetricsRepo: createFirestoreTurnMetricsRepository({
       firestore: fakeFirestore,
       logger,
     }),

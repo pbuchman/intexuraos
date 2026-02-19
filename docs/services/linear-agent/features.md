@@ -1,6 +1,6 @@
 # Linear Agent
 
-Speak your ideas, ship your issues. Linear Agent transforms natural language into structured Linear issues with AI-powered extraction of title, priority, and detailed descriptions. It provides bidirectional sync between Linear and IntexuraOS through webhooks, full issue synchronization, and programmatic issue management for AI code agents.
+Speak your ideas, ship your issues. Linear Agent transforms natural language into structured Linear issues with AI-powered extraction of title, priority, and detailed descriptions. It provides bidirectional sync between Linear and IntexuraOS through webhooks, full issue synchronization, issue commenting, and programmatic issue management for AI code agents.
 
 ## The Problem
 
@@ -32,9 +32,9 @@ AI generates proper issue structure with Functional Requirements and Technical D
 
 ### AI-Powered Title Generation
 
-When code agents create issues programmatically, the `generateIssueTitle` use case produces concise, well-formatted titles from task descriptions. The LLM classifies issue type (bug, feature, refactor, research) and generates a title under 80 characters. A robust fallback pipeline handles LLM failures by extracting the first sentence, stripping markdown/URLs/code blocks, and truncating with ellipsis.
+When code agents create issues programmatically, the `generateIssueTitle` use case produces concise, well-formatted titles from task descriptions. The LLM classifies issue type (bug, feature, refactor, research) and generates a title under 80 characters. Retries once before returning an error to the caller — quality over silent degradation.
 
-### Dashboard with Smart Grouping
+### Dashboard with Smart Grouping and Parent-Child Support
 
 View your Linear issues in a 3-column layout designed for workflow visibility:
 
@@ -44,11 +44,21 @@ View your Linear issues in a 3-column layout designed for workflow visibility:
 | Work     | In Progress, In Review, To Test | Active development stages  |
 | Closed   | Done (last 7 days)              | Recently completed work    |
 
-**Example:** Issues automatically sort into sections based on Linear state names. "In Review" and "Code Review" go to the review section. "QA" and "Testing" go to the test section.
+Issues automatically sort into sections based on Linear state names. Parent issues display their sub-issues nested beneath them. Labels (with colors) appear on each issue card for quick context.
+
+**Example:** A parent issue "Implement authentication" appears in "In Progress" with its child issues ("Add OAuth provider", "Write tests") nested below.
+
+### Fast Local-First Issue Listing
+
+The dashboard reads from a local Firestore cache populated by webhooks and full sync — not from the Linear API at request time. This means the board loads instantly, even under poor connectivity, and handles large workspaces without rate limiting concerns.
+
+### Issue Detail and Comments
+
+View full issue details and comments without leaving IntexuraOS. The `GET /linear/issues/:identifier` endpoint returns issue metadata plus `commentCount` and `lastCommentAt`. The `GET /linear/issues/:identifier/comments` endpoint returns paginated comments with author names and markdown bodies.
 
 ### Webhook-Based Real-Time Sync
 
-Linear webhooks push issue changes (create, update, remove) to the agent in real time. Each webhook is validated with per-connection HMAC-SHA256 signatures and routed to the correct user based on team ID. The `syncSingleIssue` use case maps webhook payloads to local `SyncedLinearIssue` records, keeping Firestore in sync without polling.
+Linear webhooks push issue and comment changes (create, update, remove) to the agent in real time. Each webhook is validated with per-connection HMAC-SHA256 signatures and routed to the correct user based on team ID. The `syncSingleIssue` use case keeps Firestore in sync without polling.
 
 ### Full Issue Synchronization
 
@@ -60,11 +70,11 @@ The `validateIssue` use case verifies that a Linear issue identifier (e.g., "INT
 
 ### Programmatic Issue Management (Internal API)
 
-Code agents create Linear issues and update workflow states through internal service-to-service endpoints. The `POST /internal/issues` endpoint creates issues with title, description, and optional labels. The `PATCH /internal/issues/:issueId/state` endpoint transitions issues between workflow states (backlog, in_progress, in_review, qa).
+Code agents create Linear issues and update workflow states through internal service-to-service endpoints. The `POST /internal/issues` endpoint creates issues with title and description. The `PATCH /internal/issues/:issueId/state` endpoint transitions issues between workflow states (backlog, in_progress, in_review, qa).
 
 ### Failed Issue Retry
 
-Failed AI extractions are saved for manual review. Users can retry creation from the original text via `POST /linear/failed-issues/:id/retry`, which re-attempts the Linear API call and cleans up on success. Failed issues can also be dismissed via `DELETE /linear/failed-issues/:id`.
+Failed AI extractions are saved for manual review. Users can retry creation from the original text via `POST /linear/failed-issues/:id/retry`, which re-attempts the Linear API call using the user's real team ID and cleans up on success. Failed issues can also be dismissed via `DELETE /linear/failed-issues/:id`.
 
 ### Idempotent Processing
 
@@ -116,19 +126,22 @@ An AI code agent working on a task needs to break it into subtasks:
 
 ## Key Benefits
 
-| Benefit              | Description                                           |
-| -------------------- | ----------------------------------------------------- |
-| Zero Context Switch  | Create issues without leaving WhatsApp                |
-| Consistent Structure | AI ensures every issue has proper FR/TD sections      |
-| Priority Accuracy    | Natural language maps to Linear's 5-level scale       |
-| Workflow Visibility  | 3-column dashboard shows work at every stage          |
-| Failure Recovery     | Invalid extractions saved for manual review and retry |
-| Duplicate Prevention | Idempotency check prevents duplicate issue creation   |
-| Real-Time Sync       | Webhook integration keeps local data current          |
-| Full Sync            | Bulk reconciliation for initial setup and recovery    |
-| Programmatic Access  | Internal API for code agents to manage issues         |
-| Issue Validation     | Verify issue existence and team ownership before use  |
-| AI Title Generation  | LLM-powered title generation with robust fallback     |
+| Benefit              | Description                                                |
+| -------------------- | ---------------------------------------------------------- |
+| Zero Context Switch  | Create issues without leaving WhatsApp                     |
+| Consistent Structure | AI ensures every issue has proper FR/TD sections           |
+| Priority Accuracy    | Natural language maps to Linear's 5-level scale            |
+| Workflow Visibility  | 3-column dashboard shows work at every stage               |
+| Parent-Child View    | Sub-issues nest under parent issues on the board           |
+| Instant Dashboard    | Local-first Firestore cache — no API latency on load       |
+| Issue Comments       | Read comments and last activity without leaving IntexuraOS |
+| Failure Recovery     | Invalid extractions saved for manual review and retry      |
+| Duplicate Prevention | Idempotency check prevents duplicate issue creation        |
+| Real-Time Sync       | Webhook integration keeps local data current               |
+| Full Sync            | Bulk reconciliation for initial setup and recovery         |
+| Programmatic Access  | Internal API for code agents to manage issues              |
+| Issue Validation     | Verify issue existence and team ownership before use       |
+| AI Title Generation  | LLM-powered title generation with retry-on-failure         |
 
 ## Limitations
 
@@ -138,7 +151,9 @@ An AI code agent working on a task needs to break it into subtasks:
 - Maximum input text length: 4000 characters
 - Voice transcription quality affects extraction accuracy
 - Webhook sync requires configuring webhook secret in Linear settings
-- Retry for failed issues uses a hardcoded team ID placeholder (known technical debt)
+- Dashboard shows Firestore-synced data; run a full sync after connecting for the first time
+- `generateIssueTitle` returns an error (not a degraded title) if LLM fails after 2 attempts
+- Label support in `POST /internal/issues` is accepted but not yet forwarded to Linear
 
 ---
 

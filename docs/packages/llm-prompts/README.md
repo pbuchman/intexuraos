@@ -50,6 +50,11 @@ interface PromptDeps {
 interface PromptBuilder<TInput, TDeps extends PromptDeps = PromptDeps> {
   readonly name: string;
   readonly description: string;
+  /**
+   * Semantic version (MAJOR.MINOR.PATCH). Must be bumped when content changes.
+   * Enforced by `pnpm run verify:prompt-versions` in CI.
+   */
+  readonly version: string;
   build(input: TInput, deps?: TDeps): string;
 }
 ```
@@ -88,21 +93,22 @@ const prompt = titlePrompt.build(
 
 ### Research
 
-| Export                             | Type       | Purpose                                            |
-| ---------------------------------- | ---------- | -------------------------------------------------- |
-| `buildResearchPrompt`              | Function   | Build research query prompt                        |
-| `buildSynthesisPrompt`             | Function   | Build multi-source synthesis prompt                |
-| `buildInferResearchContextPrompt`  | Function   | Infer research context from user query             |
-| `buildResearchContextRepairPrompt` | Function   | Repair malformed research context JSON             |
-| `buildModelExtractionPrompt`       | Function   | Extract model preferences from user input          |
-| `parseModelExtractionResponse`     | Function   | Parse model extraction LLM response                |
-| `parseAttributionLine`             | Function   | Parse `[S1,S2]` attribution markers                |
-| `parseSections`                    | Function   | Parse synthesized content into attributed sections |
-| `buildSourceMap`                   | Function   | Build source ID to metadata mapping                |
-| `validateSynthesisAttributions`    | Function   | Validate all attributions reference real sources   |
-| `generateBreakdown`                | Function   | Generate per-source usage breakdown                |
-| `stripAttributionLines`            | Function   | Remove attribution markers from output             |
-| `ResearchContextSchema`            | Zod schema | Validate inferred research context                 |
+| Export                                    | Type       | Purpose                                            |
+| ----------------------------------------- | ---------- | -------------------------------------------------- |
+| `buildResearchPrompt`                     | Function   | Build research query prompt                        |
+| `buildSynthesisPrompt`                    | Function   | Build multi-source synthesis prompt                |
+| `buildInferResearchContextPrompt`         | Function   | Infer research context from user query             |
+| `buildResearchContextRepairPrompt`        | Function   | Repair malformed research context JSON             |
+| `buildModelExtractionPrompt`              | Function   | Extract model preferences from user input          |
+| `parseModelExtractionResponse`            | Function   | Parse model extraction LLM response                |
+| `parseModelExtractionResponseWithLogging` | Function   | Parse with structured error logging via logger     |
+| `parseAttributionLine`                    | Function   | Parse `[S1,S2]` attribution markers                |
+| `parseSections`                           | Function   | Parse synthesized content into attributed sections |
+| `buildSourceMap`                          | Function   | Build source ID to metadata mapping                |
+| `validateSynthesisAttributions`           | Function   | Validate all attributions reference real sources   |
+| `generateBreakdown`                       | Function   | Generate per-source usage breakdown                |
+| `stripAttributionLines`                   | Function   | Remove attribution markers from output             |
+| `ResearchContextSchema`                   | Zod schema | Validate inferred research context                 |
 
 Research context types: `AnswerStyle`, `SourceType`, `AvoidSourceType`, `TimeScope`, `LocaleScope`, `ResearchPlan`, `OutputFormat`, `ResearchContext`
 
@@ -158,10 +164,11 @@ Synthesis context types: `SynthesisGoal`, `ConflictSeverity`, `DetectedConflict`
 
 ### Approvals
 
-| Export                        | Type            | Purpose                           |
-| ----------------------------- | --------------- | --------------------------------- |
-| `approvalIntentPrompt`        | `PromptBuilder` | Detect approval/rejection intent  |
-| `parseApprovalIntentResponse` | Function        | Parse approval detection response |
+| Export                                   | Type            | Purpose                                             |
+| ---------------------------------------- | --------------- | --------------------------------------------------- |
+| `approvalIntentPrompt`                   | `PromptBuilder` | Detect approval/rejection intent                    |
+| `parseApprovalIntentResponse`            | Function        | Parse approval detection response (throws on error) |
+| `parseApprovalIntentResponseWithLogging` | Function        | Parse with structured error logging via logger      |
 
 ### Calendar
 
@@ -203,14 +210,13 @@ Shared types: `Domain`, `Mode`, `DefaultApplied`, `SafetyInfo`, `InputQuality`
 
 ## Recent Changes
 
-| Commit   | Description                                        | Age     |
-| -------- | -------------------------------------------------- | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner   | 7 days  |
-| 40d83a23 | Implement Intex Chat MVP                           | 7 days  |
-| 5aa3e1bd | Enable strict 100% coverage enforcement (Phase 3)  | 8 days  |
-| d60f2ee6 | Improve calendar extraction with date-only support | 9 days  |
-| 95468bd9 | Fix Polish date parsing in calendar actions        | 10 days |
-| ed029d36 | Fix merge conflict test issues                     | 13 days |
+| Commit   | Description                                                    | Age    |
+| -------- | -------------------------------------------------------------- | ------ |
+| c2ad13fb | Fix(llm-prompts): address PR review findings                   | 1 day  |
+| 884bc168 | Add semver versioning to PromptBuilder interface (CI-enforced) | 1 day  |
+| f451d51a | Audit and improve 27 prompts across all domains                | 1 day  |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner               | 7 days |
+| 40d83a23 | Implement Intex Chat MVP                                       | 7 days |
 
 ## Source Files
 

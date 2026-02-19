@@ -4,10 +4,27 @@ This document describes the Cloud Run service configuration and operations.
 
 ## Services Overview
 
-| Service        | Cloud Run Name              | Port | Health Endpoint |
-| -------------- | --------------------------- | ---- | --------------- |
-| Auth Service   | `intexuraos-user-service`   | 8080 | `/health`       |
-| Notion Service | `intexuraos-notion-service` | 8080 | `/health`       |
+| Service                      | Cloud Run Name                            | Local Port | Health Endpoint |
+| ---------------------------- | ----------------------------------------- | ---------- | --------------- |
+| User Service                 | `intexuraos-user-service`                 | 8110       | `/health`       |
+| Notion Service               | `intexuraos-notion-service`               | 8112       | `/health`       |
+| WhatsApp Service             | `intexuraos-whatsapp-service`             | 8113       | `/health`       |
+| Mobile Notifications Service | `intexuraos-mobile-notifications-service` | 8114       | `/health`       |
+| Research Agent               | `intexuraos-research-agent`               | 8116       | `/health`       |
+| Commands Agent               | `intexuraos-commands-agent`               | 8117       | `/health`       |
+| Actions Agent                | `intexuraos-actions-agent`                | 8118       | `/health`       |
+| Data Insights Agent          | `intexuraos-data-insights-agent`          | 8119       | `/health`       |
+| Image Service                | `intexuraos-image-service`                | 8120       | `/health`       |
+| Notes Agent                  | `intexuraos-notes-agent`                  | 8121       | `/health`       |
+| App Settings Service         | `intexuraos-app-settings-service`         | 8122       | `/health`       |
+| Todos Agent                  | `intexuraos-todos-agent`                  | 8123       | `/health`       |
+| Bookmarks Agent              | `intexuraos-bookmarks-agent`              | 8124       | `/health`       |
+| Calendar Agent               | `intexuraos-calendar-agent`               | 8125       | `/health`       |
+| Linear Agent                 | `intexuraos-linear-agent`                 | 8126       | `/health`       |
+| Web Agent                    | `intexuraos-web-agent`                    | 8127       | `/health`       |
+| Code Agent                   | `intexuraos-code-agent`                   | 8128       | `/health`       |
+| Chat Agent                   | `intexuraos-chat-agent`                   | 8129       | `/health`       |
+| API Docs Hub                 | `intexuraos-api-docs-hub`                 | —          | `/health`       |
 
 ## Service Configuration
 
@@ -70,15 +87,46 @@ Or use [Cloud Logging Console](https://console.cloud.google.com/logs).
 Verify services are healthy:
 
 ```bash
-# Get service URLs
-AUTH_URL=$(gcloud run services describe intexuraos-user-service \
-  --region=europe-central2 --format="value(status.url)")
-NOTION_URL=$(gcloud run services describe intexuraos-notion-service \
+# Get service URL for any service
+SVC_URL=$(gcloud run services describe intexuraos-user-service \
   --region=europe-central2 --format="value(status.url)")
 
-# Check health endpoints
-curl -s $AUTH_URL/health | jq
-curl -s $NOTION_URL/health | jq
+# Check health endpoint
+curl -s $SVC_URL/health | jq
+```
+
+To check all services at once:
+
+```bash
+SERVICES=(
+  intexuraos-user-service
+  intexuraos-notion-service
+  intexuraos-whatsapp-service
+  intexuraos-mobile-notifications-service
+  intexuraos-research-agent
+  intexuraos-commands-agent
+  intexuraos-actions-agent
+  intexuraos-data-insights-agent
+  intexuraos-image-service
+  intexuraos-notes-agent
+  intexuraos-app-settings-service
+  intexuraos-todos-agent
+  intexuraos-bookmarks-agent
+  intexuraos-calendar-agent
+  intexuraos-linear-agent
+  intexuraos-web-agent
+  intexuraos-code-agent
+  intexuraos-chat-agent
+  intexuraos-api-docs-hub
+)
+
+for svc in "${SERVICES[@]}"; do
+  url=$(gcloud run services describe $svc --region=europe-central2 --format="value(status.url)" 2>/dev/null)
+  if [ -n "$url" ]; then
+    status=$(curl -s -o /dev/null -w "%{http_code}" $url/health)
+    echo "$svc: HTTP $status"
+  fi
+done
 ```
 
 Expected response:
@@ -98,33 +146,37 @@ Expected response:
 
 ## OpenAPI Documentation
 
-Each service exposes Swagger UI:
+Each service exposes Swagger UI at `<SERVICE_URL>/docs` and the raw spec at `<SERVICE_URL>/openapi.json`.
 
-- Auth Service: `$AUTH_URL/docs`
-- Notion Service: `$NOTION_URL/docs`
+All specs are aggregated by the `api-docs-hub` service (see `apps/api-docs-hub/`).
 
-OpenAPI spec:
+Example:
 
-- Auth Service: `$AUTH_URL/openapi.json`
-- Notion Service: `$NOTION_URL/openapi.json`
+```bash
+USER_URL=$(gcloud run services describe intexuraos-user-service \
+  --region=europe-central2 --format="value(status.url)")
+
+# Swagger UI
+open $USER_URL/docs
+
+# Raw OpenAPI spec
+curl -s $USER_URL/openapi.json | jq
+```
 
 ## Manual Deployment
 
-Deploy a specific image manually:
+Deploy a specific image manually (replace `<service-name>` with the app directory name, e.g. `user-service`, `chat-agent`):
 
 ```bash
-# Deploy user-service
-gcloud run deploy intexuraos-user-service \
-  --image=europe-central2-docker.pkg.dev/PROJECT_ID/intexuraos-dev/user-service:latest \
-  --region=europe-central2 \
-  --platform=managed
-
-# Deploy notion-service
-gcloud run deploy intexuraos-notion-service \
-  --image=europe-central2-docker.pkg.dev/PROJECT_ID/intexuraos-dev/notion-service:latest \
+gcloud run deploy intexuraos-<service-name> \
+  --image=europe-central2-docker.pkg.dev/PROJECT_ID/intexuraos-dev/<service-name>:latest \
   --region=europe-central2 \
   --platform=managed
 ```
+
+All 19 backend services follow this pattern. Service names correspond to their `apps/` directory names (e.g. `apps/chat-agent` → `intexuraos-chat-agent`).
+
+In normal operation, deployments are handled automatically by Cloud Build on push to the `development` branch (managed by Terraform).
 
 ## Rollback
 

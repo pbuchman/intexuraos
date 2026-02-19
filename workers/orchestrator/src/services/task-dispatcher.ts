@@ -18,6 +18,7 @@ import type { ApiKeyValidator } from './api-key-validator.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
 import { type CompletionVerifier, type CompletionVerifierVerdict } from './completion-verifier.js';
+import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 
 const execAsync = promisify(exec);
 
@@ -80,7 +81,8 @@ export class TaskDispatcher {
     _githubTokenService: GitHubTokenService,
     private readonly logger: Logger,
     private readonly isolation: IsolationConfig,
-    completionControl: CompletionControlConfig
+    completionControl: CompletionControlConfig,
+    private readonly turnMetricsCollector?: TurnMetricsCollector
   ) {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
@@ -692,6 +694,7 @@ export class TaskDispatcher {
         `Terminal failure: verifier unavailable (${verification.reasons.join(' | ')})`
       );
       await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
       await this.finalizeTask(task, 'failed', failurePayload);
       return;
     }
@@ -740,6 +743,7 @@ export class TaskDispatcher {
         `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
       );
       await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
       await this.finalizeTask(task, 'failed', {
         ...(result !== undefined && { result }),
         error: resumeError,
@@ -783,6 +787,7 @@ export class TaskDispatcher {
 
       this.appendOrchestratorTaskLog(task.taskId, 'Completion verification passed');
       await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
       await this.finalizeTask(task, 'completed', {
         ...(result !== undefined && { result }),
       });
@@ -804,6 +809,7 @@ export class TaskDispatcher {
       `Terminal failure: completion criteria not met (${verification.reasons.join(' | ')})`
     );
     await this.flushTaskLogs(task.taskId);
+    await this.collectTurnMetrics(task, attempt);
 
     await this.finalizeTask(task, 'failed', {
       ...(result !== undefined && { result }),
@@ -878,8 +884,9 @@ export class TaskDispatcher {
       /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
       systemPrompt: buildSystemPrompt({
         taskId: task.taskId,
-        worktreePath: task.worktreePath,
         ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+        ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
+        taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
         linearIssueLabels: task.linearIssueLabels,
         hasChildren: params.hasChildren,
       }),
@@ -1245,6 +1252,17 @@ export class TaskDispatcher {
     } catch (error) {
       this.logger.warn({ taskId, error }, 'Failed to flush task logs');
     }
+  }
+
+  private async collectTurnMetrics(task: Task, attempt: number): Promise<void> {
+    if (this.turnMetricsCollector === undefined) return;
+    await this.turnMetricsCollector.collectAndPublish({
+      taskId: task.taskId,
+      containerId: task.containerId,
+      attempt,
+      startedAt: task.startedAt,
+      completedAt: new Date().toISOString(),
+    });
   }
 
   private clearTaskTimers(taskId: string): void {

@@ -157,7 +157,7 @@
     "code_tasks": {
       "owner": "code-agent",
       "description": "Code execution tasks",
-      "subcollections": ["logs", "log_lines"]
+      "subcollections": ["logs", "log_lines", "turn_metrics"]
     },
     "user_spend": {
       "owner": "code-agent",
@@ -178,6 +178,10 @@
     "github-pr-events": {
       "owner": "code-agent",
       "description": "GitHub pull request webhook events for PR timeline and context in Code Agent UI"
+    },
+    "github-pr-summaries": {
+      "owner": "code-agent",
+      "description": "PR summaries for 30-day list view. One doc per unique PR, upserted on every webhook."
     },
     "pr_task_locks": {
       "owner": "code-agent",

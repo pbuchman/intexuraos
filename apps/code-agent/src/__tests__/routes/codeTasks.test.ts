@@ -45,6 +45,7 @@ import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHear
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
@@ -166,7 +167,12 @@ describe('GET /code/tasks endpoints', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
@@ -190,7 +196,9 @@ describe('GET /code/tasks endpoints', () => {
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     app = await buildServer();
@@ -379,7 +387,7 @@ describe('GET /code/tasks endpoints', () => {
         });
 
         if (task1.ok) {
-          await codeTaskRepo.update(task1.value.id, { status: 'completed' });
+          await codeTaskRepo.update(task1.value.id, { status: 'implemented' });
         }
 
         const task2 = await codeTaskRepo.create({
@@ -402,7 +410,7 @@ describe('GET /code/tasks endpoints', () => {
       it('filters tasks by status', async () => {
         const response = await app.inject({
           method: 'GET',
-          url: '/code/tasks?status=completed',
+          url: '/code/tasks?status=implemented',
           headers: {
             authorization: 'Bearer test-token',
           },
@@ -412,7 +420,7 @@ describe('GET /code/tasks endpoints', () => {
         const body = JSON.parse(response.body);
         expect(body.success).toBe(true);
         expect(body.data.tasks).toBeDefined();
-        expect(body.data.tasks.every((task: CodeTask) => task.status === 'completed')).toBe(true);
+        expect(body.data.tasks.every((task: CodeTask) => task.status === 'implemented')).toBe(true);
       });
     });
 

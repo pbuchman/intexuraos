@@ -51,6 +51,7 @@ import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js'
 import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -178,7 +179,12 @@ describe('POST /internal/webhooks/task-complete', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
@@ -202,7 +208,9 @@ describe('POST /internal/webhooks/task-complete', () => {
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     app = await buildServer();
@@ -523,7 +531,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('completed');
+      expect(getResult.value.status).toBe('designed');
       expect(getResult.value.result?.branch).toBe('test-branch');
       expect(getResult.value.callbackReceived).toBe(true);
     });
@@ -569,7 +577,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('completed');
+      expect(getResult.value.status).toBe('designed');
       expect(getResult.value.result).toBeUndefined();
       expect(getResult.value.callbackReceived).toBe(true);
     });
@@ -1130,7 +1138,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('completed');
+      expect(getResult.value.status).toBe('designed');
     });
 
     it('returns 500 when update fails for failed status', async () => {
@@ -1456,7 +1464,12 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
@@ -1480,7 +1493,9 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     app = await buildServer();
@@ -1536,7 +1551,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'completed');
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'designed');
     expect(mockMetricsClient.recordTaskDuration).toHaveBeenCalledWith('opus', 45.5);
   });
 
@@ -1670,7 +1685,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'completed');
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'designed');
     expect(mockMetricsClient.recordTaskDuration).not.toHaveBeenCalled();
   });
 });
@@ -1792,7 +1807,12 @@ describe('POST /internal/logs', () => {
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
@@ -1816,7 +1836,9 @@ describe('POST /internal/logs', () => {
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     app = await buildServer();
@@ -2350,7 +2372,12 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
@@ -2374,7 +2401,9 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     app = await buildServer();
@@ -2437,7 +2466,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const getResult = await codeTaskRepo.findById(task.id);
     expect(getResult.ok).toBe(true);
     if (!getResult.ok) throw new Error('Failed to get task');
-    expect(getResult.value.status).toBe('completed');
+    expect(getResult.value.status).toBe('designed');
     expect(getResult.value.callbackReceived).toBe(true);
 
     // Verify WhatsApp notification was sent

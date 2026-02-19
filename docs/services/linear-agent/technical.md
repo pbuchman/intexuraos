@@ -2,7 +2,7 @@
 
 ## Overview
 
-Linear Agent provides bidirectional integration between IntexuraOS and Linear project management. It enables natural language issue creation through voice messages with AI-powered extraction, real-time webhook synchronization, full issue sync, issue validation, AI title generation, and programmatic issue management for code agents. The service runs on Cloud Run with auto-scaling and uses the `@linear/sdk` for GraphQL API communication.
+Linear Agent provides bidirectional integration between IntexuraOS and Linear project management. It enables natural language issue creation through voice messages with AI-powered extraction, real-time webhook synchronization, full issue sync, issue validation, AI title generation, and programmatic issue management for code agents. The service runs on Cloud Run with auto-scaling and uses the `@linear/sdk` for GraphQL API communication. The dashboard reads from local Firestore (populated by webhook sync) for fast, offline-capable issue listing.
 
 ## Architecture
 
@@ -12,6 +12,7 @@ graph TB
         WA[WhatsApp Service]
         AA[Actions Agent]
         CA[Code Agent]
+        Scheduler[Cloud Scheduler]
         Linear[Linear API]
         LinearWH[Linear Webhooks]
     end
@@ -31,6 +32,7 @@ graph TB
             UC4[fullSync]
             UC5[validateIssue]
             UC6[generateIssueTitle]
+            UC7[syncCommentFromWebhook]
             IM[issueMapper]
             M[Models + WebhookTypes]
         end
@@ -43,6 +45,7 @@ graph TB
             FIR[Failed Issue Repository]
             PAR[Processed Action Repository]
             ISR[Issue Repository]
+            CMR[Comment Repository]
         end
     end
 
@@ -58,19 +61,25 @@ graph TB
     WA --> AA
     AA --> IR
     CA --> IIR
+    CA --> IR
+    Scheduler --> IR
     LinearWH --> WHR
     LR --> UC2
     LR --> UC4
     IR --> UC1
+    IR --> UC5
+    IR --> UC6
+    IR --> UC4
     IIR --> LAC
     WHR --> WV
     WHR --> UC3
+    WHR --> UC7
     UC1 --> LAC
     UC1 --> LES
     UC1 --> CR
     UC1 --> FIR
     UC1 --> PAR
-    UC2 --> LAC
+    UC2 --> ISR
     UC2 --> CR
     UC3 --> IM
     UC3 --> ISR
@@ -88,6 +97,7 @@ graph TB
     FIR --> FS
     PAR --> FS
     ISR --> FS
+    CMR --> FS
 ```
 
 ## Data Flow
@@ -157,8 +167,8 @@ sequenceDiagram
     participant Linear as Linear API
     participant FS as Firestore
 
-    User->>LA: POST /linear/sync
-    LA->>FS: Get user connection
+    User->>LA: POST /linear/sync (or /internal/linear/sync-all)
+    LA->>FS: Get user connection(s)
     LA->>Linear: List all team issues
     LA->>FS: List existing synced issues
     LA->>LA: Compare and reconcile
@@ -169,75 +179,102 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                 | Date       |
-| ---------- | ----------------------------------------------------------- | ---------- |
-| `7b2d8d0c` | Unified Linear issue templates and two-phase execution      | 2026-02-06 |
-| `8e913384` | Add multi-tenant webhook support                            | 2026-02-03 |
-| `014380a0` | Add Linear webhook support and sync functionality (INT-444) | 2026-02-02 |
-| `93087647` | Fix Linear integration for multi-user support (INT-443)     | 2026-02-01 |
-| `a23ed1ef` | Redesign Linear board column layout (INT-208)               | 2026-01-22 |
-| `5d5e17c2` | Apply rate limit fix (code audit)                           | 2026-01-24 |
-| `5bd8b1a8` | Optimize Linear API to avoid rate limiting (INT-95)         | 2026-01-16 |
-| `1e1647c5` | Add idempotency check (INT-97)                              | 2026-01-16 |
+| Commit     | Description                                                            | Date       |
+| ---------- | ---------------------------------------------------------------------- | ---------- |
+| `75cc9eb7` | Fix validateIssue label serialization; map LinearLabel[] to string[]   | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting via createLogStream() for PM2 readability  | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (distributed tracing + metrics)    | 2026-02-16 |
+| `3f58c89f` | Switch Linear dashboard to Firestore with parent-child support         | 2026-02-10 |
+| `08dbaf84` | Show subissues under parent issues on Linear board                     | 2026-02-10 |
+| `55dd047d` | Add labels support to Linear Issues view                               | 2026-02-10 |
+| `c1fe452d` | Remove regex fallback from title generation, always use LLM            | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback + longer timeout | 2026-02-15 |
+| `1c7d6455` | Fix sync-all 401 by accepting OIDC tokens from Cloud Scheduler         | 2026-02-14 |
+| `151e93d4` | Fix Linear webhook signature validation                                | 2026-02-10 |
 
-### INT-486: Unified Issue Templates and Two-Phase Execution
+### Firestore-First Dashboard (0fa80ae6 + 3f58c89f)
 
-Major expansion adding programmatic issue management for code agents:
+The `listIssues` use case no longer calls the Linear API at request time. Instead, it reads from the local `linear_issues` Firestore collection (populated by webhooks and full sync). This enables:
 
-**New Use Cases:**
+- **Faster responses** — no Linear API round-trip on dashboard load
+- **Parent-child hierarchy** — the use case builds an in-memory tree: top-level issues carry their children in a `children[]` array
+- **Offline robustness** — dashboard works even if Linear API is temporarily unavailable
 
-- `generateIssueTitle` - LLM-powered title generation with Zod schema validation and fallback pipeline
-- `validateIssue` - Validates issue identifier format, existence, and team ownership
-- `fullSync` / `fullSyncAllUsers` - Full reconciliation of Linear issues to local Firestore
-- `syncSingleIssue` - Process individual webhook events (create/update/remove)
+Issues are still sorted by `updatedAt` (most recent first) within each column.
 
-**New Domain Models:**
+### Comments System
 
-- `SyncedLinearIssue` - Locally synced issue with assignee, labels, and sync timestamp
-- `LinearIssueWithTeam` - API issue enriched with team ID, labels, and child count
-- `WorkflowState` - Linear workflow state for state transitions
-- `LinearWebhookEvent` / `LinearWebhookPayload` - Typed webhook event structures
+New in this release: synced comments stored in Firestore via `linearCommentRepository`. Two new public endpoints allow fetching issue detail and paginated comments:
 
-**New Infrastructure:**
+- `GET /linear/issues/:identifier` — returns issue with `commentCount` and `lastCommentAt`
+- `GET /linear/issues/:identifier/comments` — paginated comments (`limit`, `offset`, `hasMore`, `total`)
 
-- `linearIssueRepository` (Firestore) - CRUD for synced issues
-- `linearWebhookValidation` - HMAC-SHA256 signature verification
-- `issueMapper` - Maps webhook/API payloads to `SyncedLinearIssue`
+### LLM Title Generation: No Regex Fallback (c1fe452d)
 
-**New Routes:**
+The `generateIssueTitle` use case no longer falls back to regex extraction when the LLM fails. It now:
 
-- `linearWebhookRoutes.ts` - Webhook endpoint with multi-tenant routing
-- `internalIssuesRoutes.ts` - Service-to-service issue creation and state updates
+1. Tries LLM generation up to 2 times (retry on failure)
+2. Returns `err({ code: 'LLM_ERROR' | 'PARSE_ERROR' })` if all attempts fail
+3. Returns `ok({ title: 'Code task', issueType: 'feature' })` for empty descriptions
 
-### INT-444: Webhook Support and Sync
+Callers must handle the error case rather than receiving a degraded title silently.
 
-Added bidirectional sync through Linear webhooks:
+### New Internal HTTP Endpoints
 
-- Per-connection webhook secret storage in `LinearConnection`
-- Team-based webhook routing (find user by team ID)
-- HMAC-SHA256 signature validation using `crypto.timingSafeEqual`
-- Webhook configuration endpoints (GET/POST/DELETE `/linear/webhook-config`)
-- Full sync endpoint (`POST /linear/sync`)
-- Failed issue retry and deletion endpoints
+The following use cases previously had no HTTP exposure and are now accessible over the internal API:
+
+- `GET /internal/linear/issues/:identifier/validate` — validates issue identifier and team ownership
+- `POST /internal/linear/issues/generate-title` — generates a title from a task description
+- `POST /internal/linear/sync-all` — full sync for all connected users (OIDC + internal auth)
+- `POST /internal/linear/sync` — full sync for a specific user (service-to-service)
+
+### Label Serialization Fix at HTTP Boundary (75cc9eb7)
+
+The `GET /internal/linear/issues/:identifier/validate` endpoint previously returned `LinearLabel[]` objects in the `labels` field, which serialized as `"[object Object]"` strings. The fix maps label objects to name strings at the HTTP boundary in `internalRoutes.ts`:
+
+```typescript
+return await reply.ok({
+  ...result.value,
+  labels: result.value.labels.map((l) => l.name),
+});
+```
+
+The domain `ValidatedIssue` type retains `labels: LinearLabel[]` (full objects) — the transformation is only applied at the API surface.
+
+### OpenTelemetry / Dash0 Integration (a52a6bbc)
+
+Distributed tracing, metrics, and log export are now enabled via the `@intexuraos/infra-otel` package. The instrumentation loads transparently via the `--import` Node.js flag:
+
+```dockerfile
+CMD ["node", "--import", "./dist/otel-register.js", "dist/index.js"]
+```
+
+The `OTEL_SERVICE_NAME` env var is set to `linear-agent` in production. When `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset (local development), telemetry is a no-op.
+
+### Hardcoded Team ID Fixed
+
+The `POST /linear/failed-issues/:id/retry` endpoint previously used `teamId: 'TODO'`. It now calls `connectionRepository.getFullConnection()` to retrieve the real team ID before creating the issue. This resolves a known bug where retried issues might fail or land in the wrong team.
 
 ## API Endpoints
 
 ### Public Endpoints
 
-| Method | Path                              | Purpose                           | Auth   |
-| ------ | --------------------------------- | --------------------------------- | ------ |
-| GET    | `/linear/connection`              | Get user's connection status      | Bearer |
-| POST   | `/linear/connection/validate`     | Validate API key, get teams       | None   |
-| POST   | `/linear/connection`              | Save connection configuration     | Bearer |
-| DELETE | `/linear/connection`              | Disconnect from Linear            | Bearer |
-| GET    | `/linear/issues`                  | List issues grouped by column     | Bearer |
-| GET    | `/linear/failed-issues`           | List failed extractions           | Bearer |
-| DELETE | `/linear/failed-issues/:id`       | Delete a failed extraction        | Bearer |
-| POST   | `/linear/failed-issues/:id/retry` | Retry a failed extraction         | Bearer |
-| POST   | `/linear/sync`                    | Trigger full issue sync           | Bearer |
-| GET    | `/linear/webhook-config`          | Get webhook URL and secret status | Bearer |
-| POST   | `/linear/webhook-config`          | Set webhook signing secret        | Bearer |
-| DELETE | `/linear/webhook-config`          | Remove webhook signing secret     | Bearer |
+| Method | Path                                  | Purpose                           | Auth   |
+| ------ | ------------------------------------- | --------------------------------- | ------ |
+| GET    | `/linear/connection`                  | Get user's connection status      | Bearer |
+| POST   | `/linear/connection/validate`         | Validate API key, get teams       | None   |
+| POST   | `/linear/connection`                  | Save connection configuration     | Bearer |
+| DELETE | `/linear/connection`                  | Disconnect from Linear            | Bearer |
+| GET    | `/linear/issues`                      | List issues grouped by column     | Bearer |
+| GET    | `/linear/issues/:identifier`          | Get single issue with comments    | Bearer |
+| GET    | `/linear/issues/:identifier/comments` | List paginated issue comments     | Bearer |
+| GET    | `/linear/failed-issues`               | List failed extractions           | Bearer |
+| DELETE | `/linear/failed-issues/:id`           | Delete a failed extraction        | Bearer |
+| POST   | `/linear/failed-issues/:id/retry`     | Retry a failed extraction         | Bearer |
+| POST   | `/linear/sync`                        | Trigger full issue sync           | Bearer |
+| GET    | `/linear/webhook-config`              | Get webhook URL and secret status | Bearer |
+| POST   | `/linear/webhook-config`              | Set webhook signing secret        | Bearer |
+| DELETE | `/linear/webhook-config`              | Remove webhook signing secret     | Bearer |
 
 ### Webhook Endpoints
 
@@ -247,11 +284,15 @@ Added bidirectional sync through Linear webhooks:
 
 ### Internal Endpoints
 
-| Method | Path                              | Purpose                          | Auth       |
-| ------ | --------------------------------- | -------------------------------- | ---------- |
-| POST   | `/internal/linear/process-action` | Process action via AI extraction | X-Internal |
-| POST   | `/internal/issues`                | Create a Linear issue            | X-Internal |
-| PATCH  | `/internal/issues/:issueId/state` | Update issue workflow state      | X-Internal |
+| Method | Path                                           | Purpose                             | Auth              |
+| ------ | ---------------------------------------------- | ----------------------------------- | ----------------- |
+| POST   | `/internal/linear/process-action`              | Process action via AI extraction    | X-Internal        |
+| GET    | `/internal/linear/issues/:identifier/validate` | Validate issue identifier           | X-Internal        |
+| POST   | `/internal/linear/issues/generate-title`       | Generate title from description     | X-Internal        |
+| POST   | `/internal/linear/sync`                        | Full sync for a user                | X-Internal        |
+| POST   | `/internal/linear/sync-all`                    | Full sync for all users (Scheduler) | X-Internal / OIDC |
+| POST   | `/internal/issues`                             | Create a Linear issue               | X-Internal        |
+| PATCH  | `/internal/issues/:issueId/state`              | Update issue workflow state         | X-Internal        |
 
 ### GET /linear/issues Response
 
@@ -267,6 +308,38 @@ interface ListIssuesResponse {
     archive: LinearIssue[]; // Older completed issues
   };
   teamName: string;
+}
+```
+
+### GET /linear/issues/:identifier Response
+
+```typescript
+interface IssueDetailResponse {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  state: { name: string; type: IssueStateCategory };
+  priority: number;
+  assignee: { id: string; name: string } | null;
+  labels: { id: string; name: string; color: string }[];
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  commentCount: number;
+  lastCommentAt: string | null;
+}
+```
+
+### GET /linear/issues/:identifier/comments Response
+
+```typescript
+interface CommentsResponse {
+  comments: LinearComment[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
 }
 ```
 
@@ -301,6 +374,18 @@ State names are mapped to Linear workflow state names: `backlog` -> "Backlog", `
 
 ## Domain Models
 
+### LinearLabel
+
+```typescript
+interface LinearLabel {
+  id: string;
+  name: string;
+  color: string; // Hex color from Linear
+}
+```
+
+Used in `LinearIssue`, `LinearIssueWithTeam`, and `SyncedLinearIssue`. Note: label `color` is stored in Firestore as of the labels support update.
+
 ### LinearIssue
 
 ```typescript
@@ -319,6 +404,10 @@ interface LinearIssue {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  parentId?: string | null; // Parent issue UUID
+  childCount: number; // Calculated from children array
+  children: LinearIssue[]; // Populated in listIssues use case
+  labels: LinearLabel[]; // Full label objects with color
 }
 ```
 
@@ -327,12 +416,11 @@ interface LinearIssue {
 ```typescript
 interface LinearIssueWithTeam extends LinearIssue {
   teamId: string;
-  labels: string[]; // Label names (e.g., ['bug', 'code-task'])
-  childCount: number; // Number of child issues (subtasks)
+  childCount: number;
 }
 ```
 
-Used by `validateIssue` and `getIssueByIdentifier` for team ownership verification and subtask tracking.
+Used by `validateIssue` and `getIssueByIdentifier` for team ownership verification.
 
 ### SyncedLinearIssue
 
@@ -347,16 +435,36 @@ interface SyncedLinearIssue {
   priority: LinearPriority;
   assigneeId: string | null;
   assigneeName: string | null;
-  labels: string[];
+  labels: LinearLabel[]; // Full objects with id, name, color
   url: string;
   userId: string; // Owner user ID (for multi-tenant)
-  createdAt: string; // ISO timestamp from Linear
-  updatedAt: string; // ISO timestamp from Linear
-  syncedAt: string; // When we last synced this issue
+  parentId: string | null; // Parent issue UUID (null for top-level)
+  createdAt: string;
+  updatedAt: string;
+  syncedAt: string;
+  teamId: string; // Linear team ID (for webhook secret lookup)
 }
 ```
 
-Stored in Firestore. Created from webhook payloads via `mapWebhookToSyncedIssue` or from API responses via `mapApiIssueToSyncedIssue`.
+Stored in Firestore. Created from webhook payloads via `mapWebhookToSyncedIssue` or API responses via `mapApiIssueToSyncedIssue`.
+
+### LinearComment
+
+```typescript
+interface LinearComment {
+  id: string; // Linear UUID (document ID)
+  issueId: string; // Linear issue UUID
+  issueIdentifier: string; // e.g., "INT-444"
+  userId: string; // Comment author Linear user ID
+  userName: string; // Comment author display name
+  body: string; // Comment body (markdown)
+  createdAt: string;
+  updatedAt: string;
+  syncedAt: string;
+}
+```
+
+Stored in the `linear_issue_comments` Firestore collection. Synced via webhooks or full sync.
 
 ### WorkflowState
 
@@ -368,15 +476,11 @@ interface WorkflowState {
 }
 ```
 
-Used by `getWorkflowStates` and `updateIssueState` for state transitions.
-
 ### IssueStateCategory
 
 ```typescript
 type IssueStateCategory = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
 ```
-
-Maps from Linear's state types to internal categories.
 
 ### DashboardColumn
 
@@ -403,7 +507,7 @@ interface LinearConnection {
   apiKey: string;
   teamId: string;
   teamName: string;
-  webhookSecret: string | null; // Per-connection webhook signing secret
+  webhookSecret: string | null;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -437,7 +541,7 @@ interface FailedLinearIssue {
   error: string;
   reasoning: string | null;
   createdAt: string;
-  lastRetryAt?: string; // Tracks retry attempts
+  lastRetryAt?: string;
 }
 ```
 
@@ -448,13 +552,11 @@ interface ProcessedAction {
   actionId: string;
   userId: string;
   issueId: string;
-  issueIdentifier: string; // e.g., "INT-123"
+  issueIdentifier: string;
   resourceUrl: string;
   createdAt: string;
 }
 ```
-
-Used for idempotency to prevent duplicate issue creation.
 
 ### Webhook Types
 
@@ -493,11 +595,11 @@ Extracts structured issue data from natural language via LLM, creates the issue 
 
 ### listIssues
 
-Fetches issues from the Linear API and groups them by dashboard column using `mapStateToDashboardColumn`. Returns `GroupedIssues` with `archive` for issues older than 7 days.
+Reads all synced issues from Firestore, builds parent-child relationships in memory (children attached to their parents), and groups top-level issues by dashboard column using `mapStateToDashboardColumn`. Returns `GroupedIssues` with `archive` for issues older than 7 days. Issues within each column are sorted by `updatedAt` (most recent first). Does **not** call the Linear API.
 
 ### generateIssueTitle
 
-Generates a concise issue title (max 80 chars) from a task description using LLM. Returns a `GeneratedTitle` with `title` and `issueType` (bug, feature, refactor, research). Falls back to regex-based extraction on LLM failure: strips code blocks, URLs, and markdown, extracts the first sentence, and truncates with ellipsis.
+Generates a concise issue title (max 80 chars) from a task description using LLM. Returns a `GeneratedTitle` with `title` and `issueType` (bug, feature, refactor, research). Retries once on failure. Returns `err()` if all attempts fail — no regex fallback.
 
 ### validateIssue
 
@@ -507,18 +609,23 @@ Validates a Linear issue identifier (format: `XXX-123`) against the user's conne
 
 Processes a single webhook event. Maps the webhook payload to `SyncedLinearIssue` via `issueMapper`, then saves (create/update) or deletes (remove) the issue in the local repository. Unknown actions are skipped.
 
+### syncCommentFromWebhook
+
+Processes a comment webhook event. Saves new or updated comments to `linear_issue_comments` or deletes removed ones.
+
 ### fullSync / fullSyncAllUsers
 
-`fullSync` performs a complete reconciliation for one user: fetches all Linear API issues, upserts to local storage, and deletes stale issues that no longer exist in Linear. Returns `SyncStats` with created/updated/deleted counts and duration. `fullSyncAllUsers` iterates all connected users, continuing on individual failures.
+`fullSync` performs a complete reconciliation for one user: fetches all Linear API issues, upserts to local storage, and deletes stale issues. Returns `SyncStats`. `fullSyncAllUsers` iterates all connected users, continuing on individual failures.
 
 ## Firestore Collections
 
-| Collection               | Owner        | Purpose                     |
-| ------------------------ | ------------ | --------------------------- |
-| `linearConnections`      | linear-agent | User Linear API credentials |
-| `failedLinearIssues`     | linear-agent | Failed extraction records   |
-| `processedLinearActions` | linear-agent | Idempotency tracking        |
-| `syncedLinearIssues`     | linear-agent | Locally synced issue data   |
+| Collection                 | Owner        | Purpose                     |
+| -------------------------- | ------------ | --------------------------- |
+| `linear_connections`       | linear-agent | User Linear API credentials |
+| `linear_failed_issues`     | linear-agent | Failed extraction records   |
+| `linear_processed_actions` | linear-agent | Idempotency tracking        |
+| `linear_issues`            | linear-agent | Locally synced issue data   |
+| `linear_issue_comments`    | linear-agent | Locally synced comments     |
 
 ## AI Integration
 
@@ -536,19 +643,11 @@ Uses Gemini 2.5 Flash or GLM-4.7 to parse natural language into structured issue
 
 ### LLM Title Generation
 
-Uses `linearIssueTitlePrompt` from `@intexuraos/llm-prompts` to generate titles. Response is validated with `LinearIssueTitleSchema` (Zod). Handles markdown code block wrapping in LLM responses.
-
-**Fallback Pipeline:**
-
-1. Strip markdown code blocks and inline code
-2. Remove URLs and markdown formatting
-3. Extract first sentence (split on `.` or `\n`)
-4. Truncate to 80 characters with ellipsis
-5. Default to "Code task" if description becomes empty after cleaning
+Uses `linearIssueTitlePrompt` from `@intexuraos/llm-prompts` to generate titles. Response is validated with `LinearIssueTitleSchema` (Zod). Handles markdown code block wrapping in LLM responses. Retries once on any failure. Returns `err()` if 2 attempts fail — callers must handle the error.
 
 **Model Selection:**
 
-- Primary: Gemini 2.5 Flash (fast, cost-effective)
+- Primary: Gemini 2.5 Flash (fast, cost-effective, default)
 - Alternative: GLM-4.7 (multilingual support)
 - Lightweight: GLM-4.7-Flash (cost-effective)
 
@@ -582,7 +681,7 @@ Linear webhooks are verified using HMAC-SHA256 signatures. The raw request body 
 
 The `issueMapper` module provides two mapping functions:
 
-- `mapWebhookToSyncedIssue` - Maps webhook payload with assignee, labels, and team data
+- `mapWebhookToSyncedIssue` - Maps webhook payload with assignee, labels (as `LinearLabel[]`), and team data
 - `mapApiIssueToSyncedIssue` - Maps API response (assignee and labels set to null/empty)
 
 Both include safe parsing of state types (defaults to 'unstarted') and priority values (defaults to 0).
@@ -608,7 +707,7 @@ The Linear API client includes performance optimizations (INT-95):
 - Uses `Promise.all` for parallel state resolution
 - Eliminates N+1 queries when listing issues
 
-### New API Methods
+### API Methods
 
 | Method                 | Purpose                                   |
 | ---------------------- | ----------------------------------------- |
@@ -618,15 +717,18 @@ The Linear API client includes performance optimizations (INT-95):
 
 ## Configuration
 
-| Variable                              | Required | Description                |
-| ------------------------------------- | -------- | -------------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys  |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth    |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint        |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer               |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience             |
-| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking      |
+| Variable                              | Required | Description                          |
+| ------------------------------------- | -------- | ------------------------------------ |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys            |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth              |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source           |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                  |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                         |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                       |
+| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key              |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key                 |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint (no-op if unset) |
 
 ## Dependencies
 
@@ -645,7 +747,7 @@ The Linear API client includes performance optimizations (INT-95):
 | --------------- | ------------------------------- | ----------------------- |
 | Linear API      | Issue CRUD, team/state queries  | Return error to client  |
 | Linear Webhooks | Real-time issue change events   | Retry by Linear         |
-| Gemini API      | Issue data extraction           | Return extraction error |
+| Gemini API      | Issue data extraction / titles  | Return extraction error |
 | GLM API         | Alternative extraction provider | Fallback available      |
 
 ## Error Handling
@@ -662,20 +764,25 @@ The Linear API client includes performance optimizations (INT-95):
 | `INVALID_FORMAT`    | 400  | Invalid issue identifier format       |
 | `NOT_FOUND`         | 404  | Issue not found in Linear workspace   |
 | `WRONG_TEAM`        | 403  | Issue belongs to a different team     |
+| `LLM_ERROR`         | 500  | Title generation LLM failure          |
+| `PARSE_ERROR`       | 500  | Title generation JSON parse failure   |
 
 \*Note: Extraction failures return 200 with `status: 'failed'` per ServiceFeedback contract.
 
 ## Gotchas
 
 - Linear state names are case-insensitive for column mapping ("In Review", "IN REVIEW", "in review" all work)
-- The `completedAt` field may be null even for done issues if cancelled (handled as recent)
-- Archive includes issues older than 7 days only when `includeArchive=true` (default)
+- The `completedAt` field is not stored in `SyncedLinearIssue` — `updatedAt` is used as a proxy for archive cutoff
 - Idempotency check uses `actionId`, not message content hash
 - Client cache cleanup runs on interval, may hold stale clients during low traffic
 - Webhook signature validation requires raw body capture via custom Fastify content type parser
 - `mapApiIssueToSyncedIssue` sets assignee and labels to null/empty since the standard API response does not include them
 - Unknown webhook state types default to `unstarted`; out-of-range priority values default to 0
-- The retry endpoint for failed issues uses a hardcoded `teamId: 'TODO'` placeholder
+- `generateIssueTitle` returns `err()` on LLM failure — no silent degradation
+- Dashboard (`GET /linear/issues`) reads from Firestore; run a full sync if data seems stale
+- `/internal/linear/sync-all` accepts both OIDC Bearer tokens (Cloud Scheduler) and X-Internal-Auth
+- Labels are full objects `{ id, name, color }` internally; `validateIssue` HTTP response maps them to `string[]` (names only)
+- OpenTelemetry instrumentation is transparent — loaded via `--import otel-register.js` at process start
 
 ## File Structure
 
@@ -683,7 +790,7 @@ The Linear API client includes performance optimizations (INT-95):
 apps/linear-agent/
 ├── src/
 │   ├── domain/
-│   │   ├── models.ts             # LinearIssue, SyncedLinearIssue, WorkflowState, etc.
+│   │   ├── models.ts             # LinearIssue, SyncedLinearIssue, LinearComment, etc.
 │   │   ├── errors.ts             # LinearError definitions
 │   │   ├── ports.ts              # Repository/client interfaces
 │   │   ├── webhookTypes.ts       # LinearWebhookEvent, LinearWebhookPayload
@@ -691,34 +798,36 @@ apps/linear-agent/
 │   │   ├── index.ts              # Domain barrel exports
 │   │   └── useCases/
 │   │       ├── processLinearAction.ts   # AI extraction + issue creation
-│   │       ├── listIssues.ts            # Dashboard grouping logic
-│   │       ├── generateIssueTitle.ts    # LLM-powered title generation
+│   │       ├── listIssues.ts            # Firestore-based dashboard grouping
+│   │       ├── generateIssueTitle.ts    # LLM title generation (no regex fallback)
 │   │       ├── validateIssue.ts         # Issue identifier validation
 │   │       ├── syncSingleIssueUseCase.ts # Webhook event processing
+│   │       ├── syncCommentFromWebhook.ts # Comment webhook processing
 │   │       └── fullSyncUseCase.ts       # Full issue reconciliation
 │   ├── infra/
 │   │   ├── firestore/
 │   │   │   ├── linearConnectionRepository.ts
 │   │   │   ├── failedIssueRepository.ts
 │   │   │   ├── processedActionRepository.ts
-│   │   │   └── linearIssueRepository.ts   # NEW: synced issue storage
+│   │   │   ├── linearIssueRepository.ts
+│   │   │   └── linearCommentRepository.ts  # NEW: comment storage
 │   │   ├── linear/
-│   │   │   └── linearApiClient.ts         # @linear/sdk wrapper
-│   │   ├── linearWebhookValidation.ts     # NEW: HMAC-SHA256 validation
+│   │   │   └── linearApiClient.ts
+│   │   ├── linearWebhookValidation.ts
 │   │   └── llm/
 │   │       └── linearActionExtractionService.ts
 │   ├── routes/
-│   │   ├── linearRoutes.ts          # Public API (12 endpoints)
-│   │   ├── internalRoutes.ts        # Internal API: process-action
-│   │   ├── internalIssuesRoutes.ts  # NEW: Internal API: issues CRUD + state
-│   │   └── linearWebhookRoutes.ts   # NEW: Webhook receiver
-│   ├── services.ts                  # DI container (7 services)
+│   │   ├── linearRoutes.ts          # Public API (14 endpoints)
+│   │   ├── internalRoutes.ts        # Internal: process-action, validate, title, sync, sync-all
+│   │   ├── internalIssuesRoutes.ts  # Internal: issues CRUD + state
+│   │   └── linearWebhookRoutes.ts   # Webhook receiver
+│   ├── services.ts                  # DI container (8 services)
 │   ├── server.ts                    # Fastify setup with raw body parser
 │   └── index.ts                     # Entry point
-├── __tests__/                       # Comprehensive test suite (21+ test files)
+├── __tests__/                       # Comprehensive test suite (25+ test files)
 └── package.json
 ```
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

@@ -32,10 +32,13 @@ interface CalendarAgentTools {
   getPreview(actionId: string): Promise<CalendarPreview | null>;
 
   // Process calendar action (with preview support)
+  // HTTP body: { action: { id, userId, title } }
   processAction(params: {
-    actionId: string;
-    userId: string;
-    text: string;
+    action: {
+      id: string;
+      userId: string;
+      title: string; // user message text to extract event from
+    };
   }): Promise<ServiceFeedback>;
 
   // List events in date range
@@ -289,13 +292,15 @@ interface ServiceFeedback {
 
 ## Dependencies
 
-| Service         | Why Needed                  | Failure Behavior           |
-| --------------- | --------------------------- | -------------------------- |
-| user-service    | OAuth tokens, LLM API keys  | Reject request             |
-| Google Calendar | Event CRUD, free/busy       | Map error to CalendarError |
-| Gemini LLM      | Event extraction from text  | Save to failed events      |
-| Firestore       | Previews, processed actions | Return INTERNAL_ERROR      |
+| Service                        | Why Needed                        | Failure Behavior           |
+| ------------------------------ | --------------------------------- | -------------------------- |
+| user-service                   | OAuth tokens, LLM API keys        | Reject request             |
+| Google Calendar                | Event CRUD, free/busy             | Map error to CalendarError |
+| Gemini 2.5 Flash (primary LLM) | Event extraction from text        | Attempt fallback LLM       |
+| GLM-4.7 via Zai (fallback LLM) | Event extraction when Gemini down | Save to failed events      |
+| Firestore                      | Previews, processed actions       | Return INTERNAL_ERROR      |
+| app-settings-service           | LLM pricing context at startup    | Crash on startup           |
 
 ---
 
-**Last updated:** 2026-02-08 (v2.3.0 - INT-311 failed event delete/retry, INT-422 Polish date parsing, LLM repair mechanism)
+**Last updated:** 2026-02-19 (v2.4.0 - Gemini 2.5 Flash default LLM, platform Zai fallback, Dash0 OpenTelemetry, fix processAction HTTP body shape)

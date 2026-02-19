@@ -85,7 +85,8 @@ export class GitHubTokenService {
       }
       /* v8 ignore stop @preserve */
 
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      const message =
+        error instanceof Error ? error.message : `Non-Error thrown: ${JSON.stringify(error)}`;
       return {
         ok: false,
         error: {

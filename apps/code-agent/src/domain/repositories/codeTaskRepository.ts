@@ -22,6 +22,7 @@ export interface CreateTaskInput {
   approvalEventId?: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueUrl?: string;
   linearFallback?: boolean;
   webhookSecret?: string;
   /**
@@ -36,7 +37,8 @@ export interface CreateTaskInput {
 
   // Follow-up tracking (INT-465)
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
+  executionPhase?: 'design' | 'execution';
 }
 
 export interface UpdateTaskInput {
@@ -57,6 +59,7 @@ export interface UpdateTaskInput {
   cancelNonce?: string | null;
   cancelNonceExpiresAt?: string | null;
   pendingUserMessages?: string[];
+  implementationTaskId?: string | null;
 }
 
 export interface ListTasksInput {
@@ -153,4 +156,10 @@ export interface CodeTaskRepository {
     repository: string,
     prNumber: number
   ): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * Delete a task by ID, scoped to a user.
+   * Returns NOT_FOUND if the task does not exist or belongs to a different user.
+   */
+  deleteTask(taskId: string, userId: string): Promise<Result<void, RepositoryError>>;
 }

@@ -106,13 +106,14 @@ export function ModelSelector({
             }`}
           >
             <div className="flex items-center justify-between">
+              <span
+                className={`font-medium ${!isRowDisabled ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500'}`}
+              >
+                {provider.displayName}
+                {isProviderDisabled && isConfigured ? ' (already selected)' : ''}
+              </span>
+
               <div className="flex items-center gap-3">
-                <span
-                  className={`font-medium ${!isRowDisabled ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500'}`}
-                >
-                  {provider.displayName}
-                  {isProviderDisabled && isConfigured ? ' (already selected)' : ''}
-                </span>
                 {isActive ? (
                   <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
                     Active
@@ -122,7 +123,7 @@ export function ModelSelector({
                   <div className="flex items-center gap-1 group relative">
                     <AlertTriangle className="h-4 w-4 text-red-500" />
                     <span className="text-xs text-red-600 dark:text-red-400">Action required</span>
-                    <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 w-64 p-2 bg-white border border-red-200 rounded shadow-lg dark:bg-slate-800 dark:border-red-800">
+                    <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-10 w-64 p-2 bg-white border border-red-200 rounded shadow-lg dark:bg-slate-800 dark:border-red-800">
                       <p className="text-xs text-red-700 dark:text-red-400 mb-2">{testFailedError ?? ''}</p>
                       <Link
                         to="/settings/api-keys"
@@ -140,34 +141,34 @@ export function ModelSelector({
                     Configure API key →
                   </Link>
                 ) : null}
-              </div>
 
-              <div className="relative w-40">
-                <select
-                  value={selectedModel ?? ''}
-                  onChange={(e): void => {
-                    const value = e.target.value;
-                    onChange(provider.id, value === '' ? null : (value as SupportedModel));
-                  }}
-                  disabled={isRowDisabled}
-                  className={`w-full appearance-none rounded-lg border px-4 py-2 pr-10 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    isRowDisabled
-                      ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-700 dark:text-slate-500'
-                      : 'border-slate-200 bg-white text-slate-700 cursor-pointer hover:border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500'
-                  }`}
-                >
-                  <option value="">None</option>
-                  {provider.models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none ${
-                    isRowDisabled ? 'text-slate-300 dark:text-slate-600' : 'text-slate-500 dark:text-slate-400'
-                  }`}
-                />
+                <div className="relative w-40">
+                  <select
+                    value={selectedModel ?? ''}
+                    onChange={(e): void => {
+                      const value = e.target.value;
+                      onChange(provider.id, value === '' ? null : (value as SupportedModel));
+                    }}
+                    disabled={isRowDisabled}
+                    className={`w-full appearance-none rounded-lg border px-4 py-2 pr-10 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      isRowDisabled
+                        ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-700 dark:text-slate-500'
+                        : 'border-slate-200 bg-white text-slate-700 cursor-pointer hover:border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500'
+                    }`}
+                  >
+                    <option value="">None</option>
+                    {provider.models.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none ${
+                      isRowDisabled ? 'text-slate-300 dark:text-slate-600' : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  />
+                </div>
               </div>
             </div>
           </div>

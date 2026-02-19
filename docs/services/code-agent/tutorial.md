@@ -127,7 +127,7 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-The task progresses through statuses: `dispatched` -> `running` -> `completed` (or `failed`).
+The task progresses through statuses: `dispatched` -> `running` -> `designed` or `implemented` (or `failed`). Tasks never reach a generic `completed` status — they finish as `designed` (Phase 1) or `implemented` (Phase 2).
 
 ### Step 3: List your tasks
 
@@ -171,6 +171,40 @@ curl -X POST http://localhost:8128/code/tasks/<completedTaskId>/feedback \
   -d '{
     "feedback": "The implementation looks good but please add input validation for the limit query parameter."
   }'
+```
+
+### Send a message to a running or ended task
+
+Send mid-session guidance to a running task (queued for next turn) or resume an ended task with new instructions:
+
+```bash
+curl -X POST http://localhost:8128/code/tasks/<taskId>/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{
+    "message": "Also validate that the limit parameter is between 1 and 100."
+  }'
+```
+
+Expected response when task is running (message queued):
+
+```json
+{ "success": true, "data": { "action": "queued" } }
+```
+
+Expected response when task has ended (task resumed):
+
+```json
+{ "success": true, "data": { "action": "resumed" } }
+```
+
+### Query GitHub PR summaries
+
+View the list of PRs with recent activity (30-day window):
+
+```bash
+curl "http://localhost:8128/code/github-pr-summaries" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
 ### Query GitHub PR events
@@ -270,3 +304,21 @@ curl -X POST http://localhost:8128/internal/code/detect-zombies \
 ```
 
 **Solution verification:** The response includes `detected` (count of stale tasks) and `interrupted` (count successfully marked as interrupted).
+
+### Exercise 4: Explore PR event deduplication
+
+Fetch events for a specific PR and observe the deduplication in action:
+
+```bash
+curl "http://localhost:8128/code/github-pr-events?repository=intexuraos/intexuraos&pullRequestNumber=42" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+Look at the response:
+
+- Each comment appears **once** even if it was edited (body reflects the latest version).
+- The PR description (`body`) appears only on the **most recent** `pull_request` event.
+- `synchronize` events (new commits pushed) include a `eventUrl` compare link: `https://github.com/org/repo/compare/before...after`.
+- Other events include a direct link to the comment or review on GitHub.
+
+**Solution verification:** If the same PR received 3 commits (3 `synchronize` events) and 1 edited comment, you should see 3 synchronize events (each with a unique compare URL) and 1 comment entry (not 2).

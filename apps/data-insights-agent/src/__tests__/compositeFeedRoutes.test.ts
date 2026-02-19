@@ -8,7 +8,6 @@ import {
   FakeFeedNameGenerationService,
   FakeMobileNotificationsClient,
   FakeVisualizationRepository,
-  FakeVisualizationGenerationService,
   FakeSnapshotRepository,
   FakeDataAnalysisService,
   FakeChartDefinitionService,
@@ -38,7 +37,6 @@ describe('compositeFeedRoutes', () => {
   let fakeMobileNotificationsClient: FakeMobileNotificationsClient;
   let fakeSnapshotRepo: FakeSnapshotRepository;
   let fakeVisualizationRepo: FakeVisualizationRepository;
-  let fakeVisualizationGenerationService: FakeVisualizationGenerationService;
   let fakeDataAnalysisService: FakeDataAnalysisService;
   let fakeChartDefinitionService: FakeChartDefinitionService;
   let fakeDataTransformService: FakeDataTransformService;
@@ -51,7 +49,6 @@ describe('compositeFeedRoutes', () => {
     fakeMobileNotificationsClient = new FakeMobileNotificationsClient();
     fakeSnapshotRepo = new FakeSnapshotRepository();
     fakeVisualizationRepo = new FakeVisualizationRepository();
-    fakeVisualizationGenerationService = new FakeVisualizationGenerationService();
     fakeDataAnalysisService = new FakeDataAnalysisService();
     fakeChartDefinitionService = new FakeChartDefinitionService();
     fakeDataTransformService = new FakeDataTransformService();
@@ -63,7 +60,6 @@ describe('compositeFeedRoutes', () => {
       mobileNotificationsClient: fakeMobileNotificationsClient,
       snapshotRepository: fakeSnapshotRepo,
       visualizationRepository: fakeVisualizationRepo,
-      visualizationGenerationService: fakeVisualizationGenerationService,
       dataAnalysisService: fakeDataAnalysisService,
       chartDefinitionService: fakeChartDefinitionService,
       dataTransformService: fakeDataTransformService,
@@ -687,6 +683,43 @@ describe('compositeFeedRoutes', () => {
       });
 
       expect(response.statusCode).toBe(500);
+    });
+
+    it('deletes associated visualizations when feed is deleted', async () => {
+      const app = await buildServer();
+
+      const createResult = await fakeCompositeFeedRepo.create('user-123', 'Feed with Viz', {
+        purpose: 'Purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = createResult.ok ? createResult.value : null;
+      const feedId = feed?.id ?? '';
+
+      fakeVisualizationRepo.addVisualization({
+        id: 'viz-cascade-1',
+        userId: 'user-123',
+        feedId,
+        feedName: 'Feed with Viz',
+        insightId: 'insight-1',
+        insightTitle: 'Test Insight',
+        trackableMetric: 'metric',
+        chartConfig: {},
+        transformInstructions: 'none',
+        chartData: null,
+        status: 'pending',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/composite-feeds/${feedId}`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeVisualizationRepo.getAll()).toHaveLength(0);
     });
 
     it('succeeds when snapshot delete fails (non-fatal)', async () => {

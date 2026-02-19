@@ -24,17 +24,19 @@ App-settings-service provides:
 
 - All 5 providers (Google, OpenAI, Anthropic, Perplexity, Zai)
 - Per-model pricing
-- Input/output token costs
-- Grounding costs (Google Gemini feature: adds fixed per-request cost when using Google Search or dynamic retrieval to enhance factual accuracy)
+- Input/output token costs (per million tokens)
+- Optional costs: grounding, web search, image generation, caching multipliers
 - Internal endpoint for service startup
+- Guaranteed fresh: service refuses to start if any model lacks pricing
 
 **Usage Costs (`/settings/usage-costs`):**
 
-- Daily aggregation
 - Monthly breakdown
 - By-model breakdown
 - By-call-type breakdown
 - Configurable time range (1-365 days, default 90)
+- Total token consumption (input + output)
+- Percentage contribution per segment
 
 ## Use Cases
 
@@ -60,6 +62,8 @@ Users view their spending over time, broken down by model and month.
 
 **Internal/Public separation** - Services need auth, users get their own data
 
+**Pricing integrity** - Startup validation ensures no service runs with missing model pricing
+
 ## Limitations
 
 **Read-only** - No pricing management (admin-configured)
@@ -70,8 +74,12 @@ Users view their spending over time, broken down by model and month.
 
 **No budgets** - No spending limits or alerts
 
+**No daily breakdown** - Usage aggregates by month, not day
+
 ## Recent Changes
 
+- **Dash0 OpenTelemetry integration** - Distributed tracing added for all requests
+- **Dev-mode log formatting** - Improved structured logging for local PM2 output
 - **Response contract standardization** - Internal endpoints now use `reply.ok(data)` / `reply.fail(code, message)` for consistent `{ success, data }` or `{ success, error: { code, message } }` responses
 - **Sentry-enabled logging** - `FirestoreUsageStatsRepository` migrated from direct `pino()` to `createAppLogger()` for automatic Sentry error reporting
 - **100% branch coverage** - Added v8 ignore exemptions for TypeScript-only safety branches

@@ -50,6 +50,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 
 // Helper function to generate orchestrator HMAC signature for heartbeat endpoint
 function generateOrchestratorSignature(payload: object, secret: string): { timestamp: string; signature: string } {
@@ -204,7 +205,12 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
       }),
+      gitHubPRSummaryRepo: {} as never,
       prTaskLockRepo: createFirestorePRTaskLockRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
@@ -228,7 +234,9 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       workerSettingsRepo: WorkerSettingsRepository;
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     // Set up worker settings for the test user
@@ -496,7 +504,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       });
       expect(task1.ok).toBe(true);
       if (task1.ok) {
-        await repo.update(task1.value.id, { status: 'completed' });
+        await repo.update(task1.value.id, { status: 'implemented' });
       }
 
       await repo.create({
@@ -513,7 +521,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?status=completed',
+        url: '/code/tasks?status=implemented',
         headers: {
           authorization: 'Bearer test-token',
         },
@@ -523,7 +531,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.tasks.length).toBe(1);
-      expect(body.data.tasks[0].status).toBe('completed');
+      expect(body.data.tasks[0].status).toBe('implemented');
     });
 
     it('paginates results with limit', async () => {
@@ -726,7 +734,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       if (!created.ok) return;
 
       // Update to completed status
-      const updated = await repo.update(created.value.id, { status: 'completed' });
+      const updated = await repo.update(created.value.id, { status: 'implemented' });
       expect(updated.ok).toBe(true);
 
       const response = await server.inject({
@@ -811,7 +819,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'completed',
+          status: 'designed',
           result: {
             branch: 'fix-branch',
             commits: 3,
@@ -823,7 +831,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data.task.status).toBe('completed');
+      expect(body.data.task.status).toBe('designed');
     });
 
     it('returns 404 when task not found', async () => {
@@ -834,7 +842,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'completed',
+          status: 'designed',
         },
       });
 
@@ -848,7 +856,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'PATCH',
         url: '/internal/code-tasks/task-123',
         payload: {
-          status: 'completed',
+          status: 'designed',
         },
       });
 
@@ -876,7 +884,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'completed',
+          status: 'designed',
         },
       });
 
@@ -914,7 +922,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         url: `/internal/code-tasks/${task.id}`,
         headers: { 'x-internal-auth': 'test-internal-token' },
         payload: {
-          status: 'completed',
+          status: 'designed',
           result: { branch: 'test', commits: 1, summary: 'Done' },
         },
       });
@@ -955,7 +963,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         url: `/internal/code-tasks/${task.id}`,
         headers: { 'x-internal-auth': 'test-internal-token' },
         payload: {
-          status: 'completed',
+          status: 'designed',
           result: { branch: 'test', commits: 1, summary: 'Done', prUrl: 'https://github.com/test/pr/1' },
         },
       });
@@ -1440,7 +1448,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 
-      await repo.update(created.value.id, { status: 'completed' });
+      await repo.update(created.value.id, { status: 'implemented' });
 
       const response = await server.inject({
         method: 'POST',
@@ -1871,7 +1879,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       if (!created.ok) return;
 
       await repo.update(created.value.id, {
-        status: 'completed',
+        status: 'implemented',
         cancelNonce: 'abcd',
         cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       });
@@ -2744,6 +2752,112 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('NOT_FOUND');
     });
 
+  });
+
+  describe('POST /code/tasks/:taskId/implement', () => {
+    it('returns 401 without JWT token', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/implement',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when task not found', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/non-existent-task/implement',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 200 with correct response shape on successful Phase 2 dispatch', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a completed Phase 1 design task owned by the test JWT user
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Design feature X',
+        sanitizedPrompt: 'Design feature X (sanitized)',
+        systemPromptHash: 'abc123',
+        workerType: 'auto',
+        workerLocation: 'home-dev',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-phase1',
+        executionPhase: 'design',
+        linearIssueId: 'INT-100',
+        linearIssueTitle: 'Feature X',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Mark task as designed (Phase 1 complete)
+      await repo.update(created.value.id, { status: 'designed' });
+
+      // Override linearAgentClient and workerSettingsRepo for this test
+      const mockLinearClient: LinearAgentClient = {
+        validateIssue: async () =>
+          ok({
+            id: 'INT-100',
+            identifier: 'INT-100',
+            title: 'Feature X',
+            url: 'https://linear.app/intexuraos/issue/INT-100',
+            labels: ['code-task'],
+            childCount: 0,
+          }),
+        updateIssueState: async () => ok({}),
+        addComment: async () => ok({}),
+      } as unknown as LinearAgentClient;
+
+      const mockWorkerSettings: WorkerSettingsRepository = {
+        getSettings: async () =>
+          ok({
+            workers: [
+              {
+                name: 'home-dev',
+                url: 'https://worker.dev',
+                enabled: true,
+                cfAccessClientId: '',
+                cfAccessClientSecret: '',
+                dispatchSigningSecret: '',
+              },
+            ],
+          }),
+      } as unknown as WorkerSettingsRepository;
+
+      setServices({
+        ...getServices(),
+        linearAgentClient: mockLinearClient,
+        workerSettingsRepo: mockWorkerSettings,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/code/tasks/${created.value.id}/implement`,
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(response.statusCode).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.codeTaskId).toMatch(/^task_/);
+      expect(body.data.implementationOf).toBe(created.value.id);
+      expect(body.data.resourceUrl).toContain('/code/tasks/');
+      expect(body.data.workerLocation).toBe('mac');
+    });
+  });
+
+  describe('POST /code/tasks/:taskId/messages (existing)', () => {
     it('successfully queues message for a running task', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -2801,6 +2915,48 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.data.action).toBe('queued');
+    });
+  });
+
+  describe('DELETE /code/tasks/:taskId', () => {
+    it('deletes a task owned by the authenticated user', async () => {
+      const { codeTaskRepo } = getServices();
+      const created = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-delete-1',
+      });
+      if (!created.ok) throw new Error('Setup failed');
+
+      const response = await server.inject({
+        method: 'DELETE',
+        url: `/code/tasks/${created.value.id}`,
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.deleted).toBe(true);
+    });
+
+    it('returns 404 when task does not exist', async () => {
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/code/tasks/non-existent-task-id',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
   });
 });

@@ -5,13 +5,14 @@ describe('titlePrompt', () => {
   it('has correct metadata', () => {
     expect(titlePrompt.name).toBe('title-generation');
     expect(titlePrompt.description).toContain('concise titles');
+    expect(titlePrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('builds prompt with default deps', () => {
     const result = titlePrompt.build({ content: 'Test content' });
     expect(result).toContain('5-8 words');
     expect(result).toContain('Test content');
-    expect(result).not.toContain('GOOD EXAMPLES');
+    expect(result).toContain('GOOD EXAMPLES');
   });
 
   it('respects custom word range', () => {
@@ -31,6 +32,12 @@ describe('titlePrompt', () => {
     const result = titlePrompt.build({ content: 'Test' }, { includeExamples: true });
     expect(result).toContain('GOOD EXAMPLES');
     expect(result).toContain('BAD EXAMPLES');
+  });
+
+  it('excludes examples when explicitly disabled', () => {
+    const result = titlePrompt.build({ content: 'Test' }, { includeExamples: false });
+    expect(result).not.toContain('GOOD EXAMPLES');
+    expect(result).not.toContain('BAD EXAMPLES');
   });
 
   it('truncates long content with default limit', () => {

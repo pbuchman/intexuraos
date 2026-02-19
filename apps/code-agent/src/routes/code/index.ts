@@ -5,5 +5,6 @@
  */
 
 import githubPREventsRoute from './github-pre-events.js';
+import githubPRSummariesRoute from './github-pr-summaries.js';
 
-export { githubPREventsRoute };
+export { githubPREventsRoute, githubPRSummariesRoute };

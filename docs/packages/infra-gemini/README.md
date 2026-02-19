@@ -6,7 +6,7 @@ Google Gemini API wrapper implementing the `LLMClient` interface from `@intexura
 
 - **External API:** Google Generative AI via `@google/genai` (v1.0+)
 - **Provider:** `LlmProviders.Google`
-- **Capabilities:** Text generation, web search research (via Google Search grounding), image generation (via Gemini 2.5 Flash)
+- **Capabilities:** Text generation, web search research (via Google Search grounding), image generation (via Gemini 2.5 Flash Image)
 
 ## API Reference
 
@@ -73,6 +73,8 @@ interface GeminiConfig {
   pricing: ModelPricing; // Cost configuration for text operations
   imagePricing?: ModelPricing; // Separate pricing for image generation
   logger: Logger; // Pino logger for structured logging
+  auditSink?: AuditSink; // Optional audit sink override (defaults to Firestore)
+  usageSink?: UsageSink; // Optional usage sink override (defaults to Firestore)
 }
 ```
 
@@ -86,12 +88,12 @@ interface GeminiConfig {
 
 ### Pricing Fields
 
-| Field                     | Type   | Description                           |
-| ------------------------- | ------ | ------------------------------------- |
-| `inputPricePerMillion`    | number | Cost per million input tokens         |
-| `outputPricePerMillion`   | number | Cost per million output tokens        |
-| `groundingCostPerRequest` | number | Flat cost per grounded request        |
-| `imagePricing`            | object | Size-to-cost map for image generation |
+| Field                     | Type   | Description                                          |
+| ------------------------- | ------ | ---------------------------------------------------- |
+| `inputPricePerMillion`    | number | Cost per million input tokens                        |
+| `outputPricePerMillion`   | number | Cost per million output tokens                       |
+| `groundingCostPerRequest` | number | Flat cost per grounded research request              |
+| `imagePricing`            | object | Size-to-cost map for image generation (per size key) |
 
 ## Error Handling
 
@@ -105,13 +107,20 @@ All methods return `Result<T, GeminiError>`. Error mapping:
 | Contains "SAFETY"/"blocked" | `CONTENT_FILTERED` | Safety filter triggered |
 | Other errors                | `API_ERROR`        | General API error       |
 
+## Implementation Notes
+
+- **Grounding:** Research uses `{ googleSearch: {} }` in the tool config. The presence of `groundingMetadata` on the response determines `groundingEnabled`.
+- **Image model:** Hardcoded to `LlmModels.Gemini25FlashImage` regardless of the `model` field in config.
+- **Default image size:** `1024x1024`
+- **Image data:** Returned as a `Buffer` decoded from the base64 `inlineData` field of the first candidate part.
+- **No MAX_TOKENS:** Unlike other clients, Gemini uses the model's default output limit.
+- **Injectable sinks:** Supports `auditSink` and `usageSink` overrides for testing without Firestore.
+
 ## Cross-Cutting Concerns
 
 - **Audit trail:** Every request creates an `AuditContext` via `@intexuraos/llm-audit`
 - **Usage logging:** Automatic fire-and-forget logging via `@intexuraos/llm-pricing` `UsageLogger`
 - **Prompt building:** Research prompts built via `@intexuraos/llm-prompts` `buildResearchPrompt()`
-- **Image model:** Hardcoded to `LlmModels.Gemini25FlashImage` for image generation
-- **Default image size:** `1024x1024`
 
 ## Used By
 
@@ -125,11 +134,22 @@ All methods return `Result<T, GeminiError>`. Error mapping:
 | `commands-agent`      | Command processing           |
 | `llm-factory`         | Dynamic client creation      |
 
+## Dependencies
+
+| Package                    | Role                                                                     |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `@google/genai` ^1.0.0     | Google Generative AI SDK                                                 |
+| `@intexuraos/common-core`  | `Result` types, `getErrorMessage`, `Logger`                              |
+| `@intexuraos/llm-contract` | `LLMClient`, `NormalizedUsage`, `ModelPricing`, `LlmModels`, `ImageSize` |
+| `@intexuraos/llm-prompts`  | `buildResearchPrompt`                                                    |
+| `@intexuraos/llm-audit`    | `createAuditContext`, `AuditSink`                                        |
+| `@intexuraos/llm-pricing`  | `createUsageLogger`, `UsageSink`                                         |
+
 ## Recent Changes
 
 | Commit     | Description                                       | When        |
 | ---------- | ------------------------------------------------- | ----------- |
-| `51b4a325` | Migrate LLM clients to UsageLogger class          | 2 weeks ago |
-| `8aad9098` | Migrate imports and delete llm-common             | 2 weeks ago |
-| `816afa55` | Add ESLint rule to ban optional logger parameters | 3 weeks ago |
-| `6ec4205e` | Make logger mandatory in all LLM configs          | 3 weeks ago |
+| `51b4a325` | Migrate LLM clients to UsageLogger class          | 4 weeks ago |
+| `8aad9098` | Migrate imports and delete llm-common             | 4 weeks ago |
+| `816afa55` | Add ESLint rule to ban optional logger parameters | 5 weeks ago |
+| `6ec4205e` | Make logger mandatory in all LLM configs          | 5 weeks ago |

@@ -56,6 +56,10 @@ For notes and bookmarks:
 
 **Cost transparency** - Image generation tracked per user for billing
 
+**Platform key fallback** - Users without personal API keys automatically fall back to platform-owned keys, enabling image generation for all users
+
+**Distributed tracing** - OpenTelemetry instrumentation via Dash0 for end-to-end request visibility
+
 **Standardized response contract** - All endpoints use `reply.ok(data)` / `reply.fail(code, message)` for consistent error handling
 
 **Sentry error tracking** - Logger integrated with Sentry for automatic error reporting

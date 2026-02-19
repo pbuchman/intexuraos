@@ -118,7 +118,7 @@ describe('submitTaskFeedback use case', () => {
       workerLocation: 'home-mac',
       repository: 'pbuchman/intexuraos',
       baseBranch: 'development',
-      status: 'completed',
+      status: 'implemented',
       dedupKey: 'dedup-123',
       callbackReceived: true,
       createdAt: now,
@@ -345,6 +345,84 @@ describe('submitTaskFeedback use case', () => {
           prompt: expect.stringContaining(feedback),
         })
       );
+    });
+
+    it('should set executionPhase to design when validateIssue returns no code-task label', async () => {
+      // Default beforeEach mock returns labels: ['feature', 'backend'] — no code-task label.
+      // executionPhase should be 'design'.
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, {
+        originalTaskId,
+        userId,
+        feedback,
+      });
+
+      expect(result.ok).toBe(true);
+
+      // executionPhase is 'design' because validateIssue returns labels without 'code-task'
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executionPhase: 'design',
+        })
+      );
+    });
+
+    it('should set executionPhase to execution when validateIssue returns code-task label', async () => {
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+        })
+      );
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, {
+        originalTaskId,
+        userId,
+        feedback,
+      });
+
+      expect(result.ok).toBe(true);
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executionPhase: 'execution',
+        })
+      );
+    });
+
+    it('stores executionPhase in Firestore at create() call time when code-task label is present', async () => {
+      // toHaveBeenCalledWith evaluates object references at assertion time, not at call time.
+      // This test uses mockImplementation to capture the value synchronously at create() time,
+      // proving the value is correct before the Firestore write (not just after).
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+        })
+      );
+
+      const mockTask = createMockTask();
+      let executionPhaseAtCreateTime: unknown;
+      mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
+        executionPhaseAtCreateTime = input['executionPhase'];
+        return ok({ ...mockTask, id: 'feedback-task-123', parentTaskId: originalTaskId });
+      });
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
+
+      expect(result.ok).toBe(true);
+      // executionPhase must be 'execution' at Firestore write time, not just after post-create mutation
+      expect(executionPhaseAtCreateTime).toBe('execution');
     });
 
     it('should include feedback in follow-up prompt', async () => {

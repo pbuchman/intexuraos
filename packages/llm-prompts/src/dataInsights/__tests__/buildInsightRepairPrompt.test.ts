@@ -17,7 +17,7 @@ describe('buildInsightRepairPrompt', () => {
     expect(result).toContain('INVALID RESPONSE:');
     expect(result).toContain(invalidResponse);
     expect(result).toContain('REQUIREMENTS:');
-    expect(result).toContain('maximum 6 sentences allowed');
+    expect(result).toContain('2-3 sentences maximum');
     expect(result).toContain('ChartType must be exactly one of: C1, C2, C3, C4, C5, C6');
   });
 
@@ -34,7 +34,9 @@ describe('buildInsightRepairPrompt', () => {
     const result = buildInsightRepairPrompt('prompt', 'response', 'error');
 
     expect(result).toContain('EXAMPLES OF INVALID OUTPUT:');
-    expect(result).toContain('Description with 7+ sentences');
+    expect(result).toContain(
+      'Description with 7+ sentences (parser tolerates up to 6 but target is 2-3)'
+    );
     expect(result).toContain('ChartType=Bar');
   });
 

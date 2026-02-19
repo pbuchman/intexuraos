@@ -55,7 +55,7 @@ export function parseChartDefinition(response: string): ParsedChartDefinition {
     throw new Error(`Invalid JSON in chart config: ${String(error)}`);
   }
 
-  if (typeof parsed !== 'object') {
+  if (parsed === null || typeof parsed !== 'object') {
     throw new Error('Chart config must be an object');
   }
 

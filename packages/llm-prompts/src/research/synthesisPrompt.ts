@@ -32,7 +32,9 @@ function buildSynthesisGoalsSection(ctx: SynthesisContext): string {
   return ctx.synthesis_goals
     .map(
       (goal) =>
-        `- **${goal.replace(/_/g, ' ').toUpperCase()}**: ${goalDescriptions[goal] as string}`
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback @preserve */
+        `- **${goal.replace(/_/g, ' ').toUpperCase()}**: ${goalDescriptions[goal] ?? 'Apply this synthesis strategy'}`
+      /* v8 ignore stop @preserve */
     )
     .join('\n');
 }
@@ -119,6 +121,8 @@ Rules:
 - Multiple IDs in one category: separate with commas (e.g., Primary=S1,S2)
 - Empty category: leave value empty (e.g., Constraints=)
 - DO NOT output a 'Source Utilization Breakdown' section (system appends it automatically)
+
+Example: Attribution: Primary=S1,S3; Secondary=U1; Constraints=S2; UNK=false
 `;
 
 function buildContextualSynthesisPrompt(
@@ -195,6 +199,8 @@ ${ctx.output_format.wants_table ? '- Include comparison tables where appropriate
 
   return `Below are reports from multiple AI models${introSuffix}. Synthesize them into a comprehensive, well-organized report.
 
+This synthesis will be presented directly to the user as the final research output.
+
 ## Original Prompt
 
 ${originalPrompt}
@@ -210,14 +216,14 @@ ${ATTRIBUTION_RULES}
 - ${ctx.source_preference.prefer_official_over_aggregators ? 'Prefer official sources over aggregators when information conflicts' : 'Weight all sources equally'}
 - ${ctx.source_preference.prefer_recent_when_time_sensitive ? 'Prefer more recent sources for time-sensitive information' : 'Consider all timeframes equally'}
 
-${additionalSourcesSection}## LLM Reports
-
-${formattedReports}
-
-## Synthesis Goals
+${additionalSourcesSection}## Synthesis Goals
 
 ${buildSynthesisGoalsSection(ctx)}
 ${buildConflictsSection(ctx)}${buildMissingSectionsSection(ctx)}${safetySection}${redFlagsSection}${outputFormatSection}
+
+## LLM Reports
+
+${formattedReports}
 
 ## Your Task
 
@@ -339,6 +345,10 @@ ${sourcesInfo}
 
 ${sourceIdMap}
 ${ATTRIBUTION_RULES}
+## Synthesis Goals
+
+Merge the reports into a single coherent output. Deduplicate overlapping information. Highlight any conflicts between sources.
+
 ${additionalSourcesSection}## LLM Reports
 
 ${formattedReports}
@@ -374,3 +384,4 @@ Adjust your synthesis style based on the topic:
 
 Write the ENTIRE synthesis in the SAME LANGUAGE as the Original Prompt (Polish → Polish, Spanish → Spanish, etc.)`;
 }
+// Prompt version: 1.1.0

@@ -120,17 +120,24 @@ All fields are optional. When omitted, code-agent uses its own defaults.
 
 ## Infrastructure
 
-| Resource             | Type | Value                          |
-| -------------------- | ---- | ------------------------------ |
-| Cloud Function       | Gen2 | `intexuraos-log-cleanup-{env}` |
-| Entry point          | -    | `cleanupLogs`                  |
-| Runtime              | -    | Node.js 22                     |
-| Memory               | -    | 512 MB                         |
-| Timeout              | -    | 540 seconds (9 minutes)        |
-| Pub/Sub topic        | -    | `intexuraos-log-cleanup-{env}` |
-| Scheduler job        | -    | `intexuraos-log-cleanup-{env}` |
-| Service account      | -    | `intexuraos-functions-{env}`   |
-| Source bucket object | -    | `log-cleanup/function.zip`     |
+| Resource             | Type | Value                           |
+| -------------------- | ---- | ------------------------------- |
+| Cloud Function       | Gen2 | `intexuraos-log-cleanup-{env}`  |
+| Entry point          | -    | `cleanupLogs`                   |
+| Runtime              | -    | Node.js 22                      |
+| Memory               | -    | 512 MB                          |
+| Timeout              | -    | 540 seconds (9 minutes)         |
+| Pub/Sub topic        | -    | `intexuraos-log-cleanup-{env}`  |
+| Scheduler job        | -    | `intexuraos-log-cleanup-{env}`  |
+| Service account      | -    | `intexuraos-functions-{env}`    |
+| Build tool           | -    | esbuild via `build-service.mjs` |
+| Source bucket object | -    | `log-cleanup/function.zip`      |
+
+## Build & Local Development
+
+**Build:** `pnpm build` runs `build-service.mjs log-cleanup`, which bundles source files with esbuild into `dist/`. The esbuild bundling step was introduced to fix Cloud Functions deployment — prior zip packaging caused runtime module resolution failures.
+
+**Local dev:** `pnpm dev` uses `node --watch --experimental-strip-types src/index.ts` — Node.js's built-in TypeScript stripping (no `tsx` required). Reload is automatic on file change.
 
 ## Gotchas
 
@@ -139,6 +146,8 @@ All fields are optional. When omitted, code-agent uses its own defaults.
 **Timeout alignment** - The Cloud Function timeout is 540 seconds. The code-agent endpoint must complete within that window. Large backlogs of logs can exceed this if `tasksPerRun` is not constrained.
 
 **No dead-letter queue** - Failed Pub/Sub messages are retried but eventually dropped. There is no dead-letter topic configured for persistent failures.
+
+**Unused `firebase-admin` dependency** - `package.json` lists `firebase-admin` as a runtime dep, but no source file imports it. The worker uses native `fetch` for HTTP and `pino` for logging only. This dep is a leftover from scaffolding and adds unnecessary bundle weight.
 
 ## File Structure
 

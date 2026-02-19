@@ -82,15 +82,15 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                  | Date       |
-| ---------- | ------------------------------------------------------------ | ---------- |
-| `c3198407` | Fix all 132 response contract violations across codebase     | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps       | 2026-01-30 |
-| `1faa1d3b` | INT-301 Consolidate user service client architecture         | 2026-01-26 |
-| `73e8375f` | INT-408 Enforce mandatory env var registration               | 2026-01-28 |
-| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement (Phase 3)    | 2026-01-31 |
-| `88cec45f` | Fix deployment: Remove internal-clients subpath exports      | 2025-01-25 |
-| `b1c7a4bb` | INT-269 Create internal-clients package and migrate all apps | 2025-01-25 |
+| Commit     | Description                                                 | Date       |
+| ---------- | ----------------------------------------------------------- | ---------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability             | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration across all services     | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention        | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback | 2026-02-15 |
+| `0f69a74b` | Add default model selector with platform Zai fallback       | 2026-02-09 |
+| `c3198407` | Fix all 132 response contract violations across codebase    | 2026-01-30 |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps      | 2026-01-30 |
 
 ## API Endpoints
 
@@ -186,18 +186,21 @@ sequenceDiagram
 
 ## Configuration
 
-| Variable                              | Required | Description                         |
-| ------------------------------------- | -------- | ----------------------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User-service base URL               |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth     |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID             |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS endpoint for JWT verification  |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer                          |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience                        |
-| `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket for image storage        |
-| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects     |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service (pricing data) |
-| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking               |
+| Variable                              | Required | Description                                   |
+| ------------------------------------- | -------- | --------------------------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User-service base URL                         |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth               |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                       |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS endpoint for JWT verification            |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer                                    |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience                                  |
+| `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket for image storage                  |
+| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects               |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service (pricing data)           |
+| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking                         |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key for user fallback        |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback     |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for OpenTelemetry tracing |
 
 ## Gotchas
 
@@ -270,6 +273,31 @@ apps/image-service/src/
 ```
 
 ## Migration Notes
+
+### Dev-Mode Log Formatting (2026-02-16)
+
+- `server.ts` now uses `createLogStream()` from `@intexuraos/infra-sentry` instead of raw pino JSON
+- Colorized output format in development: `service-name | HH:mm:ss | LEVEL | message | {extras}`
+- No behavior change in production or test environments
+
+### Dash0 OpenTelemetry Integration (2026-02-16)
+
+- Added distributed tracing, metrics, and log export via OTLP/HTTP to Dash0
+- New `packages/infra-otel` package loaded via Node `--import` preload in Dockerfile
+- No-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset — transparent to services
+
+### API Key Naming Standardization and Gemini Fallback (2026-02-15)
+
+- `INTEXURAOS_ZAI_APP_API_KEY` consolidated from `INTEXURAOS_GUEST_ZAI_API_KEY` + `INTEXURAOS_ZAI_API_KEY`
+- `INTEXURAOS_GEMINI_APP_API_KEY` added as primary platform fallback before ZAI
+- `platformZaiApiKey` and `platformGeminiApiKey` both passed to `createUserServiceClient()`
+- Gemini 2.5 Flash is now the primary fallback model (ZAI GLM was too slow at 29s for title generation)
+
+### Platform Key Fallback (2026-02-09)
+
+- Users without their own provider API key now fall back to platform-owned Zai key
+- `UserServiceClient.getApiKeys()` returns platform keys if user has none configured
+- Image generation proceeds for all users, not just those with personal API keys
 
 ### Response Contract Migration (2026-02-08)
 

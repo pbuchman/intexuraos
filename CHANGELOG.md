@@ -1,5 +1,45 @@
 # Changelog
 
+## 3.0.0
+
+- Added Code Agent service for autonomous code task execution — receives tasks from WhatsApp, web UI, and GitHub webhooks, dispatches to workers with HMAC-signed requests via Cloudflare Access (INT-246)
+- Added Orchestrator worker for Docker-isolated Claude Code execution — spawns containers with git worktree isolation, Anthropic OAuth credential management, state persistence across restarts, and GitHub App token rotation (INT-272)
+- Added two-phase execution model: Phase 1 design agent enriches Linear issues and creates subissues, Phase 2 strict execution agent implements code, runs CI, creates PR, and updates Linear (INT-486)
+- Added LLM-based completion verifier (Gemini) that checks each worker attempt against a completion contract with automatic resume via `--continue` for incomplete tasks
+- Added Intex Chat with real-time conversational AI — full `chat-agent` service with WebSocket support, conversation history, and guest sessions (INT-431)
+- Added dark mode across web application with `ThemeContext` provider and Tailwind `dark:` classes
+- Added task retry mechanism with context preservation, `retriedFrom` linking, and 1-minute cool-off period (INT-524)
+- Added task messaging for running and completed tasks — messages queue during execution and trigger `--continue` resume on terminal tasks
+- Added Dash0 OpenTelemetry integration with `infra-otel` package and pino transport for distributed tracing
+- Added guest chat sessions with rate limiting for unauthenticated access
+- Added markdown editor with `@uiw/react-md-editor` for rich code task authoring (INT-451)
+- Added default model selector supporting 5 AI providers — Opus, Sonnet, Gemini, GPT, GLM
+- Added Linear issue selection with LLM-generated titles in combobox modal (INT-452)
+- Added Linear webhook sync with HMAC-validated real-time Firestore persistence replacing polling (INT-444)
+- Added Linear subissue display in `LinearIssuesPage` with `SubIssuesList` component
+- Added worker configuration UI for managing worker URLs, Cloudflare Access credentials, and signing secrets
+- Added prompt versioning with semver — 26+ prompts with `version` field and CI-enforced version bumps on content changes
+- Added interactive WhatsApp approval buttons with cryptographic nonce validation and 15-minute TTL
+- Added GitHub PR event tracking with Firestore persistence and `PREventsPage` in web UI
+- Added 100% branch coverage enforcement across all services with `v8 ignore` category validation (INT-427)
+- Changed orchestrator communication from Firestore-based to HTTP-only with HMAC-signed webhooks (INT-472)
+- Changed worker authentication from static API keys to Anthropic OAuth with Max subscription and automatic token refresh
+- Changed secret naming from `DISPATCH_SIGNING_SECRET` to `INTEXURAOS_ORCHESTRATOR_SECRET`
+- Changed API key secret names to `*_APP_API_KEY` convention (`ZAI_APP_API_KEY`, `OPENAI_APP_API_KEY`, `GEMINI_APP_API_KEY`)
+- Changed worker execution from interactive TTY to `--print --output-format stream-json` mode
+- Changed local development to PM2 with DevBar and hot-reload via `watch: true`
+- Changed unified Linear issue templates with structured sections for test requirements, scope, and acceptance criteria (INT-486)
+- Improved LLM prompt quality across 27 prompts with audit, semver versioning, and domain-specific refinements
+- Improved log transcript visibility with `[prompt]`, `[instructions]`, and `[queued]` tags for task messaging
+- Fixed orchestrator silently dropping logs by removing `MAX_CHUNKS_PER_TASK` limit
+- Fixed ANSI escape codes leaking into container log output
+- Fixed orchestrator using host worktree path instead of `/repo` in system prompt
+- Fixed log mixing on task resume by clearing old log lines before appending new ones
+- Fixed GitHub token mint errors being silently swallowed instead of propagated
+- Fixed queued messages tracked in orchestrator memory instead of Firestore, causing loss on restart
+- Fixed worker health status showing false positives for offline workers
+- Fixed secrets directory inode corruption during worker container preservation
+
 ## 2.0.0
 
 - Added WhatsApp text reply support for approval requests with LLM-based intent classification (INT-161, INT-203)

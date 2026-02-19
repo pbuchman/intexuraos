@@ -1,18 +1,18 @@
-import { Copy, Check, Eye } from 'lucide-react';
+import { Copy, Check, Save } from 'lucide-react';
 import { Button, Card } from '@/components/ui/index.js';
 import type { ChartDefinition } from '@/services/dataInsightsApi.js';
 import { useState } from 'react';
 
 interface ChartDefinitionDisplayProps {
   chartDefinition: ChartDefinition;
-  onPreview: () => void;
-  isPreviewing: boolean;
+  onSave: () => void;
+  isSaving: boolean;
 }
 
 export function ChartDefinitionDisplay({
   chartDefinition,
-  onPreview,
-  isPreviewing,
+  onSave,
+  isSaving,
 }: ChartDefinitionDisplayProps): React.JSX.Element {
   const [copied, setCopied] = useState(false);
 
@@ -44,9 +44,9 @@ export function ChartDefinitionDisplay({
               </>
             )}
           </Button>
-          <Button variant="primary" size="sm" onClick={onPreview} isLoading={isPreviewing}>
-            <Eye className="mr-1.5 h-3.5 w-3.5" />
-            Preview Visualization
+          <Button variant="primary" size="sm" onClick={onSave} isLoading={isSaving}>
+            <Save className="mr-1.5 h-3.5 w-3.5" />
+            Save Visualization
           </Button>
         </div>
       </div>

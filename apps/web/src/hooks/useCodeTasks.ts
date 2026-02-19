@@ -4,6 +4,7 @@ import { useAuth } from '@/context';
 import {
   listCodeTasks as listCodeTasksApi,
   submitCodeTask as submitCodeTaskApi,
+  deleteCodeTask as deleteCodeTaskApi,
   getWorkersStatus as getWorkersStatusApi,
   refreshWorkersStatus as refreshWorkersStatusApi,
 } from '@/services/codeAgentApi';
@@ -22,6 +23,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
   submitTask: (request: SubmitCodeTaskRequest) => Promise<string>;
+  deleteTask: (id: string) => Promise<void>;
 } {
   const { getAccessToken } = useAuth();
   const [tasks, setTasks] = useState<CodeTask[]>([]);
@@ -127,6 +129,15 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
     [getAccessToken, refresh]
   );
 
+  const deleteTask = useCallback(
+    async (id: string): Promise<void> => {
+      const token = await getAccessToken();
+      await deleteCodeTaskApi(token, id);
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+    },
+    [getAccessToken]
+  );
+
   return {
     tasks,
     loading,
@@ -137,7 +148,28 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
     loadMore,
     refresh,
     submitTask,
+    deleteTask,
   };
+}
+
+/**
+ * Find a recently created task matching a prompt.
+ * Used for timeout recovery: checks if a task was created server-side
+ * despite the client timing out.
+ */
+const RECENT_TASK_WINDOW_MS = 120000; // 2 minutes
+
+export function findRecentTask(tasks: CodeTask[], prompt: string): CodeTask | null {
+  const trimmedPrompt = prompt.trim();
+  const now = Date.now();
+
+  for (const task of tasks) {
+    const taskAge = now - new Date(task.createdAt).getTime();
+    if (taskAge <= RECENT_TASK_WINDOW_MS && task.prompt.trim() === trimmedPrompt) {
+      return task;
+    }
+  }
+  return null;
 }
 
 /**

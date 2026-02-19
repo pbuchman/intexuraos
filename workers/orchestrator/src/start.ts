@@ -34,6 +34,7 @@ import type { OrchestratorConfig } from './types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from './services/task-dispatcher.js';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
+import { TurnMetricsCollector } from './services/turn-metrics-collector.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
@@ -60,6 +61,17 @@ function getRequiredEnv(name: string): string {
 /* v8 ignore start -- ts-type: nullish coalescing creates type narrowing branch @preserve */
 function getOptionalEnv(name: string, defaultValue: string): string {
   return process.env[name] ?? defaultValue;
+}
+/* v8 ignore stop @preserve */
+
+/* v8 ignore start -- module-init: reads host git config at startup, requires git CLI @preserve */
+function readHostGitConfig(key: string): string | undefined {
+  try {
+    const value = execSync(`git config ${key}`, { encoding: 'utf-8', timeout: 5000 }).trim();
+    return value !== '' ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 /* v8 ignore stop @preserve */
 
@@ -381,6 +393,11 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  // Resolve git identity for worker containers (env var → host git config → undefined)
+  const gitUserName = process.env['INTEXURAOS_GIT_USER_NAME'] ?? readHostGitConfig('user.name');
+  const gitUserEmail = process.env['INTEXURAOS_GIT_USER_EMAIL'] ?? readHostGitConfig('user.email');
+  logger.info({ gitUserName, gitUserEmail }, 'Git identity for worker containers');
+
   // Create Docker isolation provider
   const secretsBasePath = join(orchestratorDir, 'secrets');
   const workerImage = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE);
@@ -400,6 +417,8 @@ async function bootstrap(): Promise<void> {
       keepContainersAlive,
       imageName: workerImage,
       sharedCredsPath,
+      ...(gitUserName !== undefined ? { gitUserName } : {}),
+      ...(gitUserEmail !== undefined ? { gitUserEmail } : {}),
     },
     logger
   );
@@ -507,6 +526,16 @@ async function bootstrap(): Promise<void> {
     'Completion verification configuration'
   );
 
+  const turnMetricsCollector = new TurnMetricsCollector(
+    {
+      codeAgentUrl: config.codeAgentUrl,
+      orchestratorSecret: config.orchestratorSecret,
+      internalAuthToken,
+      secretsBasePath,
+    },
+    logger
+  );
+
   const dispatcher = new TaskDispatcher(
     config,
     statePersistence,
@@ -516,7 +545,8 @@ async function bootstrap(): Promise<void> {
     tokenService,
     logger,
     isolationConfig,
-    completionControl
+    completionControl,
+    turnMetricsCollector
   );
 
   // Credential monitoring loop — trigger Docker-based refresh when near expiry

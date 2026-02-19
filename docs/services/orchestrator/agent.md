@@ -49,6 +49,16 @@ interface OrchestratorTools {
   // Auth: None
   // Errors: 404 (not found), 409 (already completed)
 
+  // Send a follow-up message to a task
+  // - Running task: message is queued and delivered when the current attempt finishes
+  // - Completed/failed/interrupted task: task is resumed with a new worker session
+  sendMessage(params: {
+    taskId: string;
+    message: string; // max 10000 chars
+  }): Promise<SendMessageResult>;
+  // Auth: HMAC-signed
+  // Errors: 400 (validation), 404 (not found), 409 (invalid status, e.g. cancelled)
+
   // Check service health and capacity
   getHealth(): Promise<{
     status:
@@ -62,7 +72,12 @@ interface OrchestratorTools {
     running: number;
     available: number;
     githubTokenExpiresAt: string | null;
+    anthropicOAuth: OAuthState;
   }>;
+  // Auth: None
+
+  // Get worker image diagnostics
+  getWorkerImageInfo(): Promise<ImageInfo | { error: string }>;
   // Auth: None
 
   // Force refresh the GitHub App installation token
@@ -108,16 +123,43 @@ interface Task {
   baseBranch: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueLabels: string[];
+  hasChildren?: boolean;
   slug?: string;
   webhookUrl: string;
   webhookSecret: string;
   actionId?: string;
+  retriedFrom?: string; // Original task ID for retry chains
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
   containerId: string;
   startedAt: string; // ISO 8601
   completedAt?: string; // ISO 8601
-  retriedFrom?: string; // Original task ID for retries
+  attemptCount?: number; // Current attempt (starts at 1)
+  maxAttempts?: number; // Maximum before terminal failure
+  lastExitCode?: number; // Exit code of most recent attempt
+  verificationHistory?: TaskVerificationRecord[]; // Completion verifier results per attempt
+}
+
+interface TaskVerificationRecord {
+  attempt: number;
+  passed: boolean;
+  confidence: number;
+  reasons: string[];
+  missingCriteria: string[];
+  resumeInstruction: string;
+  usedLlm: boolean;
+  verifierFailure?: boolean; // true if Gemini was unreachable or returned invalid JSON
+  createdAt: string;
+}
+```
+
+### SendMessageResult
+
+```typescript
+interface SendMessageResult {
+  action: 'queued' | 'resumed';
+  pendingMessages?: string[]; // Set when action is 'queued', lists all queued messages
 }
 ```
 
@@ -165,28 +207,69 @@ interface WebhookPayload {
 }
 ```
 
+### TurnMetrics (sent to code-agent after task completion)
+
+```typescript
+interface TurnMetrics {
+  taskId: string;
+  attempt: number;
+  timestamp: string; // ISO 8601 (completedAt)
+  // Resource (cgroup)
+  cpuTimeSeconds: number;
+  cpuCores: number;
+  peakMemoryMB: number;
+  // Time classification (session JSONL)
+  wallTimeSeconds: number;
+  apiWaitSeconds: number;
+  toolExecSeconds: number;
+  backgroundWaitSeconds: number;
+  overheadSeconds: number;
+  // Tokens (session JSONL)
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  apiCallCount: number;
+  // Derived
+  cpuUtilizationPercent: number;
+  idlePercent: number;
+}
+```
+
+### OAuthState (in HealthResponse)
+
+```typescript
+type OAuthState =
+  | { status: 'active'; expiresInMinutes: number }
+  | { status: 'expired'; message: string }
+  | { status: 'not_configured'; message: string };
+```
+
 ---
 
 ## Communication Protocol
 
 ### Inbound (code-agent -> orchestrator)
 
-| Method | Path                   | Auth        | Purpose             |
-| ------ | ---------------------- | ----------- | ------------------- |
-| POST   | `/tasks`               | HMAC signed | Submit task         |
-| GET    | `/tasks/:id`           | None        | Query task status   |
-| DELETE | `/tasks/:id`           | None        | Cancel task         |
-| GET    | `/health`              | None        | Health check        |
-| POST   | `/admin/refresh-token` | HMAC signed | Force token refresh |
-| POST   | `/admin/shutdown`      | HMAC signed | Request shutdown    |
+| Method | Path                   | Auth        | Purpose                        |
+| ------ | ---------------------- | ----------- | ------------------------------ |
+| POST   | `/tasks`               | HMAC signed | Submit task                    |
+| GET    | `/tasks/:id`           | None        | Query task status              |
+| DELETE | `/tasks/:id`           | None        | Cancel task                    |
+| POST   | `/tasks/:id/message`   | HMAC signed | Send follow-up message to task |
+| GET    | `/health`              | None        | Health check                   |
+| GET    | `/meta/worker-image`   | None        | Worker image diagnostics       |
+| POST   | `/admin/refresh-token` | HMAC signed | Force token refresh            |
+| POST   | `/admin/shutdown`      | HMAC signed | Request shutdown               |
 
 ### Outbound (orchestrator -> code-agent)
 
-| Method | Path                       | Auth                       | Purpose                  |
-| ------ | -------------------------- | -------------------------- | ------------------------ |
-| POST   | `{webhookUrl}`             | HMAC (X-Request-Signature) | Task completion callback |
-| POST   | `/internal/logs`           | HMAC + X-Internal-Auth     | Log chunk upload         |
-| POST   | `/internal/code/heartbeat` | HMAC (X-Request-Signature) | Running task keepalive   |
+| Method | Path                       | Auth                       | Purpose                   |
+| ------ | -------------------------- | -------------------------- | ------------------------- |
+| POST   | `{webhookUrl}`             | HMAC (X-Request-Signature) | Task completion callback  |
+| POST   | `/internal/logs`           | HMAC + X-Internal-Auth     | Log chunk upload          |
+| POST   | `/internal/code/heartbeat` | HMAC (X-Request-Signature) | Running task keepalive    |
+| POST   | `/internal/turn-metrics`   | HMAC + X-Internal-Auth     | Per-task resource metrics |
 
 ### HMAC Signature Format
 
@@ -214,6 +297,14 @@ signature = HMAC-SHA256(webhookSecret, message)
 Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 ```
 
+**Outbound (turn-metrics):**
+
+```
+message = "{timestamp}.{json_body}"
+signature = HMAC-SHA256(orchestratorSecret, message)
+Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
+```
+
 ---
 
 ## Behavioral Rules
@@ -228,14 +319,18 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 ### Task Execution Flow
 
 1. Create git worktree from `origin/{baseBranch}`
-2. Build system prompt (Phase 1 or Phase 2 based on labels)
-3. Spawn Docker container with Claude Code in interactive mode
-4. Write system prompt to container stdin
-5. Stream logs to code-agent via LogForwarder
-6. Monitor container exit (30s polling)
-7. On exit: check for PR via `gh pr list`, determine success/failure
-8. Send webhook with result or error
-9. Clean up token refresher and log forwarder registrations
+2. Validate Anthropic API key (for `opus`/`auto` workers)
+3. Build system prompt (Phase 1 or Phase 2 based on labels)
+4. Spawn Docker container with Claude Code in interactive mode
+5. Write system prompt to container stdin
+6. Stream logs to code-agent via LogForwarder
+7. Monitor container exit (30s polling)
+8. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
+9. Run completion verification (deterministic checks + Gemini 2.5 Flash adjudication)
+10. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria → go to step 4
+11. If verification **passes** or max attempts reached: collect turn metrics, send webhook with result or error
+12. Clean up token refresher, log forwarder, and task timers
+13. If any queued messages arrived during execution: deliver them immediately as a new session
 
 ### Timeout Behavior
 
@@ -258,46 +353,58 @@ On startup, the orchestrator:
 
 ## Environment
 
-| Variable                            | Required | Default                       |
-| ----------------------------------- | -------- | ----------------------------- |
-| `INTEXURAOS_REPOSITORY_URL`         | Yes      | -                             |
-| `INTEXURAOS_CODE_AGENT_URL`         | Yes      | -                             |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`    | Yes      | -                             |
-| `INTEXURAOS_PROJECT_ID`             | Yes      | -                             |
-| `INTEXURAOS_GITHUB_APP_ID`          | Yes      | -                             |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID` | Yes      | -                             |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Yes      | -                             |
-| `INTEXURAOS_LINEAR_API_KEY`         | Yes      | -                             |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | Yes      | -                             |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | Yes      | -                             |
-| `INTEXURAOS_REPOSITORY_PATH`        | No       | `~/.claude-orchestrator/repo` |
-| `INTEXURAOS_ANTHROPIC_API_KEY`      | No       | `""`                          |
-| `INTEXURAOS_ZAI_APP_API_KEY`        | No       | `""`                          |
-| `INTEXURAOS_WORKER_CAPACITY`        | No       | `2`                           |
-| `PORT`                              | No       | `8199`                        |
-| `LOG_LEVEL`                         | No       | `info`                        |
+| Variable                                       | Required | Default                       |
+| ---------------------------------------------- | -------- | ----------------------------- |
+| `INTEXURAOS_REPOSITORY_URL`                    | Yes      | -                             |
+| `INTEXURAOS_CODE_AGENT_URL`                    | Yes      | -                             |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`               | Yes      | -                             |
+| `INTEXURAOS_PROJECT_ID`                        | Yes      | -                             |
+| `INTEXURAOS_GITHUB_APP_ID`                     | Yes      | -                             |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID`            | Yes      | -                             |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`               | Yes      | -                             |
+| `INTEXURAOS_LINEAR_API_KEY`                    | Yes      | -                             |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`                 | Yes      | -                             |
+| `INTEXURAOS_GEMINI_APP_API_KEY`                | Yes      | -                             |
+| `INTEXURAOS_ZAI_APP_API_KEY`                   | Yes      | -                             |
+| `GOOGLE_APPLICATION_CREDENTIALS`               | Yes      | -                             |
+| `INTEXURAOS_REPOSITORY_PATH`                   | No       | `~/.claude-orchestrator/repo` |
+| `INTEXURAOS_WORKER_CAPACITY`                   | No       | `2`                           |
+| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`           | No       | `3`                           |
+| `INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS` | No       | `1`                           |
+| `INTEXURAOS_CLAUDE_WORKER_IMAGE`               | No       | (GCR Artifact Registry)       |
+| `INTEXURAOS_GIT_USER_NAME`                     | No       | (host git config)             |
+| `INTEXURAOS_GIT_USER_EMAIL`                    | No       | (host git config)             |
+| `PORT`                                         | No       | `8199`                        |
+| `LOG_LEVEL`                                    | No       | `info`                        |
 
 ---
 
 ## Error Codes
 
-| Code                | HTTP | Meaning                               |
-| ------------------- | ---- | ------------------------------------- |
-| `at_capacity`       | 503  | All worker slots occupied             |
-| `invalid_request`   | 400  | Request body failed Zod validation    |
-| `service_error`     | 400  | Worktree or container creation failed |
-| `not_found`         | 404  | Task ID does not exist                |
-| `already_completed` | 409  | Task already finished (cannot cancel) |
-| `NO_PR_CREATED`     | -    | Task completed but no PR was found    |
+| Code                                  | HTTP | Meaning                                                        |
+| ------------------------------------- | ---- | -------------------------------------------------------------- |
+| `at_capacity`                         | 503  | All worker slots occupied                                      |
+| `invalid_request`                     | 400  | Request body failed Zod validation                             |
+| `service_error`                       | 400  | Worktree or container creation failed                          |
+| `not_found`                           | 404  | Task ID does not exist                                         |
+| `already_completed`                   | 409  | Task already finished (cannot cancel)                          |
+| `invalid_status`                      | 409  | Message sent to task with status that does not accept messages |
+| `NO_PR_CREATED`                       | -    | Task completed but no PR was found                             |
+| `TASK_COMPLETION_VERIFICATION_FAILED` | -    | Max attempts reached without passing completion verification   |
+| `TASK_COMPLETION_VERIFIER_FAILED`     | -    | Gemini verifier unreachable or returned invalid JSON           |
+| `RESUME_ATTEMPT_FAILED`               | -    | Could not start a follow-up attempt container                  |
+| `SETUP_FAILED`                        | -    | Task setup failed (worktree creation, API key invalid, etc.)   |
 
 ---
 
 ## Constraints
 
-- Maximum concurrent tasks: configurable (default 2, Docker limit 4)
-- Maximum task duration: 2 hours (hard timeout)
-- Maximum log size per task: 4 MB / 500 chunks
-- Log chunk size: 8 KB max
+- Maximum concurrent tasks: configurable (default 2, via `INTEXURAOS_WORKER_CAPACITY`)
+- Maximum task duration: 2 hours per attempt (hard timeout); multi-attempt tasks can run longer
+- Maximum completion attempts: configurable (default 3, via `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`)
+- Maximum message length for `/tasks/:id/message`: 10,000 characters
+- Maximum log size per task: 4 MB
+- Log chunk size: 64 KB max
 - Webhook retry: 3 attempts with 5s/15s/45s delays
 - Pending webhook TTL: 24 hours
 - Nonce cache TTL: 10 minutes
@@ -306,3 +413,5 @@ On startup, the orchestrator:
 - Heartbeat interval: 10 minutes
 - Container memory limit: 8 GB
 - Container CPU limit: 4 cores
+- Turn metrics: non-fatal; zero values returned when cgroup path unavailable (macOS)
+- Completion verifier: required; verifier failure marks task `failed` (no false positives)

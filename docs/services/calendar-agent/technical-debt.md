@@ -1,7 +1,7 @@
 # Calendar Agent - Technical Debt
 
-**Last Updated:** 2026-02-08
-**Analysis Run:** v2.3.0 (INT-311 failed event delete/retry, INT-422 date parsing, LLM repair)
+**Last Updated:** 2026-02-19
+**Analysis Run:** v2.4.0 (Gemini 2.5 Flash default LLM, Dash0 OpenTelemetry, APP naming convention)
 
 ---
 
@@ -14,6 +14,37 @@
 | Type Issues   | 0     | -        |
 | TODOs         | 0     | -        |
 | **Total**     | **1** | Low      |
+
+---
+
+## Recent Improvements (v2.4.0)
+
+### Gemini 2.5 Flash as Default LLM
+
+**Status:** Complete
+
+Switched default LLM from generic Gemini to Gemini 2.5 Flash for better speed and accuracy. Required models now include Gemini 2.5 Flash, Gemini 2.5 Pro, GLM-4.7, and GLM-4.7 Flash. The service fetches pricing for all required models at startup via `INTEXURAOS_APP_SETTINGS_SERVICE_URL`.
+
+### Default Model Selector with Platform Zai Fallback
+
+**Status:** Complete
+
+Added a model selector that falls back to platform Zai (`INTEXURAOS_ZAI_APP_API_KEY`) when user-configured Gemini is unavailable. Platform Gemini (`INTEXURAOS_GEMINI_APP_API_KEY`) is also supported as a fallback. Both are optional env vars.
+
+### API Key Secrets APP Naming Convention
+
+**Status:** Complete
+
+Standardized platform LLM API key env vars to use `_APP_` naming convention:
+
+- `INTEXURAOS_ZAI_APP_API_KEY` (was `INTEXURAOS_ZAI_API_KEY`)
+- `INTEXURAOS_GEMINI_APP_API_KEY` (was `INTEXURAOS_GEMINI_API_KEY`)
+
+### Dash0 OpenTelemetry Integration
+
+**Status:** Complete
+
+Added Dash0 OpenTelemetry instrumentation for distributed tracing across services. Enables request correlation from Pub/Sub through the LLM extraction pipeline.
 
 ---
 
@@ -217,6 +248,9 @@ This ensures:
 
 | Date       | Issue                                             | Resolution                                      |
 | ---------- | ------------------------------------------------- | ----------------------------------------------- |
+| 2026-02-16 | No distributed tracing across service boundaries  | Added Dash0 OpenTelemetry integration           |
+| 2026-02-15 | API key env vars inconsistently named             | Standardized to APP naming convention           |
+| 2026-02-15 | Single LLM with no fallback on unavailability     | Added multi-model with Zai fallback             |
 | 2026-01-31 | Failed extractions could not be dismissed/retried | Added DELETE and POST retry endpoints           |
 | 2026-01-30 | LLM returning invalid JSON caused immediate fail  | Added repair prompt mechanism (1 retry attempt) |
 | 2026-01-30 | Date-only format rejected for all-day events      | Updated schema to accept YYYY-MM-DD format      |

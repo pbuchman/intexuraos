@@ -19,6 +19,8 @@ export interface DockerProviderConfig {
   managedAttemptsMode: boolean;
   workerReadyTimeoutMs?: number;
   sharedCredsPath?: string;
+  gitUserName?: string;
+  gitUserEmail?: string;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -27,8 +29,8 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   imagePullPolicy: 'always',
   networkName: 'claude-worker-net',
   maxConcurrent: 4,
-  memoryLimitBytes: 8 * 1024 * 1024 * 1024,
-  cpuCount: 4,
+  memoryLimitBytes: 30 * 1024 * 1024 * 1024,
+  cpuCount: 20,
   timeoutMs: 2 * 60 * 60 * 1000,
   secretsBasePath: '/tmp/claude-secrets',
   gcpSaKeyPath: '',
@@ -341,6 +343,13 @@ export class DockerProvider implements IsolationProvider {
       if (workerTypeConfig.model !== undefined) {
         env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
       }
+
+      if (this.config.gitUserName !== undefined) {
+        env.push(`GIT_USER_NAME=${this.config.gitUserName}`);
+      }
+      if (this.config.gitUserEmail !== undefined) {
+        env.push(`GIT_USER_EMAIL=${this.config.gitUserEmail}`);
+      }
       /* v8 ignore stop @preserve */
 
       /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
@@ -384,6 +393,7 @@ export class DockerProvider implements IsolationProvider {
             /* v8 ignore stop @preserve */
           ],
           Memory: this.config.memoryLimitBytes,
+          MemorySwap: this.config.memoryLimitBytes,
           NanoCpus: this.config.cpuCount * 1e9,
           NetworkMode: this.config.networkName,
           ReadonlyRootfs: false,

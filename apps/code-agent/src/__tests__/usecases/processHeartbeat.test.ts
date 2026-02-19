@@ -84,7 +84,7 @@ describe('processHeartbeat', () => {
   });
 
   it('should skip non-running tasks', async () => {
-    const task = createFakeCodeTask({ id: 'task-1', status: 'completed' });
+    const task = createFakeCodeTask({ id: 'task-1', status: 'implemented' });
     findByIdMock.mockResolvedValue(ok(task));
 
     const result = await useCase(['task-1']);

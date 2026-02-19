@@ -11,6 +11,8 @@ import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
+import { submitToPhase2 } from '../domain/usecases/submitToPhase2.js';
+import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
@@ -47,7 +49,7 @@ const codeTaskSchema = {
     traceId: { type: 'string' },
     status: {
       type: 'string',
-      enum: ['dispatched', 'running', 'completed', 'failed', 'interrupted', 'cancelled'],
+      enum: ['dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled'],
     },
     dedupKey: { type: 'string' },
     callbackReceived: { type: 'boolean' },
@@ -57,7 +59,12 @@ const codeTaskSchema = {
     approvalEventId: { type: 'string', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
     linearIssueTitle: { type: 'string', nullable: true },
+    linearIssueUrl: { type: 'string', nullable: true },
     linearFallback: { type: 'boolean', nullable: true },
+    executionPhase: { type: 'string', enum: ['design', 'execution'] },
+    implementationTaskId: { type: 'string' },
+    parentTaskId: { type: 'string' },
+    followUpReason: { type: 'string' },
     result: {
       type: 'object',
       nullable: true,
@@ -141,7 +148,7 @@ function taskToApiResponse(task: {
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+  status: 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: unknown;
@@ -150,7 +157,12 @@ function taskToApiResponse(task: {
   approvalEventId?: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueUrl?: string;
   linearFallback?: boolean;
+  executionPhase?: 'design' | 'execution';
+  implementationTaskId?: string;
+  parentTaskId?: string;
+  followUpReason?: string;
   result?: {
     prUrl?: string;
     branch: string;
@@ -185,7 +197,7 @@ function taskToApiResponse(task: {
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+  status: 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;
@@ -194,7 +206,12 @@ function taskToApiResponse(task: {
   approvalEventId?: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueUrl?: string;
   linearFallback?: boolean;
+  executionPhase?: 'design' | 'execution';
+  implementationTaskId?: string;
+  parentTaskId?: string;
+  followUpReason?: string;
   result?: {
     prUrl?: string;
     branch: string;
@@ -246,7 +263,22 @@ function taskToApiResponse(task: {
     ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
+    ...(task.linearIssueUrl !== undefined && { linearIssueUrl: task.linearIssueUrl }),
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.linearFallback !== undefined && { linearFallback: task.linearFallback }),
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: optional property spread @preserve */
+    ...(task.executionPhase !== undefined && { executionPhase: task.executionPhase }),
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: optional property spread @preserve */
+    ...(task.implementationTaskId !== undefined && { implementationTaskId: task.implementationTaskId }),
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: optional property spread @preserve */
+    ...(task.parentTaskId !== undefined && { parentTaskId: task.parentTaskId }),
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: optional property spread @preserve */
+    ...(task.followUpReason !== undefined && { followUpReason: task.followUpReason }),
     /* v8 ignore stop @preserve */
     ...(task.result !== undefined && { result: task.result }),
     /* v8 ignore start -- ts-type: optional property spread @preserve */
@@ -523,7 +555,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
   fastify.patch<{
     Params: { taskId: string };
     Body: {
-      status?: 'completed' | 'failed' | 'interrupted';
+      status?: 'designed' | 'implemented' | 'failed' | 'interrupted';
       result?: {
         branch: string;
         commits: number;
@@ -569,7 +601,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             status: {
               type: 'string',
-              enum: ['completed', 'failed', 'interrupted'],
+              enum: ['designed', 'implemented', 'failed', 'interrupted'],
             },
             result: {
               type: 'object',
@@ -670,7 +702,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request: FastifyRequest<{
         Params: { taskId: string };
         Body: {
-          status?: 'completed' | 'failed' | 'interrupted';
+          status?: 'designed' | 'implemented' | 'failed' | 'interrupted';
           result?: {
             branch: string;
             commits: number;
@@ -746,7 +778,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Record task completion for rate limiting (decrement concurrent, update cost)
       // Do this for terminal states: completed, failed, cancelled, interrupted
       /* v8 ignore start -- ts-type: optional chaining and array includes create type narrowing branches @preserve */
-      const terminalStatuses = ['completed', 'failed', 'cancelled', 'interrupted'] as const;
+      const terminalStatuses = ['designed', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
       /* v8 ignore stop @preserve */
       /* v8 ignore start -- ts-type: terminal status includes check @preserve */
       if (body.status !== undefined && terminalStatuses.includes(body.status)) {
@@ -1170,6 +1202,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueTitle?: string;
         linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
         linearFallback?: boolean;
+        executionPhase: 'design' | 'execution';
       } = {
         id: taskId,
         userId,
@@ -1182,6 +1215,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         webhookSecret,
+        executionPhase: hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'design',
       };
 
       // Save linearIssueId if available (linking to existing issue)
@@ -1392,7 +1426,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             status: {
               type: 'string',
-              enum: ['dispatched', 'running', 'completed', 'failed', 'interrupted', 'cancelled'],
+              enum: ['dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled'],
               description: 'Filter by task status',
             },
             limit: {
@@ -1556,6 +1590,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   linearIssueId: { type: 'string' },
                   linearIssueTitle: { type: 'string' },
                   linearFallback: { type: 'boolean' },
+                  executionPhase: { type: 'string', enum: ['design', 'execution'] },
+                  implementationTaskId: { type: 'string' },
+                  parentTaskId: { type: 'string' },
+                  followUpReason: { type: 'string' },
                   createdAt: { type: 'string', format: 'date-time' },
                   updatedAt: { type: 'string', format: 'date-time' },
                   dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -1766,6 +1804,74 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       );
 
       return await reply.ok({ ...apiResponse, linearIssue });
+    }
+  );
+
+  // DELETE /code/tasks/:taskId - Delete a task (public, Auth0 JWT)
+  fastify.delete<{
+    Params: { taskId: string };
+  }>(
+    '/code/tasks/:taskId',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'deleteCodeTask',
+        summary: 'Delete a code task',
+        description: 'Deletes a code task owned by the authenticated user.',
+        tags: ['public'],
+        params: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', description: 'Task ID' },
+          },
+          required: ['taskId'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  deleted: { type: 'boolean' },
+                },
+                required: ['deleted'],
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { taskId: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to DELETE /code/tasks/:taskId',
+        includeParams: true,
+      });
+
+      const { codeTaskRepo, logger } = getServices();
+      /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      /* v8 ignore stop @preserve */
+      const { taskId } = request.params;
+
+      logger.info({ userId, taskId }, 'Deleting code task');
+
+      const deleteResult = await codeTaskRepo.deleteTask(taskId, userId);
+
+      if (!deleteResult.ok) {
+        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
+        if (deleteResult.error.code === 'NOT_FOUND') {
+        /* v8 ignore stop @preserve */
+          return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
+        }
+        logger.error({ error: deleteResult.error, taskId }, 'Failed to delete code task');
+        return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);
+      }
+
+      logger.info({ userId, taskId }, 'Code task deleted');
+      return await reply.ok({ deleted: true });
     }
   );
 
@@ -3180,6 +3286,203 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         { originalTaskId: taskId, followUpTaskId: result.value.codeTaskId }, // @allow-result-access -- narrowed by !result.ok guard above
         'Follow-up task created from feedback'
       );
+
+      return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
+    }
+  );
+
+  // POST /code/tasks/:taskId/implement - Start Phase 2 implementation from a completed design task
+  fastify.post(
+    '/code/tasks/:taskId/implement',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'submitToPhase2',
+        summary: 'Start Phase 2 implementation from a completed design task',
+        description: 'Dispatches a Phase 2 strict-execution task from a completed Phase 1 design task. Requires Auth0 JWT.',
+        tags: ['public'],
+        params: {
+          type: 'object',
+          required: ['taskId'],
+          properties: {
+            taskId: {
+              type: 'string',
+              description: 'The ID of the completed Phase 1 design task',
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Phase 2 task dispatched successfully',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['codeTaskId', 'resourceUrl', 'workerLocation', 'implementationOf'],
+                properties: {
+                  codeTaskId: { type: 'string' },
+                  resourceUrl: { type: 'string' },
+                  workerLocation: { type: 'string' },
+                  implementationOf: { type: 'string' },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Bad request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          409: {
+            description: 'Conflict - implementation already exists or active task exists',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                  details: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      existingTaskId: { type: 'string' },
+                    },
+                  },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/tasks/:taskId/implement',
+      });
+
+      const { codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo, rateLimitService } =
+        getServices();
+      const userId = request.user?.userId;
+
+      /* v8 ignore start -- test-infra: requires authenticated user @preserve */
+      if (userId === undefined) {
+        return reply.fail('UNAUTHORIZED', 'Authentication required');
+      }
+      /* v8 ignore stop @preserve */
+
+      const { taskId } = request.params as { taskId: string };
+
+      // Check rate limits before dispatching (prompt length 0 — reuses existing task prompt)
+      const limitCheck = await rateLimitService.checkLimits(userId, 0);
+      /* v8 ignore start -- test-infra: rate limit failure covered by rateLimitService unit tests @preserve */
+      if (!limitCheck.ok) {
+        const { error } = limitCheck;
+        request.log.warn({ userId, error }, 'Rate limit exceeded for implement request');
+        if (error.code === 'service_unavailable') {
+          return reply.fail('MISCONFIGURED', error.message);
+        }
+        return reply.fail('RATE_LIMITED', error.message);
+      }
+      /* v8 ignore stop @preserve */
+
+      request.log.info({ taskId, userId }, 'Processing Phase 2 implementation request');
+
+      const result = await submitToPhase2(
+        {
+          logger: request.log,
+          codeTaskRepo,
+          linearAgentClient,
+          taskDispatcher,
+          whatsappNotifier,
+          metricsClient,
+          workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
+        },
+        { originalTaskId: taskId, userId }
+      );
+
+      /* v8 ignore start -- test-infra: error handling paths covered by use case tests @preserve */
+      if (!result.ok) {
+        const error = result.error;
+        switch (error.code) {
+          case 'task_not_found':
+            return reply.fail('NOT_FOUND', error.message);
+          case 'invalid_status':
+          case 'no_linear_issue':
+          case 'label_not_ready':
+            return reply.fail('INVALID_REQUEST', error.message);
+          case 'worker_not_configured':
+            return reply.fail('WORKER_NOT_CONFIGURED', error.message);
+          case 'already_implemented':
+            // Include existingTaskId in details so frontend can navigate
+            return reply.code(409).send({
+              success: false,
+              error: {
+                code: error.code,
+                message: error.message,
+                details: { existingTaskId: error.existingTaskId },
+              },
+            }); // @allow-raw-send: 409 with structured error payload containing existingTaskId
+          case 'active_task_exists':
+            return reply.fail('CONFLICT', error.message);
+          case 'internal_error':
+          default:
+            return reply.fail('INTERNAL_ERROR', error.message);
+        }
+      }
+      /* v8 ignore stop @preserve */
+
+      // Record task start for rate limiting
+      await rateLimitService.recordTaskStart(userId);
 
       return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }

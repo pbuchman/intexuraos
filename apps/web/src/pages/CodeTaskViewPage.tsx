@@ -8,6 +8,7 @@ import {
   GitBranch,
   GitCommit,
   Loader2,
+  Play,
   RotateCcw,
   Send,
   StopCircle,
@@ -32,7 +33,8 @@ interface StatusConfig {
 const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
   dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched', icon: Clock },
   running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running', icon: Loader2 },
-  completed: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Completed', icon: CheckCircle2 },
+  designed: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Designed', icon: CheckCircle2 },
+  implemented: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Implemented', icon: CheckCircle2 },
   failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed', icon: XCircle },
   interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted', icon: AlertCircle },
   cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled', icon: XCircle },
@@ -110,6 +112,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
     listenerHealthy,
     cancelling, cancelError, retrying, retryError,
     sending, sendError, messageStatus,
+    implementing, implementError, startImplementation,
     cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
@@ -122,6 +125,15 @@ export function CodeTaskViewPage(): React.JSX.Element {
       // retryTask already sets retryError state
     }
   }, [retryTask, navigate]);
+
+  const handleImplement = useCallback(async () => {
+    try {
+      const newId = await startImplementation();
+      void navigate(`/code-tasks/${newId}`);
+    } catch {
+      // startImplementation already sets implementError state
+    }
+  }, [startImplementation, navigate]);
 
   if (loading) {
     return (
@@ -150,12 +162,24 @@ export function CodeTaskViewPage(): React.JSX.Element {
     : undefined;
   const isTaskWorkerOnline = taskWorkerStatus === undefined || taskWorkerStatus.healthy;
   const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
+  const isImplementable = task.status === 'designed' &&
+    task.implementationTaskId === undefined &&
+    task.linearIssueId !== undefined;
 
   return (
     <Layout>
       <MemoTaskHeader task={task} workerStatusTag={workerStatusTag} />
 
       <MemoActiveProgress task={task} />
+
+      {task.parentTaskId !== undefined && task.followUpReason === 'phase2_implement' ? (
+        <DesignTaskBanner
+          parentTaskId={task.parentTaskId}
+        />
+      ) : null}
+      {task.executionPhase === 'design' && task.implementationTaskId !== undefined ? (
+        <ImplementationLinkBanner implementationTaskId={task.implementationTaskId} />
+      ) : null}
 
       <MemoTaskPrompt prompt={task.prompt} sanitizedPrompt={task.sanitizedPrompt} />
 
@@ -173,6 +197,14 @@ export function CodeTaskViewPage(): React.JSX.Element {
         messageStatus={messageStatus}
         workerOnline={isTaskWorkerOnline}
         workerName={task.workerLocation}
+      />
+
+      <MemoNextSteps
+        isImplementable={isImplementable}
+        implementing={implementing}
+        implementError={implementError}
+        {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
+        onImplement={handleImplement}
       />
 
       <MemoTaskActions
@@ -199,9 +231,20 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
     <div className="mb-6">
       <div className="min-h-[2.5rem] mt-1 flex flex-wrap items-center gap-2">
         {task.linearIssueId !== undefined ? (
-          <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
-            {task.linearIssue?.identifier ?? task.linearIssueId}
-          </span>
+          (task.linearIssueUrl ?? task.linearIssue?.url) !== undefined ? (
+            <a
+              href={task.linearIssueUrl ?? task.linearIssue?.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-lg font-medium text-blue-600 hover:underline dark:text-blue-400"
+            >
+              {task.linearIssue?.identifier ?? task.linearIssueId}
+            </a>
+          ) : (
+            <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
+              {task.linearIssue?.identifier ?? task.linearIssueId}
+            </span>
+          )
         ) : null}
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {task.linearIssue?.title ?? task.linearIssueTitle ?? 'Code Task'}
@@ -216,6 +259,15 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
         <span>Created: {formatDateTime(task.createdAt)}</span>
         {!isActiveStatus(task.status) ? (
           <span>Updated: {formatRelative(task.updatedAt)}</span>
+        ) : null}
+        {task.executionPhase === 'design' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+            Design
+          </span>
+        ) : task.executionPhase === 'execution' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+            Execution
+          </span>
         ) : null}
         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
           {task.workerType}
@@ -254,9 +306,9 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
             href={task.linearIssue.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+            className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 hover:bg-violet-200 dark:bg-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-900/80"
           >
-            Linear
+            {task.linearIssue.identifier}
           </a>
         ) : null}
         {task.result?.prUrl !== undefined ? (
@@ -264,9 +316,9 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
             href={task.result.prUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+            className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900/80"
           >
-            Pull Request
+            PR #{/\/pull\/(\d+)/.exec(task.result.prUrl)?.[1] ?? ''}
           </a>
         ) : null}
       </div>
@@ -370,6 +422,84 @@ const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTa
     </Card>
   );
 }, (prev, next) => prev.task.status === next.task.status && prev.task.error === next.task.error && prev.task.createdAt === next.task.createdAt);
+
+function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX.Element {
+  return (
+    <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
+      {'This task implements the IntexuraOS Two-Phase Code Task Execution Flow. '}
+      <a
+        href={`/#/code-tasks/${parentTaskId}`}
+        className="font-medium underline hover:no-underline"
+      >
+        {'DESIGN'}
+      </a>
+    </div>
+  );
+}
+
+function ImplementationLinkBanner({ implementationTaskId }: { implementationTaskId: string }): React.JSX.Element {
+  return (
+    <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+      {'This task is the design phase of the IntexuraOS Two-Phase Code Task Execution Flow. '}
+      <a
+        href={`/#/code-tasks/${implementationTaskId}`}
+        className="font-medium underline hover:no-underline"
+      >
+        {'IMPLEMENTATION'}
+      </a>
+    </div>
+  );
+}
+
+interface NextStepsProps {
+  isImplementable: boolean;
+  implementing: boolean;
+  implementError: string | null;
+  implementationTaskId?: string;
+  onImplement: () => Promise<void>;
+}
+
+function NextSteps({
+  isImplementable,
+  implementing,
+  implementError,
+  implementationTaskId,
+  onImplement,
+}: NextStepsProps): React.JSX.Element | null {
+  if (!isImplementable && implementationTaskId === undefined && implementError === null) return null;
+
+  return (
+    <div className="mt-4">
+      {implementationTaskId !== undefined ? (
+        <a
+          href={`/#/code-tasks/${implementationTaskId}`}
+          className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+        >
+          <Play className="h-4 w-4" />
+          View Implementation
+        </a>
+      ) : isImplementable ? (
+        <Button
+          onClick={(): void => { void onImplement(); }}
+          disabled={implementing}
+          isLoading={implementing}
+          loadingText="Starting Implementation..."
+        >
+          <Play className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Start Implementation</span>
+        </Button>
+      ) : null}
+      {implementError !== null ? (
+        <div className="mt-3 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
+          <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600 dark:text-red-400" />
+          <p className="text-sm text-red-700 dark:text-red-400">{implementError}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const MemoNextSteps = memo(NextSteps);
 
 function TaskPrompt({ prompt, sanitizedPrompt }: { prompt: string; sanitizedPrompt: string }): React.JSX.Element {
   const [copied, setCopied] = useState(false);

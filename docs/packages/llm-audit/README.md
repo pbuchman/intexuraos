@@ -94,6 +94,33 @@ try {
 }
 ```
 
+### Audit Sinks
+
+The sink determines where audit logs are persisted. Inject a custom sink via `createAuditContext(params, { sink })`.
+
+| Sink                     | Destination                   | Use Case                            |
+| ------------------------ | ----------------------------- | ----------------------------------- |
+| `FirestoreAuditSink`     | Firestore `llm_api_logs`      | Default for all production services |
+| `StructuredLogAuditSink` | Pino logger (structured JSON) | Services without Firestore access   |
+| `NoopAuditSink`          | /dev/null                     | Tests, disabled auditing            |
+
+All sinks implement `AuditSink`:
+
+```typescript
+interface AuditSink {
+  save(log: LlmAuditLog): Promise<Result<void>>;
+}
+```
+
+The `StructuredLogAuditSink` requires a `Logger` dependency:
+
+```typescript
+import { StructuredLogAuditSink, createAuditContext } from '@intexuraos/llm-audit';
+
+const sink = new StructuredLogAuditSink({ logger });
+const audit = createAuditContext(params, { sink });
+```
+
 ### Firestore Structure
 
 All audit logs are stored in the `llm_api_logs` collection:
@@ -179,9 +206,11 @@ interface CompleteAuditLogErrorParams {
 
 ## Used By
 
-**Packages (5):** `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity`
+**Packages (6):** `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity`, `llm-factory`
 
 **Apps (1):** `image-service`
+
+**Workers (1):** `orchestrator`
 
 ## Recent Changes
 
@@ -195,8 +224,9 @@ interface CompleteAuditLogErrorParams {
 
 ## Source Files
 
-| File           | Purpose                                                |
-| -------------- | ------------------------------------------------------ |
-| `src/index.ts` | Re-exports all types, AuditContext, and isAuditEnabled |
-| `src/types.ts` | LlmAuditLog, CreateAuditLogParams, completion params   |
-| `src/audit.ts` | AuditContext class, createAuditContext, saveAuditLog   |
+| File           | Purpose                                                                        |
+| -------------- | ------------------------------------------------------------------------------ |
+| `src/index.ts` | Re-exports all types, AuditContext, and isAuditEnabled                         |
+| `src/types.ts` | LlmAuditLog, CreateAuditLogParams, completion params                           |
+| `src/audit.ts` | AuditContext class, createAuditContext, isAuditEnabled                         |
+| `src/sink.ts`  | AuditSink interface, FirestoreAuditSink, StructuredLogAuditSink, NoopAuditSink |

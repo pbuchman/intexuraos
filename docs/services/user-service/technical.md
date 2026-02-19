@@ -13,7 +13,7 @@ graph TB
         CLI[CLI/Mobile] -->|Device Code| A0
         A0 -->|Tokens| US[User Service]
 
-        US --> FS[(Firestore:<br/>users, auth_tokens,<br/>oauth_connections)]
+        US --> FS[(Firestore:<br/>user_settings, auth_tokens,<br/>oauth_connections)]
         US --> FB[Firebase Admin SDK]
     end
 
@@ -102,13 +102,14 @@ sequenceDiagram
 
 ### User Settings Endpoints
 
-| Method | Path                                           | Description               | Auth         |
-| ------ | ---------------------------------------------- | ------------------------- | ------------ |
-| GET    | `/users/:uid/settings`                         | Get user settings         | Bearer token |
-| GET    | `/users/:uid/settings/llm-keys`                | Get LLM API keys (masked) | Bearer token |
-| PATCH  | `/users/:uid/settings/llm-keys`                | Set/update LLM API key    | Bearer token |
-| POST   | `/users/:uid/settings/llm-keys/:provider/test` | Test LLM API key          | Bearer token |
-| DELETE | `/users/:uid/settings/llm-keys/:provider`      | Delete LLM API key        | Bearer token |
+| Method | Path                                           | Description                              | Auth         |
+| ------ | ---------------------------------------------- | ---------------------------------------- | ------------ |
+| GET    | `/users/:uid/settings`                         | Get user settings                        | Bearer token |
+| PATCH  | `/users/:uid/settings`                         | Update default LLM model                 | Bearer token |
+| GET    | `/users/:uid/settings/llm-keys`                | Get LLM API keys (masked) + defaultModel | Bearer token |
+| PATCH  | `/users/:uid/settings/llm-keys`                | Set/update LLM API key                   | Bearer token |
+| POST   | `/users/:uid/settings/llm-keys/:provider/test` | Test LLM API key                         | Bearer token |
+| DELETE | `/users/:uid/settings/llm-keys/:provider`      | Delete LLM API key                       | Bearer token |
 
 ### OAuth Connection Endpoints
 
@@ -154,11 +155,11 @@ sequenceDiagram
 
 ### LlmTestResult
 
-| Field | Type | Description |
-| ---------- | ------------ | --------------------- | |
-| `status` | 'success' \ | 'failure' | Test outcome |
-| `message` | string | LLM response or error |
-| `testedAt` | string | ISO 8601 timestamp |
+| Field      | Type                   | Description           |
+| ---------- | ---------------------- | --------------------- |
+| `status`   | 'success' \| 'failure' | Test outcome          |
+| `message`  | string                 | LLM response or error |
+| `testedAt` | string                 | ISO 8601 timestamp    |
 
 ### OAuthConnection
 
@@ -266,29 +267,33 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 
 ### Infrastructure
 
-| Component                                  | Purpose                   |
-| ------------------------------------------ | ------------------------- |
-| Firestore (`users` collection)             | User settings storage     |
-| Firestore (`auth_tokens` collection)       | Auth0 token cache         |
-| Firestore (`oauth_connections` collection) | OAuth token storage       |
-| Firebase Admin SDK                         | Firebase token generation |
+| Component                                  | Purpose                             |
+| ------------------------------------------ | ----------------------------------- |
+| Firestore (`user_settings` collection)     | User settings storage               |
+| Firestore (`auth_tokens` collection)       | Auth0 token cache                   |
+| Firestore (`oauth_connections` collection) | OAuth token storage                 |
+| Firebase Admin SDK                         | Firebase token generation           |
+| `@intexuraos/infra-otel`                   | Dash0 OpenTelemetry tracing/metrics |
 
 ## Configuration
 
-| Environment Variable                    | Required | Description                           |
-| --------------------------------------- | -------- | ------------------------------------- |
-| `INTEXURAOS_AUTH0_DOMAIN`               | Yes      | Auth0 tenant domain                   |
-| `INTEXURAOS_AUTH0_CLIENT_ID`            | Yes      | Auth0 application client ID           |
-| `INTEXURAOS_AUTH0_CLIENT_SECRET`        | Yes      | Auth0 application client secret       |
-| `INTEXURAOS_AUTH0_AUDIENCE`             | Yes      | Auth0 API identifier                  |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Shared secret for internal endpoints  |
-| `INTEXURAOS_ENCRYPTION_KEY`             | Yes      | AES-256 encryption key (32 bytes hex) |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes      | Google OAuth client ID                |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes      | Google OAuth client secret            |
-| `INTEXURAOS_FIREBASE_PROJECT_ID`        | Yes      | Firebase project ID                   |
-| `INTEXURAOS_FIREBASE_CLIENT_EMAIL`      | Yes      | Firebase service account email        |
-| `INTEXURAOS_FIREBASE_PRIVATE_KEY`       | Yes      | Firebase service account private key  |
-| `INTEXURAOS_WEB_APP_URL`                | Yes      | Web app URL for OAuth redirects       |
+| Environment Variable                    | Required | Description                                              |
+| --------------------------------------- | -------- | -------------------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project ID (Firestore, Firebase)                     |
+| `INTEXURAOS_AUTH0_DOMAIN`               | Yes      | Auth0 tenant domain                                      |
+| `INTEXURAOS_AUTH0_CLIENT_ID`            | Yes      | Auth0 application client ID                              |
+| `INTEXURAOS_AUTH_JWKS_URL`              | Yes      | Auth0 JWKS endpoint for JWT verification                 |
+| `INTEXURAOS_AUTH_ISSUER`                | Yes      | JWT issuer (Auth0 tenant URL)                            |
+| `INTEXURAOS_AUTH_AUDIENCE`              | Yes      | JWT audience (API identifier)                            |
+| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`       | Yes      | Key for encrypting stored Auth0 tokens                   |
+| `INTEXURAOS_ENCRYPTION_KEY`             | Yes      | AES-256 key for API key encryption (64 hex chars)        |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Shared secret for internal endpoints                     |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`   | Yes      | URL of app-settings-service (fetches LLM pricing)        |
+| `INTEXURAOS_WEB_APP_URL`                | Yes      | Web app URL for OAuth redirects                          |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes      | Google OAuth client ID                                   |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes      | Google OAuth client secret                               |
+| `INTEXURAOS_SENTRY_DSN`                 | No       | Sentry DSN for error tracking (optional)                 |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`        | No       | Dash0 OTLP endpoint for tracing/metrics (no-op if unset) |
 
 ## Gotchas
 
@@ -311,6 +316,8 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 **Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`, `zai`) differ from display names.
 
 **Internal endpoints use response contract**: All internal endpoints now return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`. Callers must read from `response.data` instead of the top level.
+
+**Default model validation**: `PATCH /users/:uid/settings` validates `defaultModel` against `isFastModel()` from `@intexuraos/llm-contract`. Unsupported model names return 400 `INVALID_REQUEST`.
 
 **OAuth2 routes use raw send**: OAuth2 spec routes (`/auth/oauth/token`, `/auth/oauth/authorize`) intentionally bypass the response contract via `@allow-raw-send` annotations because the OAuth2 spec requires flat `{ error, error_description }` responses.
 

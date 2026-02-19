@@ -14,6 +14,7 @@ import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
+import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 
 /**
  * Generate a deterministic webhook secret for a task.
@@ -174,6 +175,7 @@ export async function processCodeAction(
     linearIssueLabels,
     hasChildren,
     linearFallback,
+    linearIssueUrl,
   } = issueResult;
 
   logger.info(
@@ -207,7 +209,9 @@ export async function processCodeAction(
     webhookSecret: string;
     linearIssueId?: string;
     linearIssueTitle?: string;
+    linearIssueUrl?: string;
     linearFallback?: boolean;
+    executionPhase: 'design' | 'execution';
   } = {
     id: taskId,
     userId,
@@ -224,6 +228,7 @@ export async function processCodeAction(
     actionId,
     approvalEventId,
     webhookSecret,
+    executionPhase: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'design',
   };
 
   // Only include linear issue fields if we have them
@@ -232,6 +237,9 @@ export async function processCodeAction(
     createInput.linearIssueId = finalLinearIssueId;
     createInput.linearIssueTitle = linearIssueTitle;
     createInput.linearFallback = linearFallback;
+    if (linearIssueUrl !== undefined) {
+      createInput.linearIssueUrl = linearIssueUrl;
+    }
   }
   /* v8 ignore stop @preserve */
 
