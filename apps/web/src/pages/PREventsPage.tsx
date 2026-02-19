@@ -55,7 +55,14 @@ function PREventItem({ eventType, action, senderLogin, createdAt, eventUrl, body
         color: 'text-blue-700 dark:text-blue-400',
       };
     }
-    // pull_request
+    // pull_request — give synchronize a distinct treatment
+    if (action === 'synchronize') {
+      return {
+        icon: '📤',
+        label: 'Pushed commits',
+        color: 'text-blue-700 dark:text-blue-400',
+      };
+    }
     return {
       icon: '🔀',
       label: action ?? 'PR Event',
