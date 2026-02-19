@@ -507,10 +507,10 @@ module "secret_manager" {
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
     # Dash0 OpenTelemetry observability
     "INTEXURAOS_DASH0_OTLP_ENDPOINT" = "Dash0 OTLP HTTP ingress endpoint for OpenTelemetry"
-    "INTEXURAOS_DASH0_AUTH_TOKEN"     = "Dash0 Bearer auth token for OTLP export"
+    "INTEXURAOS_DASH0_AUTH_TOKEN"    = "Dash0 Bearer auth token for OTLP export"
     # Linear Agents Platform OAuth (INT-342)
-    "INTEXURAOS_LINEAR_CLIENT_ID"     = "Linear OAuth app client ID for Agents Platform"
-    "INTEXURAOS_LINEAR_CLIENT_SECRET" = "Linear OAuth app client secret for Agents Platform"
+    "INTEXURAOS_LINEAR_CLIENT_ID"      = "Linear OAuth app client ID for Agents Platform"
+    "INTEXURAOS_LINEAR_CLIENT_SECRET"  = "Linear OAuth app client secret for Agents Platform"
     "INTEXURAOS_LINEAR_WEBHOOK_SECRET" = "Linear webhook signing secret for HMAC-SHA256 validation"
   }
 
@@ -1412,13 +1412,13 @@ module "code_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/code-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_WEBHOOK_VERIFY_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
-    INTEXURAOS_ORCHESTRATOR_SECRET     = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
-    INTEXURAOS_TOKEN_ENCRYPTION_KEY    = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
-    INTEXURAOS_GITHUB_WEBHOOK_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
-    INTEXURAOS_LINEAR_CLIENT_ID        = module.secret_manager.secret_ids["INTEXURAOS_LINEAR_CLIENT_ID"]
-    INTEXURAOS_LINEAR_CLIENT_SECRET    = module.secret_manager.secret_ids["INTEXURAOS_LINEAR_CLIENT_SECRET"]
-    INTEXURAOS_LINEAR_WEBHOOK_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_LINEAR_WEBHOOK_SECRET"]
+    INTEXURAOS_WEBHOOK_VERIFY_SECRET = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
+    INTEXURAOS_ORCHESTRATOR_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY  = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
+    INTEXURAOS_GITHUB_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
+    INTEXURAOS_LINEAR_CLIENT_ID      = module.secret_manager.secret_ids["INTEXURAOS_LINEAR_CLIENT_ID"]
+    INTEXURAOS_LINEAR_CLIENT_SECRET  = module.secret_manager.secret_ids["INTEXURAOS_LINEAR_CLIENT_SECRET"]
+    INTEXURAOS_LINEAR_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_LINEAR_WEBHOOK_SECRET"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
