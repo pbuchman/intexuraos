@@ -9,12 +9,14 @@
  * Used when analyzeData() receives an invalid LLM response
  * (e.g., description has too many sentences, invalid chart type, malformed format).
  */
+// Prompt version: 1.1.0
 export function buildInsightRepairPrompt(
   originalPrompt: string,
   invalidResponse: string,
   errorMessage: string
 ): string {
   return `The previous response was invalid. Please fix it.
+IMPORTANT: This is the only repair attempt. If you cannot produce valid output, respond with: NO_INSIGHTS: Reason=<explanation>. Do not attempt to partially fix — either fully correct all insights or output NO_INSIGHTS.
 
 ORIGINAL PROMPT:
 """
@@ -33,7 +35,7 @@ REQUIREMENTS:
 1. Output ONLY the corrected insight lines
 2. Each insight MUST follow this EXACT format on a SINGLE line:
    INSIGHT_N: Title=<title>; Description=<2-3 sentences>; Trackable=<metric>; ChartType=<C1-C6>
-3. Description should be 2-3 sentences, maximum 6 sentences allowed
+3. Description must be 2-3 sentences maximum. The parser tolerates up to 6 but this is an error ceiling, not a target.
 4. ChartType must be exactly one of: C1, C2, C3, C4, C5, C6
 5. No additional text, explanations, or formatting
 6. Each INSIGHT line must be on its own line
@@ -44,7 +46,7 @@ INSIGHT_1: Title=Monthly Revenue Growth; Description=Revenue increased by 15% mo
 INSIGHT_2: Title=User Retention Rate; Description=User retention improved from 60% to 75%. Engagement features are working effectively.; Trackable=Percentage of returning users; ChartType=C1
 
 EXAMPLES OF INVALID OUTPUT:
-- Description with 7+ sentences (must be max 6)
+- Description with 7+ sentences (parser tolerates up to 6 but target is 2-3)
 - ChartType=Bar (must use C1-C6 codes)
 - Lines split across multiple lines
 - Extra explanation text before or after insights

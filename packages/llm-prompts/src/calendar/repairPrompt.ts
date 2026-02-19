@@ -27,7 +27,7 @@ export const calendarExtractionRepairPrompt: PromptBuilder<
 > = {
   name: 'calendar-extraction-repair',
   description: 'Repairs invalid calendar event extraction responses',
-  version: '1.0.0',
+  version: '1.1.0',
 
   build(
     input: CalendarExtractionRepairPromptInput,
@@ -39,12 +39,13 @@ export const calendarExtractionRepairPrompt: PromptBuilder<
         ? input.invalidResponse.slice(0, maxPreviewLength) + '...'
         : input.invalidResponse;
 
-    return `Your previous calendar event extraction response was invalid. Please fix it.
+    return `Your previous extraction attempt failed validation. This is the final repair attempt — be more conservative, literal, and precise than before.
 
 ORIGINAL USER MESSAGE:
 ${input.originalText}
 
 CURRENT DATE: ${input.currentDate}
+For relative dates ('tomorrow', 'next Monday'), calculate from the CURRENT DATE above. Verify day-of-week matches before outputting.
 
 YOUR PREVIOUS (INVALID) RESPONSE:
 ${responsePreview}
@@ -70,6 +71,7 @@ RULES:
 3. Use null for missing optional fields, not undefined or empty string
 4. The "valid" field must be a boolean (true or false), not a string
 5. The "reasoning" field is required and must explain your extraction logic
+6. If the error was about incorrect dates, re-read CURRENT DATE and recalculate. If about wrong fields, re-read the schema. Do not guess — derive mathematically.
 
 Fix the error and provide a valid JSON response:`;
   },
