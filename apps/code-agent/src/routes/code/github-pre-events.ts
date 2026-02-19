@@ -16,6 +16,81 @@ export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
 }
 
+type PayloadObject = Record<string, unknown>;
+
+/**
+ * Extract the comment/review ID from a webhook payload so we can
+ * deduplicate created → edited sequences for the same comment.
+ */
+function extractCommentKey(eventType: string, payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const p = payload as PayloadObject;
+
+  if (eventType === 'issue_comment' || eventType === 'pull_request_review_comment') {
+    const comment = p['comment'];
+    if (typeof comment === 'object' && comment !== null) {
+      const id = (comment as PayloadObject)['id'];
+      if (typeof id === 'number') return `${eventType}:${String(id)}`;
+    }
+  }
+
+  if (eventType === 'pull_request_review') {
+    const review = p['review'];
+    if (typeof review === 'object' && review !== null) {
+      const id = (review as PayloadObject)['id'];
+      if (typeof id === 'number') return `${eventType}:${String(id)}`;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Deduplicate comment events so each comment appears once at its
+ * original position but with the latest body content.
+ */
+function deduplicateCommentEvents(events: GitHubPREvent[]): GitHubPREvent[] {
+  // First pass: find the latest version of each comment
+  const latestByKey = new Map<string, GitHubPREvent>();
+  for (const event of events) {
+    const key = extractCommentKey(event.eventType, event.payload);
+    if (key !== null) {
+      latestByKey.set(key, event);
+    }
+  }
+
+  // Second pass: emit each comment once (first occurrence position, latest body)
+  const seen = new Set<string>();
+  const result: GitHubPREvent[] = [];
+
+  for (const event of events) {
+    const key = extractCommentKey(event.eventType, event.payload);
+    if (key === null) {
+      result.push(event);
+      continue;
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const latest = latestByKey.get(key);
+    /* v8 ignore start -- ts-type: latest is always defined since key came from the same map @preserve */
+    if (latest === undefined) {
+      result.push(event);
+      continue;
+    }
+    /* v8 ignore stop @preserve */
+
+    // Keep original position and action, use latest body and payload
+    result.push({
+      ...event,
+      body: latest.body,
+      payload: latest.payload,
+    });
+  }
+
+  return result;
+}
+
 // Query params schema
 const githubPREventsQuerySchema = {
   type: 'object',
@@ -149,6 +224,9 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
         }
         /* v8 ignore stop @preserve */
 
+        // Deduplicate comment events (created → edited) so each comment appears once
+        const dedupedEvents = deduplicateCommentEvents(result.value); // @allow-result-access -- narrowed by !result.ok check above
+
         // Return only fields used by the UI
         const events: {
           pullRequestNumber: number;
@@ -160,7 +238,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           createdAt: string;
           eventUrl: string | null;
           body: string | null;
-        }[] = result.value.map((event: GitHubPREvent) => ({ // @allow-result-access -- narrowed by !result.ok check above
+        }[] = dedupedEvents.map((event: GitHubPREvent) => ({
           pullRequestNumber: event.pullRequestNumber,
           title: event.title,
           repository: event.repository,
