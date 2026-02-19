@@ -5,6 +5,7 @@ describe('feedNamePrompt', () => {
   it('has correct metadata', () => {
     expect(feedNamePrompt.name).toBe('feed-name-generation');
     expect(feedNamePrompt.description).toContain('composite data feeds');
+    expect(feedNamePrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('builds prompt with default deps', () => {

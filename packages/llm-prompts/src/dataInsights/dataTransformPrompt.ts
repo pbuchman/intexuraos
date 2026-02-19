@@ -18,6 +18,7 @@ export const dataTransformPrompt: PromptBuilder<DataTransformPromptInput, DataTr
   {
     name: 'data-transform',
     description: 'Transforms snapshot data according to chart definition instructions',
+    version: '1.0.0',
     build(input: DataTransformPromptInput): string {
       const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
       const snapshotData = JSON.stringify(input.snapshotData, null, 2);

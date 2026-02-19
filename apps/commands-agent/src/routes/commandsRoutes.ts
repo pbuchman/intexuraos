@@ -25,6 +25,7 @@ const commandSchema = {
         },
         confidence: { type: 'number' },
         reasoning: { type: 'string' },
+        promptVersion: { type: 'string' },
         classifiedAt: { type: 'string', format: 'date-time' },
       },
     },
