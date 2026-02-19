@@ -58,7 +58,7 @@ Fail-fast validation at startup. Call this before `buildServer()` in `index.ts`.
 function validateRequiredEnv(required: string[]): void;
 ```
 
-Throws an `Error` listing missing variables if any required env vars are missing or empty.
+Throws an `Error` listing missing variables if any required env vars are missing or empty. The error message also hints to check Terraform `env_vars` or `.envrc.local`.
 
 **Usage:**
 
@@ -89,6 +89,8 @@ Passive health check that always returns `'ok'`. Notion credentials are per-user
 ```typescript
 function checkNotionSdk(): HealthCheck;
 ```
+
+Returns `details: { mode: 'passive', reason: '...' }`.
 
 #### computeOverallStatus
 
@@ -156,12 +158,12 @@ app.setErrorHandler(createValidationErrorHandler());
 
 ## Recent Changes
 
-| Commit   | Description                                      | Age    |
-| -------- | ------------------------------------------------ | ------ |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner | recent |
-| 21c1528a | Fix release skill to bump all package versions   | recent |
-| 4fa0fed3 | Release v2.0.0                                   | recent |
-| 4f5a3f96 | Release v1.0.0                                   | recent |
+| Commit     | Description                                           | Age    |
+| ---------- | ----------------------------------------------------- | ------ |
+| `929dc714` | Fix JSON body parsing error handling across services  | recent |
+| `51cb268d` | Add tests for http-contracts and http-server packages | recent |
+| `d51755b6` | Migrate promptvault-service to use http-server        | recent |
+| `42d8c8c9` | Create packages/http-server with shared utilities     | recent |
 
 ## Source Files
 

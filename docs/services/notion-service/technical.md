@@ -73,8 +73,8 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 {
   configured: boolean,
   connected: boolean,
-  createdAt?: string,
-  updatedAt?: string
+  createdAt: string | null,
+  updatedAt: string | null
 }
 ```
 

@@ -101,21 +101,21 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                        | Date       |
-| ---------- | ------------------------------------------------------------------ | ---------- |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                    | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                | 2026-02-16 |
-| `e60eafc1` | Rename SPEECHMATICS_API_KEY to SPEECHMATICS_APP_API_KEY            | 2026-02-15 |
-| `d7c6a061` | Add consistent icons to all WhatsApp messages (🔐 verification)    | 2026-02-10 |
-| `fee08074` | INT-524 Add read receipt + typing indicator on button click        | 2026-02-09 |
+| Commit     | Description                                                           | Date       |
+| ---------- | --------------------------------------------------------------------- | ---------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                       | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                   | 2026-02-16 |
+| `e60eafc1` | Rename SPEECHMATICS_API_KEY to SPEECHMATICS_APP_API_KEY               | 2026-02-15 |
+| `d7c6a061` | Add consistent icons to all WhatsApp messages                         | 2026-02-10 |
+| `fee08074` | INT-524 Add read receipt + typing indicator on button click           | 2026-02-09 |
 | `f4d60cb5` | INT-524 Fix button_reply type extraction bug in extractButtonResponse | 2026-02-09 |
-| `090e1d9d` | INT-524 Unified interactive approval buttons (remove nonces/reactions) | 2026-02-09 |
-| `021e76bb` | Address PR review comments                                         | 2026-02-06 |
-| `86564bad` | Fix WhatsApp button_reply payload structure                        | 2026-01-28 |
-| `a9847b66` | Add WhatsApp approval buttons with nonces                          | 2026-01-27 |
-| `70ffe910` | Add verification routes and connect integration                    | 2026-01-26 |
-| `c3198407` | Fix all 132 response contract violations across codebase           | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps             | 2026-01-30 |
+| `090e1d9d` | INT-524 Unified interactive approval buttons (remove nonces/reactions)| 2026-02-09 |
+| `021e76bb` | Address PR review comments                                            | 2026-02-06 |
+| `86564bad` | Fix WhatsApp button_reply payload structure                           | 2026-01-28 |
+| `a9847b66` | Add WhatsApp approval buttons with nonces                             | 2026-01-27 |
+| `70ffe910` | Add verification routes and connect integration                       | 2026-01-26 |
+| `c3198407` | Fix all 132 response contract violations across codebase              | 2026-01-30 |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps                | 2026-01-30 |
 
 ## API Endpoints
 
@@ -145,7 +145,7 @@ sequenceDiagram
 
 | Method | Path                                         | Description                  | Auth         |
 | ------ | -------------------------------------------- | ---------------------------- | ------------ |
-| POST   | `/internal/whatsapp/pubsub/process-webhook`  | Process webhook from Pub/Sub | Pub/Sub OIDC |
+| POST   | `/internal/whatsapp/pubsub/process-webhook`  | Process webhook or link preview extraction from Pub/Sub | Pub/Sub OIDC |
 | POST   | `/internal/whatsapp/pubsub/transcribe-audio` | Process audio transcription  | Pub/Sub OIDC |
 | POST   | `/internal/whatsapp/pubsub/send-message`     | Send WhatsApp message        | Pub/Sub OIDC |
 | POST   | `/internal/whatsapp/pubsub/media-cleanup`    | Delete GCS media files       | Pub/Sub OIDC |
@@ -246,12 +246,13 @@ Tracks phone number verification attempts with rate limiting and cooldown.
 
 ### Subscribed Events
 
-| Event Type                  | Handler                                      |
-| --------------------------- | -------------------------------------------- |
-| `whatsapp.webhook.process`  | `/internal/whatsapp/pubsub/process-webhook`  |
-| `whatsapp.audio.transcribe` | `/internal/whatsapp/pubsub/transcribe-audio` |
-| `whatsapp.message.send`     | `/internal/whatsapp/pubsub/send-message`     |
-| `whatsapp.media.cleanup`    | `/internal/whatsapp/pubsub/media-cleanup`    |
+| Event Type                      | Handler                                      |
+| ------------------------------- | -------------------------------------------- |
+| `whatsapp.webhook.process`      | `/internal/whatsapp/pubsub/process-webhook`  |
+| `whatsapp.linkpreview.extract`  | `/internal/whatsapp/pubsub/process-webhook`  |
+| `whatsapp.audio.transcribe`     | `/internal/whatsapp/pubsub/transcribe-audio` |
+| `whatsapp.message.send`         | `/internal/whatsapp/pubsub/send-message`     |
+| `whatsapp.media.cleanup`        | `/internal/whatsapp/pubsub/media-cleanup`    |
 
 ### ApprovalReplyEvent (v4.0.0)
 
@@ -297,25 +298,29 @@ interface ApprovalReplyEvent {
 
 ## Configuration
 
-| Environment Variable                    | Required | Description                                  |
-| --------------------------------------- | -------- | -------------------------------------------- |
-| `INTEXURAOS_WHATSAPP_APP_SECRET`        | Yes      | WhatsApp app secret for signature validation |
-| `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`      | Yes      | Webhook verification token                   |
-| `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`      | Yes      | WhatsApp Graph API access token              |
-| `INTEXURAOS_WHATSAPP_WABA_ID`          | Yes      | Allowed WABA IDs (comma-separated)           |
-| `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`  | Yes      | Allowed phone number IDs (comma-separated)   |
-| `INTEXURAOS_WHATSAPP_MEDIA_BUCKET`     | Yes      | GCS bucket for media storage                 |
-| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`       | Yes | Media cleanup Pub/Sub topic              |
-| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION`| Yes | Media cleanup subscription              |
-| `INTEXURAOS_SPEECHMATICS_APP_API_KEY`  | Yes      | Speechmatics API key for transcription       |
-| `INTEXURAOS_GCP_PROJECT_ID`            | Yes      | Google Cloud project ID                      |
-| `INTEXURAOS_WEB_AGENT_URL`             | Yes      | Web-agent URL for link preview extraction    |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`       | Yes      | Shared secret for internal endpoints         |
-| `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`    | No  | Commands ingest topic                    |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`      | No  | Send message topic                       |
-| `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`    | No  | Webhook processing topic                 |
-| `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`      | No  | Audio transcription topic                |
-| `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`     | No  | Approval reply topic                     |
+| Environment Variable                           | Required | Description                                  |
+| ---------------------------------------------- | -------- | -------------------------------------------- |
+| `INTEXURAOS_WHATSAPP_APP_SECRET`               | Yes      | WhatsApp app secret for signature validation |
+| `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`             | Yes      | Webhook verification token                   |
+| `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`             | Yes      | WhatsApp Graph API access token              |
+| `INTEXURAOS_WHATSAPP_WABA_ID`                  | Yes      | Allowed WABA IDs (comma-separated)           |
+| `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`          | Yes      | Allowed phone number IDs (comma-separated)   |
+| `INTEXURAOS_WHATSAPP_MEDIA_BUCKET`             | Yes      | GCS bucket for media storage                 |
+| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`        | Yes      | Media cleanup Pub/Sub topic                  |
+| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION` | Yes      | Media cleanup subscription                   |
+| `INTEXURAOS_SPEECHMATICS_APP_API_KEY`          | Yes      | Speechmatics API key for transcription       |
+| `INTEXURAOS_GCP_PROJECT_ID`                    | Yes      | Google Cloud project ID                      |
+| `INTEXURAOS_WEB_AGENT_URL`                     | Yes      | Web-agent URL for link preview extraction    |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`               | Yes      | Shared secret for internal endpoints         |
+| `INTEXURAOS_USER_SERVICE_URL`                  | Yes      | User service URL for user lookup             |
+| `INTEXURAOS_AUTH_JWKS_URL`                     | Yes      | JWKS URL for JWT validation                  |
+| `INTEXURAOS_AUTH_ISSUER`                       | Yes      | JWT issuer for token validation              |
+| `INTEXURAOS_AUTH_AUDIENCE`                     | Yes      | JWT audience for token validation            |
+| `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`      | Yes      | Commands ingest topic                        |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`        | Yes      | Send message topic                           |
+| `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`      | Yes      | Webhook processing topic                     |
+| `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`        | Yes      | Audio transcription topic                    |
+| `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`       | Yes      | Approval reply topic                         |
 
 ## Gotchas
 
@@ -406,16 +411,25 @@ apps/whatsapp-service/src/
         outboundMessageRepository.ts  # v2.0.0
         repositories.ts               # PhoneVerificationRepository (v3.0.0)
         whatsappCloudApi.ts           # markAsReadWithTyping (v4.0.0)
+        linkPreviewFetcher.ts
+        mediaStorage.ts
+        thumbnailGenerator.ts
+        transcription.ts
       usecases/
         processAudioMessage.ts
         processImageMessage.ts
         transcribeAudio.ts
+        extractLinkPreviews.ts
       events/
         events.ts                     # ApprovalReplyEvent (v4.0.0: no nonce)
       models/
         WhatsAppMessage.ts
         PhoneVerification.ts          # v3.0.0
+        LinkPreview.ts
         error.ts                      # ALREADY_VERIFIED, COOLDOWN_ACTIVE, RATE_LIMIT_EXCEEDED
+      utils/
+        phoneNumber.ts
+        mimeType.ts
   infra/
     firestore/
       webhookEventRepository.ts
@@ -424,23 +438,32 @@ apps/whatsapp-service/src/
       outboundMessageRepository.ts    # v2.0.0
       phoneVerificationRepository.ts  # v3.0.0
     gcs/
-      mediaStorage.ts
+      mediaStorageAdapter.ts
     whatsapp/
-      cloudApiClient.ts              # markAsReadWithTyping (v4.0.0)
+      cloudApiAdapter.ts              # markAsReadWithTyping (v4.0.0)
       sender.ts                       # sendInteractiveMessage (v3.0.0)
-    thumbnail/
+    media/
       thumbnailGenerator.ts
+      thumbnailAdapter.ts
+    linkpreview/
+      webAgentLinkPreviewClient.ts
     pubsub/
       publisher.ts
+    speechmatics/
+      adapter.ts
   routes/
     webhookRoutes.ts                  # Button handling: no nonces, reject intent (v4.0.0)
     messageRoutes.ts
     mappingRoutes.ts                  # Verification-gated connect (v3.0.0)
-    pubsubRoutes.ts                   # Interactive message support (v3.0.0)
+    pubsubRoutes.ts                   # Interactive message + link preview support
     verificationRoutes.ts             # v3.0.0
     shared.ts                         # extractButtonResponse (button/button_reply fix v4.0.0)
     schemas.ts
+    routes.ts
   signature.ts
   adapters.ts                         # PhoneVerificationRepositoryAdapter (v3.0.0)
+  config.ts
   services.ts                         # phoneVerificationRepository in ServiceContainer
+  server.ts
+  index.ts
 ```

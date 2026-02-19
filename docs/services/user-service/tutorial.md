@@ -173,6 +173,7 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
 {
   "success": true,
   "data": {
+    "defaultModel": null,
     "google": null,
     "openai": "sk-p...XXXX",
     "anthropic": null,
@@ -256,6 +257,7 @@ Test results are now visible in the response:
 {
   "success": true,
   "data": {
+    "defaultModel": null,
     "openai": "sk-p...XXXX",
     "testResults": {
       "openai": {

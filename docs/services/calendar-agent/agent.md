@@ -32,10 +32,13 @@ interface CalendarAgentTools {
   getPreview(actionId: string): Promise<CalendarPreview | null>;
 
   // Process calendar action (with preview support)
+  // HTTP body: { action: { id, userId, title } }
   processAction(params: {
-    actionId: string;
-    userId: string;
-    text: string;
+    action: {
+      id: string;
+      userId: string;
+      title: string; // user message text to extract event from
+    };
   }): Promise<ServiceFeedback>;
 
   // List events in date range
@@ -300,4 +303,4 @@ interface ServiceFeedback {
 
 ---
 
-**Last updated:** 2026-02-19 (v2.4.0 - Gemini 2.5 Flash default LLM, platform Zai fallback, Dash0 OpenTelemetry)
+**Last updated:** 2026-02-19 (v2.4.0 - Gemini 2.5 Flash default LLM, platform Zai fallback, Dash0 OpenTelemetry, fix processAction HTTP body shape)

@@ -5,7 +5,7 @@
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
 | TODO/FIXME  | 0     | -        |
-| Code Smells | 2     | Low      |
+| Code Smells | 3     | Low-Med  |
 
 ## Active Issues
 
@@ -32,6 +32,22 @@
 **Impact:** A new provider requires changes in 3 locations.
 
 **Resolution path:** Extract a `fetchAllProviderPricing(repo)` utility that returns `{ google, openai, anthropic, perplexity, zai }` or throws/returns error list.
+
+---
+
+### 3. Firestore usage stats fetches all historical documents client-side
+
+**Location:** `apps/app-settings-service/src/infra/firestore/usageStatsRepository.ts:67-89`
+
+**Issue:** `getUserCosts()` queries `collectionGroup('by_user').where('userId', '==', userId)` without a date filter at the Firestore query level. The `days` cutoff is applied client-side after fetching all documents:
+
+```typescript
+if (period < cutoffDate) continue; // client-side filter
+```
+
+**Impact:** Firestore reads scale with the user's total historical data, not just the requested window. A user with 2 years of history pays full read cost even for a `?days=7` query.
+
+**Resolution path:** Add a `createdAt` timestamp field to usage docs, then push the date filter into the Firestore query: `.where('createdAt', '>=', cutoffTimestamp)`. Requires a migration to backfill `createdAt` on existing docs.
 
 ---
 

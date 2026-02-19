@@ -265,7 +265,7 @@ Serves the production build locally at `http://localhost:3000`
 | Chat not working as guest               | Guest sessions are rate-limited; clear `intex-guest-session-id` from localStorage to reset |
 | Dark mode not persisting                | Ensure localStorage is available (not in strict private mode)                              |
 | Linear board not updating               | Firestore listener may have expired; reload the page                                       |
-| Code task terminal blank                | Firebase auth may have failed; check the browser console for auth errors                   |
+| Code task log stream blank              | Firebase auth may have failed; check the browser console for auth errors                   |
 
 ---
 
@@ -297,7 +297,7 @@ Now that you understand the basics:
 2. Read [`apiClient.ts`](../../../apps/web/src/services/apiClient.ts) for request handling
 3. Check [`App.tsx`](../../../apps/web/src/App.tsx) for routing structure
 4. Study the [`Chat`](../../../apps/web/src/components/Chat/Chat.tsx) component for the chat assistant architecture
-5. Review [`CodeTaskViewPage.tsx`](../../../apps/web/src/pages/CodeTaskViewPage.tsx) for the two-phase code task UI with terminal, queued messaging, and design banners
+5. Review [`CodeTaskViewPage.tsx`](../../../apps/web/src/pages/CodeTaskViewPage.tsx) for the two-phase code task UI with LogStream, queued messaging, and design/implementation banners
 6. See [`PREventsPage.tsx`](../../../apps/web/src/pages/PREventsPage.tsx) for lazy-loaded summaries with `useGitHubPRSummaries` + `useGitHubPREvents`
 
 ---

@@ -6,9 +6,19 @@
 
 Image-service is an internal service with no public endpoints. This tutorial covers the internal endpoints used by other services like research-agent.
 
-**Version:** 2.3.0
+**Version:** 2.4.0
 
 ## Recent Updates
+
+**Dev-Mode Log Formatting (February 2026):**
+
+- PM2 logs now show colorized output: `service-name | HH:mm:ss | LEVEL | message | {extras}`
+- No behavior change required — `createLogStream()` handles the format transparently
+
+**Gemini Platform Fallback (February 2026):**
+
+- `INTEXURAOS_GEMINI_APP_API_KEY` added as primary platform fallback before ZAI
+- Gemini 2.5 Flash is now the default platform model (faster than ZAI GLM)
 
 **Dash0 OpenTelemetry Integration (February 2026):**
 
@@ -22,7 +32,7 @@ Image-service is an internal service with no public endpoints. This tutorial cov
 
 **Platform Key Fallback (February 2026):**
 
-- Users without their own API keys now fall back to platform-owned Zai key
+- Users without their own API keys fall back to platform-owned Gemini key first, then Zai
 - Image generation available to all users, not just those with personal API keys configured
 
 **Response Contract Migration (February 2026):**

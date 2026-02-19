@@ -2,7 +2,7 @@
 
 ## Overview
 
-The orchestrator is a Fastify-based HTTP service (v2.1.0) that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running Claude Code in interactive mode, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens, persists state atomically to disk, and recovers interrupted tasks on restart. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent.
+The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running Claude Code in interactive mode, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens, persists state atomically to disk, and recovers interrupted tasks on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its phase-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent.
 
 ## Architecture
 
@@ -76,6 +76,16 @@ graph TB
 
 ## Recent Changes
 
+### Multi-Attempt Completion Verification (2026-02-19)
+
+Added `OrchestratorCompletionVerifier` and integrated it into `TaskDispatcher`:
+
+- After each container exit, runs deterministic checks (worker exit code, PHASE1/PHASE2_FINAL contract blocks, PR URL presence, CI status)
+- Then calls Gemini 2.5 Flash to adjudicate completion with the last 120 log lines and the last assistant message
+- If the verifier returns `passed=false` and `attempt < maxAttempts`, the dispatcher automatically continues the session with a resume prompt listing missing criteria
+- If the verifier itself is unavailable (Gemini API error), the task is marked `failed` with `TASK_COMPLETION_VERIFIER_FAILED` — prevents false-positive completions
+- `maxAttempts` is configurable at startup via `CompletionControlConfig`
+
 ### Turn Metrics Collection (2026-02-19)
 
 Added `TurnMetricsCollector` for automatic per-task resource and cost metrics:
@@ -138,7 +148,9 @@ Split system prompt into Phase 1 (Design & Validation) and Phase 2 (Strict Execu
 | POST   | `/tasks`               | HMAC signed | `CreateTaskRequest` (Zod-validated) | `202 { taskId, status: "accepted" }`           |
 | GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                            |
 | DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404` |
+| POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`         |
 | GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available, anthropicOAuth }` |
+| GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable |
 | POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`              |
 | POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`  |
 
@@ -158,22 +170,36 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 
 ```typescript
 {
-  taskId: string;          // Unique task identifier
+  taskId: string;               // Unique task identifier
   workerType: 'opus' | 'auto' | 'glm';
-  prompt: string;          // User prompt (sanitized before injection)
-  repository?: string;     // GitHub repo (default: pbuchman/intexuraos)
-  baseBranch?: string;     // Branch to fork from (default: development)
-  linearIssueId?: string;  // Linear issue for tracking
+  prompt: string;               // User prompt (sanitized before injection)
+  repository?: string;          // GitHub repo (default: pbuchman/intexuraos)
+  baseBranch?: string;          // Branch to fork from (default: development)
+  linearIssueId?: string;       // Linear issue for tracking
   linearIssueTitle?: string;
   linearIssueLabels: string[];  // Determines Phase 1 vs Phase 2
   hasChildren: boolean;         // Enables parent execution mode
   slug?: string;
-  webhookUrl: string;      // Callback URL for results
-  webhookSecret: string;   // HMAC secret for webhook signing
-  actionId?: string;       // Originating action ID
-  retriedFrom?: string;    // Original task ID for retry chains
+  webhookUrl: string;           // Callback URL for results
+  webhookSecret: string;        // HMAC secret for webhook signing
+  actionId?: string;            // Originating action ID
 }
 ```
+
+### SendMessage Schema
+
+`POST /tasks/:id/message` — sends a follow-up message to a task.
+
+```typescript
+{
+  message: string; // min 1, max 10000 characters
+}
+```
+
+**Behavior:**
+- If the task is `running`: the message is queued and delivered when the current attempt finishes
+- If the task is `completed`, `failed`, or `interrupted`: a new worker session is started with the message as the prompt (using `continueSession: true`)
+- Returns `409` if the task status does not allow messages (e.g., `cancelled`)
 
 ## Domain Model
 
@@ -206,6 +232,48 @@ interface OrchestratorState {
 }
 ```
 
+### Task
+
+```typescript
+interface Task {
+  taskId: string;
+  workerType: 'opus' | 'auto' | 'glm';
+  prompt: string;
+  repository: string;
+  baseBranch: string;
+  linearIssueId?: string;
+  linearIssueTitle?: string;
+  linearIssueLabels: string[];
+  hasChildren?: boolean;
+  slug?: string;
+  webhookUrl: string;
+  webhookSecret: string;
+  actionId?: string;
+  retriedFrom?: string;           // Original task ID for retry chains
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+  worktreePath: string;
+  containerId: string;
+  startedAt: string;              // ISO 8601
+  completedAt?: string;           // ISO 8601
+  attemptCount?: number;          // Current attempt (starts at 1)
+  maxAttempts?: number;           // Maximum attempts before terminal failure
+  lastExitCode?: number;          // Exit code from most recent worker attempt
+  verificationHistory?: TaskVerificationRecord[]; // Completion verifier results per attempt
+}
+
+interface TaskVerificationRecord {
+  attempt: number;
+  passed: boolean;
+  confidence: number;
+  reasons: string[];
+  missingCriteria: string[];
+  resumeInstruction: string;
+  usedLlm: boolean;
+  verifierFailure?: boolean;
+  createdAt: string;
+}
+```
+
 ### TaskResult
 
 After a task completes, the orchestrator inspects the worktree for results:
@@ -234,21 +302,25 @@ The central coordinator. Manages the full task lifecycle:
 
 1. Atomic capacity check via `async-mutex`
 2. Worktree creation via `WorktreeManager`
-3. System prompt construction via `buildSystemPrompt()`
-4. Container creation via `DockerProvider`
-5. Token registration via `TokenRefresher`
-6. Log forwarding registration via `LogForwarder`
-7. Completion monitoring (30s polling interval)
-8. Timeout warning at 1h55m, hard kill at 2h
-9. Result extraction via `gh pr list` and `gh pr checks`
-10. Turn metrics collection via `TurnMetricsCollector` (post-completion)
-11. Webhook delivery via `WebhookClient`
+3. Anthropic API key validation (for `opus`/`auto` worker types)
+4. System prompt construction via `buildSystemPrompt()`
+5. Container creation via `DockerProvider` (`startWorkerAttempt`)
+6. Token registration via `TokenRefresher`
+7. Log forwarding registration via `LogForwarder`
+8. Completion monitoring (30s polling interval)
+9. Timeout warning at 1h55m, hard kill at 2h
+10. On container exit: result extraction via `gh pr list` + `gh pr checks`, then completion verification via `CompletionVerifier`
+11. If verification fails and `attempt < maxAttempts`: resume the session with a targeted follow-up prompt (auto-continue loop)
+12. If verification passes or max attempts reached: turn metrics collection via `TurnMetricsCollector`, then webhook delivery
+13. Queued messages (from `POST /tasks/:id/message` during execution) are delivered as the next session when verification passes
+
+The dispatcher also exposes `sendMessage()` for mid-task message injection. Running tasks queue messages for post-completion delivery; finished tasks are resumed immediately with a new worker session.
 
 ### DockerProvider
 
 Manages Docker container lifecycle via `dockerode`:
 
-- **Image:** `gcr.io/intexuraos-dev-pbuchman/claude-worker:latest`
+- **Image:** `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest` (overridable via `INTEXURAOS_CLAUDE_WORKER_IMAGE`)
 - **Network:** `claude-worker-net`
 - **Limits:** 8GB memory, 4 CPUs per container
 - **Security:** `CapDrop: ALL`, `CapAdd: NET_RAW`, `SecurityOpt: no-new-privileges`
@@ -340,6 +412,24 @@ Collects per-task resource and cost metrics after container exit:
 - Publishes `TurnMetrics` struct to `POST /internal/turn-metrics` on code-agent
 - Errors are non-fatal: logged and swallowed so task outcome is unaffected
 
+### OrchestratorCompletionVerifier
+
+Evaluates whether a task attempt met its phase-specific contract using a two-stage pipeline:
+
+**Stage 1 — Deterministic checks:**
+- Non-zero worker exit code → `passed=false`
+- Missing assistant final message in logs → `passed=false`
+- Phase 1: validates `PHASE1_FINAL:` block with `Linear label set`, `Phase 2 ready`, `Linear issue URL`, and `Summary`
+- Phase 2: validates `PHASE2_FINAL:` block, presence of PR URL in task result, and absence of CI failures
+
+**Stage 2 — LLM adjudication (Gemini 2.5 Flash):**
+- Sends the original prompt, required contract template, deterministic signals, last assistant message, and last 120 log lines
+- Returns `{ passed, confidence, reasons, missingCriteria, resumeInstruction }` as JSON
+- Merges LLM and deterministic failure reasons if `passed=false`
+- If Gemini is unreachable or returns invalid JSON: `verifierFailure=true`, task is marked `failed` (prevents false-positive completions)
+
+The verifier is non-optional when `INTEXURAOS_GEMINI_APP_API_KEY` is set. It uses `@intexuraos/llm-factory` and logs all requests/responses via `OrchestratorFileAuditSink`.
+
 ### SensitiveFileGuard
 
 Prevents accidental secret leaks in commits:
@@ -377,20 +467,23 @@ Appends LLM audit records to a local JSONL file:
 
 ## Dependencies
 
-| Package                   | Version   | Purpose                                    |
-| ------------------------- | --------- | ------------------------------------------ |
-| `fastify`                 | ^5.6.2    | HTTP server                                |
-| `@fastify/cors`           | ^10.1.0   | CORS support                               |
-| `dockerode`               | ^4.0.9    | Docker Engine API client                   |
-| `async-mutex`             | ^0.5.0    | Atomic capacity checking                   |
-| `jose`                    | ^5.9.6    | JWT signing for TokenRefresher             |
-| `jsonwebtoken`            | ^9.0.2    | JWT signing for GitHubTokenService         |
-| `minimatch`               | ^10.1.1   | Glob pattern matching (SensitiveFileGuard) |
-| `pino`                    | ^9.6.0    | Structured logging                         |
-| `pino-pretty`             | ^13.0.0   | Human-readable log output                  |
-| `zod`                     | ^3.24.1   | Request schema validation                  |
-| `@intexuraos/common-core` | workspace | Result types, Logger, error serialization  |
-| `@intexuraos/llm-audit`   | workspace | AuditSink interface for LLM audit logging  |
+| Package                    | Version   | Purpose                                                    |
+| -------------------------- | --------- | ---------------------------------------------------------- |
+| `fastify`                  | ^5.6.2    | HTTP server                                                |
+| `@fastify/cors`            | ^10.1.0   | CORS support                                               |
+| `dockerode`                | ^4.0.9    | Docker Engine API client                                   |
+| `async-mutex`              | ^0.5.0    | Atomic capacity checking                                   |
+| `jose`                     | ^5.9.6    | JWT signing for TokenRefresher                             |
+| `jsonwebtoken`             | ^9.0.2    | JWT signing for GitHubTokenService                         |
+| `minimatch`                | ^10.1.1   | Glob pattern matching (SensitiveFileGuard)                 |
+| `pino`                     | ^9.6.0    | Structured logging                                         |
+| `pino-pretty`              | ^13.0.0   | Human-readable log output                                  |
+| `zod`                      | ^3.24.1   | Request schema validation                                  |
+| `@intexuraos/common-core`  | workspace | Result types, Logger, error serialization                  |
+| `@intexuraos/llm-audit`    | workspace | AuditSink interface for LLM audit logging                  |
+| `@intexuraos/llm-factory`  | workspace | LLM client creation for completion verifier                |
+| `@intexuraos/llm-contract` | workspace | Model enums and pricing types used by completion verifier  |
+| `@intexuraos/llm-pricing`  | workspace | StructuredLogUsageSink for verifier token cost logging     |
 
 ## Configuration
 
@@ -398,41 +491,48 @@ Appends LLM audit records to a local JSONL file:
 
 #### Required (startup fails if missing)
 
-| Variable                            | Description                           |
-| ----------------------------------- | ------------------------------------- |
-| `INTEXURAOS_REPOSITORY_URL`         | GitHub repo URL for clone/fetch       |
-| `INTEXURAOS_CODE_AGENT_URL`         | Webhook callback URL (Cloud Run)      |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`    | HMAC signing secret                   |
-| `INTEXURAOS_PROJECT_ID`             | GCP project for Secret Manager        |
-| `INTEXURAOS_GITHUB_APP_ID`          | GitHub App ID                         |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID` | GitHub App installation ID            |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Service-to-service auth token         |
-| `INTEXURAOS_LINEAR_API_KEY`         | Linear API key (passed to workers)    |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | Sentry auth token (passed to workers) |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | GCP service account key path          |
+| Variable                            | Description                                          |
+| ----------------------------------- | ---------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL`         | GitHub repo URL for clone/fetch                      |
+| `INTEXURAOS_CODE_AGENT_URL`         | Webhook callback URL (Cloud Run)                     |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`    | HMAC signing secret                                  |
+| `INTEXURAOS_PROJECT_ID`             | GCP project for Secret Manager                       |
+| `INTEXURAOS_GITHUB_APP_ID`          | GitHub App ID                                        |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID` | GitHub App installation ID                           |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Service-to-service auth token                        |
+| `INTEXURAOS_LINEAR_API_KEY`         | Linear API key (passed to workers)                   |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | Sentry auth token (passed to workers)                |
+| `INTEXURAOS_GEMINI_APP_API_KEY`     | Gemini API key for completion verifier               |
+| `INTEXURAOS_ZAI_APP_API_KEY`        | ZAI API key for GLM workers                          |
+| `GOOGLE_APPLICATION_CREDENTIALS`    | GCP service account key path                         |
 
 #### Optional
 
-| Variable                       | Default                       | Description                |
-| ------------------------------ | ----------------------------- | -------------------------- |
-| `INTEXURAOS_REPOSITORY_PATH`   | `~/.claude-orchestrator/repo` | Local repo clone path      |
-| `INTEXURAOS_ANTHROPIC_API_KEY` | `""`                          | Claude API key for workers |
-| `INTEXURAOS_ZAI_APP_API_KEY`   | `""`                          | ZAI API key for workers    |
-| `INTEXURAOS_WORKER_CAPACITY`   | `2`                           | Max concurrent tasks       |
-| `PORT`                         | `8199`                        | HTTP server port           |
-| `LOG_LEVEL`                    | `info`                        | Pino log level             |
+| Variable                                          | Default                       | Description                                           |
+| ------------------------------------------------- | ----------------------------- | ----------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_PATH`                      | `~/.claude-orchestrator/repo` | Local repo clone path                                 |
+| `INTEXURAOS_WORKER_CAPACITY`                      | `2`                           | Max concurrent tasks                                  |
+| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`              | `3`                           | Max auto-continue attempts before terminal failure    |
+| `INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS`    | `1`                           | Keep containers alive after failure for debugging     |
+| `INTEXURAOS_CLAUDE_WORKER_IMAGE`                  | (GCR latest)                  | Override the Docker image used for workers            |
+| `INTEXURAOS_GIT_USER_NAME`                        | host git config               | Git user.name for commits inside worker containers    |
+| `INTEXURAOS_GIT_USER_EMAIL`                       | host git config               | Git user.email for commits inside worker containers   |
+| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`               | (Secret Manager)              | PEM key override for testing without Secret Manager   |
+| `KEEP_CONTAINERS_ALIVE`                           | `0`                           | `1` = never remove containers (debug mode)            |
+| `PORT`                                            | `8199`                        | HTTP server port                                      |
+| `LOG_LEVEL`                                       | `info`                        | Pino log level                                        |
 
 ### Docker Container Defaults
 
-| Setting        | Value                                                 |
-| -------------- | ----------------------------------------------------- |
-| Image          | `gcr.io/intexuraos-dev-pbuchman/claude-worker:latest` |
-| Network        | `claude-worker-net`                                   |
-| Max concurrent | 4                                                     |
-| Memory limit   | 8 GB                                                  |
-| CPU count      | 4                                                     |
-| Timeout        | 2 hours                                               |
-| User           | 1001:1001                                             |
+| Setting        | Value                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| Image          | `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`      |
+| Network        | `claude-worker-net`                                                                                |
+| Max concurrent | configurable (default 2, `INTEXURAOS_WORKER_CAPACITY`)                                            |
+| Memory limit   | 8 GB                                                                                               |
+| CPU count      | 4                                                                                                  |
+| Timeout        | 2 hours                                                                                            |
+| User           | 1001:1001                                                                                          |
 
 ### Timer Intervals
 
@@ -463,6 +563,10 @@ Appends LLM audit records to a local JSONL file:
 10. **State file corruption.** If `state.json` is corrupted (e.g., partial write on crash), `StatePersistence.load()` backs up the file and starts fresh rather than crashing.
 11. **Turn metrics are cgroup-dependent.** `TurnMetricsCollector` reads from `/sys/fs/cgroup/system.slice/docker-{id}.scope` — this path is Linux-specific and will return zero values on macOS (where cgroup v2 is not exposed). Turn metrics collection is non-fatal.
 12. **Docker header stripping handles mid-frame splits.** Long messages (e.g., `hook_response` JSON) can span multiple Docker frames, resulting in headers appearing mid-string. `log-formatter.ts` scans the entire string for the 8-byte binary pattern, not just at line boundaries.
+13. **Completion verifier is required.** `INTEXURAOS_GEMINI_APP_API_KEY` is a hard-required env var since completion verification is always enabled. Missing this key causes startup failure.
+14. **Verifier failure = task failure.** If Gemini is unreachable or returns unparseable JSON, the task is marked `failed` with `TASK_COMPLETION_VERIFIER_FAILED` rather than completing normally. This prevents tasks from being reported as successful when their outcomes cannot be verified.
+15. **Git identity flows from host to container.** The bootstrapper reads `git config user.name` and `user.email` from the host and injects them as env vars into worker containers so commits have the correct author. Override via `INTEXURAOS_GIT_USER_NAME`/`INTEXURAOS_GIT_USER_EMAIL`.
+16. **`/tasks/:id/message` requires HMAC auth.** Unlike the GET and DELETE task endpoints, sending a message to a task requires the same HMAC dispatch headers as submitting a new task.
 
 ## File Structure
 
@@ -489,7 +593,7 @@ workers/orchestrator/
       system-prompt.ts                # Phase 1/2 prompt builder
       turn-metrics-collector.ts       # Per-task cgroup + token metrics
       orchestrator-audit-sink.ts      # LLM audit log file sink
-      completion-verifier.ts          # Task completion verification
+      completion-verifier.ts          # LLM-backed task completion verification (Gemini)
       api-key-validator.ts            # API key validation
       isolation/
         index.ts                      # Factory + re-exports

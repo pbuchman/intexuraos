@@ -7,7 +7,7 @@
 | TODO/FIXME Comments | 0     | -        |
 | Security Hardening  | 3     | Medium   |
 | Operational Gaps    | 2     | Low      |
-| Architecture Debt   | 3     | Low      |
+| Architecture Debt   | 2     | Low      |
 
 Last updated: 2026-02-19
 
@@ -71,13 +71,6 @@ Last updated: 2026-02-19
 **Impact:** Rolling back to a previous worker image version requires knowing the exact tag that was pushed.
 **Ideal fix:** Tag images with git SHA or semantic version during CI builds.
 
-### 8. pnpm store is ephemeral on every container
-
-**Severity:** Low
-**Location:** `entrypoint.sh` (`pnpm config set store-dir /home/claude/pnpm-store`)
-**Context:** The pnpm content-addressable store is placed on the `/home/claude` tmpfs, meaning every container cold-installs all dependencies. For a monorepo with many packages, this adds significant startup time.
-**Impact:** Each managed-mode container startup performs a full `pnpm install`, even if the lockfile hasn't changed.
-**Ideal fix:** Mount a shared host-side pnpm store volume at a path outside `/home/claude` so the cache persists across containers. Requires ensuring the store path is not writable by other containers simultaneously (pnpm store is safe for concurrent reads, but writes need locking).
 
 ## Future Plans
 
@@ -86,6 +79,7 @@ Last updated: 2026-02-19
 - **Read-only root filesystem** - Investigate all write paths and create targeted mounts to enable `ReadonlyRootfs: true`
 - **Image size optimization** - Multi-stage build to reduce final image size by excluding build-time-only dependencies
 - **Seccomp profile** - Add a custom seccomp profile to restrict system calls beyond capability dropping
+- **Image versioning** - Tag images with git SHA or semantic version in CI; currently tagged as `:latest`
 
 ### Proposed Enhancements
 
@@ -93,7 +87,6 @@ Last updated: 2026-02-19
 2. Container health check mechanism for faster hung-process detection
 3. Automated image versioning in CI pipeline
 4. Periodic toolchain usage audit to keep the image lean
-5. Shared host-side pnpm store volume to avoid cold-install overhead
 
 ## Resolved Issues
 
@@ -108,6 +101,10 @@ Initially migrated from `--print` mode to interactive mode with Docker attach st
 ### MCP Server Permission Errors (2026-02-19)
 
 Pre-installed MCP server packages (`@upstash/context7-mcp`, `@sentry/mcp-server`, `@playwright/mcp`) globally via `npm install -g` in the Dockerfile. On Alpine, `npx -y <package>` downloads to a temp directory with `noexec` permissions, causing "Permission denied" at MCP startup. Global installation puts binaries in `/usr/local/bin` with proper execute permissions; `npx` finds the global install and skips the download.
+
+### Persistent pnpm Store via Host Mount (2026-02-19)
+
+The `DockerProvider` now creates a shared `pnpm-store` directory on the host (alongside `secretsBasePath`) and bind-mounts it at `/home/claude/pnpm-store:rw`. Store contents survive container teardown and are shared across all workers started by the same orchestrator instance, eliminating cold-install overhead for lockfile-unchanged runs.
 
 ### Playwright Browser Download Failure (2026-02-19)
 

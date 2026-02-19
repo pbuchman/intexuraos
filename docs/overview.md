@@ -42,10 +42,14 @@ This release introduces a complete autonomous coding pipeline, an in-app AI assi
 - PM2-based local worker orchestration engine running behind Cloudflare Tunnel
 - Docker container isolation with dropped capabilities, memory limits, and read-only secrets
 - Git worktree parallelism for concurrent task execution (default: 2 slots)
-- Real-time log forwarding to code-agent in 8KB chunks at 3-second intervals
+- Real-time log forwarding to code-agent in 64KB chunks at 3-second intervals
 - System prompt phases: Phase 1 (design validation) vs Phase 2 (autonomous execution) based on Linear issue labels
 - HMAC-signed webhooks with 3 retries, exponential backoff, and pending queue with 24-hour TTL
 - Crash-safe state persistence with startup recovery
+- LLM-backed completion verification: Gemini 2.5 Flash checks phase contract blocks, PR presence, and CI status after each attempt
+- Per-task turn metrics collection: CPU time, peak memory, token counts from cgroups
+- Git identity propagation: host git config injected into containers for correct commit authorship
+- Mid-task message injection: messages queued while task runs, delivered at next turn boundary
 
 **Claude Worker (worker)**
 
@@ -158,6 +162,14 @@ New 3-column layout optimized for workflow visibility:
 
 ## What's New Since v3.0.0
 
+### Distributed Tracing and Dev Logging (research-agent v2.4.0)
+
+Research-agent now emits distributed traces to Dash0 via OpenTelemetry and improves local development ergonomics:
+
+- Traces propagate across Pub/Sub, HTTP, and Firestore boundaries — enabled via `INTEXURAOS_DASH0_OTLP_ENDPOINT`
+- Powered by `@intexuraos/infra-otel` preloaded via `--import` flag (zero source-code changes)
+- PM2 log output colorized and human-readable in development; production JSON logging unchanged
+
 ### Research Notion Export (v2.2.0)
 
 Completed research reports can be automatically exported to Notion as structured pages:
@@ -186,7 +198,7 @@ Users can set a preferred fast model that all agents inherit for quick generatio
 
 ### OpenTelemetry Distributed Tracing (infra-otel)
 
-New `@intexuraos/infra-otel` package provides zero-code observability across all 19 services:
+New `@intexuraos/infra-otel` package provides zero-code observability across all 20 services:
 
 - Loaded via PM2 `NODE_OPTIONS: '--import @intexuraos/infra-otel/register'` — no source-code changes
 - OTLP HTTP export of traces and metrics to Dash0 at 30-second intervals
@@ -203,11 +215,11 @@ IntexuraOS integrates with **5 AI providers** and **17 models**, treating them a
 
 | Provider   | Models                                      | Capabilities                                              |
 | ---------- | ------------------------------------------- | --------------------------------------------------------- |
-| Google     | Gemini 2.5 Pro, Flash, Flash-Image          | Reasoning, classification, images                         |
-| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, images, embeddings (RAG)        |
-| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Analysis, research, validation, autonomous code execution |
-| Perplexity | Sonar, Sonar Pro, Sonar Deep Research       | Web search, real-time information                         |
-| Zai        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, lightweight, cost-efficient code tasks      |
+| Google     | Gemini 2.5 Pro, Flash, Flash-Image, 2.0 Flash | Reasoning, classification, images, fast internal ops (fallback) |
+| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1   | Deep research, synthesis, images, embeddings (RAG)              |
+| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5        | Analysis, research, validation, autonomous code execution       |
+| Perplexity | Sonar, Sonar Pro, Sonar Deep Research         | Web search, real-time information                               |
+| Zai        | GLM-4.7, GLM-4.7-Flash                        | Multilingual, lightweight, cost-efficient code tasks            |
 
 ### Intelligent Routing
 
@@ -756,4 +768,4 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ---
 
-**Last updated:** 2026-02-19 (v3.0.0 + post-release additions)
+**Last updated:** 2026-02-19 (v3.0.0 + v2.4.0 distributed tracing + orchestrator completion verification)

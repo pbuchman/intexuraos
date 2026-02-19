@@ -13,12 +13,12 @@ The package is the largest in the LLM stack, with 12 domain modules. Each module
 **Impact:** Low. The type alias exists for backward compatibility.
 **Suggested fix:** Audit downstream imports and remove `ExternalReport` in the next major version.
 
-#### 2. Missing logging hooks in approval and model extraction parsers
+#### 2. `parseModelExtractionResponse` TODO comment not cleaned up
 
-Both `approvalIntentPrompt.ts` and `modelExtractionPrompt.ts` contain `TODO: Add logging version for production debugging` comments. Their parse functions silently return `null` on failure without structured error logging.
+`modelExtractionPrompt.ts` has a `parseModelExtractionResponseWithLogging` function added (resolving the original gap), but still contains a `// TODO: Add logging version for production debugging` comment above the original `parseModelExtractionResponse` function. The logging function exists; the comment is stale.
 
-**Impact:** Medium. Parse failures in approval detection and model extraction produce no observable debugging output.
-**Suggested fix:** Integrate `withLlmParseErrorLogging` from `@intexuraos/llm-utils` into these parsers.
+**Impact:** Low. Confusing but harmless.
+**Suggested fix:** Remove the stale TODO comment.
 
 #### 3. Duplicate PromptBuilder/PromptDeps definitions
 
@@ -34,9 +34,15 @@ The package re-exports over 100 symbols through its index. This makes it a compi
 **Impact:** Low. Tree-shaking eliminates unused exports at build time.
 **Suggested fix:** Consider sub-path exports (e.g., `@intexuraos/llm-prompts/research`) if compile times become a concern.
 
+## Resolved
+
+| Item                                           | Resolution                                                          | Commit   |
+| ---------------------------------------------- | ------------------------------------------------------------------- | -------- |
+| Missing logging in approval/model extraction   | Added `parseApprovalIntentResponseWithLogging` and `parseModelExtractionResponseWithLogging` | f451d51a |
+
 ## Future Plans
 
-- Add structured logging to all parser functions using `withLlmParseErrorLogging`
 - Remove deprecated `ExternalReport` alias in next major version
+- Remove stale `TODO: Add logging version` comment in `modelExtractionPrompt.ts`
 - Evaluate sub-path exports for domain-level imports
 - Consider extracting Zod schemas into a separate `llm-schemas` package if schema reuse outside prompts grows

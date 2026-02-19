@@ -27,15 +27,13 @@ curl -X POST https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run
 {
   "success": true,
   "data": {
-    "id": "conn_abc123",
-    "signature": "a1b2c3d4...", // Save this - shown only once!
-    "deviceLabel": "Pixel 8 Pro",
-    "createdAt": "2026-02-19T12:00:00Z"
+    "connectionId": "conn_abc123",
+    "signature": "a1b2c3d4..." // Save this - shown only once!
   }
 }
 ```
 
-**Important:** Copy the `signature` immediately. It is shown only once; the service stores only a SHA-256 hash.
+**Important:** Copy the `signature` immediately. It is shown only once; the service stores only a SHA-256 hash. Creating a new connection also deletes any previous signature for your account — only one active signature per user.
 
 ## Part 2: Check Connection Status
 
@@ -74,7 +72,7 @@ curl -X POST https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run
     "title": "Alice: hey!",
     "text": "are you free tonight?",
     "timestamp": 1708345200000,
-    "postTime": "2026-02-19 12:00:00"
+    "post_time": "2026-02-19 12:00:00"
   }'
 ```
 
@@ -84,7 +82,7 @@ curl -X POST https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run
 {
   "success": true,
   "data": {
-    "status": "saved",
+    "status": "accepted",
     "id": "notif_xyz789"
   }
 }

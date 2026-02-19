@@ -27,6 +27,7 @@ Mobile-notifications-service manages the entire push flow:
 
 - Signature-based (plaintext returned once, stored hashed)
 - Device labeling for identification
+- Single active signature per user — reconnecting replaces the previous signature
 
 **Notification Filters:**
 
@@ -46,10 +47,11 @@ Mobile-notifications-service manages the entire push flow:
 ### Connect device
 
 1. App requests connection with device label
-2. Service generates signature token
-3. App stores plaintext token (shown only once)
-4. Service stores SHA-256 hash for verification
-5. App uses token as `X-Mobile-Notifications-Signature` header on webhooks
+2. Service deletes any previous signature for this user (single active signature per user)
+3. Service generates new signature token, returns `{ connectionId, signature }`
+4. App stores plaintext token (shown only once)
+5. Service stores SHA-256 hash for verification
+6. App uses token as `X-Mobile-Notifications-Signature` header on webhooks
 
 ### Receive notification
 

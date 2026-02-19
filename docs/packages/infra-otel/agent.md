@@ -92,6 +92,8 @@ const instrumentations = getInstrumentations();
 | `@opentelemetry/instrumentation-dns`          | `DnsInstrumentation`     |
 | `@opentelemetry/instrumentation-net`          | `NetInstrumentation`     |
 
+**Note:** `PinoInstrumentation` was removed (commit `0338e04f`). Pino log forwarding is handled by `@intexuraos/infra-sentry` via `pino-opentelemetry-transport` (direct OTLP HTTP) because Node loader hooks conflict with tsx.
+
 ---
 
 ## Register Module Behaviour

@@ -162,4 +162,4 @@ const estimatedCost =
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-19 (v2 run verification)

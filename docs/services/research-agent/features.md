@@ -92,6 +92,27 @@ Research-agent automates multi-model AI research:
 
 **Notion integration** - Automatic export to Notion with structured page hierarchy and markdown conversion (v2.2.0)
 
+## Recent Changes (v2.4.0)
+
+### Distributed Tracing (Observability)
+
+Research-agent now emits distributed traces to Dash0 via OpenTelemetry:
+
+- Traces propagate across Pub/Sub, HTTP, and Firestore boundaries
+- Enabled by `INTEXURAOS_DASH0_OTLP_ENDPOINT` environment variable
+- No-op in local development when endpoint is unset
+- Powered by `packages/infra-otel` preloaded via Node `--import` flag in Dockerfile
+
+### Dev-Mode Log Formatting
+
+PM2 log output is now colorized and readable in development environments:
+
+```
+research-agent | 10:30:00 | INFO  | Research created | {id: "abc123"}
+```
+
+Production JSON logging is unchanged.
+
 ## Recent Changes (v2.3.0)
 
 ### Platform API Key Fallbacks

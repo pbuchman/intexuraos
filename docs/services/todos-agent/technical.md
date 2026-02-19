@@ -112,37 +112,37 @@ sequenceDiagram
 
 ### Todo
 
-| Field | Type | Description |
-| ------------- | -------------- | -------------------------------------- | | | |
-| `id` | `string` | Unique todo identifier |
-| `userId` | `string` | Owner user ID |
-| `title` | `string` | Todo title |
-| `description` | `string \      | null` | Optional description (for AI extraction) |
-| `tags` | `string[]` | User-defined tags |
-| `priority` | `TodoPriority` | low \ | medium \ | high \ | urgent |
-| `dueDate` | `Date \        | null` | Deadline |
-| `source` | `string` | Source system (whatsapp, manual, etc.) |
-| `sourceId` | `string` | ID in source system |
-| `status` | `TodoStatus` | Current state |
-| `archived` | `boolean` | Soft delete flag |
-| `items` | `TodoItem[]` | Sub-items |
-| `completedAt` | `Date \        | null` | When marked completed |
-| `createdAt` | `Date` | Creation timestamp |
-| `updatedAt` | `Date` | Last update timestamp |
+| Field         | Type                | Description                              |
+| ------------- | ------------------- | ---------------------------------------- |
+| `id`          | `string`            | Unique todo identifier                   |
+| `userId`      | `string`            | Owner user ID                            |
+| `title`       | `string`            | Todo title                               |
+| `description` | `string \| null`    | Optional description (for AI extraction) |
+| `tags`        | `string[]`          | User-defined tags                        |
+| `priority`    | `TodoPriority`      | low \| medium \| high \| urgent          |
+| `dueDate`     | `Date \| null`      | Deadline                                 |
+| `source`      | `string`            | Source system (whatsapp, manual, etc.)   |
+| `sourceId`    | `string`            | ID in source system                      |
+| `status`      | `TodoStatus`        | Current state                            |
+| `archived`    | `boolean`           | Soft delete flag                         |
+| `items`       | `TodoItem[]`        | Sub-items                                |
+| `completedAt` | `Date \| null`      | When marked completed                    |
+| `createdAt`   | `Date`              | Creation timestamp                       |
+| `updatedAt`   | `Date`              | Last update timestamp                    |
 
 ### TodoItem
 
-| Field | Type | Description |
-| ------------- | ---------------- | ---------------------- | |
-| `id` | `string` | Unique item identifier |
-| `title` | `string` | Item title |
-| `status` | `TodoItemStatus` | pending \ | completed |
-| `priority` | `TodoPriority \  | null` | Item priority |
-| `dueDate` | `Date \          | null` | Item deadline |
-| `position` | `number` | Display order |
-| `completedAt` | `Date \          | null` | Completion time |
-| `createdAt` | `Date` | Creation timestamp |
-| `updatedAt` | `Date` | Last update timestamp |
+| Field         | Type                     | Description            |
+| ------------- | ------------------------ | ---------------------- |
+| `id`          | `string`                 | Unique item identifier |
+| `title`       | `string`                 | Item title             |
+| `status`      | `TodoItemStatus`         | pending \| completed   |
+| `priority`    | `TodoPriority \| null`   | Item priority          |
+| `dueDate`     | `Date \| null`           | Item deadline          |
+| `position`    | `number`                 | Display order          |
+| `completedAt` | `Date \| null`           | Completion time        |
+| `createdAt`   | `Date`                   | Creation timestamp     |
+| `updatedAt`   | `Date`                   | Last update timestamp  |
 
 ### Status Values
 
@@ -210,20 +210,20 @@ sequenceDiagram
 
 ## Configuration
 
-| Variable                              | Purpose                           | Required |
-| ------------------------------------- | --------------------------------- | -------- |
-| `INTEXURAOS_GCP_PROJECT_ID`           | GCP project ID                    | Yes      |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Auth0 JWKS endpoint               | Yes      |
-| `INTEXURAOS_AUTH_ISSUER`              | Auth0 issuer                      | Yes      |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Auth0 audience                    | Yes      |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth key         | Yes      |
-| `INTEXURAOS_TODOS_PROCESSING_TOPIC`   | Pub/Sub topic for processing      | Yes      |
-| `INTEXURAOS_USER_SERVICE_URL`         | User-service base URL             | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | App-settings base URL             | Yes      |
-| `INTEXURAOS_SENTRY_DSN`               | Sentry error tracking             | No       |
-| `INTEXURAOS_ENVIRONMENT`              | Environment name                  | No       |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | Platform Zai API key (LLM fallback) | No     |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini API key (LLM fallback) | No  |
+| Variable                              | Purpose                                 | Required |
+| ------------------------------------- | --------------------------------------- | -------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | GCP project ID                          | Yes      |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Auth0 JWKS endpoint                     | Yes      |
+| `INTEXURAOS_AUTH_ISSUER`              | Auth0 issuer                            | Yes      |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Auth0 audience                          | Yes      |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth key               | Yes      |
+| `INTEXURAOS_TODOS_PROCESSING_TOPIC`   | Pub/Sub topic for processing            | Yes      |
+| `INTEXURAOS_USER_SERVICE_URL`         | User-service base URL                   | Yes      |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | App-settings base URL (LLM pricing)     | Yes      |
+| `INTEXURAOS_SENTRY_DSN`               | Sentry error tracking                   | No       |
+| `INTEXURAOS_ENVIRONMENT`              | Environment name                        | No       |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | Platform Zai API key (LLM fallback)     | No       |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini API key (LLM fallback)  | No       |
 
 ## Gotchas
 

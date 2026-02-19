@@ -228,16 +228,15 @@ Nearly every package and app in the monorepo depends on `common-core`:
 
 ## Recent Changes
 
-| Commit   | Description                                           | Age     |
-| -------- | ----------------------------------------------------- | ------- |
-| b32d75b7 | Handle worker 502 errors gracefully (WORKER_UNAVAILABLE) | recent |
-| 0a6b7b8f | Normalize cancel-with-nonce error codes (INVALID_NONCE, NONCE_EXPIRED) | recent |
-| 474ea6d1 | Validate workerLocation exists and is healthy         | recent  |
-| f10ebdbf | Fix empty error objects in log output                 | recent  |
-| af5442c2 | Implement per-user worker configuration               | recent  |
-| 186f7ad8 | Enforce standardized HTTP response contract           | recent  |
-| b4aaafdf | Add distributed tracing with X-Trace-Id header        | recent  |
-| 4fa0fed3 | Release v2.0.0                                        | recent  |
+| Commit     | Description                                              | Age    |
+| ---------- | -------------------------------------------------------- | ------ |
+| `b32d75b7` | Handle worker 502 errors gracefully (WORKER_UNAVAILABLE) | recent |
+| `0a6b7b8f` | Normalize cancel-with-nonce error codes                  | recent |
+| `474ea6d1` | Validate workerLocation exists and is healthy            | recent |
+| `f10ebdbf` | Fix empty error objects in log output                    | recent |
+| `af5442c2` | Implement per-user worker configuration                  | recent |
+| `186f7ad8` | Enforce standardized HTTP response contract              | recent |
+| `b4aaafdf` | Add distributed tracing with X-Trace-Id header           | recent |
 
 ## Source Files
 

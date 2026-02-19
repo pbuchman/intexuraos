@@ -71,7 +71,9 @@ The `Dockerfile.test` builds a lightweight test image that replaces the real Cla
 
 **Managed execution mode** - With `CLAUDE_MANAGED_MODE=1`, the container stays alive after setup and accepts multiple work invocations via `docker exec /entrypoint.sh run-attempt`. This amortizes the startup cost (pnpm install, GCP auth) across retry and resume attempts.
 
-**Automatic dependency installation** - The entrypoint runs `pnpm install --frozen-lockfile` at startup if `pnpm-lock.yaml` is present in `/repo`, ensuring the repo's dependencies are available for CI commands without a separate install step.
+**Automatic dependency installation** - The entrypoint runs `pnpm install --frozen-lockfile` at startup if `pnpm-lock.yaml` is present in `/repo`, ensuring the repo's dependencies are available for CI commands without a separate install step. A shared host-side pnpm store is bind-mounted at `/home/claude/pnpm-store`, so the content-addressable cache persists across container restarts and is reused by subsequent workers.
+
+**Persistent Claude session state** - The per-task Claude session directory (`~/.claude`) is mounted from the host and survives container restarts. Combined with `CLAUDE_CONTINUE=1`, this enables true resume of a previous Claude session across separate `run-attempt` invocations.
 
 **Randomized AI attribution** - Each container generates a unique commit/PR attribution line (e.g. "Crafted with love by 🤖 Intex") from a list of 25 verbs, written to `/repo/.claude/settings.local.json` so every task has a distinct identity.
 
@@ -81,8 +83,6 @@ The `Dockerfile.test` builds a lightweight test image that replaces the real Cla
 
 **Root filesystem is writable** - Due to Claude Code writing to `/home/claude/.claude/` and Alpine needing `/etc/passwd` writes, the root filesystem cannot be set to read-only. Mitigation comes from non-root user, dropped capabilities, and tmpfs mounts.
 
-**No persistent state** - The `/home/claude` tmpfs mount means all session state, caches, and MCP server data are lost when the container stops. Each task starts from a clean slate.
+**Ephemeral `/tmp`** - The tmpfs on `/tmp` is wiped when the container stops, which is where the readiness marker and other scratch files live. Claude session history and the pnpm store are persisted via host-side bind mounts and survive container teardown.
 
 **Host iptables required for full network isolation** - On production GCE VMs, iptables rules must be applied at the host level to block metadata server and private IP access. On macOS with Docker Desktop, network isolation relies on the VM layer.
-
-**pnpm store is container-local** - Dependencies are installed into `/home/claude/pnpm-store` on the tmpfs, so every container cold-starts without cache. A shared host-side pnpm store volume would speed up subsequent installs but is not yet implemented.

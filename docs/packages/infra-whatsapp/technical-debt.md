@@ -1,74 +1,81 @@
 # Technical Debt: @intexuraos/infra-whatsapp
 
-## TODOs and FIXMEs
+**Last Updated:** 2026-02-19
+**Analysis Run:** [2026-02-19 documentation run](../../documentation-runs.md)
 
-No TODO/FIXME markers found in source code.
+---
 
-## Code Quality Observations
+## Summary
 
-### No Timeout on sendTextMessage
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 3     | Medium   |
+| Test Gaps   | 0     | —        |
+| Type Issues | 0     | —        |
+| TODOs       | 0     | —        |
+| **Total**   | **3** | —        |
 
-`sendTextMessage` does not use an `AbortController` timeout, unlike `downloadMedia`, `markAsRead`, and `markAsReadWithTyping` which all have 30-second timeouts.
+---
 
-**Impact:** Medium. A slow or hung Facebook Graph API response could block indefinitely.
-
-**Recommendation:** Add a timeout to `sendTextMessage` consistent with the 30-second pattern used by other methods.
-
-### No Timeout on getMediaUrl
-
-`getMediaUrl` also lacks a timeout mechanism.
-
-**Impact:** Medium. Same issue as `sendTextMessage`.
-
-**Recommendation:** Add `AbortController` timeout.
-
-### Duplicated Timeout Cleanup Pattern
-
-Each method with a timeout duplicates the `AbortController` + `clearTimeout` pattern:
-
-```ts
-const controller = new AbortController();
-const timeoutId = setTimeout(() => {
-  controller.abort();
-}, TIMEOUT_MS);
-try {
-  // ...
-  clearTimeout(timeoutId);
-} catch (error) {
-  clearTimeout(timeoutId);
-  // ...
-}
-```
-
-**Impact:** Low. Functional but verbose.
-
-**Recommendation:** Extract a `fetchWithTimeout` utility (similar to the one in `infra-perplexity`) to reduce repetition.
-
-### Hardcoded API Version
-
-The WhatsApp API version is hardcoded:
-
-```ts
-const WHATSAPP_API_VERSION = 'v22.0';
-```
-
-**Impact:** Low. WhatsApp API versions are stable, but upgrading requires a code change.
-
-**Recommendation:** Consider making the API version configurable or ensuring a regular update cadence.
-
-### No Retry Logic
-
-None of the methods implement retry logic. Transient failures (network blips, 429 rate limits) are returned as errors.
-
-**Impact:** Medium. Consumers must implement their own retry strategies.
-
-**Recommendation:** Add configurable retry with exponential backoff, especially for `sendTextMessage` and `markAsRead`.
-
-## Future Improvements
+## Future Plans
 
 - Add `AbortController` timeout to `sendTextMessage` and `getMediaUrl`
-- Extract `fetchWithTimeout` utility to eliminate duplication
+- Extract `fetchWithTimeout` utility to eliminate timeout boilerplate
 - Add media upload support (send images, documents, audio)
 - Add template message support
 - Add interactive message support (buttons, lists)
 - Consider adding retry logic for transient failures
+
+---
+
+## Code Smells
+
+### Medium Priority
+
+| File         | Issue                                                                         | Impact                                                             |
+| ------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `src/client.ts` | `sendTextMessage` has no `AbortController` timeout unlike other methods    | Slow Facebook Graph API responses could block indefinitely         |
+| `src/client.ts` | `getMediaUrl` also lacks a timeout mechanism                               | Same hang risk as `sendTextMessage`                                |
+| `src/client.ts` | Duplicated `AbortController` + `clearTimeout` pattern in 3 method bodies  | Functional but verbose; `fetchWithTimeout` utility would reduce it |
+
+### Low Priority
+
+| File         | Issue                                          | Impact                                                                             |
+| ------------ | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `src/client.ts` | `WHATSAPP_API_VERSION = 'v22.0'` hardcoded | WhatsApp API versions are stable, but upgrading requires a code change             |
+| `src/client.ts` | No retry logic on any method               | Transient failures (network blips, 429 rate limits) propagated directly to callers |
+
+---
+
+## Test Coverage Gaps
+
+No gaps — full coverage achieved.
+
+---
+
+## TypeScript Issues
+
+None.
+
+---
+
+## TODOs / FIXMEs
+
+None found in source code.
+
+---
+
+## Resolved Issues
+
+| Date       | Issue                                         | Resolution                                       |
+| ---------- | --------------------------------------------- | ------------------------------------------------ |
+| 2026-01-22 | WhatsApp voice note transcription bugs        | Fixed in commit `37551ab3`                       |
+| 2026-01-22 | `markAsReadWithTyping` added                  | Combined read receipt + typing indicator in v2.1 |
+
+---
+
+## Related
+
+- [README](README.md) — Package overview and API reference
+- [Agent Reference](agent.md) — Machine-readable interface
+- [Documentation Run Log](../../documentation-runs.md)

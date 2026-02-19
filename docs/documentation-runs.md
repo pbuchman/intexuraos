@@ -1,3 +1,143 @@
+## 2026-02-19 — Full Monorepo Refresh (v3)
+
+**Action:** Updated
+**Agent:** team (monorepo-docs-v3)
+**Method:** Parallel agent orchestration with enhanced cross-validation
+**Model:** Claude Sonnet 4.6
+
+**Scope:**
+- 20 apps documented (5 files each)
+- 4 workers documented (5 files each)
+- 22 packages documented (3 files each)
+- Total: 186 documentation files refreshed
+- 6 standard cross-validation reports
+- 4 extended validation reports (NEW: auth, service URLs, error contracts, terraform-code sync)
+- 1 meta-validation report
+
+**Emphasis:** Double cross-verification and validation pass
+
+**Documentation Coverage:** 100%
+
+---
+
+## 2026-02-19 — vm-lifecycle (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/vm-lifecycle/technical.md` — Added "Recent Changes" section from git history (5 commits)
+- `docs/services/vm-lifecycle/agent.md` — Restructured to template format: added "When to use" guidance per capability, explicit input/output schemas, request/response examples, expanded error handling table
+
+**Inferred Insights:**
+
+- Why: Automated cost control — manages GCE VM uptime to weekday business hours without operator intervention
+- Killer feature: Graceful shutdown with 10-minute task-draining grace period — prevents data loss on scheduled nightly stops
+- Future plans: Weekend override API, startup notifications, cost reporting, multi-VM support
+- Limitations: Single VM instance; fixed schedule requires Terraform apply to change; health check dependency
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (hardcoded timing constants in config.ts)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-02-19 — web (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/web/features.md` — Updated Code Task Management: replaced xterm.js/ANSI references with LogStream; updated Use Case and Key Benefits
+- `docs/services/web/technical.md` — Removed TerminalLogViewer.tsx from component tree; replaced xterm.js with LogStream in tech stack; added Log Stream section with tag color table; updated Firebase section and Gotchas; added `5fa51f75` to recent changes
+- `docs/services/web/tutorial.md` — Updated troubleshooting and Next Steps for LogStream
+- `docs/services/web/technical-debt.md` — Added resolved issue entry for xterm.js removal
+- `docs/services/web/agent.md` — Updated Manage Code Tasks: replaced xterm.js terminal with LogStream, added full tag list, clarified banner names
+
+**Inferred Insights:**
+
+- Why: Single-page PWA providing unified access to all IntexuraOS services with real-time Firestore updates
+- Killer feature: Two-phase code task execution with live LogStream, queued messaging, and design/implementation navigation banners
+- Future plans: Web app coverage refactoring, mobile UX improvements, PWA enhancements
+- Limitations: Hash routing required for GCS hosting; most features need network connection
+
+**Key Change:** xterm.js (`@xterm/xterm`, `@xterm/addon-fit`) removed in commit `5fa51f75`. Replaced with custom `LogStream` component using CSS color classes per log tag.
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 5 (InboxPage 866L, LinearIssuesPage 804L, CodeTaskViewPage 862L, WorkerSettingsPage 601L, CalendarPage 536L)
+- Test gaps: 3 missing hooks tests (medium priority)
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-02-19 — research-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/research-agent/features.md` — Added v2.4.0 section (Dash0 OpenTelemetry, dev-mode log formatting)
+- `docs/services/research-agent/technical.md` — Added v2.4.0 recent changes; added `packages/infra-otel` to shared packages; added `INTEXURAOS_DASH0_OTLP_ENDPOINT` env var; updated overview to v2.4.0
+- `docs/services/research-agent/technical-debt.md` — Added v2.4.0 resolved issues; updated architecture quality section; added distributed tracing to strengths
+- `docs/services/research-agent/agent.md` — Added `packages/infra-otel` to dependencies; bumped to v2.4.0
+
+**Inferred Insights:**
+
+- Why: Parallel multi-LLM research orchestration with synthesis, attribution, and sharing
+- Killer feature: Zod-validated parser + repair pattern — automatically fixes malformed LLM JSON and retries with targeted error messages
+- Future plans: Streaming responses, custom synthesis prompts, research collections/folders, model keyword maintenance
+- Limitations: Max 6 models, max 5 input contexts at 60k chars each, no streaming, single Notion export per research
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (researchRoutes.ts at 1662 lines — acceptable domain cohesion)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 1 (NotionServiceClient port interface missing in domain layer)
+
+---
+
+## 2026-02-19 — todos-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/todos-agent/technical.md` — Fixed broken Domain Model table rendering; added missing `INTEXURAOS_APP_SETTINGS_SERVICE_URL` env var to Configuration table
+
+**Inferred Insights:**
+
+- Why: Task management service that bridges natural language capture (WhatsApp/web) with structured, AI-organized task lists
+- Killer feature: Async AI item extraction via Pub/Sub — descriptions become structured todo items automatically via Gemini 2.5 Flash
+- Future plans: Todo templates, recurring todos, bulk operations (from technical-debt.md)
+- Limitations: No recurring tasks, no task dependencies, one level of sub-items only
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
 ## 2026-02-19 — Full Monorepo Refresh (v2)
 
 **Action:** Updated

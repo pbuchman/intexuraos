@@ -208,6 +208,16 @@ The function polls the health endpoint during the grace period. It stops waiting
 | `SHUTDOWN_POLL_INTERVAL_MS`            | number | `30000` (30 seconds)                            |
 | `ORCHESTRATOR_UNRESPONSIVE_TIMEOUT_MS` | number | `120000` (2 minutes)                            |
 
+## Recent Changes
+
+| Commit     | Description                                   | Date       |
+| ---------- | --------------------------------------------- | ---------- |
+| `b82522d2` | Fix Cloud Functions deployment with esbuild bundling | 2026-02-01 |
+| `f10ebdbf` | Fix empty error objects in log output (INT-464) | 2026-01-31 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (INT-427) | 2026-01-29 |
+| `7a90db67` | Fix vitest v4 migration and improve branch coverage | 2026-01-28 |
+| `cd70bc3f` | Add Cloud Functions for VM lifecycle (INT-369/370) | 2026-01-25 |
+
 ## Dependencies
 
 | Service              | Purpose                               |

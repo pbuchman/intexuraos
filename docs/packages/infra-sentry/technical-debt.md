@@ -4,6 +4,8 @@
 
 The package reached v2.1.0 after a major refactoring (v2.0.0) that replaced the worker-thread-based Pino transport with an in-process stream approach compatible with esbuild bundling. The `createAppLogger()` factory was added in `dfd702f1` and all 19 apps have been migrated to use it.
 
+Recent additions: `devStream.ts` provides ANSI-colorized log formatting for PM2/dev environments (`620afa4b`), and `otelTransport.ts` routes logs to Dash0 via `pino-opentelemetry-transport` (`0338e04f`).
+
 ---
 
 ## Known Issues

@@ -48,11 +48,15 @@ Comment edits are automatically deduplicated: you see each comment once at its o
 
 **Example:** You push three commits to a Code Agent PR over the course of a review cycle. The timeline shows the original PR open (with description), three "synchronize" entries each linking to the exact diff for that push, two reviewer comments (showing the latest text if edited), and a review approval -- all in chronological order without repetition.
 
-### 6. Retry and Feedback Loops
+### 6. Retry, Feedback, and Mid-Task Messaging
 
-Failed or cancelled tasks can be retried with optional additional context. Completed tasks can receive follow-up feedback that creates a new task linked to the original, carrying forward the Linear issue, branch, and prior work summary.
+Failed or cancelled tasks can be retried with optional additional context. Completed tasks can receive follow-up feedback that creates a new task linked to the original, carrying forward the Linear issue, branch, and prior work summary. Running tasks can receive mid-session messages that are queued and delivered at the next turn boundary.
 
-**Example:** A task fails because a test was flaky. You click "Retry" and add context: "The flaky test is in `auth.test.ts` -- skip it and add a note." Code Agent creates a retry task with a 5-minute cool-off period, updates the Linear issue to In Progress, and adds a comment documenting the retry.
+**Example (retry):** A task fails because a test was flaky. You click "Retry" and add context: "The flaky test is in `auth.test.ts` -- skip it and add a note." Code Agent creates a retry task with a 5-minute cool-off period, updates the Linear issue to In Progress, and adds a comment documenting the retry.
+
+**Example (mid-task message):** While a task is running, you realize the implementation needs a constraint. You send "Also validate that the limit parameter is between 1 and 100." Code Agent queues the message in Firestore. When the worker finishes its current turn, it picks up the queued message and continues with the additional instruction.
+
+**Example (resume):** A task completed but you want one more change. You send a message to the completed task. Code Agent re-dispatches it to the worker with `--continue`, picking up where it left off on the same branch.
 
 ## Use Case Walkthrough: From WhatsApp to PR
 
@@ -85,7 +89,8 @@ Failed or cancelled tasks can be retried with optional additional context. Compl
 - Maximum 3 concurrent tasks per user.
 - Prompt sanitization is not yet implemented (uses raw prompt).
 - System prompt hash is currently a static placeholder.
-- PR comment auto-dispatch (Phase 4) is logged but not yet fully wired to worker dispatch.
+- PR comment auto-dispatch (`handlePRComment`, Phase 4) prepares tasks and logs them but does not yet dispatch to a worker.
+- Tasks complete as `designed` (Phase 1) or `implemented` (Phase 2), not as a generic `completed` status.
 - Workers require Cloudflare Access tunnels for secure connectivity.
 - GLM model support (`workerType: 'glm'`) depends on external Z.ai availability.
 

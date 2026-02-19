@@ -179,7 +179,7 @@ interface CalendarPreview {
 | **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions         |
 | **Batch Limit**             | Maximum 50 action IDs per batch request                                   |
 | **Ownership**               | Users can only access their own actions                                   |
-| **Supported Types**         | Execute only supports: research, todo, note, link, linear, calendar, code |
+| **Supported Types**         | Execute only supports: research, todo, note, link, code (calendar/linear require approval) |
 | **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval      |
 
 ---

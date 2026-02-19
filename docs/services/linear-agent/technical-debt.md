@@ -1,7 +1,7 @@
 # Linear Agent - Technical Debt
 
 **Last Updated:** 2026-02-19
-**Analysis Run:** v4.0.0 documentation update (comments system, Firestore-first dashboard, new internal endpoints)
+**Analysis Run:** v4.1.0 documentation update (label serialization fix, OpenTelemetry/Dash0 integration)
 
 ---
 
@@ -125,13 +125,14 @@ None. The service uses current versions of:
 
 ## Resolved Issues
 
-| Date       | Issue                                    | Resolution                                           |
-| ---------- | ---------------------------------------- | ---------------------------------------------------- |
-| 2026-02-15 | Silent title degradation on LLM failure  | Removed regex fallback, return err() after 2 retries |
-| 2026-02-10 | Hardcoded `teamId: 'TODO'` in retry      | Fixed to use `connectionRepository.getFullConnection` |
-| 2026-02-10 | Dashboard called Linear API on every load | Switched to Firestore-first with local cache          |
-| 2026-02-10 | No parent-child issue hierarchy           | Built in-memory tree in `listIssues` use case         |
-| 2026-02-10 | Labels stored as strings only            | Labels now stored as `{ id, name, color }` objects   |
+| Date       | Issue                                     | Resolution                                                    |
+| ---------- | ----------------------------------------- | ------------------------------------------------------------- |
+| 2026-02-19 | validateIssue labels serialized as "[object Object]" | Map LinearLabel[] to string[] at HTTP boundary in internalRoutes |
+| 2026-02-15 | Silent title degradation on LLM failure   | Removed regex fallback, return err() after 2 retries          |
+| 2026-02-10 | Hardcoded `teamId: 'TODO'` in retry       | Fixed to use `connectionRepository.getFullConnection`         |
+| 2026-02-10 | Dashboard called Linear API on every load  | Switched to Firestore-first with local cache                  |
+| 2026-02-10 | No parent-child issue hierarchy            | Built in-memory tree in `listIssues` use case                 |
+| 2026-02-10 | Labels stored as strings only             | Labels now stored as `{ id, name, color }` objects            |
 | 2026-02-06 | No programmatic issue management         | INT-486: Internal API for issue CRUD + state         |
 | 2026-02-06 | No issue validation capability           | INT-486: validateIssue use case                      |
 | 2026-02-06 | No AI title generation                   | INT-486: generateIssueTitle use case                 |
@@ -165,6 +166,8 @@ None. The service uses current versions of:
 12. **OIDC + Internal Auth**: sync-all accepts both Cloud Scheduler OIDC and internal auth tokens
 13. **Signature Security**: HMAC-SHA256 with timing-safe comparison prevents timing attacks
 14. **Comment Sync**: Comments stored in Firestore and exposed via paginated API
+15. **HTTP Boundary Type Mapping**: `validateIssue` maps `LinearLabel[]` to `string[]` at the route layer — domain types stay clean
+16. **OpenTelemetry**: Distributed tracing and metrics via Dash0 loaded transparently at process start (no-op when unconfigured)
 
 ### Areas for Improvement
 
@@ -185,5 +188,5 @@ None. The service uses current versions of:
 
 ---
 
-**Last analyzed:** 2026-02-19
+**Last analyzed:** 2026-02-19 (v4.1.0)
 **Analyzed by:** service-scribe (autonomous)

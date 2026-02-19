@@ -9,7 +9,7 @@ name: @intexuraos/llm-factory
 version: 2.1.0
 type: module
 leaf: false
-dependencies: @intexuraos/common-core, @intexuraos/infra-gemini, @intexuraos/infra-glm, @intexuraos/llm-contract, @intexuraos/llm-pricing
+dependencies: @intexuraos/common-core, @intexuraos/infra-gemini, @intexuraos/infra-glm, @intexuraos/llm-audit, @intexuraos/llm-contract, @intexuraos/llm-pricing
 entry_points:
   - ".": ./src/index.ts
 ```

@@ -6,7 +6,7 @@ OpenAI GPT API wrapper implementing the `LLMClient` interface from `@intexuraos/
 
 - **External API:** OpenAI API via `openai` SDK (v6.15+)
 - **Provider:** `LlmProviders.OpenAI`
-- **Capabilities:** Text generation, web search research (via `web_search_preview` tool), image generation (via DALL-E / `gpt-image-1`), prompt caching, reasoning token tracking
+- **Capabilities:** Text generation, web search research (via `web_search_preview` tool), image generation (via `gpt-image-1`), prompt caching, reasoning token tracking
 
 ## API Reference
 
@@ -71,12 +71,12 @@ Converts raw OpenAI usage data into `NormalizedUsage`. Optionally includes `cach
 
 ```ts
 interface GptConfig {
-  apiKey: string; // OpenAI API key from platform.openai.com
-  model: string; // e.g., 'gpt-4.1', 'gpt-4o-mini', 'o4-mini-deep-research'
-  userId: string; // User ID for usage tracking
-  pricing: ModelPricing; // Cost configuration for text operations
+  apiKey: string;           // OpenAI API key from platform.openai.com
+  model: string;            // e.g., 'gpt-4.1', 'gpt-4o-mini', 'o4-mini-deep-research'
+  userId: string;           // User ID for usage tracking
+  pricing: ModelPricing;    // Cost configuration for text operations
   imagePricing?: ModelPricing; // Separate pricing for image generation
-  logger: Logger; // Pino logger for structured logging
+  logger: Logger;           // Pino logger for structured logging
 }
 ```
 
@@ -112,18 +112,18 @@ All methods return `Result<T, GptError>`. Error mapping:
 
 ## Implementation Notes
 
-- **Research** uses the OpenAI Responses API (`client.responses.create`) with `web_search_preview` tool at `medium` search context size
-- **Generate** uses the Chat Completions API (`client.chat.completions.create`) with `max_completion_tokens`
-- **Image generation** uses `client.images.generate` with `gpt-image-1` model; supports both base64 and URL response formats
-- Extracts `reasoning_tokens` from `output_tokens_details` for o-series models
+- **Research** uses the OpenAI Responses API (`client.responses.create`) with `web_search_preview` tool at `medium` search context size.
+- **Generate** uses the Chat Completions API (`client.chat.completions.create`) with `max_completion_tokens: 8192`.
+- **Image generation** uses `client.images.generate` with `gpt-image-1` model. Supports both `b64_json` (primary) and URL (fallback) response formats — URL responses are fetched via `fetch()`.
+- **Reasoning tokens:** Extracted from `output_tokens_details.reasoning_tokens` for o-series models. Included in `NormalizedUsage.reasoningTokens` when present.
+- **Dual usage shapes:** The Responses API and Chat Completions API return different usage structures (`ResponseUsage` vs `CompletionUsage`). `extractUsageDetails` handles both shapes.
+- **Audit sink:** Unlike `infra-gemini` and `infra-glm`, this client does not accept injectable `auditSink`/`usageSink`.
 
 ## Cross-Cutting Concerns
 
 - **Audit trail:** Every request creates an `AuditContext` via `@intexuraos/llm-audit`
 - **Usage logging:** Automatic fire-and-forget logging via `@intexuraos/llm-pricing` `UsageLogger`
 - **Prompt building:** Research prompts built via `@intexuraos/llm-prompts` `buildResearchPrompt()`
-- **Max tokens:** Hardcoded to 8192 for text; image model is `LlmModels.GPTImage1`
-- **Default image size:** `1024x1024`
 
 ## Used By
 
@@ -133,11 +133,22 @@ All methods return `Result<T, GptError>`. Error mapping:
 | `user-service`   | API key validation and usage |
 | `image-service`  | Image generation via DALL-E  |
 
+## Dependencies
+
+| Package                    | Role                                                              |
+| -------------------------- | ----------------------------------------------------------------- |
+| `openai` ^6.15.0           | OpenAI API SDK                                                    |
+| `@intexuraos/common-core`  | `Result` types, `getErrorMessage`, `Logger`                       |
+| `@intexuraos/llm-contract` | `LLMClient`, `NormalizedUsage`, `ModelPricing`, `LlmModels`, `ImageSize` |
+| `@intexuraos/llm-prompts`  | `buildResearchPrompt`                                             |
+| `@intexuraos/llm-audit`    | `createAuditContext`                                              |
+| `@intexuraos/llm-pricing`  | `createUsageLogger`                                               |
+
 ## Recent Changes
 
 | Commit     | Description                                       | When        |
 | ---------- | ------------------------------------------------- | ----------- |
-| `51b4a325` | Migrate LLM clients to UsageLogger class          | 2 weeks ago |
-| `8aad9098` | Migrate imports and delete llm-common             | 2 weeks ago |
-| `816afa55` | Add ESLint rule to ban optional logger parameters | 3 weeks ago |
-| `6ec4205e` | Make logger mandatory in all LLM configs          | 3 weeks ago |
+| `51b4a325` | Migrate LLM clients to UsageLogger class          | 4 weeks ago |
+| `8aad9098` | Migrate imports and delete llm-common             | 4 weeks ago |
+| `816afa55` | Add ESLint rule to ban optional logger parameters | 5 weeks ago |
+| `6ec4205e` | Make logger mandatory in all LLM configs          | 5 weeks ago |

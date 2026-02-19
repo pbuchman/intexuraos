@@ -1,14 +1,56 @@
 # Technical Debt: @intexuraos/infra-glm
 
-## TODOs and FIXMEs
+**Last Updated:** 2026-02-19
 
-No TODO/FIXME markers found in source code.
+---
 
-## Code Quality Observations
+## Summary
 
-### Force-Cast for Web Search Tool Type
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 3     | Medium   |
+| Test Gaps   | 0     | —        |
+| Type Issues | 2     | Medium   |
+| TODOs       | 0     | —        |
+| **Total**   | **5** | Medium   |
 
-The GLM web search tool is passed as an unknown cast because the OpenAI SDK types do not support the `web_search` tool type:
+---
+
+## Future Plans
+
+- Replace `unknown` casts for web search tool type with proper GLM-specific type definitions
+- Add streaming support for long-running research queries
+- Make API base URL configurable via `GlmConfig` for alternative Zai environments
+- Extract `createRequestContext` / `trackUsage` boilerplate into `@intexuraos/llm-client-base`
+- Clean up or document the `reasoningTokens` parameter — always `undefined` at call sites
+
+---
+
+## Code Smells
+
+### Medium Priority
+
+| File            | Issue                                                                              | Impact                                      |
+| --------------- | ---------------------------------------------------------------------------------- | ------------------------------------------- |
+| `src/client.ts` | `GLM_API_BASE` hardcoded constant — cannot target alternative Zai environments     | Must modify code to test against staging    |
+| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients  | Maintenance overhead                        |
+
+### Low Priority
+
+| File                  | Issue                                                                           | Impact                               |
+| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------ |
+| `src/costCalculator.ts` | `normalizeUsage` accepts `reasoningTokens` but client always passes `undefined` | Dead parameter; misleading signature |
+
+---
+
+## TypeScript Issues
+
+| File            | Issue                                                                                              | Count |
+| --------------- | -------------------------------------------------------------------------------------------------- | ----- |
+| `src/client.ts` | Web search tool cast: `as unknown as OpenAI.Chat.Completions.ChatCompletionTool`                  | 1     |
+| `src/client.ts` | Tool call type cast: `(toolCall.type as string)` and `toolCall as unknown as WebSearchToolCall`   | 1     |
+
+**Detail — Tool type cast:**
 
 ```ts
 tools: [
@@ -19,49 +61,38 @@ tools: [
 ],
 ```
 
-**Impact:** Medium. Bypasses type safety entirely. If the Zai API changes the tool format, the error will only surface at runtime.
+The OpenAI SDK types do not include Zai's `web_search` tool type. Cast through `unknown` bypasses all type safety. If the Zai API changes the tool format, errors will only surface at runtime.
 
-**Recommendation:** Create a local type definition for GLM-specific tools rather than casting through `unknown`.
+**Recommendation:** Define a local `ZaiWebSearchTool` interface and use it instead of casting through `unknown`.
 
-### Force-Cast for Web Search Tool Call Response
-
-Source extraction casts tool calls through `unknown` to access GLM-specific fields:
+**Detail — Source extraction cast:**
 
 ```ts
 if ((toolCall.type as string) === 'web_search') {
   const webSearchData = toolCall as unknown as WebSearchToolCall;
 ```
 
-**Impact:** Medium. Same rationale as above -- runtime-only validation.
+Same issue — accessing response fields that are not in the OpenAI SDK response types. The local `WebSearchToolCall` interface is defined in `client.ts` but cannot be connected to the `toolCall` type without casting.
 
-### Unused `reasoningTokens` Parameter
+---
 
-The `normalizeUsage` function accepts a `reasoningTokens` parameter, but `createGlmClient` always passes `undefined` for it. The GLM client calls `extractUsageDetails` which does not extract reasoning tokens.
+## TODOs / FIXMEs
 
-**Impact:** Low. The parameter exists for API compatibility with the GPT cost calculator (they share the same signature).
+No TODO/FIXME markers found in source code.
 
-**Recommendation:** Clean up if GLM models never support reasoning tokens, or document the intent to support future GLM reasoning models.
+---
 
-### Hardcoded API Base URL
+## Resolved Issues
 
-The API base URL is a hardcoded constant:
+| Date       | Issue                                           | Resolution                                       |
+| ---------- | ----------------------------------------------- | ------------------------------------------------ |
+| 2026-01-27 | Logger was optional, causing inconsistent usage | Made `logger` mandatory via ESLint rule          |
+| 2026-01-27 | Usage tracking used ad-hoc patterns             | Migrated to `UsageLogger` class from llm-pricing |
 
-```ts
-const GLM_API_BASE = 'https://api.z.ai/api/paas/v4/';
-```
+---
 
-**Impact:** Low. The URL is stable, but it prevents using alternative environments or API versions.
+## Related
 
-**Recommendation:** Consider making the base URL configurable via `GlmConfig`.
-
-## Shared Pattern Duplication
-
-The `createRequestContext`, `trackUsage`, and error handling boilerplate is nearly identical across all five LLM client packages.
-
-**Recommendation:** Extract into a shared `@intexuraos/llm-client-base` utility.
-
-## Future Improvements
-
-- Replace `unknown` casts with proper GLM-specific type definitions
-- Add streaming support for long-running research queries
-- Make API base URL configurable for different Zai environments
+- [README](README.md) — Developer reference
+- [Agent Reference](agent.md) — Machine-readable interface
+- [Documentation Run Log](../../documentation-runs.md)

@@ -100,34 +100,36 @@ sequenceDiagram
 
 | Commit     | Description                                                        | Date         |
 | ---------- | ------------------------------------------------------------------ | ------------ |
-| `e5637ce5` | Deduplicate PR body across pull_request events in API response     | 2 hours ago  |
-| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)        | 3 hours ago  |
-| `c1bc9883` | Truncate oversized tool results and unparseable log lines          | 5 hours ago  |
-| `27ef6a7b` | Show compare URL for PR synchronize events in timeline             | 13 hours ago |
-| `60e029a8` | Deduplicate edited comments in PR events API response              | 13 hours ago |
-| `0a48ed4e` | Display comment body on PR events page in GitHub style             | 14 hours ago |
-| `5ead960d` | Add clickable GitHub links to PR event items                       | 16 hours ago |
-| `554b716c` | Add gitHubPRSummaryRepo to ServiceContainer                        | 17 hours ago |
+| `e5637ce5` | Deduplicate PR body across pull_request events in API response     | 4 hours ago  |
+| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)        | 5 hours ago  |
+| `c1bc9883` | Truncate oversized tool results and unparseable log lines          | 6 hours ago  |
+| `27ef6a7b` | Show compare URL for PR synchronize events in timeline             | 15 hours ago |
+| `60e029a8` | Deduplicate edited comments in PR events API response              | 15 hours ago |
+| `0a48ed4e` | Display comment body on PR events page in GitHub style             | 15 hours ago |
+| `5ead960d` | Add clickable GitHub links to PR event items                       | 17 hours ago |
+| `554b716c` | Add gitHubPRSummaryRepo to ServiceContainer                        | 18 hours ago |
 
 ## API Endpoints
 
 ### Public Routes (Auth0 JWT)
 
-| Method | Path                                       | Description                       | Auth  |
-| ------ | ------------------------------------------ | --------------------------------- | ----- |
-| POST   | `/code/submit`                             | Submit code task from web UI      | Auth0 |
-| GET    | `/code/tasks`                              | List user's tasks (paginated)     | Auth0 |
-| GET    | `/code/tasks/:taskId`                      | Get task details                  | Auth0 |
-| POST   | `/code/tasks/:taskId/cancel`               | Cancel a running task             | Auth0 |
-| POST   | `/code/tasks/:taskId/retry`                | Retry a failed/cancelled task     | Auth0 |
-| POST   | `/code/tasks/:taskId/feedback`             | Submit feedback on completed task | Auth0 |
-| GET    | `/code/github-pr-events`                   | Query GitHub PR events            | Auth0 |
-| GET    | `/code/worker-settings`                    | Get worker settings (masked)      | Auth0 |
-| POST   | `/code/worker-settings/workers`            | Add new worker                    | Auth0 |
-| PATCH  | `/code/worker-settings/workers/:name`      | Update worker config              | Auth0 |
-| DELETE | `/code/worker-settings/workers/:name`      | Delete worker                     | Auth0 |
-| POST   | `/code/worker-settings/workers/:name/test` | Test worker connectivity          | Auth0 |
-| PUT    | `/code/worker-settings/priority`           | Reorder workers by priority       | Auth0 |
+| Method | Path                                       | Description                          | Auth  |
+| ------ | ------------------------------------------ | ------------------------------------ | ----- |
+| POST   | `/code/submit`                             | Submit code task from web UI         | Auth0 |
+| GET    | `/code/tasks`                              | List user's tasks (paginated)        | Auth0 |
+| GET    | `/code/tasks/:taskId`                      | Get task details                     | Auth0 |
+| POST   | `/code/tasks/:taskId/cancel`               | Cancel a running task                | Auth0 |
+| POST   | `/code/tasks/:taskId/retry`                | Retry a failed/cancelled task        | Auth0 |
+| POST   | `/code/tasks/:taskId/feedback`             | Submit feedback on completed task    | Auth0 |
+| POST   | `/code/tasks/:taskId/messages`             | Send message to running/ended task   | Auth0 |
+| GET    | `/code/github-pr-events`                   | Query GitHub PR events               | Auth0 |
+| GET    | `/code/github-pr-summaries`                | List PRs active in last 30 days      | Auth0 |
+| GET    | `/code/worker-settings`                    | Get worker settings (masked)         | Auth0 |
+| POST   | `/code/worker-settings/workers`            | Add new worker                       | Auth0 |
+| PATCH  | `/code/worker-settings/workers/:name`      | Update worker config                 | Auth0 |
+| DELETE | `/code/worker-settings/workers/:name`      | Delete worker                        | Auth0 |
+| POST   | `/code/worker-settings/workers/:name/test` | Test worker connectivity             | Auth0 |
+| PUT    | `/code/worker-settings/priority`           | Reorder workers by priority          | Auth0 |
 
 ### Internal Routes (X-Internal-Auth)
 
@@ -174,7 +176,8 @@ interface CodeTask {
   userId: string;
   workerType: 'opus' | 'auto' | 'glm';
   workerLocation: string;
-  status: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+  // Lifecycle — 'designed'/'implemented' are Phase 1/2 completions; 'completed' is not used
+  status: 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
@@ -182,14 +185,15 @@ interface CodeTask {
   baseBranch: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueUrl?: string;
   linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
-  linearIssueLabels?: string[];
-  hasChildren?: boolean;
   linearFallback?: boolean;
   prNumber?: number;
   prBranch?: string;
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
+  executionPhase?: 'design' | 'execution';
+  implementationTaskId?: string;   // Set on design task to point at Phase 2 task
   result?: TaskResult;
   error?: TaskError;
   createdAt: Timestamp;
@@ -201,6 +205,7 @@ interface CodeTask {
   lastHeartbeat?: Timestamp;
   logChunksDropped?: number;
   statusSummary?: StatusSummary;
+  pendingUserMessages?: string[];  // Accumulated while task is running
   dedupKey: string;
   cancelNonce?: string;
   cancelNonceExpiresAt?: string;
@@ -324,16 +329,17 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 
 ## Use Cases
 
-| Use Case            | File                                     | Description                                      |
-| ------------------- | ---------------------------------------- | ------------------------------------------------ |
-| processCodeAction   | `domain/usecases/processCodeAction.ts`   | Create task with dedup, dispatch to worker       |
-| cancelTaskWithNonce | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation             |
-| handlePRComment     | `domain/usecases/handlePRComment.ts`     | Detect actionable PR comments, prepare task      |
-| processHeartbeat    | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection |
-| detectZombieTasks   | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)          |
-| cleanupTaskLogs     | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                  |
-| retryTask           | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context |
-| submitTaskFeedback  | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback       |
+| Use Case            | File                                     | Description                                             |
+| ------------------- | ---------------------------------------- | ------------------------------------------------------- |
+| processCodeAction   | `domain/usecases/processCodeAction.ts`   | Create task with dedup, dispatch to worker              |
+| cancelTaskWithNonce | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation                    |
+| handlePRComment     | `domain/usecases/handlePRComment.ts`     | Detect actionable PR comments, prepare task             |
+| processHeartbeat    | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection        |
+| detectZombieTasks   | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)                 |
+| cleanupTaskLogs     | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                         |
+| retryTask           | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context        |
+| submitTaskFeedback  | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback              |
+| sendTaskMessage     | `domain/usecases/sendTaskMessage.ts`     | Send message to running task (queued) or resume ended   |
 
 ## Domain Services
 
@@ -420,7 +426,8 @@ apps/code-agent/src/
       codeTask.ts                   # CodeTask, TaskStatus, TaskResult, TaskError
       gitHubPREvent.ts              # GitHub webhook event model
       gitHubPRSummary.ts            # Per-PR summary for list view
-      logChunk.ts                   # Log chunk model
+      logChunk.ts                   # Log chunk model (HMAC-signed uploads)
+      logLine.ts                    # FormattedLogLine (for LogLineRepository)
       prTaskLock.ts                 # PR task lock model
       signing.ts                    # Signing error types
       turnMetrics.ts                # Per-turn CPU/memory/token metrics
@@ -438,6 +445,7 @@ apps/code-agent/src/
       gitHubPREventRepository.ts    # GitHub PR event repository interface
       gitHubPRSummaryRepository.ts  # PR summary repository interface
       logChunkRepository.ts         # Log chunk storage interface
+      logLineRepository.ts          # LogLine storage interface (for sendTaskMessage)
       prTaskLockRepository.ts       # PR task lock interface
       turnMetricsRepository.ts      # Turn metrics storage interface
     services/
@@ -454,6 +462,7 @@ apps/code-agent/src/
       processCodeAction.ts          # Main task creation + dispatch
       processHeartbeat.ts           # Heartbeat processing
       retryTask.ts                  # Task retry with cool-off
+      sendTaskMessage.ts            # Send message to running/ended task
       submitTaskFeedback.ts         # Feedback follow-up
     utils/
       isActionableComment.ts        # PR comment actionability check
@@ -475,7 +484,7 @@ apps/code-agent/src/
     repositories/
       firestoreCodeTaskRepository.ts    # CodeTask Firestore impl
       firestoreLogChunkRepository.ts    # LogChunk Firestore impl
-      firestoreLogLineRepository.ts     # LogLine Firestore impl
+      firestoreLogLineRepository.ts     # LogLine Firestore impl (sendTaskMessage logs)
       firestoreTurnMetricsRepository.ts # TurnMetrics subcollection impl
     services/
       hmacSigning.ts               # HMAC signing utilities
@@ -489,12 +498,13 @@ apps/code-agent/src/
     webhookValidation.ts           # Webhook HMAC validation
   routes/
     index.ts                       # Route registration
-    codeRoutes.ts                  # Main code task routes (internal + public)
+    codeRoutes.ts                  # Main code task routes (internal + public, ~3500 lines)
     webhookRoutes.ts               # Task completion + log webhooks
     workerSettingsRoutes.ts        # Worker settings CRUD routes
     code/
       index.ts                     # Code route exports
-      github-pre-events.ts        # GitHub PR events query route (with dedup passes)
+      github-pre-events.ts         # GitHub PR events query route (with dedup passes)
+      github-pr-summaries.ts       # PR summaries list route (30-day window)
       extractEventUrl.ts           # Extract clickable GitHub URLs from webhook payloads
     webhooks/
       index.ts                     # Webhook route aggregator

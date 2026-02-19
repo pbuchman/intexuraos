@@ -2,7 +2,7 @@
 
 ## Overview
 
-Claude Worker is a Docker container image that provides an isolated execution environment for Claude Code sessions. It is not a standalone service with HTTP endpoints; instead, the orchestrator manages its lifecycle via the Docker API (dockerode). The image bundles Claude CLI, a full developer toolchain (including Playwright/Chromium and pre-installed MCP servers), and a bash entrypoint that handles authentication, dependency installation, and prompt-driven execution. Two image variants exist: a production image (`Dockerfile`) and a test image (`Dockerfile.test`) that substitutes a bash stub for the real Claude CLI.
+Claude Worker is a Docker container image that provides an isolated execution environment for Claude Code sessions. It is not a standalone service with HTTP endpoints; instead, the orchestrator manages its lifecycle via the Docker API (dockerode). The image bundles Claude CLI, a full developer toolchain (including Playwright/Chromium and pre-installed MCP servers), and a bash entrypoint that handles authentication, dependency installation, and prompt-driven execution. Two image variants exist: a production image (`Dockerfile`) and a test image (`Dockerfile.test`) that substitutes a bash stub for the real Claude CLI. The image is stored at `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`.
 
 ## Architecture
 
@@ -42,14 +42,15 @@ graph TB
 
 ### Resource Limits
 
-| Resource | Limit                 | Enforcement         |
-| -------- | --------------------- | ------------------- |
-| Memory   | 8 GB                  | Docker cgroup       |
-| CPU      | 4 cores (4e9 NanoCpu) | Docker cgroup       |
-| tmpfs    | /tmp: 2 GB            | Mount option        |
-| tmpfs    | /home/claude: 500 MB  | Mount option        |
-| Timeout  | 2 hours               | Orchestrator timer  |
-| Max pool | 4 concurrent          | DockerProvider code |
+| Resource | Limit                  | Enforcement         |
+| -------- | ---------------------- | ------------------- |
+| Memory   | 30 GB                  | Docker cgroup       |
+| CPU      | 20 cores (20e9 NanoCpu)| Docker cgroup       |
+| tmpfs    | /tmp: 2 GB             | Mount option        |
+| tmpfs    | /home/claude: 500 MB   | Mount option        |
+| tmpfs    | /repo/node_modules: 4 GB | Mount option      |
+| Timeout  | 2 hours                | Orchestrator timer  |
+| Max pool | 4 concurrent           | DockerProvider code |
 
 ### Security Controls
 
@@ -78,13 +79,16 @@ Network: `claude-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquera
 
 ## Mount Points
 
-| Container Path | Host Source                                   | Mode      | Purpose                           |
-| -------------- | --------------------------------------------- | --------- | --------------------------------- |
-| `/repo`        | `~/.claude-orchestrator/worktrees/{taskId}`   | rw        | Git worktree for the task         |
-| `/secrets`     | `~/.claude-orchestrator/secrets/{taskId}`     | ro        | GCP SA key + GitHub token + prompts |
-| `/tmp`         | tmpfs                                         | rw,noexec | Ephemeral scratch + ready marker  |
-| `/home/claude` | tmpfs                                         | rw,noexec | Claude session state + pnpm store |
-| `{mainGitDir}` | Main `.git` directory (for worktrees)         | rw        | Git operations on worktrees       |
+| Container Path        | Host Source                                      | Mode        | Purpose                                    |
+| --------------------- | ------------------------------------------------ | ----------- | ------------------------------------------ |
+| `/repo`               | `{secretsBasePath}/../worktrees/{taskId}`        | rw          | Git worktree for the task                  |
+| `/secrets`            | `{secretsBasePath}/{taskId}`                     | ro          | GCP SA key + GitHub token + prompt files   |
+| `/home/claude/pnpm-store` | `{secretsBasePath}/../pnpm-store`            | rw          | Shared pnpm content-addressable store      |
+| `/home/claude/.claude`| `{secretsBasePath}/claude-session-{taskId}`      | rw          | Claude session state (persists across attempts) |
+| `/tmp`                | tmpfs                                            | rw,noexec   | Ephemeral scratch + ready marker           |
+| `/home/claude`        | tmpfs (500 MB)                                   | rw,noexec   | Home directory (pnpm-store and .claude overlaid) |
+| `/repo/node_modules`  | tmpfs (4 GB)                                     | rw,exec     | Linux-native node_modules (shadows Mac host mount) |
+| `{mainGitDir}`        | Main `.git` directory (for worktrees)            | rw          | Git operations on worktrees                |
 
 ### Secrets Directory Files
 
@@ -97,25 +101,26 @@ Network: `claude-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquera
 
 ## Environment Variables
 
-| Variable                            | Source           | Description                                           |
-| ----------------------------------- | ---------------- | ----------------------------------------------------- |
-| `TASK_ID`                           | Orchestrator     | Unique task identifier                                |
-| `ANTHROPIC_API_KEY`                 | Orchestrator env | API key for Anthropic (opus/auto types)               |
-| `ANTHROPIC_BASE_URL`                | Worker type map  | API endpoint URL                                      |
-| `ANTHROPIC_MODEL`                   | Worker type map  | Model override (opus only)                            |
-| `LINEAR_API_KEY`                    | Orchestrator env | Linear integration key                                |
-| `SENTRY_AUTH_TOKEN`                 | Orchestrator env | Sentry error tracking token                           |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | Fixed            | `/secrets/gcp-sa.json`                                |
-| `CLAUDE_PROJECT_DIR`                | Fixed            | `/repo`                                               |
+| Variable                            | Source           | Description                                            |
+| ----------------------------------- | ---------------- | ------------------------------------------------------ |
+| `TASK_ID`                           | Orchestrator     | Unique task identifier                                 |
+| `ANTHROPIC_API_KEY`                 | Orchestrator env | API key for Anthropic (opus/auto types); omitted when shared credentials are used |
+| `ANTHROPIC_BASE_URL`                | Worker type map  | API endpoint URL; omitted when shared credentials are used |
+| `ANTHROPIC_MODEL`                   | Worker type map  | Model override (opus only)                             |
+| `LINEAR_API_KEY`                    | Orchestrator env | Linear integration key                                 |
+| `SENTRY_AUTH_TOKEN`                 | Orchestrator env | Sentry error tracking token                            |
+| `GOOGLE_APPLICATION_CREDENTIALS`    | Fixed            | `/secrets/gcp-sa.json`                                 |
+| `CLAUDE_PROJECT_DIR`                | Fixed            | `/repo`                                                |
+| `CLAUDE_WORKER_MODE`                | Fixed            | `1` — identifies this as an automated worker process   |
 | `CLAUDE_MANAGED_MODE`               | Orchestrator     | `1` = stay alive, accept `run-attempt` via docker exec |
-| `CLAUDE_CONTINUE`                   | Orchestrator     | `1` = pass `--continue` to resume previous session    |
-| `GIT_USER_NAME`                     | Orchestrator env | Git commit author name                                |
-| `GIT_USER_EMAIL`                    | Orchestrator env | Git commit author email                               |
-| `HOME`                              | Dockerfile       | `/home/claude`                                        |
-| `NODE_ENV`                          | Dockerfile       | `production` (or `test` in test image)                |
-| `COREPACK_ENABLE_DOWNLOAD_PROMPT`   | Dockerfile/env   | `0` — suppress corepack prompts in CI                 |
-| `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD`  | Dockerfile       | `1` — use system Chromium                             |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Dockerfile     | `/usr/bin/chromium-browser`                           |
+| `CLAUDE_CONTINUE`                   | Orchestrator     | `1` = pass `--continue` to resume previous session     |
+| `GIT_USER_NAME`                     | Orchestrator env | Git commit author name                                 |
+| `GIT_USER_EMAIL`                    | Orchestrator env | Git commit author email                                |
+| `HOME`                              | Dockerfile       | `/home/claude`                                         |
+| `NODE_ENV`                          | Dockerfile       | `production` (or `test` in test image)                 |
+| `COREPACK_ENABLE_DOWNLOAD_PROMPT`   | Dockerfile/env   | `0` — suppress corepack prompts in CI                  |
+| `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD`  | Dockerfile       | `1` — use system Chromium                              |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | Dockerfile     | `/usr/bin/chromium-browser`                            |
 
 ## Worker Types
 
@@ -224,20 +229,29 @@ If `/repo/.claude/settings.local.json` already exists, the entrypoint merges the
 
 The `DockerProvider` class in the orchestrator manages the full container lifecycle:
 
-| Operation           | Method                          | Description                                           |
-| ------------------- | ------------------------------- | ----------------------------------------------------- |
-| Create container    | `createWorker(config)`          | Creates, starts container; waits for ready marker     |
-| Destroy container   | `destroyWorker(taskId, force?)` | SIGTERM (10s grace) or SIGKILL, then remove + cleanup |
-| Run attempt         | `runAttempt(taskId)`            | `docker exec run-attempt`; reads prompts from secrets |
-| Check status        | `isWorkerRunning(taskId)`       | Docker inspect on container state                     |
-| Get logs            | `getWorkerLogs(taskId)`         | Full stdout/stderr with timestamps                    |
-| Stream logs         | `streamLogs(taskId, onChunk)`   | Real-time log streaming via Docker follow             |
-| Wait for completion | `waitForCompletion(taskId, ms)` | Blocks until exit or timeout (returns exit code)      |
-| Send input          | `sendInput(taskId, input)`      | Writes to attach stream stdin (legacy mode)           |
-| Attach TTY          | `attachTTY(taskId)`             | Interactive bash session for debugging                |
-| Get resource usage  | `getResourceUsage(taskId)`      | CPU%, memory used/limit from Docker stats             |
-| List workers        | `listWorkers()`                 | All active worker handles                             |
-| Cleanup orphans     | `cleanupOrphanedContainers()`   | Remove containers from previous orchestrator runs     |
+| Operation             | Method                                | Description                                                  |
+| --------------------- | ------------------------------------- | ------------------------------------------------------------ |
+| Create container      | `createWorker(config)`                | Creates, starts container; waits for ready marker; triggers first attempt |
+| Destroy container     | `destroyWorker(taskId, force?)`       | SIGTERM (10s grace) or SIGKILL, then remove + cleanup        |
+| Check status          | `isWorkerRunning(taskId)`             | Docker inspect on container state                            |
+| Get logs              | `getWorkerLogs(taskId)`               | Container stdout/stderr + buffered attempt logs              |
+| Stream logs           | `streamLogs(taskId, onChunk)`         | Real-time log streaming via Docker follow                    |
+| Wait for completion   | `waitForCompletion(taskId, ms)`       | Blocks until exit or timeout (returns exit code)             |
+| Get resource usage    | `getResourceUsage(taskId)`            | CPU%, memory used/limit from Docker stats                    |
+| List workers          | `listWorkers()`                       | All active worker handles                                    |
+| Cleanup orphans       | `cleanupOrphanedContainers()`         | Remove containers older than 24 hours from previous runs     |
+| Cleanup session       | `cleanupTaskSession(taskId)`          | Delete per-task Claude session directory                     |
+| Preserve worker       | `preserveWorker(taskId)`              | Park container in preserved map (keep alive for debugging)   |
+| List preserved        | `listPreservedWorkers()`              | Active preserved (not-yet-destroyed) worker entries          |
+| Image info            | `getImageInfo()`                      | Configured image ref, last pulled digest, pull policy        |
+
+### Shared Credentials Mode
+
+When `DockerProviderConfig.sharedCredsPath` is set, opus and auto workers use pre-fetched Anthropic OAuth credentials stored in a `.credentials.json` file at that path. The file is mounted at `/home/claude/.claude` instead of the per-task session directory. In this mode, `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` are omitted from the container environment — Claude CLI reads credentials directly from the mounted file.
+
+### Image Pull and Digest Resolution
+
+With `imagePullPolicy: 'always'` (default), `DockerProvider` pulls the image before each container creation using GCP service account credentials for registry auth (`username: '_json_key'`). After pulling, it resolves the immutable image digest from `RepoDigests` and uses that digest as the actual image reference for container creation. The last resolved digest is available via `getImageInfo()`. A warning is emitted when the `:latest` tag is used.
 
 ### Container Ready Detection (Managed Mode)
 
@@ -267,7 +281,7 @@ workers/claude-worker/
 
 **tmpfs wipes image contents** - The `/home/claude` tmpfs mount replaces the image-time directory contents at container start. Config defaults are baked into `/opt/claude-defaults/` (outside the tmpfs) and copied in by the entrypoint.
 
-**pnpm store is tmpfs-local** - The entrypoint sets `pnpm config set store-dir /home/claude/pnpm-store`. Since `/home/claude` is tmpfs, the store is discarded when the container stops. Each new container cold-installs all dependencies.
+**pnpm store is host-mounted** - The orchestrator creates `{secretsBasePath}/../pnpm-store` on the host and bind-mounts it at `/home/claude/pnpm-store:rw`. This directory survives container teardown and is shared across all containers started by the same orchestrator instance. However, the entrypoint still calls `pnpm install --frozen-lockfile` at startup, which re-links packages from the store — the first container may be slow, but subsequent ones benefit from the populated store cache.
 
 **Token refresh watcher only updates the entrypoint subshell** - The background token watcher exports `GITHUB_TOKEN` in a subshell, which does not propagate to the main Claude process. Token delivery to `gh` CLI relies on the git credential helper (`!f() { echo "password=${GITHUB_TOKEN}"; }; f`) being re-evaluated at `gh` invocation time, which reads the current env.
 

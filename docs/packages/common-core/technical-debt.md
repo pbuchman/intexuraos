@@ -33,6 +33,10 @@ The `serializeError` function in `errors.ts` has multiple v8 ignore directives f
 
 **Impact:** None functionally. The ignore annotations follow project conventions.
 
+## Resolved Debt
+
+None archived yet.
+
 ## Future Plans
 
 - Consider extracting tracing utilities into a dedicated `common-tracing` package if tracing concerns grow beyond `X-Trace-Id`

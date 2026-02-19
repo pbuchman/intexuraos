@@ -5,7 +5,7 @@ Shared API contract definitions for IntexuraOS services. Provides both OpenAPI s
 **Version:** 2.1.0
 **Node:** >=22.0.0
 **Type:** ESM
-**Dependencies:** None
+**Dependencies:** None (leaf package)
 
 ## API Reference
 
@@ -29,6 +29,8 @@ const ERROR_CODES: readonly [
 
 const ErrorCodeSchema: { type: 'string'; enum: string[] };
 ```
+
+Note: `ERROR_CODES` lists only the 8 generic HTTP-aligned codes. Domain-specific codes (e.g., `WORKER_UNAVAILABLE`, `NOTION_NOT_CONNECTED`) are defined in `common-core` but not listed here. See technical debt.
 
 #### Response Schemas
 
@@ -196,12 +198,12 @@ app.get(
 
 ## Recent Changes
 
-| Commit   | Description                                      | Age    |
-| -------- | ------------------------------------------------ | ------ |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner | recent |
-| 21c1528a | Fix release skill to bump all package versions   | recent |
-| 4fa0fed3 | Release v2.0.0                                   | recent |
-| 4f5a3f96 | Release v1.0.0                                   | recent |
+| Commit     | Description                                           | Age    |
+| ---------- | ----------------------------------------------------- | ------ |
+| `51cb268d` | Add tests for http-contracts and http-server packages | recent |
+| `d51755b6` | Migrate promptvault-service to use shared contracts   | recent |
+| `42d8c8c9` | Create packages/http-contracts with shared utilities  | recent |
+| `4fa0fed3` | Release v2.0.0                                        | recent |
 
 ## Source Files
 

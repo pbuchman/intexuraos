@@ -95,6 +95,7 @@ interface LlmPreferences {
 }
 
 interface LlmKeysStatus {
+  defaultModel: string | null; // User's preferred default LLM model (from llmPreferences)
   google: string | null; // Masked key preview (e.g., "AIza...XXXX")
   openai: string | null;
   anthropic: string | null;
@@ -219,6 +220,7 @@ const testResult = await testLlmApiKey(userId, 'openai');
 
 ```typescript
 const keys = await getLlmApiKeys(userId);
+// keys.defaultModel shows user's preferred model (e.g., "claude-haiku-3-5") or null
 // keys.google shows "AIza...XXXX" (masked) if configured
 // keys.testResults.google shows last test result
 ```

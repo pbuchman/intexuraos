@@ -19,7 +19,17 @@
 ### Tools (Endpoints)
 
 ```typescript
+interface ConnectResponse {
+  connectionId: string;  // Firestore document ID for the connection
+  signature: string;     // Plaintext signature — store securely, shown only once
+}
+
 interface MobileNotificationsServiceTools {
+  // Create or replace signature connection (deletes previous signature for user)
+  connect(params?: {
+    deviceLabel?: string;
+  }): Promise<ConnectResponse>;
+
   // List notifications for authenticated user
   listNotifications(params?: {
     limit?: number;          // 1–100, default 50
@@ -202,4 +212,4 @@ interface InternalNotification {
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-19 (v2 corrections applied)

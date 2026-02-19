@@ -71,6 +71,7 @@ interface OpenApiSource {
 | **Source Config** | OpenAPI sources configured at deployment via 15 required env vars |
 | **Client Fetch**  | Swagger UI fetches specs client-side — services must allow CORS   |
 | **Fail Fast**     | Missing any of the 15 env vars causes startup crash               |
+| **Environment**   | `INTEXURAOS_ENVIRONMENT` passed to Sentry; defaults to "development" |
 
 ---
 
