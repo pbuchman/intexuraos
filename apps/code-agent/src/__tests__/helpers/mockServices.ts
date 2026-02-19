@@ -28,6 +28,9 @@ import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestor
 import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
+import { createLinearOAuthRepository } from '../../infra/firestore/linearOAuthRepository.js';
+import type { LinearAgentApiClient } from '../../domain/ports/linearAgentApiClient.js';
+import { createLinearActivityReporter } from '../../domain/services/linearActivityReporter.js';
 
 /**
  * Mock worker health probe that always returns healthy status.
@@ -49,6 +52,22 @@ export const mockWorkerHealthProbe: WorkerHealthProbe = {
       results[worker.name] = await mockWorkerHealthProbe.probeWorker(worker);
     }
     return results;
+  },
+};
+
+/**
+ * Mock Linear Agent API client for tests.
+ * All operations succeed as no-ops.
+ */
+export const mockLinearAgentApiClient: LinearAgentApiClient = {
+  async emitActivity() {
+    return ok(undefined);
+  },
+  async updateSessionPlan() {
+    return ok(undefined);
+  },
+  async updateSessionExternalUrls() {
+    return ok(undefined);
   },
 };
 
@@ -153,6 +172,15 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     prTaskLockRepo: createFirestorePRTaskLockRepository({
       firestore: fakeFirestore,
+      logger,
+    }),
+    linearOAuthRepo: createLinearOAuthRepository({
+      firestore: fakeFirestore,
+      logger,
+    }),
+    linearAgentApiClient: mockLinearAgentApiClient,
+    linearActivityReporter: createLinearActivityReporter({
+      linearAgentApiClient: mockLinearAgentApiClient,
       logger,
     }),
   };

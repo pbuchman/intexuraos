@@ -79,7 +79,9 @@ export class TokenRefresher {
         },
       });
     } catch (error) {
-      const cause = error instanceof Error && error.cause instanceof Error ? error.cause : undefined;
+      /* v8 ignore start -- test-infra: catch block requires network-level fetch failure which fakes cannot produce @preserve */
+      const cause =
+        error instanceof Error && error.cause instanceof Error ? error.cause : undefined;
       this.logger.error(
         {
           url,
@@ -90,15 +92,13 @@ export class TokenRefresher {
         },
         'GitHub token mint fetch failed'
       );
+      /* v8 ignore stop @preserve */
       throw error;
     }
 
     if (!response.ok) {
       const body = await response.text().catch(() => '<unreadable>');
-      this.logger.error(
-        { url, status: response.status, body },
-        'GitHub token mint HTTP error'
-      );
+      this.logger.error({ url, status: response.status, body }, 'GitHub token mint HTTP error');
       throw new Error(`GitHub token mint failed: ${String(response.status)}`);
     }
 

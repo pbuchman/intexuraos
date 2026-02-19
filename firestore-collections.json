@@ -186,6 +186,10 @@
     "pr_task_locks": {
       "owner": "code-agent",
       "description": "PR task locks ensuring only one Claude task runs per PR at a time (INT-465)"
+    },
+    "linear_oauth": {
+      "owner": "code-agent",
+      "description": "Linear OAuth credentials for Agents Platform integration (workspace-level app install)"
     }
   }
 }

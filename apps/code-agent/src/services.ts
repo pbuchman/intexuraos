@@ -42,6 +42,12 @@ import type { PRTaskLockRepository } from './domain/repositories/prTaskLockRepos
 import { createFirestorePRTaskLockRepository } from './infra/firestore/firestorePRTaskLockRepository.js';
 import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
+import type { LinearOAuthRepository } from './domain/ports/linearOAuthRepository.js';
+import { createLinearOAuthRepository } from './infra/firestore/linearOAuthRepository.js';
+import type { LinearAgentApiClient } from './domain/ports/linearAgentApiClient.js';
+import { createLinearAgentApiClient as createLinearAgentApiClientImpl } from './infra/services/linearAgentApiClient.js';
+import type { LinearActivityReporter } from './domain/services/linearActivityReporter.js';
+import { createLinearActivityReporter } from './domain/services/linearActivityReporter.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -65,6 +71,9 @@ export interface ServiceContainer {
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   prTaskLockRepo: PRTaskLockRepository;
+  linearOAuthRepo: LinearOAuthRepository;
+  linearAgentApiClient: LinearAgentApiClient;
+  linearActivityReporter: LinearActivityReporter;
 }
 
 // Configuration required to initialize services
@@ -250,6 +259,18 @@ export function initServices(config: ServiceConfig): void {
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     prTaskLockRepo: createFirestorePRTaskLockRepository({ firestore, logger }),
+    linearOAuthRepo: createLinearOAuthRepository({ firestore, logger }),
+    linearAgentApiClient: createLinearAgentApiClientImpl({
+      linearOAuthRepo: createLinearOAuthRepository({ firestore, logger }),
+      logger,
+    }),
+    linearActivityReporter: createLinearActivityReporter({
+      linearAgentApiClient: createLinearAgentApiClientImpl({
+        linearOAuthRepo: createLinearOAuthRepository({ firestore, logger }),
+        logger,
+      }),
+      logger,
+    }),
   };
 }
 

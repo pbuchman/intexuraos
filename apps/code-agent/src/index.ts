@@ -23,6 +23,8 @@ const REQUIRED_ENV = [
  * - INTEXURAOS_SERVICE_URL: Worker configuration
  * - INTEXURAOS_WEB_URL: Web app URL for generating task links (defaults to https://intexuraos.cloud)
  * - INTEXURAOS_AUTH_AUDIENCE, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_JWKS_URL: Auth0 JWT
+ * - INTEXURAOS_LINEAR_CLIENT_ID, INTEXURAOS_LINEAR_CLIENT_SECRET: Linear OAuth (Agents Platform)
+ * - INTEXURAOS_LINEAR_WEBHOOK_SECRET: Linear webhook signature verification
  */
 
 // Additional env vars required in production but optional in E2E mode
@@ -35,6 +37,9 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
+  'INTEXURAOS_LINEAR_CLIENT_ID',
+  'INTEXURAOS_LINEAR_CLIENT_SECRET',
+  'INTEXURAOS_LINEAR_WEBHOOK_SECRET',
 ];
 
 // In E2E mode, only validate core env vars; others have sensible defaults

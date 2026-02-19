@@ -62,6 +62,10 @@ const COMMON_OPTIONAL_ENV = new Set([
   'INTEXURAOS_ZAI_APP_API_KEY',
   // Platform-wide Gemini API key (primary fallback for services using user-service client)
   'INTEXURAOS_GEMINI_APP_API_KEY',
+  // Linear OAuth (Agents Platform — optional, production-only)
+  'INTEXURAOS_LINEAR_CLIENT_ID',
+  'INTEXURAOS_LINEAR_CLIENT_SECRET',
+  'INTEXURAOS_LINEAR_WEBHOOK_SECRET',
   // Dash0 OpenTelemetry (optional — no-op when not configured)
   'INTEXURAOS_DASH0_OTLP_ENDPOINT',
   'INTEXURAOS_DASH0_AUTH_TOKEN',

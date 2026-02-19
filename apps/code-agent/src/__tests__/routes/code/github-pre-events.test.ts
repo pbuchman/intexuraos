@@ -23,7 +23,9 @@ import { ok, err } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../../infra/firestore/gitHubPRSummariesRepository.js';
-import { mockWorkerHealthProbe } from '../../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockLinearAgentApiClient } from '../../helpers/mockServices.js';
+import { createLinearOAuthRepository } from '../../../infra/firestore/linearOAuthRepository.js';
+import { createLinearActivityReporter } from '../../../domain/services/linearActivityReporter.js';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../../infra/repositories/firestoreLogLineRepository.js';
@@ -199,6 +201,9 @@ describe('GET /code/github-pr-events', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      linearOAuthRepo: createLinearOAuthRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      linearAgentApiClient: mockLinearAgentApiClient,
+      linearActivityReporter: createLinearActivityReporter({ linearAgentApiClient: mockLinearAgentApiClient, logger }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -221,6 +226,9 @@ describe('GET /code/github-pr-events', () => {
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      linearOAuthRepo: ReturnType<typeof createLinearOAuthRepository>;
+      linearAgentApiClient: import('../../../domain/ports/linearAgentApiClient.js').LinearAgentApiClient;
+      linearActivityReporter: ReturnType<typeof createLinearActivityReporter>;
     });
 
     server = await buildServer();

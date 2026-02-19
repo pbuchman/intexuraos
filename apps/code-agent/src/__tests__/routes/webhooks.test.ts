@@ -48,9 +48,11 @@ import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
-import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockLinearAgentApiClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
+import { createLinearOAuthRepository } from '../../infra/firestore/linearOAuthRepository.js';
+import { createLinearActivityReporter } from '../../domain/services/linearActivityReporter.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -183,6 +185,9 @@ describe('POST /internal/webhooks/task-complete', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      linearOAuthRepo: createLinearOAuthRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      linearAgentApiClient: mockLinearAgentApiClient,
+      linearActivityReporter: createLinearActivityReporter({ linearAgentApiClient: mockLinearAgentApiClient, logger }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -205,6 +210,9 @@ describe('POST /internal/webhooks/task-complete', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      linearOAuthRepo: ReturnType<typeof createLinearOAuthRepository>;
+      linearAgentApiClient: import('../../domain/ports/linearAgentApiClient.js').LinearAgentApiClient;
+      linearActivityReporter: ReturnType<typeof createLinearActivityReporter>;
     });
 
     app = await buildServer();
@@ -1463,6 +1471,9 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      linearOAuthRepo: createLinearOAuthRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      linearAgentApiClient: mockLinearAgentApiClient,
+      linearActivityReporter: createLinearActivityReporter({ linearAgentApiClient: mockLinearAgentApiClient, logger }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1485,6 +1496,9 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      linearOAuthRepo: ReturnType<typeof createLinearOAuthRepository>;
+      linearAgentApiClient: import('../../domain/ports/linearAgentApiClient.js').LinearAgentApiClient;
+      linearActivityReporter: ReturnType<typeof createLinearActivityReporter>;
     });
 
     app = await buildServer();
@@ -1801,6 +1815,9 @@ describe('POST /internal/logs', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      linearOAuthRepo: createLinearOAuthRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      linearAgentApiClient: mockLinearAgentApiClient,
+      linearActivityReporter: createLinearActivityReporter({ linearAgentApiClient: mockLinearAgentApiClient, logger }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1823,6 +1840,9 @@ describe('POST /internal/logs', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      linearOAuthRepo: ReturnType<typeof createLinearOAuthRepository>;
+      linearAgentApiClient: import('../../domain/ports/linearAgentApiClient.js').LinearAgentApiClient;
+      linearActivityReporter: ReturnType<typeof createLinearActivityReporter>;
     });
 
     app = await buildServer();
@@ -2361,6 +2381,9 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      linearOAuthRepo: createLinearOAuthRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      linearAgentApiClient: mockLinearAgentApiClient,
+      linearActivityReporter: createLinearActivityReporter({ linearAgentApiClient: mockLinearAgentApiClient, logger }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -2383,6 +2406,9 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      linearOAuthRepo: ReturnType<typeof createLinearOAuthRepository>;
+      linearAgentApiClient: import('../../domain/ports/linearAgentApiClient.js').LinearAgentApiClient;
+      linearActivityReporter: ReturnType<typeof createLinearActivityReporter>;
     });
 
     app = await buildServer();

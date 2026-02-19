@@ -16,6 +16,9 @@ import * as jose from 'jose';
 import { buildServer } from '../../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../../services.js';
 import { createFakeFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import { createLinearOAuthRepository } from '../../../infra/firestore/linearOAuthRepository.js';
+import { mockLinearAgentApiClient } from '../../helpers/mockServices.js';
+import { createLinearActivityReporter } from '../../../domain/services/linearActivityReporter.js';
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
@@ -139,6 +142,9 @@ describe('POST /webhooks/github', () => {
       gitHubPREventRepo: mockEventRepo,
       gitHubPRSummaryRepo: mockSummaryRepo,
       prTaskLockRepo: mockPrTaskLockRepo,
+      linearOAuthRepo: createLinearOAuthRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      linearAgentApiClient: mockLinearAgentApiClient,
+      linearActivityReporter: createLinearActivityReporter({ linearAgentApiClient: mockLinearAgentApiClient, logger }),
     };
 
     setServices(mockServices);

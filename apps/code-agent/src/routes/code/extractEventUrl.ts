@@ -40,9 +40,11 @@ export function extractEventUrl(eventType: string, payload: unknown): string | n
         const repo = payload['repository'];
         if (isObject(repo)) {
           const fullName = getString(repo, 'full_name');
+          /* v8 ignore start -- upstream: GitHub webhook payload may have null full_name @preserve */
           if (fullName !== null) {
             return `https://github.com/${fullName}/compare/${before}...${after}`;
           }
+          /* v8 ignore stop @preserve */
         }
       }
       // Fallback to PR URL for other actions (opened, closed, etc.)

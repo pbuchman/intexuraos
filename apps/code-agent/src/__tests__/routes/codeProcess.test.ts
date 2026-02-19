@@ -49,7 +49,9 @@ import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
-import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockLinearAgentApiClient } from '../helpers/mockServices.js';
+import { createLinearOAuthRepository } from '../../infra/firestore/linearOAuthRepository.js';
+import { createLinearActivityReporter } from '../../domain/services/linearActivityReporter.js';
 
 describe('POST /internal/code/process', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -183,6 +185,9 @@ describe('POST /internal/code/process', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      linearOAuthRepo: createLinearOAuthRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      linearAgentApiClient: mockLinearAgentApiClient,
+      linearActivityReporter: createLinearActivityReporter({ linearAgentApiClient: mockLinearAgentApiClient, logger }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -205,6 +210,9 @@ describe('POST /internal/code/process', () => {
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      linearOAuthRepo: ReturnType<typeof createLinearOAuthRepository>;
+      linearAgentApiClient: import('../../domain/ports/linearAgentApiClient.js').LinearAgentApiClient;
+      linearActivityReporter: ReturnType<typeof createLinearActivityReporter>;
     });
 
     // Set up worker settings for the test user

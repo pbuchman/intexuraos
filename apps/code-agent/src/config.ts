@@ -19,6 +19,11 @@ export interface Config {
   auth0Audience: string;
   auth0Issuer: string;
   auth0JwksUri: string;
+  // Linear OAuth (Agents Platform)
+  linearClientId: string;
+  linearClientSecret: string;
+  linearWebhookSecret: string;
+  linearOAuthRedirectUri: string;
 }
 
 export function loadConfig(): Config {
@@ -37,6 +42,11 @@ export function loadConfig(): Config {
   const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
   const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
   const githubWebhookSecret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] ?? '';
+  const linearClientId = process.env['INTEXURAOS_LINEAR_CLIENT_ID'] ?? '';
+  const linearClientSecret = process.env['INTEXURAOS_LINEAR_CLIENT_SECRET'] ?? '';
+  const linearWebhookSecret = process.env['INTEXURAOS_LINEAR_WEBHOOK_SECRET'] ?? '';
+  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'http://localhost:8128';
+  const linearOAuthRedirectUri = `${serviceUrl}/oauth/linear/callback`;
 
   return {
     port,
@@ -54,5 +64,9 @@ export function loadConfig(): Config {
     auth0Audience,
     auth0Issuer,
     auth0JwksUri,
+    linearClientId,
+    linearClientSecret,
+    linearWebhookSecret,
+    linearOAuthRedirectUri,
   };
 }

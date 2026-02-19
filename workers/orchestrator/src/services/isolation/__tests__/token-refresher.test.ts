@@ -241,7 +241,11 @@ describe('TokenRefresher', () => {
 
       // First task fails, second succeeds
       mockFetch
-        .mockResolvedValueOnce({ ok: false, status: 500, text: () => Promise.resolve('Internal Server Error') })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          text: () => Promise.resolve('Internal Server Error'),
+        })
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'new-token' }) });
 
       await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);

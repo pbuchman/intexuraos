@@ -44,9 +44,11 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import { ok } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ServiceContainer } from '../../services.js';
-import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
+import { mockWorkerHealthProbe, mockLinearAgentApiClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
+import { createLinearOAuthRepository } from '../../infra/firestore/linearOAuthRepository.js';
+import { createLinearActivityReporter } from '../../domain/services/linearActivityReporter.js';
 
 describe('Worker Settings Routes', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -163,6 +165,9 @@ describe('Worker Settings Routes', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      linearOAuthRepo: createLinearOAuthRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      linearAgentApiClient: mockLinearAgentApiClient,
+      linearActivityReporter: createLinearActivityReporter({ linearAgentApiClient: mockLinearAgentApiClient, logger }),
     } as ServiceContainer);
 
     app = await buildServer();

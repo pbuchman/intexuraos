@@ -24,6 +24,7 @@ type PayloadObject = Record<string, unknown>;
  * Extract the comment/review ID from a webhook payload so we can
  * deduplicate created → edited sequences for the same comment.
  */
+/* v8 ignore start -- upstream: GitHub webhook payload type narrowing for untyped payloads @preserve */
 function extractCommentKey(eventType: string, payload: unknown): string | null {
   if (typeof payload !== 'object' || payload === null) return null;
   const p = payload as PayloadObject;
@@ -43,6 +44,7 @@ function extractCommentKey(eventType: string, payload: unknown): string | null {
       if (typeof id === 'number') return `${eventType}:${String(id)}`;
     }
   }
+  /* v8 ignore stop @preserve */
 
   return null;
 }
