@@ -150,7 +150,7 @@ describe('GitHubTokenService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('TOKEN_REFRESH_FAILED');
-        expect(result.error.message).toBe('Unknown error');
+        expect(result.error.message).toBe('Non-Error thrown: "Some string error"');
       }
     });
   });

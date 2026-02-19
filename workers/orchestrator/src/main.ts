@@ -147,7 +147,10 @@ function scheduleTokenRefresh(tokenService: GitHubTokenService, logger: Logger):
       try {
         const result = await tokenService.refreshToken();
         if (!result.ok) {
-          logger.error({ error: result.error }, 'Token refresh failed');
+          logger.error(
+            { code: result.error.code, message: result.error.message },
+            'Token refresh failed'
+          );
         } else {
           logger.debug({ message: 'Token refreshed successfully' });
         }
