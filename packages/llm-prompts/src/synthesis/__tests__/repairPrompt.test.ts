@@ -5,9 +5,9 @@ describe('buildSynthesisContextRepairPrompt', () => {
   it('includes original prompt in XML tags', () => {
     const result = buildSynthesisContextRepairPrompt('test query', '{}', 'some error');
 
-    expect(result).toContain('<original_query>');
+    expect(result).toContain('<user_query>');
     expect(result).toContain('test query');
-    expect(result).toContain('</original_query>');
+    expect(result).toContain('</user_query>');
   });
 
   it('includes invalid response in XML tags', () => {

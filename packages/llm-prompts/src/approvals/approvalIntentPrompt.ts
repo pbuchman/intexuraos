@@ -14,6 +14,8 @@ import type { PromptBuilder, PromptDeps } from '../types.js';
 export interface ApprovalIntentPromptInput {
   /** The user's reply text to analyze */
   userReply: string;
+  /** Optional description of the action being approved */
+  actionDescription?: string;
 }
 
 export type ApprovalIntentPromptDeps = PromptDeps;
@@ -30,17 +32,24 @@ export interface ApprovalIntentResponse {
 export const approvalIntentPrompt: PromptBuilder<ApprovalIntentPromptInput> = {
   name: 'approval-intent',
   description: 'Classifies user reply to approval request as approve, reject, or unclear',
-  version: '1.0.0',
+  version: '1.1.0',
 
   build(input: ApprovalIntentPromptInput): string {
+    const actionContext =
+      input.actionDescription !== undefined && input.actionDescription !== ''
+        ? `\nThe user was asked to approve: ${input.actionDescription}\n`
+        : '';
+
     return `Analyze this user reply to an action approval request.
 
+When intent is 'approve', the pending action executes immediately. When 'reject', the action is cancelled. When 'unclear', the user is re-prompted for clarification.
+${actionContext}
 User replied: "${input.userReply}"
 
 Determine the user's intent:
 - "approve": User wants to proceed (e.g., "yes", "ok", "approve", "go ahead", "do it", "sure", "yep", "yeah", "fine", "confirmed", "proceed", "let's do it", "tak", "okej", "dawaj", "zatwierdź", "zrób to")
 - "reject": User wants to cancel (e.g., "no", "reject", "cancel", "don't", "stop", "nope", "skip", "remove", "delete", "nie", "anuluj", "odrzuć", "usuń", "pomiń")
-- "unclear": Cannot determine intent (e.g., "what?", unrelated text, "maybe", "later", "not now", empty text, questions)
+- "unclear": Cannot determine intent (e.g., "what?", unrelated text, "maybe", "later", "not now", empty text, questions). Also classify as 'unclear': conditional approvals ('yes if...'), partial approvals ('yes but change...'), or approvals with modifications — these require human disambiguation.
 
 Guidelines:
 - Default to "unclear" when the response is genuinely ambiguous
@@ -49,6 +58,12 @@ Guidelines:
 - Single word negations (no, nope, nah, nie) = reject
 - Deferral words ("later", "not now", "może później") = unclear (NOT reject)
 - Empty or whitespace-only text = unclear
+
+## Confidence Calibration
+- 0.9-1.0: Explicit single-word responses (yes, no, tak, nie) or clear emoji
+- 0.7-0.9: Affirmative/negative phrasing without ambiguity
+- 0.4-0.7: Contextual inference required, some ambiguity
+- 0.1-0.4: Genuinely uncertain, multiple interpretations possible
 
 Respond with ONLY valid JSON in this exact format:
 {

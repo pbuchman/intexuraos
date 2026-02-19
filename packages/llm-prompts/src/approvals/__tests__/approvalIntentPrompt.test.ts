@@ -73,9 +73,27 @@ describe('approvalIntentPrompt', () => {
     expect(prompt).toContain('"reasoning"');
   });
 
+  it('includes action description when provided', () => {
+    const prompt = approvalIntentPrompt.build({
+      userReply: 'yes',
+      actionDescription: 'Create Linear issue INT-500',
+    });
+
+    expect(prompt).toContain('The user was asked to approve: Create Linear issue INT-500');
+  });
+
+  it('omits action context when actionDescription is empty', () => {
+    const prompt = approvalIntentPrompt.build({
+      userReply: 'yes',
+      actionDescription: '',
+    });
+
+    expect(prompt).not.toContain('The user was asked to approve');
+  });
+
   it('has PromptBuilder metadata', () => {
     expect(approvalIntentPrompt.name).toBe('approval-intent');
-    expect(approvalIntentPrompt.version).toBe('1.0.0');
+    expect(approvalIntentPrompt.version).toBe('1.1.0');
     expect(approvalIntentPrompt.description).toBeTruthy();
   });
 });

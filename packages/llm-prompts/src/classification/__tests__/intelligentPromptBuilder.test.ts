@@ -292,7 +292,16 @@ describe('toClassificationExample', () => {
   });
 
   it('accepts all valid category types', () => {
-    const validTypes = ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear'];
+    const validTypes = [
+      'todo',
+      'research',
+      'note',
+      'link',
+      'calendar',
+      'reminder',
+      'linear',
+      'code',
+    ];
 
     for (const type of validTypes) {
       const source: CommandExampleSource = {
@@ -379,7 +388,16 @@ describe('toClassificationCorrection', () => {
   });
 
   it('accepts all valid category type combinations', () => {
-    const validTypes = ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear'];
+    const validTypes = [
+      'todo',
+      'research',
+      'note',
+      'link',
+      'calendar',
+      'reminder',
+      'linear',
+      'code',
+    ];
 
     const source: TransitionSource = {
       commandText: 'test',
