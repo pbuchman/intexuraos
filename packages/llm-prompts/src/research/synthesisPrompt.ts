@@ -121,6 +121,8 @@ Rules:
 - Multiple IDs in one category: separate with commas (e.g., Primary=S1,S2)
 - Empty category: leave value empty (e.g., Constraints=)
 - DO NOT output a 'Source Utilization Breakdown' section (system appends it automatically)
+
+Example: Attribution: Primary=S1,S3; Secondary=U1; Constraints=S2; UNK=false
 `;
 
 function buildContextualSynthesisPrompt(
@@ -197,6 +199,8 @@ ${ctx.output_format.wants_table ? '- Include comparison tables where appropriate
 
   return `Below are reports from multiple AI models${introSuffix}. Synthesize them into a comprehensive, well-organized report.
 
+This synthesis will be presented directly to the user as the final research output.
+
 ## Original Prompt
 
 ${originalPrompt}
@@ -217,6 +221,10 @@ ${additionalSourcesSection}## Synthesis Goals
 ${buildSynthesisGoalsSection(ctx)}
 ${buildConflictsSection(ctx)}${buildMissingSectionsSection(ctx)}${safetySection}${redFlagsSection}${outputFormatSection}
 
+## LLM Reports
+
+${formattedReports}
+
 ## Your Task
 
 Create a unified synthesis that:
@@ -226,10 +234,6 @@ Create a unified synthesis that:
 4. **Address gaps**: Acknowledge missing coverage areas
 5. **Conclude**: Provide a balanced summary
 6. **Attribute sources**: End each ## section with an Attribution line using IDs from the Source ID Map
-
-## LLM Reports
-
-${formattedReports}
 
 ## Citation Rules (CRITICAL)
 
@@ -341,6 +345,10 @@ ${sourcesInfo}
 
 ${sourceIdMap}
 ${ATTRIBUTION_RULES}
+## Synthesis Goals
+
+Merge the reports into a single coherent output. Deduplicate overlapping information. Highlight any conflicts between sources.
+
 ${additionalSourcesSection}## LLM Reports
 
 ${formattedReports}
@@ -376,3 +384,4 @@ Adjust your synthesis style based on the topic:
 
 Write the ENTIRE synthesis in the SAME LANGUAGE as the Original Prompt (Polish → Polish, Spanish → Spanish, etc.)`;
 }
+// Prompt version: 1.1.0
