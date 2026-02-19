@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { useCodeTasks, useWorkersStatus } from '../useCodeTasks.js';
+import { useCodeTasks, useWorkersStatus, findRecentTask } from '../useCodeTasks.js';
 import type { CodeTask, WorkersStatusResponse } from '../../types/index.js';
 
 const mockGetAccessToken = vi.fn();
@@ -192,6 +192,65 @@ describe('useCodeTasks hooks', () => {
       });
 
       expect(mockListCodeTasks).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('findRecentTask', () => {
+    it('returns matching task when prompt matches and created within 2 minutes', () => {
+      const now = new Date();
+      const recentTask: CodeTask = {
+        ...mockTask,
+        id: 'task-recent',
+        prompt: 'Fix the authentication bug',
+        createdAt: new Date(now.getTime() - 60000).toISOString(), // 1 minute ago
+      };
+
+      const result = findRecentTask([recentTask], 'Fix the authentication bug');
+      expect(result).toEqual(recentTask);
+    });
+
+    it('returns null when no matching task found', () => {
+      const now = new Date();
+      const task: CodeTask = {
+        ...mockTask,
+        id: 'task-other',
+        prompt: 'Build new feature',
+        createdAt: new Date(now.getTime() - 60000).toISOString(),
+      };
+
+      const result = findRecentTask([task], 'Fix the authentication bug');
+      expect(result).toBeNull();
+    });
+
+    it('returns null when matching task is too old', () => {
+      const now = new Date();
+      const oldTask: CodeTask = {
+        ...mockTask,
+        id: 'task-old',
+        prompt: 'Fix the authentication bug',
+        createdAt: new Date(now.getTime() - 300000).toISOString(), // 5 minutes ago
+      };
+
+      const result = findRecentTask([oldTask], 'Fix the authentication bug');
+      expect(result).toBeNull();
+    });
+
+    it('returns null for empty task list', () => {
+      const result = findRecentTask([], 'Fix the bug');
+      expect(result).toBeNull();
+    });
+
+    it('matches tasks by trimmed prompt comparison', () => {
+      const now = new Date();
+      const task: CodeTask = {
+        ...mockTask,
+        id: 'task-trimmed',
+        prompt: '  Fix the bug  ',
+        createdAt: new Date(now.getTime() - 30000).toISOString(),
+      };
+
+      const result = findRecentTask([task], 'Fix the bug');
+      expect(result).toEqual(task);
     });
   });
 
