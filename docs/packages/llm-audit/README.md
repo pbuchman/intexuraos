@@ -183,6 +183,8 @@ interface CompleteAuditLogErrorParams {
 
 **Apps (1):** `image-service`
 
+**Workers (1):** `orchestrator`
+
 ## Recent Changes
 
 | Commit   | Description                                      | Age     |

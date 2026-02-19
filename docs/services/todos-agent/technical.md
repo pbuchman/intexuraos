@@ -71,16 +71,16 @@ sequenceDiagram
 
 | Commit     | Description                                          | Date       |
 | ---------- | ---------------------------------------------------- | ---------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability      | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (#803)           | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming (#793)     | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback (#792) | 2026-02-15 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter (#790)         | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform Zai fallback | 2026-02-08 |
 | `dfd702f1` | Migrate from pino to createAppLogger (Sentry)        | 2026-01-30 |
 | `c3198407` | Fix response contract violations (reply.ok/fail)     | 2026-01-30 |
 | `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement     | 2026-01-31 |
 | `1faa1d3b` | INT-301: Consolidate user service client imports     | 2026-01-26 |
-| `6210f965` | INT-402: Add cancelled/processing status coverage    | 2026-01-27 |
-| `3a693666` | INT-401: Add processTodoCreated update failure tests | 2026-01-27 |
-| `714451ce` | INT-400: Add config.ts fallback value tests          | 2026-01-27 |
-| `35f4c6`   | INT-218: Migrate to Zod schema validation            | 2026-01-24 |
-| `b1c7a4b`  | INT-269: Use @intexuraos/internal-clients            | 2026-01-24 |
-| `9f1f8dc`  | INT-126: Standardize ServiceFeedback                 | 2026-01-18 |
 
 ## API Endpoints
 
@@ -210,18 +210,20 @@ sequenceDiagram
 
 ## Configuration
 
-| Variable                              | Purpose                      | Required |
-| ------------------------------------- | ---------------------------- | -------- |
-| `INTEXURAOS_GCP_PROJECT_ID`           | GCP project ID               | Yes      |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Auth0 JWKS endpoint          | Yes      |
-| `INTEXURAOS_AUTH_ISSUER`              | Auth0 issuer                 | Yes      |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Auth0 audience               | Yes      |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth key    | Yes      |
-| `INTEXURAOS_TODOS_PROCESSING_TOPIC`   | Pub/Sub topic for processing | Yes      |
-| `INTEXURAOS_USER_SERVICE_URL`         | User-service base URL        | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | App-settings base URL        | Yes      |
-| `INTEXURAOS_SENTRY_DSN`               | Sentry error tracking        | No       |
-| `INTEXURAOS_ENVIRONMENT`              | Environment name             | No       |
+| Variable                              | Purpose                           | Required |
+| ------------------------------------- | --------------------------------- | -------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | GCP project ID                    | Yes      |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Auth0 JWKS endpoint               | Yes      |
+| `INTEXURAOS_AUTH_ISSUER`              | Auth0 issuer                      | Yes      |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Auth0 audience                    | Yes      |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth key         | Yes      |
+| `INTEXURAOS_TODOS_PROCESSING_TOPIC`   | Pub/Sub topic for processing      | Yes      |
+| `INTEXURAOS_USER_SERVICE_URL`         | User-service base URL             | Yes      |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | App-settings base URL             | Yes      |
+| `INTEXURAOS_SENTRY_DSN`               | Sentry error tracking             | No       |
+| `INTEXURAOS_ENVIRONMENT`              | Environment name                  | No       |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | Platform Zai API key (LLM fallback) | No     |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini API key (LLM fallback) | No  |
 
 ## Gotchas
 

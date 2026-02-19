@@ -12,11 +12,12 @@ framework: fastify
 runtime: node22
 deploy: cloud-run
 collections:
-  - code_tasks (subcollections: logs)
+  - code_tasks (subcollections: logs, turn_metrics)
   - user_spend
   - user_usage
   - code_worker_settings
   - github-pr-events
+  - github-pr-summaries
   - pr_task_locks
 ```
 
@@ -147,6 +148,39 @@ interface WorkerConfigInput {
 // - Masked in API responses (last 3 chars visible)
 ```
 
+### Turn Metrics
+
+Per-turn resource metrics stored automatically at turn end in the `turn_metrics` subcollection.
+
+```typescript
+interface TurnMetrics {
+  taskId: string;
+  attempt: number;
+  timestamp: string; // ISO 8601
+  // Resource (cgroup)
+  cpuTimeSeconds: number;
+  cpuCores: number;
+  peakMemoryMB: number;
+  // Time classification
+  wallTimeSeconds: number;
+  apiWaitSeconds: number;
+  toolExecSeconds: number;
+  backgroundWaitSeconds: number;
+  overheadSeconds: number;
+  // Token accounting
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  apiCallCount: number;
+  // Derived
+  cpuUtilizationPercent: number;
+  idlePercent: number;
+}
+
+// Stored at: code_tasks/{taskId}/turn_metrics/{attempt:0001}
+```
+
 ### Cancel via Nonce
 
 ```typescript
@@ -243,6 +277,36 @@ Authorization: Bearer <auth0-jwt>
 
 -> 200: { "success": true, "data": { "tasks": [...], "nextCursor": "cursor-id" } }
 ```
+
+### GitHub PR events
+
+```
+GET /code/github-pr-events?repository=org/repo&pullRequestNumber=42&limit=50
+Authorization: Bearer <auth0-jwt>
+
+-> 200: {
+  "success": true,
+  "data": {
+    "events": [{
+      "pullRequestNumber": 42,
+      "title": "Add cursor-based pagination",
+      "repository": "org/repo",
+      "eventType": "pull_request" | "pull_request_review" | "pull_request_review_comment" | "issue_comment" | "push",
+      "action": "opened" | "synchronize" | "submitted" | "created" | null,
+      "senderLogin": "username",
+      "createdAt": "2026-02-19T10:00:00.000Z",
+      "eventUrl": "https://github.com/org/repo/compare/abc...def",  // clickable link
+      "body": "Comment text or PR description (deduplicated)"        // null for non-body events
+    }]
+  }
+}
+```
+
+Notes:
+- `pullRequestNumber` requires `repository` to also be set
+- Per-PR queries return oldest-first; repository/all queries return newest-first
+- Comment `edited` events are merged with their original — same position, latest body
+- PR body appears only on the most recent `pull_request` event
 
 ### Cancel task (from web UI)
 

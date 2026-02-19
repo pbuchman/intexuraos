@@ -59,6 +59,7 @@ interface Classification {
   type: ClassificationType;
   confidence: number; // 0.0-1.0
   reasoning: string;
+  promptVersion: string; // semver of the prompt that produced this result
   classifiedAt: string; // ISO 8601
 }
 
@@ -213,4 +214,4 @@ whatsapp-service → Pub/Sub (command.ingest) → /internal/commands → command
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

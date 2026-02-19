@@ -42,6 +42,8 @@ interface UserServiceConfig {
   internalAuthToken: string;
   pricingContext: IPricingContext;
   logger: Logger;
+  platformGeminiApiKey?: string; // platform-level fallback: Gemini 2.5 Flash
+  platformZaiApiKey?: string;    // platform-level fallback: Glm47Flash (Zai)
 }
 ```
 
@@ -85,7 +87,7 @@ Build a fully configured LLM client for a user in a single call. Performs three 
 2. Fetch the user's API keys for the required provider
 3. Create an `LlmGenerateClient` via `@intexuraos/llm-factory`
 
-Falls back to `Gemini25Flash` when the user has no model preference.
+Falls back to `Gemini25Flash` when the user has no model preference. If the user has no API key for the required provider and `platformGeminiApiKey` is configured, silently falls back to Gemini 2.5 Flash using the platform key. If `platformZaiApiKey` is configured instead, falls back to Glm47Flash (Zai).
 
 Returns `Result<LlmGenerateClient, UserServiceError>` with error codes:
 
@@ -206,15 +208,15 @@ Dev dependencies: `nock` (HTTP mocking), `vitest`, `typescript`.
 
 ## Recent Changes
 
-| Commit     | Description                                                   | When    |
-| ---------- | ------------------------------------------------------------- | ------- |
-| `44017d5c` | Fix ESLint OOM with batched parallel lint runner              | 7 days  |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)             | 8 days  |
-| `7872eabb` | Phase 2: Fix v8-ignore script and begin coverage work         | 8 days  |
-| `1c054cba` | Fix internal-clients to unwrap user-service response contract | 8 days  |
-| `7a90db67` | Fix vitest v4 migration and improve branch coverage           | 10 days |
-| `e9f2ada4` | Improve internal-clients branch coverage to 98%               | 12 days |
-| `6acb3fc0` | Add tests for 95% branch coverage                             | 13 days |
+| Commit     | Description                                                     | When   |
+| ---------- | --------------------------------------------------------------- | ------ |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback    | recent |
+| `0f69a74b` | Add default model selector with platform Zai fallback           | recent |
+| `44017d5c` | Fix ESLint OOM with batched parallel lint runner                | recent |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)               | recent |
+| `1c054cba` | Fix internal-clients to unwrap user-service response contract   | recent |
+| `7a90db67` | Fix vitest v4 migration and improve branch coverage             | recent |
+| `e9f2ada4` | Improve internal-clients branch coverage to 98%                 | recent |
 
 ---
 

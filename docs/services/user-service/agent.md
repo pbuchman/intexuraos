@@ -28,6 +28,7 @@ interface UserServiceTools {
 
   // User Settings
   getUserSettings(userId: string): Promise<UserSettings>;
+  updateUserSettings(userId: string, params: { defaultModel: string }): Promise<{ defaultModel: string }>;
 
   // LLM API Keys
   getLlmApiKeys(userId: string): Promise<LlmKeysStatus>;
@@ -90,7 +91,7 @@ interface UserSettings {
 }
 
 interface LlmPreferences {
-  defaultModel: string;
+  defaultModel: string; // Must pass isFastModel() validation
 }
 
 interface LlmKeysStatus {
@@ -134,14 +135,15 @@ interface OAuthConnectionStatus {
 
 ## Constraints
 
-| Rule                      | Description                                             |
-| ------------------------- | ------------------------------------------------------- |
-| **Self-Access Only**      | Users can only access their own settings                |
-| **Encrypted Storage**     | API keys encrypted at rest with AES-256-GCM             |
-| **Key Validation**        | API keys validated with provider before storing         |
-| **5 Providers**           | Supports Google, OpenAI, Anthropic, Perplexity, Zai     |
-| **Rate Limit Precedence** | Error parser checks rate limits before API key errors   |
-| **Internal Auth**         | Service-to-service calls require X-Internal-Auth header |
+| Rule                      | Description                                                        |
+| ------------------------- | ------------------------------------------------------------------ |
+| **Self-Access Only**      | Users can only access their own settings                           |
+| **Encrypted Storage**     | API keys encrypted at rest with AES-256-GCM                        |
+| **Key Validation**        | API keys validated with provider before storing                    |
+| **5 Providers**           | Supports Google, OpenAI, Anthropic, Perplexity, Zai                |
+| **Rate Limit Precedence** | Error parser checks rate limits before API key errors              |
+| **Internal Auth**         | Service-to-service calls require X-Internal-Auth header            |
+| **Model Validation**      | `defaultModel` must pass `isFastModel()` or request is rejected    |
 
 ---
 
@@ -270,4 +272,4 @@ Keys are validated using cheap, fast models to minimize cost:
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

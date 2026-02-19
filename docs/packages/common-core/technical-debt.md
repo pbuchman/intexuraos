@@ -8,7 +8,7 @@ The package maintains high code quality as the foundational leaf package. All mo
 
 #### 1. ErrorCode proliferation
 
-`ErrorCode` in `errors.ts` contains domain-specific codes (`NOTION_NOT_CONNECTED`, `PAGE_NOT_CONFIGURED`, `RESEARCH_NOT_COMPLETED`, `NO_SYNTHESIS`, `ALREADY_EXPORTED`, `NOTION_UNAUTHORIZED`) that belong in their respective service packages rather than in a core utility package. These leak domain knowledge into the shared layer.
+`ErrorCode` in `errors.ts` contains domain-specific codes that belong in their respective service packages rather than in a core utility package. The full set of domain-specific codes has grown to: `NOTION_NOT_CONNECTED`, `PAGE_NOT_CONFIGURED`, `RESEARCH_NOT_COMPLETED`, `NO_SYNTHESIS`, `ALREADY_EXPORTED`, `NOTION_UNAUTHORIZED`, `WORKER_NOT_CONFIGURED`, `INVALID_WORKER`, `WORKER_UNHEALTHY`, `WORKER_UNAVAILABLE`, `INVALID_NONCE`, `NONCE_EXPIRED`, `NOT_OWNER`, `TASK_NOT_CANCELLABLE`. These leak domain knowledge into the shared layer.
 
 **Impact:** Low. Adding new service-specific error codes requires modifying a shared package.
 **Suggested fix:** Move domain-specific error codes to service-level packages. Keep only generic HTTP-aligned codes in `common-core`.

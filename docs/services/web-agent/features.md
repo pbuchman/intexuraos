@@ -23,7 +23,7 @@ Crawl web pages and generate clean prose summaries using the user's preferred LL
 **How it works:**
 
 1. PageContentFetcher crawls with Crawl4AI (headless browser)
-2. LlmSummarizer uses your LLM API key (not ours - you control costs)
+2. LlmSummarizer resolves which LLM to use: user's own API key → platform Gemini 2.5 Flash → platform ZAI
 3. Content focus instructions prevent platform descriptions (e.g., no "LinkedIn is a professional network" preambles)
 4. Parser validates output and triggers self-repair if LLM returns JSON
 
@@ -54,7 +54,7 @@ Browser-like request headers avoid 403 blocks from protective websites.
 1. User sends article URLs to research-agent
 2. research-agent calls web-agent's `/internal/page-summaries`
 3. web-agent crawls each URL with Crawl4AI
-4. User's LLM API key generates prose summary
+4. User's LLM API key (or platform Gemini fallback) generates prose summary
 5. If LLM returns JSON, repair prompt triggers automatic retry
 6. Summary returns in the article's original language
 
@@ -67,7 +67,9 @@ Browser-like request headers avoid 403 blocks from protective websites.
 
 ## Key Benefits
 
-**User-controlled costs** - Summaries use your API keys, not shared infrastructure
+**Works without user API keys** - Platform Gemini 2.5 Flash fallback means summaries work even before users configure their own LLM keys
+
+**User-controlled costs** - When users add their own API keys, those are used instead of shared infrastructure
 
 **Language preservation** - Polish stays Polish, German stays German
 
@@ -83,6 +85,8 @@ Browser-like request headers avoid 403 blocks from protective websites.
 
 **Memory safe** - 2MB cap prevents out-of-memory errors from huge pages
 
+**Observable** - Distributed tracing via Dash0 OpenTelemetry for latency and error tracking
+
 ## Limitations
 
 **HTTP/HTTPS only** - No support for ftp://, file://, or other protocols
@@ -92,8 +96,6 @@ Browser-like request headers avoid 403 blocks from protective websites.
 **No caching** - Every request fetches fresh content
 
 **No authentication** - Cannot access paywalled or login-protected content
-
-**LLM API key required** - Summarization fails without user's configured API key
 
 **403 still possible** - Browser-like headers help but don't guarantee access to all sites
 

@@ -1,7 +1,7 @@
 # Orchestrator - Technical Debt
 
-**Last Updated:** 2026-02-08
-**Analysis Run:** v2.1.0 documentation generation
+**Last Updated:** 2026-02-19
+**Analysis Run:** v2.1.0 documentation update
 
 ---
 
@@ -127,9 +127,9 @@ The `cleanupStaleWorktrees()` function exists but is not wired into the main loo
 
 **Severity:** Low
 
-`DockerProvider.getResourceUsage()` exists but is never called. There is no alerting when containers approach memory limits or CPU saturation.
+`DockerProvider.getResourceUsage()` exists but is never called. There is no alerting when containers approach memory limits or CPU saturation. (Note: `TurnMetricsCollector` collects post-exit cgroup data, but does not provide real-time monitoring during task execution.)
 
-**Recommended fix:** Integrate resource usage into the health endpoint or log periodic snapshots.
+**Recommended fix:** Integrate resource usage into the health endpoint or log periodic snapshots during task execution.
 
 ---
 
@@ -139,7 +139,7 @@ The `cleanupStaleWorktrees()` function exists but is not wired into the main loo
 
 Container logs are streamed to code-agent via `LogForwarder` but are not persisted locally. If the code-agent is unreachable during a task, log data is lost after the chunk retry limit (3 attempts, 4s max backoff).
 
-**Recommended fix:** Write container logs to `~/.claude-orchestrator/logs/{taskId}.log` as a fallback.
+**Recommended fix:** Write container logs to `~/.claude-orchestrator/logs/{taskId}.log` as a fallback before streaming.
 
 ---
 
@@ -171,10 +171,10 @@ Support priority levels for task scheduling:
 
 ### Metrics and Alerting
 
-Expose operational metrics:
+Expose operational metrics (extends `TurnMetricsCollector` post-task data):
 
 1. Task completion rate, average duration, failure rate
-2. Container resource usage trends
+2. Real-time container resource usage trends during execution
 3. Token refresh failure rates
 4. Webhook delivery success rates
 

@@ -13,7 +13,7 @@ A working integration that:
 - Sends WhatsApp messages to users via the internal API
 - Sends interactive approval messages with buttons
 - Tracks outbound messages for reply correlation
-- Handles approval responses (buttons, text replies, and reactions)
+- Handles approval responses (buttons and text replies)
 - Processes the approval workflow end-to-end
 
 ---
@@ -55,18 +55,18 @@ To send a WhatsApp message, publish a `whatsapp.message.send` event to Pub/Sub.
 ```typescript
 interface SendMessageEvent {
   type: 'whatsapp.message.send';
-  userId: string; // IntexuraOS user ID
-  message: string; // Message text
-  replyToMessageId?: string; // Optional: reply to specific message
+  userId: string;                        // IntexuraOS user ID
+  message: string;                       // Message text
+  replyToMessageId?: string;             // Optional: reply to specific message
   buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons (v3.0.0)
-  correlationId: string; // For tracking and reply correlation
-  timestamp: string; // ISO 8601
+  correlationId: string;                 // For tracking and reply correlation
+  timestamp: string;                     // ISO 8601
 }
 
 interface WhatsAppInteractiveButton {
   type: 'reply';
   reply: {
-    id: string; // Format: "intent:actionId[:nonce]"
+    id: string;    // Format: "intent:actionId"
     title: string; // Max 20 characters
   };
 }
@@ -78,7 +78,7 @@ interface WhatsAppInteractiveButton {
 import { PubSub } from '@google-cloud/pubsub';
 
 const pubsub = new PubSub();
-const topic = pubsub.topic(process.env.INTEXURAOS_PUBSUB_WHATSAPP_MESSAGE_SEND!);
+const topic = pubsub.topic(process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC!);
 
 const event: SendMessageEvent = {
   type: 'whatsapp.message.send',
@@ -110,19 +110,18 @@ await topic.publishMessage({
 
 ### Step 3.1: Send an Approval Request with Buttons
 
-For approval messages, include interactive buttons with the message. The button ID encodes the intent, action ID, and security nonce:
+For approval messages, include interactive buttons with the message. The button ID encodes the intent and action ID:
 
 ```typescript
 const actionId = 'act-xyz-789';
 const actionType = 'todo';
-const nonce = crypto.randomBytes(2).toString('hex'); // Short random nonce
 
 const approvalEvent: SendMessageEvent = {
   type: 'whatsapp.message.send',
   userId: 'user-abc-123',
-  message: 'Create todo: "Review quarterly report"?',
+  message: '👷 Create todo: "Review quarterly report"?',
   buttons: [
-    { type: 'reply', reply: { id: `approve:${actionId}:${nonce}`, title: 'Approve' } },
+    { type: 'reply', reply: { id: `approve:${actionId}`, title: 'Approve' } },
     { type: 'reply', reply: { id: `cancel:${actionId}`, title: 'Cancel' } },
   ],
   correlationId: `action-${actionType}-approval-${actionId}`,
@@ -135,22 +134,24 @@ await topic.publishMessage({
 });
 ```
 
-When buttons are provided, the message is sent as a WhatsApp interactive message. Users can tap buttons directly instead of typing replies. Text replies and emoji reactions still work as fallbacks.
+When buttons are provided, the message is sent as a WhatsApp interactive message. Users can tap buttons directly instead of typing replies. Text replies still work as a fallback.
+
+**Note:** As of v4.0.0 (INT-524), button IDs use the format `intent:actionId` — nonces are no longer included.
 
 ### Step 3.2: Handle Approval Responses
 
-When the user taps a button, replies, or reacts, whatsapp-service publishes an `action.approval.reply` event:
+When the user taps a button or replies, whatsapp-service publishes an `action.approval.reply` event:
 
 ```typescript
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
-  replyToWamid: string; // Original approval message wamid
-  replyText: string; // "yes", "no", or actual reply text
+  replyToWamid: string;  // Original approval message wamid
+  replyText: string;     // "yes", "no", "convert", "cancel-task", "view-task"
   userId: string;
   timestamp: string;
-  actionId?: string; // Extracted from buttonId or correlationId
-  buttonId?: string; // Button ID if user tapped a button (v3.0.0)
-  buttonTitle?: string; // Button title if user tapped a button (v3.0.0)
+  actionId?: string;     // Extracted from buttonId or correlationId
+  buttonId?: string;     // Button ID if user tapped a button
+  buttonTitle?: string;  // Button title if user tapped a button
 }
 ```
 
@@ -195,32 +196,33 @@ function classifyIntent(text: string): 'approve' | 'reject' | 'ambiguous' {
 
 ---
 
-## Part 4: Handle Buttons and Emoji Reactions (5 minutes)
+## Part 4: Handle Buttons and Text Replies (5 minutes)
 
 ### Step 4.1: Understand Response Types
 
-All three response types (buttons, text replies, reactions) produce the same `ApprovalReplyEvent`:
+Buttons and text replies both produce the same `ApprovalReplyEvent`:
 
-| Response Type    | `replyText` | `buttonId`             | `actionId`         |
-| ---------------- | ----------- | ---------------------- | ------------------ |
-| Button tap       | "yes"/"no"  | `approve:act-123:a3f2` | `act-123`          |
-| Text reply "yes" | "yes"       | undefined              | from correlationId |
-| Reaction `👍`    | "yes"       | undefined              | from correlationId |
-| Reaction `👎`    | "no"        | undefined              | from correlationId |
+| Response Type    | `replyText`   | `buttonId`       | `actionId`         |
+| ---------------- | ------------- | ---------------- | ------------------ |
+| Button "Approve" | "yes"         | `approve:act-123` | `act-123`         |
+| Button "Cancel"  | "no"          | `cancel:act-123`  | `act-123`         |
+| Button "Reject"  | "no"          | `reject:act-123`  | `act-123`         |
+| Text reply "yes" | "yes"         | undefined         | from correlationId |
+| Text reply "no"  | "no"          | undefined         | from correlationId |
 
-Other emojis are ignored (not published as approval events).
+**Note:** Emoji reactions (`👍`/`👎`) are no longer supported as of v4.0.0. They are ignored with status `REACTION_NOT_SUPPORTED`.
 
 ### Step 4.2: No Code Changes Needed!
 
-If you're handling `ApprovalReplyEvent`, all response types work automatically:
+If you're handling `ApprovalReplyEvent`, buttons and text replies both work:
 
 ```typescript
-// Same handler works for buttons, text replies, AND reactions
+// Same handler works for buttons AND text replies
 async function handleApprovalReply(event: ApprovalReplyEvent): Promise<void> {
   // event.replyText is always set ("yes" for approve, "no" for cancel/reject)
   // event.actionId is extracted from buttonId or correlationId
   // event.buttonId is set only for button taps
-  // Your existing logic handles all three!
+  // Your existing logic handles both!
 }
 ```
 
@@ -281,10 +283,9 @@ await actionRepository.save({
 | "Message not delivered"      | Check user has connected WhatsApp number via `/whatsapp/status`       |
 | "Phone not verified"         | Run `/whatsapp/verify/send` then `/whatsapp/verify/confirm` first     |
 | "No approval event received" | Verify buttonId format or correlationId format                        |
-| "Approve button ignored"     | Approve requires nonce: `approve:{actionId}:{nonce}`                  |
 | "actionId is undefined"      | User replied to non-approval message, check correlationId in DB       |
 | "Duplicate actions created"  | Ensure not publishing both approval reply AND command.ingest handlers |
-| "Reaction not processed"     | Only 👍 and 👎 are supported, other emojis are ignored                |
+| "Reaction not processed"     | Emoji reactions removed in v4.0.0; only buttons and text replies work |
 | "Button title truncated"     | WhatsApp limits button titles to 20 characters                        |
 
 ---
@@ -301,15 +302,18 @@ Now that you understand the basics:
 
 ## Quick Reference
 
-### Button ID Format for Approvals (v3.0.0)
+### Button ID Format for Approvals (v4.0.0)
 
 ```
-approve:{actionId}:{nonce}   -- Approve (nonce required)
-cancel:{actionId}            -- Cancel/reject
-convert:{actionId}           -- Convert to different type
-cancel-task:{taskId}         -- Cancel running task
-view-task:{taskId}           -- View task status
+approve:{actionId}    -- Approve
+cancel:{actionId}     -- Cancel/reject
+reject:{actionId}     -- Explicitly reject
+convert:{actionId}    -- Convert to different type
+cancel-task:{taskId}  -- Cancel running task
+view-task:{taskId}    -- View task status
 ```
+
+**Note:** Nonces were removed in v4.0.0. Old format `approve:{actionId}:{nonce}` is no longer used.
 
 ### CorrelationId Format for Text Reply Correlation
 
@@ -336,6 +340,5 @@ Examples:
 ```
 Button tap   -> replyText from intent, buttonId present
 Text reply   -> raw replyText, no buttonId
-👍 (U+1F44D) -> replyText "yes"
-👎 (U+1F44E) -> replyText "no"
+Emoji reacts -> NOT supported (v4.0.0)
 ```

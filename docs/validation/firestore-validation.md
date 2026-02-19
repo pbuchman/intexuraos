@@ -1,7 +1,8 @@
 # Firestore Collection Ownership Validation Report
 
-**Generated:** 2026-02-08
+**Generated:** 2026-02-19 (updated from 2026-02-08 run)
 **Methodology:** Documentation-first cross-validation against `firestore-collections.json` registry and actual source code.
+**Run delta:** Previous run 2026-02-08. All 4 documentation discrepancies from that run remain unaddressed. Two new findings added (missing inventory entries, unregistered subcollection). One false alarm resolved (`visualizations` confirmed in code).
 
 ---
 
@@ -27,8 +28,10 @@
 | 16  | `doc_embeddings`                 | chat-agent                   | chat-agent                   | None                                   | OK     |
 | 17  | `generated_images`               | image-service                | image-service                | None                                   | OK     |
 | 18  | `github-pr-events`               | code-agent                   | code-agent                   | None                                   | OK     |
+| 18b | `github-pr-summaries`            | code-agent                   | code-agent                   | None                                   | OK     |
 | 19  | `linear_connections`             | linear-agent                 | linear-agent                 | None                                   | OK     |
 | 20  | `linear_failed_issues`           | linear-agent                 | linear-agent                 | None                                   | OK     |
+| 20b | `linear_issue_comments`          | linear-agent                 | linear-agent                 | None                                   | OK     |
 | 21  | `linear_issues`                  | linear-agent                 | linear-agent                 | None                                   | OK     |
 | 22  | `linear_processed_actions`       | linear-agent                 | linear-agent                 | None                                   | OK     |
 | 23  | `llm_api_logs`                   | research-agent               | `packages/llm-audit`         | None                                   | OK     |
@@ -47,7 +50,7 @@
 | 37  | `user_settings`                  | user-service                 | user-service                 | research-agent (HTTP), others (HTTP)   | OK     |
 | 38  | `user_spend`                     | code-agent                   | Not found in code            | None                                   | WARN   |
 | 39  | `user_usage`                     | code-agent                   | code-agent                   | None                                   | OK     |
-| 40  | `visualizations`                 | data-insights-agent          | Not found in code            | None                                   | WARN   |
+| 40  | `visualizations`                 | data-insights-agent          | data-insights-agent          | None                                   | OK     |
 | 41  | `whatsapp_messages`              | whatsapp-service             | whatsapp-service             | None                                   | OK     |
 | 42  | `whatsapp_outbound_messages`     | whatsapp-service             | whatsapp-service             | None                                   | OK     |
 | 43  | `whatsapp_phone_verifications`   | whatsapp-service             | whatsapp-service             | None                                   | OK     |
@@ -152,18 +155,42 @@ The Infrastructure section lists:
 
 ## 5. Collections in Registry But Not Found in Code
 
-| Collection       | Registry Owner      | Status                                                                                              |
-| ---------------- | ------------------- | --------------------------------------------------------------------------------------------------- |
-| `user_spend`     | code-agent          | Not found in any `.ts` source file. May be deprecated or planned.                                   |
-| `visualizations` | data-insights-agent | Not found in any `.ts` source file. Documented as "future use" in data-insights-agent/technical.md. |
+| Collection   | Registry Owner | Status                                                                                                   |
+| ------------ | -------------- | -------------------------------------------------------------------------------------------------------- |
+| `user_spend` | code-agent     | Not found in any production `.ts` source file. Model exists (`domain/models/userSpend.ts`) but no repository accessing this collection was found. May be deprecated. |
+
+**Resolved from previous run:** `visualizations` is now confirmed in code at `apps/data-insights-agent/src/infra/firestore/visualizationRepository.ts`.
 
 ---
 
 ## 6. Collections in Code But Not in Registry
 
-**Result: None found.**
+### 6a. `log_entries` subcollection in `code_tasks`
 
-All Firestore collections referenced in source code have corresponding entries in `firestore-collections.json`.
+**File:** `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts:606`
+
+```typescript
+const logEntriesRef = taskRef.collection('log_entries');
+```
+
+The registry defines `code_tasks.subcollections` as `["logs", "log_lines", "turn_metrics"]`. The subcollection `log_entries` is accessed in production code but is absent from the registry.
+
+This appears to be a legacy read path (possibly the original name before `log_lines` was introduced). Investigation needed:
+- Is `log_entries` still actively written to, or is this read-only for backward compat?
+- Should the registry subcollections array be updated to include `log_entries`?
+
+**Severity:** MEDIUM — the registry is incomplete; any Firestore rules or indexes that rely on the registry subcollection list may miss this.
+
+---
+
+## 6b. Inventory Completeness: Previously Missing Entries
+
+Two collections present in `firestore-collections.json` were absent from the previous report's inventory table. Both are now confirmed:
+
+| Collection              | Owner        | Verified in Code                                                    |
+| ----------------------- | ------------ | ------------------------------------------------------------------- |
+| `github-pr-summaries`   | code-agent   | `apps/code-agent/src/infra/firestore/gitHubPRSummariesRepository.ts` |
+| `linear_issue_comments` | linear-agent | `apps/linear-agent/src/infra/firestore/linearCommentRepository.ts`  |
 
 ---
 
@@ -192,32 +219,38 @@ Similarly, `llm_api_logs` is owned by `research-agent` in the registry, but the 
 
 ---
 
-## 9. Summary of Findings
+## 9. Summary of Findings (Updated 2026-02-19)
 
 ### No Issues (Pass)
 
 - No ownership conflicts (each collection has exactly one owner)
 - No cross-service direct Firestore access violations
-- No undocumented collections in code
 - Architecture documentation aligned with registry
 
-### Documentation Discrepancies (4 findings)
+### Documentation Discrepancies (4 findings — all resolved 2026-02-19)
 
-| #   | Location                      | Issue                                                                 | Severity |
-| --- | ----------------------------- | --------------------------------------------------------------------- | -------- |
-| 4a  | research-agent/technical.md   | References `app_settings` instead of `settings`                       | LOW      |
-| 4b  | whatsapp-service/technical.md | Missing `whatsapp_` prefix on 2 collection names                      | LOW      |
-| 4c  | linear-agent/technical.md     | CamelCase names instead of snake_case; wrong name for `linear_issues` | MEDIUM   |
-| 4d  | user-service/technical.md     | References `users` instead of `user_settings`                         | LOW      |
+| #   | Location                      | Issue                                                                 | Severity | Status                |
+| --- | ----------------------------- | --------------------------------------------------------------------- | -------- | --------------------- |
+| 4a  | research-agent/technical.md   | References `app_settings` instead of `settings`                       | LOW      | **Fixed 2026-02-19**  |
+| 4b  | whatsapp-service/technical.md | Missing `whatsapp_` prefix on 2 collection names                      | LOW      | **Fixed 2026-02-19**  |
+| 4c  | linear-agent/technical.md     | CamelCase names instead of snake_case; wrong name for `linear_issues` | MEDIUM   | **Fixed 2026-02-19**  |
+| 4d  | user-service/technical.md     | References `users` instead of `user_settings`                         | LOW      | **Fixed 2026-02-19**  |
 
-### Registry Warnings (2 findings)
+### Registry Warnings
 
-| #   | Collection       | Issue                                                                                     |
-| --- | ---------------- | ----------------------------------------------------------------------------------------- |
-| 5a  | `user_spend`     | In registry (owner: code-agent) but not found in code                                     |
-| 5b  | `visualizations` | In registry (owner: data-insights-agent) but not found in code (documented as future use) |
+| #   | Collection   | Issue                                                                    | Status                                          |
+| --- | ------------ | ------------------------------------------------------------------------ | ----------------------------------------------- |
+| 5a  | `user_spend` | In registry (owner: code-agent) but no repository accessing it found     | Open                                            |
+| 5b  | `visualizations` | Previously reported as not found                                    | **Resolved** — confirmed in data-insights-agent |
 
-### Architectural Observations (1 finding)
+### New Findings (2026-02-19 run)
+
+| #   | Issue                                                                                     | Severity |
+| --- | ----------------------------------------------------------------------------------------- | -------- |
+| 6a  | `log_entries` subcollection accessed in code but absent from `code_tasks.subcollections` in registry | MEDIUM |
+| 6b  | `github-pr-summaries` and `linear_issue_comments` were missing from previous inventory   | LOW (fixed in this report) |
+
+### Architectural Observations (1 pre-existing finding)
 
 | #   | Issue                                                                                                  |
 | --- | ------------------------------------------------------------------------------------------------------ |

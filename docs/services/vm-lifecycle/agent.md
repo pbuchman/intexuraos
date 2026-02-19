@@ -36,7 +36,7 @@
 interface StartVmResult {
   success: boolean;
   message: string;
-  startupDurationMs?: number;
+  startupDurationMs?: number; // Present in all success cases; absent only on Compute API error
 }
 
 interface StopVmResult {
@@ -137,4 +137,4 @@ gcloud compute instances describe cc-vm \
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

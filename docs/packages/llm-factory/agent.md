@@ -23,6 +23,8 @@ interface LlmClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
+  auditSink?: AuditSink;   // from @intexuraos/llm-audit
+  usageSink?: UsageSink;   // from @intexuraos/llm-pricing
 }
 
 interface GenerateResult {
@@ -54,11 +56,12 @@ function isSupportedProvider(provider: string): provider is 'google' | 'zai';
 common-core
   <- llm-contract
        <- llm-factory
-            uses: infra-gemini, infra-glm, llm-pricing
+            uses: infra-gemini, infra-glm, llm-pricing, llm-audit
             <- internal-clients
             <- 10 apps (actions-agent, bookmarks-agent, calendar-agent, chat-agent,
                         commands-agent, data-insights-agent, linear-agent,
                         research-agent, todos-agent, web-agent)
+            <- workers/orchestrator
 ```
 
 ## Usage Patterns

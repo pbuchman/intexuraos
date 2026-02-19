@@ -35,6 +35,7 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
         "type": "todo",
         "confidence": 0.92,
         "reasoning": "Clear actionable task with no time specification",
+        "promptVersion": "2.0.0",
         "classifiedAt": "2026-01-24T12:00:01.000Z"
       },
       "actionId": "uuid-here"
@@ -319,4 +320,4 @@ Only works for status: `classified`.
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

@@ -200,7 +200,7 @@ curl -s http://localhost:8129/chat \
   }' | jq
 ```
 
-The response uses the user's configured LLM model (Gemini 2.5 Flash, GLM-4.7, or GLM-4.7-Flash) rather than the platform default.
+The response uses the user's configured LLM model -- defaulting to Gemini 2.5 Flash for new users, with GLM-4.7 and GLM-4.7-Flash available as alternatives.
 
 ### Step 3: Follow-up question with history
 

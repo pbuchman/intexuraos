@@ -109,9 +109,18 @@ class PricingContext implements IPricingContext {
 
 class UsageLogger {
   readonly logger: Logger;
-  constructor(deps: { logger: Logger });
+  readonly sink: UsageSink;
+  constructor(deps: { logger: Logger; sink?: UsageSink });
   async log(params: UsageLogParams): Promise<void>;
 }
+
+// Sink implementations
+interface UsageSink {
+  log(params: UsageLogParams): Promise<void>;
+}
+class FirestoreUsageSink implements UsageSink { /* writes to llm_usage_stats */ }
+class StructuredLogUsageSink implements UsageSink { constructor(deps: { logger: Logger }); }
+class NoopUsageSink implements UsageSink { /* discards all events */ }
 ```
 
 ## Exported Test Fixtures
@@ -138,6 +147,7 @@ common-core, llm-contract, infra-firestore
        <- infra-claude, infra-gemini, infra-glm, infra-gpt, infra-perplexity
        <- internal-clients
        <- 12 apps
+       <- workers/orchestrator
 ```
 
 ## Usage Patterns

@@ -182,9 +182,11 @@ fakePricing.getPricing('gemini-2.5-flash');
 
 ## Used By
 
-**Packages (6):** `llm-factory`, `internal-clients`, `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity`
+**Packages (7):** `llm-factory`, `internal-clients`, `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity`
 
 **Apps (12):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `user-service`, `web-agent`
+
+**Workers (1):** `orchestrator`
 
 ## Recent Changes
 

@@ -40,7 +40,15 @@ Each user configures their own worker machines (Mac Mini, VM, etc.) with Cloudfl
 
 **Example:** You configure a Mac Mini at home (`home-mac`) as primary and a cloud VM (`cloud-vm`) as fallback. When `home-mac` returns HTTP 503 (busy), Code Agent automatically falls back to `cloud-vm`.
 
-### 5. Retry and Feedback Loops
+### 5. Rich GitHub PR Activity Timeline
+
+Every pull request created by Code Agent gets a live activity feed on your dashboard. The timeline shows PR opens, pushes, reviews, and comments -- each with a clickable link directly to that event on GitHub. When someone pushes new commits to the branch, a compare link shows exactly what changed.
+
+Comment edits are automatically deduplicated: you see each comment once at its original position, but with the latest text. The PR description appears only on the most recent event so it does not repeat with every push.
+
+**Example:** You push three commits to a Code Agent PR over the course of a review cycle. The timeline shows the original PR open (with description), three "synchronize" entries each linking to the exact diff for that push, two reviewer comments (showing the latest text if edited), and a review approval -- all in chronological order without repetition.
+
+### 6. Retry and Feedback Loops
 
 Failed or cancelled tasks can be retried with optional additional context. Completed tasks can receive follow-up feedback that creates a new task linked to the original, carrying forward the Linear issue, branch, and prior work summary.
 
@@ -62,13 +70,14 @@ Failed or cancelled tasks can be retried with optional additional context. Compl
 
 ## Key Benefits
 
-| Benefit                  | Detail                                                                   |
-| ------------------------ | ------------------------------------------------------------------------ |
-| Your infrastructure      | Workers run on your machines. Code never leaves your environment.        |
-| End-to-end tracing       | Every task carries a `traceId` from submission through completion.       |
-| Cost controls            | Per-user daily ($20) and monthly ($200) caps with real-time enforcement. |
-| Zombie detection         | Tasks inactive for 30 minutes are automatically interrupted.             |
-| Log retention management | Logs older than 90 days are archived automatically.                      |
+| Benefit                  | Detail                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| Your infrastructure      | Workers run on your machines. Code never leaves your environment.                |
+| End-to-end tracing       | Every task carries a `traceId` from submission through completion.               |
+| Cost controls            | Per-user daily ($20) and monthly ($200) caps with real-time enforcement.         |
+| Zombie detection         | Tasks inactive for 30 minutes are automatically interrupted.                     |
+| Log retention management | Logs older than 90 days are archived automatically.                              |
+| Turn-level metrics       | CPU time, memory, token counts, and API wait times recorded per worker turn.     |
 
 ## Limitations
 

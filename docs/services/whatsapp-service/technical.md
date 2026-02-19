@@ -11,10 +11,10 @@ graph TB
     WhatsApp[WhatsApp Business API] -->|Webhook| WS[WhatsApp Service]
 
     WS -->|HMAC-SHA256 validation| WV[Webhook Verifier]
-    WS --> EventRepo[(Firestore:<br/>webhook_events)]
+    WS --> EventRepo[(Firestore:<br/>whatsapp_webhook_events)]
     WS --> MsgRepo[(Firestore:<br/>whatsapp_messages)]
     WS --> OutboundRepo[(Firestore:<br/>whatsapp_outbound_messages)]
-    WS --> MappingRepo[(Firestore:<br/>user_mappings)]
+    WS --> MappingRepo[(Firestore:<br/>whatsapp_user_mappings)]
     WS --> VerifyRepo[(Firestore:<br/>whatsapp_phone_verifications)]
     WS --> PubSub[Pub/Sub]
 
@@ -55,19 +55,15 @@ sequenceDiagram
     WS->>FS: Save whatsapp_message
     WS->>FS: Update webhook_event (status=completed)
 
-    alt Button Response (Interactive)
-        WS->>WS: Parse buttonId (intent:actionId[:nonce])
+    alt Button Response (Interactive) v4.0.0
+        WS->>WA: markAsReadWithTyping (fire-and-forget)
+        WS->>WS: Parse buttonId (intent:actionId)
         WS->>PS: Publish action.approval.reply (with actionId, buttonId, buttonTitle)
-        Note over WS: Approve requires nonce for security
     else Text Reply to Approval Message
         WS->>FS: Find OutboundMessage by replyToWamid
         WS->>WS: Extract actionId from correlationId
         WS->>PS: Publish action.approval.reply (with actionId)
         Note over WS: Skip command.ingest for approval replies
-    else Reaction Message
-        WS->>FS: Find OutboundMessage by messageId
-        WS->>WS: Map emoji to intent (👍=approve, 👎=reject)
-        WS->>PS: Publish action.approval.reply
     else Regular Text Message
         WS->>PS: Publish command.ingest
         WS->>PS: Publish whatsapp.linkpreview.extract
@@ -94,9 +90,9 @@ sequenceDiagram
     WS->>FS: Save OutboundMessage (wamid, correlationId)
     WS-->>AA: 200 OK with wamid
 
-    User->>WA: Reply "yes" or React 👍
+    User->>WA: Tap button OR reply "yes"
 
-    WA->>WS: Webhook (reply or reaction)
+    WA->>WS: Webhook (button or text reply)
     WS->>FS: Find OutboundMessage by wamid
     WS->>WS: Parse correlationId for actionId
     WS->>AA: Publish action.approval.reply (with actionId)
@@ -105,22 +101,21 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                              | Date       |
-| ---------- | -------------------------------------------------------- | ---------- |
-| `021e76bb` | Address PR review comments                               | 2026-02-06 |
-| `86564bad` | Fix WhatsApp button_reply payload structure              | 2026-01-28 |
-| `d3ee3269` | Add WhatsApp cancel nonce for running tasks              | 2026-01-28 |
-| `a9847b66` | Add WhatsApp approval buttons with nonces                | 2026-01-27 |
-| `70ffe910` | Add verification routes and connect integration          | 2026-01-26 |
-| `0e87d943` | Add composite index and transaction for verification     | 2026-01-26 |
-| `c3198407` | Fix all 132 response contract violations across codebase | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps   | 2026-01-30 |
-| `186f7ad8` | Enforce standardized HTTP response contract              | 2026-01-30 |
-| `e4c181f1` | Fix whatsapp-service env var and remove OPTIONAL_ENV     | 2026-01-28 |
-| `73e8375f` | Enforce mandatory env var registration for all services  | 2026-01-28 |
-| `01c99b31` | Only publish approval reply events when actionId found   | 2026-01-16 |
-| `fc3f8663` | Skip command.ingest for approval replies with actionId   | 2026-01-14 |
-| `a9a14960` | Support WhatsApp reactions for action approval/rejection | 2026-01-13 |
+| Commit     | Description                                                        | Date       |
+| ---------- | ------------------------------------------------------------------ | ---------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                    | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                | 2026-02-16 |
+| `e60eafc1` | Rename SPEECHMATICS_API_KEY to SPEECHMATICS_APP_API_KEY            | 2026-02-15 |
+| `d7c6a061` | Add consistent icons to all WhatsApp messages (🔐 verification)    | 2026-02-10 |
+| `fee08074` | INT-524 Add read receipt + typing indicator on button click        | 2026-02-09 |
+| `f4d60cb5` | INT-524 Fix button_reply type extraction bug in extractButtonResponse | 2026-02-09 |
+| `090e1d9d` | INT-524 Unified interactive approval buttons (remove nonces/reactions) | 2026-02-09 |
+| `021e76bb` | Address PR review comments                                         | 2026-02-06 |
+| `86564bad` | Fix WhatsApp button_reply payload structure                        | 2026-01-28 |
+| `a9847b66` | Add WhatsApp approval buttons with nonces                          | 2026-01-27 |
+| `70ffe910` | Add verification routes and connect integration                    | 2026-01-26 |
+| `c3198407` | Fix all 132 response contract violations across codebase           | 2026-01-30 |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps             | 2026-01-30 |
 
 ## API Endpoints
 
@@ -159,24 +154,24 @@ sequenceDiagram
 
 ### WhatsAppMessage
 
-| Field | Type | Description |
-| ------------------ | --------------------- | ---------------------------------- | | |
-| `id` | string | Unique message identifier |
-| `userId` | string | User who received the message |
-| `waMessageId` | string | WhatsApp message ID |
-| `fromNumber` | string | Sender's phone number |
-| `toNumber` | string | Recipient phone number |
-| `text` | string | Message text (text messages) |
-| `mediaType` | `text` \ | `image` \ | `audio` | Message type |
-| `gcsPath` | string | GCS path to media file |
-| `thumbnailGcsPath` | string | GCS path to thumbnail |
-| `caption` | string \ | null | Media caption |
-| `transcription` | TranscriptionState \ | null | Audio transcription result |
-| `linkPreview` | LinkPreviewState \ | null | Extracted link metadata |
-| `timestamp` | string | WhatsApp timestamp |
-| `receivedAt` | string | ISO 8601 receive time |
-| `webhookEventId` | string | Associated webhook event |
-| `metadata` | object | Additional data (senderName, etc.) |
+| Field              | Type                         | Description                        |
+| ------------------ | ---------------------------- | ---------------------------------- |
+| `id`               | string                       | Unique message identifier          |
+| `userId`           | string                       | User who received the message      |
+| `waMessageId`      | string                       | WhatsApp message ID                |
+| `fromNumber`       | string                       | Sender's phone number              |
+| `toNumber`         | string                       | Recipient phone number             |
+| `text`             | string                       | Message text (text messages)       |
+| `mediaType`        | `text` \| `image` \| `audio` | Message type                       |
+| `gcsPath`          | string                       | GCS path to media file             |
+| `thumbnailGcsPath` | string                       | GCS path to thumbnail              |
+| `caption`          | string \| null               | Media caption                      |
+| `transcription`    | TranscriptionState \| null   | Audio transcription result         |
+| `linkPreview`      | LinkPreviewState \| null      | Extracted link metadata            |
+| `timestamp`        | string                       | WhatsApp timestamp                 |
+| `receivedAt`       | string                       | ISO 8601 receive time              |
+| `webhookEventId`   | string                       | Associated webhook event           |
+| `metadata`         | object                       | Additional data (senderName, etc.) |
 
 ### OutboundMessage (v2.0.0)
 
@@ -194,38 +189,38 @@ Tracks sent messages for reply correlation. Uses wamid as document ID for effici
 
 Tracks phone number verification attempts with rate limiting and cooldown.
 
-| Field           | Type         | Description                  |
-| --------------- | ------------ | ---------------------------- | --------------------------- | -------------- | --------------------- |
-| `id`            | string       | Unique verification ID       |
-| `userId`        | string       | User requesting verification |
-| `phoneNumber`   | string       | Phone number being verified  |
-| `code`          | string       | 6-digit verification code    |
-| `attempts`      | number       | Failed attempt count         |
-| `status`        | `pending` \  | `verified` \                 | `expired` \                 | `max_attempts` | Verification progress |
-| `createdAt`     | string       | ISO 8601 creation time       |
-| `expiresAt`     | number       | Unix timestamp (10 min TTL)  |
-| `lastAttemptAt` | string \     | undefined                    | Last failed attempt time    |
-| `verifiedAt`    | string \     | undefined                    | When verification succeeded |
+| Field           | Type                                             | Description                   |
+| --------------- | ------------------------------------------------ | ----------------------------- |
+| `id`            | string                                           | Unique verification ID        |
+| `userId`        | string                                           | User requesting verification  |
+| `phoneNumber`   | string                                           | Phone number being verified   |
+| `code`          | string                                           | 6-digit verification code     |
+| `attempts`      | number                                           | Failed attempt count          |
+| `status`        | `pending` \| `verified` \| `expired` \| `max_attempts` | Verification progress  |
+| `createdAt`     | string                                           | ISO 8601 creation time        |
+| `expiresAt`     | number                                           | Unix timestamp (10 min TTL)   |
+| `lastAttemptAt` | string \| undefined                              | Last failed attempt time      |
+| `verifiedAt`    | string \| undefined                              | When verification succeeded   |
 
 ### TranscriptionState
 
-| Field | Type | Description |
-| --------- | ------------ | --------------- | | | |
-| `status` | `pending` \ | `processing` \ | `completed` \ | `failed` | Transcription progress |
-| `text` | string \ | null | Full transcribed text |
-| `summary` | string \ | null | AI-generated key points |
-| `error` | object \ | null | Error details if failed |
+| Field     | Type                                              | Description            |
+| --------- | ------------------------------------------------- | ---------------------- |
+| `status`  | `pending` \| `processing` \| `completed` \| `failed` | Transcription progress |
+| `text`    | string \| null                                    | Full transcribed text  |
+| `summary` | string \| null                                    | AI-generated key points |
+| `error`   | object \| null                                    | Error details if failed |
 
 ### WebhookEvent
 
-| Field | Type | Description |
-| ---------------- | ------------ | ----------------------------- | | | | | |
-| `id` | string | Unique event ID |
-| `payload` | object | Raw webhook payload |
-| `signatureValid` | boolean | Signature verification result |
-| `receivedAt` | string | ISO 8601 timestamp |
-| `phoneNumberId` | string | WhatsApp phone number ID |
-| `status` | `pending` \ | `processing` \ | `completed` \ | `failed` \ | `ignored` \ | `user_unmapped` | Processing status |
+| Field            | Type                                                                 | Description                   |
+| ---------------- | -------------------------------------------------------------------- | ----------------------------- |
+| `id`             | string                                                               | Unique event ID               |
+| `payload`        | object                                                               | Raw webhook payload           |
+| `signatureValid` | boolean                                                              | Signature verification result |
+| `receivedAt`     | string                                                               | ISO 8601 timestamp            |
+| `phoneNumberId`  | string                                                               | WhatsApp phone number ID      |
+| `status`         | `pending` \| `processing` \| `completed` \| `failed` \| `ignored` \| `user_unmapped` | Processing status |
 
 ### UserMapping
 
@@ -258,18 +253,18 @@ Tracks phone number verification attempts with rate limiting and cooldown.
 | `whatsapp.message.send`     | `/internal/whatsapp/pubsub/send-message`     |
 | `whatsapp.media.cleanup`    | `/internal/whatsapp/pubsub/media-cleanup`    |
 
-### ApprovalReplyEvent (v3.0.0)
+### ApprovalReplyEvent (v4.0.0)
 
 ```typescript
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
-  replyToWamid: string; // Original approval message wamid
-  replyText: string; // User's reply text (or "yes"/"no" for reactions/buttons)
+  replyToWamid: string;   // Original approval message wamid
+  replyText: string;      // "yes"/"no"/"convert"/"cancel-task"/"view-task"
   userId: string;
   timestamp: string;
-  actionId?: string; // Extracted from correlationId or buttonId
-  buttonId?: string; // Button ID for interactive button clicks (v3.0.0)
-  buttonTitle?: string; // Button title for interactive button clicks (v3.0.0)
+  actionId?: string;      // Extracted from buttonId or correlationId
+  buttonId?: string;      // Button ID for interactive button clicks
+  buttonTitle?: string;   // Button title for interactive button clicks
 }
 ```
 
@@ -280,8 +275,8 @@ interface ApprovalReplyEvent {
 | Collection                     | Purpose                             | Owner            |
 | ------------------------------ | ----------------------------------- | ---------------- |
 | `whatsapp_messages`            | Message persistence                 | whatsapp-service |
-| `webhook_events`               | Webhook event log                   | whatsapp-service |
-| `user_mappings`                | Phone number mappings               | whatsapp-service |
+| `whatsapp_webhook_events`      | Webhook event log                   | whatsapp-service |
+| `whatsapp_user_mappings`       | Phone number mappings               | whatsapp-service |
 | `whatsapp_outbound_messages`   | Outbound message tracking (v2.0.0)  | whatsapp-service |
 | `whatsapp_phone_verifications` | Phone verification records (v3.0.0) | whatsapp-service |
 
@@ -302,21 +297,25 @@ interface ApprovalReplyEvent {
 
 ## Configuration
 
-| Environment Variable                          | Required | Description                                  |
-| --------------------------------------------- | -------- | -------------------------------------------- |
-| `INTEXURAOS_APP_SECRET`                       | Yes      | WhatsApp app secret for signature validation |
-| `INTEXURAOS_VERIFY_TOKEN`                     | Yes      | Webhook verification token                   |
-| `INTEXURAOS_ALLOWED_WABA_IDS`                 | Yes      | Comma-separated WABA IDs                     |
-| `INTEXURAOS_ALLOWED_PHONE_NUMBER_IDS`         | Yes      | Comma-separated phone number IDs             |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Shared secret for internal endpoints         |
-| `INTEXURAOS_GCP_PROJECT_ID`                   | Yes      | Google Cloud project ID                      |
-| `INTEXURAOS_GCS_BUCKET_NAME`                  | Yes      | GCS bucket for media                         |
-| `INTEXURAOS_PUBSUB_WHATSAPP_WEBHOOK_PROCESS`  | Yes      | Webhook processing topic                     |
-| `INTEXURAOS_PUBSUB_WHATSAPP_AUDIO_TRANSCRIBE` | Yes      | Audio transcription topic                    |
-| `INTEXURAOS_PUBSUB_COMMAND_INGEST`            | Yes      | Command ingest topic                         |
-| `INTEXURAOS_PUBSUB_WHATSAPP_LINKPREVIEW`      | Yes      | Link preview topic                           |
-| `INTEXURAOS_PUBSUB_WHATSAPP_MEDIA_CLEANUP`    | Yes      | Media cleanup topic                          |
-| `INTEXURAOS_PUBSUB_ACTION_APPROVAL_REPLY`     | Yes      | Approval reply topic (v2.0.0)                |
+| Environment Variable                    | Required | Description                                  |
+| --------------------------------------- | -------- | -------------------------------------------- |
+| `INTEXURAOS_WHATSAPP_APP_SECRET`        | Yes      | WhatsApp app secret for signature validation |
+| `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`      | Yes      | Webhook verification token                   |
+| `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`      | Yes      | WhatsApp Graph API access token              |
+| `INTEXURAOS_WHATSAPP_WABA_ID`          | Yes      | Allowed WABA IDs (comma-separated)           |
+| `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`  | Yes      | Allowed phone number IDs (comma-separated)   |
+| `INTEXURAOS_WHATSAPP_MEDIA_BUCKET`     | Yes      | GCS bucket for media storage                 |
+| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`       | Yes | Media cleanup Pub/Sub topic              |
+| `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION`| Yes | Media cleanup subscription              |
+| `INTEXURAOS_SPEECHMATICS_APP_API_KEY`  | Yes      | Speechmatics API key for transcription       |
+| `INTEXURAOS_GCP_PROJECT_ID`            | Yes      | Google Cloud project ID                      |
+| `INTEXURAOS_WEB_AGENT_URL`             | Yes      | Web-agent URL for link preview extraction    |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`       | Yes      | Shared secret for internal endpoints         |
+| `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`    | No  | Commands ingest topic                    |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`      | No  | Send message topic                       |
+| `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`    | No  | Webhook processing topic                 |
+| `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`      | No  | Audio transcription topic                |
+| `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`     | No  | Approval reply topic                     |
 
 ## Gotchas
 
@@ -328,8 +327,6 @@ Uses HMAC-SHA256 with app secret. Must validate before any processing. Signature
 
 When sending approval messages, use correlationId format: `action-{type}-approval-{actionId}`. This pattern is parsed by whatsapp-service to extract the actionId when processing text replies.
 
-For interactive buttons (v3.0.0), the actionId is encoded directly in the button ID (`approve:{actionId}:{nonce}`), so correlationId is used only for text reply correlation.
-
 ### Preventing Duplicate Actions (v2.0.0)
 
 When a text message is a reply to an approval message with a known actionId, the service:
@@ -339,35 +336,42 @@ When a text message is a reply to an approval message with a known actionId, the
 
 This prevents the same reply from creating duplicate actions through both approval and command flows.
 
-### Interactive Button Format (v3.0.0)
+### Interactive Button Format (v4.0.0)
 
-Approval messages can include interactive buttons. Button ID format encodes intent and security nonce:
+Approval messages use interactive buttons. Button ID format encodes intent and action ID:
 
-- `approve:{actionId}:{nonce}` - Approve action (nonce required for security)
+- `approve:{actionId}` - Approve action
 - `cancel:{actionId}` - Cancel/reject action
+- `reject:{actionId}` - Explicitly reject action (added v4.0.0)
 - `convert:{actionId}` - Convert action to different type
-- `cancel-task:{taskId}` - Cancel a running code task (INT-379)
-- `view-task:{taskId}` - View task status (INT-379)
+- `cancel-task:{taskId}` - Cancel a running code task
+- `view-task:{taskId}` - View task status
+
+**Note:** Nonces were removed in v4.0.0 (INT-524). Button format changed from `approve:{actionId}:{nonce}` to `approve:{actionId}`. Update any code that sends approval buttons.
 
 Button titles are truncated to 20 characters (WhatsApp API limit).
+
+### Read Receipts on Button Click (v4.0.0)
+
+When a user taps an interactive button, whatsapp-service fires `markAsReadWithTyping` before publishing the approval event. This shows the user blue checkmarks and a typing indicator immediately. The call is fire-and-forget and does not block event publishing.
+
+### Emoji Reactions No Longer Supported (v4.0.0)
+
+As of INT-524, emoji reactions (`👍`/`👎`) no longer trigger approval events. Reactions are marked as `ignored` with status code `REACTION_NOT_SUPPORTED`. Use interactive buttons instead.
 
 ### Phone Verification Flow (v3.0.0)
 
 Phone numbers must be verified before connecting via `/whatsapp/connect`. The verification flow:
 
-1. `POST /whatsapp/verify/send` sends a 6-digit code via WhatsApp
+1. `POST /whatsapp/verify/send` sends a 6-digit code via WhatsApp (🔐 icon added v4.0.0)
 2. `POST /whatsapp/verify/confirm` validates the code
 3. Once verified, `POST /whatsapp/connect` accepts the phone number
 
 Rate limits: 3 requests per phone per hour, 60-second cooldown between requests. Codes expire after 10 minutes. Maximum 3 incorrect attempts before lockout.
 
-### Reaction Emoji Mapping
+### `extractButtonResponse()` Accepts Both Button Types
 
-Only thumbs-up and thumbs-down reactions are processed:
-
-- `👍` (U+1F44D) = approve
-- `👎` (U+1F44E) = reject
-- Other emojis are ignored (status=`ignored`, reason=`UNSUPPORTED_REACTION`)
+WhatsApp sends `interactive.type = "button_reply"` for button clicks in practice, but the WhatsApp API documentation also describes `"button"`. The `extractButtonResponse()` function (in `routes/shared.ts`) accepts both formats to handle API inconsistencies.
 
 ### OutboundMessage TTL
 
@@ -401,13 +405,13 @@ apps/whatsapp-service/src/
         messageSender.ts              # WhatsAppInteractiveButton (v3.0.0)
         outboundMessageRepository.ts  # v2.0.0
         repositories.ts               # PhoneVerificationRepository (v3.0.0)
-        whatsappCloudApi.ts
+        whatsappCloudApi.ts           # markAsReadWithTyping (v4.0.0)
       usecases/
         processAudioMessage.ts
         processImageMessage.ts
         transcribeAudio.ts
       events/
-        events.ts                     # ApprovalReplyEvent with buttonId/buttonTitle (v3.0.0)
+        events.ts                     # ApprovalReplyEvent (v4.0.0: no nonce)
       models/
         WhatsAppMessage.ts
         PhoneVerification.ts          # v3.0.0
@@ -422,19 +426,19 @@ apps/whatsapp-service/src/
     gcs/
       mediaStorage.ts
     whatsapp/
-      cloudApiClient.ts
+      cloudApiClient.ts              # markAsReadWithTyping (v4.0.0)
       sender.ts                       # sendInteractiveMessage (v3.0.0)
     thumbnail/
       thumbnailGenerator.ts
     pubsub/
       publisher.ts
   routes/
-    webhookRoutes.ts                  # Button/reaction/reply handling (v3.0.0)
+    webhookRoutes.ts                  # Button handling: no nonces, reject intent (v4.0.0)
     messageRoutes.ts
     mappingRoutes.ts                  # Verification-gated connect (v3.0.0)
     pubsubRoutes.ts                   # Interactive message support (v3.0.0)
     verificationRoutes.ts             # v3.0.0
-    shared.ts                         # extractButtonResponse, extractReactionData, extractReplyContext
+    shared.ts                         # extractButtonResponse (button/button_reply fix v4.0.0)
     schemas.ts
   signature.ts
   adapters.ts                         # PhoneVerificationRepositoryAdapter (v3.0.0)

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The orchestrator is a Fastify-based HTTP service (v2.1.0) that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running Claude Code in interactive mode, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens, persists state atomically to disk, and recovers interrupted tasks on restart.
+The orchestrator is a Fastify-based HTTP service (v2.1.0) that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running Claude Code in interactive mode, streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens, persists state atomically to disk, and recovers interrupted tasks on restart. After each task completes, it collects per-task resource and token metrics and publishes them to code-agent.
 
 ## Architecture
 
@@ -29,10 +29,12 @@ graph TB
             TD --> WC[WebhookClient<br/>HMAC-signed callbacks]
             TD --> SP[StatePersistence<br/>atomic JSON file]
             TD --> SYS[SystemPrompt<br/>Phase 1 / Phase 2]
+            TD --> TMC[TurnMetricsCollector<br/>cgroup + session JSONL]
 
             GTS[GitHubTokenService<br/>JWT + installation token]
             TR[TokenRefresher<br/>per-container tokens]
             HB[HeartbeatManager<br/>10min interval]
+            AAS[OrchestratorFileAuditSink<br/>LLM audit JSONL]
         end
 
         subgraph "Docker Containers"
@@ -51,6 +53,7 @@ graph TB
             STATE[~/.claude-orchestrator/state.json]
             SECRETS[~/.claude-orchestrator/secrets/<br/>per-task credentials]
             LOGS[~/.claude-orchestrator/logs/]
+            AUDIT[~/.claude-orchestrator/llm-audit.jsonl]
         end
 
         WM --> REPO
@@ -58,6 +61,7 @@ graph TB
         SP --> STATE
         DP --> SECRETS
         LF --> LOGS
+        AAS --> AUDIT
     end
 
     CA -->|POST /tasks HMAC| CF
@@ -66,10 +70,33 @@ graph TB
     LF -->|POST /internal/logs| CA
     WC -->|POST webhook| CA
     HB -->|POST /internal/code/heartbeat| CA
+    TMC -->|POST /internal/turn-metrics| CA
     ORCH --> SM
 ```
 
 ## Recent Changes
+
+### Turn Metrics Collection (2026-02-19)
+
+Added `TurnMetricsCollector` for automatic per-task resource and cost metrics:
+
+- Reads CPU time from Linux cgroup `cpu.stat` file (`usage_usec`) post-container-exit
+- Reads peak memory from `memory.peak` (falls back to `memory.current`)
+- Parses Claude session JSONL files to classify time: API wait (user→assistant gaps), tool execution (assistant→user gaps), background wait, overhead
+- Aggregates token counts: input, output, cache read, cache creation, API call count
+- Publishes `TurnMetrics` to `POST /internal/turn-metrics` on code-agent via HMAC-signed request
+- Non-fatal: failures are logged and do not affect task outcome
+
+### Log Forwarding Improvements (2026-02-19)
+
+- Removed `MAX_CHUNKS_PER_TASK` limit (was 500) — the 4MB total cap remains
+- `MAX_CHUNK_SIZE` increased from 8KB to 64KB to accommodate large `hook_response` JSON frames
+- Added `prefixTimestamps()`: prepends `HH:MM:ss.mmm` to each log line for readability
+- ANSI escape code stripping via `log-formatter.ts`
+
+### LLM Audit Sink (2026-02-19)
+
+Added `OrchestratorFileAuditSink` implementing the `AuditSink` interface from `@intexuraos/llm-audit`. Appends structured audit records (provider, model, audit ID, timestamp) as JSONL to `~/.claude-orchestrator/llm-audit.jsonl`.
 
 ### INT-491: Interactive Mode Migration (2026-02-08)
 
@@ -96,7 +123,7 @@ Split system prompt into Phase 1 (Design & Validation) and Phase 2 (Strict Execu
 
 - Phase determined by presence of `code-task` label in `linearIssueLabels`
 - Phase 1: Agent enriches the Linear issue description, creates sub-issues, adds labels
-- Phase 2: Agent executes autonomously (tests, code, CI, PR, Linear update)
+- Phase 2: Agent executes autonomously (tests, code, CI, PR, Linear update); includes PR description format instructions
 - Parent execution mode for issues with child tasks
 
 ### INT-524: Retry Mechanism (2026-02-05)
@@ -111,7 +138,7 @@ Split system prompt into Phase 1 (Design & Validation) and Phase 2 (Strict Execu
 | POST   | `/tasks`               | HMAC signed | `CreateTaskRequest` (Zod-validated) | `202 { taskId, status: "accepted" }`           |
 | GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                            |
 | DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404` |
-| GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available }` |
+| GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available, anthropicOAuth }` |
 | POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`              |
 | POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`  |
 
@@ -144,6 +171,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
   webhookUrl: string;      // Callback URL for results
   webhookSecret: string;   // HMAC secret for webhook signing
   actionId?: string;       // Originating action ID
+  retriedFrom?: string;    // Original task ID for retry chains
 }
 ```
 
@@ -213,7 +241,8 @@ The central coordinator. Manages the full task lifecycle:
 7. Completion monitoring (30s polling interval)
 8. Timeout warning at 1h55m, hard kill at 2h
 9. Result extraction via `gh pr list` and `gh pr checks`
-10. Webhook delivery via `WebhookClient`
+10. Turn metrics collection via `TurnMetricsCollector` (post-completion)
+11. Webhook delivery via `WebhookClient`
 
 ### DockerProvider
 
@@ -242,11 +271,14 @@ Creates isolated git worktrees per task:
 Streams container output to code-agent in near-real-time:
 
 - Receives log chunks via `appendChunk()` callback from Docker attach stream
-- Buffers content and flushes every 3 seconds or when buffer exceeds 8KB
+- Also supports file-polling mode (100ms interval) for non-Docker providers
+- Buffers content and flushes every 3 seconds or when buffer exceeds 64KB
+- Strips Docker multiplexed stream headers and ANSI escape codes via `stripDockerHeaders()`
+- Prefixes each log line with a local timestamp (`HH:MM:ss.mmm`)
 - Splits large buffers at newline boundaries
 - Sends up to 5 chunks per batch to `POST /internal/logs`
 - Signs payloads with HMAC-SHA256 using the task's webhook secret
-- Limits: 500 chunks per task, 4MB total per task
+- Limits: 4MB total per task (no per-chunk count limit)
 - Retries failed uploads 3 times with exponential backoff (1s, 2s, 4s)
 
 ### WebhookClient
@@ -296,6 +328,18 @@ Keeps running tasks visible to code-agent:
 - Logs escalating warnings after 3 consecutive failures
 - Enables zombie task detection in code-agent
 
+### TurnMetricsCollector
+
+Collects per-task resource and cost metrics after container exit:
+
+- Reads CPU time (`usage_usec`) from Linux cgroup v2 at `/sys/fs/cgroup/system.slice/docker-{containerId}.scope/cpu.stat`
+- Reads peak memory from `memory.peak` (falls back to `memory.current`)
+- Locates Claude session JSONL files at `{secretsBasePath}/claude-session-{taskId}/projects/**/*.jsonl`
+- Classifies time from JSONL event gaps: `user→assistant` = API wait, `assistant→user` = tool execution, `subtype:progress` = background wait
+- Aggregates token counts across all API calls in the session
+- Publishes `TurnMetrics` struct to `POST /internal/turn-metrics` on code-agent
+- Errors are non-fatal: logged and swallowed so task outcome is unaffected
+
 ### SensitiveFileGuard
 
 Prevents accidental secret leaks in commits:
@@ -309,9 +353,10 @@ Prevents accidental secret leaks in commits:
 Constructs phase-specific instructions for Claude Code workers:
 
 - **Phase 1 (no `code-task` label):** Design agent mode, enriches Linear issue, adds labels
-- **Phase 2 (has `code-task` label):** Execution mode, writes tests/code, runs CI, creates PR
+- **Phase 2 (has `code-task` label):** Execution mode, writes tests/code, runs CI, creates PR; includes PR description format template
 - Sanitizes user prompts by stripping XML tags and forbidden keywords (prompt injection defense)
 - Parent execution mode section injected when `hasChildren` is true
+- Uses `/repo` (container path) not the host worktree path in system prompt instructions
 
 ### RepoManager
 
@@ -320,6 +365,15 @@ Ensures the orchestrator has a valid local repository clone:
 - `ensureRepository()`: clone if missing, validate + fetch if present
 - `validateRepository()`: checks `.git` is directory (not worktree file), remote URL matches, `package.json` name matches
 - `normalizeUrl()`: handles SSH vs HTTPS and trailing `.git` suffix
+
+### OrchestratorFileAuditSink
+
+Appends LLM audit records to a local JSONL file:
+
+- Implements `AuditSink` from `@intexuraos/llm-audit`
+- Each record includes `{ time, audit: { id, provider, model, ... } }`
+- Writes to `~/.claude-orchestrator/llm-audit.jsonl` via `appendFile`
+- Non-blocking: errors are returned as `Result<void>` and handled by the caller
 
 ## Dependencies
 
@@ -336,6 +390,7 @@ Ensures the orchestrator has a valid local repository clone:
 | `pino-pretty`             | ^13.0.0   | Human-readable log output                  |
 | `zod`                     | ^3.24.1   | Request schema validation                  |
 | `@intexuraos/common-core` | workspace | Result types, Logger, error serialization  |
+| `@intexuraos/llm-audit`   | workspace | AuditSink interface for LLM audit logging  |
 
 ## Configuration
 
@@ -392,6 +447,7 @@ Ensures the orchestrator has a valid local repository clone:
 | Timeout warning  | 1h 55m     | Log warning before hard kill       |
 | Timeout kill     | 2h         | Force-kill container               |
 | Log flush        | 3 seconds  | Send buffered log chunks           |
+| Log file poll    | 100ms      | Read new content from log file     |
 
 ## Gotchas
 
@@ -405,6 +461,8 @@ Ensures the orchestrator has a valid local repository clone:
 8. **Container name conflicts.** If a previous orchestrator run left orphaned containers, `createWorker` fails with "name already in use". Call `cleanupOrphanedContainers()` on startup.
 9. **Worktree `.git` file.** Git worktrees have a `.git` file (not directory) pointing to the main repo's `.git/worktrees/`. The DockerProvider reads this file to determine the main git directory and mounts it into the container for commit/push operations.
 10. **State file corruption.** If `state.json` is corrupted (e.g., partial write on crash), `StatePersistence.load()` backs up the file and starts fresh rather than crashing.
+11. **Turn metrics are cgroup-dependent.** `TurnMetricsCollector` reads from `/sys/fs/cgroup/system.slice/docker-{id}.scope` — this path is Linux-specific and will return zero values on macOS (where cgroup v2 is not exposed). Turn metrics collection is non-fatal.
+12. **Docker header stripping handles mid-frame splits.** Long messages (e.g., `hook_response` JSON) can span multiple Docker frames, resulting in headers appearing mid-string. `log-formatter.ts` scans the entire string for the 8-byte binary pattern, not just at line boundaries.
 
 ## File Structure
 
@@ -424,15 +482,22 @@ workers/orchestrator/
       task-dispatcher.ts              # Task lifecycle coordinator
       webhook-client.ts               # Signed webhook delivery + retry queue
       log-forwarder.ts                # Chunked log streaming to code-agent
+      log-formatter.ts                # Docker header + ANSI escape stripping
       sensitive-file-guard.ts         # Secret file detection + revert
       worktree-manager.ts             # Git worktree CRUD + MCP config
       repo-manager.ts                 # Repository clone/validate/fetch
       system-prompt.ts                # Phase 1/2 prompt builder
+      turn-metrics-collector.ts       # Per-task cgroup + token metrics
+      orchestrator-audit-sink.ts      # LLM audit log file sink
+      completion-verifier.ts          # Task completion verification
+      api-key-validator.ts            # API key validation
       isolation/
         index.ts                      # Factory + re-exports
         types.ts                      # IsolationProvider interface
         docker-provider.ts            # Docker container lifecycle
         token-refresher.ts            # Per-container GitHub token refresh
+        credential-monitor.ts         # Anthropic OAuth credential monitoring
+        credential-refresher.ts       # Anthropic OAuth credential refreshing
     types/
       index.ts                        # Barrel exports
       api.ts                          # CreateTaskRequest, HealthResponse
@@ -450,6 +515,8 @@ workers/orchestrator/
       task-dispatcher.test.ts         # Task dispatcher tests
       webhook-client.test.ts          # Webhook client tests
       log-forwarder.test.ts           # Log forwarder tests
+      log-formatter.test.ts           # Log formatter tests
+      turn-metrics-collector.test.ts  # Turn metrics collector tests
       sensitive-file-guard.test.ts    # Sensitive file guard tests
       worktree-manager.test.ts        # Worktree manager tests
       repo-manager.test.ts            # Repo manager tests

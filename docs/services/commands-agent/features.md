@@ -98,6 +98,8 @@ Result: Link saved to bookmarks, not queued for research.
 
 ## Recent Changes
 
+- **2026-02-19:** Persist prompt version with each classification. Every classified command now stores which prompt version produced its result, enabling auditability and regression tracking across prompt upgrades.
+
 - **2026-02-08:** Add `code` command type for programming-related commands. Adopt standardized response contract (`reply.ok()`/`reply.fail()`). Migrate to Sentry-enabled logging via `createAppLogger()`. Consolidate user service client into shared `@intexuraos/internal-clients` package. Register `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` as required env var.
 
 ---

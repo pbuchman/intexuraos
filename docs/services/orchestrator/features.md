@@ -67,7 +67,7 @@ The orchestrator supports configurable capacity (default: 2 concurrent tasks):
 | Git worktree management   | Creates and removes isolated worktrees per task                                               |
 | HMAC request signing      | Nonce + timestamp + HMAC-SHA256 verification on all dispatch requests                         |
 | Heartbeat monitoring      | Sends running task IDs to code-agent every 10 minutes for zombie detection                    |
-| Log forwarding            | Streams container output in 8KB chunks with batched uploads                                   |
+| Log forwarding            | Streams container output in 64KB chunks with batched uploads, ANSI stripping, and 4MB cap     |
 | Webhook delivery          | HMAC-signed callbacks with 3 retries, exponential backoff, and pending queue                  |
 | State persistence         | Atomic JSON file with corruption recovery and orphan detection                                |
 | Token refresh             | GitHub installation tokens refreshed every 5 minutes (service) and 30 minutes (per-container) |
@@ -75,6 +75,8 @@ The orchestrator supports configurable capacity (default: 2 concurrent tasks):
 | Sensitive file guard      | Reverts commits that touch `.env`, `.pem`, `credentials.json`, and other secrets              |
 | System prompt phases      | Phase 1 (design) vs Phase 2 (execution) based on Linear issue labels                          |
 | Startup recovery          | Detects interrupted tasks and notifies code-agent on restart                                  |
+| Turn metrics collection   | Collects per-task CPU time, peak memory, token counts, and time classification from cgroups and session JSONL |
+| LLM audit logging         | Appends structured LLM call records to a local JSONL file via `OrchestratorFileAuditSink`     |
 
 ## Worker Types
 
@@ -90,7 +92,7 @@ The orchestrator supports configurable capacity (default: 2 concurrent tasks):
 - **Security by default** - Containers drop all capabilities, secrets are read-only mounts, and rootfs writes are constrained to tmpfs
 - **Crash resilience** - Interrupted tasks are recovered on startup; pending webhooks survive restarts
 - **Cost flexibility** - Choose between Anthropic and ZAI providers per task
-- **Observable** - Real-time logs, heartbeats, and structured JSON logging to file
+- **Observable** - Real-time logs, heartbeats, per-task turn metrics, and structured JSON logging to file
 
 ## Limitations
 

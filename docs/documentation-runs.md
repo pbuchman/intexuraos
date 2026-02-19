@@ -1,3 +1,60 @@
+## 2026-02-19 — Full Monorepo Refresh (v2)
+
+**Action:** Updated
+**Agent:** team (monorepo-docs)
+**Method:** Parallel agent orchestration (service-scribe agents)
+**Model:** Claude Sonnet 4.6
+
+**Scope:**
+- 20 apps documented (5 files each)
+- 4 workers documented (5 files each)
+- 22 packages documented (3 files each)
+- Total: 186 documentation files refreshed
+
+**Services Updated:**
+actions-agent, api-docs-hub, app-settings-service, bookmarks-agent, calendar-agent, chat-agent, code-agent, commands-agent, data-insights-agent, image-service, linear-agent, mobile-notifications-service, notes-agent, notion-service, research-agent, todos-agent, user-service, web, web-agent, whatsapp-service
+
+**Workers Updated:**
+claude-worker, log-cleanup, orchestrator, vm-lifecycle
+
+**Packages Updated:**
+common-core, common-http, http-contracts, http-server, infra-claude, infra-firestore, infra-gemini, infra-glm, infra-gpt, infra-notion, infra-otel (NEW), infra-perplexity, infra-pubsub, infra-sentry, infra-whatsapp, internal-clients, llm-audit, llm-contract, llm-factory, llm-pricing, llm-prompts, llm-utils
+
+**Documentation Coverage:** 100%
+
+---
+
+## 2026-02-19 — code-agent
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/code-agent/features.md`
+- `docs/services/code-agent/technical.md`
+- `docs/services/code-agent/tutorial.md`
+- `docs/services/code-agent/technical-debt.md`
+- `docs/services/code-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Automate repetitive coding tasks by bridging task specification (Linear issues, WhatsApp) with Claude-powered workers running on user-owned infrastructure
+- Killer feature: Three-layer deduplication + HMAC-signed worker dispatch with automatic fallback between up to 2 configured machines
+- Future plans: PR comment auto-dispatch (Phase 4), actual system prompt hashing for audit trails
+- Limitations: Max 2 workers per user; PR comment auto-dispatch detected but not yet wired to worker
+
+**Documentation Coverage:** ~85% (ESLint disabled in main route files limits JSDoc)
+
+**Technical Debt Found:**
+
+- Code smells: 4 (codeRoutes.ts SRP violation, duplicated secret generation, blanket ESLint disable, module-level health probe Map)
+- Test gaps: 0
+- Type issues: 1 (Firestore Timestamp narrowing)
+- TODOs: 3 (prompt sanitization, system prompt hash, Phase 4 dispatch)
+
+---
+
 ## 2026-01-25 - web Documentation Update
 
 **Action:** Created

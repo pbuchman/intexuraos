@@ -104,6 +104,8 @@ sequenceDiagram
 
 | Commit     | Description                                            | Date       |
 | ---------- | ------------------------------------------------------ | ---------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability        | 2026-02-16 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local | 2026-02-14 |
 | (INT-198)  | Pub/Sub retry logic for transient Crawl4AI errors      | 2026-01-28 |
 | (INT-408)  | Enforce mandatory env var registration                 | 2026-01-28 |
 | `d105688f` | Add RATE_LIMITED error code for Crawl4AI 429 responses | 2026-01-30 |
@@ -265,20 +267,25 @@ The Pub/Sub route checks for this error code and responds with HTTP 503 to trigg
 
 ## Configuration
 
-All required env vars are validated at startup via `validateRequiredEnv()` in `index.ts`.
+All required env vars are validated at startup via `validateRequiredEnv()` in `index.ts`. `INTEXURAOS_SENTRY_DSN` is validated separately before `validateRequiredEnv()`.
 
-| Environment Variable                    | Required | Description                |
-| --------------------------------------- | -------- | -------------------------- |
-| `INTEXURAOS_WEB_AGENT_URL`              | Yes      | Web-agent base URL         |
-| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | Yes      | Enrichment topic name      |
-| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | Yes      | Summarization topic name   |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Yes      | WhatsApp send topic name   |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Internal auth header value |
-| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project for Pub/Sub    |
+| Environment Variable                    | Required | Description                      |
+| --------------------------------------- | -------- | -------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project for Pub/Sub          |
+| `INTEXURAOS_AUTH_JWKS_URL`              | Yes      | Auth0 JWKS endpoint              |
+| `INTEXURAOS_AUTH_ISSUER`                | Yes      | Auth0 token issuer               |
+| `INTEXURAOS_AUTH_AUDIENCE`              | Yes      | Auth0 token audience             |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Internal auth header value       |
+| `INTEXURAOS_WEB_AGENT_URL`              | Yes      | Web-agent base URL               |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Yes      | WhatsApp send topic name         |
+| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | Yes      | Enrichment topic name            |
+| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | Yes      | Summarization topic name         |
+| `INTEXURAOS_SENTRY_DSN`                 | Yes      | Sentry DSN for error reporting   |
+| `INTEXURAOS_ENVIRONMENT`                | No       | Sentry environment tag (default: development) |
 
 ## Gotchas
 
-- **Enrichment is async** - `POST /internal/bookmarks` returns immediately; OG data and AI summary populate later via Pub/Sub
+- **Enrichment is async** - `POST /internal/bookmarks` returns immediately with `{ id, url, bookmark }` where `url` is the app deep link (`/#/bookmarks/{id}`); OG data and AI summary populate later via Pub/Sub
 - **Duplicate detection by userId+url** - Same URL can exist for different users
 - **OG fetch can fail** - Some sites block scrapers; status will be `failed`
 - **WhatsApp delivery is fire-and-forget** - If Pub/Sub publish fails, no retry for WhatsApp notification

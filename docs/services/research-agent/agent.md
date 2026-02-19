@@ -280,6 +280,18 @@ The system enforces maximum one model per provider:
 // Result: Only one is selected (first match wins)
 ```
 
+### Platform API Key Fallbacks (v2.3.0)
+
+When a user has no API key for a provider, `getLlmClient` tries platform-owned keys:
+
+```typescript
+// Fallback resolution order:
+// 1. User's own API key
+// 2. Platform Gemini key → 'gemini-2.0-flash' (if INTEXURAOS_GEMINI_APP_API_KEY set)
+// 3. Platform Zai key → 'glm-4.7-flash' (if INTEXURAOS_ZAI_APP_API_KEY set)
+// 4. Error: NO_API_KEY
+```
+
 ### Graceful Degradation
 
 Model extraction failures do not block draft creation:
@@ -452,4 +464,4 @@ draft ──approve──> pending ──process──> processing ──all_com
 
 ---
 
-**Last updated:** 2026-02-08 (v2.2.0)
+**Last updated:** 2026-02-19 (v2.3.0)

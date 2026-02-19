@@ -116,6 +116,7 @@ common-core, llm-contract, infra-firestore
   <- llm-audit
        <- infra-claude, infra-gemini, infra-glm, infra-gpt, infra-perplexity
        <- image-service
+       <- workers/orchestrator
 ```
 
 ## Usage Patterns
