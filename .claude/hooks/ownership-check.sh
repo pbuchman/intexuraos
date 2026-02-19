@@ -53,28 +53,31 @@ check_pattern() {
   local description="$2"
 
   if echo "$RECENT_RESPONSES" | grep -iqE "$pattern"; then
-    # Skip false positives: pattern inside backticks (code/discussion)
-    # Check if the pattern itself appears between backticks on the SAME line
-    # This handles cases like: "The `config` file had issues" - only skips if
-    # the pattern itself (not other words) is inside backticks
+    # Strip fenced code blocks (``` ... ```) before checking
+    local stripped
+    stripped=$(echo "$RECENT_RESPONSES" | sed '/^```/,/^```/d')
+
+    # Check remaining text line by line
+    local found_violation=false
     while IFS= read -r line; do
       if echo "$line" | grep -iqE "$pattern"; then
-        # Check if this specific line has the pattern inside backticks
-        if echo "$line" | grep -qE "\`[^\`]*${pattern}[^\`]*\`"; then
-          continue  # This line has pattern in backticks, check next line
+        # Skip if pattern is inside inline backticks on this line
+        local no_backticks
+        no_backticks=$(echo "$line" | sed 's/`[^`]*`//g')
+        if echo "$no_backticks" | grep -iqE "$pattern"; then
+          found_violation=true
+          break
         fi
-        # Found pattern NOT in backticks - this is a violation
-
-        # Log each ownership violation
-        log_blocked "$HOOK_NAME" "ownership-violation" \
-            "Used forbidden language: '$pattern' ($description)" \
-            "State ownership explicitly with action"
-
-        # Collect violation for final message
-        VIOLATIONS+="• '$pattern' ($description)\n"
-        break  # Only count each pattern once
       fi
-    done <<< "$RECENT_RESPONSES"
+    done <<< "$stripped"
+
+    if [[ "$found_violation" == "true" ]]; then
+      log_blocked "$HOOK_NAME" "ownership-violation" \
+          "Used forbidden language: '$pattern' ($description)" \
+          "State ownership explicitly with action"
+
+      VIOLATIONS+="• '$pattern' ($description)\n"
+    fi
   fi
 }
 
@@ -90,7 +93,7 @@ if [[ -n "$VIOLATIONS" ]]; then
   cat << EOF
 {
   "decision": "block",
-  "reason": "⚠️ OWNERSHIP CHECK: Your response contains ownership-deflecting language:\n${VIOLATIONS}\nTo continue, you MUST:\n1. Acknowledge the issue: 'I own [specific problem]'\n2. State your action: '[What I will do to fix it]'\n\nExample: 'I own the failing tests in auth-service. Fixing them now.'\n\nSee CLAUDE.md: Ownership Mindset (MANDATORY) section."
+  "reason": "⚠️ OWNERSHIP CHECK: Your response contains ownership-deflecting language:\n${VIOLATIONS}\nDon't piss the user off with excuses. Stop, rethink, and figure out how to fix it instead of explaining it away.\n\nTo continue, you MUST:\n1. Acknowledge the issue: 'I own [specific problem]'\n2. State your action: '[What I will do to fix it]'\n\nExample: 'I own the failing tests in auth-service. Fixing them now.'\n\nSee CLAUDE.md: Ownership Mindset (MANDATORY) section."
 }
 EOF
 
