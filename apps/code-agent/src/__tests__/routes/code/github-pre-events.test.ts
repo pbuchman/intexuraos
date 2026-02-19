@@ -705,6 +705,208 @@ describe('GET /code/github-pr-events', () => {
     expect(body.data.events[0].body).toBe('Updated review');
   });
 
+  it('should show PR body only on the most recent pull_request event', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    // PR opened
+    await repo.save({
+      githubEventId: 40001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 10',
+      body: '## Summary\nPR description table',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+
+    // synchronize 1
+    await repo.save({
+      githubEventId: 40002,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'pull_request',
+      action: 'synchronize',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 10',
+      body: '## Summary\nPR description table',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-02T00:00:00Z'),
+      payload: {},
+    });
+
+    // synchronize 2
+    await repo.save({
+      githubEventId: 40003,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'pull_request',
+      action: 'synchronize',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 10',
+      body: '## Summary\nPR description table',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-03T00:00:00Z'),
+      payload: {},
+    });
+
+    // synchronize 3 (most recent)
+    await repo.save({
+      githubEventId: 40004,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 10,
+      pullRequestId: 10001,
+      eventType: 'pull_request',
+      action: 'synchronize',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 10',
+      body: '## Summary\nPR description table',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-04T00:00:00Z'),
+      payload: {},
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=10',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.events).toHaveLength(4);
+
+    // First 3 events should have null body (deduped)
+    expect(body.data.events[0].body).toBeNull();
+    expect(body.data.events[1].body).toBeNull();
+    expect(body.data.events[2].body).toBeNull();
+
+    // Last event keeps the body
+    expect(body.data.events[3].body).toBe('## Summary\nPR description table');
+  });
+
+  it('should show latest PR body when body changes between pushes', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    // PR opened with original body
+    await repo.save({
+      githubEventId: 50001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 11,
+      pullRequestId: 11001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 11',
+      body: 'Version 1 of description',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+
+    // synchronize with updated body
+    await repo.save({
+      githubEventId: 50002,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 11,
+      pullRequestId: 11001,
+      eventType: 'pull_request',
+      action: 'synchronize',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 11',
+      body: 'Version 2 of description',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-02T00:00:00Z'),
+      payload: {},
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=11',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.data.events).toHaveLength(2);
+
+    // First event body nulled out
+    expect(body.data.events[0].body).toBeNull();
+
+    // Last event shows latest body
+    expect(body.data.events[1].body).toBe('Version 2 of description');
+  });
+
+  it('should keep PR body when there is only one pull_request event', async () => {
+    const services = (await import('../../../services.js')).getServices();
+    const repo = services.gitHubPREventRepo;
+
+    await repo.save({
+      githubEventId: 60001,
+      repository: 'intexuraos/test-repo',
+      repositoryId: 1,
+      pullRequestNumber: 12,
+      pullRequestId: 12001,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'author',
+      senderId: 1,
+      senderType: 'User',
+      title: 'PR 12',
+      body: 'Single event body',
+      state: 'open',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/github-pr-events?repository=intexuraos/test-repo&pullRequestNumber=12',
+      headers: { authorization: 'Bearer fake-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.data.events).toHaveLength(1);
+
+    // Single event keeps its body
+    expect(body.data.events[0].body).toBe('Single event body');
+  });
+
   it('should return 500 when per-PR repo fetch fails', async () => {
     setServices({
       ...getServices(),
