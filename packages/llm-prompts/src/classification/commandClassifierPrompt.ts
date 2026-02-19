@@ -31,7 +31,7 @@ export const commandClassifierPrompt: PromptBuilder<
 > = {
   name: 'command-classification',
   description: 'Classifies user messages into command categories (todo, research, note, etc.)',
-  version: '1.0.1',
+  version: '1.1.0',
 
   build(input: CommandClassifierPromptInput, _deps?: CommandClassifierPromptDeps): string {
     return `Classify the message into exactly one category. Follow this decision tree IN ORDER:

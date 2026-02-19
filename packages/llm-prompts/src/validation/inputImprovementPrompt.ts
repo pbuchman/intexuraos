@@ -20,6 +20,7 @@ export const inputImprovementPrompt: PromptBuilder<InputImprovementPromptInput> 
   build(input: InputImprovementPromptInput, deps?: PromptDeps): string {
     /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback @preserve */
     const currentDate = deps?.currentDate?.() ?? new Date().toISOString().split('T')[0] ?? '';
+    const currentYear = currentDate.split('-')[0] ?? new Date().getFullYear().toString();
     /* v8 ignore stop @preserve */
     return `You are a research prompt improvement specialist. Improve the following research prompt.
 
@@ -33,7 +34,7 @@ REQUIREMENTS:
 5. Make it specific enough that the topic can be researched from multiple angles independently
 
 IMPROVEMENTS TO MAKE:
-- Add relevant timeframes if applicable (e.g., "in ${new Date().getFullYear().toString()}", "for next summer")
+- Add relevant timeframes if applicable (e.g., "in ${currentYear}", "for next summer")
 - Add geographic scope if relevant (e.g., "in Europe", "from NYC")
 - Clarify ambiguous terms with specific criteria
 - Add specific aspects to investigate (e.g., "comparing price, features, and reliability")
