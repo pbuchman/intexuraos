@@ -253,16 +253,20 @@ sequenceDiagram
 
 ## Configuration
 
-| Variable                                      | Required | Description                         |
-| --------------------------------------------- | -------- | ----------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`                   | Yes      | GCP project ID                      |
-| `INTEXURAOS_AUTH_JWKS_URL`                    | Yes      | Auth0 JWKS endpoint                 |
-| `INTEXURAOS_AUTH_ISSUER`                      | Yes      | Auth0 issuer URL                    |
-| `INTEXURAOS_AUTH_AUDIENCE`                    | Yes      | Auth0 audience                      |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Internal service auth token         |
-| `INTEXURAOS_USER_SERVICE_URL`                 | Yes      | user-service base URL               |
-| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | mobile-notifications base URL       |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Yes      | app-settings base URL (for pricing) |
+| Variable                                      | Required | Description                                          |
+| --------------------------------------------- | -------- | ---------------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`                   | Yes      | GCP project ID                                       |
+| `INTEXURAOS_AUTH_JWKS_URL`                    | Yes      | Auth0 JWKS endpoint                                  |
+| `INTEXURAOS_AUTH_ISSUER`                      | Yes      | Auth0 issuer URL                                     |
+| `INTEXURAOS_AUTH_AUDIENCE`                    | Yes      | Auth0 audience                                       |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Internal service auth token                          |
+| `INTEXURAOS_USER_SERVICE_URL`                 | Yes      | user-service base URL                                |
+| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | mobile-notifications base URL                        |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Yes      | app-settings base URL (for pricing)                  |
+| `INTEXURAOS_SENTRY_DSN`                       | No       | Sentry DSN for error tracking (omit to disable)      |
+| `INTEXURAOS_ENVIRONMENT`                      | No       | Environment name for Sentry (default: `development`) |
+| `INTEXURAOS_ZAI_APP_API_KEY`                  | No       | Platform-level Zai API key (fallback LLM provider)   |
+| `INTEXURAOS_GEMINI_APP_API_KEY`               | No       | Platform-level Gemini API key (fallback LLM provider)|
 
 ## Gotchas
 

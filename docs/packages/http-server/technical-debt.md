@@ -39,6 +39,10 @@ This package depends on `@intexuraos/infra-firestore` solely for the `checkFires
 
 **Impact:** Low. All services register the plugin before setting the error handler.
 
+## Resolved Debt
+
+None archived yet.
+
 ## Future Plans
 
 - Consider adding a `buildServer()` helper that encapsulates the common Fastify setup pattern (plugin registration, schema registration, error handler, health route)

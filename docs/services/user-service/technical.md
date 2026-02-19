@@ -106,7 +106,7 @@ sequenceDiagram
 | ------ | ---------------------------------------------- | ------------------------- | ------------ |
 | GET    | `/users/:uid/settings`                         | Get user settings         | Bearer token |
 | PATCH  | `/users/:uid/settings`                         | Update default LLM model  | Bearer token |
-| GET    | `/users/:uid/settings/llm-keys`                | Get LLM API keys (masked) | Bearer token |
+| GET    | `/users/:uid/settings/llm-keys`                | Get LLM API keys (masked) + defaultModel | Bearer token |
 | PATCH  | `/users/:uid/settings/llm-keys`                | Set/update LLM API key    | Bearer token |
 | POST   | `/users/:uid/settings/llm-keys/:provider/test` | Test LLM API key          | Bearer token |
 | DELETE | `/users/:uid/settings/llm-keys/:provider`      | Delete LLM API key        | Bearer token |
@@ -155,11 +155,11 @@ sequenceDiagram
 
 ### LlmTestResult
 
-| Field | Type | Description |
-| ---------- | ------------ | --------------------- | |
-| `status` | 'success' \ | 'failure' | Test outcome |
-| `message` | string | LLM response or error |
-| `testedAt` | string | ISO 8601 timestamp |
+| Field      | Type                    | Description           |
+| ---------- | ----------------------- | --------------------- |
+| `status`   | 'success' \| 'failure'  | Test outcome          |
+| `message`  | string                  | LLM response or error |
+| `testedAt` | string                  | ISO 8601 timestamp    |
 
 ### OAuthConnection
 

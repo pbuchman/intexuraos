@@ -261,10 +261,14 @@ Fetches and parses OpenGraph metadata.
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Cache-Control': 'no-cache',
+  'Connection': 'keep-alive',
   'Sec-Fetch-Dest': 'document',
   'Sec-Fetch-Mode': 'navigate',
   'Sec-Fetch-Site': 'none',
   'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
 }
 ```
 
@@ -386,3 +390,4 @@ apps/web-agent/src/
 - `@intexuraos/llm-factory` - User's LLM client generation
 - `@intexuraos/infra-otel` - OpenTelemetry preload for Dash0 tracing
 - `@intexuraos/llm-prompts` - PromptBuilder interface with semver versioning
+- `@intexuraos/llm-utils` - `createDetailedParseErrorMessage()` for structured LLM parse error context

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Version 2.3.0 adds platform API key fallbacks (Gemini primary, Zai secondary), switches internal fast operations to `gemini-2.0-flash`, standardizes API key naming, and improves LLM prompt quality.
+Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Version 2.4.0 adds Dash0 OpenTelemetry distributed tracing and dev-mode log formatting. Version 2.3.0 added platform API key fallbacks (Gemini primary, Zai secondary), switched internal fast operations to `gemini-2.0-flash`, standardized API key naming, and improved LLM prompt quality.
 
 ## Architecture
 
@@ -45,6 +45,34 @@ graph TB
     InternalClients["@intexuraos/internal-clients"] --> UserSvc
     ExportSettings["Firestore:<br/>research_export_settings"] --> RA
 ```
+
+## Recent Changes (v2.4.0)
+
+### Dash0 OpenTelemetry Integration
+
+Distributed tracing, metrics, and log export via OTLP/HTTP to Dash0 added across all services including research-agent:
+
+- New `packages/infra-otel` package loaded as Node `--import` preload in Dockerfile
+- `OTEL_SERVICE_NAME=research-agent` baked into image at build time
+- Instrumentation is transparent — no code changes in service logic
+- No-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset (local dev)
+
+**Dockerfile changes:**
+
+```dockerfile
+# otel-register.js bundled alongside index.js during build
+CMD ["node", "--import", "./otel-register.js", "./index.js"]
+```
+
+### Dev-Mode Log Formatting
+
+`server.ts` now uses `createLogStream()` from `@intexuraos/http-server` for colorized, PM2-readable output in development:
+
+```
+research-agent | 10:30:00 | INFO | Research created | {id: "abc123"}
+```
+
+Production JSON logging unchanged.
 
 ## Recent Changes (v2.3.0)
 
@@ -517,12 +545,13 @@ const RESEARCH_MODELS: ResearchModel[] = [
 
 **Fast model** (`gemini-2.0-flash`): Used for title generation and context inference via the platform Gemini key. Not available as a user-selectable research model.
 
-### Shared Packages (v2.3.0)
+### Shared Packages (v2.4.0)
 
 | Package                        | Purpose                                         |
 | ------------------------------ | ----------------------------------------------- |
 | `@intexuraos/internal-clients` | User service client (NEW in v2.1.0)             |
 | `@intexuraos/infra-notion`     | Notion client and error mapping (NEW in v2.2.0) |
+| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry preload instrumentation (NEW in v2.4.0) |
 | `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                   |
 | `@intexuraos/llm-contract`     | Model types, provider mapping                   |
 | `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                    |
@@ -550,6 +579,7 @@ const RESEARCH_MODELS: ResearchModel[] = [
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`          | Yes      | Public base URL for images                                         |
 | `INTEXURAOS_GEMINI_APP_API_KEY`             | No       | Platform Gemini key; enables `gemini-2.0-flash` fallback (v2.3.0) |
 | `INTEXURAOS_ZAI_APP_API_KEY`               | No       | Platform Zai key; enables `glm-4.7-flash` fallback (v2.3.0)       |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`           | No       | Dash0 OTLP endpoint; enables distributed tracing (v2.4.0)          |
 
 ## Gotchas
 

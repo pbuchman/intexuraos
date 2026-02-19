@@ -81,6 +81,7 @@ interface Note {
 | **Content Required**   | Content must be present (can be empty string)        |
 | **No Status Update**   | Status cannot be changed after creation via PATCH    |
 | **No Tag Filtering**   | List endpoint returns all user notes; no filter support |
+| **List Order**         | Notes returned ordered by `updatedAt` descending (most recently updated first) |
 
 ---
 

@@ -128,14 +128,13 @@ interface Action {
 - Task list with status filtering and cursor-based pagination
 - Task creation with markdown editor, model selection (auto/opus/glm), and Linear issue linking (via `LinearIssueSelectorModal`)
 - Task detail view (`CodeTaskViewPage`) with:
-  - Real-time xterm.js terminal log viewer (Firestore-backed)
-  - Two-phase design/execution flow with `DesignTaskBanner`
+  - Real-time `LogStream` component (Firestore-backed, custom CSS color-coded log lines)
+  - Two-phase design/execution flow with `DesignTaskBanner` (violet, links to design) and `ImplementationLinkBanner` (emerald, links to implementation)
   - Queue-based follow-up messaging without interrupting running tasks
   - Worker offline banner with worker name
-  - Mobile fullscreen terminal overlay
   - Copy-all-logs button
   - Log follow mode with manual scroll override
-  - Log transcript tags: [prompt], [instructions], [user], [resumed]
+  - Log transcript tags: [prompt], [instructions], [user], [queued], [resumed], [claude], [tool], [error], [done], [hook], [init], [system], [orchestrator]
 - Task retry, cancel, and conflict resolution (409 handling)
 - Worker status monitoring (health checks with color coding by health)
 - GitHub PR events aggregated view (`GET /code/github-pr-events`)

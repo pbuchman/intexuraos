@@ -152,6 +152,14 @@ No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
 
+### v4.1.0 Auto-Execute Generalized to All Action Types
+
+**Issue:** `shouldAutoExecute()` only auto-executed link actions, requiring manual approval for high-confidence todo/research/note/code actions even when classification was near-certain.
+
+**Resolution:** Removed the `actionType === 'link'` guard from `shouldAutoExecute()`. The function now returns `true` for any action type when `confidence >= 0.9`. Calendar and linear still require approval because their handlers do not provide an `executeAction` dependency to the idempotency wrapper. Tests updated to reflect type-agnostic threshold behavior.
+
+**Date Resolved:** 2026-02-19
+
 ### v4.0.0 Unified Interactive Approval Buttons (INT-524)
 
 **Issue:** LLM approval classification added latency and cost on every approval reply. Nonce-based approval

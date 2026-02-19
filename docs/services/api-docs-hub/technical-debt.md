@@ -11,7 +11,7 @@
 
 ### Health endpoint bypasses response contract
 
-**Location:** `apps/api-docs-hub/src/server.ts:81-89`
+**Location:** `apps/api-docs-hub/src/server.ts:81-88`
 **Severity:** Low (deliberate exception)
 
 The `/health` endpoint uses `reply.send()` directly rather than `reply.ok()` / `reply.fail()`. This is intentional — health check response format must be stable and predictable for infrastructure monitoring tools, independent of app-level response envelope changes. However, this creates an undocumented exception to the response contract rule. A `// @allow-raw-send: health check format must be stable` comment would make the intent explicit.

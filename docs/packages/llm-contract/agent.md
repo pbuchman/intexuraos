@@ -28,7 +28,7 @@ type LLMModel =
 type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
 type ResearchModel = /* all non-image, non-validation-only models */;
 type ValidationModel = 'claude-3-5-haiku-20241022' | 'gemini-2.0-flash' | 'gpt-4o-mini' | 'sonar' | 'glm-4.7' | 'glm-4.7-flash';
-type FastModel = 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'glm-4.7-flash';
+type FastModel = 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'glm-4.7-flash' | 'claude-3-5-haiku-20241022' | 'gpt-4o-mini';
 type GenericModel = 'gemini-2.5-pro' | 'gpt-5.2';
 
 // types.ts
@@ -60,6 +60,7 @@ interface CostCalculator { calculateTextCost(usage: TokenUsage, pricing: ModelPr
 ```typescript
 function getProviderForModel(model: LLMModel): LlmProvider;
 function isValidModel(model: string): model is LLMModel;
+function isFastModel(model: string): model is FastModel;
 ```
 
 ## Exported Constants
@@ -74,7 +75,9 @@ const LlmProviders: {
 };
 const LlmModels: { Gemini25Pro: 'gemini-2.5-pro' /* ...15 more */ };
 const ALL_LLM_MODELS: LLMModel[]; // 16 entries
+const ALL_FAST_MODELS: FastModel[]; // 5 entries: Gemini25Flash, Gemini20Flash, Glm47Flash, ClaudeHaiku35, GPT4oMini
 const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider>;
+const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string>; // human-readable names for UI dropdowns
 ```
 
 ## Dependency Graph
@@ -93,9 +96,14 @@ common-core
 
 ```typescript
 // Check if a string is a valid model
-import { isValidModel, getProviderForModel } from '@intexuraos/llm-contract';
+import { isValidModel, isFastModel, getProviderForModel } from '@intexuraos/llm-contract';
 if (isValidModel(userInput)) {
   const provider = getProviderForModel(userInput);
+}
+
+// Check if a model is fast (for default model selection)
+if (isFastModel(userInput)) {
+  // TypeScript narrows to FastModel
 }
 
 // Use typed constants

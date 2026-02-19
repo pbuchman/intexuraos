@@ -81,16 +81,18 @@ All endpoints and use cases have test coverage. The service maintains >95% cover
 
 Located in `apps/whatsapp-service/src/__tests__/`:
 
-- `webhookAsyncProcessing.test.ts` - Webhook processing including button responses (v4.0.0)
-- `routes/messageRoutes.test.ts` - Message CRUD operations
-- `routes/mappingRoutes.test.ts` - User phone number mapping (with verification gate)
-- `routes/pubsubRoutes.test.ts` - Pub/Sub event handlers (including interactive messages)
+- `webhookAsyncProcessing.test.ts` - Async webhook processing including button responses (v4.0.0)
+- `webhookReceiver.test.ts` - Webhook HMAC signature validation and receipt
+- `webhookVerification.test.ts` - Webhook hub challenge verification
+- `messageRoutes.test.ts` - Message CRUD operations
+- `mappingRoutes.test.ts` - User phone number mapping (with verification gate)
+- `pubsubRoutes.test.ts` - Pub/Sub event handlers (including interactive messages)
 - `verificationRoutes.test.ts` - Phone verification send/confirm/status
 - `shared.test.ts` - Shared utility functions (extractButtonResponse with button_reply fix)
-- `domain/usecases/*.test.ts` - Business logic
+- `usecases/*.test.ts` - Business logic (processAudio, processImage, transcribeAudio, extractLinkPreviews)
 - `infra/phoneVerificationRepository.test.ts` - Verification repository
 - `infra/sender.test.ts` - WhatsApp sender (including sendInteractiveMessage)
-- `infra/**/*.test.ts` - Other repository implementations
+- `infra/**/*.test.ts` - Other infra implementations
 
 ---
 

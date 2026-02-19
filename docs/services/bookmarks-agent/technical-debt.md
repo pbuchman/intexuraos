@@ -15,6 +15,14 @@ Last updated: 2026-02-19
 
 ## Recent Improvements
 
+### Dash0 OpenTelemetry Integration
+
+Added Dash0 OpenTelemetry tracing via package-level integration (`apps/bookmarks-agent/package.json` and `Dockerfile`):
+
+- **Pattern:** OpenTelemetry instrumentation injected at the runtime layer, no application code changes required
+- **Benefit:** Distributed tracing for all incoming HTTP requests and outgoing web-agent calls without code coupling
+- **Change:** Dockerfile and package.json updated; no service logic changed
+
 ### Dev-Mode Log Formatting for PM2 Readability
 
 Added development-mode log stream formatting in `server.ts`:

@@ -57,7 +57,7 @@ interface WebhookPayload {
   title: string;          // Notification title
   text: string;           // Notification body/content
   timestamp: number;      // Unix milliseconds from device
-  postTime: string;       // Post time string from device
+  post_time: string;      // Post time string from device (snake_case)
 }
 ```
 
@@ -150,7 +150,9 @@ interface QueryNotificationsBody {
 
 ## Gotchas
 
-**Signature security** - Plaintext signature returned only on creation. Store it securely.
+**Signature security** - Plaintext signature returned only on creation (`{ connectionId, signature }`). Store it securely. The `connectionId` field is the Firestore document ID.
+
+**Single signature per user** - Creating a new connection (`POST /mobile-notifications/connect`) deletes any existing signature for the user first. Only one active signature per user at a time.
 
 **Hash comparison** - Webhook signatures compared as SHA-256 hashes; plaintext is never stored.
 

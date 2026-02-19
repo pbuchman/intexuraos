@@ -2,7 +2,7 @@
 
 ## Overview
 
-Notes-agent provides simple CRUD operations for text notes with tag-based filtering (planned) and source tracking. Deployed as a Cloud Run service.
+Notes-agent provides simple CRUD operations for text notes with tag-based filtering (planned) and source tracking. Deployed as a Cloud Run service. Runs on port 8121 locally.
 
 ## Recent Changes
 
@@ -102,6 +102,8 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 - **Legacy documents without status field**: The Firestore repository defaults `status` to `'active'` for documents that predate the status feature. This ensures backward compatibility.
 - **No status update via PATCH**: `UpdateNoteInput` only accepts `title`, `content`, and `tags`. Status changes are not supported through any public endpoint.
 - **No tag filtering**: The `listNotes` use case returns all notes for a user without filter support. Tag filtering is planned but not yet implemented.
+- **List ordering**: `findByUserId()` orders results by `updatedAt` descending. Most recently updated notes appear first.
+- **FORBIDDEN is use-case inline**: The `NoteRepository` port only defines `NOT_FOUND | STORAGE_ERROR` error codes. The `FORBIDDEN` error code is produced inline by `getNote` and `updateNote` use cases when the requesting user does not own the note.
 
 ## File Structure
 

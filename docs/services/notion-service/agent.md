@@ -43,8 +43,8 @@ interface ConnectResult {
 interface StatusResult {
   configured: boolean;
   connected: boolean;
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 interface PagePreview {

@@ -105,6 +105,7 @@ sequenceDiagram
 | Commit     | Description                                            | Date       |
 | ---------- | ------------------------------------------------------ | ---------- |
 | `6063175b` | Add dev-mode log formatting for PM2 readability        | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                    | 2026-02-16 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local | 2026-02-14 |
 | (INT-198)  | Pub/Sub retry logic for transient Crawl4AI errors      | 2026-01-28 |
 | (INT-408)  | Enforce mandatory env var registration                 | 2026-01-28 |
@@ -148,36 +149,36 @@ sequenceDiagram
 
 ### Bookmark
 
-| Field | Type | Description |
-| ---------------- | -------------------- | -------------------------------- | | |
-| `id` | `string` | Unique bookmark identifier |
-| `userId` | `string` | Owner user ID |
-| `status` | `'draft' \           | 'active'` | Draft or active status |
-| `url` | `string` | Bookmark URL |
-| `title` | `string \            | null` | Page title |
-| `description` | `string \            | null` | Page description |
-| `tags` | `string[]` | User-defined tags |
-| `ogPreview` | `OpenGraphPreview \  | null` | Fetched metadata |
-| `ogFetchedAt` | `Date \              | null` | When metadata was fetched |
-| `ogFetchStatus` | `'pending' \         | 'processed' \                    | 'failed'` | Metadata fetch status |
-| `aiSummary` | `string \            | null` | AI-generated summary |
-| `aiSummarizedAt` | `Date \              | null` | When summary was generated |
-| `source` | `string` | Source system (e.g., 'whatsapp') |
-| `sourceId` | `string` | ID in source system |
-| `archived` | `boolean` | Soft delete flag |
-| `createdAt` | `Date` | Creation timestamp |
-| `updatedAt` | `Date` | Last update timestamp |
+| Field            | Type                              | Description                      |
+| ---------------- | --------------------------------- | -------------------------------- |
+| `id`             | `string`                          | Unique bookmark identifier       |
+| `userId`         | `string`                          | Owner user ID                    |
+| `status`         | `'draft' \| 'active'`             | Draft or active status           |
+| `url`            | `string`                          | Bookmark URL                     |
+| `title`          | `string \| null`                  | Page title                       |
+| `description`    | `string \| null`                  | Page description                 |
+| `tags`           | `string[]`                        | User-defined tags                |
+| `ogPreview`      | `OpenGraphPreview \| null`        | Fetched metadata                 |
+| `ogFetchedAt`    | `Date \| null`                    | When metadata was fetched        |
+| `ogFetchStatus`  | `'pending' \| 'processed' \| 'failed'` | Metadata fetch status       |
+| `aiSummary`      | `string \| null`                  | AI-generated summary             |
+| `aiSummarizedAt` | `Date \| null`                    | When summary was generated       |
+| `source`         | `string`                          | Source system (e.g., 'whatsapp') |
+| `sourceId`       | `string`                          | ID in source system              |
+| `archived`       | `boolean`                         | Soft delete flag                 |
+| `createdAt`      | `Date`                            | Creation timestamp               |
+| `updatedAt`      | `Date`                            | Last update timestamp            |
 
 ### OpenGraphPreview
 
-| Field | Type | Description |
-| ------------- | ---------- | ----------- | |
-| `title` | `string \  | null` | OG title |
-| `description` | `string \  | null` | OG description |
-| `image` | `string \  | null` | OG image URL |
-| `siteName` | `string \  | null` | OG site name |
-| `type` | `string \  | null` | OG type |
-| `favicon` | `string \  | null` | Favicon URL |
+| Field         | Type             | Description    |
+| ------------- | ---------------- | -------------- |
+| `title`       | `string \| null` | OG title       |
+| `description` | `string \| null` | OG description |
+| `image`       | `string \| null` | OG image URL   |
+| `siteName`    | `string \| null` | OG site name   |
+| `type`        | `string \| null` | OG type        |
+| `favicon`     | `string \| null` | Favicon URL    |
 
 ### Status Values
 

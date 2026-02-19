@@ -51,21 +51,21 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                          | Date       |
-| ---------- | -------------------------------------------------------------------- | ---------- |
-| `32e6e641` | Ack deleted actions in approval reply, notify via WhatsApp           | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                  | 2026-02-16 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                      | 2026-02-16 |
-| `0a6b7b8f` | Normalize cancel-with-nonce error codes to UPPER_CASE                | 2026-02-10 |
-| `090e1d9d` | INT-524 Unified interactive approval buttons (removed LLM + nonces)  | 2026-02-09 |
-| `0f69a74b` | Add default model selector with platform Zai/Gemini fallback         | 2026-02-09 |
-| `44017d5c` | INT-473 Fix ESLint OOM with batched parallel lint runner             | 2026-02-01 |
-| `d713d754` | INT-156 Fix ActionDoc missing approvalNonce fields                   | 2026-01-31 |
-| `96258560` | INT-427 100% branch coverage enforcement                             | 2026-01-31 |
-| `9723dc24` | Standardize DELETE endpoints to return consistent contract           | 2026-01-30 |
-| `c3198407` | Fix all 132 response contract violations across codebase             | 2026-01-30 |
-| `39b6be5b` | Fix duplicate Pub/Sub events on action creation                      | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps               | 2026-01-30 |
+| Commit     | Description                                                               | Date       |
+| ---------- | ------------------------------------------------------------------------- | ---------- |
+| `884bc168` | Add semver versioning to PromptBuilder; auto-execute now applies all types | 2026-02-19 |
+| `e60eafc1` | Rename INTEXURAOS_GUEST_ZAI_API_KEY → INTEXURAOS_ZAI_APP_API_KEY         | 2026-02-15 |
+| `c72b7c53` | Add INTEXURAOS_GEMINI_APP_API_KEY for Gemini fallback in user service client | 2026-02-15 |
+| `d81ee125` | Fix view-task button URL: /#/tasks/ → /#/code-tasks/                     | 2026-02-15 |
+| `d7c6a061` | Add consistent icons to all WhatsApp approval/notification messages       | 2026-02-10 |
+| `32e6e641` | Ack deleted actions in approval reply, notify via WhatsApp                | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                       | 2026-02-16 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                           | 2026-02-16 |
+| `0a6b7b8f` | Normalize cancel-with-nonce error codes to UPPER_CASE                     | 2026-02-10 |
+| `090e1d9d` | INT-524 Unified interactive approval buttons (removed LLM + nonces)       | 2026-02-09 |
+| `0f69a74b` | Add default model selector with platform Zai/Gemini fallback              | 2026-02-09 |
+| `44017d5c` | INT-473 Fix ESLint OOM with batched parallel lint runner                  | 2026-02-01 |
+| `d713d754` | INT-156 Fix ActionDoc missing approvalNonce fields                        | 2026-01-31 |
 
 ## Data Flow
 
@@ -161,16 +161,18 @@ sequenceDiagram
 
 ### ActionType Enum
 
-| Value      | Handler                     | Auto-Execute |
-| ---------- | --------------------------- | ------------ |
-| `todo`     | HandleTodoActionUseCase     | No           |
-| `research` | HandleResearchActionUseCase | No           |
-| `note`     | HandleNoteActionUseCase     | No           |
-| `link`     | HandleLinkActionUseCase     | Yes (>= 90%) |
-| `calendar` | HandleCalendarActionUseCase | No           |
-| `linear`   | HandleLinearActionUseCase   | No           |
-| `code`     | HandleCodeActionUseCase     | No           |
-| `reminder` | Not implemented             | N/A          |
+| Value      | Handler                     | Auto-Execute    |
+| ---------- | --------------------------- | --------------- |
+| `todo`     | HandleTodoActionUseCase     | Yes (>= 90%)    |
+| `research` | HandleResearchActionUseCase | Yes (>= 90%)    |
+| `note`     | HandleNoteActionUseCase     | Yes (>= 90%)    |
+| `link`     | HandleLinkActionUseCase     | Yes (>= 90%)    |
+| `calendar` | HandleCalendarActionUseCase | No              |
+| `linear`   | HandleLinearActionUseCase   | No              |
+| `code`     | HandleCodeActionUseCase     | Yes (>= 90%)    |
+| `reminder` | Not implemented             | N/A             |
+
+> **Note (v4.1.0):** Auto-execution applies to all action types based solely on confidence threshold (`>= 90%`). Previously only link actions auto-executed. Calendar and linear still require approval because their handlers do not pass an `executeAction` dependency to the idempotent handler wrapper.
 
 ### ActionStatus Enum
 
@@ -386,24 +388,26 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 
 ## Configuration
 
-| Environment Variable                       | Required | Description                                |
-| ------------------------------------------ | -------- | ------------------------------------------ |
-| `INTEXURAOS_RESEARCH_AGENT_URL`            | Yes      | Research-agent base URL                    |
-| `INTEXURAOS_USER_SERVICE_URL`              | Yes      | User-service base URL                      |
-| `INTEXURAOS_COMMANDS_AGENT_URL`            | Yes      | Commands-agent base URL                    |
-| `INTEXURAOS_TODOS_AGENT_URL`               | Yes      | Todos-agent base URL                       |
-| `INTEXURAOS_NOTES_AGENT_URL`               | Yes      | Notes-agent base URL                       |
-| `INTEXURAOS_BOOKMARKS_AGENT_URL`           | Yes      | Bookmarks-agent base URL                   |
-| `INTEXURAOS_CALENDAR_AGENT_URL`            | Yes      | Calendar-agent base URL                    |
-| `INTEXURAOS_LINEAR_AGENT_URL`              | Yes      | Linear-agent base URL                      |
-| `INTEXURAOS_CODE_AGENT_URL`                | Yes      | Code-agent base URL (v3.0.0)               |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`      | Yes      | App settings service URL (for LLM pricing) |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes      | Shared secret for service-to-service calls |
-| `INTEXURAOS_GCP_PROJECT_ID`               | Yes      | Google Cloud project ID                    |
-| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`          | Yes      | Unified actions queue topic name           |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes      | WhatsApp send topic                        |
-| `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC` | Yes      | Calendar preview topic                     |
-| `INTEXURAOS_WEB_APP_URL`                   | Yes      | Web app URL for notification links         |
+| Environment Variable                       | Required | Description                                              |
+| ------------------------------------------ | -------- | -------------------------------------------------------- |
+| `INTEXURAOS_RESEARCH_AGENT_URL`            | Yes      | Research-agent base URL                                  |
+| `INTEXURAOS_USER_SERVICE_URL`              | Yes      | User-service base URL                                    |
+| `INTEXURAOS_COMMANDS_AGENT_URL`            | Yes      | Commands-agent base URL                                  |
+| `INTEXURAOS_TODOS_AGENT_URL`               | Yes      | Todos-agent base URL                                     |
+| `INTEXURAOS_NOTES_AGENT_URL`               | Yes      | Notes-agent base URL                                     |
+| `INTEXURAOS_BOOKMARKS_AGENT_URL`           | Yes      | Bookmarks-agent base URL                                 |
+| `INTEXURAOS_CALENDAR_AGENT_URL`            | Yes      | Calendar-agent base URL                                  |
+| `INTEXURAOS_LINEAR_AGENT_URL`              | Yes      | Linear-agent base URL                                    |
+| `INTEXURAOS_CODE_AGENT_URL`                | Yes      | Code-agent base URL (v3.0.0)                             |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`      | Yes      | App settings service URL (for LLM pricing)               |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes      | Shared secret for service-to-service calls               |
+| `INTEXURAOS_GCP_PROJECT_ID`               | Yes      | Google Cloud project ID                                  |
+| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`          | Yes      | Unified actions queue topic name                         |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes      | WhatsApp send topic                                      |
+| `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC` | Yes      | Calendar preview topic                                   |
+| `INTEXURAOS_WEB_APP_URL`                   | Yes      | Web app URL for notification links                       |
+| `INTEXURAOS_ZAI_APP_API_KEY`               | No       | ZAI platform API key for LLM fallback via user service   |
+| `INTEXURAOS_GEMINI_APP_API_KEY`            | No       | Gemini platform API key for LLM fallback via user service |
 
 ## Gotchas
 
@@ -424,8 +428,7 @@ training data.
 **Reminder actions**: The reminder type is defined in the enum but has no handler. Actions of this type remain
 in pending status indefinitely.
 
-**Auto-execution for links**: Link actions with confidence >= 90% are auto-executed immediately via `shouldAutoExecute()`.
-All other action types require manual approval before execution.
+**Auto-execution threshold**: All action types with confidence >= 90% are auto-executed immediately via `shouldAutoExecute()`. The function is purely confidence-based — no type filtering. Calendar and linear still always require approval because their handlers do not inject an `executeAction` dependency into the idempotent wrapper.
 
 **Approval reply idempotency (v2.0.0)**: The `updateStatusIf` method uses Firestore transactions to atomically check
 and update status. If the status doesn't match expectations, the operation is a no-op, preventing race conditions

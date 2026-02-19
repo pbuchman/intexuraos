@@ -169,6 +169,16 @@ src/transport-types.d.ts  -> LogEvent, TransportDestination [unused, legacy]
 src/fastify.ts            -> setupSentryErrorHandler(), IntexuraFastifyReply [internal], sanitizeHeaders() [internal]
 src/appLogger.ts          -> createAppLogger(), AppLoggerConfig, errorSerializers [internal]
 src/logStream.ts          -> createLogStream() — unified stream factory (Sentry + OTel + dev/prod destination)
-src/devStream.ts          -> createDevOutputStream() — ANSI-colorized pino JSON formatter for PM2/dev
-src/otelTransport.ts      -> getOtelTransport() [singleton], _resetOtelTransport() [test-only]
+src/devStream.ts          -> createDevOutputStream() — ANSI-colorized pino JSON formatter; format: HH:mm:ss | LEVEL | name | msg | key=val
+src/otelTransport.ts      -> getOtelTransport() [singleton], _resetOtelTransport() [test-only, exported]
+```
+
+## Internal-Only Exports (not in index.ts)
+
+```typescript
+// otelTransport.ts — test support only
+export function _resetOtelTransport(): void;
+
+// devStream.ts — used by appLogger.ts and logStream.ts
+export function createDevOutputStream(writeFn?: (line: string) => void): NodeJS.WritableStream;
 ```

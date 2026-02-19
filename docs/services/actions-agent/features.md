@@ -81,7 +81,6 @@ After WhatsApp approval, actions-agent executes actions directly or publishes `a
 - "Save this article: https://example.com/interesting-read"
 - "Bookmark this for later"
 - Action flows: pending -> processing -> completed (bookmark created, with OG metadata)
-- **Auto-executed** when confidence >= 90% (no manual approval needed)
 
 ### Calendar Actions
 
@@ -127,6 +126,8 @@ When classification is wrong:
 
 **User control** - Approve, reject, or correct actions before execution
 
+**Confidence-based auto-execution** - High-confidence actions (>= 90%) execute immediately across all types, skipping the approval step entirely
+
 **Duplicate handling** - Smart conflict resolution for existing bookmarks
 
 **Progressive enhancement** - New action types can be added without modifying core routing logic
@@ -139,7 +140,7 @@ When classification is wrong:
 
 **No reminder handler** - The reminder action type is defined but has no handler (action stays in pending)
 
-**Link actions auto-execute** - Link actions with >= 90% confidence auto-execute immediately; all other action types require manual approval
+**High-confidence auto-execution** - Any action type with >= 90% confidence auto-executes immediately without manual approval
 
 **WhatsApp-only notifications** - Success/failure notifications currently only sent via WhatsApp
 

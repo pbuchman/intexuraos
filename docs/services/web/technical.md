@@ -77,6 +77,7 @@ graph TB
 | `935d3210` | Queue-based task messaging (no interrupt)                           | 2026-02-16 |
 | `08dbaf84` | Show sub-issues under parent issues on Linear board                 | 2026-02-14 |
 | `340971a8` | INT-491: Replace text log viewer with xterm.js terminal             | 2026-02-08 |
+| `5fa51f75` | Delete TerminalLogViewer and xterm.js; replace with custom LogStream | 2026-02-17 |
 | `f86bdbf3` | Add webhook secret configuration UI to Linear settings              | 2026-02-08 |
 
 ## Application Structure
@@ -94,7 +95,6 @@ apps/web/src/
 │   ├── LinearIssueSelectorModal.tsx  # Modal for selecting Linear issues
 │   ├── TaskConflictModal.tsx   # 409 conflict resolution modal
 │   ├── TaskErrorModal.tsx      # Error-code-specific modal with actions
-│   ├── TerminalLogViewer.tsx   # xterm.js-based log viewer for code tasks
 │   └── ...
 ├── context/            # React context providers
 │   ├── AuthContext.tsx     # Auth0 authentication wrapper
@@ -265,9 +265,30 @@ The app uses Firestore listeners for real-time updates:
 
 Code tasks support a `executionPhase` field: `design` or `execution`.
 
-- **Design phase:** Task produces a design artifact. When an implementation task is linked (`implementationTaskId`), a `DesignTaskBanner` appears with a link to the implementation task.
-- **Execution phase:** Runs the code changes. The banner label changes to distinguish the two phases.
+- **Design phase:** Task produces a design artifact. When an implementation task is linked (`implementationTaskId`), an `ImplementationLinkBanner` appears (emerald color) linking to the implementation task.
+- **Execution phase:** Runs the code changes. A `DesignTaskBanner` (violet color) links back to the parent design task with the label "DESIGN".
 - **Single-phase tasks:** No banner shown.
+
+## Log Stream
+
+Code task logs render via the `LogStream` component (inline in `CodeTaskViewPage.tsx`). Log lines are color-coded by tag:
+
+| Tag            | Color         |
+| -------------- | ------------- |
+| `[user]`       | cyan          |
+| `[queued]`     | amber         |
+| `[resumed]`    | emerald       |
+| `[prompt]`     | orange        |
+| `[instructions]` | violet      |
+| `[claude]`     | blue          |
+| `[tool]`       | yellow        |
+| `[error]`      | red           |
+| `[done]`       | green         |
+| `[hook]`       | purple        |
+| `[init]`       | cyan          |
+| `[system]`/`[orchestrator]` | slate |
+
+Features: follow mode (auto-scroll), manual scroll override, copy-all-logs button, live indicator, line count. Log data streams from Firestore in real time.
 
 ## State Management
 
@@ -355,7 +376,7 @@ The `actionConfigLoader` reads this at runtime and `ActionItem` renders buttons 
 
 - `getFirestoreClient()` returns the Firestore instance
 - Used for real-time listeners on `actions`, `commands`, `linear-issues`, and code task log collections
-- `TerminalLogViewer` subscribes to Firestore for streaming code task log chunks to xterm.js
+- `useTaskView` subscribes to Firestore for streaming code task log chunks to the `LogStream` component
 - `LinearIssuesPage` listens to Firestore for real-time issue board updates
 
 ## Error Handling
@@ -388,7 +409,7 @@ The `actionConfigLoader` reads this at runtime and `ActionItem` renders buttons 
 - **Dev mode:** When `import.meta.env.DEV` is true (Vite dev server), service URLs use relative API paths (e.g., `/api/code`) proxied by Vite instead of absolute service URLs
 - **DevBar visibility:** Only renders in dev environments (`import.meta.env.DEV`) and on `dev.intexuraos.cloud`; never in production
 - **Chat guest sessions:** Unauthenticated users can use the chat with rate limiting via `X-Guest-Session` header; session ID persists in localStorage
-- **xterm.js terminal:** Code task logs use xterm.js for ANSI color rendering; the terminal component subscribes to Firestore for real-time log chunks
+- **Log stream (no xterm.js):** Code task logs use a custom `LogStream` component (inside `CodeTaskViewPage.tsx`) with CSS color classes per tag — no external terminal library
 - **CodeTaskViewPage keying:** The route mounts `CodeTaskViewPage` with `key={id}` to fully remount when navigating between tasks
 - **PR events lazy loading:** `PREventsPage` loads summaries first via `useGitHubPRSummaries`; individual event details load lazily via `useGitHubPREvents` when a PR group is expanded
 
@@ -404,7 +425,7 @@ The `actionConfigLoader` reads this at runtime and `ActionItem` renders buttons 
 | PWA        | vite-plugin-pwa, workbox            |
 | Icons      | lucide-react                        |
 | Charts     | Vega, Vega-Lite, Vega-Embed         |
-| Terminal   | @xterm/xterm, @xterm/addon-fit      |
+| Log stream | Custom `LogStream` component (CSS color-coded, no external lib) |
 | Markdown   | @uiw/react-md-editor                |
 | HTML parse | rehype-raw (PR event comment bodies)|
 | Deployment | GCS + Cloud Load Balancer           |

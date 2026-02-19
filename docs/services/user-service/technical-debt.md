@@ -26,7 +26,7 @@ Last updated: 2026-02-19
 
 ### Default Model Selector
 
-**Change:** Added `PATCH /users/:uid/settings` endpoint that accepts `{ defaultModel: string }` and persists user LLM preferences to Firestore. Validates the model against `isFastModel()` from `@intexuraos/llm-contract`. Services call the internal `/internal/users/:uid/settings` endpoint to read `llmPreferences.defaultModel` at request time.
+**Change:** Added `PATCH /users/:uid/settings` endpoint that accepts `{ defaultModel: string }` and persists user LLM preferences to Firestore. Validates the model against `isFastModel()` from `@intexuraos/llm-contract`. Services call the internal `/internal/users/:uid/settings` endpoint to read `llmPreferences.defaultModel` at request time. The `GET /users/:uid/settings/llm-keys` response was also extended to include `defaultModel` as a convenience field.
 
 **Files changed:**
 

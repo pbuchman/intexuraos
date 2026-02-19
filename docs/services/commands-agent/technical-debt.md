@@ -40,18 +40,16 @@ Based on code analysis and git history:
 
 **Recommendation:** Use structured output mode when available (Gemini function calling, OpenAI JSON mode).
 
-### 2. Magic numbers for truncation limits
+### 2. Log preview length is a magic number
 
 **File:** `apps/commands-agent/src/infra/llm/classifier.ts`
 
-**Issue:** Title sliced to 100 chars, reasoning to 500 chars without named constants.
+**Issue:** The `.slice(0, 500)` in `rawResponsePreview` log fields uses a bare number for the log preview length. `PWA_SHARED_LINK_CONFIDENCE_BOOST` and Zod-enforced title max (50 chars) are already named constants.
 
-**Recommendation:** Extract to constants:
+**Recommendation:** Extract to a named constant:
 
 ```typescript
-const MAX_TITLE_LENGTH = 100;
-const MAX_REASONING_LENGTH = 500;
-const PWA_SHARED_LINK_CONFIDENCE_BOOST = 0.1;
+const LOG_RESPONSE_PREVIEW_LENGTH = 500;
 ```
 
 ## Resolved Issues (v2.0.0 - v2.1.0)

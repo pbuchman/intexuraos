@@ -110,7 +110,9 @@ All 19 services use this package via `NODE_OPTIONS: '--import @intexuraos/infra-
 
 `actions-agent`, `api-docs-hub`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `code-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `todos-agent`, `user-service`, `web-agent`, `whatsapp-service`
 
-Additionally, `@intexuraos/infra-sentry` imports `buildOtelConfig` and `getInstrumentations` to configure the pino OTel log transport.
+Additionally, `@intexuraos/infra-sentry` imports `buildOtelConfig` and `getInstrumentations` to configure its pino OTel log transport.
+
+**Note on log forwarding:** Pino log forwarding to Dash0 is handled by `@intexuraos/infra-sentry` via `pino-opentelemetry-transport` (direct OTLP HTTP). The `PinoInstrumentation` auto-instrumentation was removed from this package because Node loader hooks conflict with tsx, preventing activation. Log transport configuration lives in `infra-sentry/src/otelTransport.ts`.
 
 ---
 
@@ -133,3 +135,13 @@ packages/infra-otel/
 ```
 
 **Note:** `register.ts` is only compiled to `dist/register.js` and is not re-exported from `"."`. Its body is covered by `/* v8 ignore start -- module-init */` since it requires a live OTel collector for integration testing.
+
+---
+
+## Recent Changes
+
+| Commit     | Description                                                    | When      |
+| ---------- | -------------------------------------------------------------- | --------- |
+| `0338e04f` | Remove PinoInstrumentation; move log forwarding to infra-sentry | 3 days ago |
+| `a49c3889` | Fix register export to point to compiled dist for --import      | 3 days ago |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (initial package creation)  | 3 days ago |

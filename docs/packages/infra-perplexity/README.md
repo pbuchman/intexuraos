@@ -53,13 +53,13 @@ Converts raw Perplexity usage data into `NormalizedUsage`. Always sets `webSearc
 
 ## Exported Types
 
-| Type               | Description                                 |
-| ------------------ | ------------------------------------------- | ------------ |
-| `PerplexityClient` | `Pick<LLMClient, 'research' \               | 'generate'>` |
-| `PerplexityConfig` | Configuration interface                     |
-| `PerplexityError`  | Re-export of `LLMError` from `llm-contract` |
-| `ResearchResult`   | Re-export from `llm-contract`               |
-| `GenerateResult`   | Re-export from `llm-contract`               |
+| Type               | Description                                              |
+| ------------------ | -------------------------------------------------------- |
+| `PerplexityClient` | `Pick<LLMClient, 'research' \| 'generate'>`              |
+| `PerplexityConfig` | Configuration interface                                  |
+| `PerplexityError`  | Re-export of `LLMError` from `@intexuraos/llm-contract`  |
+| `ResearchResult`   | Re-export from `@intexuraos/llm-contract`                |
+| `GenerateResult`   | Re-export from `@intexuraos/llm-contract`                |
 
 ### PerplexityConfig
 
@@ -76,14 +76,14 @@ interface PerplexityConfig {
 
 ### Internal Types (not exported)
 
-| Type                     | Description                                    |
-| ------------------------ | ---------------------------------------------- | ----------- | ------- |
-| `PerplexityRequestBody`  | Request body for the chat completions endpoint |
-| `PerplexityResponse`     | Full JSON response structure                   |
-| `PerplexityUsage`        | Usage including cost breakdown                 |
-| `PerplexityCost`         | Cost breakdown with input/output/request/total |
-| `PerplexitySearchResult` | Search result metadata with title/url/date     |
-| `SearchContextSize`      | `'low' \                                       | 'medium' \  | 'high'` |
+| Type                     | Description                                          |
+| ------------------------ | ---------------------------------------------------- |
+| `PerplexityRequestBody`  | Request body for the chat completions endpoint       |
+| `PerplexityResponse`     | Full JSON response structure                         |
+| `PerplexityUsage`        | Usage including cost breakdown                       |
+| `PerplexityCost`         | Cost breakdown with input/output/request/total       |
+| `PerplexitySearchResult` | Search result metadata with title/url/date           |
+| `SearchContextSize`      | `'low' \| 'medium' \| 'high'`                        |
 
 ## Configuration
 

@@ -181,7 +181,9 @@ sequenceDiagram
 
 | Commit     | Description                                                              | Date       |
 | ---------- | ------------------------------------------------------------------------ | ---------- |
-| `75cc9eb7` | Add linearIssueUrl threading, UI badge improvements                      | 2026-02-19 |
+| `75cc9eb7` | Fix validateIssue label serialization; map LinearLabel[] to string[]     | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting via createLogStream() for PM2 readability    | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (distributed tracing + metrics)      | 2026-02-16 |
 | `3f58c89f` | Switch Linear dashboard to Firestore with parent-child support           | 2026-02-10 |
 | `08dbaf84` | Show subissues under parent issues on Linear board                       | 2026-02-10 |
 | `55dd047d` | Add labels support to Linear Issues view                                 | 2026-02-10 |
@@ -189,8 +191,6 @@ sequenceDiagram
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback + longer timeout  | 2026-02-15 |
 | `1c7d6455` | Fix sync-all 401 by accepting OIDC tokens from Cloud Scheduler           | 2026-02-14 |
 | `151e93d4` | Fix Linear webhook signature validation                                  | 2026-02-10 |
-| `0fa80ae6` | Refactor Linear integration to on-demand fetch                           | 2026-02-08 |
-| `7b2d8d0c` | Unified Linear issue templates and two-phase execution                   | 2026-02-06 |
 
 ### Firestore-First Dashboard (0fa80ae6 + 3f58c89f)
 
@@ -227,6 +227,29 @@ The following use cases previously had no HTTP exposure and are now accessible o
 - `POST /internal/linear/issues/generate-title` — generates a title from a task description
 - `POST /internal/linear/sync-all` — full sync for all connected users (OIDC + internal auth)
 - `POST /internal/linear/sync` — full sync for a specific user (service-to-service)
+
+### Label Serialization Fix at HTTP Boundary (75cc9eb7)
+
+The `GET /internal/linear/issues/:identifier/validate` endpoint previously returned `LinearLabel[]` objects in the `labels` field, which serialized as `"[object Object]"` strings. The fix maps label objects to name strings at the HTTP boundary in `internalRoutes.ts`:
+
+```typescript
+return await reply.ok({
+  ...result.value,
+  labels: result.value.labels.map((l) => l.name),
+});
+```
+
+The domain `ValidatedIssue` type retains `labels: LinearLabel[]` (full objects) — the transformation is only applied at the API surface.
+
+### OpenTelemetry / Dash0 Integration (a52a6bbc)
+
+Distributed tracing, metrics, and log export are now enabled via the `@intexuraos/infra-otel` package. The instrumentation loads transparently via the `--import` Node.js flag:
+
+```dockerfile
+CMD ["node", "--import", "./dist/otel-register.js", "dist/index.js"]
+```
+
+The `OTEL_SERVICE_NAME` env var is set to `linear-agent` in production. When `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset (local development), telemetry is a no-op.
 
 ### Hardcoded Team ID Fixed
 
@@ -694,17 +717,18 @@ The Linear API client includes performance optimizations (INT-95):
 
 ## Configuration
 
-| Variable                              | Required | Description                |
-| ------------------------------------- | -------- | -------------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys  |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth    |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint        |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer               |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience             |
-| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking      |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key    |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key       |
+| Variable                              | Required | Description                              |
+| ------------------------------------- | -------- | ---------------------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys                |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth                  |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source               |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                      |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                             |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                           |
+| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                    |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key                  |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key                     |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint (no-op if unset)     |
 
 ## Dependencies
 
@@ -757,7 +781,8 @@ The Linear API client includes performance optimizations (INT-95):
 - `generateIssueTitle` returns `err()` on LLM failure — no silent degradation
 - Dashboard (`GET /linear/issues`) reads from Firestore; run a full sync if data seems stale
 - `/internal/linear/sync-all` accepts both OIDC Bearer tokens (Cloud Scheduler) and X-Internal-Auth
-- Labels are now full objects `{ id, name, color }` — not plain strings
+- Labels are full objects `{ id, name, color }` internally; `validateIssue` HTTP response maps them to `string[]` (names only)
+- OpenTelemetry instrumentation is transparent — loaded via `--import otel-register.js` at process start
 
 ## File Structure
 

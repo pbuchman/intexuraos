@@ -172,9 +172,11 @@ curl -X POST "https://calendar-agent.intexuraos.com/internal/calendar/process-ac
   -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "actionId": "action-123",
-    "userId": "user-456",
-    "text": "Dentist appointment next Tuesday at 2pm"
+    "action": {
+      "id": "action-123",
+      "userId": "user-456",
+      "title": "Dentist appointment next Tuesday at 2pm"
+    }
   }'
 ```
 
@@ -436,4 +438,4 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-19 (fix processAction request body shape)

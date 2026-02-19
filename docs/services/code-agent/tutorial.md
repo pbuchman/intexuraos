@@ -127,7 +127,7 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-The task progresses through statuses: `dispatched` -> `running` -> `completed` (or `failed`).
+The task progresses through statuses: `dispatched` -> `running` -> `designed` or `implemented` (or `failed`). Tasks never reach a generic `completed` status — they finish as `designed` (Phase 1) or `implemented` (Phase 2).
 
 ### Step 3: List your tasks
 
@@ -171,6 +171,40 @@ curl -X POST http://localhost:8128/code/tasks/<completedTaskId>/feedback \
   -d '{
     "feedback": "The implementation looks good but please add input validation for the limit query parameter."
   }'
+```
+
+### Send a message to a running or ended task
+
+Send mid-session guidance to a running task (queued for next turn) or resume an ended task with new instructions:
+
+```bash
+curl -X POST http://localhost:8128/code/tasks/<taskId>/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{
+    "message": "Also validate that the limit parameter is between 1 and 100."
+  }'
+```
+
+Expected response when task is running (message queued):
+
+```json
+{ "success": true, "data": { "action": "queued" } }
+```
+
+Expected response when task has ended (task resumed):
+
+```json
+{ "success": true, "data": { "action": "resumed" } }
+```
+
+### Query GitHub PR summaries
+
+View the list of PRs with recent activity (30-day window):
+
+```bash
+curl "http://localhost:8128/code/github-pr-summaries" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
 ### Query GitHub PR events

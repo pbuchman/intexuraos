@@ -1,6 +1,6 @@
 # Image Service - Technical Debt
 
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-02-19 (re-run)
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -109,6 +109,26 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### 2026-02-16: Dev-Mode Log Formatting
+
+**Issue:** Raw pino JSON output in PM2 logs was unreadable during local development.
+
+**Resolution:**
+
+- `server.ts` updated to use `createLogStream()` from `@intexuraos/infra-sentry`
+- Colorized format: `service-name | HH:mm:ss | LEVEL | message | {extras}`
+- Applied across all 18 service `server.ts` files via `6063175b`
+
+### 2026-02-15: Gemini Platform Fallback Added
+
+**Issue:** Platform fallback only supported ZAI (GLM-4.7-flash), which was taking 29s for title generation and exceeding the 10s HTTP timeout.
+
+**Resolution:**
+
+- `platformGeminiApiKey` added to `createUserServiceClient()` in `internal-clients`
+- `INTEXURAOS_GEMINI_APP_API_KEY` used as primary fallback before ZAI
+- Gemini 2.5 Flash is now the default platform model for faster responses
 
 ### 2026-02-16: Dash0 OpenTelemetry Integration
 

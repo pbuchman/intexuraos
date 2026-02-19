@@ -98,6 +98,7 @@ sequenceDiagram
 
 | Commit  | Description                                                   | Date       |
 | ------- | ------------------------------------------------------------- | ---------- |
+|         | Add dev-mode log formatting for PM2 readability               | 2026-02-16 |
 |         | Add Dash0 OpenTelemetry integration                           | 2026-02-16 |
 |         | Switch default LLM to Gemini 2.5 Flash + add fallbacks        | 2026-02-15 |
 |         | Standardize API key env vars to APP naming convention         | 2026-02-15 |

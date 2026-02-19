@@ -97,6 +97,7 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 | `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`               | Yes      | Chat Agent OpenAPI URL           |
 | `INTEXURAOS_SENTRY_DSN`                           | No       | Sentry DSN for error tracking    |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`                  | No       | Dash0 OTLP endpoint for log forwarding |
+| `INTEXURAOS_ENVIRONMENT`                          | No       | Runtime environment name passed to Sentry (default: "development") |
 | `PORT`                                            | No       | Server port (default: 8080)      |
 | `HOST`                                            | No       | Server host (default: 0.0.0.0)   |
 

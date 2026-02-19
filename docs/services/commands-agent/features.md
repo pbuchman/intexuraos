@@ -14,21 +14,19 @@ When users send messages through WhatsApp, voice notes, or web sharing, the syst
 
 ## How It Helps
 
-### Structured Classification Pipeline (v2.0.0)
+### Structured Classification Pipeline (v2.0.0+)
 
 Processes commands through a 5-step decision tree that eliminates ambiguity.
 
 **Step 1:** Explicit prefix override - User says "linear: buy groceries" - respect the prefix
 
-**Step 2:** Explicit intent detection - "save bookmark https://research-world.com" - the phrase "save bookmark" overrides the "research" keyword in the URL
+**Step 2:** Explicit intent detection - "save bookmark https://research-world.com" - the phrase "save bookmark" overrides the "research" keyword in the URL. Step 2 also disambiguates `linear` vs `code`: only explicit tracking language ("create issue", "track this") routes to `linear`; all other engineering tasks route to `code`
 
-**Step 3:** Linear detection - Engineering terms like "bug", "issue", "PR" trigger Linear classification
+**Step 3:** Code detection fallback - Engineering tasks that didn't match an explicit phrase in Step 2 still classify as `code` (action verbs: fix, implement, refactor, add, remove, build)
 
 **Step 4:** URL presence check - Any URL strongly suggests link classification
 
-**Step 5:** Category signals - Traditional keyword matching (calendar, reminder, research, note, todo)
-
-**Step 6:** Code detection - Programming-related commands ("fix the login bug", "refactor the auth module") trigger `code` classification
+**Step 5:** Category signals - Traditional keyword matching (calendar, reminder, research, note, todo, code)
 
 **Example:** "save bookmark https://research-world.com" correctly classifies as `link` because Step 2 (explicit "save bookmark") executes before Step 4 (URL presence), and both override the misleading "research" keyword.
 

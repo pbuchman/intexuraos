@@ -152,6 +152,7 @@ None identified.
 | 2026-02-17 | Log duplication on Firestore listener resume       | Added cancellation guard to async effects (`a59e194b`)       |
 | 2026-02-16 | Messages interrupted running tasks                 | Added queue-based messaging without interrupt (`935d3210`)   |
 | 2026-02-14 | Linear sub-issues not visible in board             | Added parent-child indented rendering (`08dbaf84`)           |
+| 2026-02-17 | xterm.js terminal removed; replaced with custom LogStream | Deleted TerminalLogViewer.tsx and xterm.js deps (`5fa51f75`) |
 | 2026-02-08 | Text log viewer lacked ANSI color support          | Replaced with xterm.js terminal (`340971a8`)                 |
 | 2026-02-07 | RefreshIndicator caused layout shifts              | Removed; replaced with inline RefreshCw (`1bc3c44f`)         |
 | 2026-02-07 | UI inconsistencies in Linear issues and code tasks | Fixed in commit `c6ed05c3`                                   |

@@ -42,9 +42,9 @@ Talk to IntexuraOS using natural language through the floating chat bubble. Ask 
 
 Submit code generation tasks with markdown instructions, choose a model (Auto, Opus, or GLM via default model selector), and link to Linear issues. Tasks support a two-phase design/execution flow: when a design task produces an implementation plan, the UI shows a banner linking directly to the implementation task so you can navigate between phases without searching.
 
-Monitor task execution through an xterm.js terminal that streams logs with full ANSI color support. Send follow-up messages in a queue without interrupting the running task. Retry interrupted or failed tasks from the task detail page.
+Monitor task execution through a live log stream that color-codes each log line by type — user messages, prompts, tool calls, errors, and orchestrator output each render in distinct colors. Send follow-up messages in a queue without interrupting the running task. Retry interrupted or failed tasks from the task detail page.
 
-**Example:** You describe a refactoring task, select Auto worker, and submit. The terminal shows live progress. When the design phase completes, a "View implementation task" banner appears. One click takes you to the execution task already in progress.
+**Example:** You describe a refactoring task, select Auto worker, and submit. The log stream shows live progress with color-coded lines. When the design phase completes, a "View implementation task" banner appears. One click takes you to the execution task already in progress.
 
 ### GitHub PR Events
 
@@ -84,7 +84,7 @@ Connect and manage all your external integrations from settings pages. Google Ca
 
 ## Use Case
 
-You wake up and open IntexuraOS on your phone. The inbox shows 5 items from overnight: 3 WhatsApp messages auto-classified as research, todos, and a note, plus 2 calendar actions awaiting approval. You tap approve on the calendar events after verifying times, then review the research report. One tap archives completed items. You check the chat to ask "what's on my plate today?" and get a summary. Then you submit a code task to fix a bug described in a Linear issue, and watch the terminal logs as it runs. When the design phase finishes, you navigate to the implementation task from the banner. You never opened WhatsApp, calendar, GitHub, or a notes app.
+You wake up and open IntexuraOS on your phone. The inbox shows 5 items from overnight: 3 WhatsApp messages auto-classified as research, todos, and a note, plus 2 calendar actions awaiting approval. You tap approve on the calendar events after verifying times, then review the research report. One tap archives completed items. You check the chat to ask "what's on my plate today?" and get a summary. Then you submit a code task to fix a bug described in a Linear issue, and watch the live log stream as it runs. When the design phase finishes, you navigate to the implementation task from the banner. You never opened WhatsApp, calendar, GitHub, or a notes app.
 
 ## Key Benefits
 
@@ -94,7 +94,7 @@ You wake up and open IntexuraOS on your phone. The inbox shows 5 items from over
 - Unified approval workflow across all action types
 - AI chat assistant for natural language interaction (works without login)
 - Code task submission with two-phase design/execution tracking
-- Real-time ANSI terminal logs with follow mode and message queuing
+- Real-time log stream with color-coded lines, follow mode, and message queuing
 - GitHub PR events with lazy loading and HTML comment rendering
 - Linear board with sub-issues, labels, and Firestore real-time updates
 - Saved data visualizations per feed

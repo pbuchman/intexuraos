@@ -54,7 +54,7 @@ graph TB
 
 ## Classification Prompt Structure (v2.0.0+)
 
-The classification prompt in `packages/llm-prompts/src/classification/commandClassifierPrompt.ts` uses a multi-step decision tree executed in strict order:
+The classification prompt in `packages/llm-prompts/src/classification/commandClassifierPrompt.ts` uses a 5-step decision tree executed in strict order:
 
 ### Step 1: Explicit Prefix Override
 
@@ -70,6 +70,13 @@ If message starts with a category keyword (with or without colon), that category
 
 Explicit command phrases override all other signals including URL content.
 
+**Critical: Linear vs Code Disambiguation**
+
+- `linear` — ONLY when the user EXPLICITLY wants to create/track a Linear issue (must include "linear", "issue", "track", "log", or "report")
+- `code` — ANY engineering task describing work to do (fix, implement, design, add, refactor, change, update, build, etc.)
+
+When ambiguous, prefer `code`. Engineering tasks default to code execution. Code actions automatically create a Linear issue, so tracking is never lost.
+
 **English phrases (confidence 0.90+):**
 
 - link: "save bookmark", "save link", "bookmark this"
@@ -78,26 +85,27 @@ Explicit command phrases override all other signals including URL content.
 - note: "create note", "save note", "write note"
 - reminder: "set reminder", "remind me"
 - calendar: "schedule", "add to calendar", "book appointment"
-- linear: "create issue", "add bug", "report issue"
+- linear (explicit tracking intent): "create issue", "report bug", "track this", "log this bug"
+- code (default for engineering): "fix X", "implement X", "refactor X", "add X", "build X"
 
 **Polish phrases:**
 
-- link: "zapisz link", "dodaj zakladke"
+- link: "zapisz link", "dodaj zakładkę"
 - todo: "stwórz zadanie", "dodaj zadanie"
-- research: "zbadaj", "sprawdz", "przeprowadz research"
-- note: "stwórz notatke", "zapisz notatke"
+- research: "zbadaj", "sprawdź", "przeprowadź research"
+- note: "stwórz notatkę", "zapisz notatkę"
 - reminder: "przypomnij mi"
 - calendar: "zaplanuj", "dodaj do kalendarza"
-- linear: "zglos blad", "stwórz issue", "dodaj do lineara"
+- linear: "zgłoś błąd", "stwórz issue", "dodaj do lineara"
 
-### Step 3: Linear Detection
+### Step 3: Code Detection (Engineering Task Fallback)
 
-Engineering context triggers linear classification:
+Engineering tasks that didn't match an explicit phrase in Step 2 classify as `code`.
 
-- Keywords: bug, issue, ticket, feature request, PR, pull request
-- Phrases: "add to linear", "create linear issue", "in linear"
+- Action verbs: fix, implement, design, add, remove, refactor, change, update, build
+- Bug descriptions, feature descriptions
 
-**Exception:** Math/science context ("linear regression", "linear algebra") excluded.
+**Exception:** Math/science context ("linear regression", "linear algebra") → `research`, not `linear`.
 
 ### Step 4: URL Presence Check
 
