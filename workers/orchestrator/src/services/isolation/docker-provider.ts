@@ -19,6 +19,8 @@ export interface DockerProviderConfig {
   managedAttemptsMode: boolean;
   workerReadyTimeoutMs?: number;
   sharedCredsPath?: string;
+  gitUserName?: string;
+  gitUserEmail?: string;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -340,6 +342,13 @@ export class DockerProvider implements IsolationProvider {
 
       if (workerTypeConfig.model !== undefined) {
         env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
+      }
+
+      if (this.config.gitUserName !== undefined) {
+        env.push(`GIT_USER_NAME=${this.config.gitUserName}`);
+      }
+      if (this.config.gitUserEmail !== undefined) {
+        env.push(`GIT_USER_EMAIL=${this.config.gitUserEmail}`);
       }
       /* v8 ignore stop @preserve */
 

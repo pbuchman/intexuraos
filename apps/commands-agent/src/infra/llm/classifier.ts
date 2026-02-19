@@ -37,6 +37,7 @@ export function createGeminiClassifier(client: LlmGenerateClient, logger: Logger
         confidence: adjustedConfidence,
         title: parsed.title,
         reasoning: adjustedReasoning,
+        promptVersion: commandClassifierPrompt.version,
       };
     },
   };

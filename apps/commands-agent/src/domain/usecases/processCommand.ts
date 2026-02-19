@@ -219,6 +219,7 @@ export function createProcessCommandUseCase(deps: {
           type: classification.type,
           confidence: classification.confidence,
           reasoning: classification.reasoning,
+          promptVersion: classification.promptVersion,
           classifiedAt: new Date().toISOString(),
         };
         command.actionId = action.id;

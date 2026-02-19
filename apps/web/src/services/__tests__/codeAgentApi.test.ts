@@ -136,7 +136,7 @@ describe('codeAgentApi', () => {
   });
 
   describe('submitCodeTask', () => {
-    it('submits a new task with minimal request', async () => {
+    it('submits a new task with minimal request and 90s timeout', async () => {
       const { apiRequest } = await import('../apiClient.js');
       const mockResponse = { status: 'submitted' as const, codeTaskId: 'new-task-id' };
       vi.mocked(apiRequest).mockResolvedValue(mockResponse);
@@ -150,6 +150,7 @@ describe('codeAgentApi', () => {
         {
           method: 'POST',
           body: { prompt: 'Build feature X' },
+          timeout: 90000,
         }
       );
       expect(result).toEqual(mockResponse);
@@ -175,11 +176,12 @@ describe('codeAgentApi', () => {
         {
           method: 'POST',
           body: request,
+          timeout: 90000,
         }
       );
     });
 
-    it('submits task with workerLocation', async () => {
+    it('submits task with workerLocation and 90s timeout', async () => {
       const { apiRequest } = await import('../apiClient.js');
       const mockResponse = { status: 'submitted' as const, codeTaskId: 'task-456' };
       vi.mocked(apiRequest).mockResolvedValue(mockResponse);
@@ -198,9 +200,21 @@ describe('codeAgentApi', () => {
         {
           method: 'POST',
           body: request,
+          timeout: 90000,
         }
       );
       expect(result).toEqual(mockResponse);
+    });
+
+    it('passes 90s timeout to apiRequest for submit call', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      vi.mocked(apiRequest).mockResolvedValue({ status: 'submitted', codeTaskId: 'task-789' });
+
+      await submitCodeTask(mockAccessToken, { prompt: 'Test timeout' });
+
+      const callArgs = vi.mocked(apiRequest).mock.calls[0];
+      const options = callArgs?.[3] as { timeout?: number } | undefined;
+      expect(options?.timeout).toBe(90000);
     });
   });
 

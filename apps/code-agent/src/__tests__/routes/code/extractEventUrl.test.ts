@@ -56,6 +56,29 @@ describe('extractEventUrl', () => {
     it('should return null when pull_request is missing', () => {
       expect(extractEventUrl('pull_request', {})).toBeNull();
     });
+
+    it('should return compare URL for synchronize events with before/after SHAs', () => {
+      const payload = {
+        before: 'abc1234',
+        after: 'def5678',
+        repository: { full_name: 'intexuraos/intexuraos' },
+        pull_request: { html_url: 'https://github.com/intexuraos/intexuraos/pull/42' },
+      };
+      expect(extractEventUrl('pull_request', payload)).toBe(
+        'https://github.com/intexuraos/intexuraos/compare/abc1234...def5678'
+      );
+    });
+
+    it('should fall back to PR URL when before/after present but repository missing', () => {
+      const payload = {
+        before: 'abc1234',
+        after: 'def5678',
+        pull_request: { html_url: 'https://github.com/org/repo/pull/42' },
+      };
+      expect(extractEventUrl('pull_request', payload)).toBe(
+        'https://github.com/org/repo/pull/42'
+      );
+    });
   });
 
   describe('push', () => {

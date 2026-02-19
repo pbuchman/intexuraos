@@ -124,6 +124,7 @@ export class FakeClassifier implements Classifier {
     confidence: 0.9,
     title: 'Test Task',
     reasoning: 'Contains task-related keywords indicating a todo item',
+    promptVersion: '1.0.0',
   };
   private failNext = false;
 

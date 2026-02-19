@@ -33,6 +33,19 @@ export function extractEventUrl(eventType: string, payload: unknown): string | n
       return getString(review, 'html_url');
     }
     case 'pull_request': {
+      // For synchronize events, build a compare URL from before/after SHAs
+      const before = getString(payload, 'before');
+      const after = getString(payload, 'after');
+      if (before !== null && after !== null) {
+        const repo = payload['repository'];
+        if (isObject(repo)) {
+          const fullName = getString(repo, 'full_name');
+          if (fullName !== null) {
+            return `https://github.com/${fullName}/compare/${before}...${after}`;
+          }
+        }
+      }
+      // Fallback to PR URL for other actions (opened, closed, etc.)
       const pr = payload['pull_request'];
       if (!isObject(pr)) return null;
       return getString(pr, 'html_url');
