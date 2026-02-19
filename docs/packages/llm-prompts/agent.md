@@ -27,6 +27,8 @@ interface PromptDeps {
 interface PromptBuilder<TInput, TDeps extends PromptDeps = PromptDeps> {
   readonly name: string;
   readonly description: string;
+  /** Semver string (MAJOR.MINOR.PATCH). CI-enforced via verify:prompt-versions. */
+  readonly version: string;
   build(input: TInput, deps?: TDeps): string;
 }
 ```
@@ -101,6 +103,7 @@ function buildInferResearchContextPrompt(/* ... */): string;
 function buildResearchContextRepairPrompt(/* ... */): string;
 function buildModelExtractionPrompt(/* ... */): string;
 function parseModelExtractionResponse(/* ... */): ModelExtractionResponse | null;
+function parseModelExtractionResponseWithLogging(logger: Logger, /* ... */): ModelExtractionResponse | null;
 function parseAttributionLine(line: string): AttributionLine | null;
 function parseSections(content: string): ParsedSection[];
 function buildSourceMap(/* ... */): Map<SourceId, SourceMapItem>;
@@ -128,6 +131,7 @@ function buildInsightRepairPrompt(/* ... */): string;
 
 // approvals/
 function parseApprovalIntentResponse(/* ... */): ApprovalIntentResponse | null;
+function parseApprovalIntentResponseWithLogging(logger: Logger, /* ... */): ApprovalIntentResponse | null;
 
 // calendar/
 function buildCalendarExtractionRepairPrompt(/* ... */): string;

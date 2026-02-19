@@ -12,6 +12,7 @@ Executing autonomous AI code tasks against a real codebase requires solving seve
 4. **Observability** - Long-running autonomous tasks (up to 2 hours) need real-time log streaming and heartbeat monitoring
 5. **Reliability** - Crash recovery, webhook retry queues, and state persistence across restarts are essential for unattended operation
 6. **Two-phase execution** - Not every task should jump straight to code; some need design validation first
+7. **Completion verification** - LLM hallucinations and partial outputs must be detected and retried automatically before reporting success
 
 ## How It Helps
 
@@ -23,6 +24,7 @@ The orchestrator runs on a local machine (macOS) behind a Cloudflare Tunnel and 
 4. **Real-time log forwarding** - Container stdout streams to the code-agent via chunked, HMAC-signed HTTP uploads at 3-second intervals
 5. **Crash-safe state** - Atomic JSON file persistence, pending webhook queues with 24-hour TTL, and startup recovery that notifies code-agent of interrupted tasks
 6. **System prompt phases** - Linear issue labels determine whether a worker enters Phase 1 (design and validation) or Phase 2 (strict autonomous execution)
+7. **LLM-backed completion verification** - After each attempt, Gemini 2.5 Flash evaluates deterministic signals (exit code, PHASE1/PHASE2_FINAL contract blocks, PR presence, CI status) and task logs; failing verifications trigger automatic follow-up attempts up to a configurable limit
 
 ## Use Cases
 
@@ -67,7 +69,7 @@ The orchestrator supports configurable capacity (default: 2 concurrent tasks):
 | Git worktree management   | Creates and removes isolated worktrees per task                                               |
 | HMAC request signing      | Nonce + timestamp + HMAC-SHA256 verification on all dispatch requests                         |
 | Heartbeat monitoring      | Sends running task IDs to code-agent every 10 minutes for zombie detection                    |
-| Log forwarding            | Streams container output in 8KB chunks with batched uploads                                   |
+| Log forwarding            | Streams container output in 64KB chunks with batched uploads, ANSI stripping, and 4MB cap     |
 | Webhook delivery          | HMAC-signed callbacks with 3 retries, exponential backoff, and pending queue                  |
 | State persistence         | Atomic JSON file with corruption recovery and orphan detection                                |
 | Token refresh             | GitHub installation tokens refreshed every 5 minutes (service) and 30 minutes (per-container) |
@@ -75,6 +77,11 @@ The orchestrator supports configurable capacity (default: 2 concurrent tasks):
 | Sensitive file guard      | Reverts commits that touch `.env`, `.pem`, `credentials.json`, and other secrets              |
 | System prompt phases      | Phase 1 (design) vs Phase 2 (execution) based on Linear issue labels                          |
 | Startup recovery          | Detects interrupted tasks and notifies code-agent on restart                                  |
+| Turn metrics collection   | Collects per-task CPU time, peak memory, token counts, and time classification from cgroups and session JSONL |
+| LLM audit logging         | Appends structured LLM call records to a local JSONL file via `OrchestratorFileAuditSink`     |
+| Completion verification   | Gemini 2.5 Flash verifier checks phase contract blocks, PR presence, and CI status after each attempt; automatically continues up to `maxAttempts` |
+| Mid-task message injection | `POST /tasks/:id/message` queues messages for running tasks or resumes finished tasks with a new session |
+| Git identity propagation  | Host git config (user.name/email) is read at startup and injected into worker containers for correct commit authorship |
 
 ## Worker Types
 
@@ -90,7 +97,7 @@ The orchestrator supports configurable capacity (default: 2 concurrent tasks):
 - **Security by default** - Containers drop all capabilities, secrets are read-only mounts, and rootfs writes are constrained to tmpfs
 - **Crash resilience** - Interrupted tasks are recovered on startup; pending webhooks survive restarts
 - **Cost flexibility** - Choose between Anthropic and ZAI providers per task
-- **Observable** - Real-time logs, heartbeats, and structured JSON logging to file
+- **Observable** - Real-time logs, heartbeats, per-task turn metrics, and structured JSON logging to file
 
 ## Limitations
 
@@ -98,5 +105,7 @@ The orchestrator supports configurable capacity (default: 2 concurrent tasks):
 - Requires Docker daemon on the host
 - GitHub private key must be accessible via GCP Secret Manager or environment variable
 - Cloudflare Tunnel required for code-agent to reach the orchestrator
-- Maximum task duration is 2 hours (hard timeout with SIGKILL)
+- Maximum task duration is 2 hours per attempt (hard timeout with SIGKILL); multi-attempt tasks multiply this
 - No hot-reload of the claude-worker Docker image; running containers use the image they started with
+- Completion verification requires Gemini API access; verifier unavailability fails the task rather than allowing unverified completion
+- Turn metrics collection reads Linux cgroup v2 paths and returns zero values on macOS

@@ -147,6 +147,31 @@ If Sentry itself fails, the error handler logs a warning and continues respondin
 
 ---
 
+### `createLogStream(): ReturnType<typeof pino.multistream>`
+
+Create the appropriate Pino log stream for the current environment. This is the recommended way to configure the Fastify logger stream in `server.ts`.
+
+```typescript
+import { createLogStream } from '@intexuraos/infra-sentry';
+
+const app = Fastify({
+  logger: {
+    level: 'info',
+    stream: createLogStream(),
+  },
+});
+```
+
+Behavior:
+- **Development (`NODE_ENV=development`):** Formatted, colorized output via `createDevOutputStream`. Format: `HH:mm:ss | LEVEL | service-name | message | key=val pairs`
+- **Production:** Raw JSON to stdout (`pino.destination` async, Cloud Logging compatible)
+- **Both modes:** Sentry stream attached when `INTEXURAOS_SENTRY_DSN` is set
+- **OTel transport:** `pino-opentelemetry-transport` stream added when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is set (routes logs to Dash0 via OTLP)
+
+This function replaces the 3-line boilerplate previously required in every `server.ts`.
+
+---
+
 ### `sendToSentry(level, message, context?): void`
 
 Manually send an error or warning to Sentry outside of the automatic log integration.
@@ -181,8 +206,9 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 | ------------------------- | ------------------------------------------------------ |
 | `@intexuraos/common-core` | `getLogLevel`, `serializeError`, `Logger`              |
 | `@sentry/node`            | Sentry SDK (`init`, `captureException`, etc.)          |
-| `fastify`                 | Type definitions for `FastifyInstance`, `FastifyError` |
-| `pino`                    | Logger creation and multistream API                    |
+| `fastify`                      | Type definitions for `FastifyInstance`, `FastifyError` |
+| `pino`                         | Logger creation and multistream API                    |
+| `pino-opentelemetry-transport` | Pino transport that forwards logs to Dash0 via OTLP    |
 
 ---
 
@@ -218,13 +244,13 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 
 | Commit     | Description                                            | When    |
 | ---------- | ------------------------------------------------------ | ------- |
-| `f10ebdbf` | Fix empty error objects in log output                  | 7 days  |
-| `44017d5c` | Fix ESLint OOM with batched parallel lint runner       | 7 days  |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)      | 8 days  |
-| `7872eabb` | Phase 2: Fix v8-ignore script and begin coverage work  | 8 days  |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps | 9 days  |
-| `766ae429` | Add tests for branch coverage gaps in packages         | 13 days |
-| `4fa0fed3` | Release v2.0.0                                         | 2 weeks |
+| `0338e04f` | Route pino logs to Dash0 via pino-opentelemetry-transport | Recent |
+| `620afa4b` | Rework dev log format to time \| level \| name \| msg \| key=val | Recent |
+| `6063175b` | Add dev-mode log formatting for PM2 readability        | Recent  |
+| `f10ebdbf` | Fix empty error objects in log output                  | 3 weeks |
+| `44017d5c` | Fix ESLint OOM with batched parallel lint runner       | 3 weeks |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps | 4 weeks |
+| `4fa0fed3` | Release v2.0.0                                         | 5 weeks |
 
 ---
 
@@ -247,14 +273,20 @@ packages/infra-sentry/
     index.ts                          # Package entry: re-exports all public API
     init.ts                           # initSentry(), SentryConfig
     transport.ts                      # createSentryStream(), sendToSentry(), isSentryConfigured(), createSentryTransport()
-    transport-types.d.ts              # LogEvent, TransportDestination type definitions
+    transport-types.d.ts              # LogEvent, TransportDestination [unused, legacy]
     fastify.ts                        # setupSentryErrorHandler(), sanitizeHeaders()
     appLogger.ts                      # createAppLogger(), AppLoggerConfig
+    logStream.ts                      # createLogStream() — unified stream factory
+    devStream.ts                      # createDevOutputStream() — colorized dev-mode formatter
+    otelTransport.ts                  # getOtelTransport() — pino-opentelemetry-transport singleton
     __tests__/
       init.test.ts                    # Tests for initSentry
       transport.test.ts               # Tests for stream and transport functions
       fastify.test.ts                 # Tests for Fastify error handler
       appLogger.test.ts               # Tests for createAppLogger
+      logStream.test.ts               # Tests for createLogStream
+      devStream.test.ts               # Tests for createDevOutputStream
+      otelTransport.test.ts           # Tests for getOtelTransport singleton
   package.json
   tsconfig.json
 ```

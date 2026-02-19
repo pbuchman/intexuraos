@@ -62,11 +62,11 @@ Converts raw Anthropic usage data into the standardized `NormalizedUsage` format
 
 ```ts
 interface ClaudeConfig {
-  apiKey: string; // Anthropic API key
-  model: string; // e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5'
-  userId: string; // User ID for usage tracking
+  apiKey: string;   // Anthropic API key
+  model: string;    // e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5'
+  userId: string;   // User ID for usage tracking
   pricing: ModelPricing; // Cost configuration per million tokens
-  logger: Logger; // Pino logger for structured logging
+  logger: Logger;   // Pino logger for structured logging
 }
 ```
 
@@ -100,6 +100,14 @@ All methods return `Result<T, ClaudeError>`. Error mapping:
 | Message contains "timeout" | `TIMEOUT`      | Request timed out        |
 | Other `APIError`           | `API_ERROR`    | General API error        |
 
+## Implementation Notes
+
+- **Cache tracking:** The Anthropic SDK does not expose `cache_read_input_tokens` and `cache_creation_input_tokens` as typed fields. These are extracted via `as` casts on the usage object.
+- **Web search:** Uses the `web_search_20250305` tool type, passed with `as const` assertions to satisfy the SDK's type union.
+- **Source extraction:** URLs are extracted both from text block content (regex) and from `web_search_tool_result` blocks.
+- **Audit sink:** Unlike other LLM clients, this client does not accept injectable `auditSink`/`usageSink` — it uses the default Firestore sinks.
+- **MAX_TOKENS:** Hardcoded to 8192.
+
 ## Cross-Cutting Concerns
 
 - **Audit trail:** Every request creates an `AuditContext` via `@intexuraos/llm-audit`
@@ -113,11 +121,22 @@ All methods return `Result<T, ClaudeError>`. Error mapping:
 | `research-agent` | Research operations          |
 | `user-service`   | API key validation and usage |
 
+## Dependencies
+
+| Package                      | Role                                                   |
+| ---------------------------- | ------------------------------------------------------ |
+| `@anthropic-ai/sdk` ^0.52.0  | Anthropic Messages API client                          |
+| `@intexuraos/common-core`    | `Result` types, `getErrorMessage`, `Logger`            |
+| `@intexuraos/llm-contract`   | `LLMClient` interface, `NormalizedUsage`, `ModelPricing` |
+| `@intexuraos/llm-prompts`    | `buildResearchPrompt`                                  |
+| `@intexuraos/llm-audit`      | `createAuditContext`                                   |
+| `@intexuraos/llm-pricing`    | `createUsageLogger`                                    |
+
 ## Recent Changes
 
 | Commit     | Description                                       | When        |
 | ---------- | ------------------------------------------------- | ----------- |
-| `51b4a325` | Migrate LLM clients to UsageLogger class          | 2 weeks ago |
-| `8aad9098` | Migrate imports and delete llm-common             | 2 weeks ago |
-| `816afa55` | Add ESLint rule to ban optional logger parameters | 3 weeks ago |
-| `6ec4205e` | Make logger mandatory in all LLM configs          | 3 weeks ago |
+| `51b4a325` | Migrate LLM clients to UsageLogger class          | 4 weeks ago |
+| `8aad9098` | Migrate imports and delete llm-common             | 4 weeks ago |
+| `816afa55` | Add ESLint rule to ban optional logger parameters | 5 weeks ago |
+| `6ec4205e` | Make logger mandatory in all LLM configs          | 5 weeks ago |

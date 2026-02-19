@@ -2,12 +2,14 @@
 
 ## Identity
 
-- **Package:** `@intexuraos/infra-glm`
-- **Version:** 2.1.0
-- **Purpose:** Zai GLM API wrapper implementing `LLMClient` via OpenAI SDK
-- **Provider constant:** `LlmProviders.Zai`
-- **External SDK:** `openai` ^6.15.0 (with custom baseURL)
-- **API Base:** `https://api.z.ai/api/paas/v4/`
+| Attribute | Value                                                            |
+| --------- | ---------------------------------------------------------------- |
+| Package   | `@intexuraos/infra-glm`                                          |
+| Version   | 2.1.0                                                            |
+| Purpose   | Zai GLM API wrapper implementing `LLMClient` via OpenAI SDK      |
+| Provider  | `LlmProviders.Zai`                                               |
+| SDK       | `openai` ^6.15.0 (with custom baseURL)                           |
+| API Base  | `https://api.z.ai/api/paas/v4/`                                  |
 
 ## Exports
 
@@ -40,15 +42,20 @@ interface GlmConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
+  auditSink?: AuditSink;  // defaults to Firestore audit sink
+  usageSink?: UsageSink;  // defaults to Firestore usage sink
 }
 
 // GlmError = LLMError from @intexuraos/llm-contract
-type GlmError = { code: LLMErrorCode; message: string };
+type GlmError = {
+  code: 'INVALID_KEY' | 'RATE_LIMITED' | 'OVERLOADED' | 'CONTEXT_LENGTH' | 'TIMEOUT' | 'CONTENT_FILTERED' | 'API_ERROR';
+  message: string;
+};
 ```
 
 ## Usage Patterns
 
-### Create client and run research
+### Research with web search
 
 ```ts
 import { createGlmClient } from '@intexuraos/infra-glm';
@@ -57,13 +64,20 @@ const client = createGlmClient({
   apiKey: env.INTEXURAOS_GLM_API_KEY,
   model: 'glm-4.7',
   userId,
-  pricing: { inputPricePerMillion: 0.6, outputPricePerMillion: 2.2, webSearchCostPerCall: 0.005 },
+  pricing: {
+    inputPricePerMillion: 0.6,
+    outputPricePerMillion: 2.2,
+    webSearchCostPerCall: 0.005,
+  },
   logger,
 });
 
 const result = await client.research('query');
 if (result.ok) {
   // result.data: { content: string, sources: string[], usage: NormalizedUsage }
+  // sources: extracted from web_search tool call results
+  // usage.webSearchCalls: count of web_search tool invocations
+  // usage.cacheTokens: present when prompt_tokens_details.cached_tokens > 0
 }
 ```
 
@@ -81,30 +95,45 @@ if (result.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED': // 429
-    case 'INVALID_KEY': // 401
-    case 'OVERLOADED': // 500+
-    case 'CONTEXT_LENGTH': // context_length_exceeded
-    case 'CONTENT_FILTERED': // sensitive/filtered content
-    case 'TIMEOUT': // timeout
-    case 'API_ERROR': // general error
+    case 'RATE_LIMITED':     // 429 — retry with backoff
+    case 'INVALID_KEY':      // 401 — do not retry
+    case 'OVERLOADED':       // 500+ — retry after delay
+    case 'CONTEXT_LENGTH':   // context_length_exceeded — reduce prompt
+    case 'CONTENT_FILTERED': // sensitive/filtered — do not retry
+    case 'TIMEOUT':          // retry
+    case 'API_ERROR':        // log and handle
   }
 }
 ```
 
 ## Dependencies
 
-- `@intexuraos/common-core` -- Result types, getErrorMessage, Logger
-- `@intexuraos/llm-contract` -- LLMClient, NormalizedUsage, TokenUsage, ModelPricing
-- `@intexuraos/llm-prompts` -- buildResearchPrompt
-- `@intexuraos/llm-audit` -- createAuditContext
-- `@intexuraos/llm-pricing` -- createUsageLogger
+| Package                    | Role                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                        |
+| `@intexuraos/llm-contract` | LLMClient, NormalizedUsage, TokenUsage, ModelPricing         |
+| `@intexuraos/llm-prompts`  | buildResearchPrompt                                          |
+| `@intexuraos/llm-audit`    | createAuditContext, AuditSink                                |
+| `@intexuraos/llm-pricing`  | createUsageLogger, UsageSink                                 |
 
 ## Constants
 
-- `MAX_TOKENS`: 8192
-- `GLM_API_BASE`: `https://api.z.ai/api/paas/v4/`
+| Constant       | Value                              |
+| -------------- | ---------------------------------- |
+| `MAX_TOKENS`   | 8192                               |
+| `GLM_API_BASE` | `https://api.z.ai/api/paas/v4/`    |
+
+## Constraints
+
+**Do NOT:**
+- Call `generateImage` — not implemented on this client
+- Expect OpenAI-standard tool type safety — GLM uses custom `web_search` tool via `unknown` cast
+- Pass `reasoningTokens` to `normalizeUsage` as a non-undefined value — always pass `undefined` (parameter exists for API compatibility but GLM does not expose reasoning tokens)
+
+**Requires:**
+- Valid `INTEXURAOS_GLM_API_KEY` environment variable
+- `logger` field on config (mandatory, enforced by ESLint)
 
 ## Implementation Detail
 
-Uses `openai` SDK with `baseURL: GLM_API_BASE` to communicate with Zai's OpenAI-compatible API. Web search is a custom tool type (`type: 'web_search'`) not part of OpenAI's type definitions.
+Uses `openai` SDK with `baseURL: GLM_API_BASE`. The GLM `web_search` tool type is not part of OpenAI's type definitions and is cast through `unknown` at the call site. Source URLs are extracted from `toolCall.web_search.search_result[].link` in the response.

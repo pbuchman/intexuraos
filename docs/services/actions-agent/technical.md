@@ -4,11 +4,11 @@
 
 Actions-agent is the central action lifecycle management service for IntexuraOS. It receives classified commands from
 commands-agent, maintains action state in Firestore, routes actions to appropriate handlers via Pub/Sub, and tracks
-execution status. In v2.0.0, it gained WhatsApp approval reply handling with LLM-based intent classification and
-atomic status transitions to prevent race conditions. In v2.1.0, it migrated to the centralized
-`@intexuraos/internal-clients/user-service` package for improved code quality and consistency. In v3.0.0, it added
-the `code` action type for dispatching Claude Code tasks via code-agent, interactive WhatsApp button approvals with
-nonce-based validation, response contract standardization, and 100% branch coverage enforcement.
+execution status. In v2.0.0, it gained WhatsApp approval handling with atomic status transitions to prevent race
+conditions. In v2.1.0, it migrated to the centralized `@intexuraos/internal-clients/user-service` package. In v3.0.0,
+it added the `code` action type for dispatching Claude Code tasks via code-agent. In v4.0.0 (INT-524), the LLM
+classification layer was removed entirely — all approval intents are now resolved deterministically via WhatsApp
+interactive buttons.
 
 ## Architecture
 
@@ -41,7 +41,7 @@ graph TB
         COH --> COA[Code Agent]
 
         AA --> WAP[WhatsApp Publisher]
-        WAP --> WUser[WhatsApp Notification]
+        WAP --> WUser[WhatsApp Notification + Buttons]
 
         WA -->|"action.approval.reply<br/>Pub/Sub event"| AA
     end
@@ -51,21 +51,21 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                | Date       |
-| ---------- | ---------------------------------------------------------- | ---------- |
-| `44017d5c` | INT-473 Fix ESLint OOM with batched parallel lint runner   | 2026-02-01 |
-| `d713d754` | INT-156 Fix ActionDoc missing approvalNonce fields         | 2026-01-31 |
-| `96258560` | INT-427 100% branch coverage enforcement                   | 2026-01-31 |
-| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement (Phase 3)  | 2026-01-31 |
-| `46c026cc` | Fix apps HTTP clients to unwrap response contract          | 2026-01-31 |
-| `9723dc24` | Standardize DELETE endpoints to return consistent contract | 2026-01-30 |
-| `c3198407` | Fix all 132 response contract violations across codebase   | 2026-01-30 |
-| `f08f890e` | Improve handleApprovalReply branch coverage to 98.23%      | 2026-01-30 |
-| `39b6be5b` | Fix duplicate Pub/Sub events on action creation            | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps     | 2026-01-30 |
-| `3a83941d` | INT-424 Fix code review issues from PR #616                | 2026-01-30 |
-| `95468bd9` | INT-422 Fix Polish date parsing in calendar actions        | 2026-01-29 |
-| `19f9a081` | Fix action payload serialization in API responses          | 2026-01-29 |
+| Commit     | Description                                                               | Date       |
+| ---------- | ------------------------------------------------------------------------- | ---------- |
+| `884bc168` | Add semver versioning to PromptBuilder; auto-execute now applies all types | 2026-02-19 |
+| `e60eafc1` | Rename INTEXURAOS_GUEST_ZAI_API_KEY → INTEXURAOS_ZAI_APP_API_KEY         | 2026-02-15 |
+| `c72b7c53` | Add INTEXURAOS_GEMINI_APP_API_KEY for Gemini fallback in user service client | 2026-02-15 |
+| `d81ee125` | Fix view-task button URL: /#/tasks/ → /#/code-tasks/                     | 2026-02-15 |
+| `d7c6a061` | Add consistent icons to all WhatsApp approval/notification messages       | 2026-02-10 |
+| `32e6e641` | Ack deleted actions in approval reply, notify via WhatsApp                | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                       | 2026-02-16 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                           | 2026-02-16 |
+| `0a6b7b8f` | Normalize cancel-with-nonce error codes to UPPER_CASE                     | 2026-02-10 |
+| `090e1d9d` | INT-524 Unified interactive approval buttons (removed LLM + nonces)       | 2026-02-09 |
+| `0f69a74b` | Add default model selector with platform Zai/Gemini fallback              | 2026-02-09 |
+| `44017d5c` | INT-473 Fix ESLint OOM with batched parallel lint runner                  | 2026-02-01 |
+| `d713d754` | INT-156 Fix ActionDoc missing approvalNonce fields                        | 2026-01-31 |
 
 ## Data Flow
 
@@ -90,33 +90,28 @@ sequenceDiagram
     AA->>PS: Publish action.created
     PS->>Handler: Push to /internal/actions/process
     Handler->>FS: updateStatusIf(awaiting_approval, pending)
-    Handler->>AA: Send WhatsApp approval notification
-    AA->>WA: WhatsApp message with correlationId
+    Handler->>AA: Send WhatsApp notification with buttons
+    User->>WA: Tap "Approve" button
 ```
 
-### Approval Reply Flow (New in v2.0.0)
+### Approval Reply Flow (v2.0.0, buttons-only in v4.0.0)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant WA as WhatsApp Service
     participant AA as Actions Agent
-    participant LLM as LLM Service
     participant FS as Firestore
-    participant PS as Pub/Sub
     participant Target as Target Service
 
-    User->>WA: Reply "yes" to approval message
+    User->>WA: Tap "Approve" button (buttonId: "approve:{actionId}")
     WA->>PS: Publish action.approval.reply
     PS->>AA: Push to /internal/actions/approval-reply
-    AA->>FS: Get action by replyToWamid or actionId
-    AA->>LLM: Classify intent (approve/reject/unclear)
-    LLM-->>AA: intent: approve
+    AA->>FS: Get action by actionId
     AA->>FS: updateStatusIf(pending, awaiting_approval)
     Note over AA,FS: Atomic transaction prevents race condition
-    AA->>WA: "Approved! Processing your research..."
-    AA->>PS: Publish action.created event
-    PS->>Target: Execute action
+    AA->>WA: "✅ Approved! Processing your research..."
+    AA->>Target: Execute action directly (or publish action.created)
 ```
 
 ## API Endpoints
@@ -141,41 +136,43 @@ sequenceDiagram
 | POST   | `/internal/actions/:actionType`    | Process action from Pub/Sub (type-specific)      | Pub/Sub OIDC            |
 | POST   | `/internal/actions/process`        | Process action from Pub/Sub (unified)            | Pub/Sub OIDC            |
 | POST   | `/internal/actions/retry-pending`  | Retry actions stuck in pending (Cloud Scheduler) | OIDC or Internal        |
-| POST   | `/internal/actions/approval-reply` | Handle WhatsApp approval replies (v2.0.0)        | Pub/Sub OIDC            |
+| POST   | `/internal/actions/approval-reply` | Handle WhatsApp button taps (v2.0.0)             | Pub/Sub OIDC            |
 
 ## Domain Models
 
 ### Action
 
-| Field                    | Type                    | Description                                       |
-| ------------------------ | ----------------------- | ------------------------------------------------- |
-| `id`                     | string (UUID)           | Unique action identifier                          |
-| `userId`                 | string                  | User who owns the action                          |
-| `commandId`              | string                  | Original command ID from commands-agent           |
-| `type`                   | ActionType              | Classification result                             |
-| `confidence`             | number (0-1)            | Classification confidence score                   |
-| `title`                  | string                  | Action title/description                          |
-| `status`                 | ActionStatus            | Current lifecycle state                           |
-| `payload`                | Record<string, unknown> | Action-specific data                              |
-| `resource_status`        | ResourceStatus (opt)    | Status of associated resource (e.g., code task)   |
-| `resource_error`         | string (optional)       | Error message from resource execution             |
-| `approvalNonce`          | string (optional)       | 4-char hex nonce for code action approvals        |
-| `approvalNonceExpiresAt` | string (optional)       | Nonce expiration timestamp (ISO 8601, 15-min TTL) |
-| `createdAt`              | string (ISO 8601)       | Creation timestamp                                |
-| `updatedAt`              | string (ISO 8601)       | Last update timestamp                             |
+| Field             | Type                    | Description                             |
+| ----------------- | ----------------------- | --------------------------------------- |
+| `id`              | string (UUID)           | Unique action identifier                |
+| `userId`          | string                  | User who owns the action                |
+| `commandId`       | string                  | Original command ID from commands-agent |
+| `type`            | ActionType              | Classification result                   |
+| `confidence`      | number (0-1)            | Classification confidence score         |
+| `title`           | string                  | Action title/description                |
+| `status`          | ActionStatus            | Current lifecycle state                 |
+| `payload`         | Record<string, unknown> | Action-specific data                    |
+| `resource_status` | ResourceStatus (opt)    | Status of associated resource           |
+| `resource_error`  | string (optional)       | Error message from resource execution   |
+| `createdAt`       | string (ISO 8601)       | Creation timestamp                      |
+| `updatedAt`       | string (ISO 8601)       | Last update timestamp                   |
+
+> **Note:** `approvalNonce` and `approvalNonceExpiresAt` fields were removed in v4.0.0 (INT-524).
 
 ### ActionType Enum
 
-| Value      | Handler                     | Auto-Execute |
-| ---------- | --------------------------- | ------------ |
-| `todo`     | HandleTodoActionUseCase     | No           |
-| `research` | HandleResearchActionUseCase | No           |
-| `note`     | HandleNoteActionUseCase     | No           |
-| `link`     | HandleLinkActionUseCase     | Yes (>= 90%) |
-| `calendar` | HandleCalendarActionUseCase | No           |
-| `linear`   | HandleLinearActionUseCase   | No           |
-| `code`     | HandleCodeActionUseCase     | No           |
-| `reminder` | Not implemented             | N/A          |
+| Value      | Handler                     | Auto-Execute    |
+| ---------- | --------------------------- | --------------- |
+| `todo`     | HandleTodoActionUseCase     | Yes (>= 90%)    |
+| `research` | HandleResearchActionUseCase | Yes (>= 90%)    |
+| `note`     | HandleNoteActionUseCase     | Yes (>= 90%)    |
+| `link`     | HandleLinkActionUseCase     | Yes (>= 90%)    |
+| `calendar` | HandleCalendarActionUseCase | No              |
+| `linear`   | HandleLinearActionUseCase   | No              |
+| `code`     | HandleCodeActionUseCase     | Yes (>= 90%)    |
+| `reminder` | Not implemented             | N/A             |
+
+> **Note (v4.1.0):** Auto-execution applies to all action types based solely on confidence threshold (`>= 90%`). Previously only link actions auto-executed. Calendar and linear still require approval because their handlers do not pass an `executeAction` dependency to the idempotent handler wrapper.
 
 ### ActionStatus Enum
 
@@ -189,7 +186,7 @@ sequenceDiagram
 | `rejected`          | User rejected the action               |
 | `archived`          | No longer relevant                     |
 
-### ApprovalMessage (New in v2.0.0)
+### ApprovalMessage
 
 | Field         | Type              | Description                           |
 | ------------- | ----------------- | ------------------------------------- |
@@ -201,28 +198,28 @@ sequenceDiagram
 | `actionType`  | ActionType        | Action type for logging               |
 | `actionTitle` | string            | Action title for logging              |
 
-### ApprovalReplyEvent (v2.0.0, enhanced in v3.0.0)
+### ApprovalReplyEvent (v2.0.0, button-based in v4.0.0)
 
-| Field          | Type              | Description                                                                               |
-| -------------- | ----------------- | ----------------------------------------------------------------------------------------- |
-| `type`         | string            | Always `action.approval.reply`                                                            |
-| `replyToWamid` | string            | Original approval message wamid                                                           |
-| `replyText`    | string            | User's reply text                                                                         |
-| `userId`       | string            | User ID                                                                                   |
-| `timestamp`    | string (ISO 8601) | Reply timestamp                                                                           |
-| `actionId`     | string (optional) | Action ID extracted from correlation ID                                                   |
-| `buttonId`     | string (optional) | v3.0.0: Button ID (e.g., `approve:actionId:nonce`, `cancel:actionId`, `convert:actionId`) |
-| `buttonTitle`  | string (optional) | v3.0.0: User-visible text of the clicked button                                           |
+| Field          | Type              | Description                                                                                                                     |
+| -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | string            | Always `action.approval.reply`                                                                                                  |
+| `replyToWamid` | string            | Original approval message wamid                                                                                                 |
+| `replyText`    | string            | User's reply text (may be empty for button taps)                                                                                |
+| `userId`       | string            | User ID                                                                                                                         |
+| `timestamp`    | string (ISO 8601) | Reply timestamp                                                                                                                 |
+| `actionId`     | string (optional) | Action ID extracted from correlation ID                                                                                         |
+| `buttonId`     | string (optional) | Button ID: `approve:{actionId}`, `reject:{actionId}`, `cancel:{actionId}`, `convert:{actionId}`, `cancel-task:{taskId}:{nonce}` |
+| `buttonTitle`  | string (optional) | User-visible text of the clicked button                                                                                         |
 
-### ApprovalIntent (New in v2.0.0)
+### ApprovalIntent
 
 | Value     | Description                      |
 | --------- | -------------------------------- |
-| `approve` | User wants to approve the action |
-| `reject`  | User wants to reject the action  |
-| `unclear` | Intent couldn't be determined    |
+| `approve` | User approved the action         |
+| `reject`  | User rejected the action         |
+| `unclear` | Button re-sent (no LLM fallback) |
 
-### ResourceStatus (New in v3.0.0)
+### ResourceStatus (v3.0.0)
 
 | Value         | Description                              |
 | ------------- | ---------------------------------------- |
@@ -233,7 +230,7 @@ sequenceDiagram
 | `cancelled`   | Code task cancelled by user              |
 | `interrupted` | Code task interrupted (e.g., VM stopped) |
 
-### CodeActionPayload (New in v3.0.0)
+### CodeActionPayload (v3.0.0)
 
 | Field              | Type              | Description                                            |
 | ------------------ | ----------------- | ------------------------------------------------------ |
@@ -257,20 +254,28 @@ sequenceDiagram
 
 ## Key Use Cases
 
-### handleApprovalReply (New in v2.0.0)
+### handleApprovalReply (v2.0.0, redesigned in v4.0.0)
 
-Processes WhatsApp approval replies using LLM-based intent classification.
+Processes WhatsApp button taps for action approval. In v4.0.0, LLM classification was removed entirely.
 
 **Flow:**
 
 1. Receive `action.approval.reply` event from whatsapp-service
-2. Look up action by `actionId` (from correlationId) or `replyToWamid` (from approval_messages)
-3. Verify user ownership and action is not in terminal state
-4. Create LLM classifier using user's configured API key
-5. Classify intent: approve, reject, or unclear
-6. On approve: atomically update status via `updateStatusIf`, send confirmation, publish `action.created`
-7. On reject: atomically update status, record rejection reason, send confirmation
-8. On unclear: request clarification via WhatsApp
+2. If `buttonId` starts with `cancel-task:` — handle code task cancellation (no action lookup needed)
+3. If `buttonId` starts with `view-task:` — send task URL to user (no action lookup needed)
+4. Look up action by `actionId` (from correlationId) or `replyToWamid` (from approval_messages)
+5. If action not found (deleted/expired) — return 200 with WhatsApp notification (prevents Pub/Sub retry)
+6. Verify user ownership and action is not in terminal state
+7. If `buttonId` present — dispatch to `handleButtonResponse` for deterministic intent resolution
+8. If text reply (no button) — re-send approval buttons via WhatsApp
+
+**Button ID formats:**
+
+- `approve:{actionId}` — atomically update status, execute action, send confirmation
+- `reject:{actionId}` / `cancel:{actionId}` — atomically mark rejected, send confirmation
+- `convert:{actionId}` — mark rejected, send "Converting to Linear issue..." message
+- `cancel-task:{taskId}:{nonce}` — cancel running code task via code-agent
+- `view-task:{taskId}` — send task URL to user
 
 **Race Condition Prevention:**
 
@@ -287,20 +292,33 @@ if (updateResult.outcome === 'status_mismatch') {
 }
 ```
 
-### handleCodeAction (New in v3.0.0)
+### buildApprovalButtons (v4.0.0)
 
-Processes code action creation requests with interactive WhatsApp button approvals.
+Creates WhatsApp interactive buttons for any action type.
+
+```typescript
+// Standard buttons (all action types)
+buildApprovalButtons({ actionId })
+// → [{ id: 'approve:{actionId}', title: 'Approve' }, { id: 'reject:{actionId}', title: 'Reject' }]
+
+// Code actions (extra "Convert to Issue" button)
+buildApprovalButtons({
+  actionId,
+  extraButtons: [{ type: 'reply', reply: { id: `convert:${actionId}`, title: 'Convert to Issue' } }],
+})
+```
+
+### handleCodeAction (v3.0.0, simplified in v4.0.0)
+
+Processes code action creation requests. Sends WhatsApp message with interactive buttons (no nonces).
 
 **Flow:**
 
-1. Check if action should be auto-executed (via `shouldAutoExecute`)
+1. Check if action should be auto-executed via `shouldAutoExecute`
 2. If auto-execute: call `executeCodeAction` directly
-3. Otherwise: generate 4-char hex approval nonce and expiration (15 min TTL)
-4. Update action with nonce fields
-5. Send WhatsApp message with interactive buttons (Approve with nonce, Cancel, Convert to Issue)
-6. Message includes prompt preview, estimated cost ($1-2), and estimated time (30-60 min)
+3. Otherwise: send WhatsApp message with Approve / Reject / Convert to Issue buttons
 
-### executeCodeAction (New in v3.0.0)
+### executeCodeAction (v3.0.0)
 
 Executes code actions by dispatching to code-agent.
 
@@ -345,17 +363,17 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 
 ### Internal Services
 
-| Service           | Purpose                                                                                 |
-| ----------------- | --------------------------------------------------------------------------------------- |
-| `commands-agent`  | Create new commands from transitions                                                    |
-| `research-agent`  | Execute research actions                                                                |
-| `todos-agent`     | Execute todo actions                                                                    |
-| `notes-agent`     | Execute note actions                                                                    |
-| `bookmarks-agent` | Execute link actions                                                                    |
-| `calendar-agent`  | Execute calendar actions                                                                |
-| `linear-agent`    | Execute Linear issue creation actions                                                   |
-| `code-agent`      | Execute code tasks (Claude Code) via submitTask and cancelTaskWithNonce (v3.0.0)        |
-| `user-service`    | Fetch user API keys for LLM (via `@intexuraos/internal-clients/user-service` in v2.1.0) |
+| Service           | Purpose                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `commands-agent`  | Create new commands from transitions                                               |
+| `research-agent`  | Execute research actions                                                           |
+| `todos-agent`     | Execute todo actions                                                               |
+| `notes-agent`     | Execute note actions                                                               |
+| `bookmarks-agent` | Execute link actions                                                               |
+| `calendar-agent`  | Execute calendar actions                                                           |
+| `linear-agent`    | Execute Linear issue creation actions                                              |
+| `code-agent`      | Execute code tasks (Claude Code) via submitTask and cancelTaskWithNonce (v3.0.0)   |
+| `user-service`    | Fetch user API keys for LLM (via `@intexuraos/internal-clients/user-service`)      |
 
 ### Infrastructure
 
@@ -370,24 +388,26 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 
 ## Configuration
 
-| Environment Variable                       | Required | Description                                |
-| ------------------------------------------ | -------- | ------------------------------------------ |
-| `INTEXURAOS_RESEARCH_AGENT_URL`            | Yes      | Research-agent base URL                    |
-| `INTEXURAOS_USER_SERVICE_URL`              | Yes      | User-service base URL                      |
-| `INTEXURAOS_COMMANDS_AGENT_URL`            | Yes      | Commands-agent base URL                    |
-| `INTEXURAOS_TODOS_AGENT_URL`               | Yes      | Todos-agent base URL                       |
-| `INTEXURAOS_NOTES_AGENT_URL`               | Yes      | Notes-agent base URL                       |
-| `INTEXURAOS_BOOKMARKS_AGENT_URL`           | Yes      | Bookmarks-agent base URL                   |
-| `INTEXURAOS_CALENDAR_AGENT_URL`            | Yes      | Calendar-agent base URL                    |
-| `INTEXURAOS_LINEAR_AGENT_URL`              | Yes      | Linear-agent base URL                      |
-| `INTEXURAOS_CODE_AGENT_URL`                | Yes      | Code-agent base URL (v3.0.0)               |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`      | Yes      | App settings service URL (for LLM pricing) |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes      | Shared secret for service-to-service calls |
-| `INTEXURAOS_GCP_PROJECT_ID`                | Yes      | Google Cloud project ID                    |
-| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`          | Yes      | Unified actions queue topic name           |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes      | WhatsApp send topic                        |
-| `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC` | Yes      | Calendar preview topic                     |
-| `INTEXURAOS_WEB_APP_URL`                   | Yes      | Web app URL for notification links         |
+| Environment Variable                       | Required | Description                                              |
+| ------------------------------------------ | -------- | -------------------------------------------------------- |
+| `INTEXURAOS_RESEARCH_AGENT_URL`            | Yes      | Research-agent base URL                                  |
+| `INTEXURAOS_USER_SERVICE_URL`              | Yes      | User-service base URL                                    |
+| `INTEXURAOS_COMMANDS_AGENT_URL`            | Yes      | Commands-agent base URL                                  |
+| `INTEXURAOS_TODOS_AGENT_URL`               | Yes      | Todos-agent base URL                                     |
+| `INTEXURAOS_NOTES_AGENT_URL`               | Yes      | Notes-agent base URL                                     |
+| `INTEXURAOS_BOOKMARKS_AGENT_URL`           | Yes      | Bookmarks-agent base URL                                 |
+| `INTEXURAOS_CALENDAR_AGENT_URL`            | Yes      | Calendar-agent base URL                                  |
+| `INTEXURAOS_LINEAR_AGENT_URL`              | Yes      | Linear-agent base URL                                    |
+| `INTEXURAOS_CODE_AGENT_URL`                | Yes      | Code-agent base URL (v3.0.0)                             |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`      | Yes      | App settings service URL (for LLM pricing)               |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes      | Shared secret for service-to-service calls               |
+| `INTEXURAOS_GCP_PROJECT_ID`               | Yes      | Google Cloud project ID                                  |
+| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`          | Yes      | Unified actions queue topic name                         |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes      | WhatsApp send topic                                      |
+| `INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC` | Yes      | Calendar preview topic                                   |
+| `INTEXURAOS_WEB_APP_URL`                   | Yes      | Web app URL for notification links                       |
+| `INTEXURAOS_ZAI_APP_API_KEY`               | No       | ZAI platform API key for LLM fallback via user service   |
+| `INTEXURAOS_GEMINI_APP_API_KEY`            | No       | Gemini platform API key for LLM fallback via user service |
 
 ## Gotchas
 
@@ -408,29 +428,27 @@ training data.
 **Reminder actions**: The reminder type is defined in the enum but has no handler. Actions of this type remain
 in pending status indefinitely.
 
-**Auto-execution for links**: Link actions with confidence >= 90% are auto-executed immediately via `shouldAutoExecute()`.
-All other action types require manual approval before execution.
+**Auto-execution threshold**: All action types with confidence >= 90% are auto-executed immediately via `shouldAutoExecute()`. The function is purely confidence-based — no type filtering. Calendar and linear still always require approval because their handlers do not inject an `executeAction` dependency into the idempotent wrapper.
 
 **Approval reply idempotency (v2.0.0)**: The `updateStatusIf` method uses Firestore transactions to atomically check
 and update status. If the status doesn't match expectations, the operation is a no-op, preventing race conditions
 when multiple Pub/Sub messages arrive concurrently.
 
-**Note actions direct execution (v2.0.0)**: When approving note actions, the system executes directly rather than
-publishing `action.created` to avoid duplicate "ready for approval" notifications.
+**Text replies re-send buttons (v4.0.0)**: When a user sends a text reply to an approval message (no buttonId),
+the system re-sends fresh interactive buttons. There is no LLM fallback — approval is button-only.
 
-**LLM classifier creation**: The approval intent classifier is created per-user using their configured LLM API key.
-If no key is configured, the user receives an error message asking them to configure their API key.
+**Deleted action handling (v4.0.0)**: When an action is not found during approval reply processing, the endpoint
+returns 200 OK (not 500) so Pub/Sub stops retrying. A WhatsApp message informs the user the action is no longer
+available. Any orphaned approval_messages are cleaned up.
 
-**Code action approval nonces (v3.0.0)**: Code actions use 4-character hex nonces embedded in WhatsApp interactive
-buttons. Nonces expire after 15 minutes. If a user clicks an expired button, the approval fails. The text fallback
-("approve XXXX") falls through to the LLM classifier if nonce validation fails.
+**Cancel-task button nonce**: The `cancel-task:{taskId}:{nonce}` button format retains nonce validation, but this
+is for code task cancellation security (cancelling a running task is irreversible), not approval.
 
-**Interactive button responses bypass LLM (v3.0.0)**: When a WhatsApp button is clicked (buttonId is present),
-the approval handler bypasses the LLM classifier entirely for deterministic intent resolution. This reduces latency
-and cost for button-based approvals.
+**Error codes UPPER_CASE (v4.0.0)**: Cancel-task error codes are normalized: `INVALID_NONCE`, `NONCE_EXPIRED`,
+`NOT_OWNER` (HTTP 403), `TASK_NOT_CANCELLABLE`.
 
 **Create action endpoint no longer publishes events (v3.0.0)**: The `POST /internal/actions` endpoint only creates
-the action record. Event publishing is now the caller's responsibility (commands-agent) to prevent duplicate events.
+the action record. Event publishing is the caller's responsibility (commands-agent) to prevent duplicate events.
 
 **Response contract enforcement**: All routes use `reply.ok()` / `reply.fail()` exclusively. Raw `reply.send()` is
 forbidden unless annotated with `@allow-raw-send`.
@@ -444,23 +462,21 @@ apps/actions-agent/src/
       action.ts              # Action entity, factory, CodeActionPayload, ResourceStatus
       actionEvent.ts         # Event schemas
       actionTransition.ts    # Type correction tracking
-      approvalMessage.ts     # WhatsApp approval tracking (v2.0.0)
-      approvalReplyEvent.ts  # Approval reply event schema (v2.0.0, enhanced v3.0.0)
+      approvalMessage.ts     # WhatsApp approval tracking
+      approvalReplyEvent.ts  # Approval reply event schema
     ports/
       actionRepository.ts    # Action storage interface + updateStatusIf
       actionTransitionRepository.ts
-      approvalMessageRepository.ts   # Approval message storage (v2.0.0)
-      approvalIntentClassifier.ts    # LLM intent classification port (v2.0.0)
-      approvalIntentClassifierFactory.ts  # Classifier factory port (v2.0.0)
+      approvalMessageRepository.ts   # Approval message storage
       actionEventPublisher.ts        # Event publishing port
       notificationSender.ts  # WhatsApp notifications
       codeAgentClient.ts     # Code-agent HTTP client port (v3.0.0)
       *ServiceClient.ts      # HTTP clients for other services
     usecases/
-      handleApprovalReply.ts     # WhatsApp reply handling (v2.0.0, buttons+nonce v3.0.0)
-      handleCodeAction.ts        # Code action handler with interactive buttons (v3.0.0)
-      executeCodeAction.ts       # Code action execution via code-agent (v3.0.0)
-      handle*Action.ts           # Pub/Sub handlers (async)
+      handleApprovalReply.ts     # WhatsApp button tap handling (v4.0.0: buttons-only)
+      handleCodeAction.ts        # Code action handler with interactive buttons
+      executeCodeAction.ts       # Code action execution via code-agent
+      handle*Action.ts           # Pub/Sub handlers (async, all use buildApprovalButtons)
       execute*Action.ts          # Direct execution (sync)
       createIdempotentActionHandler.ts  # Idempotency wrapper
       shouldAutoExecute.ts       # Auto-execution logic
@@ -468,15 +484,12 @@ apps/actions-agent/src/
       retryPendingActions.ts     # Scheduled retry
       actionHandlerRegistry.ts   # Handler routing
     utils/
-      approvalNonce.ts           # Nonce generation and validation (v3.0.0)
+      approvalButtons.ts         # buildApprovalButtons() - unified button factory (v4.0.0)
   infra/
     firestore/
       actionRepository.ts            # Includes atomic updateStatusIf
       actionTransitionRepository.ts
-      approvalMessageRepository.ts   # Approval message persistence (v2.0.0)
-    llm/
-      llmApprovalIntentClassifier.ts  # LLM-based classifier (v2.0.0)
-      approvalIntentClassifierFactory.ts  # Factory implementation (v2.0.0)
+      approvalMessageRepository.ts   # Approval message persistence
     pubsub/
       actionEventPublisher.ts
     http/

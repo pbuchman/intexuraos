@@ -35,6 +35,7 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
         "type": "todo",
         "confidence": 0.92,
         "reasoning": "Clear actionable task with no time specification",
+        "promptVersion": "2.0.0",
         "classifiedAt": "2026-01-24T12:00:01.000Z"
       },
       "actionId": "uuid-here"
@@ -291,8 +292,8 @@ Only works for status: `classified`.
 | Symptom                            | Cause                       | Solution                                    |
 | ---------------------------------- | --------------------------- | ------------------------------------------- |
 | Status `pending_classification`    | No LLM API key              | Configure Google or Zai key in user-service |
-| URL classified as `research`       | Old prompt version          | Ensure v2.0.0 prompt deployed               |
-| Polish phrases not recognized      | Old prompt version          | Ensure v2.0.0 prompt deployed               |
+| URL classified as `research`       | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
+| Polish phrases not recognized      | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
 | "Cannot delete classified command" | Wrong operation             | Use PATCH to archive instead                |
 | Status `failed`                    | LLM error or actions-agent  | Check logs, delete and retry                |
 | Duplicate command (isNew: false)   | Same externalId reprocessed | Normal idempotency behavior                 |
@@ -319,4 +320,4 @@ Only works for status: `classified`.
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

@@ -5,11 +5,11 @@
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
 | TODO/FIXME Comments | 0     | -        |
-| Code Smells         | 1     | Low      |
+| Code Smells         | 2     | Low      |
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 0     | -        |
 
-Last updated: 2026-02-08
+Last updated: 2026-02-19
 
 ## Code Smells
 
@@ -18,6 +18,14 @@ Last updated: 2026-02-08
 **Severity:** Low
 
 The worker imports `serializeError` from `@intexuraos/common-core` for logger serialization. This creates a build-time dependency on a shared package for a single utility function. The pattern should be consistent across all workers.
+
+### 2. Unused `firebase-admin` dependency
+
+**Severity:** Low
+
+`package.json` lists `firebase-admin` as a runtime dependency, but no source file imports it. The worker uses native `fetch` for the code-agent HTTP call and `pino` for logging — no Firebase SDK calls exist. This leftover dep from initial scaffolding adds unnecessary bundle weight and increases Cloud Functions cold-start time.
+
+**Fix:** Remove `firebase-admin` from `dependencies` in `package.json`.
 
 ## Future Plans
 
@@ -32,6 +40,7 @@ The worker imports `serializeError` from `@intexuraos/common-core` for logger se
 1. Add a dead-letter topic for undeliverable Pub/Sub messages
 2. Parameterize the Cloud Scheduler cron expression via Terraform variable
 3. Add retry logic within the function (currently relies solely on Pub/Sub redelivery)
+4. Remove unused `firebase-admin` dependency
 
 ## Test Coverage
 
@@ -55,7 +64,8 @@ No `any` types, `@ts-ignore`, or `@ts-expect-error` directives in source files.
 
 ### Historical Issues
 
-| Date       | Issue                       | Resolution                        |
-| ---------- | --------------------------- | --------------------------------- |
-| 2026-01-31 | Empty error objects in logs | Added error serializers (INT-464) |
-| 2026-01-29 | Branch coverage below 95%   | Added v8 ignore annotations       |
+| Date       | Issue                                    | Resolution                                        |
+| ---------- | ---------------------------------------- | ------------------------------------------------- |
+| 2026-02-05 | Cloud Functions deployment module errors | Fixed with esbuild bundling via build-service.mjs |
+| 2026-01-31 | Empty error objects in logs              | Added error serializers (INT-464)                 |
+| 2026-01-29 | Branch coverage below 95%               | Added v8 ignore annotations                       |

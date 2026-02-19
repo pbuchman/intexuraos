@@ -32,6 +32,12 @@ Transform provider-specific error responses into clear, actionable messages. The
 
 **Example:** OpenAI returns `429 Rate limit reached for default in organization org-123 on tokens: Limit 90000, Used 85000, Requested 10000.` The service formats this as: "tokens: 85000/90000 used, need 10000 more" - immediately showing the user what happened and why.
 
+### Default Model Selection
+
+Set a preferred fast model that all agents use for quick generation tasks. The service validates the chosen model against a supported list and persists the preference — no API key required, works with platform-owned keys.
+
+**Example:** User opens Settings, selects "Claude Haiku 3.5" from the provider-grouped dropdown. All subsequent `generate()` calls across every agent default to that model unless the calling service overrides it. If the user has no Anthropic API key, the platform falls back to Zai's GLM-4.7-Flash automatically.
+
 ### Auth0 Device Code Flow
 
 Enable CLI and mobile apps to authenticate without browser redirects. Users see a code, visit a URL on any device, and the CLI polls for completion.
@@ -87,6 +93,10 @@ Connect Google accounts for calendar access with automatic token refresh. Tokens
 **Standardized response contract** - All internal endpoints use `reply.ok(data)` / `reply.fail(code, message)` for consistent responses
 
 **Sentry error tracking** - Logger integrated with Sentry for automatic error reporting
+
+**Default model persistence** - Users set one preferred fast model; all agents inherit it without per-call configuration
+
+**OpenTelemetry distributed tracing** - Dash0 integration via preloaded `infra-otel` module provides traces, metrics, and log export with zero source-code changes
 
 **Auth0 namespaced claims** - Reads both namespaced (`https://intexuraos.cloud/email`) and bare JWT claims for profile data
 

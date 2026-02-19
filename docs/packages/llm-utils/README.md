@@ -160,6 +160,8 @@ interface LlmParseErrorDetails {
 
 **Apps (6):** `calendar-agent`, `commands-agent`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`
 
+> **Note:** `common-http` re-exports `redactToken`, `redactObject`, and `SENSITIVE_FIELDS` from this package, making redaction utilities available to all HTTP services via `@intexuraos/common-http`.
+
 ## Recent Changes
 
 | Commit   | Description                                       | Age     |

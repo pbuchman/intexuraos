@@ -1,6 +1,6 @@
 # Notion Service - Technical Debt
 
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-19
 
 ## Summary
 
@@ -9,16 +9,41 @@
 | TODO/FIXME Comments | 0     | -        |
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 0     | -        |
-| Code Smells         | 0     | -        |
-| **Total**           | **0** | --       |
+| Code Smells         | 1     | Low      |
+| **Total**           | **1** | Low      |
+
+## Active Debt
+
+### Webhook Stub — No Event Processing
+
+**Severity:** Low | **Category:** Incomplete feature
+
+`POST /notion-webhooks` accepts any JSON payload and responds `{ received: true }` without processing events. The route exists to receive webhooks from Notion but performs no side effects. When Notion integration matures, this stub must be replaced with real event handling (e.g., sync triggers, cache invalidation).
+
+**File:** `apps/notion-service/src/routes/webhookRoutes.ts`
+
+---
 
 ## Future Plans
 
 1. **Multiple workspaces** - Support multiple Notion workspaces per user
 2. **Sync status** - Detailed sync progress tracking
 3. **Scoped access** - Granular database/page permissions
+4. **Webhook processing** - Handle Notion events for real-time sync
 
 ## Recent Improvements
+
+### Dev-mode Log Formatting (2026-02-16)
+
+Added PM2-friendly log formatting in development mode for improved readability during local development.
+
+### Dash0 OpenTelemetry Integration (2026-02-16)
+
+Added Dash0 OTel distributed tracing integration (#803). Provides end-to-end request tracing alongside existing Sentry error tracking.
+
+### PM2 Ecosystem Migration (2026-02-14)
+
+Switched PM2 ecosystem to use `pnpm --filter <service> start:local` scripts instead of direct process invocations. Fixed `start:local` to use `tsx` (not `node --experimental-strip-types`) for TypeScript execution.
 
 ### Page Preview Endpoint (2026-01-29)
 

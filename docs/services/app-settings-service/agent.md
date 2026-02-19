@@ -20,10 +20,10 @@
 
 ```typescript
 interface AppSettingsServiceTools {
-  // Get LLM pricing for all providers
+  // Get LLM pricing for all providers (authenticated user)
   getPricing(): Promise<AllProvidersPricing>;
 
-  // Get user's LLM usage costs
+  // Get user's LLM usage costs (scoped to authenticated user)
   getUsageCosts(params?: {
     days?: number; // Default: 90, max: 365
   }): Promise<AggregatedCosts>;
@@ -35,14 +35,23 @@ interface AppSettingsServiceTools {
 ```typescript
 type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
 
+type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
+
+interface ModelPricing {
+  inputPricePerMillion: number;   // USD per 1M input tokens
+  outputPricePerMillion: number;  // USD per 1M output tokens
+  cacheReadMultiplier?: number;   // Multiplier on input cost for cache reads
+  cacheWriteMultiplier?: number;  // Multiplier on input cost for cache writes
+  webSearchCostPerCall?: number;  // Fixed cost per web search call (USD)
+  groundingCostPerRequest?: number; // Fixed cost per grounding request (USD)
+  imagePricing?: Record<ImageSize, number>; // Cost per image generation by size
+  useProviderCost?: boolean;      // Use provider's reported cost instead of calculated
+}
+
 interface ProviderPricing {
   provider: LlmProvider;
   models: Record<string, ModelPricing>;
-}
-
-interface ModelPricing {
-  inputPricePer1k: number; // USD per 1K input tokens
-  outputPricePer1k: number; // USD per 1K output tokens
+  updatedAt: string; // ISO date string of last pricing update
 }
 
 interface AllProvidersPricing {
@@ -53,33 +62,37 @@ interface AllProvidersPricing {
   zai: ProviderPricing;
 }
 
-interface AggregatedCosts {
-  totalCostUsd: number;
-  totalCalls: number;
-  monthlyBreakdown: MonthlyBreakdown[];
-  byModel: ModelCosts[];
-  byCallType: CallTypeCosts[];
-}
-
-interface MonthlyBreakdown {
-  month: string; // "2026-01"
-  costUsd: number;
-  calls: number;
-}
-
-interface ModelCosts {
-  model: string;
-  provider: LlmProvider;
+interface MonthlyCost {
+  month: string;        // "2026-01"
   costUsd: number;
   calls: number;
   inputTokens: number;
   outputTokens: number;
+  percentage: number;   // % of total cost (0-100, rounded)
 }
 
-interface CallTypeCosts {
-  callType: string; // "research", "classification", etc.
+interface ModelCost {
+  model: string;
   costUsd: number;
   calls: number;
+  percentage: number;   // % of total cost (0-100, rounded)
+}
+
+interface CallTypeCost {
+  callType: string;     // e.g. "research", "classification"
+  costUsd: number;
+  calls: number;
+  percentage: number;   // % of total cost (0-100, rounded)
+}
+
+interface AggregatedCosts {
+  totalCostUsd: number;
+  totalCalls: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  monthlyBreakdown: MonthlyCost[];  // Sorted newest first
+  byModel: ModelCost[];             // Sorted by cost descending
+  byCallType: CallTypeCost[];       // Sorted by cost descending
 }
 ```
 
@@ -89,10 +102,11 @@ interface CallTypeCosts {
 
 | Rule               | Description                                       |
 | ------------------ | ------------------------------------------------- |
-| **Authentication** | All endpoints require valid Bearer token          |
+| **Authentication** | All public endpoints require valid Bearer token   |
 | **Days Range**     | Usage costs: 1-365 days, default 90               |
 | **5 Providers**    | Pricing available for all supported LLM providers |
 | **User Scoped**    | Usage costs scoped to authenticated user only     |
+| **Startup Check**  | Service fails to start if any model lacks pricing |
 
 ---
 
@@ -102,8 +116,8 @@ interface CallTypeCosts {
 
 ```typescript
 const pricing = await getPricing();
-// pricing.google.models['gemini-2.5-flash'].inputPricePer1k
-// pricing.openai.models['gpt-4o'].outputPricePer1k
+// pricing.google.models['gemini-2.5-flash'].inputPricePerMillion
+// pricing.openai.models['gpt-4o'].outputPricePerMillion
 ```
 
 ### Get Usage Costs
@@ -111,8 +125,9 @@ const pricing = await getPricing();
 ```typescript
 const costs = await getUsageCosts({ days: 30 });
 // costs.totalCostUsd: 12.45
-// costs.monthlyBreakdown: [{ month: "2026-01", costUsd: 12.45, calls: 150 }]
-// costs.byModel: [{ model: "gemini-2.5-flash", costUsd: 5.20, ... }]
+// costs.totalInputTokens: 1_450_000
+// costs.monthlyBreakdown: [{ month: "2026-01", costUsd: 12.45, calls: 150, percentage: 100 }]
+// costs.byModel: [{ model: "gemini-2.5-flash", costUsd: 5.20, percentage: 42 }]
 ```
 
 ### Calculate Cost Preview
@@ -121,17 +136,17 @@ const costs = await getUsageCosts({ days: 30 });
 const pricing = await getPricing();
 const model = pricing.google.models['gemini-2.5-flash'];
 const estimatedCost =
-  (inputTokens / 1000) * model.inputPricePer1k + (outputTokens / 1000) * model.outputPricePer1k;
+  (inputTokens / 1_000_000) * model.inputPricePerMillion +
+  (outputTokens / 1_000_000) * model.outputPricePerMillion;
 ```
 
 ---
 
 ## Internal Endpoints
 
-| Method | Path                          | Purpose                                     | Response Format                                    |
-| ------ | ----------------------------- | ------------------------------------------- | -------------------------------------------------- |
-| POST   | `/internal/usage/record`      | Record LLM usage (called by research-agent) | `{ success, data }` or `{ success, error: {...} }` |
-| GET    | `/internal/pricing/:provider` | Get pricing for specific provider           | `{ success, data }` or `{ success, error: {...} }` |
+| Method | Path                          | Purpose                                           | Auth            |
+| ------ | ----------------------------- | ------------------------------------------------- | --------------- |
+| GET    | `/internal/settings/pricing`  | Get all LLM provider pricing (for service startup) | Internal header |
 
 ---
 
@@ -147,4 +162,4 @@ const estimatedCost =
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19 (v2 run verification)

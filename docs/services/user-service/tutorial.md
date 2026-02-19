@@ -173,6 +173,7 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
 {
   "success": true,
   "data": {
+    "defaultModel": null,
     "google": null,
     "openai": "sk-p...XXXX",
     "anthropic": null,
@@ -256,6 +257,7 @@ Test results are now visible in the response:
 {
   "success": true,
   "data": {
+    "defaultModel": null,
     "openai": "sk-p...XXXX",
     "testResults": {
       "openai": {
@@ -300,7 +302,49 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
 
 The provider now shows `null`.
 
-## Part 6: Connect Google OAuth
+## Part 6: Set Default LLM Model
+
+Configure which fast model all agents use by default.
+
+### Step 1: Set a default model
+
+```bash
+curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "defaultModel": "claude-haiku-3-5"
+  }'
+```
+
+**Success response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "defaultModel": "claude-haiku-3-5"
+  }
+}
+```
+
+**Invalid model:**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Invalid model: unsupported-model. Must be a supported fast model."
+  }
+}
+```
+
+### Checkpoint
+
+All agents now use "claude-haiku-3-5" by default. If the user has no Anthropic API key, the platform falls back to GLM-4.7-Flash automatically.
+
+## Part 8: Connect Google OAuth
 
 Connect a Google account for calendar integration.
 
@@ -355,7 +399,7 @@ curl https://user-service.intexuraos.com/oauth/connections/google/status \
 
 Google account is connected. Calendar-agent can now access the user's calendar through internal endpoints.
 
-## Part 7: Internal Service Access (Service-to-Service)
+## Part 9: Internal Service Access (Service-to-Service)
 
 Simulate how another service (like research-agent) accesses API keys.
 
@@ -431,7 +475,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 }
 ```
 
-## Part 8: Handle Errors
+## Part 10: Handle Errors
 
 ### Error: Invalid API key format
 

@@ -12,11 +12,12 @@ framework: fastify
 runtime: node22
 deploy: cloud-run
 collections:
-  - code_tasks (subcollections: logs)
+  - code_tasks (subcollections: logs, turn_metrics)
   - user_spend
   - user_usage
   - code_worker_settings
   - github-pr-events
+  - github-pr-summaries
   - pr_task_locks
 ```
 
@@ -52,14 +53,17 @@ interface SubmitCodeTaskRequest {
 ### Task Lifecycle
 
 ```typescript
-type TaskStatus = 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+// 'designed' = Phase 1 design task completed; 'implemented' = Phase 2 execution task completed
+// 'completed' is NOT used — tasks finish as 'designed' or 'implemented'
+type TaskStatus = 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
 
 // Transitions:
 // dispatched -> running (on first log chunk)
-// dispatched -> completed | failed | interrupted (on webhook)
+// dispatched -> designed | implemented | failed | interrupted (on webhook)
 // dispatched | running -> cancelled (on cancel)
-// running -> completed | failed | interrupted (on webhook)
+// running -> designed | implemented | failed | interrupted (on webhook)
 // dispatched | running -> interrupted (zombie detection after 30 min)
+// designed | implemented | failed -> running (on sendTaskMessage with 'resumed' action)
 ```
 
 ### Task Completion Webhook
@@ -124,8 +128,29 @@ interface SubmitTaskFeedbackRequest {
 }
 
 // Constraints:
-// - Original must be 'completed'
+// - Original must be 'designed' or 'implemented' (completed phase)
 // - No active task on same Linear issue
+// - User must have configured workers
+```
+
+### Send Task Message
+
+```typescript
+interface SendTaskMessageRequest {
+  taskId: string;
+  userId: string;
+  message: string; // 1-10000 chars
+}
+
+interface SendTaskMessageResult {
+  action: 'queued' | 'resumed';
+}
+
+// 'queued'  — task is running; message held in pendingUserMessages, delivered at turn end
+// 'resumed' — task is in terminal state (designed/implemented/failed); task re-dispatched via --continue
+// Constraints:
+// - Task must be owned by userId
+// - Status must NOT be 'cancelled' or 'dispatched'
 // - User must have configured workers
 ```
 
@@ -145,6 +170,39 @@ interface WorkerConfigInput {
 // - Name immutable after creation
 // - Secrets stored encrypted (AES-256-GCM)
 // - Masked in API responses (last 3 chars visible)
+```
+
+### Turn Metrics
+
+Per-turn resource metrics stored automatically at turn end in the `turn_metrics` subcollection.
+
+```typescript
+interface TurnMetrics {
+  taskId: string;
+  attempt: number;
+  timestamp: string; // ISO 8601
+  // Resource (cgroup)
+  cpuTimeSeconds: number;
+  cpuCores: number;
+  peakMemoryMB: number;
+  // Time classification
+  wallTimeSeconds: number;
+  apiWaitSeconds: number;
+  toolExecSeconds: number;
+  backgroundWaitSeconds: number;
+  overheadSeconds: number;
+  // Token accounting
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  apiCallCount: number;
+  // Derived
+  cpuUtilizationPercent: number;
+  idlePercent: number;
+}
+
+// Stored at: code_tasks/{taskId}/turn_metrics/{attempt:0001}
 ```
 
 ### Cancel via Nonce
@@ -242,6 +300,74 @@ GET /code/tasks?status=running&limit=10
 Authorization: Bearer <auth0-jwt>
 
 -> 200: { "success": true, "data": { "tasks": [...], "nextCursor": "cursor-id" } }
+```
+
+### GitHub PR summaries (list view)
+
+```
+GET /code/github-pr-summaries
+Authorization: Bearer <auth0-jwt>
+
+-> 200: {
+  "success": true,
+  "data": {
+    "prs": [{
+      "repository": "org/repo",
+      "pullRequestNumber": 42,
+      "title": "Add cursor-based pagination",
+      "status": "open" | "closed" | "merged",
+      "lastActivityAt": "2026-02-19T10:00:00.000Z"
+    }]
+  }
+}
+```
+
+Notes:
+- Returns PRs with any activity in the last 30 days
+- Sorted by PR number descending
+- O(PRs) query backed by `github-pr-summaries` collection
+
+### GitHub PR events
+
+```
+GET /code/github-pr-events?repository=org/repo&pullRequestNumber=42&limit=50
+Authorization: Bearer <auth0-jwt>
+
+-> 200: {
+  "success": true,
+  "data": {
+    "events": [{
+      "pullRequestNumber": 42,
+      "title": "Add cursor-based pagination",
+      "repository": "org/repo",
+      "eventType": "pull_request" | "pull_request_review" | "pull_request_review_comment" | "issue_comment" | "push",
+      "action": "opened" | "synchronize" | "submitted" | "created" | null,
+      "senderLogin": "username",
+      "createdAt": "2026-02-19T10:00:00.000Z",
+      "eventUrl": "https://github.com/org/repo/compare/abc...def",  // clickable link
+      "body": "Comment text or PR description (deduplicated)"        // null for non-body events
+    }]
+  }
+}
+```
+
+Notes:
+- `pullRequestNumber` requires `repository` to also be set
+- Per-PR queries return oldest-first; repository/all queries return newest-first
+- Comment `edited` events are merged with their original — same position, latest body
+- PR body appears only on the most recent `pull_request` event
+
+### Send message to task
+
+```
+POST /code/tasks/:taskId/messages
+Authorization: Bearer <auth0-jwt>
+
+{ "message": "Please also add error handling for the null case" }
+
+-> 200: { "success": true, "data": { "action": "queued" } }   // task is running
+-> 200: { "success": true, "data": { "action": "resumed" } }  // task was ended, now re-dispatched
+-> 400: { "success": false, "error": { "code": "invalid_status", ... } }  // task cancelled/dispatched
 ```
 
 ### Cancel task (from web UI)

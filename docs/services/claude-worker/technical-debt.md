@@ -9,7 +9,7 @@
 | Operational Gaps    | 2     | Low      |
 | Architecture Debt   | 2     | Low      |
 
-Last updated: 2026-02-08
+Last updated: 2026-02-19
 
 ## Security Hardening
 
@@ -42,17 +42,17 @@ Last updated: 2026-02-08
 ### 4. No health check endpoint or signal
 
 **Severity:** Low
-**Context:** The orchestrator relies on Docker container state (`inspect`) and attach stream activity to determine worker health. There is no application-level health check inside the container.
-**Impact:** A hung Claude process that keeps the container "running" but produces no output can only be detected by the timeout mechanism (up to 2 hours).
-**Ideal fix:** Add a lightweight health signal (heartbeat file in `/tmp/` written periodically) that the orchestrator can check via `docker exec`.
+**Context:** The orchestrator relies on Docker container state (`inspect`) and the readiness marker to determine worker health. There is no application-level heartbeat inside the container during Claude execution.
+**Impact:** A hung Claude process that keeps the container "running" and produces no output can only be detected by the per-attempt timeout mechanism.
+**Ideal fix:** Have Claude (or the entrypoint) write a periodic heartbeat file to `/tmp/` that the orchestrator can check via `docker exec test -f`.
 
-### 5. Token refresh watcher is shell-based polling
+### 5. Token refresh watcher does not propagate to Claude process
 
 **Severity:** Low
-**Location:** `entrypoint.sh` (lines 91-102)
-**Context:** The background loop polls `/secrets/github-token` every 60 seconds using `cat` and string comparison. The `export GITHUB_TOKEN` only affects the subshell where the watcher runs, not the main Claude process.
-**Impact:** The token refresh in the entrypoint subshell does not actually propagate to the Claude CLI process. Token propagation relies on Claude reading the file directly (via `gh` CLI which reads `GITHUB_TOKEN` or the token file).
-**Ideal fix:** Clarify the token delivery mechanism. If Claude/gh reads the file directly, the watcher is unnecessary. If env var propagation is needed, a different mechanism (writing to a shared file that Claude reads) should be used.
+**Location:** `entrypoint.sh` (background watcher loop)
+**Context:** The background loop polls `/secrets/github-token` every 60 seconds and exports `GITHUB_TOKEN` in the watcher subshell. This export does not propagate to the Claude process or to `run-attempt` invocations. Token delivery to `gh` CLI relies on the git credential helper (`!f() { echo "password=${GITHUB_TOKEN}"; }; f`) being re-evaluated at each `gh` invocation.
+**Impact:** In managed mode, if the token expires between attempts, the new token from the file is not picked up by the credential helper (which reads `GITHUB_TOKEN` from the environment). The `setup_github_token` function is called again at each `run-attempt`, but it reads from the file directly, so the credential helper is reconfigured correctly.
+**Ideal fix:** Verify the credential helper reconfiguration in `run_claude_attempt → setup_github_token` correctly picks up the refreshed token from `/secrets/github-token` on each attempt. If not, rewrite the watcher to update the credential helper config file instead.
 
 ## Architecture Debt
 
@@ -71,6 +71,7 @@ Last updated: 2026-02-08
 **Impact:** Rolling back to a previous worker image version requires knowing the exact tag that was pushed.
 **Ideal fix:** Tag images with git SHA or semantic version during CI builds.
 
+
 ## Future Plans
 
 ### Planned Features
@@ -78,6 +79,7 @@ Last updated: 2026-02-08
 - **Read-only root filesystem** - Investigate all write paths and create targeted mounts to enable `ReadonlyRootfs: true`
 - **Image size optimization** - Multi-stage build to reduce final image size by excluding build-time-only dependencies
 - **Seccomp profile** - Add a custom seccomp profile to restrict system calls beyond capability dropping
+- **Image versioning** - Tag images with git SHA or semantic version in CI; currently tagged as `:latest`
 
 ### Proposed Enhancements
 
@@ -92,6 +94,18 @@ Last updated: 2026-02-08
 
 Implemented the full Docker-based isolation architecture, replacing the previous uncontained execution model. Added Dockerfile, entrypoint, test image, E2E tests, and orchestrator DockerProvider integration.
 
-### INT-491: Interactive Mode Migration (2026-02-08)
+### INT-491: Interactive Mode Migration → Superseded by Managed Mode (2026-02-08, revised 2026-02-12)
 
-Migrated from `--print` mode (one-shot prompt execution) to interactive mode with Docker attach stdin. Added API key prompt handling for the interactive startup flow.
+Initially migrated from `--print` mode to interactive mode with Docker attach stdin. This was subsequently superseded by the managed execution mode (`CLAUDE_MANAGED_MODE=1`), which reverts to `--print` mode but via file-based prompts (`/secrets/system-prompt.txt`, `/secrets/user-prompt.txt`) invoked through `docker exec /entrypoint.sh run-attempt`. The managed mode approach avoids the complexity of stdin stream management and Docker attach ordering while enabling container reuse across multiple attempts.
+
+### MCP Server Permission Errors (2026-02-19)
+
+Pre-installed MCP server packages (`@upstash/context7-mcp`, `@sentry/mcp-server`, `@playwright/mcp`) globally via `npm install -g` in the Dockerfile. On Alpine, `npx -y <package>` downloads to a temp directory with `noexec` permissions, causing "Permission denied" at MCP startup. Global installation puts binaries in `/usr/local/bin` with proper execute permissions; `npx` finds the global install and skips the download.
+
+### Persistent pnpm Store via Host Mount (2026-02-19)
+
+The `DockerProvider` now creates a shared `pnpm-store` directory on the host (alongside `secretsBasePath`) and bind-mounts it at `/home/claude/pnpm-store:rw`. Store contents survive container teardown and are shared across all workers started by the same orchestrator instance, eliminating cold-install overhead for lockfile-unchanged runs.
+
+### Playwright Browser Download Failure (2026-02-19)
+
+Added system Chromium (`apk add chromium`) to the Dockerfile and set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` + `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser`. Previously, `@playwright/mcp` attempted to download Chromium at runtime into a noexec-restricted directory, failing silently.

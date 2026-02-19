@@ -8,7 +8,7 @@ The package is small and focused. Schemas are static constants with no runtime l
 
 #### 1. ErrorCode subset diverges from common-core
 
-The `ERROR_CODES` constant and `fastifyErrorCodeSchema.enum` list only 8 error codes, while `ErrorCode` in `common-core/errors.ts` defines 22+ codes. The OpenAPI documentation underrepresents the actual error codes that services can return.
+The `ERROR_CODES` constant and `fastifyErrorCodeSchema.enum` list only 8 error codes, while `ErrorCode` in `common-core/errors.ts` defines 27 codes. The OpenAPI documentation underrepresents the actual error codes that services can return.
 
 **Impact:** Medium. API consumers see incomplete error code documentation. Domain-specific codes like `WORKER_NOT_CONFIGURED`, `NOTION_NOT_CONNECTED`, `RATE_LIMITED`, `LOCKED`, `GONE`, `PRECONDITION_FAILED`, and `UNPROCESSABLE_ENTITY` are missing from the contracts.
 **Suggested fix:** Either auto-generate the enum from the `ErrorCode` type or explicitly list all codes. Consider a build-time check that validates parity between `http-contracts` error codes and `common-core` ErrorCode.
@@ -32,6 +32,10 @@ There is no mechanism ensuring that the JSON Schema definitions match the TypeSc
 The package has zero dependencies and hardcodes error code values. This means error codes exist in three places: `common-core/errors.ts`, `openapi-schemas.ts`, and `fastify-schemas.ts`.
 
 **Impact:** Low. Adds maintenance burden when introducing new error codes.
+
+## Resolved Debt
+
+None archived yet.
 
 ## Future Plans
 

@@ -16,23 +16,78 @@ apps/
       routes/    # HTTP transport layer
       services.ts   # Service container / DI
 packages/
-  common/           # Only shared utilities
+  common-core/      # Result/Either types, error base classes (leaf package)
+  common-http/      # HTTP response helpers, redaction utilities (leaf package)
+  http-contracts/   # Shared HTTP type definitions
+  http-server/      # Fastify server factory and plugins
+  infra-*/          # External service wrappers (Claude, Firestore, Gemini, etc.)
+  internal-clients/ # Typed clients for service-to-service communication
+  llm-*/            # LLM utilities: audit, contract, factory, pricing, prompts, utils
 ```
+
+## Package Catalog
+
+The monorepo contains 22 packages:
+
+### Common Packages (leaf — no internal deps)
+
+| Package                    | Purpose                                             |
+| -------------------------- | --------------------------------------------------- |
+| `@intexuraos/common-core`  | Result/Either types, error base classes             |
+| `@intexuraos/common-http`  | HTTP response helpers, redaction utilities          |
+| `@intexuraos/http-contracts` | Shared HTTP type definitions (request/response shapes) |
+
+### Server & Transport
+
+| Package                    | Purpose                                             |
+| -------------------------- | --------------------------------------------------- |
+| `@intexuraos/http-server`  | Fastify server factory, auth plugin, request logging |
+
+### Infrastructure Wrappers (`infra-*`)
+
+| Package                        | Purpose                                   |
+| ------------------------------ | ----------------------------------------- |
+| `@intexuraos/infra-claude`     | Anthropic Claude API client               |
+| `@intexuraos/infra-firestore`  | Firestore client initialization           |
+| `@intexuraos/infra-gemini`     | Google Gemini API client                  |
+| `@intexuraos/infra-glm`        | GLM (Zhipu AI) API client                 |
+| `@intexuraos/infra-gpt`        | OpenAI GPT API client                     |
+| `@intexuraos/infra-notion`     | Notion API client wrapper                 |
+| `@intexuraos/infra-otel`       | OpenTelemetry instrumentation             |
+| `@intexuraos/infra-perplexity` | Perplexity AI API client                  |
+| `@intexuraos/infra-pubsub`     | Google Cloud Pub/Sub client and publisher |
+| `@intexuraos/infra-sentry`     | Sentry error tracking and `createAppLogger()` |
+| `@intexuraos/infra-whatsapp`   | WhatsApp Business API client              |
+
+### Service Communication
+
+| Package                        | Purpose                                              |
+| ------------------------------ | ---------------------------------------------------- |
+| `@intexuraos/internal-clients` | Typed clients for service-to-service HTTP calls (e.g., user-service client) |
+
+### LLM Utilities (`llm-*`)
+
+| Package                    | Purpose                                             |
+| -------------------------- | --------------------------------------------------- |
+| `@intexuraos/llm-audit`    | LLM API call audit logging to Firestore             |
+| `@intexuraos/llm-contract` | Shared LLM type contracts (models, messages)        |
+| `@intexuraos/llm-factory`  | LLM client factory (selects provider by model ID)   |
+| `@intexuraos/llm-pricing`  | LLM token pricing lookup and cost calculation       |
+| `@intexuraos/llm-prompts`  | Shared `PromptBuilder` and versioned prompt helpers |
+| `@intexuraos/llm-utils`    | Shared LLM utility functions                        |
 
 ## Layer Definitions
 
-### packages/common
+### packages/common-core and packages/common-http
 
 **Purpose:** Cross-cutting technical utilities only.
 
 **Allowed contents:**
 
-- Result/Either types
-- Error base classes
-- HTTP response helpers
-- Redaction utilities
-- JWT/auth utilities
-- Firestore/Notion client wrappers (shared initialization only)
+- Result/Either types (`common-core`)
+- Error base classes (`common-core`)
+- HTTP response helpers (`common-http`)
+- Redaction utilities (`common-http`)
 
 **Forbidden contents:**
 
@@ -40,7 +95,7 @@ packages/
 - Business logic
 - App-specific code
 
-**Dependencies:** None (leaf package).
+**Dependencies:** None (leaf packages).
 
 **Verification:** `pnpm run verify:common`
 
@@ -74,7 +129,8 @@ domain/
 
 **Dependencies:**
 
-- `@intexuraos/common` ✓
+- `@intexuraos/common-core` ✓
+- `@intexuraos/common-http` ✓
 - Same-app `src/infra/` via ports only ✗ (domain should not import infra directly)
 
 ### apps/\*/src/infra/
@@ -108,7 +164,8 @@ infra/
 
 **Dependencies:**
 
-- `@intexuraos/common` ✓
+- `@intexuraos/common-core` ✓
+- `@intexuraos/common-http` ✓
 - Same-app `src/domain/` ✓
 
 ### apps/\*/src/routes/
@@ -126,32 +183,35 @@ infra/
 
 - Same-app `src/domain/` ✓
 - Same-app `src/infra/` ✓ (via services.ts)
-- `@intexuraos/common` ✓
+- `@intexuraos/common-core` ✓
+- `@intexuraos/common-http` ✓
 
 ## Import Rules
 
-| From                    | Can Import                            |
-| ----------------------- | ------------------------------------- |
-| `packages/common`       | nothing                               |
-| `apps/<app>/src/domain` | `@intexuraos/common`                  |
-| `apps/<app>/src/infra`  | `@intexuraos/common`, same-app domain |
-| `apps/<app>/src/routes` | `@intexuraos/common`, same-app all    |
+| From                    | Can Import                                          |
+| ----------------------- | --------------------------------------------------- |
+| `packages/common-core`  | nothing                                             |
+| `packages/common-http`  | `@intexuraos/common-core`                           |
+| `apps/<app>/src/domain` | `@intexuraos/common-core`, `@intexuraos/common-http` |
+| `apps/<app>/src/infra`  | `@intexuraos/common-*`, same-app domain             |
+| `apps/<app>/src/routes` | `@intexuraos/common-*`, same-app all                |
 
 **Forbidden:**
 
 - ❌ Any app importing from another app
-- ❌ `packages/common` importing from apps
+- ❌ `packages/common-*` importing from apps
 - ❌ Deep imports into package internals
 
 ## Naming Conventions
 
-| Type           | Pattern                      | Example                    |
-| -------------- | ---------------------------- | -------------------------- |
-| Shared package | `@intexuraos/common`         | `@intexuraos/common`       |
-| App            | `@intexuraos/<name>-service` | `@intexuraos/user-service` |
-| Repository     | `*Repository.ts`             | `authTokenRepository.ts`   |
-| Use case       | `*UseCase.ts`                | `createPromptUseCase.ts`   |
-| API adapter    | `*Api.ts`                    | `promptApi.ts`             |
+| Type           | Pattern                         | Example                          |
+| -------------- | ------------------------------- | -------------------------------- |
+| Core utilities | `@intexuraos/common-core`       | `@intexuraos/common-core`        |
+| HTTP utilities | `@intexuraos/common-http`       | `@intexuraos/common-http`        |
+| App            | `@intexuraos/<name>-service`    | `@intexuraos/user-service`       |
+| Repository     | `*Repository.ts`                | `authTokenRepository.ts`         |
+| Use case       | `*UseCase.ts`                   | `createPromptUseCase.ts`         |
+| API adapter    | `*Api.ts`                       | `promptApi.ts`                   |
 
 ## Verification
 

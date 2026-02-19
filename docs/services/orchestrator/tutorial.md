@@ -87,6 +87,7 @@ INFO: Starting orchestrator { port: 8199, capacity: 2 }
 INFO: Fetching GitHub private key from Secret Manager...
 INFO: Repository path exists, validating...
 INFO: Repository validation passed
+INFO: Completion verification configuration { completionMaxAttempts: 3, verifier: { enabled: true, provider: 'gemini', model: 'gemini-2.5-flash' } }
 INFO: Orchestrator HTTP server started { port: 8199 }
 INFO: No interrupted tasks to recover
 INFO: Starting heartbeat manager { intervalMs: 600000 }
@@ -107,7 +108,8 @@ Expected response:
   "capacity": 2,
   "running": 0,
   "available": 2,
-  "githubTokenExpiresAt": "2026-02-08T15:30:00.000Z"
+  "githubTokenExpiresAt": "2026-02-08T15:30:00.000Z",
+  "anthropicOAuth": { "status": "not_configured", "message": "Not configured" }
 }
 ```
 
@@ -311,6 +313,9 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `401 Invalid signature`             | HMAC secret mismatch                 | Match `INTEXURAOS_ORCHESTRATOR_SECRET` with UI setting                                                   |
 | Docker `name already in use`        | Orphaned container from previous run | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`                                             |
 | `Network not found`                 | Missing Docker network               | `./scripts/setup-worker-network.sh`                                                                      |
-| `Image not found`                   | Claude worker image not pulled/built | `docker pull europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest` |
+| `Image not found`                   | Claude worker image not pulled/built | `docker pull europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`; or set `INTEXURAOS_CLAUDE_WORKER_IMAGE` |
 | Tests skipped (E2E)                 | Docker network or test image missing | See Part 3 prerequisites                                                                                 |
 | `Cannot find module '@intexuraos'`  | Packages not built                   | Run `pnpm build` at repository root                                                                      |
+| Turn metrics always zero            | macOS host (no cgroup v2 exposure)   | Expected on macOS; metrics are non-fatal and show zeros when cgroup path is unavailable                  |
+| `INTEXURAOS_GEMINI_APP_API_KEY not set` | Missing required env var         | Add to `.envrc.local` and run `direnv allow`; completion verification is always required                 |
+| Tasks fail with `TASK_COMPLETION_VERIFIER_FAILED` | Gemini API unreachable | Check network connectivity and Gemini API key validity; tasks fail rather than complete unverified       |

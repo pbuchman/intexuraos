@@ -28,6 +28,7 @@ interface UserServiceTools {
 
   // User Settings
   getUserSettings(userId: string): Promise<UserSettings>;
+  updateUserSettings(userId: string, params: { defaultModel: string }): Promise<{ defaultModel: string }>;
 
   // LLM API Keys
   getLlmApiKeys(userId: string): Promise<LlmKeysStatus>;
@@ -90,10 +91,11 @@ interface UserSettings {
 }
 
 interface LlmPreferences {
-  defaultModel: string;
+  defaultModel: string; // Must pass isFastModel() validation
 }
 
 interface LlmKeysStatus {
+  defaultModel: string | null; // User's preferred default LLM model (from llmPreferences)
   google: string | null; // Masked key preview (e.g., "AIza...XXXX")
   openai: string | null;
   anthropic: string | null;
@@ -134,14 +136,15 @@ interface OAuthConnectionStatus {
 
 ## Constraints
 
-| Rule                      | Description                                             |
-| ------------------------- | ------------------------------------------------------- |
-| **Self-Access Only**      | Users can only access their own settings                |
-| **Encrypted Storage**     | API keys encrypted at rest with AES-256-GCM             |
-| **Key Validation**        | API keys validated with provider before storing         |
-| **5 Providers**           | Supports Google, OpenAI, Anthropic, Perplexity, Zai     |
-| **Rate Limit Precedence** | Error parser checks rate limits before API key errors   |
-| **Internal Auth**         | Service-to-service calls require X-Internal-Auth header |
+| Rule                      | Description                                                        |
+| ------------------------- | ------------------------------------------------------------------ |
+| **Self-Access Only**      | Users can only access their own settings                           |
+| **Encrypted Storage**     | API keys encrypted at rest with AES-256-GCM                        |
+| **Key Validation**        | API keys validated with provider before storing                    |
+| **5 Providers**           | Supports Google, OpenAI, Anthropic, Perplexity, Zai                |
+| **Rate Limit Precedence** | Error parser checks rate limits before API key errors              |
+| **Internal Auth**         | Service-to-service calls require X-Internal-Auth header            |
+| **Model Validation**      | `defaultModel` must pass `isFastModel()` or request is rejected    |
 
 ---
 
@@ -217,6 +220,7 @@ const testResult = await testLlmApiKey(userId, 'openai');
 
 ```typescript
 const keys = await getLlmApiKeys(userId);
+// keys.defaultModel shows user's preferred model (e.g., "claude-haiku-3-5") or null
 // keys.google shows "AIza...XXXX" (masked) if configured
 // keys.testResults.google shows last test result
 ```
@@ -270,4 +274,4 @@ Keys are validated using cheap, fast models to minimize cost:
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

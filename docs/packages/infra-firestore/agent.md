@@ -35,11 +35,11 @@ interface FakeFirestoreConfig {
 
 // FakeFirestore provides:
 // .collection(name) => FakeCollectionReference
-// .batch() => FakeBatch
-// .runTransaction(fn) => Promise<T>
+// .batch() => FakeBatch           -- NOT truly atomic; operations execute sequentially on commit()
+// .runTransaction(fn) => Promise<T>  -- serialized via queue; reads/writes isolated until commit
 // .seedCollection(name, docs) => void
 // .getAllData() => Map<string, Map<string, DocumentData>>
-// .clear() => void
+// .clear() => void               -- also resets transaction queue
 // .configure(config) => void
 // .listCollections() => Promise<CollectionReference[]>
 ```

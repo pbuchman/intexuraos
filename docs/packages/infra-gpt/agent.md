@@ -2,11 +2,13 @@
 
 ## Identity
 
-- **Package:** `@intexuraos/infra-gpt`
-- **Version:** 2.1.0
-- **Purpose:** OpenAI GPT API wrapper implementing `LLMClient`
-- **Provider constant:** `LlmProviders.OpenAI`
-- **External SDK:** `openai` ^6.15.0
+| Attribute | Value                                                 |
+| --------- | ----------------------------------------------------- |
+| Package   | `@intexuraos/infra-gpt`                               |
+| Version   | 2.1.0                                                 |
+| Purpose   | OpenAI GPT API wrapper implementing `LLMClient`       |
+| Provider  | `LlmProviders.OpenAI`                                 |
+| SDK       | `openai` ^6.15.0                                      |
 
 ## Exports
 
@@ -29,13 +31,8 @@ export function normalizeUsage(
 // Types
 export type GptClient = LLMClient;
 export type {
-  GptConfig,
-  GptError,
-  ResearchResult,
-  GenerateResult,
-  ImageGenerationResult,
-  ImageGenerateOptions,
-  SynthesisInput,
+  GptConfig, GptError, ResearchResult, GenerateResult,
+  ImageGenerationResult, ImageGenerateOptions, SynthesisInput,
 };
 ```
 
@@ -47,17 +44,20 @@ interface GptConfig {
   model: string;
   userId: string;
   pricing: ModelPricing;
-  imagePricing?: ModelPricing;
+  imagePricing?: ModelPricing;  // separate pricing for generateImage
   logger: Logger;
 }
 
 // GptError = LLMError from @intexuraos/llm-contract
-type GptError = { code: LLMErrorCode; message: string };
+type GptError = {
+  code: 'INVALID_KEY' | 'RATE_LIMITED' | 'CONTEXT_LENGTH' | 'TIMEOUT' | 'API_ERROR';
+  message: string;
+};
 ```
 
 ## Usage Patterns
 
-### Create client and run research
+### Research with web search
 
 ```ts
 import { createGptClient } from '@intexuraos/infra-gpt';
@@ -73,15 +73,20 @@ const client = createGptClient({
 const result = await client.research('query');
 if (result.ok) {
   // result.data: { content: string, sources: string[], usage: NormalizedUsage }
+  // Uses Responses API with web_search_preview tool (medium context)
+  // usage.webSearchCalls: count of web_search_call items in response.output
+  // usage.cacheTokens: from input_tokens_details.cached_tokens
+  // usage.reasoningTokens: from output_tokens_details.reasoning_tokens (o-series models)
 }
 ```
 
-### Generate image
+### Image generation
 
 ```ts
 const result = await client.generateImage?.('A sunset over mountains', { size: '1024x1024' });
 if (result?.ok) {
   // result.data: { imageData: Buffer, model: 'gpt-image-1', usage: NormalizedUsage }
+  // imageData: decoded from b64_json (primary) or fetched from URL (fallback)
 }
 ```
 
@@ -90,32 +95,46 @@ if (result?.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED': // 429
-    case 'INVALID_KEY': // 401
-    case 'CONTEXT_LENGTH': // context_length_exceeded
-    case 'TIMEOUT': // timeout
-    case 'API_ERROR': // general error
+    case 'RATE_LIMITED':   // 429 — retry with backoff
+    case 'INVALID_KEY':    // 401 — do not retry
+    case 'CONTEXT_LENGTH': // context_length_exceeded — reduce prompt
+    case 'TIMEOUT':        // retry
+    case 'API_ERROR':      // log and handle
   }
 }
 ```
 
 ## Dependencies
 
-- `@intexuraos/common-core` -- Result types, getErrorMessage, Logger
-- `@intexuraos/llm-contract` -- LLMClient, NormalizedUsage, TokenUsage, ModelPricing, LlmModels, ImageSize
-- `@intexuraos/llm-prompts` -- buildResearchPrompt
-- `@intexuraos/llm-audit` -- createAuditContext
-- `@intexuraos/llm-pricing` -- createUsageLogger
+| Package                    | Role                                                              |
+| -------------------------- | ----------------------------------------------------------------- |
+| `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                             |
+| `@intexuraos/llm-contract` | LLMClient, NormalizedUsage, TokenUsage, ModelPricing, LlmModels, ImageSize |
+| `@intexuraos/llm-prompts`  | buildResearchPrompt                                               |
+| `@intexuraos/llm-audit`    | createAuditContext                                                |
+| `@intexuraos/llm-pricing`  | createUsageLogger                                                 |
 
 ## Constants
 
-- `MAX_TOKENS`: 8192
-- `IMAGE_MODEL`: `LlmModels.GPTImage1`
-- `DEFAULT_IMAGE_SIZE`: `'1024x1024'`
+| Constant             | Value                |
+| -------------------- | -------------------- |
+| `MAX_TOKENS`         | 8192                 |
+| `IMAGE_MODEL`        | `LlmModels.GPTImage1` |
+| `DEFAULT_IMAGE_SIZE` | `'1024x1024'`        |
+
+## Constraints
+
+**Do NOT:**
+- Inject custom `auditSink` or `usageSink` — not supported (uses Firestore defaults)
+- Rely on `generateImage` having a timeout on URL fetches — it currently has none
+
+**Requires:**
+- Valid `INTEXURAOS_OPENAI_APP_API_KEY` environment variable
+- `logger` field on config (mandatory, enforced by ESLint)
+- `imagePricing` config for accurate `generateImage` cost tracking
 
 ## Implementation Detail
 
-- `research()` uses the OpenAI Responses API (`client.responses.create`) with `web_search_preview` tool
-- `generate()` uses the Chat Completions API (`client.chat.completions.create`)
-- `generateImage()` uses `client.images.generate` with `gpt-image-1`; supports both base64 and URL response formats
-- Extracts `reasoning_tokens` from `output_tokens_details` for o-series models
+- `research()` uses `client.responses.create` (Responses API) with `{ type: 'web_search_preview', search_context_size: 'medium' }` tool. Returns `response.output_text` as content.
+- `generate()` uses `client.chat.completions.create` (Chat Completions API). Both APIs require separate usage extraction since their response shapes differ.
+- `generateImage()` uses `client.images.generate` with `IMAGE_MODEL`. Prefers `b64_json`; falls back to fetching from `url` when only URL is returned.
