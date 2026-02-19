@@ -7,6 +7,7 @@ export interface ClassificationResult {
   confidence: number;
   title: string;
   reasoning: string;
+  promptVersion: string;
 }
 
 export interface ClassifyOptions {

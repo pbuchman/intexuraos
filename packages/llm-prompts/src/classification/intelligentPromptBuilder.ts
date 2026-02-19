@@ -154,6 +154,7 @@ export const intelligentClassifierPrompt: PromptBuilder<
 > = {
   name: 'intelligent-command-classification',
   description: 'Classifies user messages using historical examples and learned corrections',
+  version: '1.0.0',
 
   build(input: IntelligentClassifierPromptInput, deps?: IntelligentClassifierPromptDeps): string {
     const maxExamplesPerCategory = deps?.maxExamplesPerCategory ?? 5;

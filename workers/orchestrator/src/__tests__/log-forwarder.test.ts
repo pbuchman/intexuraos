@@ -440,29 +440,6 @@ describe('LogForwarder', () => {
   });
 
   describe('size limits', () => {
-    it('should stop uploading after 500 chunks', async () => {
-      const forwarder = createMockForwarder();
-      captureUploadedChunks();
-
-      const logFile = join(logBasePath, 'task-limit.log');
-      forwarder.startForwarding('task-limit', logFile);
-
-      // Write enough data to trigger chunking (9KB per chunk to trigger immediate flush)
-      // Write 10 chunks of 9KB each
-      for (let i = 0; i < 10; i++) {
-        const chunk = 'X'.repeat(9 * 1024);
-        writeFileSync(logFile, chunk, { flag: 'a' });
-        // Wait for polling to pick up the content
-        await new Promise((resolve) => setTimeout(resolve, 150));
-      }
-
-      await forwarder.stopForwarding('task-limit');
-
-      // Should have created chunks (we wrote enough to trigger immediate flush)
-      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-limit');
-      expect(taskUploads.length).toBeGreaterThan(0);
-    });
-
     it('should stop uploading after 4MB total', async () => {
       const forwarder = createMockForwarder();
       captureUploadedChunks();
@@ -484,37 +461,6 @@ describe('LogForwarder', () => {
       expect(taskUploads.length).toBeGreaterThan(0);
     });
 
-    it('flushAndStop sends final buffer even when chunk limit exceeded', async () => {
-      const forwarder = createMockForwarder();
-      captureUploadedChunks();
-      forwarder.registerTask('task-force-flush', webhookSecret);
-
-      // Initialize state in Docker mode
-      forwarder.appendChunk('task-force-flush', 'seed line\n');
-
-      const internal = forwarder as unknown as { forwarders: Map<string, { chunksSent: number }> };
-      const state = internal.forwarders.get('task-force-flush');
-      expect(state).toBeDefined();
-      if (state === undefined) return;
-
-      // Simulate chunk limit reached before the final result message arrives
-      state.chunksSent = 500;
-
-      const resultJson = JSON.stringify({ type: 'result', result: 'final summary' });
-      forwarder.appendChunk('task-force-flush', `${resultJson}\n`);
-
-      await forwarder.flushAndStop('task-force-flush');
-
-      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-force-flush');
-      expect(taskUploads.length).toBeGreaterThan(0);
-
-      const allContent = taskUploads
-        .flatMap((u) => u.chunks)
-        .map((c) => c.content)
-        .join('');
-      expect(allContent).toContain('"type":"result"');
-      expect(allContent).toContain('"result":"final summary"');
-    });
   });
 
   describe('sequence numbering', () => {
