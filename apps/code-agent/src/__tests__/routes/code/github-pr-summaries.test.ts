@@ -40,6 +40,7 @@ import type { TaskDispatcherService, DispatchResult } from '../../../domain/serv
 import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createFirestorePRTaskLockRepository } from '../../../infra/firestore/firestorePRTaskLockRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
 
 describe('GET /code/github-pr-summaries', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -171,6 +172,10 @@ describe('GET /code/github-pr-summaries', () => {
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -193,6 +198,7 @@ describe('GET /code/github-pr-summaries', () => {
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
       prTaskLockRepo: import('../../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
+      turnMetricsRepo: import('../../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
     server = await buildServer();

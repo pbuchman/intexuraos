@@ -34,6 +34,7 @@ import type { OrchestratorConfig } from './types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from './services/task-dispatcher.js';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
+import { TurnMetricsCollector } from './services/turn-metrics-collector.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
@@ -525,6 +526,16 @@ async function bootstrap(): Promise<void> {
     'Completion verification configuration'
   );
 
+  const turnMetricsCollector = new TurnMetricsCollector(
+    {
+      codeAgentUrl: config.codeAgentUrl,
+      orchestratorSecret: config.orchestratorSecret,
+      internalAuthToken,
+      secretsBasePath,
+    },
+    logger
+  );
+
   const dispatcher = new TaskDispatcher(
     config,
     statePersistence,
@@ -534,7 +545,8 @@ async function bootstrap(): Promise<void> {
     tokenService,
     logger,
     isolationConfig,
-    completionControl
+    completionControl,
+    turnMetricsCollector
   );
 
   // Credential monitoring loop — trigger Docker-based refresh when near expiry

@@ -26,6 +26,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestore/gitHubPRSummariesRepository.js';
 import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
 
@@ -152,6 +153,10 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
     }),
     prTaskLockRepo: createFirestorePRTaskLockRepository({
+      firestore: fakeFirestore,
+      logger,
+    }),
+    turnMetricsRepo: createFirestoreTurnMetricsRepository({
       firestore: fakeFirestore,
       logger,
     }),
