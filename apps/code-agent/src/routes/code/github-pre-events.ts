@@ -6,10 +6,12 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { Result } from '@intexuraos/common-core';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
+import type { RepositoryError } from '../../domain/repositories/gitHubPREventRepository.js';
 import { extractEventUrl } from './extractEventUrl.js';
 
 export interface CodeRoutesOptions {
@@ -199,7 +201,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
 
         request.log.info({ repository: repository ?? 'all', pullRequestNumber, limit }, 'Fetching GitHub PR events');
 
-        let result;
+        let result: Result<GitHubPREvent[], RepositoryError>;
         if (repository !== undefined && pullRequestNumber !== undefined) {
           // Per-PR fetch: returns events oldest-first (reversed from stored desc order)
           const prResult = await gitHubPREventRepo.findByPullRequest(repository, pullRequestNumber);
