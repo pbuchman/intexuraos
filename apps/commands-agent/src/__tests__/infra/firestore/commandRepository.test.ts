@@ -61,6 +61,7 @@ describe('FirestoreCommandRepository', () => {
           type: 'research',
           confidence: 0.95,
           reasoning: 'User wants to research this topic',
+          promptVersion: '1.0.0',
           classifiedAt: new Date().toISOString(),
         },
       });
@@ -113,6 +114,7 @@ describe('FirestoreCommandRepository', () => {
           type: 'todo',
           confidence: 0.88,
           reasoning: 'This is a task',
+          promptVersion: '1.0.0',
           classifiedAt: new Date().toISOString(),
         },
         actionId: 'action-789',
@@ -168,6 +170,7 @@ describe('FirestoreCommandRepository', () => {
           type: 'research',
           confidence: 0.92,
           reasoning: 'Research request detected',
+          promptVersion: '1.0.0',
           classifiedAt: new Date().toISOString(),
         },
       };
