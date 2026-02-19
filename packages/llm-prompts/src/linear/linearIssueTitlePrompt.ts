@@ -27,7 +27,7 @@ export const linearIssueTitlePrompt: PromptBuilder<
 > = {
   name: 'linear-issue-title',
   description: 'Generates value-focused Linear issue titles with product owner expertise',
-  version: '1.0.0',
+  version: '1.1.0',
 
   build(input: LinearIssueTitlePromptInput, deps?: LinearIssueTitlePromptDeps): string {
     const maxLength = deps?.maxLength ?? 80;
@@ -77,7 +77,7 @@ GOOD: "Fix phone numbers rejected incorrectly" ← user impact
 - Use verbs: "Improve", "Simplify", "Accelerate", "Reduce"
 
 BAD:  "Refactor UserService to use repository pattern"
-GOOD: "Improve test coverage for user management"
+GOOD: "Simplify user management with repository pattern"
 
 BAD:  "Migrate from REST to GraphQL"
 GOOD: "Reduce API response time for dashboard"

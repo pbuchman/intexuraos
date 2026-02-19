@@ -23,7 +23,7 @@ export const calendarActionExtractionPrompt: PromptBuilder<
 > = {
   name: 'calendar-action-extraction',
   description: 'Extracts structured calendar event data from natural language text',
-  version: '1.0.0',
+  version: '1.1.0',
 
   build(
     input: CalendarEventExtractionPromptInput,
@@ -76,12 +76,14 @@ RULES:
    TIME FORMATS:
    - "at 3pm" / "o 15:00" / "o 15 30" → parse as 24-hour time
    - "3pm tomorrow" / "jutro o 15" / "jutro o 15:30" → combine date + time
-   - If no time specified → use 09:00 as default start time
+   - If no time specified:
+     * Appointments/meetings/calls → use 09:00 as default start time
+     * Birthdays/holidays/deadlines → use date-only format (all-day event)
    - If no end time specified → assume 1 hour duration
 
 3. OUTPUT FORMAT:
-   - Dates with time: ISO-8601 format (YYYY-MM-DDTHH:mm:ss)
-   - Dates without time: YYYY-MM-DD (all-day event)
+   - Events with time: ISO-8601 format (YYYY-MM-DDTHH:mm:ss)
+   - All-day events (birthdays, holidays, deadlines): YYYY-MM-DD
    - Times in 24-hour format when parsing (e.g., 3pm → 15:00)
 
 4. REQUIRED FIELDS:

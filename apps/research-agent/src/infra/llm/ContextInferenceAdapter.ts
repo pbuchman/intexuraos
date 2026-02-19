@@ -259,13 +259,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     errorMessage: string
   ): Promise<Result<SynthesisContextResult, string>> {
     const repairPrompt = buildSynthesisContextRepairPrompt(
-      {
-        originalPrompt: params.originalPrompt,
-        reports: params.reports ?? [],
-        additionalSources: (params.additionalSources ?? []).filter(
-          (s): s is { content: string; label: string } => s.label !== undefined
-        ),
-      },
+      params.originalPrompt,
       invalidResponse,
       errorMessage
     );

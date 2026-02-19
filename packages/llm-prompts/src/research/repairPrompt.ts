@@ -10,18 +10,16 @@ export function buildResearchContextRepairPrompt(
 ): string {
   return `The previous response was invalid. Please fix it.
 
-USER QUERY:
-"""
+<user_query>
 ${originalQuery}
-"""
+</user_query>
 
 ERROR DETAILS:
 ${errorMessage}
 
-INVALID RESPONSE:
-"""
+<invalid_response>
 ${invalidResponse}
-"""
+</invalid_response>
 
 REQUIREMENTS:
 1. Output ONLY valid JSON (no markdown code blocks, no explanation text)

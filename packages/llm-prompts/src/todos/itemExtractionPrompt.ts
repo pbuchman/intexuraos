@@ -7,6 +7,7 @@ export interface ItemExtractionPromptInput {
 export interface ItemExtractionPromptDeps extends PromptDeps {
   maxItems?: number;
   maxDescriptionLength?: number;
+  currentDate?: () => string;
 }
 
 export const itemExtractionPrompt: PromptBuilder<
@@ -15,11 +16,14 @@ export const itemExtractionPrompt: PromptBuilder<
 > = {
   name: 'todo-item-extraction',
   description: 'Extracts actionable, non-repetitive todo items from description',
-  version: '1.0.0',
+  version: '1.1.0',
 
   build(input: ItemExtractionPromptInput, deps?: ItemExtractionPromptDeps): string {
     const maxItems = deps?.maxItems ?? 50;
     const maxLength = deps?.maxDescriptionLength ?? 10000;
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback @preserve */
+    const currentDate = deps?.currentDate?.() ?? new Date().toISOString().split('T')[0] ?? '';
+    /* v8 ignore stop @preserve */
     const descriptionPreview =
       input.description.length > maxLength
         ? input.description.slice(0, maxLength)
@@ -27,11 +31,12 @@ export const itemExtractionPrompt: PromptBuilder<
 
     const truncationWarning =
       input.description.length > maxLength
-        ? `\n\n⚠️ IMPORTANT: Description was truncated to first ${String(maxLength)} characters. Items will only be extracted from this portion.\n`
+        ? `\n\nIMPORTANT: Description was truncated to first ${String(maxLength)} characters. Items will only be extracted from this portion.\n`
         : '';
 
     return `Extract actionable, non-repetitive items from following todo description.
 
+CURRENT DATE: ${currentDate}
 MAXIMUM ITEMS: ${String(maxItems)} items maximum
 LANGUAGE: Maintain the SAME LANGUAGE as the description (English → English items, Polish → Polish items, Spanish → Spanish items, etc.)
 

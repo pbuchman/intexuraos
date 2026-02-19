@@ -36,14 +36,14 @@ describe('itemExtractionPrompt', () => {
     );
 
     expect(result).toContain('first 500 characters');
-    expect(result).toContain('⚠️ IMPORTANT: Description was truncated');
+    expect(result).toContain('IMPORTANT: Description was truncated');
   });
 
   it('includes truncation warning for long descriptions', () => {
     const longDescription = 'x'.repeat(11000);
     const result = itemExtractionPrompt.build({ description: longDescription });
 
-    expect(result).toContain('⚠️ IMPORTANT: Description was truncated');
+    expect(result).toContain('IMPORTANT: Description was truncated');
     expect(result).toContain('first 10000 characters');
   });
 
@@ -51,7 +51,7 @@ describe('itemExtractionPrompt', () => {
     const shortDescription = 'Short description';
     const result = itemExtractionPrompt.build({ description: shortDescription });
 
-    expect(result).not.toContain('⚠️ IMPORTANT: Description was truncated');
+    expect(result).not.toContain('IMPORTANT: Description was truncated');
     expect(result).not.toContain('truncated to first');
   });
 
@@ -74,7 +74,7 @@ describe('itemExtractionPrompt', () => {
       { maxDescriptionLength: 1000 }
     );
 
-    expect(result).not.toContain('⚠️ IMPORTANT: Description was truncated');
+    expect(result).not.toContain('IMPORTANT: Description was truncated');
     expect(result).toContain(shortDescription);
   });
 
