@@ -5,6 +5,7 @@ describe('itemExtractionPrompt', () => {
   it('has correct metadata', () => {
     expect(itemExtractionPrompt.name).toBe('todo-item-extraction');
     expect(itemExtractionPrompt.description).toContain('Extracts actionable');
+    expect(itemExtractionPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('builds prompt with default deps', () => {

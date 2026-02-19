@@ -23,6 +23,7 @@ export const calendarActionExtractionPrompt: PromptBuilder<
 > = {
   name: 'calendar-action-extraction',
   description: 'Extracts structured calendar event data from natural language text',
+  version: '1.0.0',
 
   build(
     input: CalendarEventExtractionPromptInput,

@@ -181,5 +181,9 @@ describe('linearIssueTitlePrompt', () => {
       expect(linearIssueTitlePrompt.description).toContain('value-focused');
       expect(linearIssueTitlePrompt.description).toContain('Linear issue titles');
     });
+
+    it('has valid semver version', () => {
+      expect(linearIssueTitlePrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+    });
   });
 });

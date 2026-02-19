@@ -5,6 +5,7 @@ describe('inputQualityPrompt', () => {
   it('has correct metadata', () => {
     expect(inputQualityPrompt.name).toBe('input-quality-validation');
     expect(inputQualityPrompt.description).toContain('quality');
+    expect(inputQualityPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('builds prompt with user input', () => {
