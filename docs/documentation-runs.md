@@ -1,3 +1,20 @@
+## 2026-02-19 — v3.0.0 Release Documentation Update
+
+**Action:** Updated
+**Agent:** Interactive (Claude Opus 4.6)
+**Method:** Manual high-level docs update during release finalization
+
+**Scope:**
+
+- `docs/overview.md` — Consolidated "Since v3.0.0" section into v3.0.0; added "Self-Building System" narrative; folded platform intelligence improvements (Notion export, API fallbacks, model selector, OTel, prompt versioning, coverage enforcement)
+- `CHANGELOG.md` — Added v3.0.0 entry with 20 Added, 7 Changed, 1 Improved, 8 Fixed entries
+- Removed PR comment auto-response from v3.0.0 features (not correctly implemented → INT-593)
+- Removed pre-dev environment, xterm.js terminal, saved visualizations from changelog after validation
+
+**Emphasis:** Code Agent and Orchestrator as the self-building autonomous system; accurate feature validation against codebase
+
+---
+
 ## 2026-02-19 — Full Monorepo Refresh (v3)
 
 **Action:** Updated
