@@ -1,14 +1,16 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Play, Link2, Sparkles, Pencil } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal, LinearIssueSelectorModal } from '@/components';
 import type { ConflictReason } from '@/components';
-import { useCodeTasks, useLinearIssueOptions, useWorkersStatus } from '@/hooks';
+import { useCodeTasks, useLinearIssueOptions, useWorkersStatus, findRecentTask } from '@/hooks';
 import type { CodeTaskWorkerType } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 import { ApiError, parseConflictError } from '@/services/apiClient';
+import { listCodeTasks } from '@/services/codeAgentApi';
+import { useAuth } from '@/context';
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = [
   { id: 'auto', name: 'Auto', description: 'Automatically select the best model' },
@@ -29,9 +31,13 @@ const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: R
   { id: 'link', name: 'Link Existing', description: 'Link to an existing Linear issue', icon: <Link2 className="h-4 w-4" /> },
 ];
 
+/** Delay after which loading text changes to reassure users */
+const LONG_SUBMIT_DELAY_MS = 10000;
+
 export function CodeTaskNewPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { submitTask } = useCodeTasks();
+  const { getAccessToken } = useAuth();
   const { groupedOptions, loading: linearLoading, error: linearError } = useLinearIssueOptions();
 
   const [prompt, setPrompt] = useState('');
@@ -39,13 +45,36 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [linearMode, setLinearMode] = useState<LinearMode>('create');
   const [selectedIssue, setSelectedIssue] = useState<LinearIssueOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingText, setLoadingText] = useState('Submitting...');
   const [error, setError] = useState<string | null>(null);
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [conflictInfo, setConflictInfo] = useState<{ taskId: string; reason: ConflictReason } | null>(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [taskError, setTaskError] = useState<ApiError | null>(null);
   const [showIssueSelectorModal, setShowIssueSelectorModal] = useState(false);
+  const longSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const promptManuallyEdited = useRef(false);
+
+  /** Clear the phased loading timer */
+  const clearLongSubmitTimer = useCallback((): void => {
+    if (longSubmitTimerRef.current !== null) {
+      clearTimeout(longSubmitTimerRef.current);
+      longSubmitTimerRef.current = null;
+    }
+  }, []);
+
+  /** Start phased loading: after LONG_SUBMIT_DELAY_MS, update the text */
+  const startLongSubmitTimer = useCallback((): void => {
+    clearLongSubmitTimer();
+    longSubmitTimerRef.current = setTimeout(() => {
+      setLoadingText('Still processing, please wait...');
+    }, LONG_SUBMIT_DELAY_MS);
+  }, [clearLongSubmitTimer]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return clearLongSubmitTimer;
+  }, [clearLongSubmitTimer]);
 
   const { status: workersStatus, loading: workersLoading } = useWorkersStatus();
 
@@ -111,9 +140,11 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
   const handleConfirmSubmit = async (): Promise<void> => {
     setSubmitting(true);
+    setLoadingText('Submitting...');
     setError(null);
     setShowConflictModal(false);
     setShowErrorModal(false);
+    startLongSubmitTimer();
 
     try {
       const requestData: {
@@ -138,12 +169,34 @@ export function CodeTaskNewPage(): React.JSX.Element {
       }
 
       const taskId = await submitTask(requestData);
+      clearLongSubmitTimer();
       void navigate(`/code-tasks/${taskId}`);
     } catch (err) {
+      clearLongSubmitTimer();
       setSubmitting(false);
       setShowConfirmModal(false);
 
       if (err instanceof ApiError) {
+        // Timeout recovery: check if task was created server-side despite timeout
+        if (err.code === 'TIMEOUT') {
+          try {
+            const token = await getAccessToken();
+            const { tasks } = await listCodeTasks(token, {});
+            const recentTask = findRecentTask(tasks, prompt.trim());
+            if (recentTask !== null) {
+              // Task was created successfully — navigate to it
+              void navigate(`/code-tasks/${recentTask.id}`);
+              return;
+            }
+          } catch {
+            // Recovery check failed — fall through to show timeout error
+          }
+          // No task found — show timeout-specific error
+          setTaskError(err);
+          setShowErrorModal(true);
+          return;
+        }
+
         if (err.code === 'CONFLICT') {
           const parsedConflict = parseConflictError(err.message);
           if (parsedConflict !== null) {
@@ -456,7 +509,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
           onClick={handleSubmitClick}
           disabled={!isValid}
           isLoading={submitting}
-          loadingText="Submitting..."
+          loadingText={loadingText}
         >
           <Play className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Submit Task</span>

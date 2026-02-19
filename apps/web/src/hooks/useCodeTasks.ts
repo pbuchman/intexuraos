@@ -153,6 +153,26 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
 }
 
 /**
+ * Find a recently created task matching a prompt.
+ * Used for timeout recovery: checks if a task was created server-side
+ * despite the client timing out.
+ */
+const RECENT_TASK_WINDOW_MS = 120000; // 2 minutes
+
+export function findRecentTask(tasks: CodeTask[], prompt: string): CodeTask | null {
+  const trimmedPrompt = prompt.trim();
+  const now = Date.now();
+
+  for (const task of tasks) {
+    const taskAge = now - new Date(task.createdAt).getTime();
+    if (taskAge <= RECENT_TASK_WINDOW_MS && task.prompt.trim() === trimmedPrompt) {
+      return task;
+    }
+  }
+  return null;
+}
+
+/**
  * Hook for fetching worker status (Mac and VM health).
  * Polls every 60 seconds when visible.
  */

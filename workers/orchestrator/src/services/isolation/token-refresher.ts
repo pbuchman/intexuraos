@@ -65,21 +65,40 @@ export class TokenRefresher {
    * Mint a new GitHub installation token.
    */
   private async mintGitHubToken(): Promise<string> {
+    const url = `https://api.github.com/app/installations/${this.config.githubInstallationId}/access_tokens`;
     const jwt = await this.createGitHubAppJWT();
 
-    const response = await fetch(
-      `https://api.github.com/app/installations/${this.config.githubInstallationId}/access_tokens`,
-      {
+    let response: Response;
+    try {
+      response = await fetch(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${jwt}`,
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-      }
-    );
+      });
+    } catch (error) {
+      const cause = error instanceof Error && error.cause instanceof Error ? error.cause : undefined;
+      this.logger.error(
+        {
+          url,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          causeMessage: cause?.message,
+          causeCode: (cause as NodeJS.ErrnoException | undefined)?.code,
+          causeSyscall: (cause as NodeJS.ErrnoException | undefined)?.syscall,
+        },
+        'GitHub token mint fetch failed'
+      );
+      throw error;
+    }
 
     if (!response.ok) {
+      const body = await response.text().catch(() => '<unreadable>');
+      this.logger.error(
+        { url, status: response.status, body },
+        'GitHub token mint HTTP error'
+      );
       throw new Error(`GitHub token mint failed: ${String(response.status)}`);
     }
 
