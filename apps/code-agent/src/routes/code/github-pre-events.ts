@@ -40,8 +40,9 @@ const gitHubPREventSchema = {
     senderLogin: { type: 'string' },
     createdAt: { type: 'string', format: 'date-time' },
     eventUrl: { type: ['string', 'null'] },
+    body: { type: ['string', 'null'] },
   },
-  required: ['pullRequestNumber', 'title', 'repository', 'eventType', 'action', 'senderLogin', 'createdAt', 'eventUrl'],
+  required: ['pullRequestNumber', 'title', 'repository', 'eventType', 'action', 'senderLogin', 'createdAt', 'eventUrl', 'body'],
 };
 
 // Response schema for the endpoint
@@ -160,6 +161,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           senderLogin: string;
           createdAt: string;
           eventUrl: string | null;
+          body: string | null;
         }[] = result.value.map((event: GitHubPREvent) => ({ // @allow-result-access -- narrowed by !result.ok check above
           pullRequestNumber: event.pullRequestNumber,
           title: event.title,
@@ -169,6 +171,7 @@ const githubPREventsRoute: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
           senderLogin: event.senderLogin,
           createdAt: event.createdAt.toISOString(),
           eventUrl: extractEventUrl(event.eventType, event.payload),
+          body: event.body,
         }));
 
         request.log.info({ count: events.length }, 'Returning GitHub PR events');
