@@ -72,7 +72,7 @@ Do not include any text before or after the JSON.`;
  */
 export function parseApprovalIntentResponse(response: string): ApprovalIntentResponse | null {
   try {
-    const jsonMatch = /\{[\s\S]*?\}/.exec(response);
+    const jsonMatch = /\{[\s\S]*\}/.exec(response);
     if (jsonMatch === null) {
       return null;
     }
