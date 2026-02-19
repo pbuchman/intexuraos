@@ -126,22 +126,22 @@ An AI code agent working on a task needs to break it into subtasks:
 
 ## Key Benefits
 
-| Benefit              | Description                                                   |
-| -------------------- | ------------------------------------------------------------- |
-| Zero Context Switch  | Create issues without leaving WhatsApp                        |
-| Consistent Structure | AI ensures every issue has proper FR/TD sections              |
-| Priority Accuracy    | Natural language maps to Linear's 5-level scale               |
-| Workflow Visibility  | 3-column dashboard shows work at every stage                  |
-| Parent-Child View    | Sub-issues nest under parent issues on the board              |
-| Instant Dashboard    | Local-first Firestore cache — no API latency on load          |
-| Issue Comments       | Read comments and last activity without leaving IntexuraOS    |
-| Failure Recovery     | Invalid extractions saved for manual review and retry         |
-| Duplicate Prevention | Idempotency check prevents duplicate issue creation           |
-| Real-Time Sync       | Webhook integration keeps local data current                  |
-| Full Sync            | Bulk reconciliation for initial setup and recovery            |
-| Programmatic Access  | Internal API for code agents to manage issues                 |
-| Issue Validation     | Verify issue existence and team ownership before use          |
-| AI Title Generation  | LLM-powered title generation with retry-on-failure            |
+| Benefit              | Description                                                |
+| -------------------- | ---------------------------------------------------------- |
+| Zero Context Switch  | Create issues without leaving WhatsApp                     |
+| Consistent Structure | AI ensures every issue has proper FR/TD sections           |
+| Priority Accuracy    | Natural language maps to Linear's 5-level scale            |
+| Workflow Visibility  | 3-column dashboard shows work at every stage               |
+| Parent-Child View    | Sub-issues nest under parent issues on the board           |
+| Instant Dashboard    | Local-first Firestore cache — no API latency on load       |
+| Issue Comments       | Read comments and last activity without leaving IntexuraOS |
+| Failure Recovery     | Invalid extractions saved for manual review and retry      |
+| Duplicate Prevention | Idempotency check prevents duplicate issue creation        |
+| Real-Time Sync       | Webhook integration keeps local data current               |
+| Full Sync            | Bulk reconciliation for initial setup and recovery         |
+| Programmatic Access  | Internal API for code agents to manage issues              |
+| Issue Validation     | Verify issue existence and team ownership before use       |
+| AI Title Generation  | LLM-powered title generation with retry-on-failure         |
 
 ## Limitations
 

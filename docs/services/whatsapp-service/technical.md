@@ -101,21 +101,21 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                           | Date       |
-| ---------- | --------------------------------------------------------------------- | ---------- |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                       | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                   | 2026-02-16 |
-| `e60eafc1` | Rename SPEECHMATICS_API_KEY to SPEECHMATICS_APP_API_KEY               | 2026-02-15 |
-| `d7c6a061` | Add consistent icons to all WhatsApp messages                         | 2026-02-10 |
-| `fee08074` | INT-524 Add read receipt + typing indicator on button click           | 2026-02-09 |
-| `f4d60cb5` | INT-524 Fix button_reply type extraction bug in extractButtonResponse | 2026-02-09 |
-| `090e1d9d` | INT-524 Unified interactive approval buttons (remove nonces/reactions)| 2026-02-09 |
-| `021e76bb` | Address PR review comments                                            | 2026-02-06 |
-| `86564bad` | Fix WhatsApp button_reply payload structure                           | 2026-01-28 |
-| `a9847b66` | Add WhatsApp approval buttons with nonces                             | 2026-01-27 |
-| `70ffe910` | Add verification routes and connect integration                       | 2026-01-26 |
-| `c3198407` | Fix all 132 response contract violations across codebase              | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps                | 2026-01-30 |
+| Commit     | Description                                                            | Date       |
+| ---------- | ---------------------------------------------------------------------- | ---------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability                        | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                    | 2026-02-16 |
+| `e60eafc1` | Rename SPEECHMATICS_API_KEY to SPEECHMATICS_APP_API_KEY                | 2026-02-15 |
+| `d7c6a061` | Add consistent icons to all WhatsApp messages                          | 2026-02-10 |
+| `fee08074` | INT-524 Add read receipt + typing indicator on button click            | 2026-02-09 |
+| `f4d60cb5` | INT-524 Fix button_reply type extraction bug in extractButtonResponse  | 2026-02-09 |
+| `090e1d9d` | INT-524 Unified interactive approval buttons (remove nonces/reactions) | 2026-02-09 |
+| `021e76bb` | Address PR review comments                                             | 2026-02-06 |
+| `86564bad` | Fix WhatsApp button_reply payload structure                            | 2026-01-28 |
+| `a9847b66` | Add WhatsApp approval buttons with nonces                              | 2026-01-27 |
+| `70ffe910` | Add verification routes and connect integration                        | 2026-01-26 |
+| `c3198407` | Fix all 132 response contract violations across codebase               | 2026-01-30 |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps                 | 2026-01-30 |
 
 ## API Endpoints
 
@@ -143,12 +143,12 @@ sequenceDiagram
 
 ### Internal Endpoints
 
-| Method | Path                                         | Description                  | Auth         |
-| ------ | -------------------------------------------- | ---------------------------- | ------------ |
+| Method | Path                                         | Description                                             | Auth         |
+| ------ | -------------------------------------------- | ------------------------------------------------------- | ------------ |
 | POST   | `/internal/whatsapp/pubsub/process-webhook`  | Process webhook or link preview extraction from Pub/Sub | Pub/Sub OIDC |
-| POST   | `/internal/whatsapp/pubsub/transcribe-audio` | Process audio transcription  | Pub/Sub OIDC |
-| POST   | `/internal/whatsapp/pubsub/send-message`     | Send WhatsApp message        | Pub/Sub OIDC |
-| POST   | `/internal/whatsapp/pubsub/media-cleanup`    | Delete GCS media files       | Pub/Sub OIDC |
+| POST   | `/internal/whatsapp/pubsub/transcribe-audio` | Process audio transcription                             | Pub/Sub OIDC |
+| POST   | `/internal/whatsapp/pubsub/send-message`     | Send WhatsApp message                                   | Pub/Sub OIDC |
+| POST   | `/internal/whatsapp/pubsub/media-cleanup`    | Delete GCS media files                                  | Pub/Sub OIDC |
 
 ## Domain Models
 
@@ -167,7 +167,7 @@ sequenceDiagram
 | `thumbnailGcsPath` | string                       | GCS path to thumbnail              |
 | `caption`          | string \| null               | Media caption                      |
 | `transcription`    | TranscriptionState \| null   | Audio transcription result         |
-| `linkPreview`      | LinkPreviewState \| null      | Extracted link metadata            |
+| `linkPreview`      | LinkPreviewState \| null     | Extracted link metadata            |
 | `timestamp`        | string                       | WhatsApp timestamp                 |
 | `receivedAt`       | string                       | ISO 8601 receive time              |
 | `webhookEventId`   | string                       | Associated webhook event           |
@@ -189,38 +189,38 @@ Tracks sent messages for reply correlation. Uses wamid as document ID for effici
 
 Tracks phone number verification attempts with rate limiting and cooldown.
 
-| Field           | Type                                             | Description                   |
-| --------------- | ------------------------------------------------ | ----------------------------- |
-| `id`            | string                                           | Unique verification ID        |
-| `userId`        | string                                           | User requesting verification  |
-| `phoneNumber`   | string                                           | Phone number being verified   |
-| `code`          | string                                           | 6-digit verification code     |
-| `attempts`      | number                                           | Failed attempt count          |
-| `status`        | `pending` \| `verified` \| `expired` \| `max_attempts` | Verification progress  |
-| `createdAt`     | string                                           | ISO 8601 creation time        |
-| `expiresAt`     | number                                           | Unix timestamp (10 min TTL)   |
-| `lastAttemptAt` | string \| undefined                              | Last failed attempt time      |
-| `verifiedAt`    | string \| undefined                              | When verification succeeded   |
+| Field           | Type                                                   | Description                  |
+| --------------- | ------------------------------------------------------ | ---------------------------- |
+| `id`            | string                                                 | Unique verification ID       |
+| `userId`        | string                                                 | User requesting verification |
+| `phoneNumber`   | string                                                 | Phone number being verified  |
+| `code`          | string                                                 | 6-digit verification code    |
+| `attempts`      | number                                                 | Failed attempt count         |
+| `status`        | `pending` \| `verified` \| `expired` \| `max_attempts` | Verification progress        |
+| `createdAt`     | string                                                 | ISO 8601 creation time       |
+| `expiresAt`     | number                                                 | Unix timestamp (10 min TTL)  |
+| `lastAttemptAt` | string \| undefined                                    | Last failed attempt time     |
+| `verifiedAt`    | string \| undefined                                    | When verification succeeded  |
 
 ### TranscriptionState
 
-| Field     | Type                                              | Description            |
-| --------- | ------------------------------------------------- | ---------------------- |
-| `status`  | `pending` \| `processing` \| `completed` \| `failed` | Transcription progress |
-| `text`    | string \| null                                    | Full transcribed text  |
-| `summary` | string \| null                                    | AI-generated key points |
-| `error`   | object \| null                                    | Error details if failed |
+| Field     | Type                                                 | Description             |
+| --------- | ---------------------------------------------------- | ----------------------- |
+| `status`  | `pending` \| `processing` \| `completed` \| `failed` | Transcription progress  |
+| `text`    | string \| null                                       | Full transcribed text   |
+| `summary` | string \| null                                       | AI-generated key points |
+| `error`   | object \| null                                       | Error details if failed |
 
 ### WebhookEvent
 
-| Field            | Type                                                                 | Description                   |
-| ---------------- | -------------------------------------------------------------------- | ----------------------------- |
-| `id`             | string                                                               | Unique event ID               |
-| `payload`        | object                                                               | Raw webhook payload           |
-| `signatureValid` | boolean                                                              | Signature verification result |
-| `receivedAt`     | string                                                               | ISO 8601 timestamp            |
-| `phoneNumberId`  | string                                                               | WhatsApp phone number ID      |
-| `status`         | `pending` \| `processing` \| `completed` \| `failed` \| `ignored` \| `user_unmapped` | Processing status |
+| Field            | Type                                                                                 | Description                   |
+| ---------------- | ------------------------------------------------------------------------------------ | ----------------------------- |
+| `id`             | string                                                                               | Unique event ID               |
+| `payload`        | object                                                                               | Raw webhook payload           |
+| `signatureValid` | boolean                                                                              | Signature verification result |
+| `receivedAt`     | string                                                                               | ISO 8601 timestamp            |
+| `phoneNumberId`  | string                                                                               | WhatsApp phone number ID      |
+| `status`         | `pending` \| `processing` \| `completed` \| `failed` \| `ignored` \| `user_unmapped` | Processing status             |
 
 ### UserMapping
 
@@ -246,26 +246,26 @@ Tracks phone number verification attempts with rate limiting and cooldown.
 
 ### Subscribed Events
 
-| Event Type                      | Handler                                      |
-| ------------------------------- | -------------------------------------------- |
-| `whatsapp.webhook.process`      | `/internal/whatsapp/pubsub/process-webhook`  |
-| `whatsapp.linkpreview.extract`  | `/internal/whatsapp/pubsub/process-webhook`  |
-| `whatsapp.audio.transcribe`     | `/internal/whatsapp/pubsub/transcribe-audio` |
-| `whatsapp.message.send`         | `/internal/whatsapp/pubsub/send-message`     |
-| `whatsapp.media.cleanup`        | `/internal/whatsapp/pubsub/media-cleanup`    |
+| Event Type                     | Handler                                      |
+| ------------------------------ | -------------------------------------------- |
+| `whatsapp.webhook.process`     | `/internal/whatsapp/pubsub/process-webhook`  |
+| `whatsapp.linkpreview.extract` | `/internal/whatsapp/pubsub/process-webhook`  |
+| `whatsapp.audio.transcribe`    | `/internal/whatsapp/pubsub/transcribe-audio` |
+| `whatsapp.message.send`        | `/internal/whatsapp/pubsub/send-message`     |
+| `whatsapp.media.cleanup`       | `/internal/whatsapp/pubsub/media-cleanup`    |
 
 ### ApprovalReplyEvent (v4.0.0)
 
 ```typescript
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
-  replyToWamid: string;   // Original approval message wamid
-  replyText: string;      // "yes"/"no"/"convert"/"cancel-task"/"view-task"
+  replyToWamid: string; // Original approval message wamid
+  replyText: string; // "yes"/"no"/"convert"/"cancel-task"/"view-task"
   userId: string;
   timestamp: string;
-  actionId?: string;      // Extracted from buttonId or correlationId
-  buttonId?: string;      // Button ID for interactive button clicks
-  buttonTitle?: string;   // Button title for interactive button clicks
+  actionId?: string; // Extracted from buttonId or correlationId
+  buttonId?: string; // Button ID for interactive button clicks
+  buttonTitle?: string; // Button title for interactive button clicks
 }
 ```
 

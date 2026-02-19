@@ -60,9 +60,9 @@ The service starts on port 8080 by default. Visit `http://localhost:8080/docs`.
 
 ## Troubleshooting
 
-| Issue            | Cause                              | Solution                            |
-| ---------------- | ---------------------------------- | ----------------------------------- |
-| Spec not loading | Service down                       | Check service status                |
-| CORS error       | Service blocks origin              | Configure CORS on service           |
-| Health "down"    | Missing env vars at startup        | Check all 15 `*_OPENAPI_URL` vars   |
-| Startup crash    | Any required env var missing       | Run `direnv allow`, check ecosystem.config.cjs |
+| Issue            | Cause                        | Solution                                       |
+| ---------------- | ---------------------------- | ---------------------------------------------- |
+| Spec not loading | Service down                 | Check service status                           |
+| CORS error       | Service blocks origin        | Configure CORS on service                      |
+| Health "down"    | Missing env vars at startup  | Check all 15 `*_OPENAPI_URL` vars              |
+| Startup crash    | Any required env var missing | Run `direnv allow`, check ecosystem.config.cjs |

@@ -289,9 +289,9 @@ The title line is omitted if no title is available. `correlationId` is set to `b
 
 ```typescript
 interface CreateBookmarkInternalResponse {
-  id: string;          // bookmark ID
-  url: string;         // app deep link: "/#/bookmarks/{id}"
-  bookmark: Bookmark;  // full bookmark object
+  id: string; // bookmark ID
+  url: string; // app deep link: "/#/bookmarks/{id}"
+  bookmark: Bookmark; // full bookmark object
 }
 ```
 

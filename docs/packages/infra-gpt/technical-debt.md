@@ -31,19 +31,19 @@
 
 ### Medium Priority
 
-| File            | Issue                                                                                                   | Impact                                            |
-| --------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `src/client.ts` | Image URL fetch has no timeout: `const imageResponse = await fetch(imageUrl)` — can hang indefinitely  | Production risk if image CDN is slow or unresponsive |
-| `src/client.ts` | Dual API pattern (Responses + Chat Completions) requires two usage extraction code paths                | Complexity; must be maintained separately          |
-| `src/client.ts` | `MAX_TOKENS` constant (8192) hardcoded — incompatible with 128k output models                          | Cannot use full output capacity of GPT-4o         |
-| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients                      | Maintenance overhead                               |
+| File            | Issue                                                                                                 | Impact                                               |
+| --------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `src/client.ts` | Image URL fetch has no timeout: `const imageResponse = await fetch(imageUrl)` — can hang indefinitely | Production risk if image CDN is slow or unresponsive |
+| `src/client.ts` | Dual API pattern (Responses + Chat Completions) requires two usage extraction code paths              | Complexity; must be maintained separately            |
+| `src/client.ts` | `MAX_TOKENS` constant (8192) hardcoded — incompatible with 128k output models                         | Cannot use full output capacity of GPT-4o            |
+| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients                     | Maintenance overhead                                 |
 
 ---
 
 ## TypeScript Issues
 
-| File            | Issue                                                                                              | Count |
-| --------------- | -------------------------------------------------------------------------------------------------- | ----- |
+| File            | Issue                                                                                                               | Count |
+| --------------- | ------------------------------------------------------------------------------------------------------------------- | ----- |
 | `src/client.ts` | Type assertion on usage to access `input_tokens_details.cached_tokens` and `output_tokens_details.reasoning_tokens` | 1     |
 
 **Detail:**

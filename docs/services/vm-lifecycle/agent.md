@@ -167,12 +167,12 @@ gcloud compute instances describe cc-vm \
 
 ## Error Handling
 
-| HTTP Status | Condition                                      | Recovery Action                                   |
-| ----------- | ---------------------------------------------- | ------------------------------------------------- |
-| 200         | Success (start or stop)                        | No action needed                                  |
-| 401         | Missing or wrong `X-Internal-Auth` token       | Verify token value matches Secret Manager         |
-| 405         | Non-POST method used                           | Send POST request                                 |
-| 503         | VM operation failed (health timeout, API error) | Check Cloud Function logs; inspect VM state       |
+| HTTP Status | Condition                                       | Recovery Action                             |
+| ----------- | ----------------------------------------------- | ------------------------------------------- |
+| 200         | Success (start or stop)                         | No action needed                            |
+| 401         | Missing or wrong `X-Internal-Auth` token        | Verify token value matches Secret Manager   |
+| 405         | Non-POST method used                            | Send POST request                           |
+| 503         | VM operation failed (health timeout, API error) | Check Cloud Function logs; inspect VM state |
 
 ---
 

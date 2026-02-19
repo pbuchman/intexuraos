@@ -305,26 +305,26 @@ None (web app is a consumer, not publisher).
 
 ## Dependencies
 
-| Service                      | Why Needed                         | Failure Behavior                          |
-| ---------------------------- | ---------------------------------- | ----------------------------------------- |
-| user-service                 | Authentication, settings           | Cannot authenticate or load settings      |
-| actions-agent                | Action CRUD operations             | Cannot view or execute actions            |
-| commands-agent               | Command viewing + chat creation    | Cannot see command queue or use chat      |
-| research-agent               | Research reports + Notion settings | Cannot view research history              |
-| todos-agent                  | Todo management                    | Cannot manage todos                       |
-| notes-agent                  | Note management                    | Cannot manage notes                       |
-| bookmarks-agent              | Bookmark management                | Cannot manage bookmarks                   |
-| calendar-agent               | Calendar integration               | Cannot view or manage events              |
-| linear-agent                 | Linear integration + webhooks      | Cannot view or manage issues              |
-| data-insights-agent          | Data visualization + visualizations| Cannot view data insights or saved charts |
-| code-agent                   | Code tasks, workers, PR events     | Cannot manage code tasks or workers       |
-| chat-agent                   | AI chat assistant                  | Cannot use Intex Chat                     |
-| whatsapp-service             | WhatsApp connection + verification | Cannot connect WhatsApp                   |
-| notion-service               | Notion connection                  | Cannot connect Notion                     |
-| mobile-notifications-service | Push notification management       | Cannot manage push devices                |
-| app-settings-service         | LLM pricing, analytics             | Cannot view costs/pricing                 |
-| Firestore                    | Real-time data sync                | Falls back to polling only                |
-| Auth0                        | User authentication                | Cannot log in (chat still works as guest) |
+| Service                      | Why Needed                          | Failure Behavior                          |
+| ---------------------------- | ----------------------------------- | ----------------------------------------- |
+| user-service                 | Authentication, settings            | Cannot authenticate or load settings      |
+| actions-agent                | Action CRUD operations              | Cannot view or execute actions            |
+| commands-agent               | Command viewing + chat creation     | Cannot see command queue or use chat      |
+| research-agent               | Research reports + Notion settings  | Cannot view research history              |
+| todos-agent                  | Todo management                     | Cannot manage todos                       |
+| notes-agent                  | Note management                     | Cannot manage notes                       |
+| bookmarks-agent              | Bookmark management                 | Cannot manage bookmarks                   |
+| calendar-agent               | Calendar integration                | Cannot view or manage events              |
+| linear-agent                 | Linear integration + webhooks       | Cannot view or manage issues              |
+| data-insights-agent          | Data visualization + visualizations | Cannot view data insights or saved charts |
+| code-agent                   | Code tasks, workers, PR events      | Cannot manage code tasks or workers       |
+| chat-agent                   | AI chat assistant                   | Cannot use Intex Chat                     |
+| whatsapp-service             | WhatsApp connection + verification  | Cannot connect WhatsApp                   |
+| notion-service               | Notion connection                   | Cannot connect Notion                     |
+| mobile-notifications-service | Push notification management        | Cannot manage push devices                |
+| app-settings-service         | LLM pricing, analytics              | Cannot view costs/pricing                 |
+| Firestore                    | Real-time data sync                 | Falls back to polling only                |
+| Auth0                        | User authentication                 | Cannot log in (chat still works as guest) |
 
 ## State Management
 
@@ -343,43 +343,43 @@ None (web app is a consumer, not publisher).
 
 ## Route Reference
 
-| Route                                   | Auth | Purpose                       |
-| --------------------------------------- | ---- | ----------------------------- |
-| `/#/`                                   | No   | Landing page                  |
-| `/#/login`                              | No   | Auth0 login                   |
-| `/#/inbox`                              | Yes  | Commands and actions          |
-| `/#/research`                           | Yes  | Research list                 |
-| `/#/research/new`                       | Yes  | Create research               |
-| `/#/research/:id`                       | Yes  | Research detail               |
-| `/#/code-tasks`                         | Yes  | Code task list                |
-| `/#/code-tasks/new`                     | Yes  | Create code task              |
-| `/#/code-tasks/:id`                     | Yes  | Code task detail with logs    |
-| `/#/code-tasks/pr-events`               | Yes  | GitHub PR events              |
-| `/#/my-todos`                           | Yes  | Todos                         |
-| `/#/todos/:id`                          | Yes  | Todo detail                   |
-| `/#/my-notes`                           | Yes  | Notes                         |
-| `/#/notes/:id`                          | Yes  | Note detail                   |
-| `/#/my-bookmarks`                       | Yes  | Bookmarks                     |
-| `/#/bookmarks/:id`                      | Yes  | Bookmark detail               |
-| `/#/notes`                              | Yes  | WhatsApp notes                |
-| `/#/calendar`                           | Yes  | Calendar events               |
-| `/#/linear`                             | Yes  | Linear issues                 |
-| `/#/data-insights`                      | Yes  | Data insights feeds           |
-| `/#/data-insights/visualizations`       | Yes  | Saved visualizations (global) |
-| `/#/data-insights/:feedId/visualizations` | Yes | Saved visualizations (per feed)|
-| `/#/data-insights/:id`                  | Yes  | Feed data/charts              |
-| `/#/data-insights/static-sources`       | Yes  | Static data sources           |
-| `/#/data-insights/static-sources/new`   | Yes  | Create static source          |
-| `/#/data-insights/static-sources/:id`   | Yes  | Edit static source            |
-| `/#/notifications`                      | Yes  | Push notification history     |
-| `/#/settings/whatsapp`                  | Yes  | WhatsApp connection           |
-| `/#/settings/mobile`                    | Yes  | Mobile notifications          |
-| `/#/settings/notion`                    | Yes  | Notion connection             |
-| `/#/settings/calendar`                  | Yes  | Google Calendar connection    |
-| `/#/settings/linear`                    | Yes  | Linear + webhook config       |
-| `/#/settings/workers`                   | Yes  | Worker configuration          |
-| `/#/settings/api-keys`                  | Yes  | API key management            |
-| `/#/settings/llm-pricing`               | Yes  | LLM pricing                   |
-| `/#/settings/usage-costs`               | Yes  | Usage cost tracking           |
-| `/#/settings/share-history`             | Yes  | Share history                 |
-| `/#/share-target`                       | Yes  | PWA share handler             |
+| Route                                     | Auth | Purpose                         |
+| ----------------------------------------- | ---- | ------------------------------- |
+| `/#/`                                     | No   | Landing page                    |
+| `/#/login`                                | No   | Auth0 login                     |
+| `/#/inbox`                                | Yes  | Commands and actions            |
+| `/#/research`                             | Yes  | Research list                   |
+| `/#/research/new`                         | Yes  | Create research                 |
+| `/#/research/:id`                         | Yes  | Research detail                 |
+| `/#/code-tasks`                           | Yes  | Code task list                  |
+| `/#/code-tasks/new`                       | Yes  | Create code task                |
+| `/#/code-tasks/:id`                       | Yes  | Code task detail with logs      |
+| `/#/code-tasks/pr-events`                 | Yes  | GitHub PR events                |
+| `/#/my-todos`                             | Yes  | Todos                           |
+| `/#/todos/:id`                            | Yes  | Todo detail                     |
+| `/#/my-notes`                             | Yes  | Notes                           |
+| `/#/notes/:id`                            | Yes  | Note detail                     |
+| `/#/my-bookmarks`                         | Yes  | Bookmarks                       |
+| `/#/bookmarks/:id`                        | Yes  | Bookmark detail                 |
+| `/#/notes`                                | Yes  | WhatsApp notes                  |
+| `/#/calendar`                             | Yes  | Calendar events                 |
+| `/#/linear`                               | Yes  | Linear issues                   |
+| `/#/data-insights`                        | Yes  | Data insights feeds             |
+| `/#/data-insights/visualizations`         | Yes  | Saved visualizations (global)   |
+| `/#/data-insights/:feedId/visualizations` | Yes  | Saved visualizations (per feed) |
+| `/#/data-insights/:id`                    | Yes  | Feed data/charts                |
+| `/#/data-insights/static-sources`         | Yes  | Static data sources             |
+| `/#/data-insights/static-sources/new`     | Yes  | Create static source            |
+| `/#/data-insights/static-sources/:id`     | Yes  | Edit static source              |
+| `/#/notifications`                        | Yes  | Push notification history       |
+| `/#/settings/whatsapp`                    | Yes  | WhatsApp connection             |
+| `/#/settings/mobile`                      | Yes  | Mobile notifications            |
+| `/#/settings/notion`                      | Yes  | Notion connection               |
+| `/#/settings/calendar`                    | Yes  | Google Calendar connection      |
+| `/#/settings/linear`                      | Yes  | Linear + webhook config         |
+| `/#/settings/workers`                     | Yes  | Worker configuration            |
+| `/#/settings/api-keys`                    | Yes  | API key management              |
+| `/#/settings/llm-pricing`                 | Yes  | LLM pricing                     |
+| `/#/settings/usage-costs`                 | Yes  | Usage cost tracking             |
+| `/#/settings/share-history`               | Yes  | Share history                   |
+| `/#/share-target`                         | Yes  | PWA share handler               |

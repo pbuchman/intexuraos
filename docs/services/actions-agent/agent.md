@@ -173,14 +173,14 @@ interface CalendarPreview {
 
 ## Constraints
 
-| Rule                        | Description                                                               |
-| --------------------------- | ------------------------------------------------------------------------- |
-| **Status Transitions**      | Can only set status to 'processing', 'rejected', or 'archived'            |
-| **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions         |
-| **Batch Limit**             | Maximum 50 action IDs per batch request                                   |
-| **Ownership**               | Users can only access their own actions                                   |
+| Rule                        | Description                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| **Status Transitions**      | Can only set status to 'processing', 'rejected', or 'archived'                             |
+| **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions                          |
+| **Batch Limit**             | Maximum 50 action IDs per batch request                                                    |
+| **Ownership**               | Users can only access their own actions                                                    |
 | **Supported Types**         | Execute only supports: research, todo, note, link, code (calendar/linear require approval) |
-| **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval      |
+| **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval                       |
 
 ---
 
@@ -326,7 +326,9 @@ buttons = buildApprovalButtons({ actionId });
 // Code actions (with Convert to Issue button)
 buttons = buildApprovalButtons({
   actionId,
-  extraButtons: [{ type: 'reply', reply: { id: `convert:${actionId}`, title: 'Convert to Issue' } }],
+  extraButtons: [
+    { type: 'reply', reply: { id: `convert:${actionId}`, title: 'Convert to Issue' } },
+  ],
 });
 ```
 
@@ -334,20 +336,20 @@ buttons = buildApprovalButtons({
 
 ```typescript
 // Approval
-message: `✅ Approved! Processing your ${action.type}: "${action.title}"`
+message: `✅ Approved! Processing your ${action.type}: "${action.title}"`;
 
 // Rejection/cancel
-message: `🛑 Got it. Cancelled the ${action.type}: "${action.title}"`
+message: `🛑 Got it. Cancelled the ${action.type}: "${action.title}"`;
 
 // Convert to issue
-message: `🔀 Converting ${action.type} to Linear issue: "${action.title}"`
+message: `🔀 Converting ${action.type} to Linear issue: "${action.title}"`;
 
 // Text reply (no button) — re-send buttons
-message: `Please use the buttons to approve or reject. If buttons expired, here they are again:`
-buttons: buildApprovalButtons({ actionId })
+message: `Please use the buttons to approve or reject. If buttons expired, here they are again:`;
+buttons: buildApprovalButtons({ actionId });
 
 // Action not found
-message: `This action is no longer available. It may have been deleted or already processed.`
+message: `This action is no longer available. It may have been deleted or already processed.`;
 ```
 
 ---
@@ -373,13 +375,13 @@ if (updateResult.outcome === 'status_mismatch') {
 
 ### Cancel-task Error Codes (v4.0.0 — UPPER_CASE)
 
-| Error Code             | HTTP Status | User Message                                      |
-| ---------------------- | ----------- | ------------------------------------------------- |
-| `TASK_NOT_FOUND`       | 404         | Task not found.                                   |
-| `INVALID_NONCE`        | 400         | Invalid cancel code. May have been used already.  |
-| `NONCE_EXPIRED`        | 400         | Cancel link has expired.                          |
-| `NOT_OWNER`            | 403         | You are not the owner of this task.               |
-| `TASK_NOT_CANCELLABLE` | 400         | Task cannot be cancelled (may have completed).    |
+| Error Code             | HTTP Status | User Message                                     |
+| ---------------------- | ----------- | ------------------------------------------------ |
+| `TASK_NOT_FOUND`       | 404         | Task not found.                                  |
+| `INVALID_NONCE`        | 400         | Invalid cancel code. May have been used already. |
+| `NONCE_EXPIRED`        | 400         | Cancel link has expired.                         |
+| `NOT_OWNER`            | 403         | You are not the owner of this task.              |
+| `TASK_NOT_CANCELLABLE` | 400         | Task cannot be cancelled (may have completed).   |
 
 ---
 

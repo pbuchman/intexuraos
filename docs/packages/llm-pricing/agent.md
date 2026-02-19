@@ -118,9 +118,15 @@ class UsageLogger {
 interface UsageSink {
   log(params: UsageLogParams): Promise<void>;
 }
-class FirestoreUsageSink implements UsageSink { /* writes to llm_usage_stats */ }
-class StructuredLogUsageSink implements UsageSink { constructor(deps: { logger: Logger }); }
-class NoopUsageSink implements UsageSink { /* discards all events */ }
+class FirestoreUsageSink implements UsageSink {
+  /* writes to llm_usage_stats */
+}
+class StructuredLogUsageSink implements UsageSink {
+  constructor(deps: { logger: Logger });
+}
+class NoopUsageSink implements UsageSink {
+  /* discards all events */
+}
 ```
 
 ## Exported Test Fixtures

@@ -149,25 +149,25 @@ sequenceDiagram
 
 ### Bookmark
 
-| Field            | Type                              | Description                      |
-| ---------------- | --------------------------------- | -------------------------------- |
-| `id`             | `string`                          | Unique bookmark identifier       |
-| `userId`         | `string`                          | Owner user ID                    |
-| `status`         | `'draft' \| 'active'`             | Draft or active status           |
-| `url`            | `string`                          | Bookmark URL                     |
-| `title`          | `string \| null`                  | Page title                       |
-| `description`    | `string \| null`                  | Page description                 |
-| `tags`           | `string[]`                        | User-defined tags                |
-| `ogPreview`      | `OpenGraphPreview \| null`        | Fetched metadata                 |
-| `ogFetchedAt`    | `Date \| null`                    | When metadata was fetched        |
-| `ogFetchStatus`  | `'pending' \| 'processed' \| 'failed'` | Metadata fetch status       |
-| `aiSummary`      | `string \| null`                  | AI-generated summary             |
-| `aiSummarizedAt` | `Date \| null`                    | When summary was generated       |
-| `source`         | `string`                          | Source system (e.g., 'whatsapp') |
-| `sourceId`       | `string`                          | ID in source system              |
-| `archived`       | `boolean`                         | Soft delete flag                 |
-| `createdAt`      | `Date`                            | Creation timestamp               |
-| `updatedAt`      | `Date`                            | Last update timestamp            |
+| Field            | Type                                   | Description                      |
+| ---------------- | -------------------------------------- | -------------------------------- |
+| `id`             | `string`                               | Unique bookmark identifier       |
+| `userId`         | `string`                               | Owner user ID                    |
+| `status`         | `'draft' \| 'active'`                  | Draft or active status           |
+| `url`            | `string`                               | Bookmark URL                     |
+| `title`          | `string \| null`                       | Page title                       |
+| `description`    | `string \| null`                       | Page description                 |
+| `tags`           | `string[]`                             | User-defined tags                |
+| `ogPreview`      | `OpenGraphPreview \| null`             | Fetched metadata                 |
+| `ogFetchedAt`    | `Date \| null`                         | When metadata was fetched        |
+| `ogFetchStatus`  | `'pending' \| 'processed' \| 'failed'` | Metadata fetch status            |
+| `aiSummary`      | `string \| null`                       | AI-generated summary             |
+| `aiSummarizedAt` | `Date \| null`                         | When summary was generated       |
+| `source`         | `string`                               | Source system (e.g., 'whatsapp') |
+| `sourceId`       | `string`                               | ID in source system              |
+| `archived`       | `boolean`                              | Soft delete flag                 |
+| `createdAt`      | `Date`                                 | Creation timestamp               |
+| `updatedAt`      | `Date`                                 | Last update timestamp            |
 
 ### OpenGraphPreview
 
@@ -270,18 +270,18 @@ The Pub/Sub route checks for this error code and responds with HTTP 503 to trigg
 
 All required env vars are validated at startup via `validateRequiredEnv()` in `index.ts`. `INTEXURAOS_SENTRY_DSN` is validated separately before `validateRequiredEnv()`.
 
-| Environment Variable                    | Required | Description                      |
-| --------------------------------------- | -------- | -------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project for Pub/Sub          |
-| `INTEXURAOS_AUTH_JWKS_URL`              | Yes      | Auth0 JWKS endpoint              |
-| `INTEXURAOS_AUTH_ISSUER`                | Yes      | Auth0 token issuer               |
-| `INTEXURAOS_AUTH_AUDIENCE`              | Yes      | Auth0 token audience             |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Internal auth header value       |
-| `INTEXURAOS_WEB_AGENT_URL`              | Yes      | Web-agent base URL               |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Yes      | WhatsApp send topic name         |
-| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | Yes      | Enrichment topic name            |
-| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | Yes      | Summarization topic name         |
-| `INTEXURAOS_SENTRY_DSN`                 | Yes      | Sentry DSN for error reporting   |
+| Environment Variable                    | Required | Description                                   |
+| --------------------------------------- | -------- | --------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project for Pub/Sub                       |
+| `INTEXURAOS_AUTH_JWKS_URL`              | Yes      | Auth0 JWKS endpoint                           |
+| `INTEXURAOS_AUTH_ISSUER`                | Yes      | Auth0 token issuer                            |
+| `INTEXURAOS_AUTH_AUDIENCE`              | Yes      | Auth0 token audience                          |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Internal auth header value                    |
+| `INTEXURAOS_WEB_AGENT_URL`              | Yes      | Web-agent base URL                            |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Yes      | WhatsApp send topic name                      |
+| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | Yes      | Enrichment topic name                         |
+| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | Yes      | Summarization topic name                      |
+| `INTEXURAOS_SENTRY_DSN`                 | Yes      | Sentry DSN for error reporting                |
 | `INTEXURAOS_ENVIRONMENT`                | No       | Sentry environment tag (default: development) |
 
 ## Gotchas

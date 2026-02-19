@@ -92,14 +92,14 @@ interface IntexuraFastifyReply extends FastifyReply {
 
 ## Environment Variables Read
 
-| Variable                         | Read By                                           | Required |
-| -------------------------------- | ------------------------------------------------- | -------- |
-| `INTEXURAOS_SENTRY_DSN`          | `isSentryConfigured()`, `sendToSentry()`          | No       |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT` | `getOtelTransport()` (via `logStream.ts`)         | No       |
-| `INTEXURAOS_DASH0_AUTH_TOKEN`    | `getOtelTransport()` (via `logStream.ts`)         | No       |
-| `INTEXURAOS_ENVIRONMENT`         | `getOtelTransport()` resource attribute           | No       |
-| `NODE_ENV`                       | `createAppLogger()`, `createLogStream()`          | No       |
-| `LOG_LEVEL`                      | Via `getLogLevel()` from common-core              | No       |
+| Variable                         | Read By                                   | Required |
+| -------------------------------- | ----------------------------------------- | -------- |
+| `INTEXURAOS_SENTRY_DSN`          | `isSentryConfigured()`, `sendToSentry()`  | No       |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT` | `getOtelTransport()` (via `logStream.ts`) | No       |
+| `INTEXURAOS_DASH0_AUTH_TOKEN`    | `getOtelTransport()` (via `logStream.ts`) | No       |
+| `INTEXURAOS_ENVIRONMENT`         | `getOtelTransport()` resource attribute   | No       |
+| `NODE_ENV`                       | `createAppLogger()`, `createLogStream()`  | No       |
+| `LOG_LEVEL`                      | Via `getLogLevel()` from common-core      | No       |
 
 ---
 

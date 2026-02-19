@@ -36,6 +36,7 @@ Added a model selector that falls back to platform Zai (`INTEXURAOS_ZAI_APP_API_
 **Status:** Complete
 
 Standardized platform LLM API key env vars to use `_APP_` naming convention:
+
 - `INTEXURAOS_ZAI_APP_API_KEY` (was `INTEXURAOS_ZAI_API_KEY`)
 - `INTEXURAOS_GEMINI_APP_API_KEY` (was `INTEXURAOS_GEMINI_API_KEY`)
 

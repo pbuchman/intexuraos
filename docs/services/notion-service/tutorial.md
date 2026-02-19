@@ -52,9 +52,9 @@ curl -X DELETE https://notion-service.intexuraos.com/notion/disconnect \
 
 ## Troubleshooting
 
-| Error            | Cause                       | Solution                       |
-| ---------------- | --------------------------- | ------------------------------ |
-| INVALID_REQUEST  | Bad token format            | Check token starts with secret_|
-| UNAUTHORIZED     | Bad token                   | Regenerate in Notion           |
-| DOWNSTREAM_ERROR | Notion API issue            | Retry later                    |
-| NOT_FOUND        | No connection or page issue | Connect first or check page ID |
+| Error            | Cause                       | Solution                         |
+| ---------------- | --------------------------- | -------------------------------- |
+| INVALID_REQUEST  | Bad token format            | Check token starts with secret\_ |
+| UNAUTHORIZED     | Bad token                   | Regenerate in Notion             |
+| DOWNSTREAM_ERROR | Notion API issue            | Retry later                      |
+| NOT_FOUND        | No connection or page issue | Connect first or check page ID   |

@@ -6,17 +6,17 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 ## Recent Changes
 
-| Commit     | Description                                        | Date       |
-| ---------- | -------------------------------------------------- | ---------- |
-| `6063175b` | Add dev-mode log formatting for PM2 readability    | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (#803)         | 2026-02-16 |
-| `d5fbb354` | Fix start:local to use tsx (not node strip-types)  | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter start:local  | 2026-02-14 |
-| `3a25d55e` | Add Notion page validation for Research Export     | 2026-01-29 |
-| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)      | 2026-01-30 |
-| `c3198407` | Fix response contract violations (reply.ok/fail)   | 2026-01-30 |
-| `9723dc24` | Standardize DELETE endpoint response               | 2026-01-31 |
-| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement   | 2026-01-31 |
+| Commit     | Description                                       | Date       |
+| ---------- | ------------------------------------------------- | ---------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability   | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (#803)        | 2026-02-16 |
+| `d5fbb354` | Fix start:local to use tsx (not node strip-types) | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter start:local | 2026-02-14 |
+| `3a25d55e` | Add Notion page validation for Research Export    | 2026-01-29 |
+| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)     | 2026-01-30 |
+| `c3198407` | Fix response contract violations (reply.ok/fail)  | 2026-01-30 |
+| `9723dc24` | Standardize DELETE endpoint response              | 2026-01-31 |
+| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement  | 2026-01-31 |
 
 ## API Endpoints
 
@@ -30,9 +30,9 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 ### Webhook Endpoints
 
-| Method | Path               | Description                    | Auth    |
-| ------ | ------------------ | ------------------------------ | ------- |
-| POST   | `/notion-webhooks` | Receive Notion webhook events  | None    |
+| Method | Path               | Description                   | Auth |
+| ------ | ------------------ | ----------------------------- | ---- |
+| POST   | `/notion-webhooks` | Receive Notion webhook events | None |
 
 ### Internal Endpoints
 
@@ -43,11 +43,11 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 ### System Endpoints
 
-| Method | Path          | Description       | Auth |
-| ------ | ------------- | ----------------- | ---- |
-| GET    | `/health`     | Health check      | None |
-| GET    | `/openapi.json` | OpenAPI spec    | None |
-| GET    | `/docs`       | Swagger UI        | None |
+| Method | Path            | Description  | Auth |
+| ------ | --------------- | ------------ | ---- |
+| GET    | `/health`       | Health check | None |
+| GET    | `/openapi.json` | OpenAPI spec | None |
+| GET    | `/docs`         | Swagger UI   | None |
 
 ### Connect Request
 
@@ -95,7 +95,7 @@ Returns empty data object (`{}`).
 
 ```typescript
 {
-  received: boolean
+  received: boolean;
 }
 ```
 

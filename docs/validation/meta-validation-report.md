@@ -3,6 +3,7 @@
 **Generated:** 2026-02-19
 **Scope:** Cross-checking 10 validation reports for internal consistency
 **Reports analyzed:**
+
 1. `docs/validation/http-contracts-validation.md` — HTTP endpoint validation
 2. `docs/validation/pubsub-contracts-validation.md` — Pub/Sub topic validation
 3. `docs/validation/ai-models-validation.md` — AI model registry validation
@@ -64,14 +65,14 @@ These are all facets of the same issue. The combined picture is a partially-impl
 
 **Issue:** The two reports were generated from the same codebase but do not share a consistent endpoint inventory. Several discrepancies:
 
-| Service | HTTP Contracts (v3) | Route-Auth Report | Divergence |
-| ------- | ------------------- | ----------------- | ---------- |
-| actions-agent | Lists `GET /actions`, `GET /actions/:id`, `PATCH /actions/:actionId` (3 public routes) | Lists `GET /actions`, `PATCH /actions/:actionId`, `DELETE /actions/:actionId`, `POST /actions/batch`, `POST /actions/:actionId/execute`, `GET /actions/:actionId/preview`, `POST /actions/:actionId/resolve-duplicate` (7 public routes) | Route-auth found 4 more public endpoints not in HTTP contracts |
-| code-agent | Lists specific `/code/submit`, `/code/tasks`, etc. | Lists generic `/code/tasks`, `/code/tasks/:taskId`, `/code/tasks/:taskId/events`, `/code/tasks/:taskId/pr-events`, `/code/tasks/:taskId/pr-summaries` | Path variants differ (e.g., HTTP contracts has `/code/submit`, route-auth has no such path; route-auth has `/code/tasks/:taskId/events` not in HTTP contracts) |
-| linear-agent | Lists `GET /linear/issues`, `GET /linear/issues/:identifier`, `POST /linear/connection`, etc. | Lists `GET /linear/issues`, `POST /linear/issues`, `GET /linear/issues/:identifier`, `PATCH /linear/issues/:identifier`, `GET /linear/cycles`, `GET /linear/projects`, `POST /linear/webhooks` | Route-auth lists `POST /linear/issues`, `PATCH /linear/issues/:identifier`, `GET /linear/cycles`, `GET /linear/projects` not found in HTTP contracts |
-| data-insights-agent | Lists 20+ public and internal endpoints | Route-auth only lists `POST /internal/visualizations/compute` and `POST /internal/snapshots/refresh` | Route-auth has major coverage gap for data-insights-agent public routes |
-| research-agent | Lists public routes (`/internal/research/draft`, etc.) | Lists `GET /research`, `POST /research`, `GET /research/:researchId`, `POST /internal/research/process` | HTTP contracts lists no public routes for research-agent; route-auth lists 3 public ones + different internal paths |
-| user-service | Lists `POST /auth/device/start`, `POST /auth/device/poll`, etc. | Lists `GET /auth/login`, `GET /auth/logout`, `GET /auth/callback`, etc. | Substantially different path inventory |
+| Service             | HTTP Contracts (v3)                                                                           | Route-Auth Report                                                                                                                                                                                                                        | Divergence                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| actions-agent       | Lists `GET /actions`, `GET /actions/:id`, `PATCH /actions/:actionId` (3 public routes)        | Lists `GET /actions`, `PATCH /actions/:actionId`, `DELETE /actions/:actionId`, `POST /actions/batch`, `POST /actions/:actionId/execute`, `GET /actions/:actionId/preview`, `POST /actions/:actionId/resolve-duplicate` (7 public routes) | Route-auth found 4 more public endpoints not in HTTP contracts                                                                                                 |
+| code-agent          | Lists specific `/code/submit`, `/code/tasks`, etc.                                            | Lists generic `/code/tasks`, `/code/tasks/:taskId`, `/code/tasks/:taskId/events`, `/code/tasks/:taskId/pr-events`, `/code/tasks/:taskId/pr-summaries`                                                                                    | Path variants differ (e.g., HTTP contracts has `/code/submit`, route-auth has no such path; route-auth has `/code/tasks/:taskId/events` not in HTTP contracts) |
+| linear-agent        | Lists `GET /linear/issues`, `GET /linear/issues/:identifier`, `POST /linear/connection`, etc. | Lists `GET /linear/issues`, `POST /linear/issues`, `GET /linear/issues/:identifier`, `PATCH /linear/issues/:identifier`, `GET /linear/cycles`, `GET /linear/projects`, `POST /linear/webhooks`                                           | Route-auth lists `POST /linear/issues`, `PATCH /linear/issues/:identifier`, `GET /linear/cycles`, `GET /linear/projects` not found in HTTP contracts           |
+| data-insights-agent | Lists 20+ public and internal endpoints                                                       | Route-auth only lists `POST /internal/visualizations/compute` and `POST /internal/snapshots/refresh`                                                                                                                                     | Route-auth has major coverage gap for data-insights-agent public routes                                                                                        |
+| research-agent      | Lists public routes (`/internal/research/draft`, etc.)                                        | Lists `GET /research`, `POST /research`, `GET /research/:researchId`, `POST /internal/research/process`                                                                                                                                  | HTTP contracts lists no public routes for research-agent; route-auth lists 3 public ones + different internal paths                                            |
+| user-service        | Lists `POST /auth/device/start`, `POST /auth/device/poll`, etc.                               | Lists `GET /auth/login`, `GET /auth/logout`, `GET /auth/callback`, etc.                                                                                                                                                                  | Substantially different path inventory                                                                                                                         |
 
 **Impact:** The route-auth report appears to have analyzed different route files than the http-contracts report, or the codebase evolved between the two runs. Neither report can be fully trusted as a comprehensive endpoint inventory without reconciliation.
 
@@ -87,11 +88,11 @@ These are all facets of the same issue. The combined picture is a partially-impl
 
 **Issue (corroboration, not conflict):** Both reports independently identify the same HIGH-severity findings:
 
-| Finding | Env-Vars ID | Terraform ID | Agreement |
-| ------- | ----------- | ------------ | --------- |
-| `INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` not in REQUIRED_ENV | H3 HIGH | D-3 HIGH | Consistent |
-| `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` not in REQUIRED_ENV | H2 HIGH | D-4 HIGH | Consistent |
-| `INTEXURAOS_WEB_AGENT_URL` missing from Terraform | Partially (bookmarks OK label) | D-1 CRITICAL | Partial — terraform is more accurate |
+| Finding                                                     | Env-Vars ID                    | Terraform ID | Agreement                            |
+| ----------------------------------------------------------- | ------------------------------ | ------------ | ------------------------------------ |
+| `INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` not in REQUIRED_ENV  | H3 HIGH                        | D-3 HIGH     | Consistent                           |
+| `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` not in REQUIRED_ENV | H2 HIGH                        | D-4 HIGH     | Consistent                           |
+| `INTEXURAOS_WEB_AGENT_URL` missing from Terraform           | Partially (bookmarks OK label) | D-1 CRITICAL | Partial — terraform is more accurate |
 
 **Impact:** High confidence in these findings — two independent validators flagged the same gaps. The terraform report is more reliable on the `WEB_AGENT_URL` severity.
 
@@ -105,11 +106,11 @@ These are all facets of the same issue. The combined picture is a partially-impl
 
 Specific cross-impact:
 
-| Service | Pub/Sub D-3 (wrong doc name) | Env-Vars Impact |
-| ------- | ---------------------------- | --------------- |
-| actions-agent | Docs say `intexuraos-actions-{env}` (wrong: should be `intexuraos-actions-queue-{env}`) | Env var `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` validated OK — code name is correct; docs discrepancy is docs-only |
-| research-agent | Docs say `intexuraos-llm-process-{env}` (wrong) | Env vars `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` validated OK against code |
-| whatsapp-service | Docs say `intexuraos-whatsapp-audio-transcribe-{env}` (wrong) | Env vars validated OK against code |
+| Service          | Pub/Sub D-3 (wrong doc name)                                                            | Env-Vars Impact                                                                                              |
+| ---------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| actions-agent    | Docs say `intexuraos-actions-{env}` (wrong: should be `intexuraos-actions-queue-{env}`) | Env var `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` validated OK — code name is correct; docs discrepancy is docs-only |
+| research-agent   | Docs say `intexuraos-llm-process-{env}` (wrong)                                         | Env vars `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` validated OK against code                                |
+| whatsapp-service | Docs say `intexuraos-whatsapp-audio-transcribe-{env}` (wrong)                           | Env vars validated OK against code                                                                           |
 
 **Assessment:** The env-vars report validated against code (REQUIRED_ENV arrays and Terraform), not docs. So doc naming errors in pub/sub D-3 do not cascade into env-vars failures. The reports are measuring different things here and no conflict exists.
 
@@ -173,6 +174,7 @@ Specific cross-impact:
 **Issue:** None of the other 9 reports reference AI model usage. The AI models report identifies that `gpt-4.1` and `text-embedding-3-small` are used in production but not in the central `llm-contract`. No other report validates whether the services using these models (image-service for `gpt-4.1`, chat-agent for `text-embedding-3-small`) have the necessary API key env vars.
 
 Cross-checking:
+
 - `image-service` env-vars validation shows `INTEXURAOS_OPENAI_APP_API_KEY` is present in chat-agent but does NOT appear in the image-service env-vars table. image-service uses `gpt-4.1` (an OpenAI model) but the env-vars report shows no OpenAI key for image-service — only ZAI and Gemini keys plus the suspicious `INTEXURAOS_GUEST_ZAI_API_KEY` and `INTEXURAOS_ZAI_API_KEY` doc errors.
 - This is a potential gap: if `gpt-4.1` requires `INTEXURAOS_OPENAI_APP_API_KEY`, and that key is not in image-service's env-vars, the prompt enhancement feature may fail silently.
 
@@ -217,28 +219,28 @@ Cross-checking:
 
 ## Service Risk Matrix
 
-| Service | HTTP Contracts | Pub/Sub | AI Models | Firestore | Pkg Deps | Env Vars | Route Auth | Service URLs | Error Contracts | Terraform | Combined Risk |
-| ------- | -------------- | ------- | --------- | --------- | -------- | -------- | ---------- | ------------ | --------------- | --------- | ------------- |
-| research-agent | PASS | HIGH (dead publisher) | MEDIUM (model naming) | PASS | N/A | HIGH (analytics topic gap) | PASS | OK | PASS | HIGH (analytics topic) | **HIGH** |
-| bookmarks-agent | PASS | PASS | N/A | PASS | N/A | LOW (doc naming) | PASS | OK | PASS | **CRITICAL** (WEB_AGENT_URL) | **CRITICAL** |
-| code-agent | HIGH (2 undoc endpoints) | N/A | N/A | PASS | N/A | HIGH (3 vars no REQUIRED_ENV) | PASS | OK | MEDIUM (INVALID_STATUS cast) | PASS | **HIGH** |
-| actions-agent | HIGH (1 undoc endpoint) | PASS | N/A | PASS | N/A | PASS | PASS | OK | PASS | PASS | **MEDIUM** |
-| linear-agent | HIGH (1 undoc endpoint) | PASS | N/A | MEDIUM (camelCase names — fixed) | N/A | HIGH (GCP_PROJECT_ID not in docs) | PASS | OK | PASS | PASS | **MEDIUM** |
-| user-service | PASS | N/A | N/A | LOW (users → user_settings — fixed) | N/A | HIGH (GOOGLE_OAUTH_REDIRECT_URI) | PASS | OK | PASS | HIGH (same) | **HIGH** |
-| image-service | PASS | N/A | CRITICAL (gpt-4.1 not in contract) | PASS | N/A | HIGH (phantom doc vars) | PASS | OK | PASS | PASS | **HIGH** |
-| whatsapp-service | PASS | PASS | N/A | LOW (prefix names — fixed) | N/A | PASS | PASS | OK | LOW (raw error msgs) | PASS | **LOW** |
-| calendar-agent | PASS | PASS | MEDIUM (llm-factory scope) | PASS | N/A | LOW (optional LLM keys) | PASS | OK | MEDIUM (redundant status) | PASS | **MEDIUM** |
-| chat-agent | PASS | N/A | N/A (text-embedding unregistered) | PASS | N/A | PASS | PASS | OK | PASS | PASS | **LOW** |
-| commands-agent | PASS | PASS | MEDIUM (GLM-4.7-Flash missing) | PASS | N/A | PASS | PASS | OK | PASS | PASS | **LOW** |
-| data-insights-agent | PASS | PASS | MEDIUM (dynamic model mis-documented) | PASS | N/A | PASS | PASS (limited audit) | OK | PASS | PASS | **LOW** |
-| todos-agent | PASS | LOW (env var prefix) | MEDIUM (Via commands-agent wrong) | PASS | N/A | PASS | PASS | OK | PASS | PASS | **LOW** |
-| app-settings-service | PASS | N/A | N/A | PASS | N/A | PASS | MEDIUM (path convention) | OK | PASS | PASS | **LOW** |
-| notion-service | PASS | N/A | N/A | PASS | N/A | PASS | LOW (webhook stub) | OK | PASS | PASS | **LOW** |
-| notes-agent | PASS | N/A | N/A | PASS | N/A | PASS | PASS | OK | PASS | PASS | **PASS** |
-| mobile-notifications-service | PASS | N/A | N/A | PASS | N/A | PASS | PASS | OK | PASS | PASS | **PASS** |
-| web-agent | PASS | N/A | MEDIUM (user-config dynamic) | PASS | N/A | PASS | PASS | OK | LOW (partial-success) | PASS | **LOW** |
-| api-docs-hub | PASS | N/A | N/A | N/A | N/A | MEDIUM (no ecosystem) | N/A | MEDIUM | PASS | PASS | **LOW** |
-| orchestrator | N/A (worker) | N/A | N/A | N/A | N/A | HIGH (PROJECT_ID naming) | N/A | N/A | N/A | **CRITICAL** (no Terraform) | **CRITICAL** |
+| Service                      | HTTP Contracts           | Pub/Sub               | AI Models                             | Firestore                           | Pkg Deps | Env Vars                          | Route Auth               | Service URLs | Error Contracts              | Terraform                    | Combined Risk |
+| ---------------------------- | ------------------------ | --------------------- | ------------------------------------- | ----------------------------------- | -------- | --------------------------------- | ------------------------ | ------------ | ---------------------------- | ---------------------------- | ------------- |
+| research-agent               | PASS                     | HIGH (dead publisher) | MEDIUM (model naming)                 | PASS                                | N/A      | HIGH (analytics topic gap)        | PASS                     | OK           | PASS                         | HIGH (analytics topic)       | **HIGH**      |
+| bookmarks-agent              | PASS                     | PASS                  | N/A                                   | PASS                                | N/A      | LOW (doc naming)                  | PASS                     | OK           | PASS                         | **CRITICAL** (WEB_AGENT_URL) | **CRITICAL**  |
+| code-agent                   | HIGH (2 undoc endpoints) | N/A                   | N/A                                   | PASS                                | N/A      | HIGH (3 vars no REQUIRED_ENV)     | PASS                     | OK           | MEDIUM (INVALID_STATUS cast) | PASS                         | **HIGH**      |
+| actions-agent                | HIGH (1 undoc endpoint)  | PASS                  | N/A                                   | PASS                                | N/A      | PASS                              | PASS                     | OK           | PASS                         | PASS                         | **MEDIUM**    |
+| linear-agent                 | HIGH (1 undoc endpoint)  | PASS                  | N/A                                   | MEDIUM (camelCase names — fixed)    | N/A      | HIGH (GCP_PROJECT_ID not in docs) | PASS                     | OK           | PASS                         | PASS                         | **MEDIUM**    |
+| user-service                 | PASS                     | N/A                   | N/A                                   | LOW (users → user_settings — fixed) | N/A      | HIGH (GOOGLE_OAUTH_REDIRECT_URI)  | PASS                     | OK           | PASS                         | HIGH (same)                  | **HIGH**      |
+| image-service                | PASS                     | N/A                   | CRITICAL (gpt-4.1 not in contract)    | PASS                                | N/A      | HIGH (phantom doc vars)           | PASS                     | OK           | PASS                         | PASS                         | **HIGH**      |
+| whatsapp-service             | PASS                     | PASS                  | N/A                                   | LOW (prefix names — fixed)          | N/A      | PASS                              | PASS                     | OK           | LOW (raw error msgs)         | PASS                         | **LOW**       |
+| calendar-agent               | PASS                     | PASS                  | MEDIUM (llm-factory scope)            | PASS                                | N/A      | LOW (optional LLM keys)           | PASS                     | OK           | MEDIUM (redundant status)    | PASS                         | **MEDIUM**    |
+| chat-agent                   | PASS                     | N/A                   | N/A (text-embedding unregistered)     | PASS                                | N/A      | PASS                              | PASS                     | OK           | PASS                         | PASS                         | **LOW**       |
+| commands-agent               | PASS                     | PASS                  | MEDIUM (GLM-4.7-Flash missing)        | PASS                                | N/A      | PASS                              | PASS                     | OK           | PASS                         | PASS                         | **LOW**       |
+| data-insights-agent          | PASS                     | PASS                  | MEDIUM (dynamic model mis-documented) | PASS                                | N/A      | PASS                              | PASS (limited audit)     | OK           | PASS                         | PASS                         | **LOW**       |
+| todos-agent                  | PASS                     | LOW (env var prefix)  | MEDIUM (Via commands-agent wrong)     | PASS                                | N/A      | PASS                              | PASS                     | OK           | PASS                         | PASS                         | **LOW**       |
+| app-settings-service         | PASS                     | N/A                   | N/A                                   | PASS                                | N/A      | PASS                              | MEDIUM (path convention) | OK           | PASS                         | PASS                         | **LOW**       |
+| notion-service               | PASS                     | N/A                   | N/A                                   | PASS                                | N/A      | PASS                              | LOW (webhook stub)       | OK           | PASS                         | PASS                         | **LOW**       |
+| notes-agent                  | PASS                     | N/A                   | N/A                                   | PASS                                | N/A      | PASS                              | PASS                     | OK           | PASS                         | PASS                         | **PASS**      |
+| mobile-notifications-service | PASS                     | N/A                   | N/A                                   | PASS                                | N/A      | PASS                              | PASS                     | OK           | PASS                         | PASS                         | **PASS**      |
+| web-agent                    | PASS                     | N/A                   | MEDIUM (user-config dynamic)          | PASS                                | N/A      | PASS                              | PASS                     | OK           | LOW (partial-success)        | PASS                         | **LOW**       |
+| api-docs-hub                 | PASS                     | N/A                   | N/A                                   | N/A                                 | N/A      | MEDIUM (no ecosystem)             | N/A                      | MEDIUM       | PASS                         | PASS                         | **LOW**       |
+| orchestrator                 | N/A (worker)             | N/A                   | N/A                                   | N/A                                 | N/A      | HIGH (PROJECT_ID naming)          | N/A                      | N/A          | N/A                          | **CRITICAL** (no Terraform)  | **CRITICAL**  |
 
 ---
 
@@ -246,28 +248,28 @@ Cross-checking:
 
 ### Contradiction 1: Notion-Service Webhook Auth — HTTP Contracts vs Route-Auth
 
-| Report | Claim |
-| ------ | ----- |
-| http-contracts-validation | `POST /notion-webhooks` Auth: `HMAC` |
-| route-auth-validation | `POST /notion-webhooks` Auth: `None` (stub with no signature verification) |
+| Report                    | Claim                                                                      |
+| ------------------------- | -------------------------------------------------------------------------- |
+| http-contracts-validation | `POST /notion-webhooks` Auth: `HMAC`                                       |
+| route-auth-validation     | `POST /notion-webhooks` Auth: `None` (stub with no signature verification) |
 
 **Resolution:** Route-auth analyzed actual code and found no verification. HTTP contracts likely documented intended future auth. **Route-auth is authoritative here.**
 
 ### Contradiction 2: research-agent Pub/Sub Topic Status
 
-| Report | Claim |
-| ------ | ----- |
-| pubsub-contracts-validation | `intexuraos-llm-analytics` topic has no active publisher (dead code) |
+| Report                         | Claim                                                                                           |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| pubsub-contracts-validation    | `intexuraos-llm-analytics` topic has no active publisher (dead code)                            |
 | terraform-code-sync-validation | Publisher `intexuraos-llm-analytics-dev` listed as publisher: `research-agent` in pub/sub table |
 
 **Resolution:** The terraform-code-sync report's Pub/Sub table shows the Terraform-configured publisher service account. This is the IAM grant, not an active publisher in code. The pub/sub report's finding (not wired in ServiceContainer) is the more precise code-level observation. **No true contradiction — different levels of analysis.**
 
 ### Contradiction 3: Route-Auth and HTTP Contracts on actions-agent Public Endpoints
 
-| Report | Public Endpoints Listed |
-| ------ | ---------------------- |
-| http-contracts-validation | `GET /actions`, `GET /actions/:id`, `PATCH /actions/:actionId` |
-| route-auth-validation | `GET /actions`, `PATCH /actions/:actionId`, `DELETE /actions/:actionId`, `POST /actions/batch`, `POST /actions/:actionId/execute`, `GET /actions/:actionId/preview`, `POST /actions/:actionId/resolve-duplicate` |
+| Report                    | Public Endpoints Listed                                                                                                                                                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| http-contracts-validation | `GET /actions`, `GET /actions/:id`, `PATCH /actions/:actionId`                                                                                                                                                   |
+| route-auth-validation     | `GET /actions`, `PATCH /actions/:actionId`, `DELETE /actions/:actionId`, `POST /actions/batch`, `POST /actions/:actionId/execute`, `GET /actions/:actionId/preview`, `POST /actions/:actionId/resolve-duplicate` |
 
 **Resolution:** Route-auth lists more endpoints. Either the HTTP contracts report is incomplete for actions-agent public routes, or route-auth analyzed a different code version. The HTTP contracts report explicitly claims 181 verified endpoints after v3 expansion — this discrepancy should be investigated. **Unresolved: requires code verification.**
 
@@ -289,7 +291,7 @@ The pub/sub report thoroughly documents DLQ configuration (all 14 module-managed
 
 ### Gap 4: Firestore Security — No Validator for Cross-Service Access Patterns at Runtime
 
-The firestore report confirms no static cross-service Firestore access. But no validator checked whether the llm-audit package (which writes to `llm_api_logs`) is properly initialized only within services that use it, or whether all services that depend on `llm-audit` (via their infra-* dependencies) could inadvertently write logs to collections they shouldn't own.
+The firestore report confirms no static cross-service Firestore access. But no validator checked whether the llm-audit package (which writes to `llm_api_logs`) is properly initialized only within services that use it, or whether all services that depend on `llm-audit` (via their infra-\* dependencies) could inadvertently write logs to collections they shouldn't own.
 
 ### Gap 5: No Validator for OpenAPI Specification Accuracy
 
@@ -307,65 +309,65 @@ Unified, prioritized, deduplicated across all 10 reports:
 
 ### P0 — Production-Breaking (Fix Immediately)
 
-| ID | Service | Issue | Source Reports |
-| -- | ------- | ----- | -------------- |
+| ID    | Service         | Issue                                                                                                             | Source Reports      |
+| ----- | --------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------- |
 | MA-01 | bookmarks-agent | Add `INTEXURAOS_WEB_AGENT_URL = module.web_agent.service_url` to `module "bookmarks_agent"` env_vars in Terraform | terraform, env-vars |
 
 ### P1 — High Severity (Fix Before Next Deploy)
 
-| ID | Service | Issue | Source Reports |
-| -- | ------- | ----- | -------------- |
+| ID    | Service        | Issue                                                                                                                                                                                                                                                                          | Source Reports              |
+| ----- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
 | MA-02 | research-agent | Decide: wire `AnalyticsEventPublisherImpl` into ServiceContainer (Option A) OR delete publisher class + Terraform topic + IAM + env var + route handler (Option B). Also add/remove `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` from REQUIRED_ENV and ecosystem.config accordingly | pubsub, env-vars, terraform |
-| MA-03 | user-service | Add `INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` to REQUIRED_ENV in `apps/user-service/src/index.ts` | env-vars, terraform |
-| MA-04 | orchestrator | Document and resolve deployment gap: orchestrator has no Terraform Cloud Run module. Either create a Terraform module or explicitly document as dev-VM-only | terraform |
-| MA-05 | image-service | Investigate whether `gpt-4.1` usage requires `INTEXURAOS_OPENAI_APP_API_KEY` in image-service (not currently in its env-vars). Add to Terraform and ecosystem.config if needed | ai-models, env-vars (meta) |
+| MA-03 | user-service   | Add `INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` to REQUIRED_ENV in `apps/user-service/src/index.ts`                                                                                                                                                                                 | env-vars, terraform         |
+| MA-04 | orchestrator   | Document and resolve deployment gap: orchestrator has no Terraform Cloud Run module. Either create a Terraform module or explicitly document as dev-VM-only                                                                                                                    | terraform                   |
+| MA-05 | image-service  | Investigate whether `gpt-4.1` usage requires `INTEXURAOS_OPENAI_APP_API_KEY` in image-service (not currently in its env-vars). Add to Terraform and ecosystem.config if needed                                                                                                 | ai-models, env-vars (meta)  |
 
 ### P2 — Medium Severity (Fix in Current Sprint)
 
-| ID | Service | Issue | Source Reports |
-| -- | ------- | ----- | -------------- |
-| MA-06 | code-agent | Replace `'INVALID_STATUS' as ErrorCode` cast with `'CONFLICT'` mapping in codeRoutes.ts ~line 3573 | error-contracts |
-| MA-07 | code-agent | Add `INTEXURAOS_SERVICE_URL`, `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`, and `INTEXURAOS_AUTH_JWKS_URL` to REQUIRED_ENV — all three are used at runtime | env-vars |
-| MA-08 | actions-agent | Document `PATCH /internal/actions/:actionId/status` in actions-agent technical.md Internal Endpoints table | http-contracts |
-| MA-09 | linear-agent | Document `GET /internal/linear/issues/:identifier` in linear-agent technical.md Internal Endpoints table | http-contracts |
-| MA-10 | app-settings-service | Rename internal route `GET /settings/pricing` → `GET /internal/settings/pricing` for convention compliance, update all callers | route-auth, http-contracts |
-| MA-11 | calendar-agent | Remove redundant `reply.status()` pre-sets in centralized error handler | error-contracts |
-| MA-12 | bookmarks-agent | Add `INTEXURAOS_USER_SERVICE_URL` and `INTEXURAOS_APP_SETTINGS_SERVICE_URL` to bookmarks-agent REQUIRED_ENV, or remove from Terraform env if unused | terraform |
+| ID    | Service                   | Issue                                                                                                                                                                                            | Source Reports             |
+| ----- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------- |
+| MA-06 | code-agent                | Replace `'INVALID_STATUS' as ErrorCode` cast with `'CONFLICT'` mapping in codeRoutes.ts ~line 3573                                                                                               | error-contracts            |
+| MA-07 | code-agent                | Add `INTEXURAOS_SERVICE_URL`, `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`, and `INTEXURAOS_AUTH_JWKS_URL` to REQUIRED_ENV — all three are used at runtime                                            | env-vars                   |
+| MA-08 | actions-agent             | Document `PATCH /internal/actions/:actionId/status` in actions-agent technical.md Internal Endpoints table                                                                                       | http-contracts             |
+| MA-09 | linear-agent              | Document `GET /internal/linear/issues/:identifier` in linear-agent technical.md Internal Endpoints table                                                                                         | http-contracts             |
+| MA-10 | app-settings-service      | Rename internal route `GET /settings/pricing` → `GET /internal/settings/pricing` for convention compliance, update all callers                                                                   | route-auth, http-contracts |
+| MA-11 | calendar-agent            | Remove redundant `reply.status()` pre-sets in centralized error handler                                                                                                                          | error-contracts            |
+| MA-12 | bookmarks-agent           | Add `INTEXURAOS_USER_SERVICE_URL` and `INTEXURAOS_APP_SETTINGS_SERVICE_URL` to bookmarks-agent REQUIRED_ENV, or remove from Terraform env if unused                                              | terraform                  |
 | MA-13 | Route-auth reconciliation | Reconcile route-auth-validation endpoint inventory against http-contracts v3 registry — resolve discrepancies in actions-agent, research-agent, linear-agent, code-agent, user-service endpoints | http-contracts, route-auth |
 
 ### P3 — Low Severity (Schedule for Backlog)
 
-| ID | Service/Area | Issue | Source Reports |
-| -- | ------------ | ----- | -------------- |
-| MA-14 | ai-models | Add `gpt-4.1` and `text-embedding-3-small` to `llm-contract/src/supportedModels.ts` or document exclusion rationale | ai-models |
-| MA-15 | ai-models | Fix model count in overview.md (says "17 models", should be 16 per contract or 18 actual) and index.md | ai-models |
-| MA-16 | ai-models | Fix `o4-mini` in test fixtures → should be `o4-mini-deep-research`; fix `gemini-2.0-flash-exp` → `gemini-2.0-flash` | ai-models |
-| MA-17 | docs (6 services) | Regenerate technical.md Pub/Sub topic names for actions-agent, bookmarks-agent, commands-agent, data-insights-agent, research-agent, whatsapp-service | pubsub |
-| MA-18 | todos-agent | Consider renaming `INTEXURAOS_TODOS_PROCESSING_TOPIC` → `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC` for naming consistency | pubsub, env-vars |
-| MA-19 | bookmarks-agent | Add `_TOPIC` suffix to `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH` and `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` env var names | pubsub |
-| MA-20 | firestore | Remove stale index entries `dataSource` and `compositeFeeds` from `firestore.indexes.json` | firestore |
-| MA-21 | firestore | Remove or implement `user_spend` registry entry and domain model | firestore |
-| MA-22 | common-core README | Fix package count label: `Packages (13)` → `Packages (19)` | pkg-deps |
-| MA-23 | infra-otel README | Remove phantom claim that infra-sentry imports from infra-otel | pkg-deps |
-| MA-24 | orchestrator | Document env var naming: orchestrator uses `INTEXURAOS_PROJECT_ID` but `.envrc` exports `INTEXURAOS_GCP_PROJECT_ID` — requires manual `.envrc.local` override | env-vars |
-| MA-25 | notion-service | When activating Notion webhook processing, add `x-notion-signature` HMAC verification | route-auth |
-| MA-26 | whatsapp-service / calendar-agent / linear-agent | Standardize `DOWNSTREAM_ERROR` messages to static strings; log originals server-side only | error-contracts |
-| MA-27 | api-docs-hub | Confirm whether api-docs-hub should run locally via PM2; add to ecosystem.config.cjs if yes | service-urls, env-vars |
-| MA-28 | vm-lifecycle | Add `INTEXURAOS_VM_ZONE`, `INTEXURAOS_VM_INSTANCE_NAME` to vm-lifecycle Terraform env_vars for per-environment configurability | terraform |
+| ID    | Service/Area                                     | Issue                                                                                                                                                         | Source Reports         |
+| ----- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| MA-14 | ai-models                                        | Add `gpt-4.1` and `text-embedding-3-small` to `llm-contract/src/supportedModels.ts` or document exclusion rationale                                           | ai-models              |
+| MA-15 | ai-models                                        | Fix model count in overview.md (says "17 models", should be 16 per contract or 18 actual) and index.md                                                        | ai-models              |
+| MA-16 | ai-models                                        | Fix `o4-mini` in test fixtures → should be `o4-mini-deep-research`; fix `gemini-2.0-flash-exp` → `gemini-2.0-flash`                                           | ai-models              |
+| MA-17 | docs (6 services)                                | Regenerate technical.md Pub/Sub topic names for actions-agent, bookmarks-agent, commands-agent, data-insights-agent, research-agent, whatsapp-service         | pubsub                 |
+| MA-18 | todos-agent                                      | Consider renaming `INTEXURAOS_TODOS_PROCESSING_TOPIC` → `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC` for naming consistency                                     | pubsub, env-vars       |
+| MA-19 | bookmarks-agent                                  | Add `_TOPIC` suffix to `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH` and `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` env var names                                           | pubsub                 |
+| MA-20 | firestore                                        | Remove stale index entries `dataSource` and `compositeFeeds` from `firestore.indexes.json`                                                                    | firestore              |
+| MA-21 | firestore                                        | Remove or implement `user_spend` registry entry and domain model                                                                                              | firestore              |
+| MA-22 | common-core README                               | Fix package count label: `Packages (13)` → `Packages (19)`                                                                                                    | pkg-deps               |
+| MA-23 | infra-otel README                                | Remove phantom claim that infra-sentry imports from infra-otel                                                                                                | pkg-deps               |
+| MA-24 | orchestrator                                     | Document env var naming: orchestrator uses `INTEXURAOS_PROJECT_ID` but `.envrc` exports `INTEXURAOS_GCP_PROJECT_ID` — requires manual `.envrc.local` override | env-vars               |
+| MA-25 | notion-service                                   | When activating Notion webhook processing, add `x-notion-signature` HMAC verification                                                                         | route-auth             |
+| MA-26 | whatsapp-service / calendar-agent / linear-agent | Standardize `DOWNSTREAM_ERROR` messages to static strings; log originals server-side only                                                                     | error-contracts        |
+| MA-27 | api-docs-hub                                     | Confirm whether api-docs-hub should run locally via PM2; add to ecosystem.config.cjs if yes                                                                   | service-urls, env-vars |
+| MA-28 | vm-lifecycle                                     | Add `INTEXURAOS_VM_ZONE`, `INTEXURAOS_VM_INSTANCE_NAME` to vm-lifecycle Terraform env_vars for per-environment configurability                                | terraform              |
 
 ---
 
 ## Report Quality Assessment
 
-| Report | Thoroughness | Consistency | Actionability | Notes |
-| ------ | ------------ | ----------- | ------------- | ----- |
-| http-contracts-validation | HIGH — 181 endpoints fully verified | HIGH — clear v3 vs v2 history | HIGH — specific file locations for fixes | Most authoritative endpoint source |
-| pubsub-contracts-validation | HIGH — all 16 topics, IAM, DLQ, schemas | HIGH | HIGH | Thorough DLQ documentation; D-1 dead publisher is the key finding |
-| ai-models-validation | HIGH — 19 issues found | MEDIUM — some categories overlap | HIGH | Best documentation of the 3-tier naming problem |
-| firestore-validation | HIGH — all 45 collections, indexes | HIGH | MEDIUM — some findings marked fixed without verification context | `user_spend` orphan well-investigated |
-| package-deps-validation | HIGH — full dep matrix, build order | HIGH | HIGH (2 open items) | Clean pass overall; small surface area |
-| env-vars-validation | HIGH — 4-source matrix for each service | HIGH | HIGH | Misses the WEB_AGENT_URL severity; terraform report is more accurate on that finding |
-| route-auth-validation | MEDIUM — auth patterns excellent, endpoint inventory incomplete | LOW — diverges from http-contracts on several services | MEDIUM | Auth pattern documentation is high value; endpoint coverage needs reconciliation |
-| service-urls-validation | MEDIUM — focused scope, clean matrix | HIGH | MEDIUM (2 items) | Clean pass; api-docs-hub gap is documented |
-| error-contracts-validation | HIGH — quantified all reply.fail/ok/send calls | HIGH | HIGH | Excellent systematic coverage; INVALID_STATUS cast is a real type safety issue |
-| terraform-code-sync-validation | HIGH — all services, env var cross-ref | HIGH | HIGH — P0/P1/P2/P3 priorities | Most actionable report; CRITICAL bookmarks finding is the highest-priority item |
+| Report                         | Thoroughness                                                    | Consistency                                            | Actionability                                                    | Notes                                                                                |
+| ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| http-contracts-validation      | HIGH — 181 endpoints fully verified                             | HIGH — clear v3 vs v2 history                          | HIGH — specific file locations for fixes                         | Most authoritative endpoint source                                                   |
+| pubsub-contracts-validation    | HIGH — all 16 topics, IAM, DLQ, schemas                         | HIGH                                                   | HIGH                                                             | Thorough DLQ documentation; D-1 dead publisher is the key finding                    |
+| ai-models-validation           | HIGH — 19 issues found                                          | MEDIUM — some categories overlap                       | HIGH                                                             | Best documentation of the 3-tier naming problem                                      |
+| firestore-validation           | HIGH — all 45 collections, indexes                              | HIGH                                                   | MEDIUM — some findings marked fixed without verification context | `user_spend` orphan well-investigated                                                |
+| package-deps-validation        | HIGH — full dep matrix, build order                             | HIGH                                                   | HIGH (2 open items)                                              | Clean pass overall; small surface area                                               |
+| env-vars-validation            | HIGH — 4-source matrix for each service                         | HIGH                                                   | HIGH                                                             | Misses the WEB_AGENT_URL severity; terraform report is more accurate on that finding |
+| route-auth-validation          | MEDIUM — auth patterns excellent, endpoint inventory incomplete | LOW — diverges from http-contracts on several services | MEDIUM                                                           | Auth pattern documentation is high value; endpoint coverage needs reconciliation     |
+| service-urls-validation        | MEDIUM — focused scope, clean matrix                            | HIGH                                                   | MEDIUM (2 items)                                                 | Clean pass; api-docs-hub gap is documented                                           |
+| error-contracts-validation     | HIGH — quantified all reply.fail/ok/send calls                  | HIGH                                                   | HIGH                                                             | Excellent systematic coverage; INVALID_STATUS cast is a real type safety issue       |
+| terraform-code-sync-validation | HIGH — all services, env var cross-ref                          | HIGH                                                   | HIGH — P0/P1/P2/P3 priorities                                    | Most actionable report; CRITICAL bookmarks finding is the highest-priority item      |

@@ -28,11 +28,11 @@ Full monorepo documentation refresh covering all 20 apps, 4 workers, and 22 pack
 
 ### Execution
 
-| Wave   | Scope                           | Agents | Status    |
-| ------ | ------------------------------- | ------ | --------- |
-| Wave 1 | 10 apps (actions-agent to image-service) | 10     | Completed |
+| Wave   | Scope                                      | Agents | Status    |
+| ------ | ------------------------------------------ | ------ | --------- |
+| Wave 1 | 10 apps (actions-agent to image-service)   | 10     | Completed |
 | Wave 2 | 10 apps (linear-agent to whatsapp-service) | 10     | Completed |
-| Wave 3 | 4 workers + 4 package batches   | 8      | Completed |
+| Wave 3 | 4 workers + 4 package batches              | 8      | Completed |
 
 **Total Phase 2 agents:** 28
 **Concurrency:** 10-13 agents per wave (limited by tmux pane capacity)
@@ -40,12 +40,12 @@ Full monorepo documentation refresh covering all 20 apps, 4 workers, and 22 pack
 
 ### Files Generated Per Component
 
-| Component Type | Files Per Component | Components | Total Files |
-| -------------- | ------------------- | ---------- | ----------- |
-| Apps           | 5 (features, technical, tutorial, debt, agent) | 20 | 100 |
-| Workers        | 5 (features, technical, tutorial, debt, agent) | 4  | 20  |
-| Packages       | 3 (README, debt, agent)                        | 22 | 66  |
-| **Total**      |                                                | 46 | 186 |
+| Component Type | Files Per Component                            | Components | Total Files |
+| -------------- | ---------------------------------------------- | ---------- | ----------- |
+| Apps           | 5 (features, technical, tutorial, debt, agent) | 20         | 100         |
+| Workers        | 5 (features, technical, tutorial, debt, agent) | 4          | 20          |
+| Packages       | 3 (README, debt, agent)                        | 22         | 66          |
+| **Total**      |                                                | 46         | 186         |
 
 ### New Documentation Created
 
@@ -59,12 +59,12 @@ All other components were incremental updates preserving existing user insights.
 
 ## Phase 3: Aggregation
 
-| File                     | Status  | Notes                            |
-| ------------------------ | ------- | -------------------------------- |
+| File                    | Status  | Notes                               |
+| ----------------------- | ------- | ----------------------------------- |
 | `services/index.md`     | Updated | Full catalog with all 46 components |
-| `overview.md`           | Updated | Project narrative refreshed      |
-| `site-index.json`       | Updated | Structured metadata current      |
-| `documentation-runs.md` | Updated | This run logged                  |
+| `overview.md`           | Updated | Project narrative refreshed         |
+| `site-index.json`       | Updated | Structured metadata current         |
+| `documentation-runs.md` | Updated | This run logged                     |
 
 ---
 
@@ -72,15 +72,15 @@ All other components were incremental updates preserving existing user insights.
 
 ### Summary by Domain
 
-| Domain               | Items Checked | Verified OK | Discrepancies | Severity Breakdown     |
-| -------------------- | ------------- | ----------- | ------------- | ---------------------- |
-| HTTP Contracts       | 52            | 40          | 12            | 0C / 4H / 5M / 3L     |
-| Pub/Sub Contracts    | 14            | 12          | 9             | 0C / 1H / 5M / 3L     |
-| AI Models            | 18            | 16          | 2             | 0C / 1H / 1M / 0L     |
-| Firestore Collections| 45            | 43          | 2             | 0C / 0H / 2M / 0L     |
-| Package Dependencies | 21            | 21          | 0             | Clean                  |
-| Environment Variables| 10 services   | 4           | 8+            | 0C / 3H / 5M / varies |
-| **Total**            |               |             | **33+**       | **0C / 9H / 18M / 6L**|
+| Domain                | Items Checked | Verified OK | Discrepancies | Severity Breakdown     |
+| --------------------- | ------------- | ----------- | ------------- | ---------------------- |
+| HTTP Contracts        | 52            | 40          | 12            | 0C / 4H / 5M / 3L      |
+| Pub/Sub Contracts     | 14            | 12          | 9             | 0C / 1H / 5M / 3L      |
+| AI Models             | 18            | 16          | 2             | 0C / 1H / 1M / 0L      |
+| Firestore Collections | 45            | 43          | 2             | 0C / 0H / 2M / 0L      |
+| Package Dependencies  | 21            | 21          | 0             | Clean                  |
+| Environment Variables | 10 services   | 4           | 8+            | 0C / 3H / 5M / varies  |
+| **Total**             |               |             | **33+**       | **0C / 9H / 18M / 6L** |
 
 ### Key Findings
 
@@ -131,16 +131,19 @@ Clean. No circular dependencies. `common-core` is the foundational leaf package 
 ## Recommendations
 
 ### Priority 1 (Fix in docs)
+
 - [ ] Correct `/llm-client` phantom endpoint in 4 service technical.md files
 - [ ] Fix model count in overview.md and services/index.md (16 in registry, 18 in use)
 - [ ] Add undocumented endpoints to actions-agent technical.md
 
 ### Priority 2 (Investigate)
+
 - [ ] Verify if `user_spend` and `visualizations` Firestore collections are still used
 - [ ] Register `gpt-4.1` and `text-embedding-3-small` in llm-contract or document as exceptions
 - [ ] Align env var documentation with REQUIRED_ENV for whatsapp-service and user-service
 
 ### Priority 3 (Process improvement)
+
 - [ ] Add CI check for model count consistency
 - [ ] Consider smaller package batches (3-4) for future documentation runs
 - [ ] Add pre-commit hook to validate env var documentation when index.ts changes
@@ -149,15 +152,15 @@ Clean. No circular dependencies. `common-core` is the foundational leaf package 
 
 ## Agent Execution Summary
 
-| Phase | Agents | Type | Model | Mode |
-| ----- | ------ | ---- | ----- | ---- |
-| Phase 2 Wave 1 | 10 | service-scribe | Sonnet | bypassPermissions |
-| Phase 2 Wave 2 | 10 | service-scribe | Sonnet | bypassPermissions |
-| Phase 2 Wave 3 | 8  | service-scribe | Sonnet | bypassPermissions |
-| Phase 3         | 4  | general-purpose | Sonnet | bypassPermissions |
-| Phase 4         | 6  | general-purpose | Sonnet | bypassPermissions |
-| **Total**       | **38** | | | |
+| Phase          | Agents | Type            | Model  | Mode              |
+| -------------- | ------ | --------------- | ------ | ----------------- |
+| Phase 2 Wave 1 | 10     | service-scribe  | Sonnet | bypassPermissions |
+| Phase 2 Wave 2 | 10     | service-scribe  | Sonnet | bypassPermissions |
+| Phase 2 Wave 3 | 8      | service-scribe  | Sonnet | bypassPermissions |
+| Phase 3        | 4      | general-purpose | Sonnet | bypassPermissions |
+| Phase 4        | 6      | general-purpose | Sonnet | bypassPermissions |
+| **Total**      | **38** |                 |        |                   |
 
 ---
 
-*Report generated by team-lead orchestrator. See individual validation reports in `docs/validation/` for full details.*
+_Report generated by team-lead orchestrator. See individual validation reports in `docs/validation/` for full details._

@@ -129,15 +129,15 @@ interface Task {
   webhookUrl: string;
   webhookSecret: string;
   actionId?: string;
-  retriedFrom?: string;                          // Original task ID for retry chains
+  retriedFrom?: string; // Original task ID for retry chains
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
   containerId: string;
-  startedAt: string;                             // ISO 8601
-  completedAt?: string;                          // ISO 8601
-  attemptCount?: number;                         // Current attempt (starts at 1)
-  maxAttempts?: number;                          // Maximum before terminal failure
-  lastExitCode?: number;                         // Exit code of most recent attempt
+  startedAt: string; // ISO 8601
+  completedAt?: string; // ISO 8601
+  attemptCount?: number; // Current attempt (starts at 1)
+  maxAttempts?: number; // Maximum before terminal failure
+  lastExitCode?: number; // Exit code of most recent attempt
   verificationHistory?: TaskVerificationRecord[]; // Completion verifier results per attempt
 }
 
@@ -251,25 +251,25 @@ type OAuthState =
 
 ### Inbound (code-agent -> orchestrator)
 
-| Method | Path                   | Auth        | Purpose                          |
-| ------ | ---------------------- | ----------- | -------------------------------- |
-| POST   | `/tasks`               | HMAC signed | Submit task                      |
-| GET    | `/tasks/:id`           | None        | Query task status                |
-| DELETE | `/tasks/:id`           | None        | Cancel task                      |
-| POST   | `/tasks/:id/message`   | HMAC signed | Send follow-up message to task   |
-| GET    | `/health`              | None        | Health check                     |
-| GET    | `/meta/worker-image`   | None        | Worker image diagnostics         |
-| POST   | `/admin/refresh-token` | HMAC signed | Force token refresh              |
-| POST   | `/admin/shutdown`      | HMAC signed | Request shutdown                 |
+| Method | Path                   | Auth        | Purpose                        |
+| ------ | ---------------------- | ----------- | ------------------------------ |
+| POST   | `/tasks`               | HMAC signed | Submit task                    |
+| GET    | `/tasks/:id`           | None        | Query task status              |
+| DELETE | `/tasks/:id`           | None        | Cancel task                    |
+| POST   | `/tasks/:id/message`   | HMAC signed | Send follow-up message to task |
+| GET    | `/health`              | None        | Health check                   |
+| GET    | `/meta/worker-image`   | None        | Worker image diagnostics       |
+| POST   | `/admin/refresh-token` | HMAC signed | Force token refresh            |
+| POST   | `/admin/shutdown`      | HMAC signed | Request shutdown               |
 
 ### Outbound (orchestrator -> code-agent)
 
-| Method | Path                        | Auth                       | Purpose                   |
-| ------ | --------------------------- | -------------------------- | ------------------------- |
-| POST   | `{webhookUrl}`              | HMAC (X-Request-Signature) | Task completion callback  |
-| POST   | `/internal/logs`            | HMAC + X-Internal-Auth     | Log chunk upload          |
-| POST   | `/internal/code/heartbeat`  | HMAC (X-Request-Signature) | Running task keepalive    |
-| POST   | `/internal/turn-metrics`    | HMAC + X-Internal-Auth     | Per-task resource metrics |
+| Method | Path                       | Auth                       | Purpose                   |
+| ------ | -------------------------- | -------------------------- | ------------------------- |
+| POST   | `{webhookUrl}`             | HMAC (X-Request-Signature) | Task completion callback  |
+| POST   | `/internal/logs`           | HMAC + X-Internal-Auth     | Log chunk upload          |
+| POST   | `/internal/code/heartbeat` | HMAC (X-Request-Signature) | Running task keepalive    |
+| POST   | `/internal/turn-metrics`   | HMAC + X-Internal-Auth     | Per-task resource metrics |
 
 ### HMAC Signature Format
 
@@ -381,19 +381,19 @@ On startup, the orchestrator:
 
 ## Error Codes
 
-| Code                                    | HTTP | Meaning                                                              |
-| --------------------------------------- | ---- | -------------------------------------------------------------------- |
-| `at_capacity`                           | 503  | All worker slots occupied                                            |
-| `invalid_request`                       | 400  | Request body failed Zod validation                                   |
-| `service_error`                         | 400  | Worktree or container creation failed                                |
-| `not_found`                             | 404  | Task ID does not exist                                               |
-| `already_completed`                     | 409  | Task already finished (cannot cancel)                                |
-| `invalid_status`                        | 409  | Message sent to task with status that does not accept messages       |
-| `NO_PR_CREATED`                         | -    | Task completed but no PR was found                                   |
-| `TASK_COMPLETION_VERIFICATION_FAILED`   | -    | Max attempts reached without passing completion verification         |
-| `TASK_COMPLETION_VERIFIER_FAILED`       | -    | Gemini verifier unreachable or returned invalid JSON                 |
-| `RESUME_ATTEMPT_FAILED`                 | -    | Could not start a follow-up attempt container                        |
-| `SETUP_FAILED`                          | -    | Task setup failed (worktree creation, API key invalid, etc.)         |
+| Code                                  | HTTP | Meaning                                                        |
+| ------------------------------------- | ---- | -------------------------------------------------------------- |
+| `at_capacity`                         | 503  | All worker slots occupied                                      |
+| `invalid_request`                     | 400  | Request body failed Zod validation                             |
+| `service_error`                       | 400  | Worktree or container creation failed                          |
+| `not_found`                           | 404  | Task ID does not exist                                         |
+| `already_completed`                   | 409  | Task already finished (cannot cancel)                          |
+| `invalid_status`                      | 409  | Message sent to task with status that does not accept messages |
+| `NO_PR_CREATED`                       | -    | Task completed but no PR was found                             |
+| `TASK_COMPLETION_VERIFICATION_FAILED` | -    | Max attempts reached without passing completion verification   |
+| `TASK_COMPLETION_VERIFIER_FAILED`     | -    | Gemini verifier unreachable or returned invalid JSON           |
+| `RESUME_ATTEMPT_FAILED`               | -    | Could not start a follow-up attempt container                  |
+| `SETUP_FAILED`                        | -    | Task setup failed (worktree creation, API key invalid, etc.)   |
 
 ---
 

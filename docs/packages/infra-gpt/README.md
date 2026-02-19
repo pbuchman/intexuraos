@@ -71,12 +71,12 @@ Converts raw OpenAI usage data into `NormalizedUsage`. Optionally includes `cach
 
 ```ts
 interface GptConfig {
-  apiKey: string;           // OpenAI API key from platform.openai.com
-  model: string;            // e.g., 'gpt-4.1', 'gpt-4o-mini', 'o4-mini-deep-research'
-  userId: string;           // User ID for usage tracking
-  pricing: ModelPricing;    // Cost configuration for text operations
+  apiKey: string; // OpenAI API key from platform.openai.com
+  model: string; // e.g., 'gpt-4.1', 'gpt-4o-mini', 'o4-mini-deep-research'
+  userId: string; // User ID for usage tracking
+  pricing: ModelPricing; // Cost configuration for text operations
   imagePricing?: ModelPricing; // Separate pricing for image generation
-  logger: Logger;           // Pino logger for structured logging
+  logger: Logger; // Pino logger for structured logging
 }
 ```
 
@@ -135,14 +135,14 @@ All methods return `Result<T, GptError>`. Error mapping:
 
 ## Dependencies
 
-| Package                    | Role                                                              |
-| -------------------------- | ----------------------------------------------------------------- |
-| `openai` ^6.15.0           | OpenAI API SDK                                                    |
-| `@intexuraos/common-core`  | `Result` types, `getErrorMessage`, `Logger`                       |
+| Package                    | Role                                                                     |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `openai` ^6.15.0           | OpenAI API SDK                                                           |
+| `@intexuraos/common-core`  | `Result` types, `getErrorMessage`, `Logger`                              |
 | `@intexuraos/llm-contract` | `LLMClient`, `NormalizedUsage`, `ModelPricing`, `LlmModels`, `ImageSize` |
-| `@intexuraos/llm-prompts`  | `buildResearchPrompt`                                             |
-| `@intexuraos/llm-audit`    | `createAuditContext`                                              |
-| `@intexuraos/llm-pricing`  | `createUsageLogger`                                               |
+| `@intexuraos/llm-prompts`  | `buildResearchPrompt`                                                    |
+| `@intexuraos/llm-audit`    | `createAuditContext`                                                     |
+| `@intexuraos/llm-pricing`  | `createUsageLogger`                                                      |
 
 ## Recent Changes
 

@@ -34,45 +34,45 @@ apps/*
 
 ### Common + HTTP
 
-| Package                                                              | Description                                              | Dependencies                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------- |
-| [`common-core`](../docs/packages/common-core/README.md)             | Result types, error codes, redaction utilities           | None (leaf)                           |
-| [`common-http`](../docs/packages/common-http/README.md)             | Fastify plugins, JWT auth, API response helpers          | `common-core`, `llm-utils`            |
-| [`http-contracts`](../docs/packages/http-contracts/README.md)       | OpenAPI schemas, Fastify JSON schemas                    | None (leaf)                           |
-| [`http-server`](../docs/packages/http-server/README.md)             | Health check utilities, validation error handler         | `common-core`, `common-http`, `infra-firestore` |
+| Package                                                       | Description                                      | Dependencies                                    |
+| ------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------- |
+| [`common-core`](../docs/packages/common-core/README.md)       | Result types, error codes, redaction utilities   | None (leaf)                                     |
+| [`common-http`](../docs/packages/common-http/README.md)       | Fastify plugins, JWT auth, API response helpers  | `common-core`, `llm-utils`                      |
+| [`http-contracts`](../docs/packages/http-contracts/README.md) | OpenAPI schemas, Fastify JSON schemas            | None (leaf)                                     |
+| [`http-server`](../docs/packages/http-server/README.md)       | Health check utilities, validation error handler | `common-core`, `common-http`, `infra-firestore` |
 
 ### Infrastructure
 
-| Package                                                              | Description                                              | Dependencies                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------- |
-| [`infra-claude`](../docs/packages/infra-claude/README.md)           | Anthropic Claude API wrapper implementing `LLMClient`    | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
-| [`infra-firestore`](../docs/packages/infra-firestore/README.md)     | Firestore singleton, fake implementation for testing     | None (leaf)                           |
-| [`infra-gemini`](../docs/packages/infra-gemini/README.md)           | Google Gemini API wrapper with image generation support  | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
-| [`infra-glm`](../docs/packages/infra-glm/README.md)                 | Zai GLM API wrapper (OpenAI-compatible) implementing `LLMClient` | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
-| [`infra-gpt`](../docs/packages/infra-gpt/README.md)                 | OpenAI GPT API wrapper with image generation support     | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
-| [`infra-notion`](../docs/packages/infra-notion/README.md)           | Notion API client, error mapping, page retrieval         | `common-core`, `infra-firestore`      |
-| [`infra-otel`](../docs/packages/infra-otel/README.md)               | OpenTelemetry SDK bootstrap for Dash0 trace/metric export | None (leaf)                          |
-| [`infra-perplexity`](../docs/packages/infra-perplexity/README.md)   | Perplexity AI API wrapper with SSE streaming support     | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
-| [`infra-pubsub`](../docs/packages/infra-pubsub/README.md)           | Cloud Pub/Sub abstract publisher base and concrete implementations | `common-core`              |
-| [`infra-sentry`](../docs/packages/infra-sentry/README.md)           | Sentry SDK init, Pino log stream, Fastify error handler, logger factory | `common-core`    |
-| [`infra-whatsapp`](../docs/packages/infra-whatsapp/README.md)       | WhatsApp Business Cloud API client (messages, media, receipts) | None (leaf)               |
+| Package                                                           | Description                                                             | Dependencies                                                             |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [`infra-claude`](../docs/packages/infra-claude/README.md)         | Anthropic Claude API wrapper implementing `LLMClient`                   | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
+| [`infra-firestore`](../docs/packages/infra-firestore/README.md)   | Firestore singleton, fake implementation for testing                    | None (leaf)                                                              |
+| [`infra-gemini`](../docs/packages/infra-gemini/README.md)         | Google Gemini API wrapper with image generation support                 | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
+| [`infra-glm`](../docs/packages/infra-glm/README.md)               | Zai GLM API wrapper (OpenAI-compatible) implementing `LLMClient`        | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
+| [`infra-gpt`](../docs/packages/infra-gpt/README.md)               | OpenAI GPT API wrapper with image generation support                    | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
+| [`infra-notion`](../docs/packages/infra-notion/README.md)         | Notion API client, error mapping, page retrieval                        | `common-core`, `infra-firestore`                                         |
+| [`infra-otel`](../docs/packages/infra-otel/README.md)             | OpenTelemetry SDK bootstrap for Dash0 trace/metric export               | None (leaf)                                                              |
+| [`infra-perplexity`](../docs/packages/infra-perplexity/README.md) | Perplexity AI API wrapper with SSE streaming support                    | `common-core`, `llm-contract`, `llm-audit`, `llm-pricing`, `llm-prompts` |
+| [`infra-pubsub`](../docs/packages/infra-pubsub/README.md)         | Cloud Pub/Sub abstract publisher base and concrete implementations      | `common-core`                                                            |
+| [`infra-sentry`](../docs/packages/infra-sentry/README.md)         | Sentry SDK init, Pino log stream, Fastify error handler, logger factory | `common-core`                                                            |
+| [`infra-whatsapp`](../docs/packages/infra-whatsapp/README.md)     | WhatsApp Business Cloud API client (messages, media, receipts)          | None (leaf)                                                              |
 
 ### LLM
 
-| Package                                                              | Description                                              | Dependencies                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------- |
-| [`llm-audit`](../docs/packages/llm-audit/README.md)                 | LLM API audit logging to Firestore with full request/response context | `common-core`, `infra-firestore`, `llm-contract` |
-| [`llm-contract`](../docs/packages/llm-contract/README.md)           | Shared LLM type definitions, model constants, client interface | `common-core`                    |
-| [`llm-factory`](../docs/packages/llm-factory/README.md)             | Unified factory mapping model names to provider-specific clients | `common-core`, `infra-gemini`, `infra-glm`, `llm-audit`, `llm-contract`, `llm-pricing` |
-| [`llm-pricing`](../docs/packages/llm-pricing/README.md)             | Fetches LLM pricing from app-settings-service and tracks usage to Firestore | `common-core`, `infra-firestore`, `llm-contract` |
-| [`llm-prompts`](../docs/packages/llm-prompts/README.md)             | Centralized library of typed prompt builders with Zod response schemas | `llm-contract`, `common-core`, `llm-utils` |
-| [`llm-utils`](../docs/packages/llm-utils/README.md)                 | Sensitive data redaction and structured LLM parse error helpers | `common-core`                  |
+| Package                                                   | Description                                                                 | Dependencies                                                                           |
+| --------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [`llm-audit`](../docs/packages/llm-audit/README.md)       | LLM API audit logging to Firestore with full request/response context       | `common-core`, `infra-firestore`, `llm-contract`                                       |
+| [`llm-contract`](../docs/packages/llm-contract/README.md) | Shared LLM type definitions, model constants, client interface              | `common-core`                                                                          |
+| [`llm-factory`](../docs/packages/llm-factory/README.md)   | Unified factory mapping model names to provider-specific clients            | `common-core`, `infra-gemini`, `infra-glm`, `llm-audit`, `llm-contract`, `llm-pricing` |
+| [`llm-pricing`](../docs/packages/llm-pricing/README.md)   | Fetches LLM pricing from app-settings-service and tracks usage to Firestore | `common-core`, `infra-firestore`, `llm-contract`                                       |
+| [`llm-prompts`](../docs/packages/llm-prompts/README.md)   | Centralized library of typed prompt builders with Zod response schemas      | `llm-contract`, `common-core`, `llm-utils`                                             |
+| [`llm-utils`](../docs/packages/llm-utils/README.md)       | Sensitive data redaction and structured LLM parse error helpers             | `common-core`                                                                          |
 
 ### Integration
 
-| Package                                                              | Description                                              | Dependencies                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------- |
-| [`internal-clients`](../docs/packages/internal-clients/README.md)   | Typed HTTP clients for calling IntexuraOS internal service APIs | `common-core`, `llm-contract`, `llm-factory`, `llm-pricing` |
+| Package                                                           | Description                                                     | Dependencies                                                |
+| ----------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------- |
+| [`internal-clients`](../docs/packages/internal-clients/README.md) | Typed HTTP clients for calling IntexuraOS internal service APIs | `common-core`, `llm-contract`, `llm-factory`, `llm-pricing` |
 
 ## Testing
 

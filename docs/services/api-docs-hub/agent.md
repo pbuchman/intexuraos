@@ -6,12 +6,12 @@
 
 ## Identity
 
-| Field        | Value                                                      |
-| ------------ | ---------------------------------------------------------- |
-| **Name**     | api-docs-hub                                               |
-| **Role**     | API Documentation Aggregator                               |
-| **Goal**     | Provide unified Swagger UI for all IntexuraOS service APIs |
-| **Version**  | 2.1.0 (package) / 0.0.4 (OpenAPI spec)                    |
+| Field       | Value                                                      |
+| ----------- | ---------------------------------------------------------- |
+| **Name**    | api-docs-hub                                               |
+| **Role**    | API Documentation Aggregator                               |
+| **Goal**    | Provide unified Swagger UI for all IntexuraOS service APIs |
+| **Version** | 2.1.0 (package) / 0.0.4 (OpenAPI spec)                     |
 
 ---
 
@@ -40,23 +40,23 @@ interface SwaggerUI {
 
 interface HealthResponse {
   status: 'healthy' | 'degraded' | 'down';
-  serviceName: string;    // "api-docs-hub"
-  version: string;        // "0.0.4"
+  serviceName: string; // "api-docs-hub"
+  version: string; // "0.0.4"
   checks: HealthCheck[];
 }
 
 interface HealthCheck {
-  name: string;           // "config"
+  name: string; // "config"
   status: 'ok' | 'down';
   latencyMs: number;
   details?: {
-    sourceCount: number;  // Number of configured OpenAPI sources (15)
+    sourceCount: number; // Number of configured OpenAPI sources (15)
   };
 }
 
 interface OpenApiSource {
   name: string; // Display name shown in Swagger UI dropdown
-  url: string;  // Full URL to service's OpenAPI JSON endpoint
+  url: string; // Full URL to service's OpenAPI JSON endpoint
 }
 ```
 
@@ -64,13 +64,13 @@ interface OpenApiSource {
 
 ## Constraints
 
-| Rule              | Description                                                       |
-| ----------------- | ----------------------------------------------------------------- |
-| **Read Only**     | No data modification — documentation only                         |
-| **Public Access** | Both `/docs` and `/health` accessible without authentication      |
-| **Source Config** | OpenAPI sources configured at deployment via 15 required env vars |
-| **Client Fetch**  | Swagger UI fetches specs client-side — services must allow CORS   |
-| **Fail Fast**     | Missing any of the 15 env vars causes startup crash               |
+| Rule              | Description                                                          |
+| ----------------- | -------------------------------------------------------------------- |
+| **Read Only**     | No data modification — documentation only                            |
+| **Public Access** | Both `/docs` and `/health` accessible without authentication         |
+| **Source Config** | OpenAPI sources configured at deployment via 15 required env vars    |
+| **Client Fetch**  | Swagger UI fetches specs client-side — services must allow CORS      |
+| **Fail Fast**     | Missing any of the 15 env vars causes startup crash                  |
 | **Environment**   | `INTEXURAOS_ENVIRONMENT` passed to Sentry; defaults to "development" |
 
 ---
@@ -131,7 +131,7 @@ The hub aggregates specs from configured sources:
 ```typescript
 interface OpenApiSource {
   name: string; // Display name in dropdown
-  url: string;  // URL to service's OpenAPI JSON
+  url: string; // URL to service's OpenAPI JSON
 }
 
 // All 15 sources loaded from required env vars at startup

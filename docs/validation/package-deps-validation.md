@@ -7,18 +7,18 @@
 
 ## Summary
 
-| Check                                | Result   | Details                                                |
-| ------------------------------------ | -------- | ------------------------------------------------------ |
-| Circular dependencies                | PASS     | No cycles in @intexuraos/* graph                       |
-| Undocumented packages                | PASS     | All 22 packages have README docs                       |
-| Version pinning — @intexuraos deps   | PASS     | All 100% use `workspace:*` (packages, apps, workers)   |
-| Peer dependency issues               | PASS     | No peer dependencies defined anywhere                  |
-| Build order vs dependency graph      | PASS     | pnpm topological resolution handles this automatically |
-| Export surface vs docs               | PASS     | All exports documented; infra-otel `./register` noted  |
-| Phantom documented deps              | OPEN     | infra-otel claims infra-sentry dep (D4, not fixed)     |
-| "Used By" count mismatches           | OPEN     | common-core Packages count wrong: says 13, lists 19 (D1, not fixed) |
-| Missing deps in package docs         | FIXED    | llm-factory llm-audit dep added (D3 fixed)             |
-| Missing package in Used By           | FIXED    | llm-audit now lists llm-factory (D2 fixed)             |
+| Check                              | Result | Details                                                             |
+| ---------------------------------- | ------ | ------------------------------------------------------------------- |
+| Circular dependencies              | PASS   | No cycles in @intexuraos/\* graph                                   |
+| Undocumented packages              | PASS   | All 22 packages have README docs                                    |
+| Version pinning — @intexuraos deps | PASS   | All 100% use `workspace:*` (packages, apps, workers)                |
+| Peer dependency issues             | PASS   | No peer dependencies defined anywhere                               |
+| Build order vs dependency graph    | PASS   | pnpm topological resolution handles this automatically              |
+| Export surface vs docs             | PASS   | All exports documented; infra-otel `./register` noted               |
+| Phantom documented deps            | OPEN   | infra-otel claims infra-sentry dep (D4, not fixed)                  |
+| "Used By" count mismatches         | OPEN   | common-core Packages count wrong: says 13, lists 19 (D1, not fixed) |
+| Missing deps in package docs       | FIXED  | llm-factory llm-audit dep added (D3 fixed)                          |
+| Missing package in Used By         | FIXED  | llm-audit now lists llm-factory (D2 fixed)                          |
 
 **Open discrepancies: 2** (D1 count label error, D4 phantom dependency claim)
 **Fixed since v1: 2** (D2 llm-factory in llm-audit Used By; D3 llm-audit in llm-factory deps)
@@ -29,30 +29,30 @@
 
 Which `@intexuraos/*` package depends on which other `@intexuraos/*` packages (direct dependencies from `package.json` only):
 
-| Package            | Depends On (@intexuraos/*)                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------------- |
-| `common-core`      | *(none — leaf)*                                                                             |
-| `common-http`      | `common-core`, `llm-utils`                                                                  |
-| `http-contracts`   | *(none — leaf)*                                                                             |
-| `http-server`      | `common-core`, `common-http`, `infra-firestore`                                             |
-| `infra-claude`     | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`                   |
-| `infra-firestore`  | `common-core`                                                                               |
-| `infra-gemini`     | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`                   |
-| `infra-glm`        | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`                   |
-| `infra-gpt`        | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`                   |
-| `infra-notion`     | `common-core`                                                                               |
-| `infra-otel`       | *(none — standalone OTel wrapper, no @intexuraos/* deps)*                                   |
-| `infra-perplexity` | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`                   |
-| `infra-pubsub`     | `common-core`                                                                               |
-| `infra-sentry`     | `common-core`                                                                               |
-| `infra-whatsapp`   | `common-core`                                                                               |
-| `internal-clients` | `common-core`, `llm-contract`, `llm-factory`, `llm-pricing`                                |
-| `llm-audit`        | `common-core`, `infra-firestore`, `llm-contract`                                            |
-| `llm-contract`     | `common-core`                                                                               |
-| `llm-factory`      | `common-core`, `llm-audit`, `infra-gemini`, `infra-glm`, `llm-contract`, `llm-pricing`     |
-| `llm-pricing`      | `common-core`, `infra-firestore`, `llm-contract`                                            |
-| `llm-prompts`      | `common-core`, `llm-contract`, `llm-utils`                                                  |
-| `llm-utils`        | `common-core`                                                                               |
+| Package            | Depends On (@intexuraos/\*)                                                            |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `common-core`      | _(none — leaf)_                                                                        |
+| `common-http`      | `common-core`, `llm-utils`                                                             |
+| `http-contracts`   | _(none — leaf)_                                                                        |
+| `http-server`      | `common-core`, `common-http`, `infra-firestore`                                        |
+| `infra-claude`     | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`               |
+| `infra-firestore`  | `common-core`                                                                          |
+| `infra-gemini`     | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`               |
+| `infra-glm`        | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`               |
+| `infra-gpt`        | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`               |
+| `infra-notion`     | `common-core`                                                                          |
+| `infra-otel`       | _(none — standalone OTel wrapper, no @intexuraos/_ deps)\*                             |
+| `infra-perplexity` | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`               |
+| `infra-pubsub`     | `common-core`                                                                          |
+| `infra-sentry`     | `common-core`                                                                          |
+| `infra-whatsapp`   | `common-core`                                                                          |
+| `internal-clients` | `common-core`, `llm-contract`, `llm-factory`, `llm-pricing`                            |
+| `llm-audit`        | `common-core`, `infra-firestore`, `llm-contract`                                       |
+| `llm-contract`     | `common-core`                                                                          |
+| `llm-factory`      | `common-core`, `llm-audit`, `infra-gemini`, `infra-glm`, `llm-contract`, `llm-pricing` |
+| `llm-pricing`      | `common-core`, `infra-firestore`, `llm-contract`                                       |
+| `llm-prompts`      | `common-core`, `llm-contract`, `llm-utils`                                             |
+| `llm-utils`        | `common-core`                                                                          |
 
 ---
 
@@ -70,6 +70,7 @@ Tracing all dependency chains:
 **Result: No circular dependencies found.**
 
 Notable transitive chains:
+
 - `llm-factory` transitively depends on `infra-firestore` (via `llm-audit` and `llm-pricing`) even though it doesn't list it directly.
 - Any app using `llm-factory` or `internal-clients` transitively pulls in `infra-gemini` and `infra-glm`.
 
@@ -78,10 +79,11 @@ Notable transitive chains:
 ## ENHANCED: Version Pinning Verification
 
 All `@intexuraos/*` inter-package dependencies must use `workspace:*`. This ensures:
+
 - pnpm resolves to the local workspace copy (no accidental registry version)
 - Topological build order is computed from the dependency graph automatically
 
-**Result: PASS — 100% of @intexuraos/* dependencies use `workspace:*` across all 22 packages, 20 apps, and 3 workers.**
+**Result: PASS — 100% of @intexuraos/_ dependencies use `workspace:_` across all 22 packages, 20 apps, and 3 workers.**
 
 No packages, apps, or workers use pinned semver, ranges, or git references for `@intexuraos/*` dependencies.
 
@@ -91,9 +93,9 @@ No packages, apps, or workers use pinned semver, ranges, or git references for `
 
 Peer dependencies require consumers to install matching versions manually. They are appropriate for framework plugins and packages that need to avoid bundling heavy dependencies.
 
-| Package     | Peer Dependencies |
-| ----------- | ----------------- |
-| *(all 22)*  | None              |
+| Package    | Peer Dependencies |
+| ---------- | ----------------- |
+| _(all 22)_ | None              |
 
 **Result: PASS — No peer dependencies defined anywhere in the package graph.**
 
@@ -107,14 +109,14 @@ pnpm uses topological resolution automatically when processing `workspace:*` ref
 
 **Computed topological build order for `packages/*`:**
 
-| Level | Packages                                                                              |
-| ----- | ------------------------------------------------------------------------------------- |
-| 1     | `common-core`, `http-contracts`, `infra-otel` *(leaf packages, no @intexuraos deps)* |
-| 2     | `infra-firestore`, `infra-notion`, `infra-pubsub`, `infra-sentry`, `infra-whatsapp`, `llm-contract`, `llm-utils` *(depend only on level 1)* |
-| 3     | `llm-audit`, `llm-pricing`, `common-http`, `llm-prompts` *(depend on levels 1-2)* |
-| 4     | `http-server`, `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity` *(depend on levels 1-3)* |
-| 5     | `llm-factory` *(depends on infra-gemini + infra-glm from level 4)*                   |
-| 6     | `internal-clients` *(depends on llm-factory from level 5)*                           |
+| Level | Packages                                                                                                                                    |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `common-core`, `http-contracts`, `infra-otel` _(leaf packages, no @intexuraos deps)_                                                        |
+| 2     | `infra-firestore`, `infra-notion`, `infra-pubsub`, `infra-sentry`, `infra-whatsapp`, `llm-contract`, `llm-utils` _(depend only on level 1)_ |
+| 3     | `llm-audit`, `llm-pricing`, `common-http`, `llm-prompts` _(depend on levels 1-2)_                                                           |
+| 4     | `http-server`, `infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity` _(depend on levels 1-3)_                        |
+| 5     | `llm-factory` _(depends on infra-gemini + infra-glm from level 4)_                                                                          |
+| 6     | `internal-clients` _(depends on llm-factory from level 5)_                                                                                  |
 
 **Result: PASS — Build order is correct and enforced automatically by pnpm workspace resolution.**
 
@@ -126,8 +128,8 @@ Special case: `infra-otel`'s `./register` export points to `./dist/register.js` 
 
 Each package's `exports` field in `package.json` defines the public API surface. All packages export via `"."` → `./src/index.ts` (source-based, no build required), except:
 
-| Package      | Export Path   | Points To            | Doc Status                                                      |
-| ------------ | ------------- | -------------------- | --------------------------------------------------------------- |
+| Package       | Export Path  | Points To            | Doc Status                                                      |
+| ------------- | ------------ | -------------------- | --------------------------------------------------------------- |
 | `common-core` | `./errors`   | `./src/errors.ts`    | DOCUMENTED — README lists both entry points in an Exports table |
 | `infra-otel`  | `./register` | `./dist/register.js` | DOCUMENTED — README explains the side-effect bootstrap pattern  |
 
@@ -271,9 +273,9 @@ Note: `api-docs-hub`, `web-agent`, and `web` do NOT directly depend on `infra-fi
 
 **Severity: HIGH**
 
-| Field                     | Documented | Actual |
-| ------------------------- | ---------- | ------ |
-| Used By Packages (count)  | **13**     | **19** |
+| Field                    | Documented | Actual |
+| ------------------------ | ---------- | ------ |
+| Used By Packages (count) | **13**     | **19** |
 
 **Location:** `docs/packages/common-core/README.md` line 223 — `**Packages (13):**`
 
@@ -299,15 +301,17 @@ Previously the inline Dependencies line omitted `@intexuraos/llm-audit`. The REA
 
 **Severity: MEDIUM**
 
-| Field                              | Documented                                                                  | Actual                                                                      |
-| ---------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| infra-sentry imports from infra-otel | Claims `infra-sentry` imports `buildOtelConfig` and `getInstrumentations`   | `infra-sentry/package.json` has no `infra-otel` dep; source does not import it |
+| Field                                | Documented                                                                | Actual                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| infra-sentry imports from infra-otel | Claims `infra-sentry` imports `buildOtelConfig` and `getInstrumentations` | `infra-sentry/package.json` has no `infra-otel` dep; source does not import it |
 
 **Location:** `docs/packages/infra-otel/README.md` — two places:
+
 1. Line: "The package also exports `buildOtelConfig` and `getInstrumentations` as a library for use by `@intexuraos/infra-sentry`'s OTel log transport."
 2. "Additionally, `@intexuraos/infra-sentry` imports `buildOtelConfig` and `getInstrumentations` to configure its pino OTel log transport."
 
 **Evidence:**
+
 - `packages/infra-sentry/package.json` dependencies: `common-core`, `@sentry/node`, `fastify`, `pino`, `pino-opentelemetry-transport` — no `infra-otel` present.
 - `packages/infra-sentry/src/otelTransport.ts` imports only `pino` — not `@intexuraos/infra-otel`.
 - `infra-sentry` implements its OTel transport directly via `pino-opentelemetry-transport`, not through `infra-otel`'s `getInstrumentations()`.
@@ -324,19 +328,20 @@ The `./register` entry point in `infra-otel` initializes OTel for the process. `
 
 The five LLM provider adapter packages (`infra-claude`, `infra-gemini`, `infra-glm`, `infra-gpt`, `infra-perplexity`) share identical dependency profiles:
 
-| Dependency         | Role                                    |
-| ------------------ | --------------------------------------- |
-| `common-core`      | Result types, Logger, error handling    |
-| `llm-contract`     | LLMClient interface, model types        |
-| `llm-prompts`      | buildResearchPrompt for research method |
-| `llm-audit`        | AuditContext for every LLM call         |
-| `llm-pricing`      | UsageLogger for cost tracking           |
+| Dependency     | Role                                    |
+| -------------- | --------------------------------------- |
+| `common-core`  | Result types, Logger, error handling    |
+| `llm-contract` | LLMClient interface, model types        |
+| `llm-prompts`  | buildResearchPrompt for research method |
+| `llm-audit`    | AuditContext for every LLM call         |
+| `llm-pricing`  | UsageLogger for cost tracking           |
 
 Each adapter uses a structured Dependencies table in its README. `infra-claude` and `infra-gpt` note they do not support injectable `auditSink`/`usageSink` (unlike `infra-gemini` and `infra-glm` which do). This distinction is documented correctly per-package.
 
 ### Dual-Consumer Pattern: infra-gemini and infra-glm
 
 Both `infra-gemini` and `infra-glm` are consumed by two distinct paths:
+
 1. **Direct** — apps like `research-agent`, `user-service`, `todos-agent` import them for provider-specific configuration
 2. **Via factory** — `llm-factory` imports them and creates clients dynamically via `createLlmClient()`
 
@@ -345,6 +350,7 @@ Apps that use `llm-factory` or `internal-clients` transitively pull in both `inf
 ### infra-otel Dual-Use Architecture
 
 `infra-otel` has two usage modes documented in its README:
+
 1. **Process bootstrap** — `./register` entry point loaded via `NODE_OPTIONS: '--import @intexuraos/infra-otel/register'` in PM2 ecosystem config. This bootstraps OTel tracing/metrics for all 19 services without code changes.
 2. **Library** — `.` entry point exports `buildOtelConfig` and `getInstrumentations` for use by other packages. However, no other package currently imports these functions (D4 documents the phantom claim about `infra-sentry`).
 
@@ -352,23 +358,23 @@ Apps that use `llm-factory` or `internal-clients` transitively pull in both `inf
 
 ## v2 vs v1 Comparison
 
-| Area                          | v1 Status            | v2 Status                                       |
-| ----------------------------- | -------------------- | ----------------------------------------------- |
-| Circular dependency check     | PASS                 | PASS (unchanged)                                |
-| D1 common-core count          | OPEN (13 vs 19)      | OPEN (still unfixed)                            |
-| D2 llm-audit missing llm-factory | OPEN              | FIXED (now shows 6 packages)                    |
-| D3 llm-factory missing dep    | OPEN                 | FIXED (llm-audit now in deps list)              |
-| D4 phantom infra-sentry claim | OPEN                 | OPEN (still unfixed)                            |
-| Version pinning               | Not checked          | PASS — all workspace:*                          |
-| Peer dependencies             | Not checked          | PASS — none defined                             |
-| Build order                   | Not checked          | PASS — pnpm handles topologically               |
-| Export surface                | Not checked          | PASS — all non-standard exports documented      |
+| Area                             | v1 Status       | v2 Status                                  |
+| -------------------------------- | --------------- | ------------------------------------------ |
+| Circular dependency check        | PASS            | PASS (unchanged)                           |
+| D1 common-core count             | OPEN (13 vs 19) | OPEN (still unfixed)                       |
+| D2 llm-audit missing llm-factory | OPEN            | FIXED (now shows 6 packages)               |
+| D3 llm-factory missing dep       | OPEN            | FIXED (llm-audit now in deps list)         |
+| D4 phantom infra-sentry claim    | OPEN            | OPEN (still unfixed)                       |
+| Version pinning                  | Not checked     | PASS — all workspace:\*                    |
+| Peer dependencies                | Not checked     | PASS — none defined                        |
+| Build order                      | Not checked     | PASS — pnpm handles topologically          |
+| Export surface                   | Not checked     | PASS — all non-standard exports documented |
 
 ---
 
 ## Action Items
 
-| Priority | Severity | Item                                                                                    | File                                              |
-| -------- | -------- | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| 1        | HIGH     | Fix package count label: `Packages (13)` → `Packages (19)` in common-core Used By     | `docs/packages/common-core/README.md`             |
-| 2        | MEDIUM   | Remove phantom claim that infra-sentry imports buildOtelConfig from infra-otel          | `docs/packages/infra-otel/README.md`              |
+| Priority | Severity | Item                                                                              | File                                  |
+| -------- | -------- | --------------------------------------------------------------------------------- | ------------------------------------- |
+| 1        | HIGH     | Fix package count label: `Packages (13)` → `Packages (19)` in common-core Used By | `docs/packages/common-core/README.md` |
+| 2        | MEDIUM   | Remove phantom claim that infra-sentry imports buildOtelConfig from infra-otel    | `docs/packages/infra-otel/README.md`  |

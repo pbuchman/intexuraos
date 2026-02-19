@@ -98,38 +98,38 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                        | Date         |
-| ---------- | ------------------------------------------------------------------ | ------------ |
-| `e5637ce5` | Deduplicate PR body across pull_request events in API response     | 4 hours ago  |
-| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)        | 5 hours ago  |
-| `c1bc9883` | Truncate oversized tool results and unparseable log lines          | 6 hours ago  |
-| `27ef6a7b` | Show compare URL for PR synchronize events in timeline             | 15 hours ago |
-| `60e029a8` | Deduplicate edited comments in PR events API response              | 15 hours ago |
-| `0a48ed4e` | Display comment body on PR events page in GitHub style             | 15 hours ago |
-| `5ead960d` | Add clickable GitHub links to PR event items                       | 17 hours ago |
-| `554b716c` | Add gitHubPRSummaryRepo to ServiceContainer                        | 18 hours ago |
+| Commit     | Description                                                    | Date         |
+| ---------- | -------------------------------------------------------------- | ------------ |
+| `e5637ce5` | Deduplicate PR body across pull_request events in API response | 4 hours ago  |
+| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)    | 5 hours ago  |
+| `c1bc9883` | Truncate oversized tool results and unparseable log lines      | 6 hours ago  |
+| `27ef6a7b` | Show compare URL for PR synchronize events in timeline         | 15 hours ago |
+| `60e029a8` | Deduplicate edited comments in PR events API response          | 15 hours ago |
+| `0a48ed4e` | Display comment body on PR events page in GitHub style         | 15 hours ago |
+| `5ead960d` | Add clickable GitHub links to PR event items                   | 17 hours ago |
+| `554b716c` | Add gitHubPRSummaryRepo to ServiceContainer                    | 18 hours ago |
 
 ## API Endpoints
 
 ### Public Routes (Auth0 JWT)
 
-| Method | Path                                       | Description                          | Auth  |
-| ------ | ------------------------------------------ | ------------------------------------ | ----- |
-| POST   | `/code/submit`                             | Submit code task from web UI         | Auth0 |
-| GET    | `/code/tasks`                              | List user's tasks (paginated)        | Auth0 |
-| GET    | `/code/tasks/:taskId`                      | Get task details                     | Auth0 |
-| POST   | `/code/tasks/:taskId/cancel`               | Cancel a running task                | Auth0 |
-| POST   | `/code/tasks/:taskId/retry`                | Retry a failed/cancelled task        | Auth0 |
-| POST   | `/code/tasks/:taskId/feedback`             | Submit feedback on completed task    | Auth0 |
-| POST   | `/code/tasks/:taskId/messages`             | Send message to running/ended task   | Auth0 |
-| GET    | `/code/github-pr-events`                   | Query GitHub PR events               | Auth0 |
-| GET    | `/code/github-pr-summaries`                | List PRs active in last 30 days      | Auth0 |
-| GET    | `/code/worker-settings`                    | Get worker settings (masked)         | Auth0 |
-| POST   | `/code/worker-settings/workers`            | Add new worker                       | Auth0 |
-| PATCH  | `/code/worker-settings/workers/:name`      | Update worker config                 | Auth0 |
-| DELETE | `/code/worker-settings/workers/:name`      | Delete worker                        | Auth0 |
-| POST   | `/code/worker-settings/workers/:name/test` | Test worker connectivity             | Auth0 |
-| PUT    | `/code/worker-settings/priority`           | Reorder workers by priority          | Auth0 |
+| Method | Path                                       | Description                        | Auth  |
+| ------ | ------------------------------------------ | ---------------------------------- | ----- |
+| POST   | `/code/submit`                             | Submit code task from web UI       | Auth0 |
+| GET    | `/code/tasks`                              | List user's tasks (paginated)      | Auth0 |
+| GET    | `/code/tasks/:taskId`                      | Get task details                   | Auth0 |
+| POST   | `/code/tasks/:taskId/cancel`               | Cancel a running task              | Auth0 |
+| POST   | `/code/tasks/:taskId/retry`                | Retry a failed/cancelled task      | Auth0 |
+| POST   | `/code/tasks/:taskId/feedback`             | Submit feedback on completed task  | Auth0 |
+| POST   | `/code/tasks/:taskId/messages`             | Send message to running/ended task | Auth0 |
+| GET    | `/code/github-pr-events`                   | Query GitHub PR events             | Auth0 |
+| GET    | `/code/github-pr-summaries`                | List PRs active in last 30 days    | Auth0 |
+| GET    | `/code/worker-settings`                    | Get worker settings (masked)       | Auth0 |
+| POST   | `/code/worker-settings/workers`            | Add new worker                     | Auth0 |
+| PATCH  | `/code/worker-settings/workers/:name`      | Update worker config               | Auth0 |
+| DELETE | `/code/worker-settings/workers/:name`      | Delete worker                      | Auth0 |
+| POST   | `/code/worker-settings/workers/:name/test` | Test worker connectivity           | Auth0 |
+| PUT    | `/code/worker-settings/priority`           | Reorder workers by priority        | Auth0 |
 
 ### Internal Routes (X-Internal-Auth)
 
@@ -177,7 +177,14 @@ interface CodeTask {
   workerType: 'opus' | 'auto' | 'glm';
   workerLocation: string;
   // Lifecycle — 'designed'/'implemented' are Phase 1/2 completions; 'completed' is not used
-  status: 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
+  status:
+    | 'dispatched'
+    | 'running'
+    | 'designed'
+    | 'implemented'
+    | 'failed'
+    | 'interrupted'
+    | 'cancelled';
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
@@ -193,7 +200,7 @@ interface CodeTask {
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
   executionPhase?: 'design' | 'execution';
-  implementationTaskId?: string;   // Set on design task to point at Phase 2 task
+  implementationTaskId?: string; // Set on design task to point at Phase 2 task
   result?: TaskResult;
   error?: TaskError;
   createdAt: Timestamp;
@@ -205,7 +212,7 @@ interface CodeTask {
   lastHeartbeat?: Timestamp;
   logChunksDropped?: number;
   statusSummary?: StatusSummary;
-  pendingUserMessages?: string[];  // Accumulated while task is running
+  pendingUserMessages?: string[]; // Accumulated while task is running
   dedupKey: string;
   cancelNonce?: string;
   cancelNonceExpiresAt?: string;
@@ -317,29 +324,29 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 
 ## Firestore Collections Owned
 
-| Collection               | Description                                                                |
-| ------------------------ | -------------------------------------------------------------------------- |
-| `code_tasks`             | Code execution tasks (subcollections: `logs`, `turn_metrics`)              |
-| `user_spend`             | User cost tracking for rate limiting                                       |
-| `user_usage`             | Rate limiting counters (concurrent, hourly, cost)                          |
-| `code_worker_settings`   | Per-user worker configs with encrypted credentials                         |
-| `github-pr-events`       | GitHub PR webhook events for timeline display                              |
-| `github-pr-summaries`    | Per-PR rollup documents for O(PRs) list view (30-day window)               |
-| `pr_task_locks`          | Per-PR task locks preventing concurrent modifications                      |
+| Collection             | Description                                                   |
+| ---------------------- | ------------------------------------------------------------- |
+| `code_tasks`           | Code execution tasks (subcollections: `logs`, `turn_metrics`) |
+| `user_spend`           | User cost tracking for rate limiting                          |
+| `user_usage`           | Rate limiting counters (concurrent, hourly, cost)             |
+| `code_worker_settings` | Per-user worker configs with encrypted credentials            |
+| `github-pr-events`     | GitHub PR webhook events for timeline display                 |
+| `github-pr-summaries`  | Per-PR rollup documents for O(PRs) list view (30-day window)  |
+| `pr_task_locks`        | Per-PR task locks preventing concurrent modifications         |
 
 ## Use Cases
 
-| Use Case            | File                                     | Description                                             |
-| ------------------- | ---------------------------------------- | ------------------------------------------------------- |
-| processCodeAction   | `domain/usecases/processCodeAction.ts`   | Create task with dedup, dispatch to worker              |
-| cancelTaskWithNonce | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation                    |
-| handlePRComment     | `domain/usecases/handlePRComment.ts`     | Detect actionable PR comments, prepare task             |
-| processHeartbeat    | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection        |
-| detectZombieTasks   | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)                 |
-| cleanupTaskLogs     | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                         |
-| retryTask           | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context        |
-| submitTaskFeedback  | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback              |
-| sendTaskMessage     | `domain/usecases/sendTaskMessage.ts`     | Send message to running task (queued) or resume ended   |
+| Use Case            | File                                     | Description                                           |
+| ------------------- | ---------------------------------------- | ----------------------------------------------------- |
+| processCodeAction   | `domain/usecases/processCodeAction.ts`   | Create task with dedup, dispatch to worker            |
+| cancelTaskWithNonce | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation                  |
+| handlePRComment     | `domain/usecases/handlePRComment.ts`     | Detect actionable PR comments, prepare task           |
+| processHeartbeat    | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection      |
+| detectZombieTasks   | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)               |
+| cleanupTaskLogs     | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                       |
+| retryTask           | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context      |
+| submitTaskFeedback  | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback            |
+| sendTaskMessage     | `domain/usecases/sendTaskMessage.ts`     | Send message to running task (queued) or resume ended |
 
 ## Domain Services
 

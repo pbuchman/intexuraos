@@ -166,19 +166,19 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 
 ### 2026-02-19 - v2.4.0 Observability & Developer Experience
 
-| Date       | Issue                                              | Resolution                                                          |
-| ---------- | -------------------------------------------------- | ------------------------------------------------------------------- |
-| 2026-02-19 | No distributed tracing across services             | Added Dash0 OTLP via `packages/infra-otel` preload in Dockerfile   |
-| 2026-02-19 | PM2 log output unreadable (raw JSON)               | Added `createLogStream()` for colorized dev-mode formatting         |
+| Date       | Issue                                  | Resolution                                                       |
+| ---------- | -------------------------------------- | ---------------------------------------------------------------- |
+| 2026-02-19 | No distributed tracing across services | Added Dash0 OTLP via `packages/infra-otel` preload in Dockerfile |
+| 2026-02-19 | PM2 log output unreadable (raw JSON)   | Added `createLogStream()` for colorized dev-mode formatting      |
 
 ### 2026-02-19 - v2.3.0 Platform Fallbacks & Prompt Improvements
 
-| Date       | Issue                                              | Resolution                                                              |
-| ---------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
-| 2026-02-19 | Title generation timeout (glm-4.7-flash at 29s)    | Switched fast model to `gemini-2.0-flash`; platform Gemini key added   |
-| 2026-02-19 | Users without API keys had no LLM fallback         | Added Gemini (primary) + Zai (secondary) platform-owned key fallbacks  |
-| 2026-02-19 | `buildSynthesisContextRepairPrompt` overly complex | Simplified to pass `originalPrompt` directly; matches updated llm-prompts API |
-| 2026-02-19 | `INTEXURAOS_GUEST_ZAI_API_KEY` naming inconsistency | Consolidated to `INTEXURAOS_ZAI_APP_API_KEY`                           |
+| Date       | Issue                                               | Resolution                                                                    |
+| ---------- | --------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 2026-02-19 | Title generation timeout (glm-4.7-flash at 29s)     | Switched fast model to `gemini-2.0-flash`; platform Gemini key added          |
+| 2026-02-19 | Users without API keys had no LLM fallback          | Added Gemini (primary) + Zai (secondary) platform-owned key fallbacks         |
+| 2026-02-19 | `buildSynthesisContextRepairPrompt` overly complex  | Simplified to pass `originalPrompt` directly; matches updated llm-prompts API |
+| 2026-02-19 | `INTEXURAOS_GUEST_ZAI_API_KEY` naming inconsistency | Consolidated to `INTEXURAOS_ZAI_APP_API_KEY`                                  |
 
 ### 2026-02-08 - Notion Export Integration
 

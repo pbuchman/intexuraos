@@ -54,9 +54,9 @@ Features that are planned but not yet implemented:
 
 ### Low Priority
 
-| File                          | Issue                             | Impact                              |
-| ----------------------------- | --------------------------------- | ----------------------------------- |
-| `routes/webhookRoutes.ts:763` | Stale button format comment       | Comment references old nonce format |
+| File                          | Issue                       | Impact                              |
+| ----------------------------- | --------------------------- | ----------------------------------- |
+| `routes/webhookRoutes.ts:763` | Stale button format comment | Comment references old nonce format |
 
 **Details:** Comment at line 763 still references old nonce format: `"approve:{actionId}:{nonce}"`. Nonces were removed in v4.0.0 (INT-524).
 
@@ -171,21 +171,21 @@ No deprecated APIs or dependencies in use.
 
 ### Historical Issues
 
-| Date       | Issue                                               | Resolution                                                        |
-| ---------- | --------------------------------------------------- | ----------------------------------------------------------------- |
-| 2026-02-15 | SPEECHMATICS_API_KEY non-standard naming            | Renamed to SPEECHMATICS_APP_API_KEY convention                    |
-| 2026-02-09 | Interactive button extraction failed with button_reply type | Accept both "button" and "button_reply" in extractButtonResponse |
-| 2026-02-09 | Nonce requirement created friction without clear security benefit | Remove nonces from button IDs (INT-524)                  |
-| 2026-02-09 | Emoji reactions deprecated for approvals            | Mark as REACTION_NOT_SUPPORTED, buttons are the only approval UI  |
-| 2026-02-06 | button_reply payload structure mismatch             | Fix payload extraction for WhatsApp button responses              |
-| 2026-01-30 | Response contract violations in Pub/Sub routes      | Migrate to reply.ok()/reply.fail() contract                       |
-| 2026-01-30 | Loggers missing Sentry integration                  | Migrate to createAppLogger from @intexuraos/infra-sentry          |
-| 2026-01-28 | OPTIONAL_ENV pattern causing startup issues         | Remove OPTIONAL_ENV, make WHATSAPP_SEND_TOPIC optional            |
-| 2026-01-28 | Env vars not registered in REQUIRED_ENV             | Add mandatory env var registration enforcement                    |
-| 2026-01-16 | Approval events published without actionId          | Only publish when actionId extracted                              |
-| 2026-01-14 | Duplicate actions from approval replies             | Skip command.ingest for known approvals                           |
-| 2026-01-13 | Reactions not triggering approval flow              | Add reaction handling (later removed in v4.0.0)                   |
-| 2026-01-11 | No reply correlation for approval messages          | Add OutboundMessage tracking                                      |
+| Date       | Issue                                                             | Resolution                                                       |
+| ---------- | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 2026-02-15 | SPEECHMATICS_API_KEY non-standard naming                          | Renamed to SPEECHMATICS_APP_API_KEY convention                   |
+| 2026-02-09 | Interactive button extraction failed with button_reply type       | Accept both "button" and "button_reply" in extractButtonResponse |
+| 2026-02-09 | Nonce requirement created friction without clear security benefit | Remove nonces from button IDs (INT-524)                          |
+| 2026-02-09 | Emoji reactions deprecated for approvals                          | Mark as REACTION_NOT_SUPPORTED, buttons are the only approval UI |
+| 2026-02-06 | button_reply payload structure mismatch                           | Fix payload extraction for WhatsApp button responses             |
+| 2026-01-30 | Response contract violations in Pub/Sub routes                    | Migrate to reply.ok()/reply.fail() contract                      |
+| 2026-01-30 | Loggers missing Sentry integration                                | Migrate to createAppLogger from @intexuraos/infra-sentry         |
+| 2026-01-28 | OPTIONAL_ENV pattern causing startup issues                       | Remove OPTIONAL_ENV, make WHATSAPP_SEND_TOPIC optional           |
+| 2026-01-28 | Env vars not registered in REQUIRED_ENV                           | Add mandatory env var registration enforcement                   |
+| 2026-01-16 | Approval events published without actionId                        | Only publish when actionId extracted                             |
+| 2026-01-14 | Duplicate actions from approval replies                           | Skip command.ingest for known approvals                          |
+| 2026-01-13 | Reactions not triggering approval flow                            | Add reaction handling (later removed in v4.0.0)                  |
+| 2026-01-11 | No reply correlation for approval messages                        | Add OutboundMessage tracking                                     |
 
 ---
 

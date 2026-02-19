@@ -83,7 +83,7 @@ Production JSON logging unchanged.
 ```typescript
 createUserServiceClient({
   // ...
-  platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'],     // Zai secondary fallback
+  platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY'], // Zai secondary fallback
   platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'], // Gemini primary fallback
 });
 ```
@@ -113,10 +113,10 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
 
 All platform-owned API keys follow `INTEXURAOS_<PROVIDER>_APP_API_KEY`:
 
-| Old Variable                  | New Variable                    |
-| ----------------------------- | ------------------------------- |
-| `INTEXURAOS_GUEST_ZAI_API_KEY` | `INTEXURAOS_ZAI_APP_API_KEY`   |
-| `INTEXURAOS_ZAI_API_KEY`       | `INTEXURAOS_ZAI_APP_API_KEY`   |
+| Old Variable                   | New Variable                 |
+| ------------------------------ | ---------------------------- |
+| `INTEXURAOS_GUEST_ZAI_API_KEY` | `INTEXURAOS_ZAI_APP_API_KEY` |
+| `INTEXURAOS_ZAI_API_KEY`       | `INTEXURAOS_ZAI_APP_API_KEY` |
 
 ### LLM Prompt Improvements
 
@@ -535,51 +535,51 @@ const RESEARCH_MODELS: ResearchModel[] = [
 
 ### LLM Providers
 
-| Provider   | Models                                                                       |
-| ---------- | ---------------------------------------------------------------------------- |
-| Anthropic  | `claude-opus-4.5`, `claude-sonnet-4.5`                                       |
-| OpenAI     | `gpt-5.2`, `o4-mini-deep-research`                                           |
-| Google     | `gemini-2.5-pro`, `gemini-2.5-flash` (research); `gemini-2.0-flash` (fast)  |
-| Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research`                                  |
-| Zai        | `glm-4.7`, `glm-4.7-flash`                                                   |
+| Provider   | Models                                                                     |
+| ---------- | -------------------------------------------------------------------------- |
+| Anthropic  | `claude-opus-4.5`, `claude-sonnet-4.5`                                     |
+| OpenAI     | `gpt-5.2`, `o4-mini-deep-research`                                         |
+| Google     | `gemini-2.5-pro`, `gemini-2.5-flash` (research); `gemini-2.0-flash` (fast) |
+| Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research`                                |
+| Zai        | `glm-4.7`, `glm-4.7-flash`                                                 |
 
 **Fast model** (`gemini-2.0-flash`): Used for title generation and context inference via the platform Gemini key. Not available as a user-selectable research model.
 
 ### Shared Packages (v2.4.0)
 
-| Package                        | Purpose                                         |
-| ------------------------------ | ----------------------------------------------- |
-| `@intexuraos/internal-clients` | User service client (NEW in v2.1.0)             |
-| `@intexuraos/infra-notion`     | Notion client and error mapping (NEW in v2.2.0) |
+| Package                        | Purpose                                                     |
+| ------------------------------ | ----------------------------------------------------------- |
+| `@intexuraos/internal-clients` | User service client (NEW in v2.1.0)                         |
+| `@intexuraos/infra-notion`     | Notion client and error mapping (NEW in v2.2.0)             |
 | `@intexuraos/infra-otel`       | Dash0 OpenTelemetry preload instrumentation (NEW in v2.4.0) |
-| `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                   |
-| `@intexuraos/llm-contract`     | Model types, provider mapping                   |
-| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                    |
-| `@intexuraos/llm-pricing`      | Pricing context interface                       |
-| `@intexuraos/llm-utils`        | Parse error formatting                          |
-| `@intexuraos/infra-gemini`     | Gemini client wrapper                           |
-| `@intexuraos/common-http`      | HTTP utilities, auth                            |
-| `@intexuraos/common-core`      | Result types, logging                           |
+| `@intexuraos/infra-sentry`     | Sentry-enabled logger factory                               |
+| `@intexuraos/llm-contract`     | Model types, provider mapping                               |
+| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders                                |
+| `@intexuraos/llm-pricing`      | Pricing context interface                                   |
+| `@intexuraos/llm-utils`        | Parse error formatting                                      |
+| `@intexuraos/infra-gemini`     | Gemini client wrapper                                       |
+| `@intexuraos/common-http`      | HTTP utilities, auth                                        |
+| `@intexuraos/common-core`      | Result types, logging                                       |
 
 ## Configuration
 
-| Environment Variable                        | Required | Description                                                        |
-| ------------------------------------------- | -------- | ------------------------------------------------------------------ |
-| `INTEXURAOS_USER_SERVICE_URL`               | Yes      | User-service base URL                                              |
-| `INTEXURAOS_IMAGE_SERVICE_URL`              | Yes      | Image-service base URL                                             |
-| `INTEXURAOS_NOTION_SERVICE_URL`             | Yes      | Notion-service base URL (v2.2.0)                                   |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes      | Shared secret for service-to-service                               |
-| `INTEXURAOS_GCP_PROJECT_ID`                 | Yes      | Google Cloud project ID                                            |
-| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`          | Yes      | LLM call queue topic                                               |
-| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC`  | Yes      | Research process queue topic                                       |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`     | Yes      | WhatsApp send topic                                                |
-| `INTEXURAOS_WEB_APP_URL`                    | Yes      | Web app URL for notifications                                      |
-| `INTEXURAOS_SHARED_CONTENT_BUCKET`          | Yes      | GCS bucket for shared research                                     |
-| `INTEXURAOS_SHARE_BASE_URL`                 | Yes      | Base URL for shared research                                       |
-| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`          | Yes      | Public base URL for images                                         |
-| `INTEXURAOS_GEMINI_APP_API_KEY`             | No       | Platform Gemini key; enables `gemini-2.0-flash` fallback (v2.3.0) |
+| Environment Variable                       | Required | Description                                                       |
+| ------------------------------------------ | -------- | ----------------------------------------------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`              | Yes      | User-service base URL                                             |
+| `INTEXURAOS_IMAGE_SERVICE_URL`             | Yes      | Image-service base URL                                            |
+| `INTEXURAOS_NOTION_SERVICE_URL`            | Yes      | Notion-service base URL (v2.2.0)                                  |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Yes      | Shared secret for service-to-service                              |
+| `INTEXURAOS_GCP_PROJECT_ID`                | Yes      | Google Cloud project ID                                           |
+| `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Yes      | LLM call queue topic                                              |
+| `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | Yes      | Research process queue topic                                      |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Yes      | WhatsApp send topic                                               |
+| `INTEXURAOS_WEB_APP_URL`                   | Yes      | Web app URL for notifications                                     |
+| `INTEXURAOS_SHARED_CONTENT_BUCKET`         | Yes      | GCS bucket for shared research                                    |
+| `INTEXURAOS_SHARE_BASE_URL`                | Yes      | Base URL for shared research                                      |
+| `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Yes      | Public base URL for images                                        |
+| `INTEXURAOS_GEMINI_APP_API_KEY`            | No       | Platform Gemini key; enables `gemini-2.0-flash` fallback (v2.3.0) |
 | `INTEXURAOS_ZAI_APP_API_KEY`               | No       | Platform Zai key; enables `glm-4.7-flash` fallback (v2.3.0)       |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`           | No       | Dash0 OTLP endpoint; enables distributed tracing (v2.4.0)          |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`           | No       | Dash0 OTLP endpoint; enables distributed tracing (v2.4.0)         |
 
 ## Gotchas
 

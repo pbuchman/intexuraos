@@ -63,25 +63,25 @@ The orchestrator supports configurable capacity (default: 2 concurrent tasks):
 
 ## Key Capabilities
 
-| Capability                | Description                                                                                   |
-| ------------------------- | --------------------------------------------------------------------------------------------- |
-| Docker container creation | Spawns Claude Code workers with security hardening (dropped caps, tmpfs, etc.)                |
-| Git worktree management   | Creates and removes isolated worktrees per task                                               |
-| HMAC request signing      | Nonce + timestamp + HMAC-SHA256 verification on all dispatch requests                         |
-| Heartbeat monitoring      | Sends running task IDs to code-agent every 10 minutes for zombie detection                    |
-| Log forwarding            | Streams container output in 64KB chunks with batched uploads, ANSI stripping, and 4MB cap     |
-| Webhook delivery          | HMAC-signed callbacks with 3 retries, exponential backoff, and pending queue                  |
-| State persistence         | Atomic JSON file with corruption recovery and orphan detection                                |
-| Token refresh             | GitHub installation tokens refreshed every 5 minutes (service) and 30 minutes (per-container) |
-| Stale worktree cleanup    | Removes worktrees older than a configurable age threshold                                     |
-| Sensitive file guard      | Reverts commits that touch `.env`, `.pem`, `credentials.json`, and other secrets              |
-| System prompt phases      | Phase 1 (design) vs Phase 2 (execution) based on Linear issue labels                          |
-| Startup recovery          | Detects interrupted tasks and notifies code-agent on restart                                  |
-| Turn metrics collection   | Collects per-task CPU time, peak memory, token counts, and time classification from cgroups and session JSONL |
-| LLM audit logging         | Appends structured LLM call records to a local JSONL file via `OrchestratorFileAuditSink`     |
-| Completion verification   | Gemini 2.5 Flash verifier checks phase contract blocks, PR presence, and CI status after each attempt; automatically continues up to `maxAttempts` |
-| Mid-task message injection | `POST /tasks/:id/message` queues messages for running tasks or resumes finished tasks with a new session |
-| Git identity propagation  | Host git config (user.name/email) is read at startup and injected into worker containers for correct commit authorship |
+| Capability                 | Description                                                                                                                                        |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker container creation  | Spawns Claude Code workers with security hardening (dropped caps, tmpfs, etc.)                                                                     |
+| Git worktree management    | Creates and removes isolated worktrees per task                                                                                                    |
+| HMAC request signing       | Nonce + timestamp + HMAC-SHA256 verification on all dispatch requests                                                                              |
+| Heartbeat monitoring       | Sends running task IDs to code-agent every 10 minutes for zombie detection                                                                         |
+| Log forwarding             | Streams container output in 64KB chunks with batched uploads, ANSI stripping, and 4MB cap                                                          |
+| Webhook delivery           | HMAC-signed callbacks with 3 retries, exponential backoff, and pending queue                                                                       |
+| State persistence          | Atomic JSON file with corruption recovery and orphan detection                                                                                     |
+| Token refresh              | GitHub installation tokens refreshed every 5 minutes (service) and 30 minutes (per-container)                                                      |
+| Stale worktree cleanup     | Removes worktrees older than a configurable age threshold                                                                                          |
+| Sensitive file guard       | Reverts commits that touch `.env`, `.pem`, `credentials.json`, and other secrets                                                                   |
+| System prompt phases       | Phase 1 (design) vs Phase 2 (execution) based on Linear issue labels                                                                               |
+| Startup recovery           | Detects interrupted tasks and notifies code-agent on restart                                                                                       |
+| Turn metrics collection    | Collects per-task CPU time, peak memory, token counts, and time classification from cgroups and session JSONL                                      |
+| LLM audit logging          | Appends structured LLM call records to a local JSONL file via `OrchestratorFileAuditSink`                                                          |
+| Completion verification    | Gemini 2.5 Flash verifier checks phase contract blocks, PR presence, and CI status after each attempt; automatically continues up to `maxAttempts` |
+| Mid-task message injection | `POST /tasks/:id/message` queues messages for running tasks or resumes finished tasks with a new session                                           |
+| Git identity propagation   | Host git config (user.name/email) is read at startup and injected into worker containers for correct commit authorship                             |
 
 ## Worker Types
 

@@ -210,16 +210,16 @@ interface SummarizePageResponse {
 
 ## Error Handling
 
-| Error Code    | Meaning                     | Recovery Action                            |
-| ------------- | --------------------------- | ------------------------------------------ |
-| INVALID_URL   | Not HTTP/HTTPS or malformed | Validate URL format                        |
-| ACCESS_DENIED | Site returned 403           | Accept no preview available                |
-| FETCH_FAILED  | Network or HTTP error       | Retry with backoff                         |
-| TIMEOUT       | Request exceeded time limit | Retry or increase timeout                  |
-| TOO_LARGE     | Response over 2MB           | Cannot process large pages                 |
-| NO_CONTENT    | No text extracted from page | Page may be JS-only or empty               |
+| Error Code    | Meaning                     | Recovery Action                             |
+| ------------- | --------------------------- | ------------------------------------------- |
+| INVALID_URL   | Not HTTP/HTTPS or malformed | Validate URL format                         |
+| ACCESS_DENIED | Site returned 403           | Accept no preview available                 |
+| FETCH_FAILED  | Network or HTTP error       | Retry with backoff                          |
+| TIMEOUT       | Request exceeded time limit | Retry or increase timeout                   |
+| TOO_LARGE     | Response over 2MB           | Cannot process large pages                  |
+| NO_CONTENT    | No text extracted from page | Page may be JS-only or empty                |
 | API_ERROR     | LLM or user-service error   | Check platform fallback keys are configured |
-| RATE_LIMITED  | Crawl4AI returned HTTP 429  | Wait and retry with backoff                |
+| RATE_LIMITED  | Crawl4AI returned HTTP 429  | Wait and retry with backoff                 |
 
 ## Rate Limits
 
@@ -232,13 +232,13 @@ interface SummarizePageResponse {
 
 ## Dependencies
 
-| Service           | Why Needed                            | Failure Behavior    |
-| ----------------- | ------------------------------------- | ------------------- |
-| user-service      | Get user's LLM client (with fallback) | Return API_ERROR    |
-| Crawl4AI          | Fetch page content                    | Return FETCH_FAILED |
-| User's LLM        | Generate summary (primary)            | Fall back to Gemini |
-| Platform Gemini   | Summary fallback (no user key)        | Fall back to ZAI    |
-| Platform ZAI      | Summary secondary fallback            | Return API_ERROR    |
+| Service         | Why Needed                            | Failure Behavior    |
+| --------------- | ------------------------------------- | ------------------- |
+| user-service    | Get user's LLM client (with fallback) | Return API_ERROR    |
+| Crawl4AI        | Fetch page content                    | Return FETCH_FAILED |
+| User's LLM      | Generate summary (primary)            | Fall back to Gemini |
+| Platform Gemini | Summary fallback (no user key)        | Fall back to ZAI    |
+| Platform ZAI    | Summary secondary fallback            | Return API_ERROR    |
 
 ---
 

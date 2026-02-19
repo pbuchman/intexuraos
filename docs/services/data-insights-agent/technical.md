@@ -81,19 +81,19 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                | Date       |
-| ---------- | ---------------------------------------------------------- | ---------- |
-| `f00798da` | Add saved visualizations feature (full CRUD + auto-refresh)| 2026-02-17 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability            | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                        | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention       | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback      | 2026-02-15 |
-| `0f69a74b` | Add default model selector with platform Zai fallback      | 2026-02-08 |
-| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement            | 2026-01-31 |
-| `c3198407` | Fix response contract violations (reply.ok/reply.fail)     | 2026-01-30 |
-| `dfd702f1` | Migrate to Sentry-enabled createAppLogger                  | 2026-01-30 |
-| `73e8375f` | INT-408 Enforce mandatory env var registration             | 2026-01-28 |
-| `1faa1d3b` | INT-301 Consolidate user service client architecture       | 2026-01-26 |
+| Commit     | Description                                                 | Date       |
+| ---------- | ----------------------------------------------------------- | ---------- |
+| `f00798da` | Add saved visualizations feature (full CRUD + auto-refresh) | 2026-02-17 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability             | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                         | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention        | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback       | 2026-02-15 |
+| `0f69a74b` | Add default model selector with platform Zai fallback       | 2026-02-08 |
+| `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement             | 2026-01-31 |
+| `c3198407` | Fix response contract violations (reply.ok/reply.fail)      | 2026-01-30 |
+| `dfd702f1` | Migrate to Sentry-enabled createAppLogger                   | 2026-01-30 |
+| `73e8375f` | INT-408 Enforce mandatory env var registration              | 2026-01-28 |
+| `1faa1d3b` | INT-301 Consolidate user service client architecture        | 2026-01-26 |
 
 ## API Endpoints
 
@@ -126,10 +126,10 @@ sequenceDiagram
 
 ### Internal Endpoints
 
-| Method | Path                              | Purpose                        | Caller                    |
-| ------ | --------------------------------- | ------------------------------ | ------------------------- |
-| POST   | `/internal/snapshots/refresh`     | Refresh all feed snapshots     | Cloud Scheduler (Pub/Sub) |
-| POST   | `/internal/visualizations/compute`| Compute visualization data     | Internal services         |
+| Method | Path                               | Purpose                    | Caller                    |
+| ------ | ---------------------------------- | -------------------------- | ------------------------- |
+| POST   | `/internal/snapshots/refresh`      | Refresh all feed snapshots | Cloud Scheduler (Pub/Sub) |
+| POST   | `/internal/visualizations/compute` | Compute visualization data | Internal services         |
 
 ## Domain Model
 
@@ -204,23 +204,23 @@ sequenceDiagram
 
 ### Visualization
 
-| Field                  | Type                                             | Description                      |
-| ---------------------- | ------------------------------------------------ | -------------------------------- |
-| `id`                   | string                                           | Unique identifier                |
-| `userId`               | string                                           | Owner user ID                    |
-| `feedId`               | string                                           | Associated composite feed ID     |
-| `feedName`             | string                                           | Feed name at creation time       |
-| `insightId`            | string                                           | Associated insight ID            |
-| `insightTitle`         | string                                           | Insight title at creation time   |
-| `trackableMetric`      | string                                           | Metric being tracked             |
-| `chartConfig`          | object                                           | Vega-Lite spec (without data)    |
-| `transformInstructions`| string                                           | LLM data transform instructions  |
-| `chartData`            | unknown[] \| null                                | Computed chart data              |
-| `status`               | `pending` \| `ready` \| `refreshing` \| `error` | Computation lifecycle status     |
-| `lastError`            | string?                                          | Last error message if any        |
-| `lastRefreshedAt`      | Date?                                            | Timestamp of last data refresh   |
-| `createdAt`            | Date                                             | Creation timestamp               |
-| `updatedAt`            | Date                                             | Last update timestamp            |
+| Field                   | Type                                            | Description                     |
+| ----------------------- | ----------------------------------------------- | ------------------------------- |
+| `id`                    | string                                          | Unique identifier               |
+| `userId`                | string                                          | Owner user ID                   |
+| `feedId`                | string                                          | Associated composite feed ID    |
+| `feedName`              | string                                          | Feed name at creation time      |
+| `insightId`             | string                                          | Associated insight ID           |
+| `insightTitle`          | string                                          | Insight title at creation time  |
+| `trackableMetric`       | string                                          | Metric being tracked            |
+| `chartConfig`           | object                                          | Vega-Lite spec (without data)   |
+| `transformInstructions` | string                                          | LLM data transform instructions |
+| `chartData`             | unknown[] \| null                               | Computed chart data             |
+| `status`                | `pending` \| `ready` \| `refreshing` \| `error` | Computation lifecycle status    |
+| `lastError`             | string?                                         | Last error message if any       |
+| `lastRefreshedAt`       | Date?                                           | Timestamp of last data refresh  |
+| `createdAt`             | Date                                            | Creation timestamp              |
+| `updatedAt`             | Date                                            | Last update timestamp           |
 
 **Status Lifecycle:** `pending` → `ready` (or `error`). Manual and scheduled refreshes use `refreshing` as intermediate state.
 
@@ -230,9 +230,9 @@ sequenceDiagram
 
 ### Subscribed Events
 
-| Topic       | Handler                        | Action                                          |
-| ----------- | ------------------------------ | ----------------------------------------------- |
-| (scheduled) | `/internal/snapshots/refresh`  | Refresh all feed snapshots + feed visualizations |
+| Topic       | Handler                       | Action                                           |
+| ----------- | ----------------------------- | ------------------------------------------------ |
+| (scheduled) | `/internal/snapshots/refresh` | Refresh all feed snapshots + feed visualizations |
 
 ## Dependencies
 
@@ -253,20 +253,20 @@ sequenceDiagram
 
 ## Configuration
 
-| Variable                                      | Required | Description                                          |
-| --------------------------------------------- | -------- | ---------------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`                   | Yes      | GCP project ID                                       |
-| `INTEXURAOS_AUTH_JWKS_URL`                    | Yes      | Auth0 JWKS endpoint                                  |
-| `INTEXURAOS_AUTH_ISSUER`                      | Yes      | Auth0 issuer URL                                     |
-| `INTEXURAOS_AUTH_AUDIENCE`                    | Yes      | Auth0 audience                                       |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Internal service auth token                          |
-| `INTEXURAOS_USER_SERVICE_URL`                 | Yes      | user-service base URL                                |
-| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | mobile-notifications base URL                        |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Yes      | app-settings base URL (for pricing)                  |
-| `INTEXURAOS_SENTRY_DSN`                       | No       | Sentry DSN for error tracking (omit to disable)      |
-| `INTEXURAOS_ENVIRONMENT`                      | No       | Environment name for Sentry (default: `development`) |
-| `INTEXURAOS_ZAI_APP_API_KEY`                  | No       | Platform-level Zai API key (fallback LLM provider)   |
-| `INTEXURAOS_GEMINI_APP_API_KEY`               | No       | Platform-level Gemini API key (fallback LLM provider)|
+| Variable                                      | Required | Description                                           |
+| --------------------------------------------- | -------- | ----------------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`                   | Yes      | GCP project ID                                        |
+| `INTEXURAOS_AUTH_JWKS_URL`                    | Yes      | Auth0 JWKS endpoint                                   |
+| `INTEXURAOS_AUTH_ISSUER`                      | Yes      | Auth0 issuer URL                                      |
+| `INTEXURAOS_AUTH_AUDIENCE`                    | Yes      | Auth0 audience                                        |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Internal service auth token                           |
+| `INTEXURAOS_USER_SERVICE_URL`                 | Yes      | user-service base URL                                 |
+| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | mobile-notifications base URL                         |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Yes      | app-settings base URL (for pricing)                   |
+| `INTEXURAOS_SENTRY_DSN`                       | No       | Sentry DSN for error tracking (omit to disable)       |
+| `INTEXURAOS_ENVIRONMENT`                      | No       | Environment name for Sentry (default: `development`)  |
+| `INTEXURAOS_ZAI_APP_API_KEY`                  | No       | Platform-level Zai API key (fallback LLM provider)    |
+| `INTEXURAOS_GEMINI_APP_API_KEY`               | No       | Platform-level Gemini API key (fallback LLM provider) |
 
 ## Gotchas
 
@@ -338,9 +338,9 @@ apps/data-insights-agent/src/
 
 ## Firestore Collections
 
-| Collection                 | Owner               | Access Pattern               |
-| -------------------------- | ------------------- | ---------------------------- |
-| `custom_data_sources`      | data-insights-agent | By userId, by id             |
-| `composite_feeds`          | data-insights-agent | By userId, by id             |
-| `composite_feed_snapshots` | data-insights-agent | By feedId+userId, TTL 15m    |
-| `visualizations`           | data-insights-agent | By userId, by feedId, by id  |
+| Collection                 | Owner               | Access Pattern              |
+| -------------------------- | ------------------- | --------------------------- |
+| `custom_data_sources`      | data-insights-agent | By userId, by id            |
+| `composite_feeds`          | data-insights-agent | By userId, by id            |
+| `composite_feed_snapshots` | data-insights-agent | By feedId+userId, TTL 15m   |
+| `visualizations`           | data-insights-agent | By userId, by feedId, by id |

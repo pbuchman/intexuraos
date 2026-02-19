@@ -6,27 +6,27 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 
 ## Recent Changes
 
-| Commit     | Description                                        | Date       |
-| ---------- | -------------------------------------------------- | ---------- |
-| `6063175b` | Add dev-mode log formatting for PM2 readability    | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                | 2026-02-16 |
-| `d5fbb354` | Fix start:local to use tsx instead of node         | 2026-02-14 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter start:local  | 2026-02-14 |
-| `c3198407` | Fix response contract violations (reply.fail)      | 2026-01-30 |
-| `09091782` | Fix branch coverage for legacy status default      | 2026-01-30 |
-| `9f1f8dc2` | INT-126: Standardize ServiceFeedback contract      | 2026-01-18 |
+| Commit     | Description                                       | Date       |
+| ---------- | ------------------------------------------------- | ---------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability   | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration               | 2026-02-16 |
+| `d5fbb354` | Fix start:local to use tsx instead of node        | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter start:local | 2026-02-14 |
+| `c3198407` | Fix response contract violations (reply.fail)     | 2026-01-30 |
+| `09091782` | Fix branch coverage for legacy status default     | 2026-01-30 |
+| `9f1f8dc2` | INT-126: Standardize ServiceFeedback contract     | 2026-01-18 |
 
 ## API Endpoints
 
 ### Public Endpoints
 
-| Method | Path         | Description           | Auth         |
-| ------ | ------------ | --------------------- | ------------ |
-| GET    | `/notes`     | List user's notes     | Bearer token |
-| POST   | `/notes`     | Create new note       | Bearer token |
-| GET    | `/notes/:id` | Get specific note     | Bearer token |
-| PATCH  | `/notes/:id` | Update note fields    | Bearer token |
-| DELETE | `/notes/:id` | Delete note           | Bearer token |
+| Method | Path         | Description        | Auth         |
+| ------ | ------------ | ------------------ | ------------ |
+| GET    | `/notes`     | List user's notes  | Bearer token |
+| POST   | `/notes`     | Create new note    | Bearer token |
+| GET    | `/notes/:id` | Get specific note  | Bearer token |
+| PATCH  | `/notes/:id` | Update note fields | Bearer token |
+| DELETE | `/notes/:id` | Delete note        | Bearer token |
 
 **Note:** The public note response does **not** include the `status` field. Status is stored in Firestore but is intentionally omitted from the serialized response (`formatNote` excludes it).
 
@@ -42,18 +42,18 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 
 ### Note
 
-| Field       | Type                  | Description           |
-| ----------- | --------------------- | --------------------- |
+| Field       | Type                  | Description            |
+| ----------- | --------------------- | ---------------------- |
 | `id`        | string                | Unique note identifier |
-| `userId`    | string                | Owner user ID         |
-| `title`     | string                | Note title            |
-| `content`   | string                | Note content          |
-| `tags`      | string[]              | User-defined tags     |
-| `status`    | `'draft' \| 'active'` | Draft or active       |
-| `source`    | string                | Source system         |
-| `sourceId`  | string                | ID in source system   |
-| `createdAt` | Date                  | Creation timestamp    |
-| `updatedAt` | Date                  | Last update timestamp |
+| `userId`    | string                | Owner user ID          |
+| `title`     | string                | Note title             |
+| `content`   | string                | Note content           |
+| `tags`      | string[]              | User-defined tags      |
+| `status`    | `'draft' \| 'active'` | Draft or active        |
+| `source`    | string                | Source system          |
+| `sourceId`  | string                | ID in source system    |
+| `createdAt` | Date                  | Creation timestamp     |
+| `updatedAt` | Date                  | Last update timestamp  |
 
 ### CreateNoteInput
 
@@ -87,14 +87,14 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 
 ## Configuration
 
-| Variable                       | Required | Description                  |
-| ------------------------------ | -------- | ---------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`    | Yes      | GCP project for Firestore    |
-| `INTEXURAOS_AUTH_JWKS_URL`     | Yes      | JWKS endpoint for JWT auth   |
-| `INTEXURAOS_AUTH_ISSUER`       | Yes      | JWT issuer                   |
-| `INTEXURAOS_AUTH_AUDIENCE`     | Yes      | JWT audience                 |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes    | Token for internal service auth |
-| `INTEXURAOS_SENTRY_DSN`        | Yes      | Sentry error reporting DSN   |
+| Variable                         | Required | Description                     |
+| -------------------------------- | -------- | ------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | GCP project for Firestore       |
+| `INTEXURAOS_AUTH_JWKS_URL`       | Yes      | JWKS endpoint for JWT auth      |
+| `INTEXURAOS_AUTH_ISSUER`         | Yes      | JWT issuer                      |
+| `INTEXURAOS_AUTH_AUDIENCE`       | Yes      | JWT audience                    |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Token for internal service auth |
+| `INTEXURAOS_SENTRY_DSN`          | Yes      | Sentry error reporting DSN      |
 
 ## Gotchas
 

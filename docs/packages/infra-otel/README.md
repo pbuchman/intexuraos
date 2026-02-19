@@ -34,8 +34,8 @@ Reads configuration from environment variables. Returns `undefined` when `INTEXU
 
 ```typescript
 interface OtelConfig {
-  readonly endpoint: string;    // OTLP collector base URL
-  readonly authToken: string;   // Bearer auth token for Dash0 ('' if not set)
+  readonly endpoint: string; // OTLP collector base URL
+  readonly authToken: string; // Bearer auth token for Dash0 ('' if not set)
   readonly environment: string; // Deployment environment label (default: 'unknown')
 }
 ```
@@ -44,13 +44,13 @@ interface OtelConfig {
 
 Returns the standard list of OpenTelemetry auto-instrumentations used across all services:
 
-| Instrumentation                             | Instruments        |
-| ------------------------------------------- | ------------------ |
-| `@opentelemetry/instrumentation-http`       | Node.js http/https |
-| `@opentelemetry/instrumentation-fastify`    | Fastify routes     |
-| `@opentelemetry/instrumentation-undici`     | undici HTTP client |
-| `@opentelemetry/instrumentation-dns`        | DNS lookups        |
-| `@opentelemetry/instrumentation-net`        | TCP connections    |
+| Instrumentation                          | Instruments        |
+| ---------------------------------------- | ------------------ |
+| `@opentelemetry/instrumentation-http`    | Node.js http/https |
+| `@opentelemetry/instrumentation-fastify` | Fastify routes     |
+| `@opentelemetry/instrumentation-undici`  | undici HTTP client |
+| `@opentelemetry/instrumentation-dns`     | DNS lookups        |
+| `@opentelemetry/instrumentation-net`     | TCP connections    |
 
 ---
 
@@ -69,11 +69,11 @@ Returns the standard list of OpenTelemetry auto-instrumentations used across all
 
 The SDK registers these attributes on all spans and metrics:
 
-| OTel Attribute                   | Source                                                              |
-| -------------------------------- | ------------------------------------------------------------------- |
-| `service.name`                   | `OTEL_SERVICE_NAME` → `npm_package_name` → `unknown-service`       |
-| `service.version`                | `npm_package_version` → `0.0.0`                                    |
-| `deployment.environment.name`    | `INTEXURAOS_ENVIRONMENT` → `unknown`                               |
+| OTel Attribute                | Source                                                       |
+| ----------------------------- | ------------------------------------------------------------ |
+| `service.name`                | `OTEL_SERVICE_NAME` → `npm_package_name` → `unknown-service` |
+| `service.version`             | `npm_package_version` → `0.0.0`                              |
+| `deployment.environment.name` | `INTEXURAOS_ENVIRONMENT` → `unknown`                         |
 
 ---
 
@@ -88,19 +88,19 @@ The SDK registers these attributes on all spans and metrics:
 
 ## Dependencies
 
-| Package                                         | Purpose                                        |
-| ----------------------------------------------- | ---------------------------------------------- |
-| `@opentelemetry/sdk-node`                        | Core Node.js OTel SDK                          |
-| `@opentelemetry/exporter-trace-otlp-http`        | OTLP trace export over HTTP                    |
-| `@opentelemetry/exporter-metrics-otlp-http`      | OTLP metrics export over HTTP                  |
-| `@opentelemetry/resources`                       | Service resource definition                    |
-| `@opentelemetry/semantic-conventions`            | Standard OTel attribute names                  |
-| `@opentelemetry/instrumentation-http`            | Auto-instrument Node.js http/https             |
-| `@opentelemetry/instrumentation-fastify`         | Auto-instrument Fastify                        |
-| `@opentelemetry/instrumentation-undici`          | Auto-instrument undici                         |
-| `@opentelemetry/instrumentation-dns`             | Auto-instrument DNS                            |
-| `@opentelemetry/instrumentation-net`             | Auto-instrument TCP                            |
-| `@opentelemetry/sdk-metrics`                     | Metrics SDK (PeriodicExportingMetricReader)    |
+| Package                                     | Purpose                                     |
+| ------------------------------------------- | ------------------------------------------- |
+| `@opentelemetry/sdk-node`                   | Core Node.js OTel SDK                       |
+| `@opentelemetry/exporter-trace-otlp-http`   | OTLP trace export over HTTP                 |
+| `@opentelemetry/exporter-metrics-otlp-http` | OTLP metrics export over HTTP               |
+| `@opentelemetry/resources`                  | Service resource definition                 |
+| `@opentelemetry/semantic-conventions`       | Standard OTel attribute names               |
+| `@opentelemetry/instrumentation-http`       | Auto-instrument Node.js http/https          |
+| `@opentelemetry/instrumentation-fastify`    | Auto-instrument Fastify                     |
+| `@opentelemetry/instrumentation-undici`     | Auto-instrument undici                      |
+| `@opentelemetry/instrumentation-dns`        | Auto-instrument DNS                         |
+| `@opentelemetry/instrumentation-net`        | Auto-instrument TCP                         |
+| `@opentelemetry/sdk-metrics`                | Metrics SDK (PeriodicExportingMetricReader) |
 
 ---
 
@@ -140,8 +140,8 @@ packages/infra-otel/
 
 ## Recent Changes
 
-| Commit     | Description                                                    | When      |
-| ---------- | -------------------------------------------------------------- | --------- |
+| Commit     | Description                                                     | When       |
+| ---------- | --------------------------------------------------------------- | ---------- |
 | `0338e04f` | Remove PinoInstrumentation; move log forwarding to infra-sentry | 3 days ago |
 | `a49c3889` | Fix register export to point to compiled dist for --import      | 3 days ago |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration (initial package creation)  | 3 days ago |

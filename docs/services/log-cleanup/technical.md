@@ -120,18 +120,18 @@ All fields are optional. When omitted, code-agent uses its own defaults.
 
 ## Infrastructure
 
-| Resource             | Type | Value                          |
-| -------------------- | ---- | ------------------------------ |
-| Cloud Function       | Gen2 | `intexuraos-log-cleanup-{env}` |
-| Entry point          | -    | `cleanupLogs`                  |
-| Runtime              | -    | Node.js 22                     |
-| Memory               | -    | 512 MB                         |
-| Timeout              | -    | 540 seconds (9 minutes)        |
-| Pub/Sub topic        | -    | `intexuraos-log-cleanup-{env}` |
-| Scheduler job        | -    | `intexuraos-log-cleanup-{env}` |
-| Service account      | -    | `intexuraos-functions-{env}`   |
+| Resource             | Type | Value                           |
+| -------------------- | ---- | ------------------------------- |
+| Cloud Function       | Gen2 | `intexuraos-log-cleanup-{env}`  |
+| Entry point          | -    | `cleanupLogs`                   |
+| Runtime              | -    | Node.js 22                      |
+| Memory               | -    | 512 MB                          |
+| Timeout              | -    | 540 seconds (9 minutes)         |
+| Pub/Sub topic        | -    | `intexuraos-log-cleanup-{env}`  |
+| Scheduler job        | -    | `intexuraos-log-cleanup-{env}`  |
+| Service account      | -    | `intexuraos-functions-{env}`    |
 | Build tool           | -    | esbuild via `build-service.mjs` |
-| Source bucket object | -    | `log-cleanup/function.zip`     |
+| Source bucket object | -    | `log-cleanup/function.zip`      |
 
 ## Build & Local Development
 

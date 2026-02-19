@@ -61,13 +61,13 @@ Converts raw GLM usage data into `NormalizedUsage`. Optionally includes `cacheTo
 
 ```ts
 interface GlmConfig {
-  apiKey: string;         // Zai GLM API key from open.bigmodel.cn
-  model: string;          // e.g., 'glm-4.7'
-  userId: string;         // User ID for usage tracking
-  pricing: ModelPricing;  // Cost configuration per million tokens
-  logger: Logger;         // Pino logger for structured logging
-  auditSink?: AuditSink;  // Optional audit sink override (defaults to Firestore)
-  usageSink?: UsageSink;  // Optional usage sink override (defaults to Firestore)
+  apiKey: string; // Zai GLM API key from open.bigmodel.cn
+  model: string; // e.g., 'glm-4.7'
+  userId: string; // User ID for usage tracking
+  pricing: ModelPricing; // Cost configuration per million tokens
+  logger: Logger; // Pino logger for structured logging
+  auditSink?: AuditSink; // Optional audit sink override (defaults to Firestore)
+  usageSink?: UsageSink; // Optional usage sink override (defaults to Firestore)
 }
 ```
 

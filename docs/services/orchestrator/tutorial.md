@@ -305,17 +305,17 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 
 ## Troubleshooting
 
-| Symptom                             | Cause                                | Fix                                                                                                      |
-| ----------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `INTEXURAOS_REPOSITORY_URL not set` | Missing env var                      | Add to `.envrc.local`, run `direnv allow`                                                                |
-| `Secret Manager fetch failed`       | Wrong credentials path               | Verify `GOOGLE_APPLICATION_CREDENTIALS` file exists                                                      |
-| `502 from tunnel`                   | Orchestrator not running             | Start with `pnpm --filter orchestrator dev`                                                              |
-| `401 Invalid signature`             | HMAC secret mismatch                 | Match `INTEXURAOS_ORCHESTRATOR_SECRET` with UI setting                                                   |
-| Docker `name already in use`        | Orphaned container from previous run | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`                                             |
-| `Network not found`                 | Missing Docker network               | `./scripts/setup-worker-network.sh`                                                                      |
-| `Image not found`                   | Claude worker image not pulled/built | `docker pull europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`; or set `INTEXURAOS_CLAUDE_WORKER_IMAGE` |
-| Tests skipped (E2E)                 | Docker network or test image missing | See Part 3 prerequisites                                                                                 |
-| `Cannot find module '@intexuraos'`  | Packages not built                   | Run `pnpm build` at repository root                                                                      |
-| Turn metrics always zero            | macOS host (no cgroup v2 exposure)   | Expected on macOS; metrics are non-fatal and show zeros when cgroup path is unavailable                  |
-| `INTEXURAOS_GEMINI_APP_API_KEY not set` | Missing required env var         | Add to `.envrc.local` and run `direnv allow`; completion verification is always required                 |
-| Tasks fail with `TASK_COMPLETION_VERIFIER_FAILED` | Gemini API unreachable | Check network connectivity and Gemini API key validity; tasks fail rather than complete unverified       |
+| Symptom                                           | Cause                                | Fix                                                                                                                                               |
+| ------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL not set`               | Missing env var                      | Add to `.envrc.local`, run `direnv allow`                                                                                                         |
+| `Secret Manager fetch failed`                     | Wrong credentials path               | Verify `GOOGLE_APPLICATION_CREDENTIALS` file exists                                                                                               |
+| `502 from tunnel`                                 | Orchestrator not running             | Start with `pnpm --filter orchestrator dev`                                                                                                       |
+| `401 Invalid signature`                           | HMAC secret mismatch                 | Match `INTEXURAOS_ORCHESTRATOR_SECRET` with UI setting                                                                                            |
+| Docker `name already in use`                      | Orphaned container from previous run | `docker rm -f $(docker ps -aq --filter name=claude-worker-)`                                                                                      |
+| `Network not found`                               | Missing Docker network               | `./scripts/setup-worker-network.sh`                                                                                                               |
+| `Image not found`                                 | Claude worker image not pulled/built | `docker pull europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest`; or set `INTEXURAOS_CLAUDE_WORKER_IMAGE` |
+| Tests skipped (E2E)                               | Docker network or test image missing | See Part 3 prerequisites                                                                                                                          |
+| `Cannot find module '@intexuraos'`                | Packages not built                   | Run `pnpm build` at repository root                                                                                                               |
+| Turn metrics always zero                          | macOS host (no cgroup v2 exposure)   | Expected on macOS; metrics are non-fatal and show zeros when cgroup path is unavailable                                                           |
+| `INTEXURAOS_GEMINI_APP_API_KEY not set`           | Missing required env var             | Add to `.envrc.local` and run `direnv allow`; completion verification is always required                                                          |
+| Tasks fail with `TASK_COMPLETION_VERIFIER_FAILED` | Gemini API unreachable               | Check network connectivity and Gemini API key validity; tasks fail rather than complete unverified                                                |

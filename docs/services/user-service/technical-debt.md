@@ -227,11 +227,11 @@ No deprecated APIs or dependencies in use.
 
 ### 2026-02-16 to 2026-02-19
 
-| Issue | Description                                          | Resolution                                                       |
-| ----- | ---------------------------------------------------- | ---------------------------------------------------------------- |
-| -     | No distributed tracing or metrics                    | Added Dash0 OTel via `infra-otel` preload module                 |
-| -     | No per-user default model setting                    | Added `PATCH /users/:uid/settings` with model validation         |
-| -     | PM2 log output hard to read in dev                   | Improved dev-mode log formatting                                 |
+| Issue | Description                        | Resolution                                               |
+| ----- | ---------------------------------- | -------------------------------------------------------- |
+| -     | No distributed tracing or metrics  | Added Dash0 OTel via `infra-otel` preload module         |
+| -     | No per-user default model setting  | Added `PATCH /users/:uid/settings` with model validation |
+| -     | PM2 log output hard to read in dev | Improved dev-mode log formatting                         |
 
 ### 2026-02-08
 

@@ -23,8 +23,8 @@ interface LlmClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;   // from @intexuraos/llm-audit
-  usageSink?: UsageSink;   // from @intexuraos/llm-pricing
+  auditSink?: AuditSink; // from @intexuraos/llm-audit
+  usageSink?: UsageSink; // from @intexuraos/llm-pricing
 }
 
 interface GenerateResult {

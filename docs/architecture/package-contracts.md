@@ -31,38 +31,38 @@ The monorepo contains 22 packages:
 
 ### Common Packages (leaf — no internal deps)
 
-| Package                    | Purpose                                             |
-| -------------------------- | --------------------------------------------------- |
-| `@intexuraos/common-core`  | Result/Either types, error base classes             |
-| `@intexuraos/common-http`  | HTTP response helpers, redaction utilities          |
+| Package                      | Purpose                                                |
+| ---------------------------- | ------------------------------------------------------ |
+| `@intexuraos/common-core`    | Result/Either types, error base classes                |
+| `@intexuraos/common-http`    | HTTP response helpers, redaction utilities             |
 | `@intexuraos/http-contracts` | Shared HTTP type definitions (request/response shapes) |
 
 ### Server & Transport
 
-| Package                    | Purpose                                             |
-| -------------------------- | --------------------------------------------------- |
-| `@intexuraos/http-server`  | Fastify server factory, auth plugin, request logging |
+| Package                   | Purpose                                              |
+| ------------------------- | ---------------------------------------------------- |
+| `@intexuraos/http-server` | Fastify server factory, auth plugin, request logging |
 
 ### Infrastructure Wrappers (`infra-*`)
 
-| Package                        | Purpose                                   |
-| ------------------------------ | ----------------------------------------- |
-| `@intexuraos/infra-claude`     | Anthropic Claude API client               |
-| `@intexuraos/infra-firestore`  | Firestore client initialization           |
-| `@intexuraos/infra-gemini`     | Google Gemini API client                  |
-| `@intexuraos/infra-glm`        | GLM (Zhipu AI) API client                 |
-| `@intexuraos/infra-gpt`        | OpenAI GPT API client                     |
-| `@intexuraos/infra-notion`     | Notion API client wrapper                 |
-| `@intexuraos/infra-otel`       | OpenTelemetry instrumentation             |
-| `@intexuraos/infra-perplexity` | Perplexity AI API client                  |
-| `@intexuraos/infra-pubsub`     | Google Cloud Pub/Sub client and publisher |
+| Package                        | Purpose                                       |
+| ------------------------------ | --------------------------------------------- |
+| `@intexuraos/infra-claude`     | Anthropic Claude API client                   |
+| `@intexuraos/infra-firestore`  | Firestore client initialization               |
+| `@intexuraos/infra-gemini`     | Google Gemini API client                      |
+| `@intexuraos/infra-glm`        | GLM (Zhipu AI) API client                     |
+| `@intexuraos/infra-gpt`        | OpenAI GPT API client                         |
+| `@intexuraos/infra-notion`     | Notion API client wrapper                     |
+| `@intexuraos/infra-otel`       | OpenTelemetry instrumentation                 |
+| `@intexuraos/infra-perplexity` | Perplexity AI API client                      |
+| `@intexuraos/infra-pubsub`     | Google Cloud Pub/Sub client and publisher     |
 | `@intexuraos/infra-sentry`     | Sentry error tracking and `createAppLogger()` |
-| `@intexuraos/infra-whatsapp`   | WhatsApp Business API client              |
+| `@intexuraos/infra-whatsapp`   | WhatsApp Business API client                  |
 
 ### Service Communication
 
-| Package                        | Purpose                                              |
-| ------------------------------ | ---------------------------------------------------- |
+| Package                        | Purpose                                                                     |
+| ------------------------------ | --------------------------------------------------------------------------- |
 | `@intexuraos/internal-clients` | Typed clients for service-to-service HTTP calls (e.g., user-service client) |
 
 ### LLM Utilities (`llm-*`)
@@ -188,13 +188,13 @@ infra/
 
 ## Import Rules
 
-| From                    | Can Import                                          |
-| ----------------------- | --------------------------------------------------- |
-| `packages/common-core`  | nothing                                             |
-| `packages/common-http`  | `@intexuraos/common-core`                           |
+| From                    | Can Import                                           |
+| ----------------------- | ---------------------------------------------------- |
+| `packages/common-core`  | nothing                                              |
+| `packages/common-http`  | `@intexuraos/common-core`                            |
 | `apps/<app>/src/domain` | `@intexuraos/common-core`, `@intexuraos/common-http` |
-| `apps/<app>/src/infra`  | `@intexuraos/common-*`, same-app domain             |
-| `apps/<app>/src/routes` | `@intexuraos/common-*`, same-app all                |
+| `apps/<app>/src/infra`  | `@intexuraos/common-*`, same-app domain              |
+| `apps/<app>/src/routes` | `@intexuraos/common-*`, same-app all                 |
 
 **Forbidden:**
 
@@ -204,14 +204,14 @@ infra/
 
 ## Naming Conventions
 
-| Type           | Pattern                         | Example                          |
-| -------------- | ------------------------------- | -------------------------------- |
-| Core utilities | `@intexuraos/common-core`       | `@intexuraos/common-core`        |
-| HTTP utilities | `@intexuraos/common-http`       | `@intexuraos/common-http`        |
-| App            | `@intexuraos/<name>-service`    | `@intexuraos/user-service`       |
-| Repository     | `*Repository.ts`                | `authTokenRepository.ts`         |
-| Use case       | `*UseCase.ts`                   | `createPromptUseCase.ts`         |
-| API adapter    | `*Api.ts`                       | `promptApi.ts`                   |
+| Type           | Pattern                      | Example                    |
+| -------------- | ---------------------------- | -------------------------- |
+| Core utilities | `@intexuraos/common-core`    | `@intexuraos/common-core`  |
+| HTTP utilities | `@intexuraos/common-http`    | `@intexuraos/common-http`  |
+| App            | `@intexuraos/<name>-service` | `@intexuraos/user-service` |
+| Repository     | `*Repository.ts`             | `authTokenRepository.ts`   |
+| Use case       | `*UseCase.ts`                | `createPromptUseCase.ts`   |
+| API adapter    | `*Api.ts`                    | `promptApi.ts`             |
 
 ## Verification
 

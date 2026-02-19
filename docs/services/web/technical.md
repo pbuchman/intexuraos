@@ -61,24 +61,24 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                         | Date       |
-| ---------- | ------------------------------------------------------------------- | ---------- |
-| `27ef6a7b` | INT-505: Show compare URL for PR synchronize events                 | 2026-02-19 |
-| `2a187f90` | Fix: render HTML in PR event comment bodies with rehype-raw         | 2026-02-19 |
-| `0a48ed4e` | Display comment body on PR events page in GitHub style              | 2026-02-19 |
-| `5ead960d` | Add clickable GitHub links to PR event items                        | 2026-02-19 |
-| `0e07e938` | Show two-phase flow banner on design tasks with implementation link | 2026-02-19 |
-| `e8bbacd7` | GitHub PR summaries with lazy event loading                         | 2026-02-19 |
-| `75cc9eb7` | linearIssueUrl threading, UI badge improvements                     | 2026-02-19 |
-| `6f6b6fd8` | Add executionPhase field and Phase 2 implementation trigger         | 2026-02-18 |
-| `f00798da` | Add saved visualizations feature                                    | 2026-02-18 |
-| `5fa51f75` | Clean up CodeTaskViewPage migration                                 | 2026-02-17 |
-| `a59e194b` | Redesign code task detail page with useTaskView hook                | 2026-02-17 |
-| `935d3210` | Queue-based task messaging (no interrupt)                           | 2026-02-16 |
-| `08dbaf84` | Show sub-issues under parent issues on Linear board                 | 2026-02-14 |
-| `340971a8` | INT-491: Replace text log viewer with xterm.js terminal             | 2026-02-08 |
+| Commit     | Description                                                          | Date       |
+| ---------- | -------------------------------------------------------------------- | ---------- |
+| `27ef6a7b` | INT-505: Show compare URL for PR synchronize events                  | 2026-02-19 |
+| `2a187f90` | Fix: render HTML in PR event comment bodies with rehype-raw          | 2026-02-19 |
+| `0a48ed4e` | Display comment body on PR events page in GitHub style               | 2026-02-19 |
+| `5ead960d` | Add clickable GitHub links to PR event items                         | 2026-02-19 |
+| `0e07e938` | Show two-phase flow banner on design tasks with implementation link  | 2026-02-19 |
+| `e8bbacd7` | GitHub PR summaries with lazy event loading                          | 2026-02-19 |
+| `75cc9eb7` | linearIssueUrl threading, UI badge improvements                      | 2026-02-19 |
+| `6f6b6fd8` | Add executionPhase field and Phase 2 implementation trigger          | 2026-02-18 |
+| `f00798da` | Add saved visualizations feature                                     | 2026-02-18 |
+| `5fa51f75` | Clean up CodeTaskViewPage migration                                  | 2026-02-17 |
+| `a59e194b` | Redesign code task detail page with useTaskView hook                 | 2026-02-17 |
+| `935d3210` | Queue-based task messaging (no interrupt)                            | 2026-02-16 |
+| `08dbaf84` | Show sub-issues under parent issues on Linear board                  | 2026-02-14 |
+| `340971a8` | INT-491: Replace text log viewer with xterm.js terminal              | 2026-02-08 |
 | `5fa51f75` | Delete TerminalLogViewer and xterm.js; replace with custom LogStream | 2026-02-17 |
-| `f86bdbf3` | Add webhook secret configuration UI to Linear settings              | 2026-02-08 |
+| `f86bdbf3` | Add webhook secret configuration UI to Linear settings               | 2026-02-08 |
 
 ## Application Structure
 
@@ -171,47 +171,47 @@ apps/web/src/
 
 ## Routes
 
-| Route                                     | Page                              | Auth Required                   | Purpose                            |
-| ----------------------------------------- | --------------------------------- | ------------------------------- | ---------------------------------- |
-| `/`                                       | HomePage                          | No                              | Public landing page                |
-| `/login`                                  | LoginPage                         | No (redirects if authenticated) | Auth0 login                        |
-| `/inbox`                                  | InboxPage                         | Yes                             | Commands and actions queue         |
-| `/research`                               | ResearchListPage                  | Yes                             | Research reports list              |
-| `/research/new`                           | ResearchAgentPage                 | Yes                             | Create new research query          |
-| `/research/:id`                           | ResearchDetailPage                | Yes                             | Research report detail             |
-| `/code-tasks`                             | CodeTasksPage                     | Yes                             | Code task list                     |
-| `/code-tasks/new`                         | CodeTaskNewPage                   | Yes                             | Create new code task               |
-| `/code-tasks/:id`                         | CodeTaskViewPage                  | Yes                             | Code task detail with terminal     |
-| `/code-tasks/pr-events`                   | PREventsPage                      | Yes                             | GitHub PR events view              |
-| `/my-todos`                               | TodosListPage                     | Yes                             | Todo items                         |
-| `/todos/:id`                              | Todo detail                       | Yes                             | Single todo item                   |
-| `/my-notes`                               | NotesListPage                     | Yes                             | Notes list                         |
-| `/notes/:id`                              | Note detail                       | Yes                             | Single note                        |
-| `/my-bookmarks`                           | BookmarksListPage                 | Yes                             | Bookmarks list                     |
-| `/bookmarks/:id`                          | Bookmark detail                   | Yes                             | Single bookmark                    |
-| `/notes`                                  | WhatsAppNotesPage                 | Yes                             | WhatsApp notes                     |
-| `/calendar`                               | CalendarPage                      | Yes                             | Calendar events                    |
-| `/linear`                                 | LinearIssuesPage                  | Yes                             | Linear issues dashboard            |
-| `/data-insights`                          | CompositeFeedsListPage            | Yes                             | Data insights feeds                |
-| `/data-insights/new`                      | CompositeFeedFormPage             | Yes                             | Create composite feed              |
-| `/data-insights/visualizations`           | VisualizationsListPage            | Yes                             | Saved visualizations               |
-| `/data-insights/:feedId/visualizations`   | VisualizationsListPage            | Yes                             | Saved visualizations for a feed    |
-| `/data-insights/:id`                      | DataInsightsPage                  | Yes                             | Feed visualizations                |
-| `/data-insights/static-sources`           | DataSourcesListPage               | Yes                             | Static data sources                |
-| `/data-insights/static-sources/new`       | DataSourceFormPage                | Yes                             | Create data source                 |
-| `/data-insights/static-sources/:id`       | DataSourceFormPage                | Yes                             | Edit data source                   |
-| `/notifications`                          | MobileNotificationsListPage       | Yes                             | Push notifications history         |
-| `/settings/whatsapp`                      | WhatsAppConnectionPage            | Yes                             | WhatsApp connection                |
-| `/settings/mobile`                        | MobileNotificationsConnectionPage | Yes                             | Mobile notification settings       |
-| `/settings/notion`                        | NotionConnectionPage              | Yes                             | Notion connection                  |
-| `/settings/calendar`                      | GoogleCalendarConnectionPage      | Yes                             | Google Calendar connection         |
-| `/settings/linear`                        | LinearConnectionPage              | Yes                             | Linear connection + webhooks       |
-| `/settings/workers`                       | WorkerSettingsPage                | Yes                             | Code worker configuration          |
-| `/settings/api-keys`                      | ApiKeysSettingsPage               | Yes                             | LLM API key management             |
-| `/settings/llm-pricing`                   | LlmPricingPage                    | Yes                             | LLM pricing configuration         |
-| `/settings/usage-costs`                   | LlmCostsPage                      | Yes                             | LLM usage cost tracking            |
-| `/settings/share-history`                 | ShareHistoryPage                  | Yes                             | PWA share history                  |
-| `/share-target`                           | ShareTargetPage                   | Yes                             | PWA share target handler           |
+| Route                                   | Page                              | Auth Required                   | Purpose                         |
+| --------------------------------------- | --------------------------------- | ------------------------------- | ------------------------------- |
+| `/`                                     | HomePage                          | No                              | Public landing page             |
+| `/login`                                | LoginPage                         | No (redirects if authenticated) | Auth0 login                     |
+| `/inbox`                                | InboxPage                         | Yes                             | Commands and actions queue      |
+| `/research`                             | ResearchListPage                  | Yes                             | Research reports list           |
+| `/research/new`                         | ResearchAgentPage                 | Yes                             | Create new research query       |
+| `/research/:id`                         | ResearchDetailPage                | Yes                             | Research report detail          |
+| `/code-tasks`                           | CodeTasksPage                     | Yes                             | Code task list                  |
+| `/code-tasks/new`                       | CodeTaskNewPage                   | Yes                             | Create new code task            |
+| `/code-tasks/:id`                       | CodeTaskViewPage                  | Yes                             | Code task detail with terminal  |
+| `/code-tasks/pr-events`                 | PREventsPage                      | Yes                             | GitHub PR events view           |
+| `/my-todos`                             | TodosListPage                     | Yes                             | Todo items                      |
+| `/todos/:id`                            | Todo detail                       | Yes                             | Single todo item                |
+| `/my-notes`                             | NotesListPage                     | Yes                             | Notes list                      |
+| `/notes/:id`                            | Note detail                       | Yes                             | Single note                     |
+| `/my-bookmarks`                         | BookmarksListPage                 | Yes                             | Bookmarks list                  |
+| `/bookmarks/:id`                        | Bookmark detail                   | Yes                             | Single bookmark                 |
+| `/notes`                                | WhatsAppNotesPage                 | Yes                             | WhatsApp notes                  |
+| `/calendar`                             | CalendarPage                      | Yes                             | Calendar events                 |
+| `/linear`                               | LinearIssuesPage                  | Yes                             | Linear issues dashboard         |
+| `/data-insights`                        | CompositeFeedsListPage            | Yes                             | Data insights feeds             |
+| `/data-insights/new`                    | CompositeFeedFormPage             | Yes                             | Create composite feed           |
+| `/data-insights/visualizations`         | VisualizationsListPage            | Yes                             | Saved visualizations            |
+| `/data-insights/:feedId/visualizations` | VisualizationsListPage            | Yes                             | Saved visualizations for a feed |
+| `/data-insights/:id`                    | DataInsightsPage                  | Yes                             | Feed visualizations             |
+| `/data-insights/static-sources`         | DataSourcesListPage               | Yes                             | Static data sources             |
+| `/data-insights/static-sources/new`     | DataSourceFormPage                | Yes                             | Create data source              |
+| `/data-insights/static-sources/:id`     | DataSourceFormPage                | Yes                             | Edit data source                |
+| `/notifications`                        | MobileNotificationsListPage       | Yes                             | Push notifications history      |
+| `/settings/whatsapp`                    | WhatsAppConnectionPage            | Yes                             | WhatsApp connection             |
+| `/settings/mobile`                      | MobileNotificationsConnectionPage | Yes                             | Mobile notification settings    |
+| `/settings/notion`                      | NotionConnectionPage              | Yes                             | Notion connection               |
+| `/settings/calendar`                    | GoogleCalendarConnectionPage      | Yes                             | Google Calendar connection      |
+| `/settings/linear`                      | LinearConnectionPage              | Yes                             | Linear connection + webhooks    |
+| `/settings/workers`                     | WorkerSettingsPage                | Yes                             | Code worker configuration       |
+| `/settings/api-keys`                    | ApiKeysSettingsPage               | Yes                             | LLM API key management          |
+| `/settings/llm-pricing`                 | LlmPricingPage                    | Yes                             | LLM pricing configuration       |
+| `/settings/usage-costs`                 | LlmCostsPage                      | Yes                             | LLM usage cost tracking         |
+| `/settings/share-history`               | ShareHistoryPage                  | Yes                             | PWA share history               |
+| `/share-target`                         | ShareTargetPage                   | Yes                             | PWA share target handler        |
 
 **Note:** All routes use hash routing (`/#/path`) because the app is served from a GCS backend bucket which doesn't support SPA fallback. Legacy routes (`/notion`, `/whatsapp`, `/whatsapp-notes`, `/mobile-notifications`, `/mobile-notifications/list`) redirect to their canonical paths.
 
@@ -273,20 +273,20 @@ Code tasks support a `executionPhase` field: `design` or `execution`.
 
 Code task logs render via the `LogStream` component (inline in `CodeTaskViewPage.tsx`). Log lines are color-coded by tag:
 
-| Tag            | Color         |
-| -------------- | ------------- |
-| `[user]`       | cyan          |
-| `[queued]`     | amber         |
-| `[resumed]`    | emerald       |
-| `[prompt]`     | orange        |
-| `[instructions]` | violet      |
-| `[claude]`     | blue          |
-| `[tool]`       | yellow        |
-| `[error]`      | red           |
-| `[done]`       | green         |
-| `[hook]`       | purple        |
-| `[init]`       | cyan          |
-| `[system]`/`[orchestrator]` | slate |
+| Tag                         | Color   |
+| --------------------------- | ------- |
+| `[user]`                    | cyan    |
+| `[queued]`                  | amber   |
+| `[resumed]`                 | emerald |
+| `[prompt]`                  | orange  |
+| `[instructions]`            | violet  |
+| `[claude]`                  | blue    |
+| `[tool]`                    | yellow  |
+| `[error]`                   | red     |
+| `[done]`                    | green   |
+| `[hook]`                    | purple  |
+| `[init]`                    | cyan    |
+| `[system]`/`[orchestrator]` | slate   |
 
 Features: follow mode (auto-scroll), manual scroll override, copy-all-logs button, live indicator, line count. Log data streams from Firestore in real time.
 
@@ -415,20 +415,20 @@ The `actionConfigLoader` reads this at runtime and `ActionItem` renders buttons 
 
 ## Technology Stack
 
-| Layer      | Technology                          |
-| ---------- | ----------------------------------- |
-| Framework  | React 19.1 with TypeScript          |
-| Build      | Vite 7.3                            |
-| Styling    | TailwindCSS 4.1 (dark mode support) |
-| Auth       | Auth0 SPA SDK                       |
-| Real-time  | Firebase SDK (Firestore)            |
-| PWA        | vite-plugin-pwa, workbox            |
-| Icons      | lucide-react                        |
-| Charts     | Vega, Vega-Lite, Vega-Embed         |
+| Layer      | Technology                                                      |
+| ---------- | --------------------------------------------------------------- |
+| Framework  | React 19.1 with TypeScript                                      |
+| Build      | Vite 7.3                                                        |
+| Styling    | TailwindCSS 4.1 (dark mode support)                             |
+| Auth       | Auth0 SPA SDK                                                   |
+| Real-time  | Firebase SDK (Firestore)                                        |
+| PWA        | vite-plugin-pwa, workbox                                        |
+| Icons      | lucide-react                                                    |
+| Charts     | Vega, Vega-Lite, Vega-Embed                                     |
 | Log stream | Custom `LogStream` component (CSS color-coded, no external lib) |
-| Markdown   | @uiw/react-md-editor                |
-| HTML parse | rehype-raw (PR event comment bodies)|
-| Deployment | GCS + Cloud Load Balancer           |
+| Markdown   | @uiw/react-md-editor                                            |
+| HTML parse | rehype-raw (PR event comment bodies)                            |
+| Deployment | GCS + Cloud Load Balancer                                       |
 
 ## Deployment
 

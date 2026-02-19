@@ -66,11 +66,11 @@ interface WebhookResult {
 
 ## Constraints
 
-| Rule                      | Description                                      |
-| ------------------------- | ------------------------------------------------ |
-| **Notion Token Required** | User must provide valid Notion integration token |
-| **Single Workspace**      | One Notion workspace per user                    |
-| **Token Validation**      | Token validated with Notion API before storing   |
+| Rule                      | Description                                         |
+| ------------------------- | --------------------------------------------------- |
+| **Notion Token Required** | User must provide valid Notion integration token    |
+| **Single Workspace**      | One Notion workspace per user                       |
+| **Token Validation**      | Token validated with Notion API before storing      |
 | **Webhook Stub**          | Webhook endpoint accepts events but takes no action |
 
 ---
@@ -131,8 +131,8 @@ await disconnectNotion();
 
 ## Webhook Endpoints
 
-| Method | Path               | Purpose                            | Auth |
-| ------ | ------------------ | ---------------------------------- | ---- |
+| Method | Path               | Purpose                                 | Auth |
+| ------ | ------------------ | --------------------------------------- | ---- |
 | POST   | `/notion-webhooks` | Receive Notion events (stub, logs only) | None |
 
 ---

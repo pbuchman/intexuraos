@@ -249,15 +249,15 @@ The stub supports both interactive stdin mode and `--print` mode (reads from std
 
 ## Troubleshooting
 
-| Issue                        | Symptom                                                   | Solution                                                   |
-| ---------------------------- | --------------------------------------------------------- | ---------------------------------------------------------- |
-| Container exits immediately  | `[entrypoint] ERROR: Running as root is forbidden`        | Run with `--user 1001:1001`                                |
-| GCP auth fails               | `[entrypoint] GCP auth failed (non-fatal)`                | Verify `/secrets/gcp-sa.json` contains a valid SA key      |
-| No git repo detected         | `[entrypoint] WARNING: /repo is not a git repository`     | Ensure the mounted directory has a `.git` dir or file      |
-| Claude onboarding prompt     | Interactive setup screens on startup                      | Check that config defaults are at `/opt/claude-defaults/`  |
-| Network not found            | Docker network error on container start                   | Run `./scripts/setup-worker-network.sh` first              |
-| UID permission denied        | Permission errors writing to /home/claude                 | Verify tmpfs mount has `uid=1001,gid=1001`                 |
-| Token not refreshing         | Stale GitHub token after 1 hour                           | Orchestrator's TokenRefresher must be running              |
-| run-attempt fails instantly  | `[entrypoint] ERROR: Worker not ready`                    | Wait for `/tmp/worker-ready` before calling run-attempt    |
-| run-attempt prompt errors    | `[entrypoint] ERROR: /secrets/system-prompt.txt not found` | Write prompt files to secrets dir before calling run-attempt |
-| pnpm install slow            | Long startup time on every container                      | Expected — pnpm store is on tmpfs and cold-starts each time |
+| Issue                       | Symptom                                                    | Solution                                                     |
+| --------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
+| Container exits immediately | `[entrypoint] ERROR: Running as root is forbidden`         | Run with `--user 1001:1001`                                  |
+| GCP auth fails              | `[entrypoint] GCP auth failed (non-fatal)`                 | Verify `/secrets/gcp-sa.json` contains a valid SA key        |
+| No git repo detected        | `[entrypoint] WARNING: /repo is not a git repository`      | Ensure the mounted directory has a `.git` dir or file        |
+| Claude onboarding prompt    | Interactive setup screens on startup                       | Check that config defaults are at `/opt/claude-defaults/`    |
+| Network not found           | Docker network error on container start                    | Run `./scripts/setup-worker-network.sh` first                |
+| UID permission denied       | Permission errors writing to /home/claude                  | Verify tmpfs mount has `uid=1001,gid=1001`                   |
+| Token not refreshing        | Stale GitHub token after 1 hour                            | Orchestrator's TokenRefresher must be running                |
+| run-attempt fails instantly | `[entrypoint] ERROR: Worker not ready`                     | Wait for `/tmp/worker-ready` before calling run-attempt      |
+| run-attempt prompt errors   | `[entrypoint] ERROR: /secrets/system-prompt.txt not found` | Write prompt files to secrets dir before calling run-attempt |
+| pnpm install slow           | Long startup time on every container                       | Expected — pnpm store is on tmpfs and cold-starts each time  |

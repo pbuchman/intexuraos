@@ -43,7 +43,7 @@ interface UserServiceConfig {
   pricingContext: IPricingContext;
   logger: Logger;
   platformGeminiApiKey?: string; // platform-level fallback: Gemini 2.5 Flash
-  platformZaiApiKey?: string;    // platform-level fallback: Glm47Flash (Zai)
+  platformZaiApiKey?: string; // platform-level fallback: Glm47Flash (Zai)
 }
 ```
 
@@ -208,15 +208,15 @@ Dev dependencies: `nock` (HTTP mocking), `vitest`, `typescript`.
 
 ## Recent Changes
 
-| Commit     | Description                                                     | When   |
-| ---------- | --------------------------------------------------------------- | ------ |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback    | recent |
-| `0f69a74b` | Add default model selector with platform Zai fallback           | recent |
-| `44017d5c` | Fix ESLint OOM with batched parallel lint runner                | recent |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)               | recent |
-| `1c054cba` | Fix internal-clients to unwrap user-service response contract   | recent |
-| `7a90db67` | Fix vitest v4 migration and improve branch coverage             | recent |
-| `e9f2ada4` | Improve internal-clients branch coverage to 98%                 | recent |
+| Commit     | Description                                                   | When   |
+| ---------- | ------------------------------------------------------------- | ------ |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback  | recent |
+| `0f69a74b` | Add default model selector with platform Zai fallback         | recent |
+| `44017d5c` | Fix ESLint OOM with batched parallel lint runner              | recent |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)             | recent |
+| `1c054cba` | Fix internal-clients to unwrap user-service response contract | recent |
+| `7a90db67` | Fix vitest v4 migration and improve branch coverage           | recent |
+| `e9f2ada4` | Improve internal-clients branch coverage to 98%               | recent |
 
 ---
 

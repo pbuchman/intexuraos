@@ -149,9 +149,9 @@ curl https://notes-agent.intexuraos.com/notes \
 
 ## Troubleshooting
 
-| Issue           | Symptom          | Solution                                |
-| --------------- | ---------------- | --------------------------------------- |
-| Auth failed     | 401 Unauthorized | Check token validity                    |
-| Note not found  | 404 error        | Verify note ID belongs to your account  |
+| Issue           | Symptom          | Solution                                                       |
+| --------------- | ---------------- | -------------------------------------------------------------- |
+| Auth failed     | 401 Unauthorized | Check token validity                                           |
+| Note not found  | 404 error        | Verify note ID belongs to your account                         |
 | Invalid request | 400 error        | Check required fields (title, content, tags, source, sourceId) |
-| Access denied   | 403 error        | Note belongs to a different user        |
+| Access denied   | 403 error        | Note belongs to a different user                               |

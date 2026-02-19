@@ -30,25 +30,25 @@
 
 ### Medium Priority
 
-| File            | Issue                                                                              | Impact                                      |
-| --------------- | ---------------------------------------------------------------------------------- | ------------------------------------------- |
-| `src/client.ts` | `GLM_API_BASE` hardcoded constant — cannot target alternative Zai environments     | Must modify code to test against staging    |
-| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients  | Maintenance overhead                        |
+| File            | Issue                                                                             | Impact                                   |
+| --------------- | --------------------------------------------------------------------------------- | ---------------------------------------- |
+| `src/client.ts` | `GLM_API_BASE` hardcoded constant — cannot target alternative Zai environments    | Must modify code to test against staging |
+| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients | Maintenance overhead                     |
 
 ### Low Priority
 
-| File                  | Issue                                                                           | Impact                               |
-| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------ |
+| File                    | Issue                                                                           | Impact                               |
+| ----------------------- | ------------------------------------------------------------------------------- | ------------------------------------ |
 | `src/costCalculator.ts` | `normalizeUsage` accepts `reasoningTokens` but client always passes `undefined` | Dead parameter; misleading signature |
 
 ---
 
 ## TypeScript Issues
 
-| File            | Issue                                                                                              | Count |
-| --------------- | -------------------------------------------------------------------------------------------------- | ----- |
-| `src/client.ts` | Web search tool cast: `as unknown as OpenAI.Chat.Completions.ChatCompletionTool`                  | 1     |
-| `src/client.ts` | Tool call type cast: `(toolCall.type as string)` and `toolCall as unknown as WebSearchToolCall`   | 1     |
+| File            | Issue                                                                                           | Count |
+| --------------- | ----------------------------------------------------------------------------------------------- | ----- |
+| `src/client.ts` | Web search tool cast: `as unknown as OpenAI.Chat.Completions.ChatCompletionTool`                | 1     |
+| `src/client.ts` | Tool call type cast: `(toolCall.type as string)` and `toolCall as unknown as WebSearchToolCall` | 1     |
 
 **Detail — Tool type cast:**
 

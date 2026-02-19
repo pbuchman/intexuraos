@@ -2,13 +2,13 @@
 
 ## Identity
 
-| Attribute | Value                                                 |
-| --------- | ----------------------------------------------------- |
-| Package   | `@intexuraos/infra-gpt`                               |
-| Version   | 2.1.0                                                 |
-| Purpose   | OpenAI GPT API wrapper implementing `LLMClient`       |
-| Provider  | `LlmProviders.OpenAI`                                 |
-| SDK       | `openai` ^6.15.0                                      |
+| Attribute | Value                                           |
+| --------- | ----------------------------------------------- |
+| Package   | `@intexuraos/infra-gpt`                         |
+| Version   | 2.1.0                                           |
+| Purpose   | OpenAI GPT API wrapper implementing `LLMClient` |
+| Provider  | `LlmProviders.OpenAI`                           |
+| SDK       | `openai` ^6.15.0                                |
 
 ## Exports
 
@@ -31,8 +31,13 @@ export function normalizeUsage(
 // Types
 export type GptClient = LLMClient;
 export type {
-  GptConfig, GptError, ResearchResult, GenerateResult,
-  ImageGenerationResult, ImageGenerateOptions, SynthesisInput,
+  GptConfig,
+  GptError,
+  ResearchResult,
+  GenerateResult,
+  ImageGenerationResult,
+  ImageGenerateOptions,
+  SynthesisInput,
 };
 ```
 
@@ -44,7 +49,7 @@ interface GptConfig {
   model: string;
   userId: string;
   pricing: ModelPricing;
-  imagePricing?: ModelPricing;  // separate pricing for generateImage
+  imagePricing?: ModelPricing; // separate pricing for generateImage
   logger: Logger;
 }
 
@@ -95,40 +100,42 @@ if (result?.ok) {
 ```ts
 if (!result.ok) {
   switch (result.error.code) {
-    case 'RATE_LIMITED':   // 429 — retry with backoff
-    case 'INVALID_KEY':    // 401 — do not retry
+    case 'RATE_LIMITED': // 429 — retry with backoff
+    case 'INVALID_KEY': // 401 — do not retry
     case 'CONTEXT_LENGTH': // context_length_exceeded — reduce prompt
-    case 'TIMEOUT':        // retry
-    case 'API_ERROR':      // log and handle
+    case 'TIMEOUT': // retry
+    case 'API_ERROR': // log and handle
   }
 }
 ```
 
 ## Dependencies
 
-| Package                    | Role                                                              |
-| -------------------------- | ----------------------------------------------------------------- |
-| `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                             |
+| Package                    | Role                                                                       |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                                      |
 | `@intexuraos/llm-contract` | LLMClient, NormalizedUsage, TokenUsage, ModelPricing, LlmModels, ImageSize |
-| `@intexuraos/llm-prompts`  | buildResearchPrompt                                               |
-| `@intexuraos/llm-audit`    | createAuditContext                                                |
-| `@intexuraos/llm-pricing`  | createUsageLogger                                                 |
+| `@intexuraos/llm-prompts`  | buildResearchPrompt                                                        |
+| `@intexuraos/llm-audit`    | createAuditContext                                                         |
+| `@intexuraos/llm-pricing`  | createUsageLogger                                                          |
 
 ## Constants
 
-| Constant             | Value                |
-| -------------------- | -------------------- |
-| `MAX_TOKENS`         | 8192                 |
+| Constant             | Value                 |
+| -------------------- | --------------------- |
+| `MAX_TOKENS`         | 8192                  |
 | `IMAGE_MODEL`        | `LlmModels.GPTImage1` |
-| `DEFAULT_IMAGE_SIZE` | `'1024x1024'`        |
+| `DEFAULT_IMAGE_SIZE` | `'1024x1024'`         |
 
 ## Constraints
 
 **Do NOT:**
+
 - Inject custom `auditSink` or `usageSink` — not supported (uses Firestore defaults)
 - Rely on `generateImage` having a timeout on URL fetches — it currently has none
 
 **Requires:**
+
 - Valid `INTEXURAOS_OPENAI_APP_API_KEY` environment variable
 - `logger` field on config (mandatory, enforced by ESLint)
 - `imagePricing` config for accurate `generateImage` cost tracking

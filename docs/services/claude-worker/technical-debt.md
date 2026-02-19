@@ -71,7 +71,6 @@ Last updated: 2026-02-19
 **Impact:** Rolling back to a previous worker image version requires knowing the exact tag that was pushed.
 **Ideal fix:** Tag images with git SHA or semantic version during CI builds.
 
-
 ## Future Plans
 
 ### Planned Features

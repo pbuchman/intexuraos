@@ -231,7 +231,15 @@ curl http://localhost:3000/linear/issues \
   "success": true,
   "data": {
     "issues": {
-      "todo": [{ "identifier": "ENG-125", "title": "Add dark mode toggle", "priority": 4, "children": [], "labels": [] }],
+      "todo": [
+        {
+          "identifier": "ENG-125",
+          "title": "Add dark mode toggle",
+          "priority": 4,
+          "children": [],
+          "labels": []
+        }
+      ],
       "backlog": [],
       "in_progress": [
         {
@@ -248,7 +256,15 @@ curl http://localhost:3000/linear/issues \
       ],
       "in_review": [],
       "to_test": [],
-      "done": [{ "identifier": "ENG-120", "title": "Previous completed issue", "priority": 3, "children": [], "labels": [] }],
+      "done": [
+        {
+          "identifier": "ENG-120",
+          "title": "Previous completed issue",
+          "priority": 3,
+          "children": [],
+          "labels": []
+        }
+      ],
       "archive": []
     },
     "teamName": "Engineering"

@@ -343,16 +343,16 @@ curl https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizatio
 
 ## Troubleshooting
 
-| Problem                    | Solution                                                   |
-| -------------------------- | ---------------------------------------------------------- |
-| "MISCONFIGURED"            | Configure your LLM API key in user-service settings first  |
-| 409 Conflict               | Data source is used by a composite feed -- remove it first |
-| "No insights generated"    | Your data may not have enough patterns -- add more data    |
-| "Snapshot not found"       | Wait for snapshot generation (up to 30 seconds)            |
-| "UNAUTHORIZED"             | Verify your Auth0 token is valid and not expired           |
-| "INTERNAL_ERROR"           | Server-side error -- check logs and retry with backoff     |
-| Visualization stays pending| LLM transform may have failed -- check `lastError` field   |
-| Visualization limit error  | Max 10 visualizations per feed -- delete unused ones first |
+| Problem                     | Solution                                                   |
+| --------------------------- | ---------------------------------------------------------- |
+| "MISCONFIGURED"             | Configure your LLM API key in user-service settings first  |
+| 409 Conflict                | Data source is used by a composite feed -- remove it first |
+| "No insights generated"     | Your data may not have enough patterns -- add more data    |
+| "Snapshot not found"        | Wait for snapshot generation (up to 30 seconds)            |
+| "UNAUTHORIZED"              | Verify your Auth0 token is valid and not expired           |
+| "INTERNAL_ERROR"            | Server-side error -- check logs and retry with backoff     |
+| Visualization stays pending | LLM transform may have failed -- check `lastError` field   |
+| Visualization limit error   | Max 10 visualizations per feed -- delete unused ones first |
 
 **Note:** All error responses follow the standard response contract: `{ "success": false, "error": { "code": "...", "message": "..." } }`.
 

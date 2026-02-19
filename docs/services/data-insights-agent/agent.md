@@ -261,7 +261,7 @@ interface Snapshot {
 interface CreateVisualizationInput {
   feedId: string;
   insightId: string;
-  chartConfig: object;         // Vega-Lite spec without data
+  chartConfig: object; // Vega-Lite spec without data
   transformInstructions: string;
 }
 ```
@@ -281,7 +281,7 @@ interface Visualization {
   trackableMetric: string;
   chartConfig: object;
   transformInstructions: string;
-  chartData: object[] | null;   // null until computation completes
+  chartData: object[] | null; // null until computation completes
   status: VisualizationStatus;
   lastError?: string;
   lastRefreshedAt?: string;
@@ -421,12 +421,12 @@ type ListVisualizationsOutput = Visualization[];
 
 ## Dependencies
 
-| Service                           | Why Needed                                     |
-| --------------------------------- | ---------------------------------------------- |
-| user-service                      | Get user's LLM API key                         |
-| mobile-notifications-service      | Query filtered notifications for feeds         |
+| Service                           | Why Needed                                        |
+| --------------------------------- | ------------------------------------------------- |
+| user-service                      | Get user's LLM API key                            |
+| mobile-notifications-service      | Query filtered notifications for feeds            |
 | Firestore                         | Persist feeds, sources, snapshots, visualizations |
-| LLM Providers (Gemini, GLM, etc.) | Data analysis, title/chart generation, transform |
+| LLM Providers (Gemini, GLM, etc.) | Data analysis, title/chart generation, transform  |
 
 ---
 

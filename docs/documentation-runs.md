@@ -6,6 +6,7 @@
 **Model:** Claude Sonnet 4.6
 
 **Scope:**
+
 - 20 apps documented (5 files each)
 - 4 workers documented (5 files each)
 - 22 packages documented (3 files each)
@@ -146,6 +147,7 @@
 **Model:** Claude Sonnet 4.6
 
 **Scope:**
+
 - 20 apps documented (5 files each)
 - 4 workers documented (5 files each)
 - 22 packages documented (3 files each)

@@ -55,18 +55,18 @@ To send a WhatsApp message, publish a `whatsapp.message.send` event to Pub/Sub.
 ```typescript
 interface SendMessageEvent {
   type: 'whatsapp.message.send';
-  userId: string;                        // IntexuraOS user ID
-  message: string;                       // Message text
-  replyToMessageId?: string;             // Optional: reply to specific message
+  userId: string; // IntexuraOS user ID
+  message: string; // Message text
+  replyToMessageId?: string; // Optional: reply to specific message
   buttons?: WhatsAppInteractiveButton[]; // Optional: interactive buttons (v3.0.0)
-  correlationId: string;                 // For tracking and reply correlation
-  timestamp: string;                     // ISO 8601
+  correlationId: string; // For tracking and reply correlation
+  timestamp: string; // ISO 8601
 }
 
 interface WhatsAppInteractiveButton {
   type: 'reply';
   reply: {
-    id: string;    // Format: "intent:actionId"
+    id: string; // Format: "intent:actionId"
     title: string; // Max 20 characters
   };
 }
@@ -145,13 +145,13 @@ When the user taps a button or replies, whatsapp-service publishes an `action.ap
 ```typescript
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
-  replyToWamid: string;  // Original approval message wamid
-  replyText: string;     // "yes", "no", "convert", "cancel-task", "view-task"
+  replyToWamid: string; // Original approval message wamid
+  replyText: string; // "yes", "no", "convert", "cancel-task", "view-task"
   userId: string;
   timestamp: string;
-  actionId?: string;     // Extracted from buttonId or correlationId
-  buttonId?: string;     // Button ID if user tapped a button
-  buttonTitle?: string;  // Button title if user tapped a button
+  actionId?: string; // Extracted from buttonId or correlationId
+  buttonId?: string; // Button ID if user tapped a button
+  buttonTitle?: string; // Button title if user tapped a button
 }
 ```
 
@@ -202,13 +202,13 @@ function classifyIntent(text: string): 'approve' | 'reject' | 'ambiguous' {
 
 Buttons and text replies both produce the same `ApprovalReplyEvent`:
 
-| Response Type    | `replyText`   | `buttonId`       | `actionId`         |
-| ---------------- | ------------- | ---------------- | ------------------ |
-| Button "Approve" | "yes"         | `approve:act-123` | `act-123`         |
-| Button "Cancel"  | "no"          | `cancel:act-123`  | `act-123`         |
-| Button "Reject"  | "no"          | `reject:act-123`  | `act-123`         |
-| Text reply "yes" | "yes"         | undefined         | from correlationId |
-| Text reply "no"  | "no"          | undefined         | from correlationId |
+| Response Type    | `replyText` | `buttonId`        | `actionId`         |
+| ---------------- | ----------- | ----------------- | ------------------ |
+| Button "Approve" | "yes"       | `approve:act-123` | `act-123`          |
+| Button "Cancel"  | "no"        | `cancel:act-123`  | `act-123`          |
+| Button "Reject"  | "no"        | `reject:act-123`  | `act-123`          |
+| Text reply "yes" | "yes"       | undefined         | from correlationId |
+| Text reply "no"  | "no"        | undefined         | from correlationId |
 
 **Note:** Emoji reactions (`👍`/`👎`) are no longer supported as of v4.0.0. They are ignored with status `REACTION_NOT_SUPPORTED`.
 
