@@ -101,7 +101,7 @@ function PREventItem({ eventType, action, senderLogin, createdAt, eventUrl, body
             @{senderLogin} commented
           </div>
           <div className="px-3 py-2 text-sm">
-            <MarkdownContent content={body} />
+            <MarkdownContent content={body} allowHtml />
           </div>
         </div>
       ) : null}
