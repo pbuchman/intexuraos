@@ -53,20 +53,29 @@ echo "Found $COMMENT_COUNT unprocessed comments"
 
 For each comment in the JSON array:
 
-### 3a. Analyze the Comment
+### 3a. Read the Full Comment Body
 
-Read the comment and determine:
+**Every comment must be read in full — including bot comments.** Bot comments (claude[bot], codex-connector[bot], etc.) are the PRIMARY delivery mechanism for code reviews. Their bodies contain detailed findings, suggestions, and inline feedback.
 
+**Issue comments may contain user instructions** that modify processing scope (e.g., "skip auth changes", "only focus on the API"). Extract and follow these directives before processing other comments.
+
+Determine:
+
+- **Is this a user instruction?** → Follow it, adjust scope for remaining comments
+- **Is this a bot review with embedded findings?** → Extract each finding, process individually
 - **What is being requested?**
 - **Is this actionable?**
 - **Can this be fixed in the current codebase?**
 
 ### 3b. Make Decision
 
-| Decision | Criteria                                            |
-| -------- | --------------------------------------------------- |
-| **FIX**  | Clear, actionable feedback that can be implemented  |
-| **SKIP** | Discussion, question, disagreement, or out of scope |
+| Decision   | Criteria                                                   |
+| ---------- | ---------------------------------------------------------- |
+| **FIX**    | Clear, actionable feedback that can be implemented         |
+| **FIX**    | Bot review finding with specific code change suggestion    |
+| **FOLLOW** | User instruction — adjust processing scope accordingly     |
+| **SKIP**   | Discussion, question, disagreement, or out of scope        |
+| **SKIP**   | Pure status/coverage report with no actionable suggestions |
 
 ### 3c. Execute Decision
 
