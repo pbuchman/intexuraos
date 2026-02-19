@@ -57,6 +57,7 @@ export async function submitCodeTask(
   return await apiRequest<SubmitCodeTaskResponse>(config.codeAgentUrl, '/code/submit', accessToken, {
     method: 'POST',
     body: request,
+    timeout: 90000, // 90s — submit can take 30+ seconds due to Linear API + worker dispatch
   });
 }
 
