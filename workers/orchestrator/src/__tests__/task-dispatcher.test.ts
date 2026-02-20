@@ -2937,4 +2937,123 @@ describe('TaskDispatcher', () => {
       vi.useRealTimers();
     });
   });
+
+  describe('activity heartbeat', () => {
+    let heartbeatDispatcher: TaskDispatcher;
+    let heartbeatStatePersistence: StatePersistence;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      heartbeatStatePersistence = createStatePersistence();
+      heartbeatDispatcher = new TaskDispatcher(
+        mockConfig,
+        heartbeatStatePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should emit heartbeat after 30s of silence', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'heartbeat-test',
+        workerType: 'auto',
+        prompt: 'Test heartbeat',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await heartbeatDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+
+      // Advance 30s — triggers completion monitor, no output received
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const heartbeatCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls.filter(
+        (call) => typeof call[1] === 'string' && call[1].includes('[system]')
+      );
+      expect(heartbeatCalls.length).toBe(1);
+      expect(heartbeatCalls[0]?.[1]).toContain('Still processing...');
+      expect(heartbeatCalls[0]?.[1]).toContain('no output for 30s');
+    });
+
+    it('should not emit heartbeat when output is flowing', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'heartbeat-active-test',
+        workerType: 'auto',
+        prompt: 'Test heartbeat active',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await heartbeatDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+
+      // Grab onLog callback from createWorker
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      // Simulate output at 15s — within the 30s window
+      await vi.advanceTimersByTimeAsync(15 * 1000);
+      onLog?.('Some output\n');
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
+      // Advance another 15s to hit the 30s monitor tick — only 15s since last output
+      await vi.advanceTimersByTimeAsync(15 * 1000);
+
+      const heartbeatCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls.filter(
+        (call) => typeof call[1] === 'string' && call[1].includes('[system]')
+      );
+      expect(heartbeatCalls.length).toBe(0);
+    });
+
+    it('should show correct elapsed time in heartbeat', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'heartbeat-elapsed-test',
+        workerType: 'auto',
+        prompt: 'Test heartbeat elapsed',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await heartbeatDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+
+      // First tick at 30s
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+      // Second tick at 60s
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const heartbeatCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls.filter(
+        (call) => typeof call[1] === 'string' && call[1].includes('[system]')
+      );
+      expect(heartbeatCalls.length).toBe(2);
+      expect(heartbeatCalls[0]?.[1]).toContain('no output for 30s');
+      expect(heartbeatCalls[1]?.[1]).toContain('no output for 60s');
+    });
+  });
 });
