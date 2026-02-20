@@ -129,7 +129,6 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
         userId,
         title,
         description: `## Code Task\n\n${taskPrompt}\n\n---\n*Created automatically by code-agent*`,
-        labels: ['Code Task'],
       });
 
       if (!createResult.ok) {
@@ -153,7 +152,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
         linearIssueTitle: createResult.value.issueTitle,
         linearIssueType: issueType,
         linearFallback: false,
-        linearIssueLabels: ['Code Task'],
+        linearIssueLabels: [],
         hasChildren: false,
         linearIssueUrl: createResult.value.issueUrl,
       };
