@@ -75,7 +75,7 @@ Include these in every PR:
 ```markdown
 ## Cross-References
 
-- **Linear Issue**: [INT-XXX](https://linear.app/...)
+- **Linear Issue**: [INT-XXX](https://linear.app/pbuchman/issue/INT-XXX)
 - **Sentry Issue** (if applicable): [Error Title](https://sentry.io/...)
 ```
 

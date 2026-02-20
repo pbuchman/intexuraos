@@ -149,7 +149,7 @@ Fixes [INT-123](url)
 Call: mcp__linear__list_issues
 Parameters:
   - query: "[sentry]"
-  - team: "pbuchman"
+  - team: "IntexuraOS"
 ```
 
 **Search in Sentry:**

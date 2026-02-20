@@ -40,7 +40,7 @@ Extract:
 Call: mcp__linear__list_issues
 Parameters:
   - query: "[sentry]"
-  - team: "pbuchman"
+  - team: "IntexuraOS"
 ```
 
 Search the results for:
@@ -60,7 +60,7 @@ If match found:
 Call: mcp__linear__create_issue
 Parameters:
   - title: "[sentry] <short-error-message>"
-  - team: "pbuchman"
+  - team: "IntexuraOS"
   - state: "Backlog"
   - labels: ["bug", "sentry"]
   - description: |

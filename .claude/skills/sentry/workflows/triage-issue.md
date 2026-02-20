@@ -78,7 +78,7 @@ Returns:
 Call: mcp__linear__list_issues
 Parameters:
   - query: "[sentry] <error-title-substring>"
-  - team: "pbuchman"
+  - team: "IntexuraOS"
 ```
 
 If match found:
@@ -94,7 +94,7 @@ If no existing issue, offer to create:
 Call: mcp__linear__create_issue
 Parameters:
   - title: "[sentry] <short-error-message>"
-  - team: "pbuchman"
+  - team: "IntexuraOS"
   - state: "Backlog"
   - description: See templates/linear-issue.md
   - labels: ["bug", "sentry"]
