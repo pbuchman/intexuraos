@@ -5,8 +5,6 @@ import {
   CheckCircle2,
   Clock,
   Copy,
-  GitBranch,
-  GitCommit,
   Loader2,
   Play,
   RotateCcw,
@@ -16,6 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
+import { PREventsGroup } from '@/components/PREventsGroup';
 import { useTaskView, useWorkersStatus } from '@/hooks';
 import type { LogLine, MessageStatus } from '@/hooks';
 import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
@@ -547,27 +546,20 @@ function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
   const result = task.result;
   if (result === undefined) return null;
 
+  const prNumber = result.prUrl !== undefined
+    ? parseInt(/\/pull\/(\d+)/.exec(result.prUrl)?.[1] ?? '', 10)
+    : undefined;
+
+  if (prNumber === undefined || isNaN(prNumber)) return null;
+
   return (
-    <Card className="mb-6">
-      <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">Summary</h3>
-      <p className="whitespace-pre-wrap text-slate-600 dark:text-slate-300">{result.summary}</p>
-      <div className="mt-3 flex flex-wrap gap-6">
-        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-          <GitBranch className="h-4 w-4" />
-          <code className="rounded bg-slate-100 px-2 py-0.5 text-sm dark:bg-slate-700">{result.branch}</code>
-        </div>
-        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-          <GitCommit className="h-4 w-4" />
-          <span>{String(result.commits)} commit{result.commits !== 1 ? 's' : ''}</span>
-        </div>
-      </div>
-      {result.ciFailed === true ? (
-        <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">CI checks failed. Review before merging.</p>
-      ) : null}
-      {result.partialWork === true ? (
-        <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">Partial work completed. May need additional attention.</p>
-      ) : null}
-    </Card>
+    <div className="mb-6">
+      <PREventsGroup
+        pullRequestNumber={prNumber}
+        title={result.summary}
+        repository={task.repository}
+      />
+    </div>
   );
 }
 
