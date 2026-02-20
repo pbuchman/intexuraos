@@ -180,7 +180,7 @@ describe('linearIssueService', () => {
         linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-456',
         linearIssueType: 'bug',
         linearFallback: false,
-        linearIssueLabels: ['Code Task'],
+        linearIssueLabels: [],
         hasChildren: false,
       });
 
@@ -192,7 +192,6 @@ describe('linearIssueService', () => {
       expect(mockCreateIssue).toHaveBeenCalledWith({
         title: 'Fix login authentication for SSO users',
         description: expect.stringContaining('Fix the login bug in the auth module'),
-        labels: ['Code Task'],
         userId: testUserId,
       });
 
@@ -442,6 +441,35 @@ describe('linearIssueService', () => {
 
       expect(result.linearIssueId).toBe('INT-700');
       expect(mockCreateIssue).toHaveBeenCalled();
+    });
+
+    it('should return empty labels for auto-created issues to ensure Phase 1 is entered', async () => {
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        ok({ title: 'Some Feature', issueType: 'feature' as const })
+      );
+
+      mockCreateIssue = vi.fn().mockResolvedValue(
+        ok({
+          issueId: 'phase-check-1',
+          issueIdentifier: 'INT-999',
+          issueTitle: 'Some Feature',
+          issueUrl: 'https://linear.app/intexuraos/INT-999',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        taskPrompt: 'Do something',
+      });
+
+      // Auto-created issues MUST have no labels so processCodeAction routes to Phase 1
+      expect(result.linearIssueLabels).toEqual([]);
+      // Verify the code-task label was not passed to the Linear API
+      expect(mockCreateIssue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ labels: expect.arrayContaining(['Code Task']) })
+      );
     });
   });
 

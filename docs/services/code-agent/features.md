@@ -64,7 +64,7 @@ Failed or cancelled tasks can be retried with optional additional context. Compl
 2. The actions-agent classifies it as a `code` action and sends it for approval.
 3. You approve via WhatsApp. The actions-agent calls `POST /internal/code/process`.
 4. Code Agent checks rate limits (3 concurrent, 10/hour, $20/day, $200/month).
-5. Code Agent calls the linear-agent to generate a title ("Fix Safari login redirect loop") and creates a Linear issue with the `Code Task` label.
+5. Code Agent calls the linear-agent to generate a title ("Fix Safari login redirect loop") and creates a Linear issue. Phase 1 (design) begins — the agent enriches the issue and adds the `code-task` label when the design is ready.
 6. The task document lands in Firestore with deduplication checks passing.
 7. Code Agent signs the dispatch request with HMAC and sends it to your primary worker via Cloudflare Access.
 8. You receive a WhatsApp message: "Task started on home-mac. Cancel: reply `cancel a1b2`."
