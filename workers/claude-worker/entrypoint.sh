@@ -6,11 +6,20 @@ set -euo pipefail
 # ==============================================================================
 
 setup_git_identity() {
+    # Set identity at BOTH repo and global level.
+    # Repo-level is critical because worktrees inherit the parent repo's
+    # .git/config [user] section, which overrides global ~/.gitconfig.
     if [ -n "${GIT_USER_NAME:-}" ]; then
         git config --global user.name "$GIT_USER_NAME"
+        if [ -d "/repo" ] && { [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; }; then
+            git -C /repo config user.name "$GIT_USER_NAME"
+        fi
     fi
     if [ -n "${GIT_USER_EMAIL:-}" ]; then
         git config --global user.email "$GIT_USER_EMAIL"
+        if [ -d "/repo" ] && { [ -d "/repo/.git" ] || [ -f "/repo/.git" ]; }; then
+            git -C /repo config user.email "$GIT_USER_EMAIL"
+        fi
     fi
 }
 
