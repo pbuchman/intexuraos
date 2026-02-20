@@ -47,7 +47,6 @@ import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRep
 import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from './helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestorePRTaskLockRepository } from '../infra/firestore/firestorePRTaskLockRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../infra/repositories/firestoreTurnMetricsRepository.js';
 
 describe('OpenAPI contract', () => {
@@ -147,10 +146,6 @@ describe('OpenAPI contract', () => {
         logger,
       }),
       gitHubPRSummaryRepo: {} as never,
-      prTaskLockRepo: createFirestorePRTaskLockRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
       turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -176,7 +171,6 @@ describe('OpenAPI contract', () => {
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
-      prTaskLockRepo: import('../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
       turnMetricsRepo: import('../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 

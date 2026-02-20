@@ -39,7 +39,6 @@ import { createWorkerSettingsRepository } from '../../../infra/firestore/workerS
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
 import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
-import { createFirestorePRTaskLockRepository } from '../../../infra/firestore/firestorePRTaskLockRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
 
 describe('GET /code/github-pr-summaries', () => {
@@ -168,10 +167,6 @@ describe('GET /code/github-pr-summaries', () => {
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo,
       gitHubPRSummaryRepo,
-      prTaskLockRepo: createFirestorePRTaskLockRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
       turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -197,7 +192,6 @@ describe('GET /code/github-pr-summaries', () => {
       workerHealthProbe: import('../../../domain/ports/workerHealthProbe.js').WorkerHealthProbe;
       gitHubPREventRepo: import('../../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
-      prTaskLockRepo: import('../../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
       turnMetricsRepo: import('../../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
