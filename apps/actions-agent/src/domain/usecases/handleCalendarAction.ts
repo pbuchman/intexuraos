@@ -1,8 +1,10 @@
-import { ok, type Result } from '@intexuraos/common-core';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher, CalendarPreviewPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
+import type { ExecuteCalendarActionUseCase } from './executeCalendarAction.js';
+import { shouldAutoExecute } from './shouldAutoExecute.js';
 import { buildApprovalButtons } from '../utils/approvalButtons.js';
 
 export interface HandleCalendarActionDeps {
@@ -11,6 +13,7 @@ export interface HandleCalendarActionDeps {
   calendarPreviewPublisher: CalendarPreviewPublisher;
   webAppUrl: string;
   logger: Logger;
+  executeCalendarAction?: ExecuteCalendarActionUseCase;
 }
 
 export interface HandleCalendarActionUseCase {
@@ -26,6 +29,7 @@ export function createHandleCalendarActionUseCase(
     calendarPreviewPublisher,
     webAppUrl,
     logger,
+    executeCalendarAction,
   } = deps;
 
   return {
@@ -40,6 +44,23 @@ export function createHandleCalendarActionUseCase(
         },
         'Processing calendar action'
       );
+
+      if (shouldAutoExecute(event) && executeCalendarAction !== undefined) {
+        logger.info({ actionId: event.actionId }, 'Auto-executing calendar action');
+
+        const executeResult = await executeCalendarAction(event.actionId);
+
+        if (!executeResult.ok) {
+          logger.error(
+            { actionId: event.actionId, error: getErrorMessage(executeResult.error) },
+            'Failed to auto-execute calendar action'
+          );
+          return err(executeResult.error);
+        }
+
+        logger.info({ actionId: event.actionId }, 'Calendar action auto-executed successfully');
+        return ok({ actionId: event.actionId });
+      }
 
       // Trigger preview generation asynchronously via Pub/Sub
       // Include day of week so LLM can calculate relative dates like "następny czwartek" (next Thursday)

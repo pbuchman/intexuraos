@@ -385,6 +385,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       calendarPreviewPublisher,
       webAppUrl: config.webAppUrl,
       logger: createAppLogger({ name: 'handleCalendarAction' }),
+      executeCalendarAction: executeCalendarActionUseCase,
     }
   );
 
