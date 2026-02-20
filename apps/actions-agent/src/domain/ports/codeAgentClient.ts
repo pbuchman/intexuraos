@@ -15,6 +15,7 @@ export interface CodeAgentClient {
 
 export interface SubmitTaskInput {
   actionId: string;
+  userId: string;
   approvalEventId: string;
   payload: CodeActionPayload;
 }

@@ -728,6 +728,7 @@ export class FakeLinearAgentClient implements LinearAgentClient {
 export class FakeCodeAgentClient implements CodeAgentClient {
   private submittedTasks: {
     actionId: string;
+    userId: string;
     approvalEventId: string;
     payload: {
       prompt: string;
@@ -772,6 +773,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
 
   async submitTask(input: {
     actionId: string;
+    userId: string;
     approvalEventId: string;
     payload: {
       prompt: string;

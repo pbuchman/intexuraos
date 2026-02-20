@@ -25,6 +25,7 @@ describe('codeAgentHttpClient', () => {
       const scope = nock(baseUrl)
         .post('/internal/code/process', {
           actionId: 'action-123',
+          userId: 'user-456',
           approvalEventId: 'approval-event-uuid',
           payload: {
             prompt: 'Fix the login bug',
@@ -43,6 +44,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix the login bug',
@@ -74,6 +76,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -88,6 +91,7 @@ describe('codeAgentHttpClient', () => {
       const scope = nock(baseUrl)
         .post('/internal/code/process', {
           actionId: 'action-abc',
+          userId: 'user-456',
           approvalEventId: 'event-uuid-123',
           payload: {
             prompt: 'Implement dark mode',
@@ -108,6 +112,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       await client.submitTask({
         actionId: 'action-abc',
+        userId: 'user-456',
         approvalEventId: 'event-uuid-123',
         payload: {
           prompt: 'Implement dark mode',
@@ -140,6 +145,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -165,6 +171,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -191,6 +198,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -215,6 +223,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -239,6 +248,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -265,6 +275,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -289,6 +300,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -312,6 +324,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -339,6 +352,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: 'Fix bug',
@@ -361,6 +375,7 @@ describe('codeAgentHttpClient', () => {
       const scope = nock(baseUrl)
         .post('/internal/code/process', {
           actionId: 'action-123',
+          userId: 'user-456',
           approvalEventId: 'approval-event-uuid',
           payload: {
             prompt: specialPrompt,
@@ -379,6 +394,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: specialPrompt,
@@ -395,6 +411,7 @@ describe('codeAgentHttpClient', () => {
       const scope = nock(baseUrl)
         .post('/internal/code/process', {
           actionId: 'action-123',
+          userId: 'user-456',
           approvalEventId: 'approval-event-uuid',
           payload: {
             prompt: unicodePrompt,
@@ -413,6 +430,7 @@ describe('codeAgentHttpClient', () => {
       const client = createClient();
       const result = await client.submitTask({
         actionId: 'action-123',
+        userId: 'user-456',
         approvalEventId: 'approval-event-uuid',
         payload: {
           prompt: unicodePrompt,
@@ -442,6 +460,7 @@ describe('codeAgentHttpClient', () => {
         const client = createClient();
         const result = await client.submitTask({
           actionId: 'action-123',
+          userId: 'user-456',
           approvalEventId: 'approval-event-uuid',
           payload: {
             prompt: 'Fix bug',

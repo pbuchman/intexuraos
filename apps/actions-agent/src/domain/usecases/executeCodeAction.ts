@@ -118,6 +118,7 @@ export function createExecuteCodeActionUseCase(
 
     const result = await codeAgentClient.submitTask({
       actionId,
+      userId: action.userId,
       approvalEventId,
       payload,
     });
