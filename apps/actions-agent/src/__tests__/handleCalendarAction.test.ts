@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ok, err } from '@intexuraos/common-core';
 import { createHandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -60,7 +61,7 @@ describe('handleCalendarAction usecase', () => {
     fakeCalendarPreviewPublisher = new FakeCalendarPreviewPublisher();
   });
 
-  it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
+  it('sets action to awaiting_approval and publishes WhatsApp notification for low confidence', async () => {
     await fakeActionRepository.save(createAction());
 
     const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
@@ -71,7 +72,7 @@ describe('handleCalendarAction usecase', () => {
       logger: createMockLogger(),
     });
 
-    const event = createEvent();
+    const event = createEvent({ payload: { prompt: 'Schedule team standup for tomorrow at 10am', confidence: 0.85 } });
     const result = await usecase.execute(event);
 
     expect(result.ok).toBe(true);
@@ -119,7 +120,7 @@ describe('handleCalendarAction usecase', () => {
       logger: createMockLogger(),
     });
 
-    const event = createEvent();
+    const event = createEvent({ payload: { prompt: 'Schedule team standup for tomorrow at 10am', confidence: 0.85 } });
     const result = await usecase.execute(event);
 
     expect(result.ok).toBe(true);
@@ -144,7 +145,7 @@ describe('handleCalendarAction usecase', () => {
       logger: createMockLogger(),
     });
 
-    const event = createEvent();
+    const event = createEvent({ payload: { prompt: 'Schedule team standup for tomorrow at 10am', confidence: 0.85 } });
     const result = await usecase.execute(event);
 
     expect(result.ok).toBe(false);
@@ -169,7 +170,7 @@ describe('handleCalendarAction usecase', () => {
       message: 'WhatsApp unavailable',
     });
 
-    const event = createEvent();
+    const event = createEvent({ payload: { prompt: 'Schedule team standup for tomorrow at 10am', confidence: 0.85 } });
     const result = await usecase.execute(event);
 
     expect(result.ok).toBe(true);
@@ -249,5 +250,149 @@ describe('handleCalendarAction usecase', () => {
     }
 
     expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);
+  });
+
+  describe('auto-execute flow for high confidence calendar actions', () => {
+    it('auto-executes when confidence >= 90% and executeCalendarAction is provided', async () => {
+      await fakeActionRepository.save(createAction());
+
+      const fakeExecuteCalendarAction = vi.fn().mockResolvedValue(
+        ok({ status: 'completed' as const, message: 'Calendar event created', resourceUrl: '/#/calendar' })
+      );
+
+      const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: createMockLogger(),
+        executeCalendarAction: fakeExecuteCalendarAction,
+      });
+
+      // Event with 95% confidence triggers auto-execute
+      const event = createEvent({ payload: { prompt: 'Schedule meeting', confidence: 0.95 } });
+      const result = await usecase.execute(event);
+
+      expect(result.ok).toBe(true);
+      expect(fakeExecuteCalendarAction).toHaveBeenCalledWith('action-123');
+
+      // No "awaiting_approval" message should be sent for auto-executed actions
+      const messages = fakeWhatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(0);
+
+      // Preview generation should NOT be triggered for auto-executed actions
+      const previewRequests = fakeCalendarPreviewPublisher.getPublishedRequests();
+      expect(previewRequests).toHaveLength(0);
+    });
+
+    it('auto-executes at exactly 90% confidence', async () => {
+      await fakeActionRepository.save(createAction());
+
+      const fakeExecuteCalendarAction = vi.fn().mockResolvedValue(
+        ok({ status: 'completed' as const, message: 'Calendar event created', resourceUrl: '/#/calendar' })
+      );
+
+      const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: createMockLogger(),
+        executeCalendarAction: fakeExecuteCalendarAction,
+      });
+
+      const event = createEvent({ payload: { prompt: 'Schedule meeting', confidence: 0.9 } });
+      const result = await usecase.execute(event);
+
+      expect(result.ok).toBe(true);
+      expect(fakeExecuteCalendarAction).toHaveBeenCalledWith('action-123');
+    });
+
+    it('returns error when auto-execute fails', async () => {
+      await fakeActionRepository.save(createAction());
+
+      const fakeExecuteCalendarAction = vi.fn().mockResolvedValue(
+        err(new Error('Calendar API unavailable'))
+      );
+
+      const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: createMockLogger(),
+        executeCalendarAction: fakeExecuteCalendarAction,
+      });
+
+      const event = createEvent({ payload: { prompt: 'Schedule meeting', confidence: 0.95 } });
+      const result = await usecase.execute(event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Calendar API unavailable');
+      }
+    });
+
+    it('falls back to approval flow when executeCalendarAction is not provided', async () => {
+      await fakeActionRepository.save(createAction());
+
+      const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: createMockLogger(),
+      });
+
+      const event = createEvent({ payload: { prompt: 'Schedule meeting', confidence: 0.95 } });
+      const result = await usecase.execute(event);
+
+      expect(result.ok).toBe(true);
+
+      // Action should be updated to awaiting_approval when executeCalendarAction is not available
+      const action = await fakeActionRepository.getById('action-123');
+      expect(action?.status).toBe('awaiting_approval');
+
+      // Preview should be generated since we're in approval flow
+      const previewRequests = fakeCalendarPreviewPublisher.getPublishedRequests();
+      expect(previewRequests).toHaveLength(1);
+    });
+
+    it('does NOT auto-execute when confidence is below 90%', async () => {
+      await fakeActionRepository.save(createAction());
+
+      const fakeExecuteCalendarAction = vi.fn().mockResolvedValue(
+        ok({ status: 'completed' as const, message: 'Calendar event created', resourceUrl: '/#/calendar' })
+      );
+
+      const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: createMockLogger(),
+        executeCalendarAction: fakeExecuteCalendarAction,
+      });
+
+      // Event with 85% confidence does NOT trigger auto-execute (threshold is 90%)
+      const event = createEvent({ payload: { prompt: 'Schedule meeting', confidence: 0.85 } });
+      const result = await usecase.execute(event);
+
+      expect(result.ok).toBe(true);
+      expect(fakeExecuteCalendarAction).not.toHaveBeenCalled();
+
+      // Action should be updated to awaiting_approval
+      const action = await fakeActionRepository.getById('action-123');
+      expect(action?.status).toBe('awaiting_approval');
+
+      // Approval message should be sent
+      const messages = fakeWhatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('New calendar event ready for approval');
+
+      // Preview should be generated
+      const previewRequests = fakeCalendarPreviewPublisher.getPublishedRequests();
+      expect(previewRequests).toHaveLength(1);
+    });
   });
 });
