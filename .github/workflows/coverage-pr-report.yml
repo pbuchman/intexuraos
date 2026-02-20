@@ -41,41 +41,6 @@ jobs:
       - name: Run tests with coverage
         run: pnpm run test:coverage
 
-      - name: Checkout base branch for comparison
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.base_ref }}
-          path: base-branch
-
-      - name: Install base branch dependencies
-        working-directory: base-branch
-        run: pnpm install
-
-      - name: Build base branch
-        working-directory: base-branch
-        run: pnpm run build
-
-      - name: Run base branch coverage
-        id: base-coverage
-        working-directory: base-branch
-        # continue-on-error allows trend comparison even if base has test failures
-        # This is expected when PR adds new tests or fixes broken tests
-        continue-on-error: true
-        run: pnpm run test:coverage
-
-      - name: Copy base coverage for comparison
-        run: |
-          mkdir -p coverage-base
-          if [ -f base-branch/coverage/coverage-summary.json ]; then
-            cp base-branch/coverage/coverage-summary.json coverage-base/coverage-summary.json
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Base coverage available for trend comparison"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "No base coverage found - trend comparison will be skipped"
-          fi
-        id: check-base-coverage
-
       - name: Report Coverage
         if: always()
         uses: davelosert/vitest-coverage-report-action@v2
@@ -84,4 +49,3 @@ jobs:
           github-token: ${{ secrets.PAT_TOKEN }}
           file-coverage-mode: all
           comment-on: 'pr'
-          json-summary-compare-path: ${{ steps.check-base-coverage.outputs.exists == 'true' && 'coverage-base/coverage-summary.json' || '' }}
