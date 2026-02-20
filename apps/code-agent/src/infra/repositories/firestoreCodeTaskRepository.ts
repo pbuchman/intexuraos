@@ -704,6 +704,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const snapshot = await collection
           .where('repository', '==', repository)
           .where('prNumber', '==', prNumber)
+          .orderBy('createdAt', 'desc')
           .limit(1)
           .get();
 

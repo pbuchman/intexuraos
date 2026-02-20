@@ -120,14 +120,14 @@ Single-model assistants hallucinate. A council of models cross-checks. When thre
 
 Speak to WhatsApp. IntexuraOS classifies your intent, routes to the right agent, and executes.
 
-| You Say | What Happens |
-| --- | --- |
-| *"Fix the login redirect on Safari"* | Code Agent dispatches to worker, you get a PR |
-| *"Research quantum computing with Claude and GPT"* | Council of AI queries specified models, synthesizes |
-| *"Schedule a sync with engineering Tuesday at 2"* | Shows preview, waits for approval, then creates event |
-| *"Remind me to review the Q4 report by Friday"* | Extracts task with priority and deadline |
-| *"Save this link about TypeScript 5.0"* | AI-generated summary with metadata extraction |
-| *"Create a Linear issue for the auth refactor"* | Issue filed with AI-generated title and description |
+| You Say                                            | What Happens                                          |
+| -------------------------------------------------- | ----------------------------------------------------- |
+| _"Fix the login redirect on Safari"_               | Code Agent dispatches to worker, you get a PR         |
+| _"Research quantum computing with Claude and GPT"_ | Council of AI queries specified models, synthesizes   |
+| _"Schedule a sync with engineering Tuesday at 2"_  | Shows preview, waits for approval, then creates event |
+| _"Remind me to review the Q4 report by Friday"_    | Extracts task with priority and deadline              |
+| _"Save this link about TypeScript 5.0"_            | AI-generated summary with metadata extraction         |
+| _"Create a Linear issue for the auth refactor"_    | Issue filed with AI-generated title and description   |
 
 **7 action types**: research, todo, note, link, calendar, linear, code — classified by a 5-step decision tree that isolates URL keywords, detects explicit intent, and supports Polish language input.
 
@@ -178,28 +178,28 @@ graph TD
 
 ### Technology Stack
 
-| Layer | Technologies |
-| --- | --- |
-| **Runtime** | Node.js 22, TypeScript 5.7 (strict), pnpm workspaces |
-| **Framework** | Fastify, Hexagonal Architecture, Domain-Driven Design |
-| **AI Providers** | Anthropic, OpenAI, Google AI, Perplexity, Zai |
-| **AI Tooling** | Claude Code (autonomous worker), OpenAI Embeddings (RAG) |
-| **Data** | Firestore (NoSQL), Google Cloud Storage |
-| **Messaging** | Cloud Pub/Sub (event-driven, push-only) |
-| **Auth** | Auth0, Google OAuth, Cloudflare Access, HMAC signing |
-| **Infrastructure** | Terraform, Cloud Run, Cloud Functions, Docker, PM2 |
-| **Observability** | OpenTelemetry + Dash0 (traces & metrics), Sentry (errors) |
-| **Integrations** | WhatsApp Business API, Linear, GitHub, Google Calendar, Notion, Speechmatics |
+| Layer              | Technologies                                                                 |
+| ------------------ | ---------------------------------------------------------------------------- |
+| **Runtime**        | Node.js 22, TypeScript 5.7 (strict), pnpm workspaces                         |
+| **Framework**      | Fastify, Hexagonal Architecture, Domain-Driven Design                        |
+| **AI Providers**   | Anthropic, OpenAI, Google AI, Perplexity, Zai                                |
+| **AI Tooling**     | Claude Code (autonomous worker), OpenAI Embeddings (RAG)                     |
+| **Data**           | Firestore (NoSQL), Google Cloud Storage                                      |
+| **Messaging**      | Cloud Pub/Sub (event-driven, push-only)                                      |
+| **Auth**           | Auth0, Google OAuth, Cloudflare Access, HMAC signing                         |
+| **Infrastructure** | Terraform, Cloud Run, Cloud Functions, Docker, PM2                           |
+| **Observability**  | OpenTelemetry + Dash0 (traces & metrics), Sentry (errors)                    |
+| **Integrations**   | WhatsApp Business API, Linear, GitHub, Google Calendar, Notion, Speechmatics |
 
 ### AI Provider Matrix
 
-| Provider | Models | Strengths |
-| --- | --- | --- |
-| **Google** | Gemini 2.5 Pro, Flash, Flash-Image, 2.0 Flash | Classification, fast ops, image generation |
-| **OpenAI** | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, embeddings |
-| **Anthropic** | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5 | Analysis, validation, autonomous coding |
-| **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research | Real-time web search with citations |
-| **Zai** | GLM-4.7, GLM-4.7-Flash | Multilingual, cost-efficient, guest access |
+| Provider       | Models                                        | Strengths                                  |
+| -------------- | --------------------------------------------- | ------------------------------------------ |
+| **Google**     | Gemini 2.5 Pro, Flash, Flash-Image, 2.0 Flash | Classification, fast ops, image generation |
+| **OpenAI**     | GPT-5.2, o4-mini-deep-research, GPT Image 1   | Deep research, synthesis, embeddings       |
+| **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5        | Analysis, validation, autonomous coding    |
+| **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research         | Real-time web search with citations        |
+| **Zai**        | GLM-4.7, GLM-4.7-Flash                        | Multilingual, cost-efficient, guest access |
 
 ---
 
@@ -217,11 +217,11 @@ pnpm run ci:tracked  # TypeCheck → Lint → Tests (100% branches) → Build
 
 This isn't a codebase that "uses" AI — **AI is a first-class team member** with its own skills, agents, and development commands:
 
-| Type | Examples | What They Do |
-| --- | --- | --- |
-| **Skills** | `/linear`, `/sentry`, `/document-service` | Issue creation with auto-splitting, error triage with Seer, autonomous documentation |
-| **Agents** | `service-scribe`, `llm-manager` | Generate service docs in parallel, audit LLM pricing across providers |
-| **Commands** | `/create-service`, `/refactoring`, `/release` | Scaffold services, detect code smells, orchestrate semantic versioning |
+| Type         | Examples                                      | What They Do                                                                         |
+| ------------ | --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| **Skills**   | `/linear`, `/sentry`, `/document-service`     | Issue creation with auto-splitting, error triage with Seer, autonomous documentation |
+| **Agents**   | `service-scribe`, `llm-manager`               | Generate service docs in parallel, audit LLM pricing across providers                |
+| **Commands** | `/create-service`, `/refactoring`, `/release` | Scaffold services, detect code smells, orchestrate semantic versioning               |
 
 **Cross-linking is automatic.** `INT-XXX` in a PR title connects Linear to GitHub. `[sentry]` prefix on Linear issues connects to Sentry. Every artifact traces back to every other.
 
@@ -246,11 +246,11 @@ direnv allow
 pnpm run dev
 ```
 
-| Service | URL |
-| --- | --- |
-| Web App | http://localhost:3000 |
-| API Docs | http://localhost:8115/docs |
-| Firebase UI | http://localhost:8100 |
+| Service     | URL                        |
+| ----------- | -------------------------- |
+| Web App     | http://localhost:3000      |
+| API Docs    | http://localhost:8115/docs |
+| Firebase UI | http://localhost:8100      |
 
 Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md)**
 
@@ -258,23 +258,23 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 
 ## Documentation
 
-| Document | Description |
-| --- | --- |
-| **[Platform Overview](docs/overview.md)** | Architecture, agents, and the self-building system |
-| **[Services Catalog](docs/services/index.md)** | All 20 apps + 4 workers + 22 packages |
-| **[AI Architecture](docs/architecture/ai-architecture.md)** | Deep dive into 17 models across 5 providers |
-| **[Setup Guide](docs/setup/01-gcp-project.md)** | Step-by-step GCP and local environment setup |
+| Document                                                    | Description                                        |
+| ----------------------------------------------------------- | -------------------------------------------------- |
+| **[Platform Overview](docs/overview.md)**                   | Architecture, agents, and the self-building system |
+| **[Services Catalog](docs/services/index.md)**              | All 20 apps + 4 workers + 22 packages              |
+| **[AI Architecture](docs/architecture/ai-architecture.md)** | Deep dive into 17 models across 5 providers        |
+| **[Setup Guide](docs/setup/01-gcp-project.md)**             | Step-by-step GCP and local environment setup       |
 
 ### Key Services
 
-| Service | What It Does |
-| --- | --- |
-| **[code-agent](docs/services/code-agent/features.md)** | Autonomous code execution — task dispatch, deduplication, rate limiting, PR lifecycle |
-| **[orchestrator](docs/services/orchestrator/features.md)** | Docker-isolated Claude Code sessions with worktree parallelism and completion verification |
-| **[chat-agent](docs/services/chat-agent/features.md)** | In-app AI assistant with RAG-powered documentation Q&A and guest access |
-| **[research-agent](docs/services/research-agent/features.md)** | Multi-model research with parallel synthesis across 11 models |
-| **[commands-agent](docs/services/commands-agent/features.md)** | 5-step intent classification with URL isolation and Polish support |
-| **[whatsapp-service](docs/services/whatsapp-service/features.md)** | Voice transcription, message handling, approval workflows |
+| Service                                                            | What It Does                                                                               |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| **[code-agent](docs/services/code-agent/features.md)**             | Autonomous code execution — task dispatch, deduplication, rate limiting, PR lifecycle      |
+| **[orchestrator](docs/services/orchestrator/features.md)**         | Docker-isolated Claude Code sessions with worktree parallelism and completion verification |
+| **[chat-agent](docs/services/chat-agent/features.md)**             | In-app AI assistant with RAG-powered documentation Q&A and guest access                    |
+| **[research-agent](docs/services/research-agent/features.md)**     | Multi-model research with parallel synthesis across 11 models                              |
+| **[commands-agent](docs/services/commands-agent/features.md)**     | 5-step intent classification with URL isolation and Polish support                         |
+| **[whatsapp-service](docs/services/whatsapp-service/features.md)** | Voice transcription, message handling, approval workflows                                  |
 
 ---
 

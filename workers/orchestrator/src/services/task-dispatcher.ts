@@ -359,8 +359,14 @@ export class TaskDispatcher {
     taskId: string,
     message: string
   ): Promise<Result<SendMessageResult, SendMessageError>> {
-    const state = await this.statePersistence.load();
-    const task = state.tasks[taskId];
+    const loadResult = await this.statePersistence.load().catch((error: unknown) => {
+      this.logger.error({ taskId, error }, 'Failed to load state persistence');
+      return null;
+    });
+    if (loadResult === null) {
+      return { ok: false, error: { type: 'service_error', message: 'Failed to load task state' } };
+    }
+    const task = loadResult.tasks[taskId];
 
     if (task === undefined) {
       return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
@@ -393,8 +399,9 @@ export class TaskDispatcher {
         message.length > 200 ? message.slice(0, 200) + '\u2026' : message
       );
 
+      const preamble = this.buildResumePreamble();
       const resumeResult = await this.startWorkerAttempt(task, {
-        prompt: message,
+        prompt: preamble + message,
         hasChildren: task.hasChildren ?? false,
         continueSession: true,
       });
@@ -846,6 +853,24 @@ export class TaskDispatcher {
     ].join('\n');
   }
 
+  private buildResumePreamble(): string {
+    return [
+      '[RESUME PRE-FLIGHT — MANDATORY]',
+      'Before making ANY changes, check your PR state:',
+      '  gh pr view --json state,merged 2>/dev/null || echo "NO_PR"',
+      '',
+      'If PR is MERGED or CLOSED or NO_PR:',
+      '  1. git fetch origin',
+      '  2. git checkout -b followup/<short-desc> origin/development',
+      '  3. After changes → create NEW PR targeting development',
+      '  4. Do NOT push to the old branch',
+      '',
+      'If PR is OPEN: continue on current branch normally.',
+      '---',
+      '',
+    ].join('\n');
+  }
+
   private async startWorkerAttempt(
     task: Task,
     params: { prompt: string; hasChildren: boolean; continueSession: boolean }
@@ -1256,13 +1281,20 @@ export class TaskDispatcher {
 
   private async collectTurnMetrics(task: Task, attempt: number): Promise<void> {
     if (this.turnMetricsCollector === undefined) return;
-    await this.turnMetricsCollector.collectAndPublish({
-      taskId: task.taskId,
-      containerId: task.containerId,
-      attempt,
-      startedAt: task.startedAt,
-      completedAt: new Date().toISOString(),
-    });
+    try {
+      await this.turnMetricsCollector.collectAndPublish({
+        taskId: task.taskId,
+        containerId: task.containerId,
+        attempt,
+        startedAt: task.startedAt,
+        completedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logger.error(
+        { taskId: task.taskId, attempt, error },
+        'Failed to collect turn metrics (non-fatal, task finalization continues)'
+      );
+    }
   }
 
   private clearTaskTimers(taskId: string): void {
