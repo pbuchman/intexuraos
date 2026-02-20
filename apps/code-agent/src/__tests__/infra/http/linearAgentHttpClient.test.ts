@@ -64,7 +64,7 @@ describe('linearAgentHttpClient', () => {
       }
     });
 
-    it('should include default label Code Task when labels not provided', async () => {
+    it('should send empty labels array when labels not provided', async () => {
       const mockResponse = {
         success: true,
         data: {
@@ -94,7 +94,7 @@ describe('linearAgentHttpClient', () => {
       expect(capturedBody).toEqual({
         title: 'Test Issue',
         description: 'Test description',
-        labels: ['Code Task'],
+        labels: [],
       });
     });
 

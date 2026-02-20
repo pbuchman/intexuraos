@@ -58,7 +58,7 @@ export function createLinearAgentHttpClient(
           body: JSON.stringify({
             title: request.title,
             description: request.description,
-            labels: request.labels ?? ['Code Task'],
+            labels: request.labels ?? [],
           }),
           signal: controller.signal,
         });
