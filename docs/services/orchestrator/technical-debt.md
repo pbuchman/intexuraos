@@ -1,7 +1,7 @@
 # Orchestrator - Technical Debt
 
-**Last Updated:** 2026-02-08
-**Analysis Run:** v2.1.0 documentation generation
+**Last Updated:** 2026-02-19
+**Analysis Run:** v2.2.0 documentation update (multi-attempt completion verification)
 
 ---
 
@@ -10,10 +10,10 @@
 | Category            | Count  | Severity |
 | ------------------- | ------ | -------- |
 | TODO/FIXME Comments | 2      | Low      |
-| Architectural Gaps  | 3      | Medium   |
+| Architectural Gaps  | 4      | Medium   |
 | Code Duplicates     | 1      | Low      |
 | Missing Features    | 4      | Medium   |
-| **Total**           | **10** | Medium   |
+| **Total**           | **11** | Medium   |
 
 ---
 
@@ -87,7 +87,17 @@ The orchestrator runs on a single machine. State is stored in a local JSON file,
 
 ---
 
-### 5. No graceful container shutdown on task cancel
+### 5. Completion verifier has no circuit-breaker
+
+**Severity:** Medium
+
+When Gemini is unavailable (network error, rate limit, API outage), all in-flight tasks fail with `TASK_COMPLETION_VERIFIER_FAILED`. There is no fallback to deterministic-only verification, no retry with backoff, and no way to temporarily disable the verifier for a task.
+
+**Recommended fix:** Add a circuit-breaker pattern: after N consecutive Gemini failures within a time window, fall back to deterministic-only verification and log a warning. Re-enable LLM verification after the circuit resets.
+
+---
+
+### 6. No graceful container shutdown on task cancel
 
 **Severity:** Medium
 
@@ -103,7 +113,7 @@ The orchestrator runs on a single machine. State is stored in a local JSON file,
 
 ## Missing Features
 
-### 6. No task retry from the orchestrator
+### 7. No task retry from the orchestrator
 
 **Severity:** Medium
 
@@ -113,7 +123,7 @@ The `retriedFrom` field exists on tasks, but retry logic lives entirely in code-
 
 ---
 
-### 7. No worktree cleanup on completed tasks
+### 8. No worktree cleanup on completed tasks
 
 **Severity:** Medium
 
@@ -123,23 +133,23 @@ The `cleanupStaleWorktrees()` function exists but is not wired into the main loo
 
 ---
 
-### 8. No resource usage monitoring
+### 9. No resource usage monitoring
 
 **Severity:** Low
 
-`DockerProvider.getResourceUsage()` exists but is never called. There is no alerting when containers approach memory limits or CPU saturation.
+`DockerProvider.getResourceUsage()` exists but is never called. There is no alerting when containers approach memory limits or CPU saturation. (Note: `TurnMetricsCollector` collects post-exit cgroup data, but does not provide real-time monitoring during task execution.)
 
-**Recommended fix:** Integrate resource usage into the health endpoint or log periodic snapshots.
+**Recommended fix:** Integrate resource usage into the health endpoint or log periodic snapshots during task execution.
 
 ---
 
-### 9. No container log persistence
+### 10. No container log persistence
 
 **Severity:** Low
 
 Container logs are streamed to code-agent via `LogForwarder` but are not persisted locally. If the code-agent is unreachable during a task, log data is lost after the chunk retry limit (3 attempts, 4s max backoff).
 
-**Recommended fix:** Write container logs to `~/.claude-orchestrator/logs/{taskId}.log` as a fallback.
+**Recommended fix:** Write container logs to `~/.claude-orchestrator/logs/{taskId}.log` as a fallback before streaming.
 
 ---
 
@@ -171,10 +181,10 @@ Support priority levels for task scheduling:
 
 ### Metrics and Alerting
 
-Expose operational metrics:
+Expose operational metrics (extends `TurnMetricsCollector` post-task data):
 
 1. Task completion rate, average duration, failure rate
-2. Container resource usage trends
+2. Real-time container resource usage trends during execution
 3. Token refresh failure rates
 4. Webhook delivery success rates
 
@@ -188,8 +198,9 @@ Expose operational metrics:
 | 2   | Admin shutdown not wired          | 2026-02-08 | -        | -      |
 | 3   | Duplicate JWT libraries           | 2026-02-08 | -        | -      |
 | 4   | No horizontal scaling             | 2026-02-08 | -        | -      |
-| 5   | No graceful container cancel      | 2026-02-08 | -        | -      |
-| 6   | No orchestrator-side retry        | 2026-02-08 | -        | -      |
-| 7   | No worktree cleanup on completion | 2026-02-08 | -        | -      |
-| 8   | No resource usage monitoring      | 2026-02-08 | -        | -      |
-| 9   | No local log persistence fallback | 2026-02-08 | -        | -      |
+| 5   | Verifier has no circuit-breaker   | 2026-02-19 | -        | -      |
+| 6   | No graceful container cancel      | 2026-02-08 | -        | -      |
+| 7   | No orchestrator-side retry        | 2026-02-08 | -        | -      |
+| 8   | No worktree cleanup on completion | 2026-02-08 | -        | -      |
+| 9   | No resource usage monitoring      | 2026-02-08 | -        | -      |
+| 10  | No local log persistence fallback | 2026-02-08 | -        | -      |

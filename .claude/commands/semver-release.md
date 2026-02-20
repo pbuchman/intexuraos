@@ -1,8 +1,19 @@
 # Release
 
-Generate a new release by analyzing merged pull requests and their associated Linear issues since the last release.
+Generate a new release by analyzing merged pull requests, commit messages, and their associated Linear issues (including subissues) since the last release.
 
-**Important:** Use PR descriptions and Linear issues as the primary source of truth. They contain human-written context about what changed and why.
+**Important:** Use commit messages, PR descriptions, AND Linear issues as combined sources of truth. Each captures different granularity — commits show atomic changes, PRs show intent and context, Linear shows business rationale and hierarchy.
+
+## Architecture: Collect First, Process Second
+
+This workflow follows a strict **collect → net → categorize → build** pipeline:
+
+1. **Collect** all raw data (PRs, commits, Linear issues + subissues)
+2. **Net out** cancelled changes (added then removed in same release)
+3. **Categorize** remaining changes
+4. **Build** the changelog from the netted, categorized result
+
+Never categorize or filter during collection. Collect everything first.
 
 ## Steps
 
@@ -26,20 +37,50 @@ git tag -l "v*" --sort=-v:refname | head -5
 git log -1 --format="%ci" v<last-version>
 ```
 
-### 3. Get Merged PRs Since Last Release
+### 3. Collect ALL Data (Do Not Process Yet)
+
+**CRITICAL:** Complete ALL sub-steps before moving to Step 4. Do not categorize, filter, or skip anything during collection.
+
+#### 3.1 Collect All Merged PRs
 
 ```bash
 # List PRs merged since last release date
-gh pr list --state merged --base main --json number,title,body,mergedAt,author --limit 100 | \
+gh pr list --state merged --base main --json number,title,body,mergedAt,author,labels --limit 100 | \
   jq --arg date "<last-release-date>" '[.[] | select(.mergedAt > $date)]'
 ```
 
-### 3.5. Get Direct Commits Without PRs
-
-Some commits are pushed directly to development without going through a PR. Capture these separately:
+For EACH merged PR, also fetch full details:
 
 ```bash
-# Get commits on development since last release that aren't from merge commits
+gh pr view <pr-number> --json title,body,labels,mergedAt,commits
+```
+
+Store: PR number, title, body, labels, mergedAt, author.
+
+#### 3.2 Collect All Commit Messages Per PR
+
+For each PR collected in 3.1, extract the individual commit messages:
+
+```bash
+# Get all commits in a PR
+gh pr view <pr-number> --json commits --jq '.commits[].messageHeadline'
+```
+
+Commit messages capture granular changes that PR descriptions may summarize or omit. Store each commit message alongside its parent PR number.
+
+**What to extract from commit messages:**
+
+- Conventional commit prefixes: `feat:`, `fix:`, `chore:`, `refactor:`, `perf:`, `docs:`
+- Linear issue IDs: `INT-XXX` patterns
+- Scope indicators: `feat(classifier):`, `fix(whatsapp):`
+- Revert indicators: `Revert "..."` or `revert:` prefix
+
+#### 3.3 Collect Direct Commits Without PRs
+
+Some commits are pushed directly without going through a PR:
+
+```bash
+# Get commits since last release that aren't from merge commits
 git log v<last-version>..origin/development --no-merges --format="%H %s" | \
   while read hash msg; do
     # Check if commit is part of any merged PR
@@ -49,39 +90,108 @@ git log v<last-version>..origin/development --no-merges --format="%H %s" | \
   done
 ```
 
-For each direct commit:
+For each direct commit, store: hash, message, any `INT-XXX` reference.
 
-1. Use the commit message as the description
-2. Extract Linear issue ID if present (INT-XXX pattern)
-3. Categorize based on commit message prefix (feat:, fix:, chore:, etc.)
+#### 3.4 Collect All Linear Issues and Subissues
 
-### 4. For Each PR: Extract Information
+Extract ALL `INT-XXX` references found across:
 
-For EACH merged PR:
+- PR titles and bodies (from 3.1)
+- Commit messages (from 3.2 and 3.3)
 
-1. **Read the PR description** - Contains summary, test plan, and context
-2. **Extract Linear issue IDs** - Look for `INT-XXX` patterns in title or body
-3. **Fetch Linear issue details** - Use MCP tools to get issue title, description, and labels
+For EACH unique Linear issue ID:
 
-```bash
-# Get full PR details including body
-gh pr view <pr-number> --json title,body,labels,mergedAt
+1. **Fetch the issue** using `mcp__linear__get_issue`
+2. **Extract:** title, description, labels, state, parent issue ID
+3. **Fetch subissues** using `mcp__linear__list_issues` with `parentId` filter (limit: 20)
+4. **For each subissue:** extract title, description, labels, state
+
+**Why subissues matter:** A parent issue like "INT-300: Revamp classifier" may have subissues that describe individual changes ("INT-301: Add Polish support", "INT-302: Add keyword isolation"). The subissues often contain the granular changelog-worthy details that the parent issue rolls up.
+
+Store the full issue hierarchy: parent → children, with labels and descriptions for each.
+
+#### 3.5 Build Unified Change Manifest
+
+After ALL collection is complete, assemble a single manifest:
+
+```
+Change Manifest:
+├── PR #101: "feat: add calendar preview"
+│   ├── Commits: ["feat(calendar): add preview endpoint", "feat(calendar): add preview UI"]
+│   ├── Linear: INT-250 (labels: feature)
+│   │   ├── Subissue: INT-251 "Preview rendering" (labels: feature)
+│   │   └── Subissue: INT-252 "Preview approval flow" (labels: feature)
+│   └── Source: PR description + commit messages + Linear context
+├── PR #105: "fix: duplicate WhatsApp messages"
+│   ├── Commits: ["fix(whatsapp): deduplicate approval messages"]
+│   ├── Linear: INT-260 (labels: bug)
+│   └── Source: PR description + commit messages + Linear context
+├── PR #110: "revert: remove calendar preview"
+│   ├── Commits: ["Revert 'feat: add calendar preview'"]
+│   ├── Linear: none
+│   └── Source: PR title indicates revert of PR #101
+└── Direct commit: abc123 "chore: fix typo in README"
+    └── Linear: none
 ```
 
-For Linear issues, use the `mcp__linear__get_issue` tool:
+This manifest is the SINGLE source for all subsequent steps.
 
-- Extract issue ID from PR (e.g., `INT-123` → `INT-123`)
-- Fetch issue details: title, description, labels, state
+### 4. Net Out Cancelled Changes
 
-### 5. Categorize Based on PR and Linear Context
+**CRITICAL:** Before categorizing, detect and remove changes that cancel each other out within this release window.
+
+#### 4.1 Detect Revert Pairs
+
+Scan the manifest for:
+
+| Pattern                          | Detection Method                                           |
+| -------------------------------- | ---------------------------------------------------------- |
+| Explicit revert PRs              | PR title starts with `revert:` or `Revert "..."`           |
+| Revert commits                   | Commit message starts with `Revert "..."`                  |
+| Add-then-remove on same resource | PR adds feature X, later PR removes/disables feature X     |
+| Feature flag on then off         | PR enables flag, later PR disables same flag               |
+| Endpoint added then removed      | Route added in one PR, route removed in another            |
+| Linear issue cancelled           | Linear issue state is `Cancelled` or has `won't-fix` label |
+
+#### 4.2 Net Out Algorithm
+
+```
+FOR each change in manifest:
+  IF change is a revert:
+    Mark BOTH the revert AND the original as "netted out"
+  IF change adds feature X AND another change removes feature X:
+    Mark BOTH as "netted out"
+  IF Linear issue state is Cancelled:
+    Mark as "netted out"
+
+REMOVE all "netted out" entries from manifest
+```
+
+#### 4.3 Document What Was Netted
+
+Keep a separate log of netted changes for transparency:
+
+```
+Netted Out (not included in changelog):
+- PR #101 "feat: add calendar preview" ← reverted by PR #110
+- PR #110 "revert: remove calendar preview" ← revert of PR #101
+- INT-275 "Add dark mode toggle" ← Linear state: Cancelled
+```
+
+Present this log to the user for verification before building the changelog.
+
+### 5. Categorize Remaining Changes
+
+**Only categorize changes that survived netting (Step 4).**
 
 **Categorization sources (in priority order):**
 
-1. **Linear issue labels** - `feature`, `bug`, `chore`, `breaking-change`
-2. **PR labels** - Similar categorization
-3. **Linear issue title prefix** - `[sentry]`, `[feature]`, etc.
-4. **PR title prefix** - Convention-based (e.g., `feat:`, `fix:`, `chore:`)
-5. **PR description content** - Look for explicit mentions of breaking changes
+1. **Linear issue labels** — `feature`, `bug`, `chore`, `breaking-change` (check both parent and subissues)
+2. **PR labels** — Similar categorization
+3. **Commit message prefixes** — `feat:`, `fix:`, `chore:`, `refactor:`, `perf:`, `docs:`
+4. **Linear issue title prefix** — `[sentry]`, `[feature]`, etc.
+5. **PR title prefix** — Convention-based
+6. **PR description content** — Look for explicit mentions of breaking changes
 
 **Label to Category Mapping:**
 
@@ -93,9 +203,19 @@ For Linear issues, use the `mcp__linear__get_issue` tool:
 | `improvement`, `perf:`            | Improved    | PATCH         |
 | `chore`, `refactor`               | Changed     | PATCH         |
 
+**Combining sources for richer descriptions:**
+
+For each change, synthesize the best description by combining:
+
+- **Commit messages** → What specifically changed (granular, technical)
+- **PR description** → Why it changed and what it means (context, intent)
+- **Linear issue/subissues** → Business rationale and user-facing framing
+
+Prefer user-facing language from Linear issues over technical language from commits.
+
 ### 6. Determine Semver Version Bump
 
-Based on the categorized changes from PRs, Linear issues, and direct commits:
+Based on the categorized changes (post-netting):
 
 **Decision Table:**
 
@@ -116,9 +236,9 @@ Based on the categorized changes from PRs, Linear issues, and direct commits:
 **Algorithm:**
 
 ```
-IF any PR/issue indicates breaking changes:
+IF any change (post-netting) indicates breaking changes:
     RETURN "major"
-ELSE IF any PR/issue indicates new features:
+ELSE IF any change (post-netting) indicates new features:
     RETURN "minor"
 ELSE:
     RETURN "patch"
@@ -141,15 +261,17 @@ ELSE:
 
 **Entry Rules:**
 
-| Rule                   | Example                                                    |
-| ---------------------- | ---------------------------------------------------------- |
-| Start with verb        | Added, Fixed, Improved, Changed, Removed                   |
-| Single line per entry  | No paragraphs, no multi-line descriptions                  |
-| Use backticks for code | commands, flags, env vars, settings, file paths            |
-| Linear refs optional   | `(INT-XXX)` at end of line if helpful                      |
-| User-facing only       | Skip pure internal refactorings unless they affect users   |
-| No subcategories       | No `### Added`, `### Fixed` headers — just the bullet list |
-| Most recent at top     | New version goes above existing versions                   |
+| Rule                    | Example                                                    |
+| ----------------------- | ---------------------------------------------------------- |
+| Start with verb         | Added, Fixed, Improved, Changed, Removed                   |
+| Single line per entry   | No paragraphs, no multi-line descriptions                  |
+| Use backticks for code  | commands, flags, env vars, settings, file paths            |
+| Linear refs optional    | `(INT-XXX)` at end of line if helpful                      |
+| User-facing only        | Skip pure internal refactorings unless they affect users   |
+| No subcategories        | No `### Added`, `### Fixed` headers — just the bullet list |
+| Most recent at top      | New version goes above existing versions                   |
+| No netted-out changes   | If added AND removed in this release, omit entirely        |
+| Combine related commits | Multiple commits on same feature = single changelog entry  |
 
 **Verb Usage:**
 
@@ -160,6 +282,20 @@ ELSE:
 | Improved | Performance, UX enhancements to existing features          |
 | Changed  | Behavioral modifications, renames, config changes          |
 | Removed  | Deprecated features, deleted functionality, breaking drops |
+
+**Building entries from combined sources:**
+
+Use this priority for writing the changelog line:
+
+1. **Linear issue title** (if user-facing and concise) → best for user-facing language
+2. **PR title** (if descriptive) → good summary of intent
+3. **Commit messages** (if PR/Linear are vague) → fallback for specificity
+
+If a parent Linear issue has subissues, decide:
+
+- **Few subissues (2-3):** One changelog entry per subissue if each is user-facing
+- **Many subissues (4+):** One combined entry using the parent issue description
+- **Mixed:** Entry for the parent + separate entries only for standout subissues
 
 **What to Include:**
 
@@ -175,6 +311,7 @@ ELSE:
 - Internal refactorings with no behavior change
 - CI/tooling config changes
 - Dependency updates (unless security-related)
+- **Changes that were netted out (added then removed in same release)**
 
 ### 8. Update All Package Versions
 
@@ -226,9 +363,10 @@ git commit -m "Release vNEW_VERSION"
 - PRs that only update dependencies (unless security-related)
 - PRs that only modify CI/tooling configs
 - PRs with `skip-changelog` label
-- Revert PRs (mention original in changelog if significant)
+- Revert PRs that net out with their original (omit BOTH from changelog)
 - Direct commits that are merge conflict resolutions
 - PRs that only add/update tests without user-facing changes
+- **Changes that were added AND removed/reverted within the same release window**
 
 ## What to Highlight
 
@@ -238,12 +376,13 @@ git commit -m "Release vNEW_VERSION"
 - PRs that add new services or integrations
 - Security fixes (even if PATCH, call out explicitly)
 - Performance improvements mentioned in PR description
+- Linear parent issues with many completed subissues (indicates significant effort)
 
 ## Using Linear MCP Tools
 
 To fetch Linear issue details for a PR:
 
-1. **Extract issue ID** from PR title/body (pattern: `INT-XXX`)
+1. **Extract issue ID** from PR title/body/commits (pattern: `INT-XXX`)
 2. **Fetch issue details:**
    ```
    Use mcp__linear__get_issue with the issue ID
@@ -252,7 +391,12 @@ To fetch Linear issue details for a PR:
    - `title` — User-facing description
    - `description` — Full context
    - `labels` — Categorization (feature, bug, chore, etc.)
-   - `state` — Verify issue was completed
+   - `state` — Verify issue was completed (or cancelled → net out)
+4. **Fetch subissues:**
+   ```
+   Use mcp__linear__list_issues with parentId filter, limit: 20
+   ```
+5. **For each subissue:** Extract title, labels, state. Cancelled subissues are netted out.
 
 **Label Interpretation:**
 

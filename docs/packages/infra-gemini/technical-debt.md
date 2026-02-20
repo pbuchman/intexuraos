@@ -1,49 +1,76 @@
 # Technical Debt: @intexuraos/infra-gemini
 
-## TODOs and FIXMEs
+**Last Updated:** 2026-02-19
 
-No TODO/FIXME markers found in source code.
+---
 
-## Code Quality Observations
+## Summary
 
-### Hardcoded Image Model
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 3     | Low      |
+| Test Gaps   | 0     | —        |
+| Type Issues | 1     | Low      |
+| TODOs       | 0     | —        |
+| **Total**   | **4** | Low      |
 
-The image model is hardcoded to `LlmModels.Gemini25FlashImage`:
+---
 
-```ts
-const IMAGE_MODEL = LlmModels.Gemini25FlashImage;
-```
+## Future Plans
 
-**Impact:** Low. Only one Gemini image model exists currently. If Google releases additional image models, this will need to be configurable.
+- Add support for multi-modal inputs (image + text prompts)
+- Add support for Gemini's code execution tool
+- Extract `createRequestContext` / `trackUsage` boilerplate into `@intexuraos/llm-client-base` (shared with Claude, GPT, GLM)
+- Make image model configurable via `GeminiConfig` when additional Gemini image models become available
+- Align `generate()` with the 8192 token cap used by other clients, or make it configurable
 
-**Recommendation:** Make image model configurable via `GeminiConfig` when additional models become available.
+---
 
-### No Inline Data Validation
+## Code Smells
 
-`generateImage` accesses `response.candidates?.[0]?.content?.parts` with optional chaining but does not validate the MIME type of returned image data:
+### Low Priority
+
+| File            | Issue                                                                             | Impact                                               |
+| --------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `src/client.ts` | `IMAGE_MODEL` hardcoded to `LlmModels.Gemini25FlashImage`, not configurable       | Must change code if Google releases new image models |
+| `src/client.ts` | No `max_tokens` set on `generate()` calls — uses model default                    | Inconsistent with other LLM clients using 8192       |
+| `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across 4 LLM clients | Maintenance overhead                                 |
+
+---
+
+## TypeScript Issues
+
+| File            | Issue                                                                          | Count |
+| --------------- | ------------------------------------------------------------------------------ | ----- |
+| `src/client.ts` | `imagePart.inlineData` accessed without MIME type validation on the image data | 1     |
+
+**Detail:**
 
 ```ts
 const imagePart = parts?.find((part) => part.inlineData !== undefined);
 ```
 
-**Impact:** Low. The API currently returns PNG data consistently, but the MIME type is not verified.
+The response `inlineData.mimeType` is not verified to be `image/png` or similar. The API currently returns PNG consistently, but the MIME type should be validated defensively.
 
-### Hardcoded MAX_TOKENS Absent
+---
 
-Unlike other LLM clients in the monorepo, the Gemini client does not set a `max_tokens` limit on text generation requests. The `@google/genai` SDK uses the model's default.
+## TODOs / FIXMEs
 
-**Impact:** Low. Gemini models handle token limits well by default. However, it creates inconsistency with other clients that enforce 8192.
+No TODO/FIXME markers found in source code.
 
-**Recommendation:** Add an optional `maxTokens` configuration or align with the 8192 default used by other clients.
+---
 
-## Shared Pattern Duplication
+## Resolved Issues
 
-The `createRequestContext`, `trackUsage`, and error handling boilerplate is nearly identical across all five LLM client packages (Claude, Gemini, GPT, GLM, Perplexity).
+| Date       | Issue                                           | Resolution                                       |
+| ---------- | ----------------------------------------------- | ------------------------------------------------ |
+| 2026-01-27 | Logger was optional, causing inconsistent usage | Made `logger` mandatory via ESLint rule          |
+| 2026-01-27 | Usage tracking used ad-hoc patterns             | Migrated to `UsageLogger` class from llm-pricing |
 
-**Recommendation:** Extract into a shared `@intexuraos/llm-client-base` utility.
+---
 
-## Future Improvements
+## Related
 
-- Add support for multi-modal inputs (image + text prompts)
-- Add support for Gemini's code execution tool
-- Extract `createRequestContext` helper into a shared LLM client base package
+- [README](README.md) — Developer reference
+- [Agent Reference](agent.md) — Machine-readable interface
+- [Documentation Run Log](../../documentation-runs.md)

@@ -6,11 +6,12 @@
 
 ## Identity
 
-| Field    | Value                                                      |
-| -------- | ---------------------------------------------------------- |
-| **Name** | api-docs-hub                                               |
-| **Role** | API Documentation Aggregator                               |
-| **Goal** | Provide unified Swagger UI for all IntexuraOS service APIs |
+| Field       | Value                                                      |
+| ----------- | ---------------------------------------------------------- |
+| **Name**    | api-docs-hub                                               |
+| **Role**    | API Documentation Aggregator                               |
+| **Goal**    | Provide unified Swagger UI for all IntexuraOS service APIs |
+| **Version** | 2.1.0 (package) / 0.0.4 (OpenAPI spec)                     |
 
 ---
 
@@ -20,10 +21,10 @@
 
 ```typescript
 interface ApiDocsHubTools {
-  // Access Swagger UI
+  // Access Swagger UI (browser-only; serves interactive HTML)
   getDocumentation(): SwaggerUI;
 
-  // Health check
+  // Health check — returns config validation + source count
   getHealth(): HealthResponse;
 }
 ```
@@ -33,21 +34,29 @@ interface ApiDocsHubTools {
 ```typescript
 interface SwaggerUI {
   // Interactive documentation at /docs
-  // Aggregates OpenAPI specs from all services
+  // Aggregates OpenAPI specs from all 15 configured services
+  // Service selector dropdown uses name from OpenApiSource.name
 }
 
 interface HealthResponse {
   status: 'healthy' | 'degraded' | 'down';
-  serviceName: string;
-  version: string;
+  serviceName: string; // "api-docs-hub"
+  version: string; // "0.0.4"
   checks: HealthCheck[];
 }
 
 interface HealthCheck {
-  name: string;
+  name: string; // "config"
   status: 'ok' | 'down';
   latencyMs: number;
-  details?: Record<string, unknown>;
+  details?: {
+    sourceCount: number; // Number of configured OpenAPI sources (15)
+  };
+}
+
+interface OpenApiSource {
+  name: string; // Display name shown in Swagger UI dropdown
+  url: string; // Full URL to service's OpenAPI JSON endpoint
 }
 ```
 
@@ -55,11 +64,14 @@ interface HealthCheck {
 
 ## Constraints
 
-| Rule              | Description                                  |
-| ----------------- | -------------------------------------------- |
-| **Read Only**     | No data modification - documentation only    |
-| **Public Access** | Swagger UI accessible without authentication |
-| **Source Config** | OpenAPI sources configured at deployment     |
+| Rule              | Description                                                          |
+| ----------------- | -------------------------------------------------------------------- |
+| **Read Only**     | No data modification — documentation only                            |
+| **Public Access** | Both `/docs` and `/health` accessible without authentication         |
+| **Source Config** | OpenAPI sources configured at deployment via 15 required env vars    |
+| **Client Fetch**  | Swagger UI fetches specs client-side — services must allow CORS      |
+| **Fail Fast**     | Missing any of the 15 env vars causes startup crash                  |
+| **Environment**   | `INTEXURAOS_ENVIRONMENT` passed to Sentry; defaults to "development" |
 
 ---
 
@@ -68,9 +80,9 @@ interface HealthCheck {
 ### Access Documentation
 
 ```
-Navigate to: https://api-docs-hub.intexuraos.app/docs
+Navigate to: https://api-docs-hub.intexuraos.com/docs
 
-1. Select service from dropdown (top-right)
+1. Select service from dropdown (top-left)
 2. Browse endpoints by tag
 3. Try endpoints with "Try it out" button
 4. View request/response schemas
@@ -122,12 +134,8 @@ interface OpenApiSource {
   url: string; // URL to service's OpenAPI JSON
 }
 
-// Example configuration
-const sources: OpenApiSource[] = [
-  { name: 'actions-agent', url: 'https://actions-agent.../docs/json' },
-  { name: 'research-agent', url: 'https://research-agent.../docs/json' },
-  // ... all services
-];
+// All 15 sources loaded from required env vars at startup
+// e.g. INTEXURAOS_USER_SERVICE_OPENAPI_URL -> { name: 'User Service API', url: value }
 ```
 
 ---
@@ -138,6 +146,8 @@ const sources: OpenApiSource[] = [
 | ------ | --------- | -------------------- |
 | GET    | `/health` | Service health check |
 
+Health status is `'healthy'` when all 15 sources are configured, `'down'` if none are present.
+
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

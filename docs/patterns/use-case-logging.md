@@ -158,11 +158,14 @@ catch (error) {
 
 **Step 1: Create logger in services.ts**
 
+Use `createAppLogger()` from `@intexuraos/infra-sentry` — never use `pino()` directly in apps.
+This ensures errors are automatically forwarded to Sentry.
+
 ```typescript
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
 export function initServices(config: ServiceConfig): void {
-  const logger = pino({ name: 'service-name' });
+  const logger = createAppLogger({ name: 'service-name' });
 
   container = {
     // ... other dependencies

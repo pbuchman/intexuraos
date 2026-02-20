@@ -1,7 +1,7 @@
 # Research Agent - Technical Debt
 
-**Last Updated:** 2026-02-08
-**Analysis Run:** v2.2.0 documentation update
+**Last Updated:** 2026-02-19
+**Analysis Run:** v2.4.0 documentation update
 
 ---
 
@@ -164,6 +164,22 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 
 ## Resolved Issues
 
+### 2026-02-19 - v2.4.0 Observability & Developer Experience
+
+| Date       | Issue                                  | Resolution                                                       |
+| ---------- | -------------------------------------- | ---------------------------------------------------------------- |
+| 2026-02-19 | No distributed tracing across services | Added Dash0 OTLP via `packages/infra-otel` preload in Dockerfile |
+| 2026-02-19 | PM2 log output unreadable (raw JSON)   | Added `createLogStream()` for colorized dev-mode formatting      |
+
+### 2026-02-19 - v2.3.0 Platform Fallbacks & Prompt Improvements
+
+| Date       | Issue                                               | Resolution                                                                    |
+| ---------- | --------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 2026-02-19 | Title generation timeout (glm-4.7-flash at 29s)     | Switched fast model to `gemini-2.0-flash`; platform Gemini key added          |
+| 2026-02-19 | Users without API keys had no LLM fallback          | Added Gemini (primary) + Zai (secondary) platform-owned key fallbacks         |
+| 2026-02-19 | `buildSynthesisContextRepairPrompt` overly complex  | Simplified to pass `originalPrompt` directly; matches updated llm-prompts API |
+| 2026-02-19 | `INTEXURAOS_GUEST_ZAI_API_KEY` naming inconsistency | Consolidated to `INTEXURAOS_ZAI_APP_API_KEY`                                  |
+
 ### 2026-02-08 - Notion Export Integration
 
 | Date       | Issue                         | Resolution                                          |
@@ -218,7 +234,7 @@ No previously resolved issues tracked prior to v2.0.0.
 
 ---
 
-## v2.2.0 Architecture Quality
+## v2.4.0 Architecture Quality
 
 ### Strengths
 
@@ -229,6 +245,7 @@ No previously resolved issues tracked prior to v2.0.0.
 5. **Notion integration** - Clean separation between export use case, exporter, markdown converter, and service client
 6. **100% branch coverage** - Strict enforcement with categorized v8 ignore exemptions
 7. **Sentry integration** - All loggers use `createAppLogger()` for error forwarding
+8. **Distributed tracing** - Dash0 OpenTelemetry preload provides transparent trace propagation across all services
 
 ### Areas for Future Improvement
 

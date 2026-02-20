@@ -59,6 +59,7 @@ interface Classification {
   type: ClassificationType;
   confidence: number; // 0.0-1.0
   reasoning: string;
+  promptVersion: string; // semver of the prompt that produced this result
   classifiedAt: string; // ISO 8601
 }
 
@@ -93,7 +94,7 @@ interface Command {
 
 ---
 
-## Classification Pipeline (v2.0.0)
+## Classification Pipeline (v2.0.0+)
 
 The LLM prompt executes a 5-step decision tree in strict order:
 
@@ -105,11 +106,15 @@ Step 1: Explicit Prefix Override
 Step 2: Explicit Intent Detection (HIGH PRIORITY)
   "save bookmark https://research-world.com" → link
   "research this https://example.com" → research
+  "create issue for auth bug" → linear (explicit "create issue")
+  "fix the login bug" → code (engineering task, not explicit tracking)
   "zbadaj" (Polish) → research
+  NOTE: linear requires explicit "linear"/"issue"/"track" language;
+        code is the default for all other engineering tasks
         ↓ (no match)
-Step 3: Linear Detection
-  "bug: mobile menu broken" → linear
-  "create linear issue" → linear
+Step 3: Code Detection (Engineering Task Fallback)
+  "implement dark mode" → code (engineering task, no explicit intent)
+  "refactor auth module" → code
         ↓ (no match)
 Step 4: URL Presence Check
   "https://research-tools.com" → link
@@ -213,4 +218,4 @@ whatsapp-service → Pub/Sub (command.ingest) → /internal/commands → command
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

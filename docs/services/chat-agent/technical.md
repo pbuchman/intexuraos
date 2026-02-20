@@ -2,7 +2,7 @@
 
 ## Overview
 
-Chat-agent is the in-app AI assistant for IntexuraOS. It combines Retrieval-Augmented Generation (RAG) with conversational LLM capabilities to answer documentation questions, explain APIs, and create commands on behalf of users. Runs on Cloud Run with auto-scaling, uses Firestore vector search for semantic document retrieval, and supports both authenticated and guest sessions.
+Chat-agent is the in-app AI assistant for IntexuraOS. It combines Retrieval-Augmented Generation (RAG) with conversational LLM capabilities to answer documentation questions, explain APIs, and create commands on behalf of users. Runs on Cloud Run with auto-scaling, uses Firestore vector search for semantic document retrieval, and supports both authenticated and guest sessions. OpenTelemetry instrumentation via `@intexuraos/infra-otel` is loaded as a Node.js preload module (`--import ./dist/otel-register.js`), exporting traces, metrics, and logs to Dash0 when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is configured.
 
 ## Architecture
 
@@ -84,17 +84,17 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Hash       | Description                                         | Age      |
-| ---------- | --------------------------------------------------- | -------- |
-| `63170e4a` | Remove "free" GLM terminology, use createLlmClient  | 12 hours |
-| `996c4179` | Add chat-agent to Cloud Build pipeline              | 35 hours |
-| `ea6652f7` | Add guest chat sessions with rate limiting          | 2 days   |
-| `332fd990` | Refactor EmbeddingClient to use function injection  | 4 days   |
-| `0f37ed41` | Refactor chat-agent to use per-request LLM client   | 5 days   |
-| `21a78188` | Implement Intex Chat MVP with command creation flow | 6 days   |
-| `8596eeb6` | Fix services test missing GCP_PROJECT_ID env var    | 7 days   |
-| `e6782f64` | Remove INTEXURAOS_LLM_MODEL environment variable    | 7 days   |
-| `40d83a23` | Implement Intex Chat MVP                            | 7 days   |
+| Hash       | Description                                              | Age     |
+| ---------- | -------------------------------------------------------- | ------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability          | 3 days  |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                      | 3 days  |
+| `e60eafc1` | Standardize API key secrets to APP naming convention     | 4 days  |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback | 4 days  |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local   | 5 days  |
+| `0f69a74b` | Add default model selector with platform Zai fallback    | 11 days |
+| `63170e4a` | Remove "free" GLM terminology, use createLlmClient       | 12 days |
+| `996c4179` | Add chat-agent to Cloud Build pipeline                   | 13 days |
+| `ea6652f7` | Add guest chat sessions with rate limiting               | 13 days |
 
 ## API Endpoints
 
@@ -240,6 +240,7 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | `@intexuraos/http-contracts`   | Core API schema definitions         |
 | `@intexuraos/infra-firestore`  | Firestore singleton + vector search |
 | `@intexuraos/infra-glm`        | GLM LLM provider integration        |
+| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry instrumentation |
 | `@intexuraos/infra-sentry`     | Sentry logging, error handler       |
 | `@intexuraos/internal-clients` | user-service client                 |
 | `@intexuraos/llm-contract`     | LLM model enums, error types        |
@@ -250,26 +251,29 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 
 ### Environment Variables
 
-| Variable                              | Required | Description                                         |
-| ------------------------------------- | -------- | --------------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project ID for Firestore                        |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS URL for JWT validation                         |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer for token validation                     |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for token validation                   |
-| `INTEXURAOS_OPENAI_APP_API_KEY`       | Yes      | OpenAI API key for embeddings                       |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | URL for user-service                                |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Token for internal service-to-service calls         |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | URL for app-settings-service (pricing data)         |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | Yes      | ZAI API key for guest chat sessions (GLM-4.7-Flash) |
-| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                       |
-| `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (defaults to `development`)        |
-| `PORT`                                | No       | Server port (defaults to `8080`)                    |
-| `HOST`                                | No       | Server host (defaults to `0.0.0.0`)                 |
-| `LOG_LEVEL`                           | No       | Pino log level (defaults to `info`)                 |
+| Variable                              | Required | Description                                                   |
+| ------------------------------------- | -------- | ------------------------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project ID for Firestore                                  |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWKS URL for JWT validation                                   |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer for token validation                               |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for token validation                             |
+| `INTEXURAOS_OPENAI_APP_API_KEY`       | Yes      | OpenAI API key for embeddings                                 |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | URL for user-service                                          |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Token for internal service-to-service calls                   |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | URL for app-settings-service (pricing data)                   |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | Yes      | ZAI API key for guest chat sessions (GLM-4.7-Flash)           |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for authenticated user model fallback |
+| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                 |
+| `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (defaults to `development`)                  |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for distributed tracing and metrics       |
+| `OTEL_SERVICE_NAME`                   | No       | OpenTelemetry service name (set to `chat-agent` in Docker)    |
+| `PORT`                                | No       | Server port (defaults to `8080`)                              |
+| `HOST`                                | No       | Server host (defaults to `0.0.0.0`)                           |
+| `LOG_LEVEL`                           | No       | Pino log level (defaults to `info`)                           |
 
 ### Terraform
 
-Deployed as `intexuraos-chat-agent` via Cloud Run module. Secrets `INTEXURAOS_OPENAI_APP_API_KEY` and `INTEXURAOS_ZAI_APP_API_KEY` injected from Secret Manager. Common service env vars inherited. Scales from 0 to 1 instance.
+Deployed as `intexuraos-chat-agent` via Cloud Run module. Secrets `INTEXURAOS_OPENAI_APP_API_KEY`, `INTEXURAOS_ZAI_APP_API_KEY`, and `INTEXURAOS_GEMINI_APP_API_KEY` injected from Secret Manager. `INTEXURAOS_DASH0_OTLP_ENDPOINT` injected for Dash0 observability. Common service env vars inherited. Scales from 0 to 1 instance. Dockerfile runs with `--import ./dist/otel-register.js` preload for transparent OpenTelemetry instrumentation.
 
 ### Local Development
 

@@ -73,6 +73,80 @@ interface ProcessActionOutput {
 }
 ```
 
+### Validate Issue
+
+**Endpoint:** `GET /internal/linear/issues/:identifier/validate?userId=<userId>`
+
+**When to use:** When you need to verify that a Linear issue identifier exists and belongs to the user's configured team before performing operations on it (e.g., creating subtasks or referencing a parent issue).
+
+**Auth:** `X-Internal-Auth` header
+
+**Output Schema:**
+
+```typescript
+interface ValidatedIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+  labels: string[]; // Label names only (color stripped for simplicity)
+  childCount: number;
+}
+```
+
+**Error Codes:** `INVALID_FORMAT` (400), `NOT_CONNECTED` (403), `NOT_FOUND` (404), `WRONG_TEAM` (404), `API_ERROR` (500)
+
+**Example:**
+
+```json
+// GET /internal/linear/issues/INT-445/validate?userId=user-xyz
+// Response
+{
+  "id": "issue-uuid-abc",
+  "identifier": "INT-445",
+  "title": "Implement authentication flow",
+  "url": "https://linear.app/team/issue/INT-445",
+  "labels": ["feature", "auth"],
+  "childCount": 3
+}
+```
+
+### Generate Issue Title
+
+**Endpoint:** `POST /internal/linear/issues/generate-title`
+
+**When to use:** When you need to generate a concise issue title from a task description using LLM. Returns an error if LLM fails after 2 attempts — handle the error case explicitly.
+
+**Auth:** `X-Internal-Auth` header
+
+**Input Schema:**
+
+```typescript
+interface GenerateIssueTitleInput {
+  description: string;
+  userId: string;
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface GeneratedTitle {
+  title: string; // Max 80 characters
+  issueType: 'bug' | 'feature' | 'refactor' | 'research'; // Classified issue type
+}
+```
+
+**Example:**
+
+```json
+// Request
+{ "description": "The sidebar crashes when you click the settings icon on iOS 17", "userId": "user-xyz" }
+
+// Response
+{ "title": "Fix sidebar crash on settings icon tap (iOS 17)", "issueType": "bug" }
+```
+
 ### Create Issue (Programmatic)
 
 **Endpoint:** `POST /internal/issues`
@@ -87,7 +161,7 @@ interface ProcessActionOutput {
 interface CreateIssueInput {
   title: string;
   description: string;
-  labels?: string[]; // Accepted for future use
+  labels?: string[]; // Accepted for future use (not forwarded to Linear yet)
 }
 ```
 
@@ -149,68 +223,53 @@ interface UpdateStateInput {
 
 ```json
 // Request: PATCH /internal/issues/issue-uuid-789/state
-{
-  "state": "in_progress"
-}
+{ "state": "in_progress" }
 
 // Response
-{
-  "success": true,
-  "data": {}
-}
+{ "success": true, "data": {} }
 ```
 
-### Validate Issue
+### Full Sync (Service-to-Service)
 
-**Domain Use Case:** `validateIssue`
+**Endpoint:** `POST /internal/linear/sync`
 
-**When to use:** When you need to verify that a Linear issue identifier exists and belongs to the user's configured team before performing operations on it (e.g., creating subtasks or referencing a parent issue).
+**When to use:** When another service needs to trigger a full sync for a specific user programmatically.
 
-**Input:**
+**Auth:** `X-Internal-Auth` header
+
+**Input Schema:**
 
 ```typescript
-interface ValidateIssueRequest {
-  identifier: string; // e.g., "INT-123"
+interface SyncInput {
   userId: string;
 }
 ```
 
-**Output:**
+**Output Schema:**
 
 ```typescript
-interface ValidatedIssue {
-  id: string;
-  identifier: string;
-  title: string;
-  url: string;
-  labels: string[];
-  childCount: number;
+interface SyncStats {
+  created: number;
+  updated: number;
+  deleted: number;
+  total: number;
+  durationMs: number;
+  syncedAt: string;
 }
 ```
 
-**Error Codes:** `INVALID_FORMAT`, `NOT_CONNECTED`, `NOT_FOUND`, `WRONG_TEAM`, `API_ERROR`
+### Full Sync All Users (Cloud Scheduler)
 
-### Generate Issue Title
+**Endpoint:** `POST /internal/linear/sync-all`
 
-**Domain Use Case:** `generateIssueTitle`
+**When to use:** Scheduled by Cloud Scheduler to sync all connected users. Accepts OIDC Bearer token (from Cloud Scheduler) or `X-Internal-Auth` header.
 
-**When to use:** When you need to generate a concise issue title from a task description using LLM. Falls back to regex-based extraction if LLM is unavailable.
-
-**Input:**
+**Output Schema:**
 
 ```typescript
-interface GenerateIssueTitleRequest {
-  description: string;
-  userId: string;
-}
-```
-
-**Output:**
-
-```typescript
-interface GeneratedTitle {
-  title: string; // Max 80 characters
-  issueType: 'bug' | 'feature' | 'refactor' | 'research'; // Classified issue type
+interface SyncAllStats {
+  userCount: number;
+  totalIssues: number;
 }
 ```
 
@@ -218,7 +277,7 @@ interface GeneratedTitle {
 
 **Endpoint:** `GET /linear/issues`
 
-**When to use:** When displaying user's Linear issues grouped by workflow stage.
+**When to use:** When displaying user's Linear issues grouped by workflow stage. Reads from local Firestore cache — fast and does not call Linear API.
 
 **Query Parameters:**
 
@@ -259,27 +318,85 @@ interface LinearIssue {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  parentId?: string | null;
+  childCount: number; // Number of children
+  children: LinearIssue[]; // Populated for top-level issues
+  labels: LinearLabel[];
+}
+
+interface LinearLabel {
+  id: string;
+  name: string;
+  color: string; // Hex color
 }
 ```
 
-### Full Sync
+### Get Issue Detail
 
-**Endpoint:** `POST /linear/sync`
+**Endpoint:** `GET /linear/issues/:identifier`
 
-**When to use:** To trigger a full reconciliation of all Linear issues for the authenticated user. Creates new records, updates existing ones, and deletes stale issues.
+**When to use:** Fetch a single issue with comment metadata (count and last activity).
+
+**Auth:** Bearer token
 
 **Output Schema:**
 
 ```typescript
-interface SyncStats {
-  created: number;
-  updated: number;
-  deleted: number;
-  total: number;
-  durationMs: number;
-  syncedAt: string;
+interface IssueDetailOutput {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  state: { name: string; type: string };
+  priority: number;
+  assignee: { id: string; name: string } | null;
+  labels: { id: string; name: string; color: string }[];
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  commentCount: number;
+  lastCommentAt: string | null;
 }
 ```
+
+### List Issue Comments
+
+**Endpoint:** `GET /linear/issues/:identifier/comments`
+
+**When to use:** Fetch paginated comments for an issue.
+
+**Auth:** Bearer token
+
+**Query Parameters:** `limit` (1-100, default 20), `offset` (default 0)
+
+**Output Schema:**
+
+```typescript
+interface CommentsOutput {
+  comments: {
+    id: string;
+    userId: string; // Linear user ID
+    userName: string;
+    body: string; // Markdown
+    createdAt: string;
+    updatedAt: string;
+  }[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+```
+
+### Full Sync (User-Triggered)
+
+**Endpoint:** `POST /linear/sync`
+
+**When to use:** To trigger a full reconciliation of all Linear issues for the authenticated user.
+
+**Auth:** Bearer token
+
+**Output:** `SyncStats` (created, updated, deleted, total, durationMs, syncedAt)
 
 ### Get Connection Status
 
@@ -299,70 +416,41 @@ interface ConnectionOutput {
 }
 ```
 
-### List Failed Issues
+### Failed Issues
 
-**Endpoint:** `GET /linear/failed-issues`
+**Endpoints:**
 
-**When to use:** Review issues that failed AI extraction for manual intervention.
-
-**Output Schema:**
-
-```typescript
-interface FailedIssuesOutput {
-  failedIssues: FailedLinearIssue[];
-}
-
-interface FailedLinearIssue {
-  id: string;
-  userId: string;
-  actionId: string;
-  originalText: string;
-  extractedTitle: string | null;
-  extractedPriority: number | null;
-  error: string;
-  reasoning: string | null;
-  createdAt: string;
-  lastRetryAt?: string;
-}
-```
-
-### Retry Failed Issue
-
-**Endpoint:** `POST /linear/failed-issues/:id/retry`
-
-**When to use:** Re-attempt creating a Linear issue from a previously failed extraction. On success, deletes the failed record and returns the created issue. On failure, updates the error message and retry timestamp.
-
-### Delete Failed Issue
-
-**Endpoint:** `DELETE /linear/failed-issues/:id`
-
-**When to use:** Dismiss a failed extraction that is not actionable. Returns 204 No Content on success.
+- `GET /linear/failed-issues` — Review issues that failed AI extraction
+- `POST /linear/failed-issues/:id/retry` — Re-attempt creating issue (uses real team ID)
+- `DELETE /linear/failed-issues/:id` — Dismiss a failed extraction (204 No Content)
 
 ### Webhook Configuration
 
 **Endpoints:**
 
-- `GET /linear/webhook-config` - Get webhook URL and secret status
-- `POST /linear/webhook-config` - Set webhook signing secret (`{"secret": "..."}`)
-- `DELETE /linear/webhook-config` - Remove webhook signing secret
-
-**When to use:** Configure real-time sync between Linear and IntexuraOS. The webhook URL is provided by the GET endpoint and should be registered in Linear Settings > API > Webhooks.
+- `GET /linear/webhook-config` — Get webhook URL and secret status
+- `POST /linear/webhook-config` — Set webhook signing secret (`{"secret": "..."}`)
+- `DELETE /linear/webhook-config` — Remove webhook signing secret
 
 ---
 
 ## Constraints
 
-| Rule                        | Description                                                              |
-| --------------------------- | ------------------------------------------------------------------------ |
-| **Linear API Key Required** | User must have Linear API key configured via `/linear/connection`        |
-| **Team Scope**              | Issues created in user's configured team                                 |
-| **Priority Scale**          | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low               |
-| **Idempotency**             | Same `actionId` returns cached result, no duplicate issues               |
-| **Auth Required**           | Public endpoints require Bearer token, internal requires X-Internal-Auth |
-| **Internal API Auth**       | Internal issues endpoints also require X-User-Id header                  |
-| **Webhook Secret**          | Webhook events require HMAC-SHA256 signature validation per connection   |
-| **Issue Identifier Format** | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)         |
-| **Title Length**            | Generated titles are max 80 characters                                   |
+| Rule                         | Description                                                              |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| **Linear API Key Required**  | User must have Linear API key configured via `/linear/connection`        |
+| **Team Scope**               | Issues created in user's configured team                                 |
+| **Priority Scale**           | 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low               |
+| **Idempotency**              | Same `actionId` returns cached result, no duplicate issues               |
+| **Auth Required**            | Public endpoints require Bearer token, internal requires X-Internal-Auth |
+| **Internal API Auth**        | Internal issues endpoints also require X-User-Id header                  |
+| **Webhook Secret**           | Webhook events require HMAC-SHA256 signature validation per connection   |
+| **Issue Identifier Format**  | Must match `XXX-123` pattern (uppercase letters, hyphen, digits)         |
+| **Title Length**             | Generated titles are max 80 characters                                   |
+| **Title Error on Failure**   | `generateIssueTitle` returns err() after 2 failed attempts — no fallback |
+| **Dashboard from Firestore** | `GET /linear/issues` reads local cache; sync first if data looks stale   |
+| **Labels in POST /issues**   | `labels` field accepted but not forwarded to Linear API yet              |
+| **sync-all Auth**            | Accepts OIDC (Cloud Scheduler) or X-Internal-Auth                        |
 
 ---
 
@@ -382,8 +470,8 @@ interface FailedLinearIssue {
 ### Pattern 2: Code Agent Issue Management
 
 ```
-1. Code agent validates parent issue: validateIssue("INT-445", userId)
-2. Code agent generates title: generateIssueTitle(description, userId)
+1. Code agent validates parent issue: GET /internal/linear/issues/INT-445/validate?userId=...
+2. Code agent generates title: POST /internal/linear/issues/generate-title
 3. Code agent creates subtask: POST /internal/issues {title, description}
 4. Code agent starts work: PATCH /internal/issues/:id/state {state: "in_progress"}
 5. Code agent opens PR: PATCH /internal/issues/:id/state {state: "in_review"}
@@ -393,12 +481,13 @@ interface FailedLinearIssue {
 
 ```
 1. User navigates to Linear dashboard
-2. Frontend calls GET /linear/issues
-3. Display issues in 3-column layout:
+2. Frontend calls GET /linear/issues (reads Firestore cache — fast)
+3. Display issues in 3-column layout with parent-child nesting and label colors:
    - Planning: todo + backlog
    - Work: in_progress + in_review + to_test
    - Closed: done
-4. Refresh periodically or on user action
+4. For issue detail: GET /linear/issues/:identifier (includes commentCount)
+5. For comments: GET /linear/issues/:identifier/comments
 ```
 
 ### Pattern 4: Webhook-Based Real-Time Sync
@@ -409,12 +498,13 @@ interface FailedLinearIssue {
 3. Linear sends issue events to POST /linear/webhook
 4. linear-agent validates HMAC signature and routes by team ID
 5. syncSingleIssue creates/updates/deletes local SyncedLinearIssue
+6. Dashboard shows updated data on next load
 ```
 
 ### Pattern 5: Full Sync Recovery
 
 ```
-1. User triggers POST /linear/sync (or Cloud Scheduler for all users)
+1. User triggers POST /linear/sync (or Cloud Scheduler calls POST /internal/linear/sync-all)
 2. linear-agent fetches all issues from Linear API
 3. Compares with local Firestore records
 4. Upserts new/changed issues, deletes stale ones
@@ -427,7 +517,7 @@ interface FailedLinearIssue {
 1. Monitor GET /linear/failed-issues for pending items
 2. Display failed issues with original text and error
 3. Allow user to:
-   a. Retry via POST /linear/failed-issues/:id/retry
+   a. Retry via POST /linear/failed-issues/:id/retry (uses real team ID)
    b. Dismiss via DELETE /linear/failed-issues/:id
    c. Create issue manually
 ```
@@ -463,6 +553,8 @@ Linear state names map to dashboard columns:
 | `INVALID_FORMAT`    | 400   | Bad issue identifier       | Fix identifier format         |
 | `NOT_FOUND`         | 404   | Issue not in workspace     | Verify identifier is correct  |
 | `WRONG_TEAM`        | 403   | Issue in different team    | Use correct team connection   |
+| `LLM_ERROR`         | 500   | Title generation failed    | Retry or use fallback title   |
+| `PARSE_ERROR`       | 500   | Title JSON invalid         | Retry or use fallback title   |
 
 \*Note: `EXTRACTION_FAILED` returns 200 with `status: 'failed'` per ServiceFeedback contract.
 
@@ -479,14 +571,18 @@ Linear state names map to dashboard columns:
 
 ---
 
-## Internal Endpoints
+## Internal Endpoints Summary
 
-| Method | Path                              | Purpose                            |
-| ------ | --------------------------------- | ---------------------------------- |
-| POST   | `/internal/linear/process-action` | Create issue from natural language |
-| POST   | `/internal/issues`                | Create issue programmatically      |
-| PATCH  | `/internal/issues/:issueId/state` | Update issue workflow state        |
+| Method | Path                                           | Purpose                            |
+| ------ | ---------------------------------------------- | ---------------------------------- |
+| POST   | `/internal/linear/process-action`              | Create issue from natural language |
+| GET    | `/internal/linear/issues/:identifier/validate` | Validate issue exists + team       |
+| POST   | `/internal/linear/issues/generate-title`       | Generate LLM title from desc       |
+| POST   | `/internal/linear/sync`                        | Full sync for a specific user      |
+| POST   | `/internal/linear/sync-all`                    | Full sync for all users            |
+| POST   | `/internal/issues`                             | Create issue programmatically      |
+| PATCH  | `/internal/issues/:issueId/state`              | Update issue workflow state        |
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-19

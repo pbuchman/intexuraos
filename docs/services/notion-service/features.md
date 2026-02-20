@@ -18,6 +18,7 @@ Notion-service provides Notion integration lifecycle:
 1. **Connect** - Validate and store Notion tokens
 2. **Status** - Check connection health
 3. **Disconnect** - Remove integration data
+4. **Page preview** - Validate export targets for research-agent
 
 ## Key Features
 
@@ -38,6 +39,12 @@ Notion-service provides Notion integration lifecycle:
 - Validates user has access to a specific Notion page
 - Returns page title and URL
 - Used by research-agent to validate export targets
+
+**Webhook receiver:**
+
+- Accepts Notion webhook events at `POST /notion-webhooks`
+- Logs payloads for debugging and future processing
+- No authentication required (Notion-signed events)
 
 **Disconnection:**
 
@@ -71,6 +78,8 @@ Notion-service provides Notion integration lifecycle:
 
 **Clean disconnect** - Full data cleanup
 
+**Observability** - Sentry error tracking + Dash0 OpenTelemetry tracing
+
 ## Limitations
 
 **Notion-only** - No other integrations
@@ -80,3 +89,5 @@ Notion-service provides Notion integration lifecycle:
 **Token required** - User must generate token manually
 
 **No retry** - Connection failures require manual reconnect
+
+**Webhook stub** - Webhook events are accepted and logged but not yet processed

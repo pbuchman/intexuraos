@@ -125,7 +125,7 @@ All functions return `Result<T, NotionError>`. Error mapping:
 
 | Commit     | Description                                         | When        |
 | ---------- | --------------------------------------------------- | ----------- |
-| `1f06a8c0` | Add manual Notion export trigger for research       | 11 days ago |
-| `13d66654` | Add linear-agent integration tests for 95% coverage | 3 weeks ago |
-| `1dc6097d` | Make logger mandatory in infra-notion package       | 3 weeks ago |
-| `d70e2581` | Improve infra-notion coverage to 100%               | 4 weeks ago |
+| `1f06a8c0` | Add manual Notion export trigger for research       | 3 weeks ago |
+| `13d66654` | Add linear-agent integration tests for 95% coverage | 5 weeks ago |
+| `1dc6097d` | Make logger mandatory in infra-notion package       | 5 weeks ago |
+| `d70e2581` | Improve infra-notion coverage to 100%               | 5 weeks ago |

@@ -39,6 +39,10 @@ The `zod` dependency exists solely for the `handleValidationError` function's `Z
 **Impact:** Low. Adds a dependency for a single type import.
 **Suggested fix:** Consider accepting a generic validation error shape instead of coupling to Zod.
 
+## Resolved Debt
+
+None archived yet.
+
 ## Future Plans
 
 - Evaluate centralizing Fastify module augmentations into a single declaration file

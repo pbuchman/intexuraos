@@ -1,8 +1,8 @@
 # Data Insights Agent — Tutorial
 
-> **Time:** 20-30 minutes
+> **Time:** 30-40 minutes
 > **Prerequisites:** Node.js 22+, Auth0 access token, configured LLM API key
-> **You'll learn:** Create data sources, build composite feeds, analyze data with AI, and generate charts
+> **You'll learn:** Create data sources, build composite feeds, analyze data with AI, generate charts, and save persistent visualizations
 
 ---
 
@@ -14,6 +14,7 @@ A complete data analysis workflow:
 - Composite feed combining multiple sources
 - AI-powered data insights with chart recommendations
 - Ready-to-render Vega-Lite chart specifications
+- Persistent visualization that auto-refreshes with new data
 
 ---
 
@@ -261,16 +262,97 @@ You can now pass this spec directly to any Vega-Lite renderer.
 
 ---
 
+## Part 6: Save a Persistent Visualization (5 minutes)
+
+Save the chart as a visualization that automatically refreshes with new snapshot data.
+
+### Step 6.1: Create the Visualization
+
+```bash
+curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizations \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feedId": "feed-xyz789",
+    "insightId": "feed-xyz789-insight-1",
+    "chartConfig": {
+      "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+      "mark": "line",
+      "encoding": {
+        "x": { "field": "month", "type": "temporal", "title": "Month" },
+        "y": { "field": "revenue", "type": "quantitative", "title": "Revenue ($)" }
+      }
+    },
+    "transformInstructions": "Extract month and revenue fields. Sort by month chronologically."
+  }'
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "viz-001",
+    "feedId": "feed-xyz789",
+    "insightId": "feed-xyz789-insight-1",
+    "insightTitle": "Revenue Growth Trend",
+    "status": "pending",
+    "chartData": null,
+    "createdAt": "2025-01-25T10:15:00Z",
+    "updatedAt": "2025-01-25T10:15:00Z"
+  }
+}
+```
+
+### Step 6.2: Poll for Completion
+
+Computation runs asynchronously. Poll `GET /visualizations/:id` until `status` changes from `pending` to `ready`.
+
+```bash
+curl https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizations/viz-001 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Ready response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "viz-001",
+    "status": "ready",
+    "chartData": [
+      { "month": "2025-01-01", "revenue": 50000 },
+      { "month": "2025-02-01", "revenue": 55000 },
+      { "month": "2025-03-01", "revenue": 60000 }
+    ],
+    "lastRefreshedAt": "2025-01-25T10:15:08Z"
+  }
+}
+```
+
+### What Just Happened?
+
+1. A visualization record was created in `pending` state (returns immediately)
+2. The service fired an async job to transform the snapshot data using LLM instructions
+3. The visualization updated to `ready` with the computed `chartData`
+4. Every 15 minutes when the snapshot refreshes, this visualization **automatically recomputes** — no further action needed
+
+---
+
 ## Troubleshooting
 
-| Problem                 | Solution                                                   |
-| ----------------------- | ---------------------------------------------------------- |
-| "MISCONFIGURED"         | Configure your LLM API key in user-service settings first  |
-| 409 Conflict            | Data source is used by a composite feed -- remove it first |
-| "No insights generated" | Your data may not have enough patterns -- add more data    |
-| "Snapshot not found"    | Wait for snapshot generation (up to 30 seconds)            |
-| "UNAUTHORIZED"          | Verify your Auth0 token is valid and not expired           |
-| "INTERNAL_ERROR"        | Server-side error -- check logs and retry with backoff     |
+| Problem                     | Solution                                                   |
+| --------------------------- | ---------------------------------------------------------- |
+| "MISCONFIGURED"             | Configure your LLM API key in user-service settings first  |
+| 409 Conflict                | Data source is used by a composite feed -- remove it first |
+| "No insights generated"     | Your data may not have enough patterns -- add more data    |
+| "Snapshot not found"        | Wait for snapshot generation (up to 30 seconds)            |
+| "UNAUTHORIZED"              | Verify your Auth0 token is valid and not expired           |
+| "INTERNAL_ERROR"            | Server-side error -- check logs and retry with backoff     |
+| Visualization stays pending | LLM transform may have failed -- check `lastError` field   |
+| Visualization limit error   | Max 10 visualizations per feed -- delete unused ones first |
 
 **Note:** All error responses follow the standard response contract: `{ "success": false, "error": { "code": "...", "message": "..." } }`.
 
@@ -283,7 +365,8 @@ Now that you understand the basics:
 1. **Add more data sources** — Combine CSV exports with live notifications
 2. **Explore chart types** — Try different visualizations for your insights
 3. **Set up scheduled refreshes** — Configure Cloud Scheduler for automatic snapshots
-4. **Read the [Technical Reference](technical.md)** for full API details
+4. **List your visualizations** — `GET /visualizations` to see all saved charts
+5. **Read the [Technical Reference](technical.md)** for full API details
 
 ---
 
@@ -293,7 +376,7 @@ Test your understanding:
 
 1. **Easy:** Create a data source with JSON content instead of CSV
 2. **Medium:** Create a composite feed with 2 notification filters
-3. **Hard:** Use the preview endpoint to transform data for a custom chart
+3. **Hard:** Create a visualization and manually trigger a refresh with `POST /visualizations/:id/refresh`
 
 <details>
 <summary>Solutions</summary>
@@ -333,24 +416,15 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/comp
   }'
 ```
 
-### Exercise 3: Chart Preview
+### Exercise 3: Manual Visualization Refresh
 
 ```bash
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/composite-feeds/feed-xyz789/preview \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "chartConfig": {
-      "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-      "mark": "bar",
-      "encoding": {
-        "x": {"field": "category", "type": "nominal"},
-        "y": {"field": "value", "type": "quantitative"}
-      }
-    },
-    "transformInstructions": "Group by category and sum values",
-    "insightId": "feed-xyz789-insight-2"
-  }'
+# First create a visualization (steps from Part 6)
+# Then manually trigger refresh:
+curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizations/viz-001/refresh \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
+
+The response will show `status: "refreshing"` while recomputing, then poll until `status: "ready"`.
 
 </details>

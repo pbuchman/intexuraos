@@ -9,7 +9,7 @@
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 0     | -        |
 
-Last updated: 2026-02-08
+Last updated: 2026-02-19
 
 ## Code Smells
 
@@ -18,9 +18,9 @@ Last updated: 2026-02-08
 **Severity:** Low
 **File:** `workers/vm-lifecycle/src/config.ts`
 
-All polling intervals, timeouts, and grace periods are hardcoded as constants (`10_000`, `180_000`, `600_000`, etc.) rather than configurable via environment variables. This makes tuning shutdown behavior require a code change and redeployment.
+All polling intervals, timeouts, and grace periods are hardcoded as constants (`10_000`, `180_000`, `600_000`, etc.) rather than configurable via environment variables. Additionally, the VM state-wait poll interval in `waitForState` is hardcoded at `5000` ms (5 seconds) directly in the function body, not even referenced through `VM_CONFIG`. This makes tuning startup and shutdown timing require code changes and redeployment.
 
-**Potential fix:** Add optional `INTEXURAOS_VM_HEALTH_POLL_INTERVAL_MS`, `INTEXURAOS_VM_HEALTH_POLL_TIMEOUT_MS`, `INTEXURAOS_VM_SHUTDOWN_GRACE_PERIOD_MS` environment variables with the current values as defaults.
+**Potential fix:** Add optional `INTEXURAOS_VM_HEALTH_POLL_INTERVAL_MS`, `INTEXURAOS_VM_HEALTH_POLL_TIMEOUT_MS`, `INTEXURAOS_VM_SHUTDOWN_GRACE_PERIOD_MS`, and `INTEXURAOS_VM_STATE_POLL_INTERVAL_MS` environment variables with the current values as defaults.
 
 ## Future Plans
 
@@ -60,8 +60,9 @@ No `any` types, `@ts-ignore`, or `@ts-expect-error` directives in source files.
 
 ### Historical Issues
 
-| Date       | Issue                       | Resolution                        |
-| ---------- | --------------------------- | --------------------------------- |
-| 2026-01-31 | Empty error objects in logs | Added error serializers (INT-464) |
-| 2026-01-29 | Branch coverage below 95%   | Added v8 ignore annotations       |
-| 2026-01-28 | Vitest v4 migration issues  | Updated test patterns             |
+| Date       | Issue                                        | Resolution                                         |
+| ---------- | -------------------------------------------- | -------------------------------------------------- |
+| 2026-02-01 | Cloud Functions deployment failed at runtime | Switched from `tsc` to esbuild bundling (b82522d2) |
+| 2026-01-31 | Empty error objects in logs                  | Added error serializers (INT-464)                  |
+| 2026-01-29 | Branch coverage below 95%                    | Added v8 ignore annotations                        |
+| 2026-01-28 | Vitest v4 migration issues                   | Updated test patterns                              |

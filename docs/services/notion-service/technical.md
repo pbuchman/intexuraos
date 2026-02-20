@@ -6,14 +6,17 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 ## Recent Changes
 
-| Commit     | Description                                        | Date       |
-| ---------- | -------------------------------------------------- | ---------- |
-| `3a25d55e` | Add Notion page preview endpoint for validation    | 2026-01-29 |
-| `7c5e9153` | INT-319: Remove PromptVault, keep Notion connector | 2026-01-26 |
-| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)      | 2026-01-30 |
-| `c3198407` | Fix response contract violations (reply.ok/fail)   | 2026-01-30 |
-| `9723dc24` | Standardize DELETE endpoint response               | 2026-01-31 |
-| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement   | 2026-01-31 |
+| Commit     | Description                                       | Date       |
+| ---------- | ------------------------------------------------- | ---------- |
+| `6063175b` | Add dev-mode log formatting for PM2 readability   | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (#803)        | 2026-02-16 |
+| `d5fbb354` | Fix start:local to use tsx (not node strip-types) | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter start:local | 2026-02-14 |
+| `3a25d55e` | Add Notion page validation for Research Export    | 2026-01-29 |
+| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)     | 2026-01-30 |
+| `c3198407` | Fix response contract violations (reply.ok/fail)  | 2026-01-30 |
+| `9723dc24` | Standardize DELETE endpoint response              | 2026-01-31 |
+| `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement  | 2026-01-31 |
 
 ## API Endpoints
 
@@ -25,12 +28,26 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 | GET    | `/notion/status`     | Get integration status     | Bearer token |
 | DELETE | `/notion/disconnect` | Disconnect integration     | Bearer token |
 
+### Webhook Endpoints
+
+| Method | Path               | Description                   | Auth |
+| ------ | ------------------ | ----------------------------- | ---- |
+| POST   | `/notion-webhooks` | Receive Notion webhook events | None |
+
 ### Internal Endpoints
 
 | Method | Path                                                   | Description                  | Auth         |
 | ------ | ------------------------------------------------------ | ---------------------------- | ------------ |
 | GET    | `/internal/notion/users/:userId/context`               | Get connection context/token | Internal key |
 | GET    | `/internal/notion/users/:userId/pages/:pageId/preview` | Get Notion page preview      | Internal key |
+
+### System Endpoints
+
+| Method | Path            | Description  | Auth |
+| ------ | --------------- | ------------ | ---- |
+| GET    | `/health`       | Health check | None |
+| GET    | `/openapi.json` | OpenAPI spec | None |
+| GET    | `/docs`         | Swagger UI   | None |
 
 ### Connect Request
 
@@ -56,8 +73,8 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 {
   configured: boolean,
   connected: boolean,
-  createdAt?: string,
-  updatedAt?: string
+  createdAt: string | null,
+  updatedAt: string | null
 }
 ```
 
@@ -74,12 +91,21 @@ Returns empty data object (`{}`).
 }
 ```
 
+### Webhook Response
+
+```typescript
+{
+  received: boolean;
+}
+```
+
 ## Error Codes
 
 | Code               | HTTP Status | Description              |
 | ------------------ | ----------- | ------------------------ |
-| `VALIDATION_ERROR` | 400         | Invalid token format     |
-| `INVALID_TOKEN`    | 401         | Token rejected by Notion |
+| `INVALID_REQUEST`  | 400         | Invalid token format     |
+| `UNAUTHORIZED`     | 401         | Token rejected by Notion |
+| `NOT_FOUND`        | 404         | No connection or page    |
 | `DOWNSTREAM_ERROR` | 502         | Notion API error         |
 
 ## Dependencies
@@ -92,11 +118,22 @@ Returns empty data object (`{}`).
 
 - Notion API - Token validation and workspace info
 
+**Observability:**
+
+- Sentry - Error tracking via `createAppLogger()`
+- Dash0 OpenTelemetry - Distributed tracing (added 2026-02-16)
+
 ## Configuration
 
 | Environment Variable             | Required | Description                     |
 | -------------------------------- | -------- | ------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | GCP project for Firestore       |
+| `INTEXURAOS_AUTH_JWKS_URL`       | Yes      | JWKS URL for JWT validation     |
+| `INTEXURAOS_AUTH_ISSUER`         | Yes      | JWT issuer                      |
+| `INTEXURAOS_AUTH_AUDIENCE`       | Yes      | JWT audience                    |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth |
+| `INTEXURAOS_SENTRY_DSN`          | No       | Sentry DSN (optional)           |
+| `PORT`                           | No       | HTTP port (default: 8082)       |
 
 ## Gotchas
 
@@ -109,6 +146,8 @@ Returns empty data object (`{}`).
 **Disconnect returns empty data** - The disconnect endpoint returns `reply.ok({})` (empty object), not connection state.
 
 **Page preview requires active connection** - The page preview endpoint validates the user has an active Notion connection with a valid token before querying the Notion API.
+
+**Webhook is a stub** - `POST /notion-webhooks` accepts any JSON payload and returns `{ received: true }` without processing events. No side effects.
 
 ## File Structure
 
@@ -125,11 +164,11 @@ apps/notion-service/src/
     firestore/
       notionConnectionRepository.ts
     notion/
-      notionApi.ts
+      index.ts               # Re-exports from @intexuraos/infra-notion
   routes/
     integrationRoutes.ts   # Connect/status/disconnect
     internalRoutes.ts      # Context + page preview endpoints
-    webhookRoutes.ts       # Notion webhooks
+    webhookRoutes.ts       # Notion webhook stub
     schemas.ts             # Zod request schemas
   services.ts
   server.ts

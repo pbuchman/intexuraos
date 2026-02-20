@@ -102,7 +102,7 @@ interface Action {
 
 ### Display Linear Issues
 
-**Endpoint:** `GET /issues` from linear-agent
+**Endpoint:** `GET /issues` from linear-agent (Firestore-backed for real-time)
 
 **When to use:** When user views Linear issue dashboard
 
@@ -110,7 +110,9 @@ interface Action {
 
 - 3-column layout: Planning, Work, Closed
 - State-to-column mapping
-- Todo and To Test category support
+- Sub-issues displayed indented under parent issues
+- Labels shown as colored badges
+- Real-time Firestore updates (no polling)
 - Issue creation and management
 - Full sync from Linear (`POST /linear/sync`)
 - Webhook secret configuration (`GET/POST/DELETE /linear/webhook-config`)
@@ -124,11 +126,41 @@ interface Action {
 **Features:**
 
 - Task list with status filtering and cursor-based pagination
-- Task creation with markdown editor, worker type selection (auto/opus/glm), and Linear issue linking
-- Task detail view with real-time xterm.js terminal log viewer (Firestore-backed)
+- Task creation with markdown editor, model selection (auto/opus/glm), and Linear issue linking (via `LinearIssueSelectorModal`)
+- Task detail view (`CodeTaskViewPage`) with:
+  - Real-time `LogStream` component (Firestore-backed, custom CSS color-coded log lines)
+  - Two-phase design/execution flow with `DesignTaskBanner` (violet, links to design) and `ImplementationLinkBanner` (emerald, links to implementation)
+  - Queue-based follow-up messaging without interrupting running tasks
+  - Worker offline banner with worker name
+  - Copy-all-logs button
+  - Log follow mode with manual scroll override
+  - Log transcript tags: [prompt], [instructions], [user], [queued], [resumed], [claude], [tool], [error], [done], [hook], [init], [system], [orchestrator]
 - Task retry, cancel, and conflict resolution (409 handling)
-- Worker status monitoring (health checks)
+- Worker status monitoring (health checks with color coding by health)
 - GitHub PR events aggregated view (`GET /code/github-pr-events`)
+
+**Two-Phase Code Task Flow:**
+
+```
+executionPhase: 'design'  → Shows DesignTaskBanner when implementationTaskId is set
+executionPhase: 'execution' → Banner label changes to indicate execution phase
+No executionPhase → Single-phase task, no banner
+```
+
+### GitHub PR Events
+
+**Endpoint:** `GET /code/github-pr-events` from code-agent
+
+**When to use:** When user views GitHub pull request activity
+
+**Features:**
+
+- PR summaries loaded immediately via `useGitHubPRSummaries`
+- Individual event details load lazily per-group via `useGitHubPREvents`
+- Comment bodies render in GitHub style with HTML support (rehype-raw)
+- Compare URL displayed for "synchronize" (push) events
+- Clickable GitHub links on all event items
+- Status badges (open/closed/merged) per PR
 
 ### Intex Chat
 
@@ -156,6 +188,20 @@ interface Action {
 - Drag-and-drop priority reordering
 - Connectivity testing per worker
 - Masked secret display (Cloudflare Access credentials, orchestrator secret)
+- Color-coded status badges by health (green/red/gray)
+
+### Manage Saved Visualizations
+
+**Endpoint:** `GET /visualizations` from data-insights-agent
+
+**When to use:** When user browses or creates saved Vega/Vega-Lite charts
+
+**Features:**
+
+- Global list at `/data-insights/visualizations`
+- Per-feed list at `/data-insights/:feedId/visualizations`
+- Create, view, and persist chart definitions
+- Integrates with composite feed data
 
 ### Manage Integration Settings
 
@@ -219,20 +265,39 @@ interface Action {
 6. Opens ActionDetailModal
 ```
 
+### Pattern 4: Code Task Two-Phase Navigation
+
+```
+1. User views design task → DesignTaskBanner renders if implementationTaskId present
+2. User clicks banner link → Navigates to /code-tasks/:implementationTaskId
+3. CodeTaskViewPage remounts (key={id}) for the implementation task
+4. Execution phase terminal shows live logs
+```
+
+### Pattern 5: PR Events Lazy Loading
+
+```
+1. PREventsPage loads → useGitHubPRSummaries fetches PR list (lightweight)
+2. User expands a PR group → useGitHubPREvents fetches detail for that PR only
+3. Events render with HTML comment bodies and clickable GitHub links
+```
+
 ## Error Handling
 
-| Error Code | Meaning         | Recovery Action                     |
-| ---------- | --------------- | ----------------------------------- |
-| 401        | Unauthorized    | Redirect to login page              |
-| 403        | Forbidden       | Show permission error               |
-| 404        | Not Found       | Show "not found" state              |
-| 408        | Request Timeout | Show timeout message with retry     |
-| 429        | Rate Limited    | Show rate limit message             |
-| 500+       | Server Error    | Show error banner with retry option |
+| Error Code  | Meaning         | Recovery Action                              |
+| ----------- | --------------- | -------------------------------------------- |
+| 401         | Unauthorized    | Redirect to login page                       |
+| 403         | Forbidden       | Show permission error                        |
+| 404         | Not Found       | Show "not found" state                       |
+| 408         | Request Timeout | Show timeout message with retry              |
+| 409         | Conflict        | Show TaskConflictModal with resolution steps |
+| 429         | Rate Limited    | Show rate limit message                      |
+| 500+        | Server Error    | Show error banner with retry option          |
+| 502/503/504 | Gateway Error   | Show user-friendly non-JSON error message    |
 
 ## Rate Limits
 
-No client-side rate limiting. Backend services enforce their own limits.
+No client-side rate limiting. Backend services enforce their own limits. Guest chat sessions have server-side rate limits.
 
 ## Events Published
 
@@ -240,26 +305,26 @@ None (web app is a consumer, not publisher).
 
 ## Dependencies
 
-| Service                      | Why Needed                         | Failure Behavior                          |
-| ---------------------------- | ---------------------------------- | ----------------------------------------- |
-| user-service                 | Authentication, settings           | Cannot authenticate or load settings      |
-| actions-agent                | Action CRUD operations             | Cannot view or execute actions            |
-| commands-agent               | Command viewing + chat creation    | Cannot see command queue or use chat      |
-| research-agent               | Research reports + Notion settings | Cannot view research history              |
-| todos-agent                  | Todo management                    | Cannot manage todos                       |
-| notes-agent                  | Note management                    | Cannot manage notes                       |
-| bookmarks-agent              | Bookmark management                | Cannot manage bookmarks                   |
-| calendar-agent               | Calendar integration               | Cannot view or manage events              |
-| linear-agent                 | Linear integration + webhooks      | Cannot view or manage issues              |
-| data-insights-agent          | Data visualization                 | Cannot view data insights                 |
-| code-agent                   | Code tasks, workers, PR events     | Cannot manage code tasks or workers       |
-| chat-agent                   | AI chat assistant                  | Cannot use Intex Chat                     |
-| whatsapp-service             | WhatsApp connection + verification | Cannot connect WhatsApp                   |
-| notion-service               | Notion connection                  | Cannot connect Notion                     |
-| mobile-notifications-service | Push notification management       | Cannot manage push devices                |
-| app-settings-service         | LLM pricing, analytics             | Cannot view costs/pricing                 |
-| Firestore                    | Real-time data sync                | Falls back to polling only                |
-| Auth0                        | User authentication                | Cannot log in (chat still works as guest) |
+| Service                      | Why Needed                          | Failure Behavior                          |
+| ---------------------------- | ----------------------------------- | ----------------------------------------- |
+| user-service                 | Authentication, settings            | Cannot authenticate or load settings      |
+| actions-agent                | Action CRUD operations              | Cannot view or execute actions            |
+| commands-agent               | Command viewing + chat creation     | Cannot see command queue or use chat      |
+| research-agent               | Research reports + Notion settings  | Cannot view research history              |
+| todos-agent                  | Todo management                     | Cannot manage todos                       |
+| notes-agent                  | Note management                     | Cannot manage notes                       |
+| bookmarks-agent              | Bookmark management                 | Cannot manage bookmarks                   |
+| calendar-agent               | Calendar integration                | Cannot view or manage events              |
+| linear-agent                 | Linear integration + webhooks       | Cannot view or manage issues              |
+| data-insights-agent          | Data visualization + visualizations | Cannot view data insights or saved charts |
+| code-agent                   | Code tasks, workers, PR events      | Cannot manage code tasks or workers       |
+| chat-agent                   | AI chat assistant                   | Cannot use Intex Chat                     |
+| whatsapp-service             | WhatsApp connection + verification  | Cannot connect WhatsApp                   |
+| notion-service               | Notion connection                   | Cannot connect Notion                     |
+| mobile-notifications-service | Push notification management        | Cannot manage push devices                |
+| app-settings-service         | LLM pricing, analytics              | Cannot view costs/pricing                 |
+| Firestore                    | Real-time data sync                 | Falls back to polling only                |
+| Auth0                        | User authentication                 | Cannot log in (chat still works as guest) |
 
 ## State Management
 
@@ -278,34 +343,43 @@ None (web app is a consumer, not publisher).
 
 ## Route Reference
 
-| Route                       | Auth | Purpose                    |
-| --------------------------- | ---- | -------------------------- |
-| `/#/`                       | No   | Landing page               |
-| `/#/login`                  | No   | Auth0 login                |
-| `/#/inbox`                  | Yes  | Commands and actions       |
-| `/#/research`               | Yes  | Research list              |
-| `/#/research/new`           | Yes  | Create research            |
-| `/#/research/:id`           | Yes  | Research detail            |
-| `/#/code-tasks`             | Yes  | Code task list             |
-| `/#/code-tasks/new`         | Yes  | Create code task           |
-| `/#/code-tasks/:id`         | Yes  | Code task detail with logs |
-| `/#/code-tasks/pr-events`   | Yes  | GitHub PR events           |
-| `/#/my-todos`               | Yes  | Todos                      |
-| `/#/my-notes`               | Yes  | Notes                      |
-| `/#/my-bookmarks`           | Yes  | Bookmarks                  |
-| `/#/notes`                  | Yes  | WhatsApp notes             |
-| `/#/calendar`               | Yes  | Calendar events            |
-| `/#/linear`                 | Yes  | Linear issues              |
-| `/#/data-insights`          | Yes  | Data insights              |
-| `/#/notifications`          | Yes  | Push notification history  |
-| `/#/settings/whatsapp`      | Yes  | WhatsApp connection        |
-| `/#/settings/mobile`        | Yes  | Mobile notifications       |
-| `/#/settings/notion`        | Yes  | Notion connection          |
-| `/#/settings/calendar`      | Yes  | Google Calendar connection |
-| `/#/settings/linear`        | Yes  | Linear + webhook config    |
-| `/#/settings/workers`       | Yes  | Worker configuration       |
-| `/#/settings/api-keys`      | Yes  | API key management         |
-| `/#/settings/llm-pricing`   | Yes  | LLM pricing                |
-| `/#/settings/usage-costs`   | Yes  | Usage cost tracking        |
-| `/#/settings/share-history` | Yes  | Share history              |
-| `/#/share-target`           | Yes  | PWA share handler          |
+| Route                                     | Auth | Purpose                         |
+| ----------------------------------------- | ---- | ------------------------------- |
+| `/#/`                                     | No   | Landing page                    |
+| `/#/login`                                | No   | Auth0 login                     |
+| `/#/inbox`                                | Yes  | Commands and actions            |
+| `/#/research`                             | Yes  | Research list                   |
+| `/#/research/new`                         | Yes  | Create research                 |
+| `/#/research/:id`                         | Yes  | Research detail                 |
+| `/#/code-tasks`                           | Yes  | Code task list                  |
+| `/#/code-tasks/new`                       | Yes  | Create code task                |
+| `/#/code-tasks/:id`                       | Yes  | Code task detail with logs      |
+| `/#/code-tasks/pr-events`                 | Yes  | GitHub PR events                |
+| `/#/my-todos`                             | Yes  | Todos                           |
+| `/#/todos/:id`                            | Yes  | Todo detail                     |
+| `/#/my-notes`                             | Yes  | Notes                           |
+| `/#/notes/:id`                            | Yes  | Note detail                     |
+| `/#/my-bookmarks`                         | Yes  | Bookmarks                       |
+| `/#/bookmarks/:id`                        | Yes  | Bookmark detail                 |
+| `/#/notes`                                | Yes  | WhatsApp notes                  |
+| `/#/calendar`                             | Yes  | Calendar events                 |
+| `/#/linear`                               | Yes  | Linear issues                   |
+| `/#/data-insights`                        | Yes  | Data insights feeds             |
+| `/#/data-insights/visualizations`         | Yes  | Saved visualizations (global)   |
+| `/#/data-insights/:feedId/visualizations` | Yes  | Saved visualizations (per feed) |
+| `/#/data-insights/:id`                    | Yes  | Feed data/charts                |
+| `/#/data-insights/static-sources`         | Yes  | Static data sources             |
+| `/#/data-insights/static-sources/new`     | Yes  | Create static source            |
+| `/#/data-insights/static-sources/:id`     | Yes  | Edit static source              |
+| `/#/notifications`                        | Yes  | Push notification history       |
+| `/#/settings/whatsapp`                    | Yes  | WhatsApp connection             |
+| `/#/settings/mobile`                      | Yes  | Mobile notifications            |
+| `/#/settings/notion`                      | Yes  | Notion connection               |
+| `/#/settings/calendar`                    | Yes  | Google Calendar connection      |
+| `/#/settings/linear`                      | Yes  | Linear + webhook config         |
+| `/#/settings/workers`                     | Yes  | Worker configuration            |
+| `/#/settings/api-keys`                    | Yes  | API key management              |
+| `/#/settings/llm-pricing`                 | Yes  | LLM pricing                     |
+| `/#/settings/usage-costs`                 | Yes  | Usage cost tracking             |
+| `/#/settings/share-history`               | Yes  | Share history                   |
+| `/#/share-target`                         | Yes  | PWA share handler               |

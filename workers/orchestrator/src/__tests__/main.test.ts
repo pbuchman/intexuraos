@@ -492,7 +492,7 @@ describe('main.ts', () => {
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        { error: expect.any(Object) },
+        { code: 'NETWORK_ERROR', message: 'Token refresh failed' },
         'Token refresh failed'
       );
 

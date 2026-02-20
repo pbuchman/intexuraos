@@ -92,6 +92,54 @@ Research-agent automates multi-model AI research:
 
 **Notion integration** - Automatic export to Notion with structured page hierarchy and markdown conversion (v2.2.0)
 
+## Recent Changes (v2.4.0)
+
+### Distributed Tracing (Observability)
+
+Research-agent now emits distributed traces to Dash0 via OpenTelemetry:
+
+- Traces propagate across Pub/Sub, HTTP, and Firestore boundaries
+- Enabled by `INTEXURAOS_DASH0_OTLP_ENDPOINT` environment variable
+- No-op in local development when endpoint is unset
+- Powered by `packages/infra-otel` preloaded via Node `--import` flag in Dockerfile
+
+### Dev-Mode Log Formatting
+
+PM2 log output is now colorized and readable in development environments:
+
+```
+research-agent | 10:30:00 | INFO  | Research created | {id: "abc123"}
+```
+
+Production JSON logging is unchanged.
+
+## Recent Changes (v2.3.0)
+
+### Platform API Key Fallbacks
+
+Research-agent now supports platform-owned API keys as fallbacks for users without their own LLM provider keys:
+
+- **Gemini primary fallback** — `INTEXURAOS_GEMINI_APP_API_KEY` enables `gemini-2.0-flash` for users without a Google API key
+- **Zai secondary fallback** — `INTEXURAOS_ZAI_APP_API_KEY` enables `glm-4.7-flash` when Gemini fallback is unavailable
+- Fallback ordering: user key → Gemini platform key → Zai platform key → error
+
+### Gemini 2.0 Flash for Internal Operations
+
+Switched title generation and context inference fast model from `glm-4.7-flash` to `gemini-2.0-flash`:
+
+- `glm-4.7-flash` was taking 29s for title generation, exceeding the 10s HTTP timeout
+- `gemini-2.0-flash` is faster and already available via the platform Gemini key
+
+### API Key Naming Convention
+
+Standardized platform-owned API key environment variables to the `INTEXURAOS_<PROVIDER>_APP_API_KEY` pattern:
+
+- `INTEXURAOS_GUEST_ZAI_API_KEY` + `INTEXURAOS_ZAI_API_KEY` → `INTEXURAOS_ZAI_APP_API_KEY`
+
+### LLM Prompt Improvements
+
+- Simplified `buildSynthesisContextRepairPrompt` call signature in `ContextInferenceAdapter` — passes `originalPrompt` directly instead of a full params object, matching updated `@intexuraos/llm-prompts` API
+
 ## Recent Changes (v2.2.0)
 
 ### Notion Export Integration

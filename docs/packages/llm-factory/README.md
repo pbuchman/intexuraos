@@ -5,7 +5,7 @@ Unified factory for creating LLM clients across different providers. Maps model 
 **Version:** 2.1.0
 **Node:** >=22.0.0
 **Type:** ESM
-**Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-gemini`, `@intexuraos/infra-glm`, `@intexuraos/llm-contract`, `@intexuraos/llm-pricing`
+**Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-gemini`, `@intexuraos/infra-glm`, `@intexuraos/llm-audit`, `@intexuraos/llm-contract`, `@intexuraos/llm-pricing`
 
 ## Why It Exists
 
@@ -74,6 +74,8 @@ interface LlmClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
+  auditSink?: AuditSink; // from @intexuraos/llm-audit; defaults to Firestore sink
+  usageSink?: UsageSink; // from @intexuraos/llm-pricing; defaults to Firestore sink
 }
 
 interface GenerateResult {
@@ -99,17 +101,18 @@ The factory also re-exports `LLMError` from `@intexuraos/llm-contract` for conve
 
 **Apps (10):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`
 
+**Workers (1):** `orchestrator`
+
 ## Recent Changes
 
-| Commit   | Description                                        | Age     |
-| -------- | -------------------------------------------------- | ------- |
-| 44017d5c | Fix ESLint OOM with batched parallel lint runner   | 7 days  |
-| 21c1528a | Fix release skill to bump all package versions     | 12 days |
-| 4fa0fed3 | Release v2.0.0                                     | 2 weeks |
-| 8aad9098 | Migrate imports and delete llm-common              | 2 weeks |
-| 6ec4205e | Make logger mandatory in all LLM configs           | 3 weeks |
-| 7d2b5a9f | Add getLlmClient implementation for commands-agent | 4 weeks |
-| 0d1f115e | Fix pricing endpoint to include zai provider       | 4 weeks |
+| Commit   | Description                                                           | Age     |
+| -------- | --------------------------------------------------------------------- | ------- |
+| 1c9d7ec9 | Orchestrator verification hardening and unified secrets sync workflow | 10 days |
+| 44017d5c | Fix ESLint OOM with batched parallel lint runner                      | 17 days |
+| 21c1528a | Fix release skill to bump all package versions                        | 3 weeks |
+| 4fa0fed3 | Release v2.0.0                                                        | 3 weeks |
+| 8aad9098 | Migrate imports and delete llm-common                                 | 3 weeks |
+| 6ec4205e | Make logger mandatory in all LLM configs                              | 4 weeks |
 
 ## Source Files
 

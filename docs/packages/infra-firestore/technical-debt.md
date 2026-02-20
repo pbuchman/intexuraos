@@ -46,8 +46,17 @@ if (!currentArray.some((e) => JSON.stringify(e) === JSON.stringify(elem))) {
 
 **Recommendation:** Add type-aware comparison (string vs number) in the sorting logic.
 
+### FakeBatch Is Not Truly Atomic
+
+`FakeBatch.commit()` executes operations sequentially via fire-and-forget `void` calls. Unlike real Firestore batches, failures in individual operations do not roll back preceding operations.
+
+**Impact:** Low for tests. In production, real Firestore batches are atomic. Tests that rely on batch atomicity semantics (rollback on failure) will not catch that behavior.
+
+**Recommendation:** Acceptable for the test-only use case. Document the limitation in test utilities.
+
 ## Future Improvements
 
 - Add `collectionGroup()` support to the fake for cross-collection queries
 - Add `onSnapshot()` listener simulation for real-time update testing
 - Consider splitting `firestoreFake.ts` (~800 lines) into separate files per class (FakeQuery, FakeTransaction, FakeCollectionReference)
+- Add dot-notation support to `FakeQuery.where()` filter evaluation (currently uses direct property lookup only)

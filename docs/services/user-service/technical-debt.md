@@ -11,9 +11,32 @@
 | Code Duplicates     | 0     | -        |
 | Deprecations        | 0     | -        |
 
-Last updated: 2026-02-08
+Last updated: 2026-02-19
 
 ## Recent Changes
+
+### Dash0 OpenTelemetry Integration
+
+**Change:** Added `@intexuraos/infra-otel` dependency and preloaded it via `node --import ./dist/otel-register.js` in the Dockerfile. Exports traces, metrics, and structured logs to Dash0 via OTLP/HTTP. No-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset, so local and test environments are unaffected.
+
+**Files changed:**
+
+- `apps/user-service/Dockerfile`
+- `apps/user-service/package.json`
+
+### Default Model Selector
+
+**Change:** Added `PATCH /users/:uid/settings` endpoint that accepts `{ defaultModel: string }` and persists user LLM preferences to Firestore. Validates the model against `isFastModel()` from `@intexuraos/llm-contract`. Services call the internal `/internal/users/:uid/settings` endpoint to read `llmPreferences.defaultModel` at request time. The `GET /users/:uid/settings/llm-keys` response was also extended to include `defaultModel` as a convenience field.
+
+**Files changed:**
+
+- `apps/user-service/src/routes/settingsRoutes.ts`
+- `apps/user-service/src/__tests__/settingsRoutes.test.ts`
+- `apps/user-service/src/__tests__/fakes.ts`
+
+### Dev-Mode Log Formatting
+
+**Change:** Improved PM2 log readability in development environments with structured formatting.
 
 ### Standardized Response Contract and Sentry Logger Migration
 
@@ -201,6 +224,14 @@ Not considered technical debt as the pattern is explicit and maintainable.
 No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
+
+### 2026-02-16 to 2026-02-19
+
+| Issue | Description                        | Resolution                                               |
+| ----- | ---------------------------------- | -------------------------------------------------------- |
+| -     | No distributed tracing or metrics  | Added Dash0 OTel via `infra-otel` preload module         |
+| -     | No per-user default model setting  | Added `PATCH /users/:uid/settings` with model validation |
+| -     | PM2 log output hard to read in dev | Improved dev-mode log formatting                         |
 
 ### 2026-02-08
 

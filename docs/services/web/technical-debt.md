@@ -1,6 +1,6 @@
 # Web App — Technical Debt
 
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-19
 **Analysis Run:** Autonomous documentation generation (service-scribe agent)
 
 ---
@@ -9,11 +9,11 @@
 
 | Category    | Count | Severity      |
 | ----------- | ----- | ------------- |
-| Code Smells | 4     | Medium/Low    |
+| Code Smells | 5     | Medium/Low    |
 | Test Gaps   | N/A   | N/A (planned) |
 | Type Issues | 0     | --            |
 | TODOs       | 0     | --            |
-| **Total**   | **4** | --            |
+| **Total**   | **5** | --            |
 
 ---
 
@@ -24,7 +24,7 @@ Based on code analysis and recent commits:
 - **Refactoring for improved coverage:** The web app is exempt from the 95% coverage threshold due to planned refactoring (see CLAUDE.md)
 - **PWA enhancements:** Enhanced offline capabilities and background sync
 - **Mobile optimization:** Continued improvements to mobile responsiveness across all pages
-- **Code task UX refinement:** Ongoing iteration on task submission, log viewing, and error handling flows
+- **Code task UX refinement:** Ongoing iteration on task submission, log viewing, and two-phase flow
 
 ---
 
@@ -36,18 +36,19 @@ None identified.
 
 ### Medium Priority
 
-| File                           | Issue                                  | Impact                                                                                                                                      |
-| ------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `InboxPage.tsx`                | 879 lines (exceeds SRP guideline)      | File handles UI, state management, real-time listeners, filtering, pagination, and deep linking. Consider extracting to smaller components. |
-| `pages/WorkerSettingsPage.tsx` | 601 lines with inline form components  | Worker add/edit forms, drag-and-drop, and connectivity testing all in one file. Extract form components.                                    |
-| `pages/CodeTaskNewPage.tsx`    | 463 lines with complex submission flow | Worker selection, Linear issue linking, conflict/error modals, and markdown editor in one file.                                             |
-| `pages/CalendarPage.tsx`       | Large page component with inline logic | Extract calendar event rendering and filtering logic into separate components.                                                              |
+| File                           | Issue                                     | Impact                                                                                                                                 |
+| ------------------------------ | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `InboxPage.tsx`                | 866 lines (exceeds SRP guideline)         | Handles UI, state management, real-time listeners, filtering, pagination, and deep linking. Consider extracting to smaller components. |
+| `LinearIssuesPage.tsx`         | 804 lines with inline sub-issue rendering | Board columns, Firestore listener, sub-issue tree, label display, and sync management all in one file.                                 |
+| `CodeTaskViewPage.tsx`         | 862 lines with two-phase UI inline        | Task detail, terminal, two-phase banner, worker offline handling, queue messaging, and retry all in one file.                          |
+| `pages/WorkerSettingsPage.tsx` | 601 lines with inline form components     | Worker add/edit forms, drag-and-drop, and connectivity testing all in one file. Extract form components.                               |
+| `pages/CalendarPage.tsx`       | 536 lines with inline logic               | Event list, month/week views, filtering, sync management, and failed event recovery all in one file.                                   |
 
 ### Low Priority
 
-| File           | Issue                           | Impact                                                                                   |
-| -------------- | ------------------------------- | ---------------------------------------------------------------------------------------- |
-| `HomePage.tsx` | 463 lines in a single component | Landing page is less critical, but extraction of sections could improve maintainability. |
+| File           | Issue                  | Impact                                                                                   |
+| -------------- | ---------------------- | ---------------------------------------------------------------------------------------- |
+| `HomePage.tsx` | Large single component | Landing page is less critical, but extraction of sections could improve maintainability. |
 
 ---
 
@@ -87,12 +88,14 @@ Tests are OPTIONAL for:
 
 ### Missing Tests
 
-| Module                       | Missing                 | Priority       |
-| ---------------------------- | ----------------------- | -------------- |
-| `services/actionExecutor.ts` | Execution flow tests    | Medium         |
-| `hooks/useActionChanges.ts`  | Listener behavior tests | Low            |
-| `hooks/useCommandChanges.ts` | Listener behavior tests | Low            |
-| Most `pages/` components     | Integration tests       | Low (optional) |
+| Module                          | Missing                 | Priority       |
+| ------------------------------- | ----------------------- | -------------- |
+| `services/actionExecutor.ts`    | Execution flow tests    | Medium         |
+| `hooks/useGitHubPRSummaries.ts` | PR summary hook tests   | Medium         |
+| `hooks/useTaskView.ts`          | Task view state tests   | Medium         |
+| `hooks/useActionChanges.ts`     | Listener behavior tests | Low            |
+| `hooks/useCommandChanges.ts`    | Listener behavior tests | Low            |
+| Most `pages/` components        | Integration tests       | Low (optional) |
 
 ---
 
@@ -110,13 +113,13 @@ None identified.
 
 ## SRP Violations
 
-| File                     | Lines | Issue                                                            | Suggestion                                                                                                         |
-| ------------------------ | ----- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `InboxPage.tsx`          | 879   | Handles routing, state, listeners, filtering, pagination, modals | Extract filtering to `useInboxFilters` hook, pagination to `useInfiniteScroll` hook, modals to separate components |
-| `WorkerSettingsPage.tsx` | 601   | Add/edit forms, drag-drop reorder, connectivity testing inline   | Extract `WorkerForm`, `WorkerCard`, and `WorkerList` components                                                    |
-| `CalendarPage.tsx`       | ~525  | Event list, month/week views, filtering, sync management         | Extract calendar views and event list rendering                                                                    |
-| `CodeTaskDetailPage.tsx` | ~495  | Task detail, log viewer, retry/cancel, PR links all inline       | Extract log viewer section and action buttons                                                                      |
-| `CodeTaskNewPage.tsx`    | ~463  | Form, worker selection, Linear linking, modals all inline        | Extract form sections and modal management                                                                         |
+| File                     | Lines | Issue                                                                  | Suggestion                                                                                                         |
+| ------------------------ | ----- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `InboxPage.tsx`          | 866   | Handles routing, state, listeners, filtering, pagination, modals       | Extract filtering to `useInboxFilters` hook, pagination to `useInfiniteScroll` hook, modals to separate components |
+| `LinearIssuesPage.tsx`   | 804   | Board columns, Firestore listener, sub-issue tree, labels, sync inline | Extract `IssueCard`, `IssueTree`, and `LinearBoardColumn` components                                               |
+| `CodeTaskViewPage.tsx`   | 862   | Task detail, terminal, two-phase banner, queue messaging, retry inline | Extract `TaskTerminal`, `DesignTaskBanner`, and `TaskActions` into separate components                             |
+| `WorkerSettingsPage.tsx` | 601   | Add/edit forms, drag-drop reorder, connectivity testing inline         | Extract `WorkerForm`, `WorkerCard`, and `WorkerList` components                                                    |
+| `CalendarPage.tsx`       | 536   | Event list, month/week views, filtering, sync, failed event recovery   | Extract calendar views and event list rendering                                                                    |
 
 ---
 
@@ -140,19 +143,27 @@ None identified.
 
 ## Resolved Issues
 
-| Date       | Issue                                              | Resolution                                           |
-| ---------- | -------------------------------------------------- | ---------------------------------------------------- |
-| 2026-02-08 | Text log viewer lacked ANSI color support          | Replaced with xterm.js terminal (`340971a8`)         |
-| 2026-02-07 | RefreshIndicator caused layout shifts              | Removed; replaced with inline RefreshCw (`1bc3c44f`) |
-| 2026-02-07 | UI inconsistencies in Linear issues and code tasks | Fixed in commit `c6ed05c3`                           |
-| 2026-02-06 | Missing redirect when dev environment is ready     | Fixed in INT-511 (`65c26987`)                        |
-| 2026-02-05 | Firestore Timestamp bug in PR events               | Fixed in commit `a31578d7`                           |
-| 2026-02-04 | Invalid Date display in log viewer                 | Fixed in commit `c2dd8db2`                           |
-| 2026-02-04 | Code task 409 conflict not handled in UI           | Added conflict modal in INT-498 (`a29e301b`)         |
-| 2026-02-02 | LinearIssueCombobox crash when filtering issues    | Fixed in commit `0ecb6a6a`                           |
-| 2025-01-14 | System health page in UI                           | Removed in INT-270 (commit `31ab6d2f`)               |
-| 2024-12-20 | Inbox showing old actions after initial load       | Fixed in commit `089fbe51`                           |
-| 2024-12-XX | Calendar action failures not displayed             | Fixed in INT-144                                     |
+| Date       | Issue                                                     | Resolution                                                   |
+| ---------- | --------------------------------------------------------- | ------------------------------------------------------------ |
+| 2026-02-19 | PR event comment bodies showed raw HTML                   | Added rehype-raw rendering (`2a187f90`)                      |
+| 2026-02-19 | PR event page loaded all events at once (expensive)       | Split into lazy-loaded summaries + details (`e8bbacd7`)      |
+| 2026-02-18 | No way to navigate from design task to impl task          | Added DesignTaskBanner with link (`0e07e938`)                |
+| 2026-02-17 | Code task detail had dead code from migration             | Cleaned up CodeTaskViewPage migration (`5fa51f75`)           |
+| 2026-02-17 | Log duplication on Firestore listener resume              | Added cancellation guard to async effects (`a59e194b`)       |
+| 2026-02-16 | Messages interrupted running tasks                        | Added queue-based messaging without interrupt (`935d3210`)   |
+| 2026-02-14 | Linear sub-issues not visible in board                    | Added parent-child indented rendering (`08dbaf84`)           |
+| 2026-02-17 | xterm.js terminal removed; replaced with custom LogStream | Deleted TerminalLogViewer.tsx and xterm.js deps (`5fa51f75`) |
+| 2026-02-08 | Text log viewer lacked ANSI color support                 | Replaced with xterm.js terminal (`340971a8`)                 |
+| 2026-02-07 | RefreshIndicator caused layout shifts                     | Removed; replaced with inline RefreshCw (`1bc3c44f`)         |
+| 2026-02-07 | UI inconsistencies in Linear issues and code tasks        | Fixed in commit `c6ed05c3`                                   |
+| 2026-02-06 | Missing redirect when dev environment is ready            | Fixed in INT-511 (`65c26987`)                                |
+| 2026-02-05 | Firestore Timestamp bug in PR events                      | Fixed in commit `a31578d7`                                   |
+| 2026-02-04 | Invalid Date display in log viewer                        | Fixed in commit `c2dd8db2`                                   |
+| 2026-02-04 | Code task 409 conflict not handled in UI                  | Added conflict modal in INT-498 (`a29e301b`)                 |
+| 2026-02-02 | LinearIssueCombobox crash when filtering issues           | Moved selector to modal (`LinearIssueSelectorModal`)         |
+| 2025-01-14 | System health page in UI                                  | Removed in INT-270 (commit `31ab6d2f`)                       |
+| 2024-12-20 | Inbox showing old actions after initial load              | Fixed in commit `089fbe51`                                   |
+| 2024-12-XX | Calendar action failures not displayed                    | Fixed in INT-144                                             |
 
 ---
 

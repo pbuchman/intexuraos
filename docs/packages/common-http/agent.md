@@ -181,9 +181,9 @@ declare module 'fastify' {
 ## Environment Variables
 
 ```
-INTEXURAOS_AUTH_JWKS_URL      - JWKS endpoint for JWT validation
-INTEXURAOS_AUTH_ISSUER        - Expected JWT issuer claim
-INTEXURAOS_AUTH_AUDIENCE      - Expected JWT audience claim
+INTEXURAOS_AUTH_JWKS_URL       - JWKS endpoint for JWT validation
+INTEXURAOS_AUTH_ISSUER         - Expected JWT issuer claim
+INTEXURAOS_AUTH_AUDIENCE       - Expected JWT audience claim
 INTEXURAOS_INTERNAL_AUTH_TOKEN - Shared token for service-to-service auth
 ```
 
