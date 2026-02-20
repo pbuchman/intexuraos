@@ -547,21 +547,21 @@ All artifacts must be connected:
 
 ## Environments
 
-| Environment | Domain               | Infra                 | Machine                              | Deploy Target            |
-| ----------- | -------------------- | --------------------- | ------------------------------------ | ------------------------ |
-| **local**   | localhost:3000       | PM2                   | Any dev machine (`uname -s`=Darwin)  | Direct                   |
-| **dev**     | dev.intexuraos.cloud | PM2, GCP              | home-dev (`uname -n`=home-dev)       | `~/deploy/intexuraos`    |
-| **prod**    | intexuraos.cloud     | Cloud Run / Functions | GCloud                               | CI/CD via GitHub Actions |
+| Environment | Domain               | Infra                 | Machine                             | Deploy Target            |
+| ----------- | -------------------- | --------------------- | ----------------------------------- | ------------------------ |
+| **local**   | localhost:3000       | PM2                   | Any dev machine (`uname -s`=Darwin) | Direct                   |
+| **dev**     | dev.intexuraos.cloud | PM2, GCP              | home-dev (`uname -n`=home-dev)      | `~/deploy/intexuraos`    |
+| **prod**    | intexuraos.cloud     | Cloud Run / Functions | GCloud                              | CI/CD via GitHub Actions |
 
 **How to detect which environment you are on:**
 
-| Check              | local                  | dev (home-dev)         | prod                |
-| ------------------ | ---------------------- | ---------------------- | ------------------- |
-| `uname -s`         | Darwin                 | Linux                  | N/A (Cloud Run)     |
-| `uname -n`         | ≠ home-dev             | home-dev               | N/A                 |
-| Platform (context) | darwin                 | linux                  | N/A                 |
-| Logs               | PM2 logs / stdout      | PM2 logs / stdout      | `gcloud logging`    |
-| Firestore          | Emulator (port 8101)   | Emulator or production | Production          |
+| Check              | local                | dev (home-dev)         | prod             |
+| ------------------ | -------------------- | ---------------------- | ---------------- |
+| `uname -s`         | Darwin               | Linux                  | N/A (Cloud Run)  |
+| `uname -n`         | ≠ home-dev           | home-dev               | N/A              |
+| Platform (context) | darwin               | linux                  | N/A              |
+| Logs               | PM2 logs / stdout    | PM2 logs / stdout      | `gcloud logging` |
+| Firestore          | Emulator (port 8101) | Emulator or production | Production       |
 
 **local** = wherever you run code that is NOT prod or dev. No assumptions about specific machine.
 

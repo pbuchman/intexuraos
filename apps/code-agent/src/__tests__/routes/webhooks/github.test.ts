@@ -23,7 +23,6 @@ import type { GitHubPREventRepository } from '../../../domain/repositories/gitHu
 import type { GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 import type { GitHubPRSummaryRepository } from '../../../domain/repositories/gitHubPRSummaryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
-import type { PRTaskLockRepository } from '../../../domain/repositories/prTaskLockRepository.js';
 
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
@@ -103,19 +102,6 @@ describe('POST /webhooks/github', () => {
       findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
     };
 
-    // Create mock prTaskLockRepo - returns NOT_ACTIONABLE for most comments
-    const mockPrTaskLockRepo: PRTaskLockRepository = {
-      acquireLock: vi.fn().mockResolvedValue(ok({
-        id: 'lock-123',
-        activeTaskId: 'pending',
-        lockedAt: { toDate: () => new Date() },
-        lockedBy: 'github-webhook',
-        expiresAt: { toDate: () => new Date(Date.now() + 30 * 60 * 1000) },
-      })),
-      releaseLock: vi.fn().mockResolvedValue(ok(undefined)),
-      findLock: vi.fn().mockResolvedValue(ok(null)),
-    };
-
     // Setup services with all required fields
     const mockServices: ServiceContainer = {
       firestore: fakeFirestore as unknown as Firestore,
@@ -138,7 +124,6 @@ describe('POST /webhooks/github', () => {
       workerHealthProbe: {} as never,
       gitHubPREventRepo: mockEventRepo,
       gitHubPRSummaryRepo: mockSummaryRepo,
-      prTaskLockRepo: mockPrTaskLockRepo,
       turnMetricsRepo: {} as never,
     };
 
@@ -433,8 +418,8 @@ describe('POST /webhooks/github', () => {
     });
   });
 
-  describe('issue_comment events', () => {
-    it('processes issue_comment created event and calls processPRCommentForTask', async () => {
+  describe('PR comment dispatch events', () => {
+    it('dispatches issue_comment created event to task', async () => {
       const issueCommentPayload = {
         action: 'created',
         issue: {
@@ -477,7 +462,6 @@ describe('POST /webhooks/github', () => {
         },
       };
 
-      // Return event with issue_comment type to trigger processPRCommentForTask
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 12345,
@@ -517,7 +501,7 @@ describe('POST /webhooks/github', () => {
       expect(body.success).toBe(true);
     });
 
-    it('skips processPRCommentForTask for issue_comment deleted events', async () => {
+    it('skips dispatch for issue_comment deleted events', async () => {
       const issueCommentPayload = {
         action: 'deleted',
         issue: {
@@ -560,7 +544,6 @@ describe('POST /webhooks/github', () => {
         },
       };
 
-      // Return event with issue_comment type but deleted action
       mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
         id: 'test-event-id',
         githubEventId: 12345,
@@ -598,6 +581,369 @@ describe('POST /webhooks/github', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
+    });
+
+    it('saves pull_request_review_comment but does not dispatch', async () => {
+      const reviewCommentPayload = {
+        action: 'created',
+        comment: {
+          id: 99999,
+          body: '@claude this variable naming is confusing',
+          path: 'src/utils/helper.ts',
+          line: 42,
+          diff_hunk: '@@ -40,6 +40,8 @@\n+const foo = true;',
+          user: {
+            login: 'reviewer',
+            id: 333,
+            type: 'User',
+          },
+        },
+        pull_request: {
+          id: 101,
+          number: 55,
+          title: 'Refactor utils',
+          state: 'open',
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: {
+            login: 'test',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'reviewer',
+          id: 333,
+          type: 'User',
+        },
+      };
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 99999,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 55,
+        pullRequestId: 101,
+        eventType: 'pull_request_review_comment' as const,
+        action: 'created' as const,
+        senderLogin: 'reviewer',
+        senderId: 333,
+        senderType: 'User',
+        title: 'Refactor utils',
+        body: '@claude this variable naming is confusing',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: reviewCommentPayload,
+      }));
+
+      const { payload, signature } = signPayload(reviewCommentPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request_review_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('processed');
+    });
+
+    it('dispatches pull_request_review submitted event', async () => {
+      const reviewPayload = {
+        action: 'submitted',
+        review: {
+          id: 88888,
+          body: '@claude please address these issues',
+          state: 'changes_requested',
+        },
+        pull_request: {
+          id: 101,
+          number: 60,
+          title: 'Add feature',
+          state: 'open',
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'reviewer',
+          id: 444,
+          type: 'User',
+        },
+      };
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 88888,
+        repository: 'intexuraos/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 60,
+        pullRequestId: 101,
+        eventType: 'pull_request_review' as const,
+        action: 'submitted' as const,
+        senderLogin: 'reviewer',
+        senderId: 444,
+        senderType: 'User',
+        title: 'Add feature',
+        body: '@claude please address these issues',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: reviewPayload,
+      }));
+
+      const { payload, signature } = signPayload(reviewPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request_review',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('processed');
+    });
+
+    it('skips dispatch for pull_request_review dismissed events', async () => {
+      const reviewPayload = {
+        action: 'dismissed',
+        review: {
+          id: 77777,
+          body: 'Dismissing stale review',
+          state: 'dismissed',
+        },
+        pull_request: {
+          id: 101,
+          number: 60,
+          title: 'Add feature',
+          state: 'open',
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'intexuraos/intexuraos',
+          owner: {
+            login: 'intexuraos',
+            id: 789,
+          },
+        },
+        sender: {
+          login: 'reviewer',
+          id: 444,
+          type: 'User',
+        },
+      };
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 77777,
+        repository: 'intexuraos/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 60,
+        pullRequestId: 101,
+        eventType: 'pull_request_review' as const,
+        action: 'dismissed' as const,
+        senderLogin: 'reviewer',
+        senderId: 444,
+        senderType: 'User',
+        title: 'Add feature',
+        body: 'Dismissing stale review',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: reviewPayload,
+      }));
+
+      const { payload, signature } = signPayload(reviewPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'pull_request_review',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+
+    it('skips dispatch for comments from our own bot', async () => {
+      const botCommentPayload = {
+        action: 'created',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 55555,
+          body: 'I have addressed the review comments.',
+          user: { login: 'intexuraos-code-worker[bot]', id: 888, type: 'Bot' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: { login: 'test', id: 789 },
+        },
+        sender: { login: 'intexuraos-code-worker[bot]', id: 888, type: 'Bot' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 55555,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'created' as const,
+        senderLogin: 'intexuraos-code-worker[bot]',
+        senderId: 888,
+        senderType: 'Bot',
+        title: 'Test PR',
+        body: 'I have addressed the review comments.',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: botCommentPayload,
+      }));
+
+      const { payload, signature } = signPayload(botCommentPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Dispatch was fire-and-forget but bot check should prevent findByPR from being called
+      // Wait a tick to let the async dispatch settle
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).not.toHaveBeenCalled();
+    });
+
+    it('dispatches other bot comments (non-worker bot)', async () => {
+      const otherBotPayload = {
+        action: 'created',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 66666,
+          body: 'Coverage: 94.2%',
+          user: { login: 'codecov[bot]', id: 777, type: 'Bot' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: { login: 'test', id: 789 },
+        },
+        sender: { login: 'codecov[bot]', id: 777, type: 'Bot' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 66666,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'created' as const,
+        senderLogin: 'codecov[bot]',
+        senderId: 777,
+        senderType: 'Bot',
+        title: 'Test PR',
+        body: 'Coverage: 94.2%',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: otherBotPayload,
+      }));
+
+      const { payload, signature } = signPayload(otherBotPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Other bots pass through — dispatch should call findByPR
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).toHaveBeenCalledWith('test/intexuraos', 42);
     });
   });
 });

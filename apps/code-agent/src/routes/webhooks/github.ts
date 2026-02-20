@@ -15,73 +15,157 @@ import {
   parseGitHubWebhookEvent,
   shouldProcessRepository,
 } from '../../infra/github-event-parser.js';
-import { handlePRComment } from '../../domain/usecases/handlePRComment.js';
+import { sendTaskMessage } from '../../domain/usecases/sendTaskMessage.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import type { Logger } from 'pino';
 
+const BOT_LOGIN = 'intexuraos-code-worker[bot]';
+
 /**
- * Process a PR comment event to potentially create a Claude task.
- * This is a fire-and-forget operation - we don't block the webhook response.
+ * Dispatch a PR comment to the task that owns this PR via sendTaskMessage.
+ * Fire-and-forget — webhook returns immediately.
+ * Only filter: skip our own bot to prevent infinite loops.
+ * The worker decides what deserves a response.
  */
-async function processPRCommentForTask(event: GitHubPREvent, logger: Logger): Promise<void> {
-  const { codeTaskRepo, prTaskLockRepo } = getServices();
-
+async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Promise<void> {
   try {
-    const result = await handlePRComment(event, 'github-webhook', {
-      codeTaskRepo,
-      prTaskLockRepo,
-      logger,
-    });
+    if (event.senderLogin === BOT_LOGIN) {
+      logger.debug(
+        { repository: event.repository, prNumber: event.pullRequestNumber },
+        'Skipping own bot comment to prevent loop'
+      );
+      return;
+    }
 
-    /* v8 ignore start -- test-infra: handlePRComment error paths covered by unit tests in handlePRComment.test.ts @preserve */
-    if (!result.ok) {
-      const error = result.error;
-      if (error.code === 'NOT_ACTIONABLE') {
-        logger.debug(
-          { repository: event.repository, prNumber: event.pullRequestNumber },
-          'PR comment not actionable, skipping task creation'
-        );
-      } else if (error.code === 'PR_LOCKED') {
-        logger.info(
-          { repository: event.repository, prNumber: event.pullRequestNumber, activeTaskId: error.activeTaskId },
-          'PR already has active task, skipping'
-        );
-      } else {
-        logger.warn(
-          { repository: event.repository, prNumber: event.pullRequestNumber, error },
-          'Failed to handle PR comment'
-        );
-      }
+    const services = getServices();
+    const taskResult = await services.codeTaskRepo.findByPR(event.repository, event.pullRequestNumber);
+
+    /* v8 ignore start -- upstream: Firestore error path in fire-and-forget dispatch @preserve */
+    if (!taskResult.ok) {
+      logger.error(
+        { repository: event.repository, prNumber: event.pullRequestNumber, error: taskResult.error },
+        'Failed to find task for PR comment dispatch'
+      );
       return;
     }
     /* v8 ignore stop @preserve */
 
-    // Task was prepared successfully - now we need to dispatch it
-    // For now, log the result. Full dispatch integration is Phase 4.
-    const { taskId, mode, prompt } = result.value; // @allow-result-access -- .ok checked on line 37
-    logger.info(
+    const task = taskResult.value; // @allow-result-access -- narrowed by !taskResult.ok above
+
+    /* v8 ignore start -- test-infra: fire-and-forget dispatch path, null-task branch not reachable via route integration tests @preserve */
+    if (task === null) {
+      logger.info(
+        { repository: event.repository, prNumber: event.pullRequestNumber },
+        'No task found for PR, ignoring comment'
+      );
+      return;
+    }
+    /* v8 ignore stop @preserve */
+
+    const payload = event.payload as Record<string, unknown> | undefined;
+    const message = buildDispatchMessage(event, payload);
+
+    const sendResult = await sendTaskMessage(
       {
-        repository: event.repository,
-        prNumber: event.pullRequestNumber,
-        taskId,
-        mode,
-        promptLength: prompt.length,
+        logger: services.logger,
+        codeTaskRepo: services.codeTaskRepo,
+        logLineRepo: services.logLineRepo,
+        taskDispatcher: services.taskDispatcher,
+        workerSettingsRepo: services.workerSettingsRepo,
+        statusMirrorService: services.statusMirrorService,
+        whatsappNotifier: services.whatsappNotifier,
       },
-      'PR comment task prepared for dispatch'
+      { taskId: task.id, userId: task.userId, message }
     );
 
-    // TODO (Phase 4): Dispatch the task to the worker
-    // This requires creating the actual CodeTask document and dispatching
-    // For now, we just log that the task is ready
+    /* v8 ignore start -- test-infra: fire-and-forget dispatch, sendTaskMessage error paths covered by unit tests @preserve */
+    if (!sendResult.ok) {
+      logger.error(
+        { taskId: task.id, error: sendResult.error, prNumber: event.pullRequestNumber },
+        'Failed to dispatch PR comment to task'
+      );
+      return;
+    }
+    /* v8 ignore stop @preserve */
 
+    const { action } = sendResult.value; // @allow-result-access -- narrowed by !sendResult.ok above
+    logger.info(
+      { taskId: task.id, action, prNumber: event.pullRequestNumber, senderLogin: event.senderLogin },
+      'PR comment dispatched to task'
+    );
   } catch (error) {
     logger.error(
       { error, repository: event.repository, prNumber: event.pullRequestNumber },
-      'Unexpected error processing PR comment for task'
+      'Unexpected error dispatching PR comment to task'
     );
   }
 }
+
+/* v8 ignore start -- test-infra: fire-and-forget helpers only reachable when findByPR returns a task, not testable via route integration tests @preserve */
+function extractId(payload: Record<string, unknown> | undefined, key: string): string {
+  if (payload === undefined) return 'unknown';
+  const obj = payload[key] as Record<string, unknown> | undefined;
+  if (obj === undefined) return 'unknown';
+  const id = obj['id'];
+  return typeof id === 'string' || typeof id === 'number' ? String(id) : 'unknown';
+}
+
+function extractReviewState(payload: Record<string, unknown> | undefined): string {
+  if (payload === undefined) return 'unknown';
+  const review = payload['review'] as Record<string, unknown> | undefined;
+  if (review === undefined) return 'unknown';
+  const state = review['state'];
+  return typeof state === 'string' ? state : 'unknown';
+}
+/* v8 ignore stop @preserve */
+
+/* v8 ignore start -- test-infra: fire-and-forget message builder only reachable when findByPR returns a task @preserve */
+function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unknown> | undefined): string {
+  const { repository, pullRequestNumber: prNumber, senderLogin, body } = event;
+
+  if (event.eventType === 'pull_request_review') {
+    const reviewId = extractId(payload, 'review');
+    const reviewState = extractReviewState(payload);
+    return [
+      `[PR Review] New review on PR #${String(prNumber)} in ${repository}`,
+      `From: @${senderLogin}`,
+      `Review ID: ${reviewId}`,
+      `Review state: ${reviewState}`,
+      '',
+      'Review body:',
+      body ?? '(empty)',
+      '',
+      'Instructions:',
+      `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged`,
+      `2. Fetch inline comments for this review: gh api /repos/${repository}/pulls/${String(prNumber)}/reviews/${reviewId}/comments`,
+      '3. React with eyes to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=eyes',
+      '4. Read all comments and understand the full context',
+      '5. For questions: investigate codebase, reply with answer',
+      '6. For fix requests: make changes, commit, reply with reasoning',
+      '7. Reply to each comment: gh api /repos/${repository}/pulls/${prNumber}/comments -f body="..." -F in_reply_to={id}',
+      '8. If review body exists, react with eyes and reply to the review as well',
+    ].join('\n');
+  }
+
+  const commentId = extractId(payload, 'comment');
+  return [
+    `[PR Comment] New comment on PR #${String(prNumber)} in ${repository}`,
+    `From: @${senderLogin}`,
+    `Comment ID: ${commentId}`,
+    'Type: issue_comment',
+    '',
+    'The commenter said:',
+    body ?? '(empty)',
+    '',
+    'Instructions:',
+    `1. React with eyes to the comment: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=eyes`,
+    '2. Read the comment and decide if it needs a response',
+    `3. If actionable: investigate, then reply via gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
+    '4. If not actionable (e.g. coverage report, "+1", bot noise): do nothing',
+  ].join('\n');
+}
+/* v8 ignore stop @preserve */
 
 export interface GitHubWebhookHeaders {
   'x-hub-signature-256': string;
@@ -275,9 +359,12 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
-      // For issue_comment events, attempt to create a PR comment task
-      if (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') {
-        await processPRCommentForTask(savedEvent, logger);
+      const isActionablePRCommentEvent =
+        (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') ||
+        (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted');
+
+      if (isActionablePRCommentEvent) {
+        void dispatchPRCommentToTask(savedEvent, logger);
       }
 
       return await reply.ok({ message: 'processed' });

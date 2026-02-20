@@ -2938,6 +2938,24 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('buildResumePreamble', () => {
+    it('returns preamble with PR state check instructions', () => {
+      const internal = dispatcher as unknown as {
+        buildResumePreamble: () => string;
+      };
+      const preamble = internal.buildResumePreamble();
+
+      expect(preamble).toContain('[RESUME PRE-FLIGHT');
+      expect(preamble).toContain('gh pr view --json state,merged,number');
+      expect(preamble).toContain('MERGED or CLOSED or NO_PR');
+      expect(preamble).toContain('git checkout -b followup/');
+      expect(preamble).toContain('If PR is OPEN:');
+      expect(preamble).toContain('unaddressed PR comments');
+      expect(preamble).toContain('---');
+      expect(preamble.endsWith('\n')).toBe(true);
+    });
+  });
+
   describe('activity heartbeat', () => {
     let heartbeatDispatcher: TaskDispatcher;
     let heartbeatStatePersistence: StatePersistence;

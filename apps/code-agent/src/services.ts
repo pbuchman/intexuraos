@@ -38,8 +38,6 @@ import { createWorkerSettingsRepository } from './infra/firestore/workerSettings
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
 import type { GitHubPREventRepository } from './domain/repositories/gitHubPREventRepository.js';
 import { createFirestoreGitHubPREventsRepository } from './infra/firestore/gitHubPREventsRepository.js';
-import type { PRTaskLockRepository } from './domain/repositories/prTaskLockRepository.js';
-import { createFirestorePRTaskLockRepository } from './infra/firestore/firestorePRTaskLockRepository.js';
 import type { TurnMetricsRepository } from './domain/repositories/turnMetricsRepository.js';
 import { createFirestoreTurnMetricsRepository } from './infra/repositories/firestoreTurnMetricsRepository.js';
 import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
@@ -66,7 +64,6 @@ export interface ServiceContainer {
   workerHealthProbe: WorkerHealthProbe;
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
-  prTaskLockRepo: PRTaskLockRepository;
   turnMetricsRepo: TurnMetricsRepository;
 }
 
@@ -252,7 +249,6 @@ export function initServices(config: ServiceConfig): void {
     workerHealthProbe: createWorkerHealthProbe(),
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
-    prTaskLockRepo: createFirestorePRTaskLockRepository({ firestore, logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
   };
 }
