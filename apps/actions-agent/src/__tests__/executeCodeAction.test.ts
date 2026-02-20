@@ -373,6 +373,7 @@ describe('executeCodeAction usecase', () => {
     const submittedTasks = fakeCodeClient.getSubmittedTasks();
     expect(submittedTasks).toHaveLength(1);
     expect(submittedTasks[0]?.actionId).toBe('action-123');
+    expect(submittedTasks[0]?.userId).toBe('user-456');
     expect(submittedTasks[0]?.payload.prompt).toBe('Fix the login bug');
     expect(submittedTasks[0]?.payload.workerType).toBe('opus');
     expect(submittedTasks[0]?.payload.linearIssueId).toBe('LIN-123');

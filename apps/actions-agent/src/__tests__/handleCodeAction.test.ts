@@ -262,6 +262,40 @@ describe('handleCodeAction usecase', () => {
     mockShouldAutoExecute.mockRestore();
   });
 
+  it('logs warning when auto-execute returns failed status', async () => {
+    const mockShouldAutoExecute = vi.mocked(shouldAutoExecute);
+    mockShouldAutoExecute.mockReturnValue(true);
+
+    await fakeActionRepository.save(createAction());
+
+    const fakeExecuteCodeAction = createFakeExecuteCodeActionUseCaseWithRepo(fakeActionRepository, {
+      returnResult: {
+        status: 'failed',
+        message: 'No workers available. Please try again later.',
+      },
+    });
+
+    const mockLogger = createMockLogger();
+    const usecase = registerActionHandler(createHandleCodeActionUseCase, {
+      actionRepository: fakeActionRepository,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+      executeCodeAction: fakeExecuteCodeAction,
+    });
+
+    const event = createEvent();
+    const result = await usecase.execute(event);
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      { actionId: 'action-123', message: 'No workers available. Please try again later.' },
+      'Code action auto-executed but resulted in failure'
+    );
+
+    mockShouldAutoExecute.mockRestore();
+  });
+
   describe('idempotency', () => {
     it('returns success without sending notification when action already processed (idempotency)', async () => {
       const action = createAction({ status: 'awaiting_approval' });

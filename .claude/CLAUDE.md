@@ -547,11 +547,23 @@ All artifacts must be connected:
 
 ## Environments
 
-| Environment | Domain               | Infra                 | Machine  | Deploy Target            |
-| ----------- | -------------------- | --------------------- | -------- | ------------------------ |
-| **dev**     | dev.intexuraos.cloud | PM2, GCP              | home-dev | `~/deploy/intexuraos`    |
-| **prod**    | intexuraos.cloud     | Cloud Run / Functions | GCloud   | CI/CD via GitHub Actions |
-| **local**   | localhost:3000       | PM2                   | macOS    | Direct                   |
+| Environment | Domain               | Infra                 | Machine                              | Deploy Target            |
+| ----------- | -------------------- | --------------------- | ------------------------------------ | ------------------------ |
+| **local**   | localhost:3000       | PM2                   | Any dev machine (`uname -s`=Darwin)  | Direct                   |
+| **dev**     | dev.intexuraos.cloud | PM2, GCP              | home-dev (`uname -n`=home-dev)       | `~/deploy/intexuraos`    |
+| **prod**    | intexuraos.cloud     | Cloud Run / Functions | GCloud                               | CI/CD via GitHub Actions |
+
+**How to detect which environment you are on:**
+
+| Check              | local                  | dev (home-dev)         | prod                |
+| ------------------ | ---------------------- | ---------------------- | ------------------- |
+| `uname -s`         | Darwin                 | Linux                  | N/A (Cloud Run)     |
+| `uname -n`         | ≠ home-dev             | home-dev               | N/A                 |
+| Platform (context) | darwin                 | linux                  | N/A                 |
+| Logs               | PM2 logs / stdout      | PM2 logs / stdout      | `gcloud logging`    |
+| Firestore          | Emulator (port 8101)   | Emulator or production | Production          |
+
+**local** = wherever you run code that is NOT prod or dev. No assumptions about specific machine.
 
 **Dev** and **local** both use `pnpm dev` (Vite dev server with proxy). Service URLs are `/api/*` relative paths proxied by Vite.
 **Prod** uses `pnpm build` (static bundle on CDN). Service URLs are absolute Cloud Run URLs baked at build time.
@@ -561,12 +573,13 @@ All artifacts must be connected:
 **RULE: Identify WHERE you are running before investigating.** Wrong assumptions waste time.
 
 ```
-STEP 1: Am I on home-dev, local macOS, or analyzing prod logs?
+STEP 1: Check `uname -n`. Is it home-dev? If not, am I analyzing prod (gcloud) logs or local?
 STEP 2: If home-dev → everything is co-located. No SSH needed. Direct access.
-STEP 3: Check service status with the right tool (see below).
+STEP 3: If analyzing a failure → check where the failure HAPPENED (prod Cloud Run logs vs local PM2 logs).
+STEP 4: Check service status with the right tool (see below).
 ```
 
-**On home-dev / local — all services run on the SAME machine:**
+**On home-dev — all services run on the SAME machine:**
 
 | Component                    | Manager        | Commands                                              |
 | ---------------------------- | -------------- | ----------------------------------------------------- |
@@ -588,10 +601,11 @@ STEP 3: Check service status with the right tool (see below).
 
 **Forbidden assumptions:**
 
-- "This is a prod issue" — verify first. Claude Code runs on home-dev.
+- "Platform is darwin therefore home-dev" — WRONG. darwin = local macOS, home-dev is Linux.
+- "This is a prod issue" — verify first by checking where the logs came from.
 - "I can't access that service" — on home-dev, you CAN. It's localhost.
 - "Not related to my changes" — if it's on the same machine, investigate it.
-- "We need to restart/deploy" — watch mode auto-reloads. Just push.
+- "We need to restart/deploy" — watch mode auto-reloads on home-dev. Just push.
 
 ---
 
