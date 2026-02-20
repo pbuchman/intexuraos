@@ -124,6 +124,13 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
   });
   const allLabels = await Promise.all(labelsPromises);
 
+  // Batch fetch all assignees
+  const assigneePromises = issues.map(async (issue) => {
+    const assignee = await issue.assignee;
+    return assignee ? { id: assignee.id, name: assignee.name } : null;
+  });
+  const allAssignees = await Promise.all(assigneePromises);
+
   return issues.map((issue, index) => {
     const state = states[index] as IssueState | null | undefined;
     return {
@@ -145,6 +152,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
       childCount: childCounts[index] ?? 0,
       children: [],
       labels: allLabels[index] ?? [],
+      assignee: allAssignees[index] ?? null,
     };
   });
 }
@@ -162,6 +170,9 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
     name: l.name,
     color: l.color,
   }));
+
+  // Fetch assignee for the issue
+  const assignee = await issue.assignee;
 
   return {
     id: issue.id,
@@ -182,6 +193,7 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
     childCount: children.nodes.length,
     children: [],
     labels,
+    assignee: assignee ? { id: assignee.id, name: assignee.name } : null,
   };
 }
 

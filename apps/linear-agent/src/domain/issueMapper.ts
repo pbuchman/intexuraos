@@ -60,8 +60,8 @@ export function mapApiIssueToSyncedIssue(
     state: issue.state.name,
     stateType: issue.state.type,
     priority: issue.priority,
-    assigneeId: null, // API LinearIssue doesn't include assignee
-    assigneeName: null,
+    assigneeId: issue.assignee?.id ?? null,
+    assigneeName: issue.assignee?.name ?? null,
     labels: issue.labels,
     url: issue.url,
     userId,
