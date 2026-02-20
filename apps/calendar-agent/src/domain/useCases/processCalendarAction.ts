@@ -48,10 +48,6 @@ function toCalendarError(error: ExtractionError): CalendarError {
   };
 }
 
-function createResourceUrl(): string {
-  return '/#/calendar';
-}
-
 function isValidIsoDateTime(value: string | null): boolean {
   if (value === null) return false;
   const isoDateTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
@@ -339,7 +335,7 @@ export async function processCalendarAction(
   }
 
   const createdEvent = createResult.value;
-  const resourceUrl = createResourceUrl();
+  const resourceUrl = createdEvent.htmlLink ?? '/#/calendar';
 
   logger.info(
     { userId, actionId, eventId: createdEvent.id },
