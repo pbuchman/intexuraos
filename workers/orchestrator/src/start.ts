@@ -73,6 +73,18 @@ function readHostGitConfig(key: string): string | undefined {
     return undefined;
   }
 }
+
+function readRepoGitConfig(repoPath: string, key: string): string | undefined {
+  try {
+    const value = execSync(`git -C ${repoPath} config --local ${key}`, {
+      encoding: 'utf-8',
+      timeout: 5000,
+    }).trim();
+    return value !== '' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
 /* v8 ignore stop @preserve */
 
 /**
@@ -397,6 +409,23 @@ async function bootstrap(): Promise<void> {
   const gitUserName = process.env['INTEXURAOS_GIT_USER_NAME'] ?? readHostGitConfig('user.name');
   const gitUserEmail = process.env['INTEXURAOS_GIT_USER_EMAIL'] ?? readHostGitConfig('user.email');
   logger.info({ gitUserName, gitUserEmail }, 'Git identity for worker containers');
+
+  // Log repo-level git config — this overrides global config in worktrees
+  const repoUserName = readRepoGitConfig(repoPath, 'user.name');
+  const repoUserEmail = readRepoGitConfig(repoPath, 'user.email');
+  if (repoUserName !== undefined || repoUserEmail !== undefined) {
+    logger.warn(
+      { repoUserName, repoUserEmail },
+      'Repository has local git user config — this OVERRIDES the identity passed to containers. ' +
+        'Run: git -C <repo> config --unset user.name && git -C <repo> config --unset user.email'
+    );
+  }
+  const effectiveName = repoUserName ?? gitUserName ?? 'NOT SET';
+  const effectiveEmail = repoUserEmail ?? gitUserEmail ?? 'NOT SET';
+  logger.info(
+    { effectiveName, effectiveEmail },
+    'Effective git identity for commits (repo-level > global > env var)'
+  );
 
   // Create Docker isolation provider
   const secretsBasePath = join(orchestratorDir, 'secrets');

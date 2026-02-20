@@ -560,6 +560,51 @@ describe('processCalendarAction', () => {
       if (result.ok) {
         expect(result.value.status).toBe('completed');
         expect(result.value.message).toBe('Event "Doctor Appointment" created successfully');
+        expect(result.value.resourceUrl).toBe('https://calendar.google.com/event');
+      }
+    });
+
+    it('falls back to internal calendar URL when htmlLink is not available', async () => {
+      const mockEvent = {
+        id: 'event-no-link',
+        summary: 'No Link Event',
+        start: { dateTime: '2025-01-20T10:00:00' },
+        end: { dateTime: '2025-01-20T11:00:00' },
+      };
+
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'No Link Event',
+        start: '2025-01-20T10:00:00',
+        end: '2025-01-20T11:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Event without htmlLink',
+      });
+
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-no-link',
+          userId: 'user-456',
+          text: 'Event without link',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
         expect(result.value.resourceUrl).toBe('/#/calendar');
       }
     });
@@ -607,7 +652,7 @@ describe('processCalendarAction', () => {
       if (result.ok) {
         expect(result.value.status).toBe('completed');
         expect(result.value.message).toBe('Event "Company Holiday" created successfully');
-        expect(result.value.resourceUrl).toBe('/#/calendar');
+        expect(result.value.resourceUrl).toBe('https://calendar.google.com/event');
       }
     });
 

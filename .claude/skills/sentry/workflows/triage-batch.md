@@ -75,7 +75,7 @@ For each Sentry issue:
    Call: mcp__linear__list_issues
    Parameters:
      - query: "[sentry] <error-title-substring>"
-     - team: "pbuchman"
+     - team: "IntexuraOS"
    ```
 
 2. **Create (if missing)**:

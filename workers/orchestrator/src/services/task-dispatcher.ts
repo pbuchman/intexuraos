@@ -25,6 +25,7 @@ const execAsync = promisify(exec);
 const TASK_TIMEOUT_WARNING_MS = 115 * 60 * 1000; // 1h 55m
 const TASK_TIMEOUT_KILL_MS = 120 * 60 * 1000; // 2h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
+const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 
 export interface DispatchError {
   type: 'at_capacity' | 'invalid_request' | 'service_error';
@@ -68,6 +69,7 @@ export class TaskDispatcher {
   private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
   private readonly pendingMessages = new Map<string, string[]>();
+  private readonly lastOutputAt = new Map<string, number>();
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
   private readonly preserveFailedContainers: boolean;
@@ -318,6 +320,7 @@ export class TaskDispatcher {
       this.attemptCompletionSignals.delete(taskId);
       this.completionInProgress.delete(taskId);
       this.pendingMessages.delete(taskId);
+      this.lastOutputAt.delete(taskId);
       await this.isolation.provider.cleanupTaskSession?.(taskId);
 
       // Update task status
@@ -521,6 +524,7 @@ export class TaskDispatcher {
           this.claudeLogBuffers.delete(taskId);
           this.attemptCompletionSignals.delete(taskId);
           this.completionInProgress.delete(taskId);
+          this.lastOutputAt.delete(taskId);
           await this.isolation.provider.cleanupTaskSession?.(taskId);
 
           // Check for PR
@@ -572,6 +576,16 @@ export class TaskDispatcher {
           // Check if Docker container is still running
           const isRunning = await this.isolation.provider.isWorkerRunning(taskId);
           const attemptCompleted = this.attemptCompletionSignals.has(taskId);
+
+          // Emit activity heartbeat when no Docker output for threshold duration
+          const lastActivity = this.lastOutputAt.get(taskId);
+          if (isRunning && lastActivity !== undefined) {
+            const silenceMs = Date.now() - lastActivity;
+            if (silenceMs >= ACTIVITY_HEARTBEAT_THRESHOLD_MS) {
+              const silenceSeconds = Math.round(silenceMs / 1000);
+              this.appendTaggedTaskLog(taskId, 'system', `Still processing... no output for ${String(silenceSeconds)}s`);
+            }
+          }
 
           if (!isRunning || attemptCompleted) {
             if (this.completionInProgress.has(taskId)) {
@@ -929,6 +943,7 @@ export class TaskDispatcher {
         const cleaned = stripDockerHeaders(chunk);
         const formatted = this.formatClaudeSystemMessages(cleaned);
         this.logForwarder.appendChunk(task.taskId, formatted);
+        this.lastOutputAt.set(task.taskId, Date.now());
         this.detectClaudeError(task.taskId, cleaned);
       },
       onComplete: (exitCode) => {
@@ -948,6 +963,7 @@ export class TaskDispatcher {
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
     this.claudeLogBuffers.delete(task.taskId);
+    this.lastOutputAt.set(task.taskId, Date.now());
 
     try {
       await this.isolation.tokenRefresher.registerTask(task.taskId);
@@ -1020,6 +1036,7 @@ export class TaskDispatcher {
     this.claudeLogBuffers.delete(task.taskId);
     this.attemptCompletionSignals.delete(task.taskId);
     this.pendingMessages.delete(task.taskId);
+    this.lastOutputAt.delete(task.taskId);
 
     task.status = finalStatus;
     task.completedAt = new Date().toISOString();
