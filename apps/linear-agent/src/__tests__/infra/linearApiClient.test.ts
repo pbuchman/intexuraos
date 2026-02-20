@@ -234,6 +234,104 @@ describe('LinearApiClient', () => {
     });
   });
 
+  describe('assignee data', () => {
+    it('returns issue with assignee when seeded with assignee', async () => {
+      fakeClient.seedIssue({
+        id: 'issue-with-assignee',
+        identifier: 'ENG-10',
+        title: 'Assigned Issue',
+        description: null,
+        priority: 2,
+        state: { id: 'state-1', name: 'In Progress', type: 'started' },
+        url: 'https://linear.app/issue/10',
+        createdAt: '2025-01-15T10:00:00Z',
+        updatedAt: '2025-01-15T10:00:00Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [],
+        assignee: { id: 'user-abc', name: 'Alice Smith' },
+      });
+
+      const result = await fakeClient.getIssue('api-key', 'issue-with-assignee');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value?.assignee).toEqual({ id: 'user-abc', name: 'Alice Smith' });
+      }
+    });
+
+    it('returns issue with null assignee when seeded without assignee', async () => {
+      fakeClient.seedIssue({
+        id: 'issue-no-assignee',
+        identifier: 'ENG-11',
+        title: 'Unassigned Issue',
+        description: null,
+        priority: 3,
+        state: { id: 'state-1', name: 'Backlog', type: 'backlog' },
+        url: 'https://linear.app/issue/11',
+        createdAt: '2025-01-15T10:00:00Z',
+        updatedAt: '2025-01-15T10:00:00Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [],
+        assignee: null,
+      });
+
+      const result = await fakeClient.getIssue('api-key', 'issue-no-assignee');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value?.assignee).toBeNull();
+      }
+    });
+
+    it('lists multiple issues with different assignees', async () => {
+      fakeClient.seedIssue({
+        id: 'issue-a',
+        identifier: 'ENG-20',
+        title: 'Issue A',
+        description: null,
+        priority: 1,
+        state: { id: 'state-1', name: 'In Progress', type: 'started' },
+        url: 'https://linear.app/issue/20',
+        createdAt: '2025-01-15T10:00:00Z',
+        updatedAt: '2025-01-15T10:00:00Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [],
+        assignee: { id: 'user-1', name: 'Alice' },
+      });
+      fakeClient.seedIssue({
+        id: 'issue-b',
+        identifier: 'ENG-21',
+        title: 'Issue B',
+        description: null,
+        priority: 2,
+        state: { id: 'state-2', name: 'Todo', type: 'unstarted' },
+        url: 'https://linear.app/issue/21',
+        createdAt: '2025-01-15T10:00:00Z',
+        updatedAt: '2025-01-15T10:00:00Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [],
+        assignee: { id: 'user-2', name: 'Bob' },
+      });
+
+      const result = await fakeClient.listIssues('api-key', 'team-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(2);
+        expect(result.value[0]?.assignee).toEqual({ id: 'user-1', name: 'Alice' });
+        expect(result.value[1]?.assignee).toEqual({ id: 'user-2', name: 'Bob' });
+      }
+    });
+  });
+
   describe('test helpers', () => {
     it('reset clears all issues', async () => {
       await fakeClient.createIssue('key', {
