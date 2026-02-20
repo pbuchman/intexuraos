@@ -48,6 +48,8 @@ export interface LinearIssue {
   children: LinearIssue[];
   /** Labels associated with the issue */
   labels: LinearLabel[];
+  /** Assignee data (fetched from API or webhook) */
+  assignee?: { id: string; name: string } | null;
 }
 
 /** Linear issue with team ID for validation */
