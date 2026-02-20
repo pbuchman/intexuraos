@@ -58,6 +58,7 @@ export function createCodeAgentHttpClient(
   return {
     async submitTask(input: {
       actionId: string;
+      userId: string;
       approvalEventId: string;
       payload: CodeActionPayload;
     }): Promise<Result<{ codeTaskId: string; resourceUrl: string }, CodeAgentError>> {
@@ -90,6 +91,7 @@ export function createCodeAgentHttpClient(
           },
           body: JSON.stringify({
             actionId: input.actionId,
+            userId: input.userId,
             approvalEventId: input.approvalEventId,
             payload: input.payload,
           }),

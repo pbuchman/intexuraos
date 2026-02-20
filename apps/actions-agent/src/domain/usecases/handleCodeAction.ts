@@ -50,7 +50,14 @@ export function createHandleCodeActionUseCase(
           return err(executeResult.error);
         }
 
-        logger.info({ actionId: event.actionId }, 'Code action auto-executed successfully');
+        if (executeResult.value.status === 'failed') {
+          logger.warn(
+            { actionId: event.actionId, message: executeResult.value.message },
+            'Code action auto-executed but resulted in failure'
+          );
+        } else {
+          logger.info({ actionId: event.actionId }, 'Code action auto-executed successfully');
+        }
         return ok({ actionId: event.actionId });
       }
 
