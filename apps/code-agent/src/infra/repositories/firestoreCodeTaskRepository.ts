@@ -29,10 +29,15 @@ import type {
 
 const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (design line 1544)
 
-function generateDedupKey(userId: string, prompt: string): string {
+function generateDedupKey(userId: string, prompt: string, linearIssueId?: string): string {
   // Normalize prompt: trim, collapse spaces, lowercase (design lines 1542-1547)
   const normalized = prompt.trim().replace(/\s+/g, ' ').toLowerCase();
-  const hash = createHash('sha256').update(userId + normalized).digest('hex');
+  // Include linearIssueId when present so the same default prompt
+  // ("Implement exactly as described...") produces distinct keys for different issues.
+  const input = linearIssueId !== undefined
+    ? userId + linearIssueId + normalized
+    : userId + normalized;
+  const hash = createHash('sha256').update(input).digest('hex');
   return hash.substring(0, 16);
 }
 
@@ -46,7 +51,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
   return {
     create: async (input: CreateTaskInput): Promise<Result<CodeTask, RepositoryError>> => {
       const taskId = input.id ?? `task_${randomUUID()}`;
-      const dedupKey = generateDedupKey(input.userId, input.prompt);
+      const dedupKey = generateDedupKey(input.userId, input.prompt, input.linearIssueId);
       const now = new Date();
       const dedupWindowStart = new Date(now.getTime() - DEDUP_WINDOW_MS);
 
