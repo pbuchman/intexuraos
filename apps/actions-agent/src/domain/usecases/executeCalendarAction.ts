@@ -142,7 +142,8 @@ export function createExecuteCalendarActionUseCase(
     logger.info({ actionId, status: 'completed' }, 'Action marked as completed');
 
     if (resourceUrl !== undefined) {
-      const fullUrl = `${webAppUrl}${resourceUrl}`;
+      const isAbsoluteUrl = resourceUrl.startsWith('http');
+      const fullUrl = isAbsoluteUrl ? resourceUrl : `${webAppUrl}${resourceUrl}`;
       const whatsappMessage = `📅 ${message} View it here: ${fullUrl}`;
 
       logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');

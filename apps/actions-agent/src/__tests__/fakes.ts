@@ -637,7 +637,7 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   private nextResponse: ServiceFeedback = {
     status: 'completed',
     message: 'Calendar event created successfully',
-    resourceUrl: '/#/calendar',
+    resourceUrl: 'https://calendar.google.com/calendar/event?eid=fake123',
   };
   private failNext = false;
   private failError: Error | null = null;
@@ -967,7 +967,7 @@ export function createFakeExecuteCalendarActionUseCase(config?: {
       config?.returnResult ?? {
         status: 'completed',
         message: 'Calendar event created successfully',
-        resourceUrl: '/#/calendar',
+        resourceUrl: 'https://calendar.google.com/calendar/event?eid=fake123',
       }
     );
   };

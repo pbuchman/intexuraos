@@ -115,12 +115,12 @@ describe('executeCalendarAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resourceUrl).toBe('/#/calendar');
+      expect(result.value.resourceUrl).toBe('https://calendar.google.com/calendar/event?eid=fake123');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
-    expect(updatedAction?.payload['resource_url']).toBe('/#/calendar');
+    expect(updatedAction?.payload['resource_url']).toBe('https://calendar.google.com/calendar/event?eid=fake123');
   });
 
   it('updates action to failed when calendar service returns failed status', async () => {
@@ -227,7 +227,7 @@ describe('executeCalendarAction usecase', () => {
     }
   });
 
-  it('publishes WhatsApp notification on success', async () => {
+  it('publishes WhatsApp notification with Google Calendar URL on success', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
 
@@ -245,6 +245,32 @@ describe('executeCalendarAction usecase', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('Calendar event created');
+    expect(messages[0]?.message).toContain('https://calendar.google.com/calendar/event?eid=fake123');
+    // Absolute URL should NOT be prepended with webAppUrl
+    expect(messages[0]?.message).not.toContain('https://app.test.com/https://');
+  });
+
+  it('publishes WhatsApp notification with relative URL prepended by webAppUrl (legacy)', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    fakeCalendarClient.setNextResponse({
+      status: 'completed',
+      message: 'Calendar event created',
+      resourceUrl: '/#/calendar',
+    });
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
     expect(messages[0]?.message).toContain('https://app.test.com/#/calendar');
   });
 
