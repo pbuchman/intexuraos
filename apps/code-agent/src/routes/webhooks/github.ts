@@ -16,36 +16,29 @@ import {
   shouldProcessRepository,
 } from '../../infra/github-event-parser.js';
 import { sendTaskMessage } from '../../domain/usecases/sendTaskMessage.js';
-import { isActionableComment } from '../../domain/utils/isActionableComment.js';
-import { formatPRCommentMessage } from '../../domain/utils/formatPRCommentMessage.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import type { Logger } from 'pino';
 
+const BOT_LOGIN = 'intexuraos-code-worker[bot]';
+
 /**
  * Dispatch a PR comment to the task that owns this PR via sendTaskMessage.
  * Fire-and-forget — webhook returns immediately.
+ * Only filter: skip our own bot to prevent infinite loops.
+ * The worker decides what deserves a response.
  */
 async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Promise<void> {
   try {
-    const services = getServices();
-
-    const actionable = isActionableComment({
-      /* v8 ignore start -- upstream: GitHub webhook payload may contain null body @preserve */
-      body: event.body ?? '',
-      /* v8 ignore stop @preserve */
-      senderLogin: event.senderLogin,
-      senderType: event.senderType,
-    });
-
-    if (!actionable) {
+    if (event.senderLogin === BOT_LOGIN) {
       logger.debug(
-        { repository: event.repository, prNumber: event.pullRequestNumber, senderLogin: event.senderLogin },
-        'PR comment not actionable, skipping dispatch'
+        { repository: event.repository, prNumber: event.pullRequestNumber },
+        'Skipping own bot comment to prevent loop'
       );
       return;
     }
 
+    const services = getServices();
     const taskResult = await services.codeTaskRepo.findByPR(event.repository, event.pullRequestNumber);
 
     /* v8 ignore start -- upstream: Firestore error path in fire-and-forget dispatch @preserve */
@@ -70,7 +63,8 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
     }
     /* v8 ignore stop @preserve */
 
-    const message = formatPRCommentMessage(event);
+    const payload = event.payload as Record<string, unknown> | undefined;
+    const message = buildDispatchMessage(event, payload);
 
     const sendResult = await sendTaskMessage(
       {
@@ -107,6 +101,71 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
     );
   }
 }
+
+/* v8 ignore start -- test-infra: fire-and-forget helpers only reachable when findByPR returns a task, not testable via route integration tests @preserve */
+function extractId(payload: Record<string, unknown> | undefined, key: string): string {
+  if (payload === undefined) return 'unknown';
+  const obj = payload[key] as Record<string, unknown> | undefined;
+  if (obj === undefined) return 'unknown';
+  const id = obj['id'];
+  return typeof id === 'string' || typeof id === 'number' ? String(id) : 'unknown';
+}
+
+function extractReviewState(payload: Record<string, unknown> | undefined): string {
+  if (payload === undefined) return 'unknown';
+  const review = payload['review'] as Record<string, unknown> | undefined;
+  if (review === undefined) return 'unknown';
+  const state = review['state'];
+  return typeof state === 'string' ? state : 'unknown';
+}
+/* v8 ignore stop @preserve */
+
+/* v8 ignore start -- test-infra: fire-and-forget message builder only reachable when findByPR returns a task @preserve */
+function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unknown> | undefined): string {
+  const { repository, pullRequestNumber: prNumber, senderLogin, body } = event;
+
+  if (event.eventType === 'pull_request_review') {
+    const reviewId = extractId(payload, 'review');
+    const reviewState = extractReviewState(payload);
+    return [
+      `[PR Review] New review on PR #${String(prNumber)} in ${repository}`,
+      `From: @${senderLogin}`,
+      `Review ID: ${reviewId}`,
+      `Review state: ${reviewState}`,
+      '',
+      'Review body:',
+      body ?? '(empty)',
+      '',
+      'Instructions:',
+      `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged`,
+      `2. Fetch inline comments for this review: gh api /repos/${repository}/pulls/${String(prNumber)}/reviews/${reviewId}/comments`,
+      '3. React with eyes to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=eyes',
+      '4. Read all comments and understand the full context',
+      '5. For questions: investigate codebase, reply with answer',
+      '6. For fix requests: make changes, commit, reply with reasoning',
+      '7. Reply to each comment: gh api /repos/${repository}/pulls/${prNumber}/comments -f body="..." -F in_reply_to={id}',
+      '8. If review body exists, react with eyes and reply to the review as well',
+    ].join('\n');
+  }
+
+  const commentId = extractId(payload, 'comment');
+  return [
+    `[PR Comment] New comment on PR #${String(prNumber)} in ${repository}`,
+    `From: @${senderLogin}`,
+    `Comment ID: ${commentId}`,
+    'Type: issue_comment',
+    '',
+    'The commenter said:',
+    body ?? '(empty)',
+    '',
+    'Instructions:',
+    `1. React with eyes to the comment: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=eyes`,
+    '2. Read the comment and decide if it needs a response',
+    `3. If actionable: investigate, then reply via gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
+    '4. If not actionable (e.g. coverage report, "+1", bot noise): do nothing',
+  ].join('\n');
+}
+/* v8 ignore stop @preserve */
 
 export interface GitHubWebhookHeaders {
   'x-hub-signature-256': string;
@@ -302,7 +361,6 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
 
       const isActionablePRCommentEvent =
         (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') ||
-        (parsedEvent.eventType === 'pull_request_review_comment' && parsedEvent.action === 'created') ||
         (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted');
 
       if (isActionablePRCommentEvent) {

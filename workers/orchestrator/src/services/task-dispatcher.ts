@@ -857,7 +857,7 @@ export class TaskDispatcher {
     return [
       '[RESUME PRE-FLIGHT — MANDATORY]',
       'Before making ANY changes, check your PR state:',
-      '  gh pr view --json state,merged 2>/dev/null || echo "NO_PR"',
+      '  gh pr view --json state,merged,number 2>/dev/null || echo "NO_PR"',
       '',
       'If PR is MERGED or CLOSED or NO_PR:',
       '  1. git fetch origin',
@@ -865,7 +865,11 @@ export class TaskDispatcher {
       '  3. After changes → create NEW PR targeting development',
       '  4. Do NOT push to the old branch',
       '',
-      'If PR is OPEN: continue on current branch normally.',
+      'If PR is OPEN:',
+      '  1. Continue on current branch normally',
+      '  2. Check for unaddressed PR comments:',
+      '     gh api /repos/{owner}/{repo}/pulls/{number}/comments --jq "[.[] | select(.user.login != \\"intexuraos-code-worker[bot]\\")] | length"',
+      '  3. If the message below references a PR comment or review, address it',
       '---',
       '',
     ].join('\n');
