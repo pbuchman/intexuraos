@@ -980,7 +980,7 @@ export interface LinearIssue {
     type: IssueStateCategory;
   };
   priority: LinearPriority;
-  assignee?: LinearUser;
+  assignee?: LinearUser | null;
   creator?: LinearUser;
   createdAt: string;
   updatedAt: string;
