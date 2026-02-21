@@ -144,7 +144,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, logger } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, logger } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -201,6 +201,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+
+        // Transition Linear issue to In Review when PR is created (best-effort)
+        /* v8 ignore start -- ts-type: optional property checks create type narrowing branches @preserve */
+        if (prNumber !== undefined && task.linearIssueId !== undefined) {
+          await linearIssueService.markInReview(task.userId, task.linearIssueId);
+        }
+        /* v8 ignore stop @preserve */
 
         // Notify actions-agent if task has actionId
         if (task.actionId) {
