@@ -22,6 +22,7 @@ import type { Logger } from 'pino';
 
 const BOT_LOGIN = 'intexuraos-code-worker[bot]';
 const EXTERNAL_AGENT_MENTIONS = ['@claude', '@codex'];
+const CLAUDE_BOT_LOGIN = 'claude[bot]';
 
 /**
  * Dispatch a PR comment to the task that owns this PR via sendTaskMessage.
@@ -368,9 +369,15 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
+      const isEditedClaudeBotComment =
+        parsedEvent.eventType === 'issue_comment' &&
+        parsedEvent.action === 'edited' &&
+        parsedEvent.senderLogin === CLAUDE_BOT_LOGIN;
+
       const isActionablePRCommentEvent =
         (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') ||
-        (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted');
+        (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted') ||
+        isEditedClaudeBotComment;
 
       if (isActionablePRCommentEvent) {
         void dispatchPRCommentToTask(savedEvent, logger);
