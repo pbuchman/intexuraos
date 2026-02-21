@@ -167,6 +167,61 @@ describe('processCodeAction', () => {
     }
   });
 
+  it('returns duplicate_prompt for DUPLICATE_PROMPT errors', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      err({
+        code: 'DUPLICATE_PROMPT',
+        message: 'Duplicate prompt within 5 minutes',
+        existingTaskId: 'existing-task-prompt',
+      })
+    );
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        workerType: 'auto',
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('duplicate_prompt');
+      expect(result.error.existingTaskId).toBe('existing-task-prompt');
+    }
+  });
+
+  it('returns active_task_exists for ACTIVE_TASK_EXISTS errors', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      err({
+        code: 'ACTIVE_TASK_EXISTS',
+        message: 'Active task exists for Linear issue',
+        existingTaskId: 'existing-task-active',
+      })
+    );
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        workerType: 'auto',
+        linearIssueId: 'INT-500',
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('active_task_exists');
+      expect(result.error.existingTaskId).toBe('existing-task-active');
+    }
+  });
+
   it('successfully creates task and dispatches to worker', async () => {
     vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
       ok({

@@ -482,6 +482,121 @@ describe('POST /internal/code/process', () => {
     validateIssueSpy.mockRestore();
   });
 
+  it('returns 409 for duplicate prompt within 5 minutes (Layer 2)', async () => {
+    // Mock dispatch to succeed for the first request
+    vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({
+      ok: true,
+      value: { dispatched: true, workerLocation: 'mac' },
+    });
+
+    // First request
+    await app.inject({
+      method: 'POST',
+      url: '/internal/code/process',
+      headers: {
+        'X-Internal-Auth': 'test-internal-token',
+      },
+      payload: {
+        actionId: 'action-dedup-prompt-1',
+        approvalEventId: 'approval-dedup-prompt-1',
+        userId: 'user-123',
+        payload: {
+          prompt: 'Fix the duplicate prompt bug',
+        },
+      },
+    });
+
+    // Second request with same prompt but different action/approval IDs
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/code/process',
+      headers: {
+        'X-Internal-Auth': 'test-internal-token',
+      },
+      payload: {
+        actionId: 'action-dedup-prompt-2',
+        approvalEventId: 'approval-dedup-prompt-2',
+        userId: 'user-123',
+        payload: {
+          prompt: 'Fix the duplicate prompt bug',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    const json = response.json() as { success: boolean; error: { code: string; message: string } };
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('CONFLICT');
+    expect(json.error.message).toContain('Similar task submitted in last 5 minutes');
+  });
+
+  it('returns 409 for active task on same Linear issue (Layer 3)', async () => {
+    // Mock dispatch to succeed but leave task in dispatched status (active)
+    vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({
+      ok: true,
+      value: { dispatched: true, workerLocation: 'mac' },
+    });
+
+    // Mock linearAgentClient.validateIssue for user-provided issue IDs
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    const validateIssueSpy = vi.spyOn(services.linearAgentClient, 'validateIssue').mockResolvedValue({
+      ok: true,
+      value: {
+        id: 'uuid-active-issue',
+        identifier: 'INT-ACTIVE',
+        title: 'Active Issue',
+        url: 'https://linear.app/intexuraos/INT-ACTIVE',
+        labels: [],
+        childCount: 0,
+      },
+    });
+
+    // First request with linearIssueId
+    await app.inject({
+      method: 'POST',
+      url: '/internal/code/process',
+      headers: {
+        'X-Internal-Auth': 'test-internal-token',
+      },
+      payload: {
+        actionId: 'action-active-1',
+        approvalEventId: 'approval-active-1',
+        userId: 'user-123',
+        payload: {
+          prompt: 'First task for this issue',
+          linearIssueId: 'INT-ACTIVE',
+        },
+      },
+    });
+
+    // Second request with same linearIssueId (different prompt to avoid Layer 2)
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/code/process',
+      headers: {
+        'X-Internal-Auth': 'test-internal-token',
+      },
+      payload: {
+        actionId: 'action-active-2',
+        approvalEventId: 'approval-active-2',
+        userId: 'user-123',
+        payload: {
+          prompt: 'Second different task for same issue',
+          linearIssueId: 'INT-ACTIVE',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    const json = response.json() as { success: boolean; error: { code: string; message: string } };
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('CONFLICT');
+    expect(json.error.message).toContain('Active task already exists for this Linear issue');
+
+    validateIssueSpy.mockRestore();
+  });
+
   it('returns 200 with correct resourceUrl format', async () => {
     // Mock taskDispatcher to succeed
     vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({

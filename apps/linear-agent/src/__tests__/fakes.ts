@@ -802,7 +802,7 @@ export class FakeLinearCommentRepository implements LinearCommentRepository {
 export class FakeCodeAgentClient implements CodeAgentClient {
   private shouldFail = false;
   private failError: CodeAgentError = { code: 'UNAVAILABLE', message: 'code-agent unavailable' };
-  private lastRequest: { userId: string; linearIssueId: string; prompt: string; workerType: string } | null = null;
+  private lastRequest: { userId: string; linearIssueId: string; prompt: string; workerType: string; actionId: string; approvalEventId: string } | null = null;
   private taskIdCounter = 1;
 
   async triggerCodeTask(request: {
@@ -818,6 +818,8 @@ export class FakeCodeAgentClient implements CodeAgentClient {
       linearIssueId: request.linearIssueId,
       prompt: request.prompt,
       workerType: request.workerType,
+      actionId: request.actionId,
+      approvalEventId: request.approvalEventId,
     };
 
     if (this.shouldFail) return err(this.failError);

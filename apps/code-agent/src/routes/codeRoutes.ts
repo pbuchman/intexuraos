@@ -516,6 +516,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           /* v8 ignore stop @preserve */
         }
 
+        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
+        if (error.code === 'duplicate_prompt') {
+        /* v8 ignore stop @preserve */
+          /* v8 ignore start -- ts-type: error existingTaskId nullish coalescing @preserve */
+          return await reply.fail('CONFLICT', `Similar task submitted in last 5 minutes: ${error.existingTaskId ?? ''}`);
+          /* v8 ignore stop @preserve */
+        }
+
+        /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
+        if (error.code === 'active_task_exists') {
+        /* v8 ignore stop @preserve */
+          /* v8 ignore start -- ts-type: error existingTaskId nullish coalescing @preserve */
+          return await reply.fail('CONFLICT', `Active task already exists for this Linear issue: ${error.existingTaskId ?? ''}`);
+          /* v8 ignore stop @preserve */
+        }
+
         /* v8 ignore start -- ts-type: error code comparison @preserve */
         if (error.code === 'worker_not_configured') {
         /* v8 ignore stop @preserve */

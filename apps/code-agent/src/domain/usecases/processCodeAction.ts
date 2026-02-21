@@ -70,6 +70,8 @@ export type ProcessCodeActionErrorCode =
   | 'unauthorized'
   | 'duplicate_approval'
   | 'duplicate_action'
+  | 'duplicate_prompt'
+  | 'active_task_exists'
   | 'worker_unavailable'
   | 'worker_not_configured'
   | 'internal_error';
@@ -248,9 +250,18 @@ export async function processCodeAction(
   if (!createResult.ok) {
     // Handle deduplication errors specifically
     const error = createResult.error;
-    if (error.code === 'DUPLICATE_APPROVAL' || error.code === 'DUPLICATE_ACTION') {
+    if (
+      error.code === 'DUPLICATE_APPROVAL' ||
+      error.code === 'DUPLICATE_ACTION' ||
+      error.code === 'DUPLICATE_PROMPT' ||
+      error.code === 'ACTIVE_TASK_EXISTS'
+    ) {
       return err({
-        code: error.code.toLowerCase() as 'duplicate_approval' | 'duplicate_action',
+        code: error.code.toLowerCase() as
+          | 'duplicate_approval'
+          | 'duplicate_action'
+          | 'duplicate_prompt'
+          | 'active_task_exists',
         message: error.message,
         existingTaskId: error.existingTaskId,
       });
