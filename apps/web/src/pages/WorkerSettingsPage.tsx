@@ -216,6 +216,7 @@ function AddWorkerForm({ onCancel, onAdd }: AddWorkerFormProps): React.JSX.Eleme
         <Input
           label="CF Access Client ID"
           type="password"
+          autoComplete="new-password"
           placeholder="Cloudflare Access Service Token ID"
           value={cfAccessClientId}
           onChange={(e): void => {
@@ -228,6 +229,7 @@ function AddWorkerForm({ onCancel, onAdd }: AddWorkerFormProps): React.JSX.Eleme
         <Input
           label="CF Access Client Secret"
           type="password"
+          autoComplete="new-password"
           placeholder="Cloudflare Access Service Token Secret"
           value={cfAccessClientSecret}
           onChange={(e): void => {
@@ -240,6 +242,7 @@ function AddWorkerForm({ onCancel, onAdd }: AddWorkerFormProps): React.JSX.Eleme
         <Input
           label="Orchestrator Secret"
           type="password"
+          autoComplete="new-password"
           placeholder="Shared secret for code-agent ↔ orchestrator communication"
           value={dispatchSigningSecret}
           onChange={(e): void => {
@@ -307,15 +310,15 @@ function WorkerRow({
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [url, setUrl] = useState(worker.url);
-  const [cfAccessClientId, setCfAccessClientId] = useState(worker.cfAccessClientId);
-  const [cfAccessClientSecret, setCfAccessClientSecret] = useState(worker.cfAccessClientSecret);
-  const [dispatchSigningSecret, setDispatchSigningSecret] = useState(worker.dispatchSigningSecret);
+  const [cfAccessClientId, setCfAccessClientId] = useState('');
+  const [cfAccessClientSecret, setCfAccessClientSecret] = useState('');
+  const [dispatchSigningSecret, setDispatchSigningSecret] = useState('');
 
   const resetForm = (): void => {
     setUrl(worker.url);
-    setCfAccessClientId(worker.cfAccessClientId);
-    setCfAccessClientSecret(worker.cfAccessClientSecret);
-    setDispatchSigningSecret(worker.dispatchSigningSecret);
+    setCfAccessClientId('');
+    setCfAccessClientSecret('');
+    setDispatchSigningSecret('');
     setFormError(null);
   };
 
@@ -511,6 +514,7 @@ function WorkerRow({
           <Input
             label="CF Access Client ID"
             type="password"
+            autoComplete="new-password"
             placeholder="Cloudflare Access Service Token ID"
             value={cfAccessClientId}
             onChange={(e): void => {
@@ -522,6 +526,7 @@ function WorkerRow({
           <Input
             label="CF Access Client Secret"
             type="password"
+            autoComplete="new-password"
             placeholder="Cloudflare Access Service Token Secret"
             value={cfAccessClientSecret}
             onChange={(e): void => {
@@ -533,6 +538,7 @@ function WorkerRow({
           <Input
             label="Orchestrator Secret"
             type="password"
+            autoComplete="new-password"
             placeholder="Shared secret for code-agent ↔ orchestrator communication"
             value={dispatchSigningSecret}
             onChange={(e): void => {
