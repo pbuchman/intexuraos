@@ -7,6 +7,7 @@ import {
   FakeLinearApiClient,
   FakeLinearIssueRepository,
   FakeLinearCommentRepository,
+  FakeCodeAgentClient,
 } from '../fakes.js';
 import type { LinearConnection, LinearIssue, SyncedLinearIssue, LinearComment } from '../../domain/models.js';
 
@@ -48,6 +49,7 @@ describe('internalIssuesRoutes', () => {
       issueRepository: fakeIssueRepo,
       userServiceClient: null as unknown as import('@intexuraos/internal-clients').UserServiceClient,
       commentRepository: fakeCommentRepo,
+      codeAgentClient: new FakeCodeAgentClient(),
     });
 
     app = await buildServer();

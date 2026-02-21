@@ -1,0 +1,142 @@
+import { describe, expect, it } from 'vitest';
+import { shouldTriggerCodeTask, triggerCodeTaskFromAssignment } from '../../domain/useCases/triggerCodeTaskFromAssignment.js';
+import type { LinearWebhookEvent } from '../../domain/webhookTypes.js';
+import { FakeCodeAgentClient } from '../fakes.js';
+import { createFakeLogger } from '../testUtils.js';
+
+function createEvent(overrides: Partial<LinearWebhookEvent> = {}): LinearWebhookEvent {
+  return {
+    action: 'update',
+    type: 'Issue',
+    data: {
+      id: 'issue-uuid-1',
+      identifier: 'INT-123',
+      title: 'Test Issue',
+      description: 'Implement the feature',
+      priority: 2,
+      url: 'https://linear.app/team/issue/INT-123',
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-02T00:00:00.000Z',
+      state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
+      assignee: { id: 'user-1', name: 'Test User' },
+      labels: [{ id: 'label-1', name: 'bug' }],
+      team: { id: 'team-1', key: 'INT' },
+    },
+    updatedFrom: { assigneeId: null },
+    webhookTimestamp: Date.now(),
+    webhookId: 'webhook-1',
+    ...overrides,
+  };
+}
+
+describe('shouldTriggerCodeTask', () => {
+  it('returns true for new assignment in unstarted state without Code Task label', () => {
+    expect(shouldTriggerCodeTask(createEvent())).toBe(true);
+  });
+
+  it('returns false when action is not update', () => {
+    expect(shouldTriggerCodeTask(createEvent({ action: 'create' }))).toBe(false);
+    expect(shouldTriggerCodeTask(createEvent({ action: 'remove' }))).toBe(false);
+  });
+
+  it('returns false when updatedFrom is undefined', () => {
+    const { updatedFrom: _, ...rest } = createEvent();
+    expect(shouldTriggerCodeTask(rest as LinearWebhookEvent)).toBe(false);
+  });
+
+  it('returns false when previous assignee was not null (reassignment)', () => {
+    expect(shouldTriggerCodeTask(createEvent({ updatedFrom: { assigneeId: 'prev-user' } }))).toBe(false);
+  });
+
+  it('returns false when updatedFrom has no assigneeId field', () => {
+    expect(shouldTriggerCodeTask(createEvent({ updatedFrom: { stateId: 'some-state' } }))).toBe(false);
+  });
+
+  it('returns false when current assignee is null', () => {
+    const event = createEvent();
+    event.data.assignee = null;
+    expect(shouldTriggerCodeTask(event)).toBe(false);
+  });
+
+  it('returns false when state is not unstarted', () => {
+    const event = createEvent();
+    event.data.state = { id: 'state-2', name: 'In Progress', type: 'started' };
+    expect(shouldTriggerCodeTask(event)).toBe(false);
+  });
+
+  it('returns false when issue has Code Task label', () => {
+    const event = createEvent();
+    event.data.labels = [{ id: 'label-code', name: 'Code Task' }];
+    expect(shouldTriggerCodeTask(event)).toBe(false);
+  });
+
+  it('returns true with multiple non-Code-Task labels', () => {
+    const event = createEvent();
+    event.data.labels = [
+      { id: 'l1', name: 'bug' },
+      { id: 'l2', name: 'feature' },
+    ];
+    expect(shouldTriggerCodeTask(event)).toBe(true);
+  });
+});
+
+describe('triggerCodeTaskFromAssignment', () => {
+  it('sends correct request to code-agent client', async () => {
+    const client = new FakeCodeAgentClient();
+    const logger = createFakeLogger();
+
+    await triggerCodeTaskFromAssignment(createEvent(), 'user-123', {
+      codeAgentClient: client,
+      logger,
+    });
+
+    const req = client.getLastRequest();
+    expect(req).not.toBeNull();
+    expect(req?.userId).toBe('user-123');
+    expect(req?.linearIssueId).toBe('INT-123');
+    expect(req?.prompt).toBe('Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.');
+    expect(req?.workerType).toBe('auto');
+  });
+
+  it('uses webhookId for actionId and approvalEventId deduplication', async () => {
+    const client = new FakeCodeAgentClient();
+    const logger = createFakeLogger();
+
+    await triggerCodeTaskFromAssignment(createEvent({ webhookId: 'wh-42' }), 'user-123', {
+      codeAgentClient: client,
+      logger,
+    });
+
+    const req = client.getLastRequest();
+    expect(req).not.toBeNull();
+  });
+
+  it('does not throw on successful trigger', async () => {
+    const client = new FakeCodeAgentClient();
+    const logger = createFakeLogger();
+
+    await expect(
+      triggerCodeTaskFromAssignment(createEvent(), 'user-123', {
+        codeAgentClient: client,
+        logger,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(client.getLastRequest()).not.toBeNull();
+  });
+
+  it('does not throw on failed trigger', async () => {
+    const client = new FakeCodeAgentClient();
+    client.setFailure(true, { code: 'UNAVAILABLE', message: 'down' });
+    const logger = createFakeLogger();
+
+    await expect(
+      triggerCodeTaskFromAssignment(createEvent(), 'user-123', {
+        codeAgentClient: client,
+        logger,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(client.getLastRequest()).not.toBeNull();
+  });
+});

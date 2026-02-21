@@ -13,6 +13,7 @@ import {
   FakeUserServiceClient,
   FakeLinearIssueRepository,
   FakeLinearCommentRepository,
+  FakeCodeAgentClient,
 } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
 
@@ -217,6 +218,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
       issueRepository: context.issueRepository,
       commentRepository: context.commentRepository,
       userServiceClient: context.userServiceClient,
+      codeAgentClient: new FakeCodeAgentClient(),
     });
     clearJwksCache();
     context.app = await buildServer(withTestLogger ? getTestLoggerStream() : undefined);

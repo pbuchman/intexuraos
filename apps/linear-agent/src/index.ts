@@ -17,6 +17,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_CODE_AGENT_URL',
 ];
 
 const REQUIRED_MODELS: LLMModel[] = [
@@ -41,6 +42,7 @@ initSentry({
 
 async function main(): Promise<void> {
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
+  const codeAgentUrl = process.env['INTEXURAOS_CODE_AGENT_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
   const appSettingsUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? '';
 
@@ -54,6 +56,7 @@ async function main(): Promise<void> {
 
   initServices({
     userServiceUrl,
+    codeAgentUrl,
     internalAuthToken,
     pricingContext,
   });
