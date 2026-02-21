@@ -8,7 +8,7 @@ export interface TriggerCodeTaskDeps {
 }
 
 const ASSIGNMENT_PROMPT =
-  'Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.';
+  'Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.';
 
 export function shouldTriggerCodeTask(event: LinearWebhookEvent): boolean {
   if (event.action !== 'update') return false;
