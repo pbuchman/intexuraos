@@ -158,6 +158,49 @@ function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unkn
     ].join('\n');
   }
 
+  if (event.action === 'edited' && event.senderLogin === CLAUDE_BOT_LOGIN) {
+    const commentId = extractId(payload, 'comment');
+    return [
+      `[PR Comment — Bot Review Edit] Comment updated on PR #${String(prNumber)} in ${repository}`,
+      `From: @${senderLogin}`,
+      `Comment ID: ${commentId}`,
+      'Type: issue_comment (edited)',
+      '',
+      'Full comment body:',
+      body ?? '(empty)',
+      '',
+      'Instructions:',
+      '1. CHECK IF REVIEW IS STILL IN PROGRESS:',
+      '   Look for indicators that the review is NOT finished:',
+      '   - Body contains "is working" / "working..." / spinner image',
+      '   - Body is very short (< 200 chars) with no findings',
+      '   - Checklist items are unchecked ([ ] without [x])',
+      '',
+      '   If the review appears to still be in progress → do nothing, stop here.',
+      '',
+      '2. IF REVIEW IS FINALIZED — process it as a code review:',
+      `   a. React with eyes: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=eyes`,
+      '   b. Read the full review body and extract EVERY finding/issue/suggestion',
+      '   c. For EACH finding, decide: FIX or SKIP',
+      '      - FIX: Clear actionable feedback, code change with clear intent, specific bug or gap',
+      '      - SKIP: Discussion/question, intentional design disagreement, out of PR scope, pure status report',
+      '   d. Post a response comment with a triage table:',
+      '      - One row per finding',
+      '      - Columns: # | Finding | Verdict (FIX/SKIP) | Reasoning | Action',
+      '      - For SKIP items: explain why in the Reasoning column',
+      '      - For FIX items: write "Will fix" in the Action column',
+      '',
+      '   ⚠ MANDATORY — DO NOT STOP AFTER POSTING THE TABLE ⚠',
+      '   e. IMMEDIATELY after posting the triage comment, implement ALL fixes',
+      '      marked as FIX in the table. This is not optional. Do not end your turn',
+      '      until every FIX item has been implemented, committed, and pushed.',
+      '      Skipping implementation after posting the table is a contract violation.',
+      '   f. After all fixes: commit, push, verify CI passes',
+      `   g. Update your triage comment (gh api PATCH /repos/${repository}/issues/comments/{your-comment-id})`,
+      '      to replace "Will fix" with the actual commit SHA for each implemented fix',
+    ].join('\n');
+  }
+
   const commentId = extractId(payload, 'comment');
   return [
     `[PR Comment] New comment on PR #${String(prNumber)} in ${repository}`,
