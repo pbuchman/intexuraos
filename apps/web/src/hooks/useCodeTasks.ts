@@ -13,7 +13,7 @@ import type { CodeTask, CodeTaskStatus, SubmitCodeTaskRequest, WorkersStatusResp
 /**
  * Hook for managing a list of code tasks with pagination.
  */
-export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
+export function useCodeTasks(options?: { status?: CodeTaskStatus[] }): {
   tasks: CodeTask[];
   loading: boolean;
   loadingMore: boolean;
@@ -49,7 +49,7 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
 
       try {
         const token = await getAccessToken();
-        const listOptions = options?.status !== undefined ? { status: options.status } : {};
+        const listOptions = options?.status !== undefined && options.status.length > 0 ? { status: options.status } : {};
         const data = await listCodeTasksApi(token, listOptions);
         if (isMountedRef.current) {
           setTasks(data.tasks);
@@ -101,8 +101,8 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
     setLoadingMore(true);
     try {
       const token = await getAccessToken();
-      const loadMoreOptions: { status?: CodeTaskStatus; cursor?: string } = {};
-      if (options?.status !== undefined) {
+      const loadMoreOptions: { status?: CodeTaskStatus[]; cursor?: string } = {};
+      if (options?.status !== undefined && options.status.length > 0) {
         loadMoreOptions.status = options.status;
       }
       if (cursor !== undefined) {
