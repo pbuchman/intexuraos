@@ -168,6 +168,53 @@ describe('firestoreCodeTaskRepository', () => {
       expect(phase2.ok).toBe(true);
     });
 
+    it('Layer 2: allows same prompt for different Linear issues within 5 minutes', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({
+        prompt: 'Implement exactly as described in the linked Linear issue.',
+        linearIssueId: 'INT-100',
+      }));
+      expect(first.ok).toBe(true);
+
+      // Complete the first task so Layer 3 doesn't block
+      if (first.ok) {
+        await repo.update(first.value.id, { status: 'designed' });
+      }
+
+      // Same prompt, different Linear issue — should NOT be blocked by Layer 2
+      const second = await repo.create(createTaskInput({
+        prompt: 'Implement exactly as described in the linked Linear issue.',
+        linearIssueId: 'INT-200',
+      }));
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: still blocks same prompt + same Linear issue within 5 minutes', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({
+        prompt: 'Implement exactly as described in the linked Linear issue.',
+        linearIssueId: 'INT-100',
+      }));
+      expect(first.ok).toBe(true);
+
+      // Same prompt AND same Linear issue — should be blocked by Layer 2
+      const second = await repo.create(createTaskInput({
+        prompt: 'Implement exactly as described in the linked Linear issue.',
+        linearIssueId: 'INT-100',
+      }));
+      expect(second.ok).toBe(false);
+      if (second.ok) return;
+      expect(['DUPLICATE_PROMPT', 'ACTIVE_TASK_EXISTS']).toContain(second.error.code);
+    });
+
     it('Layer 2: allows same prompt after 5 minutes', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
