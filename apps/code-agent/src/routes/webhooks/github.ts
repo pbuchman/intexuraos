@@ -21,12 +21,13 @@ import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSum
 import type { Logger } from 'pino';
 
 const BOT_LOGIN = 'intexuraos-code-worker[bot]';
+const CLAUDE_MENTION = '@claude';
 
 /**
  * Dispatch a PR comment to the task that owns this PR via sendTaskMessage.
  * Fire-and-forget — webhook returns immediately.
- * Only filter: skip our own bot to prevent infinite loops.
- * The worker decides what deserves a response.
+ * Filters: skip our own bot (infinite loop) and @claude mentions (handled by GitHub Actions workflow).
+ * The worker decides what deserves a response for everything else.
  */
 async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Promise<void> {
   try {
@@ -34,6 +35,14 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
       logger.debug(
         { repository: event.repository, prNumber: event.pullRequestNumber },
         'Skipping own bot comment to prevent loop'
+      );
+      return;
+    }
+
+    if (event.body?.includes(CLAUDE_MENTION) === true) {
+      logger.debug(
+        { repository: event.repository, prNumber: event.pullRequestNumber },
+        'Skipping @claude mention — handled by GitHub Actions workflow'
       );
       return;
     }
