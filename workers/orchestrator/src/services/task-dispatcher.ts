@@ -908,9 +908,7 @@ export class TaskDispatcher {
 
   private buildActiveGoalSection(prompt: string): string {
     const preamble = this.buildResumePreamble();
-    const goalText = prompt.startsWith(preamble)
-      ? prompt.slice(preamble.length)
-      : prompt;
+    const goalText = prompt.startsWith(preamble) ? prompt.slice(preamble.length) : prompt;
     return [
       '',
       '',
@@ -1051,7 +1049,12 @@ export class TaskDispatcher {
 
   private async startWorkerAttempt(
     task: Task,
-    params: { prompt: string; hasChildren: boolean; continueSession: boolean; injectActiveGoal?: boolean }
+    params: {
+      prompt: string;
+      hasChildren: boolean;
+      continueSession: boolean;
+      injectActiveGoal?: boolean;
+    }
   ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
     this.attemptCompletionSignals.delete(task.taskId);
     this.appendOrchestratorTaskLog(
@@ -1085,16 +1088,17 @@ export class TaskDispatcher {
       worktreePath: task.worktreePath,
       prompt: params.prompt,
       /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
-      systemPrompt: buildSystemPrompt({
-        taskId: task.taskId,
-        ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-        ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
-        taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
-        linearIssueLabels: task.linearIssueLabels,
-        hasChildren: params.hasChildren,
-      })
-      /* v8 ignore stop @preserve */
-        + (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
+      systemPrompt:
+        buildSystemPrompt({
+          taskId: task.taskId,
+          ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+          ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
+          taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
+          linearIssueLabels: task.linearIssueLabels,
+          hasChildren: params.hasChildren,
+        }) +
+        /* v8 ignore stop @preserve */
+        (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
       workerType: task.workerType,
       secrets: this.isolation.getSecrets(),
       gcpSaKeyPath: this.isolation.gcpSaKeyPath,

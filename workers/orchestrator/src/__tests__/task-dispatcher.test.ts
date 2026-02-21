@@ -2963,7 +2963,8 @@ describe('TaskDispatcher', () => {
         buildResumePreamble: () => string;
       };
       const preamble = internal.buildResumePreamble();
-      const userMessage = '[PR Comment] New comment on PR #849\nFrom: @pbuchman\nThe commenter said:\nFix the bug';
+      const userMessage =
+        '[PR Comment] New comment on PR #849\nFrom: @pbuchman\nThe commenter said:\nFix the bug';
       const combined = preamble + userMessage;
 
       const result = internal.buildActiveGoalSection(combined);
@@ -3008,7 +3009,10 @@ describe('TaskDispatcher', () => {
 
       vi.mocked(mockIsolationProvider.createWorker).mockClear();
 
-      const result = await dispatcher.sendMessage('active-goal-resume-test', 'User follow-up message');
+      const result = await dispatcher.sendMessage(
+        'active-goal-resume-test',
+        'User follow-up message'
+      );
       await flushAsync();
 
       expect(result.ok).toBe(true);
