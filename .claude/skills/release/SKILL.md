@@ -1,6 +1,6 @@
 ---
 name: release
-description: Orchestrate a 6-phase release workflow with automated service documentation, high-level docs updates, README "What's New" section, website improvements, and semantic versioning. Use when preparing a new release.
+description: Orchestrate a 6-phase release workflow with automated service documentation, high-level docs updates, README "What's New" section, website improvements, RAG embeddings refresh, and semantic versioning. Use when preparing a new release.
 argument-hint: '[--skip-docs | --phase N]'
 ---
 
@@ -35,7 +35,7 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 | 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait            |
 | 4     | README          | **Checkpoint** | Propose "What's New" section, wait                |
 | 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions              |
-| 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, commit, tag push |
+| 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, RAG embeddings, commit, tag push |
 
 ## Tool Verification (Fail Fast)
 
@@ -204,11 +204,30 @@ When releasing a NEW major version (e.g., v3.0.0):
 1. **Update ALL package.json versions** — root, apps/\*, packages/\*, workers/\* (CRITICAL)
 2. **Update CHANGELOG.md** using Claude Code style (see Changelog Format below)
 3. Run `pnpm run ci:tracked` — MUST pass
-4. Stage all changes
-5. Commit with release message
-6. Create version tag
-7. Push tag to remote
-8. Display release summary
+4. **Refresh RAG embeddings** — re-embed all docs into production Firestore (see below)
+5. Stage all changes
+6. Commit with release message
+7. Create version tag
+8. Push tag to remote
+9. Display release summary
+
+#### RAG Embeddings Refresh (Step 4)
+
+After CI passes (docs are finalized), re-generate embeddings for the chat-agent RAG pipeline:
+
+```bash
+FIRESTORE_EMULATOR_HOST="" \
+GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY \
+pnpm run embed-docs
+```
+
+This reads all `docs/**/*.md`, chunks by headers, generates OpenAI embeddings, and uploads to the `doc_embeddings` Firestore collection. Stale embeddings (from deleted docs) are cleaned automatically.
+
+**Skip condition:** If `--skip-docs` was used, skip this step too (no doc changes to re-embed).
+
+**Failure handling:** Log the error but do NOT block the release. Embeddings can be re-run manually after release.
 
 ## Changelog Format (Claude Code Style)
 
