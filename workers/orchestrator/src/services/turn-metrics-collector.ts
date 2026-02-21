@@ -34,6 +34,7 @@ export interface TurnMetricsCollectorConfig {
   orchestratorSecret: string;
   internalAuthToken: string;
   secretsBasePath: string;
+  sharedCredsPath?: string;
 }
 
 interface SessionEntry {
@@ -87,7 +88,10 @@ export class TurnMetricsCollector {
       const [cpuTimeSeconds, peakMemoryMB, sessionData] = await Promise.all([
         this.readCpuTimeSec(cgroupPath),
         this.readPeakMemoryMB(cgroupPath),
-        this.parseSessionJsonl(params.taskId),
+        this.parseSessionJsonl(params.taskId, {
+          startedAt: params.startedAt,
+          completedAt: params.completedAt,
+        }),
       ]);
 
       const wallTimeSeconds =
@@ -175,15 +179,38 @@ export class TurnMetricsCollector {
   }
 
   async parseSessionJsonl(
-    taskId: string
+    taskId: string,
+    timeWindow?: { startedAt: string; completedAt: string }
   ): Promise<{ timeClassification: TimeClassification; tokens: TokenAggregation }> {
     const entries: SessionEntry[] = [];
-    const sessionDir = join(this.config.secretsBasePath, `claude-session-${taskId}`);
-    const pattern = join(sessionDir, 'projects', '**', '*.jsonl');
+    const useSharedPath = this.config.sharedCredsPath !== undefined;
+    const basePath = useSharedPath
+      ? this.config.sharedCredsPath
+      : join(this.config.secretsBasePath, `claude-session-${taskId}`);
+    const pattern = join(basePath, 'projects', '**', '*.jsonl');
 
     try {
       for await (const filePath of glob(pattern)) {
         const content = await readFile(filePath, 'utf-8');
+
+        if (useSharedPath && timeWindow !== undefined) {
+          const firstNewline = content.indexOf('\n');
+          const firstLine = firstNewline === -1 ? content : content.slice(0, firstNewline);
+          if (firstLine.trim() !== '') {
+            try {
+              const firstEntry = JSON.parse(firstLine) as SessionEntry;
+              if (firstEntry.timestamp !== undefined) {
+                const ts = new Date(firstEntry.timestamp).getTime();
+                const start = new Date(timeWindow.startedAt).getTime();
+                const end = new Date(timeWindow.completedAt).getTime();
+                if (ts < start || ts > end) continue;
+              }
+            } catch {
+              continue;
+            }
+          }
+        }
+
         for (const line of content.split('\n')) {
           if (line.trim() === '') continue;
           try {
