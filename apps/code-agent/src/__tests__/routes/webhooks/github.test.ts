@@ -439,7 +439,7 @@ describe('POST /webhooks/github', () => {
         },
         comment: {
           id: 12345,
-          body: '@claude-bot please fix the linting errors',
+          body: 'please fix the linting errors',
           user: {
             login: 'reviewer',
             id: 222,
@@ -475,7 +475,7 @@ describe('POST /webhooks/github', () => {
         senderId: 222,
         senderType: 'User',
         title: 'Test PR',
-        body: '@claude-bot please fix the linting errors',
+        body: 'please fix the linting errors',
         state: 'open',
         mergedAt: null,
         createdAt: new Date(),
@@ -521,7 +521,7 @@ describe('POST /webhooks/github', () => {
         },
         comment: {
           id: 12345,
-          body: '@claude-bot please fix the linting errors',
+          body: 'please fix the linting errors',
           user: {
             login: 'reviewer',
             id: 222,
@@ -557,7 +557,7 @@ describe('POST /webhooks/github', () => {
         senderId: 222,
         senderType: 'User',
         title: 'Test PR',
-        body: '@claude-bot please fix the linting errors',
+        body: 'please fix the linting errors',
         state: 'open',
         mergedAt: null,
         createdAt: new Date(),
@@ -588,7 +588,7 @@ describe('POST /webhooks/github', () => {
         action: 'created',
         comment: {
           id: 99999,
-          body: '@claude this variable naming is confusing',
+          body: 'this variable naming is confusing',
           path: 'src/utils/helper.ts',
           line: 42,
           diff_hunk: '@@ -40,6 +40,8 @@\n+const foo = true;',
@@ -633,7 +633,7 @@ describe('POST /webhooks/github', () => {
         senderId: 333,
         senderType: 'User',
         title: 'Refactor utils',
-        body: '@claude this variable naming is confusing',
+        body: 'this variable naming is confusing',
         state: 'open',
         mergedAt: null,
         createdAt: new Date(),
@@ -665,7 +665,7 @@ describe('POST /webhooks/github', () => {
         action: 'submitted',
         review: {
           id: 88888,
-          body: '@claude please address these issues',
+          body: 'please address these issues',
           state: 'changes_requested',
         },
         pull_request: {
@@ -703,7 +703,7 @@ describe('POST /webhooks/github', () => {
         senderId: 444,
         senderType: 'User',
         title: 'Add feature',
-        body: '@claude please address these issues',
+        body: 'please address these issues',
         state: 'open',
         mergedAt: null,
         createdAt: new Date(),
@@ -869,6 +869,79 @@ describe('POST /webhooks/github', () => {
 
       // Dispatch was fire-and-forget but bot check should prevent findByPR from being called
       // Wait a tick to let the async dispatch settle
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).not.toHaveBeenCalled();
+    });
+
+    it('skips dispatch for @claude mentions handled by GitHub Actions', async () => {
+      const claudeMentionPayload = {
+        action: 'created',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 77777,
+          body: '@claude review completeness of the design',
+          user: { login: 'reviewer', id: 222, type: 'User' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: { login: 'test', id: 789 },
+        },
+        sender: { login: 'reviewer', id: 222, type: 'User' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 77777,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'created' as const,
+        senderLogin: 'reviewer',
+        senderId: 222,
+        senderType: 'User',
+        title: 'Test PR',
+        body: '@claude review completeness of the design',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: claudeMentionPayload,
+      }));
+
+      const { payload, signature } = signPayload(claudeMentionPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // @claude mention should prevent findByPR from being called
       await new Promise((resolve) => { setTimeout(resolve, 50); });
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
