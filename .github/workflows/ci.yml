@@ -15,12 +15,20 @@ permissions:
 
 jobs:
   # =============================================================================
-  # Type Check & Lint - runs in parallel with other jobs
+  # Type Check & Lint - split across parallel runners for faster feedback
   # =============================================================================
   type-lint:
-    name: Type & Lint
+    name: ${{ matrix.check.name }}
     runs-on: ubuntu-latest
     if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - name: Type Check
+            run: pnpm run typecheck && pnpm run typecheck:tests
+          - name: Lint
+            run: pnpm run lint
     env:
       NODE_OPTIONS: '--max-old-space-size=6144'
 
@@ -45,14 +53,8 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Type Check
-        run: pnpm run typecheck
-
-      - name: Type Check Tests
-        run: pnpm run typecheck:tests
-
-      - name: Lint
-        run: pnpm run lint
+      - name: ${{ matrix.check.name }}
+        run: ${{ matrix.check.run }}
 
   # =============================================================================
   # Tests - sharded across 3 runners for ~3x speedup
