@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import jwt from 'jsonwebtoken';
 const { sign } = jwt;
 import type { Result } from '@intexuraos/common-core';
+import { createRetryOctokit } from './octokit-client.js';
 
 export interface TokenError {
   code: string;
@@ -25,35 +26,17 @@ export class GitHubTokenService {
   ) {}
 
   async refreshToken(): Promise<Result<string, TokenError>> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, 30000);
-
     try {
       // Generate JWT
       const jwt = await this.generateJWT();
 
-      // Fetch installation token
-      const response = await fetch(
-        `https://api.github.com/app/installations/${this.installationId}/access_tokens`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${jwt}`,
-            Accept: 'application/vnd.github+json',
-          },
-          signal: controller.signal,
-        }
+      // Fetch installation token with automatic retry on 5xx/network errors
+      const octokit = createRetryOctokit(jwt);
+      const { data } = await octokit.request(
+        'POST /app/installations/{installation_id}/access_tokens',
+        { installation_id: Number(this.installationId) }
       );
 
-      /* v8 ignore start -- upstream: GitHub API error response is external, not practical to test @preserve */
-      if (!response.ok) {
-        throw new Error(`GitHub API returned ${String(response.status)}: ${response.statusText}`);
-      }
-      /* v8 ignore stop @preserve */
-
-      const data = (await response.json()) as { token: string; expires_at: string };
       const token = data.token;
       const expiresAt = new Date(data.expires_at);
 
@@ -73,18 +56,6 @@ export class GitHubTokenService {
         this.authDegradedCallback();
       }
 
-      /* v8 ignore start -- upstream: AbortError depends on external fetch timing @preserve */
-      if (error instanceof Error && error.name === 'AbortError') {
-        return {
-          ok: false,
-          error: {
-            code: 'TOKEN_REFRESH_TIMEOUT',
-            message: 'GitHub API request timed out after 30s',
-          },
-        };
-      }
-      /* v8 ignore stop @preserve */
-
       const message =
         error instanceof Error ? error.message : `Non-Error thrown: ${JSON.stringify(error)}`;
       return {
@@ -94,8 +65,6 @@ export class GitHubTokenService {
           message,
         },
       };
-    } finally {
-      clearTimeout(timeoutId);
     }
   }
 

@@ -15,15 +15,15 @@ Scan all `technical-debt.md` files across the monorepo, consolidate cross-servic
 
 ## Workflow Overview
 
-| Phase | Step | Type        | Description                                      |
-| ----- | ---- | ----------- | ------------------------------------------------ |
-| 1     | 1    | Gate        | Freshness warning + single-run disclaimer        |
-| 2     | 2-3  | Scan        | Read all debt files, extract + classify           |
-| 3     | 4    | User Input  | Select severity levels to proceed with           |
-| 4     | 5    | Consolidate | Group cross-service issues that belong together  |
-| 5     | 6    | User Input  | Approve/reject each consolidated issue           |
-| 6     | 7-8  | Linear      | Create parent issue + subtasks via `/linear`     |
-| 6     | 9    | Output      | Display final triage summary to user             |
+| Phase | Step | Type        | Description                                     |
+| ----- | ---- | ----------- | ----------------------------------------------- |
+| 1     | 1    | Gate        | Freshness warning + single-run disclaimer       |
+| 2     | 2-3  | Scan        | Read all debt files, extract + classify         |
+| 3     | 4    | User Input  | Select severity levels to proceed with          |
+| 4     | 5    | Consolidate | Group cross-service issues that belong together |
+| 5     | 6    | User Input  | Approve/reject each consolidated issue          |
+| 6     | 7-8  | Linear      | Create parent issue + subtasks via `/linear`    |
+| 6     | 9    | Output      | Display final triage summary to user            |
 
 ---
 
@@ -196,9 +196,9 @@ For parent and subtask description templates: **`references/linear-templates.md`
 
 ## Error Handling
 
-| Error                        | Action                                     |
-| ---------------------------- | ------------------------------------------ |
-| Linear MCP unavailable       | STOP immediately, inform user              |
-| No tech debt files found     | STOP, suggest running `/document-service`  |
-| All files show "None Detected" | Inform user: no actionable debt found    |
-| Linear issue creation fails  | Report which issues failed, continue rest  |
+| Error                          | Action                                    |
+| ------------------------------ | ----------------------------------------- |
+| Linear MCP unavailable         | STOP immediately, inform user             |
+| No tech debt files found       | STOP, suggest running `/document-service` |
+| All files show "None Detected" | Inform user: no actionable debt found     |
+| Linear issue creation fails    | Report which issues failed, continue rest |

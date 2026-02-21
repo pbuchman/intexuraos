@@ -12,17 +12,18 @@ Use this template for the top-level Linear issue created in Step 7.
 
 ### Scan Summary
 
-| Metric                    | Count |
-| ------------------------- | ----- |
-| Files scanned             | <N>   |
-| Individual issues found   | <N>   |
-| Consolidated into groups  | <N>   |
-| User-approved for action  | <N>   |
-| Subtasks created          | <N>   |
+| Metric                   | Count |
+| ------------------------ | ----- |
+| Files scanned            | <N>   |
+| Individual issues found  | <N>   |
+| Consolidated into groups | <N>   |
+| User-approved for action | <N>   |
+| Subtasks created         | <N>   |
 
 ### Source
 
 All findings are based on `technical-debt.md` documentation files located in:
+
 - `docs/services/*/technical-debt.md` (apps + workers)
 - `docs/packages/*/technical-debt.md` (shared packages)
 
@@ -49,9 +50,9 @@ Use this template for each child issue created in Step 8.
 
 **Backend Tests:**
 
-| Test Name          | Endpoint/Function | Scenario              | Expected                |
-| ------------------ | ----------------- | --------------------- | ----------------------- |
-| <to be determined> | <affected code>   | <based on debt scope> | <correct behavior>      |
+| Test Name          | Endpoint/Function | Scenario              | Expected           |
+| ------------------ | ----------------- | --------------------- | ------------------ |
+| <to be determined> | <affected code>   | <based on debt scope> | <correct behavior> |
 
 > Test requirements are intentionally incomplete. The executing agent MUST read the affected source code, understand the current behavior, and define specific test cases before implementing changes.
 
@@ -102,10 +103,10 @@ _This issue was created by the tech-debt-triage skill from documented technical 
 
 ## Technical Debt Sources
 
-| Service/Package | File                                             | Section          |
-| --------------- | ------------------------------------------------ | ---------------- |
-| <name>          | `docs/services/<name>/technical-debt.md`         | <section header> |
-| <name>          | `docs/packages/<name>/technical-debt.md`         | <section header> |
+| Service/Package | File                                     | Section          |
+| --------------- | ---------------------------------------- | ---------------- |
+| <name>          | `docs/services/<name>/technical-debt.md` | <section header> |
+| <name>          | `docs/packages/<name>/technical-debt.md` | <section header> |
 
 ---
 
