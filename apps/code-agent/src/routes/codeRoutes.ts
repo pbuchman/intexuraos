@@ -743,7 +743,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
-      const { codeTaskRepo, linearIssueService, rateLimitService } = getServices();
+      const { codeTaskRepo, rateLimitService } = getServices();
       const { taskId } = request.params;
       const body = request.body;
 
@@ -789,11 +789,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         rateLimitService.recordTaskComplete(userId, undefined).catch((err) => {
           request.log.error({ taskId, userId, error: err }, 'Failed to record task completion for rate limiting');
         });
-      }
-
-      // If PR was created and task has a Linear issue, transition to In Review
-      if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) { // @allow-result-access -- narrowed by !result.ok guard above
-        await linearIssueService.markInReview(result.value.userId, result.value.linearIssueId); // @allow-result-access -- narrowed by !result.ok guard above
       }
 
       request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully'); // @allow-result-access -- narrowed by !result.ok guard above
