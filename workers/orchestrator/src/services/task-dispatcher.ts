@@ -408,6 +408,7 @@ export class TaskDispatcher {
         prompt: preamble + message,
         hasChildren: task.hasChildren ?? false,
         continueSession: true,
+        injectActiveGoal: true,
       });
 
       if (!resumeResult.ok) {
@@ -807,6 +808,7 @@ export class TaskDispatcher {
           prompt: combinedPrompt,
           hasChildren: task.hasChildren ?? false,
           continueSession: true,
+          injectActiveGoal: true,
         });
         if (resumeResult.ok) {
           task.containerId = resumeResult.containerId;
@@ -901,6 +903,23 @@ export class TaskDispatcher {
       '  3. If the message below references a PR comment or review, address it',
       '---',
       '',
+    ].join('\n');
+  }
+
+  private buildActiveGoalSection(prompt: string): string {
+    const preamble = this.buildResumePreamble();
+    const goalText = prompt.startsWith(preamble)
+      ? prompt.slice(preamble.length)
+      : prompt;
+    return [
+      '',
+      '',
+      '[ACTIVE GOAL — HIGHEST PRIORITY]',
+      'A new user message has been received. This is your PRIMARY task.',
+      'Complete this goal before doing anything else. If context was compacted,',
+      'this section survives and takes absolute priority over conversation history.',
+      '',
+      goalText,
     ].join('\n');
   }
 
@@ -1006,6 +1025,7 @@ export class TaskDispatcher {
         prompt: combinedPrompt,
         hasChildren: task.hasChildren ?? false,
         continueSession: true,
+        injectActiveGoal: true,
       });
       if (resumeResult.ok) {
         task.containerId = resumeResult.containerId;
@@ -1031,7 +1051,7 @@ export class TaskDispatcher {
 
   private async startWorkerAttempt(
     task: Task,
-    params: { prompt: string; hasChildren: boolean; continueSession: boolean }
+    params: { prompt: string; hasChildren: boolean; continueSession: boolean; injectActiveGoal?: boolean }
   ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
     this.attemptCompletionSignals.delete(task.taskId);
     this.appendOrchestratorTaskLog(
@@ -1072,8 +1092,9 @@ export class TaskDispatcher {
         taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
         linearIssueLabels: task.linearIssueLabels,
         hasChildren: params.hasChildren,
-      }),
+      })
       /* v8 ignore stop @preserve */
+        + (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
       workerType: task.workerType,
       secrets: this.isolation.getSecrets(),
       gcpSaKeyPath: this.isolation.gcpSaKeyPath,

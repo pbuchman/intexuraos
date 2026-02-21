@@ -2956,6 +2956,35 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('buildActiveGoalSection', () => {
+    it('strips resume preamble and wraps user message', () => {
+      const internal = dispatcher as unknown as {
+        buildActiveGoalSection: (prompt: string) => string;
+        buildResumePreamble: () => string;
+      };
+      const preamble = internal.buildResumePreamble();
+      const userMessage = '[PR Comment] New comment on PR #849\nFrom: @pbuchman\nThe commenter said:\nFix the bug';
+      const combined = preamble + userMessage;
+
+      const result = internal.buildActiveGoalSection(combined);
+
+      expect(result).toContain('[ACTIVE GOAL');
+      expect(result).toContain('[PR Comment] New comment on PR #849');
+      expect(result).toContain('Fix the bug');
+      expect(result).not.toContain('[RESUME PRE-FLIGHT');
+    });
+
+    it('handles prompt without preamble', () => {
+      const internal = dispatcher as unknown as {
+        buildActiveGoalSection: (prompt: string) => string;
+      };
+      const result = internal.buildActiveGoalSection('Just a plain message');
+
+      expect(result).toContain('[ACTIVE GOAL');
+      expect(result).toContain('Just a plain message');
+    });
+  });
+
   describe('resumedAfterSuccess', () => {
     let resumedDispatcher: TaskDispatcher;
     let resumedStatePersistence: StatePersistence;
