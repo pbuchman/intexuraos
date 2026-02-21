@@ -104,6 +104,7 @@ Multiple Task calls in single message for parallel execution
 - [ ] Update ALL package.json versions (root, apps/\*, packages/\*, workers/\*)
 - [ ] Update CHANGELOG.md with new version entry (Claude Code style)
 - [ ] Run `pnpm run ci:tracked` — **MUST PASS**
+- [ ] Refresh RAG embeddings: `pnpm run embed-docs` (with prod env overrides)
 - [ ] Stage all changes: `git add -A`
 - [ ] Commit with release message
 - [ ] Create tag: `git tag -a "vX.Y.Z"`
@@ -181,12 +182,13 @@ At each checkpoint (Phases 3, 4, 5):
 
 ## Error Recovery
 
-| Error                         | Recovery                                |
-| ----------------------------- | --------------------------------------- |
-| CI fails in Phase 6           | Fix issues, re-run CI, then commit      |
-| service-scribe agent fails    | Log error, continue with other services |
-| User declines all checkpoints | Proceed with version-only release       |
-| Tool unavailable              | ABORT immediately with clear error      |
+| Error                         | Recovery                                        |
+| ----------------------------- | ----------------------------------------------- |
+| CI fails in Phase 6           | Fix issues, re-run CI, then commit              |
+| service-scribe agent fails    | Log error, continue with other services         |
+| RAG embeddings fail           | Log error, continue release (re-run manually)   |
+| User declines all checkpoints | Proceed with version-only release               |
+| Tool unavailable              | ABORT immediately with clear error              |
 
 ---
 
