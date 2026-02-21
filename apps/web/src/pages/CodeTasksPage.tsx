@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  CheckCircle,
   ChevronDown,
   ChevronUp,
   Filter,
   Plus,
   Trash2,
-  XCircle,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
 import { useCodeTasks, useWorkersStatus } from '@/hooks';
@@ -193,7 +191,7 @@ export function CodeTasksPage(): React.JSX.Element {
       ) : (
         <div className="space-y-4">
           {tasks.map((task) => (
-            <CodeTaskCard key={task.id} task={task} workersStatus={workersStatus} onDelete={(): void => { void deleteTask(task.id); }} />
+            <CodeTaskCard key={task.id} task={task} workersStatus={workersStatus} onDelete={async (): Promise<void> => { await deleteTask(task.id); }} />
           ))}
 
           {hasMore ? (
@@ -225,18 +223,29 @@ export function CodeTasksPage(): React.JSX.Element {
 interface CodeTaskCardProps {
   task: CodeTask;
   workersStatus: WorkersStatusResponse | null;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
 }
 
 function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): React.JSX.Element {
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const status = STATUS_STYLES[task.status];
   const taskWorkerStatus = workersStatus?.workers.find((w) => w.name === task.workerLocation);
   const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
 
   const handleCardClick = (): void => {
     void navigate(`/code-tasks/${task.id}`);
+  };
+
+  const handleDelete = async (): Promise<void> => {
+    setIsDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
   };
 
   const truncatePrompt = (prompt: string, maxLength = 150): string => {
@@ -330,38 +339,53 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
             <span>Completed: {formatDateTime(task.updatedAt)}</span>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          {showDeleteConfirm ? (
-            <div
-              className="flex gap-2"
-              onClick={(e): void => { e.stopPropagation(); }}
-            >
-              <Button variant="danger" onClick={onDelete}>
-                <CheckCircle className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Confirm</span>
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={(): void => { setShowDeleteConfirm(false); }}
-              >
-                <XCircle className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Cancel</span>
-              </Button>
-            </div>
-          ) : (
-            <button
-              onClick={(e): void => {
-                e.stopPropagation();
-                setShowDeleteConfirm(true);
-              }}
-              className="text-sm text-slate-400 hover:text-red-600 flex items-center gap-1 dark:hover:text-red-400"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Delete</span>
-            </button>
-          )}
-        </div>
+        {!showDeleteConfirm ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={(e): void => {
+              e.stopPropagation();
+              setShowDeleteConfirm(true);
+            }}
+            className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        ) : null}
       </div>
+
+      {showDeleteConfirm ? (
+        <div
+          className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30"
+          onClick={(e): void => { e.stopPropagation(); }}
+        >
+          <p className="mb-3 text-sm text-red-800 dark:text-red-400">
+            Delete &quot;{task.linearIssueTitle ?? truncatePrompt(task.sanitizedPrompt, 60)}&quot;?
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              onClick={(): void => { void handleDelete(); }}
+              disabled={isDeleting}
+              isLoading={isDeleting}
+            >
+              Delete
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={(): void => { setShowDeleteConfirm(false); }}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {task.error !== undefined ? (
         <div className="mt-3 text-sm text-red-600 dark:text-red-400">
