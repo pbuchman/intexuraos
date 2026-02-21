@@ -570,6 +570,7 @@ export function ResearchDetailPage(): React.JSX.Element {
         ) : null}
 
         {research.status === 'draft' ? (
+          <>
           <div className="mt-4 flex flex-wrap gap-3">
             <Button
               onClick={(): void => {
@@ -591,44 +592,53 @@ export function ResearchDetailPage(): React.JSX.Element {
               <FileText className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Edit Draft</span>
             </Button>
-            {showDeleteConfirm ? (
-              <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(): void => {
+                setShowDeleteConfirm(!showDeleteConfirm);
+              }}
+              disabled={deleting}
+            >
+              <Trash2 className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Discard</span>
+            </Button>
+          </div>
+          {showDeleteConfirm ? (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+              <p className="mb-3 text-sm text-red-800 dark:text-red-300">
+                Discard &quot;{research.title !== '' ? research.title : 'Untitled Research'}&quot;?
+              </p>
+              <div className="flex gap-2">
                 <Button
+                  type="button"
                   variant="danger"
+                  size="sm"
                   onClick={(): void => {
                     void handleDelete();
                   }}
                   disabled={deleting}
                   isLoading={deleting}
                 >
-                  <CheckCircle className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Confirm Discard</span>
+                  Discard
                 </Button>
                 <Button
+                  type="button"
                   variant="secondary"
+                  size="sm"
                   onClick={(): void => {
                     setShowDeleteConfirm(false);
                   }}
                   disabled={deleting}
                 >
-                  <XCircle className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Cancel</span>
+                  Cancel
                 </Button>
-              </>
-            ) : (
-              <Button
-                variant="secondary"
-                onClick={(): void => {
-                  setShowDeleteConfirm(true);
-                }}
-                disabled={deleting}
-              >
-                <Trash2 className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Discard</span>
-              </Button>
-            )}
-          </div>
+              </div>
+            </div>
+          ) : null}
+          </>
         ) : (
+          <>
           <div className="mt-4 flex flex-wrap gap-3">
             {research.status === 'failed' ? (
               <Button
@@ -688,82 +698,95 @@ export function ResearchDetailPage(): React.JSX.Element {
                       <Share2 className="h-4 w-4 sm:mr-2" />
                       <span className="hidden sm:inline">Share</span>
                     </Button>
-                    {showUnshareConfirm ? (
-                      <>
-                        <Button
-                          variant="danger"
-                          onClick={(): void => {
-                            void handleUnshare();
-                          }}
-                          disabled={unsharing}
-                          isLoading={unsharing}
-                        >
-                          <span className="hidden sm:inline">Confirm Unshare</span>
-                          <CheckCircle className="h-4 w-4 sm:hidden" />
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={(): void => {
-                            setShowUnshareConfirm(false);
-                          }}
-                          disabled={unsharing}
-                        >
-                          <span className="hidden sm:inline">Cancel</span>
-                          <XCircle className="h-4 w-4 sm:hidden" />
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="secondary"
-                        onClick={(): void => {
-                          setShowUnshareConfirm(true);
-                        }}
-                      >
-                        <Link2Off className="h-4 w-4 sm:mr-2" />
-                        <span className="hidden sm:inline">Unshare</span>
-                      </Button>
-                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(): void => {
+                        setShowUnshareConfirm(!showUnshareConfirm);
+                      }}
+                    >
+                      <Link2Off className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Unshare</span>
+                    </Button>
                   </>
                 ) : null}
               </>
             ) : null}
-            {showDeleteConfirm ? (
-              <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(): void => {
+                setShowDeleteConfirm(!showDeleteConfirm);
+              }}
+              disabled={deleting || retrying}
+            >
+              <Trash2 className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Delete</span>
+            </Button>
+          </div>
+          {showUnshareConfirm ? (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+              <p className="mb-3 text-sm text-red-800 dark:text-red-300">Unshare this research?</p>
+              <div className="flex gap-2">
                 <Button
+                  type="button"
                   variant="danger"
+                  size="sm"
+                  onClick={(): void => {
+                    void handleUnshare();
+                  }}
+                  disabled={unsharing}
+                  isLoading={unsharing}
+                >
+                  Unshare
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={(): void => {
+                    setShowUnshareConfirm(false);
+                  }}
+                  disabled={unsharing}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          {showDeleteConfirm ? (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+              <p className="mb-3 text-sm text-red-800 dark:text-red-300">
+                Delete &quot;{research.title !== '' ? research.title : 'Untitled Research'}&quot;?
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
                   onClick={(): void => {
                     void handleDelete();
                   }}
                   disabled={deleting}
                   isLoading={deleting}
                 >
-                  <CheckCircle className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Confirm Delete</span>
+                  Delete
                 </Button>
                 <Button
+                  type="button"
                   variant="secondary"
+                  size="sm"
                   onClick={(): void => {
                     setShowDeleteConfirm(false);
                   }}
                   disabled={deleting}
                 >
-                  <XCircle className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Cancel</span>
+                  Cancel
                 </Button>
-              </>
-            ) : (
-              <Button
-                variant="secondary"
-                onClick={(): void => {
-                  setShowDeleteConfirm(true);
-                }}
-                disabled={deleting || retrying}
-              >
-                <Trash2 className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Delete</span>
-              </Button>
-            )}
-          </div>
+              </div>
+            </div>
+          ) : null}
+          </>
         )}
 
         {approveError !== null && approveError !== '' ? (

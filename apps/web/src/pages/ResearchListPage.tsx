@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle, Plus, Star, Trash2, XCircle } from 'lucide-react';
+import { Plus, Star, Trash2 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useResearches } from '@/hooks';
@@ -97,8 +97,8 @@ export function ResearchListPage(): React.JSX.Element {
             <ResearchCard
               key={research.id}
               research={research}
-              onDelete={(): void => {
-                void deleteResearch(research.id);
+              onDelete={async (): Promise<void> => {
+                await deleteResearch(research.id);
               }}
               onToggleFavourite={handleToggleFavourite}
               updatingFavourite={updatingFavourite}
@@ -133,7 +133,7 @@ export function ResearchListPage(): React.JSX.Element {
 
 interface ResearchCardProps {
   research: Research;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
   onToggleFavourite: (researchId: string, favourite: boolean) => void;
   updatingFavourite: string | null;
 }
@@ -141,9 +141,20 @@ interface ResearchCardProps {
 const ResearchCard = memo(function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite }: ResearchCardProps): React.JSX.Element {
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const status = STATUS_STYLES[research.status];
   const isDraft = research.status === 'draft';
   const deleteLabel = isDraft ? 'Discard' : 'Delete';
+
+  const handleDelete = async (): Promise<void> => {
+    setIsDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
 
   const handleCardClick = (): void => {
     void navigate(`/research/${research.id}`);
@@ -194,41 +205,58 @@ const ResearchCard = memo(function ResearchCard({ research, onDelete, onToggleFa
               className={`h-5 w-5 ${research.favourite === true ? 'text-amber-400 fill-amber-400' : 'text-slate-300 dark:text-slate-500'}`}
             />
           </button>
-          {showDeleteConfirm ? (
-            <div
-              className="flex gap-2"
-              onClick={(e): void => {
-                e.stopPropagation();
-              }}
-            >
-              <Button variant="danger" onClick={onDelete}>
-                <CheckCircle className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Confirm {deleteLabel}</span>
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={(): void => {
-                  setShowDeleteConfirm(false);
-                }}
-              >
-                <XCircle className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Cancel</span>
-              </Button>
-            </div>
-          ) : (
-            <button
-              onClick={(e): void => {
-                e.stopPropagation();
-                setShowDeleteConfirm(true);
-              }}
-              className="text-sm text-slate-400 hover:text-red-600 flex items-center gap-1 dark:hover:text-red-400"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="hidden sm:inline">{deleteLabel}</span>
-            </button>
-          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={(e): void => {
+              e.stopPropagation();
+              setShowDeleteConfirm(!showDeleteConfirm);
+            }}
+          >
+            <Trash2 className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">{deleteLabel}</span>
+          </Button>
         </div>
       </div>
+
+      {showDeleteConfirm ? (
+        <div
+          className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          <p className="mb-3 text-sm text-red-800 dark:text-red-300">
+            {deleteLabel} &quot;{research.title !== '' ? stripMarkdown(research.title) : 'Untitled Research'}&quot;?
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              onClick={(): void => {
+                void handleDelete();
+              }}
+              disabled={isDeleting}
+              isLoading={isDeleting}
+            >
+              {deleteLabel}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={(): void => {
+                setShowDeleteConfirm(false);
+              }}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }, (prevProps, nextProps) => {
