@@ -1,30 +1,172 @@
-# Resume Goal Preservation — Design
+# Resume Goal Preservation Implementation Plan
 
-## Problem
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-When a user sends a message (e.g., PR comment) to a completed task, the orchestrator resumes the Claude session with `--continue`. If the session's context is near capacity, Claude Code compacts the conversation. The compaction summary can lose or deprioritize the user's actual request, causing Claude to follow stale system prompt instructions instead.
+**Goal:** When resuming a completed task with a user message, inject the user's goal into the system prompt so it survives context compaction.
 
-**Root cause:** The user's goal exists only in the conversation (user prompt), which is vulnerable to compaction. The system prompt — which survives compaction — contains the original task goal, not the new one.
+**Architecture:** Add a `buildActiveGoalSection()` private method to `TaskDispatcher` that strips the RESUME PRE-FLIGHT preamble and wraps the raw user message in an `[ACTIVE GOAL]` block. Append this to the system prompt only when `continueSession: true`.
 
-## Solution
+**Tech Stack:** TypeScript, Vitest
 
-Inject the user's new message into the system prompt when resuming (`continueSession: true`). System prompts are never compacted.
+---
 
-## Changes
+### Task 1: Add `buildActiveGoalSection` method and wire it into `startWorkerAttempt`
 
-### `workers/orchestrator/src/services/task-dispatcher.ts`
+**Files:**
+- Modify: `workers/orchestrator/src/services/task-dispatcher.ts:885-905` (near `buildResumePreamble`)
+- Modify: `workers/orchestrator/src/services/task-dispatcher.ts:1063-1076` (in `startWorkerAttempt`)
 
-**`startWorkerAttempt()`** — When `continueSession: true`, append an `[ACTIVE GOAL]` section to the system prompt containing the raw user message (with the RESUME PRE-FLIGHT preamble stripped).
+**Step 1: Write failing test**
 
-**New helper: `buildActiveGoalSection(prompt: string)`** — Strips the preamble from the combined prompt and wraps the user's actual message in an `[ACTIVE GOAL — HIGHEST PRIORITY]` block.
+Add to `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`, after the `buildResumePreamble` describe block (line ~2957):
 
-### `workers/orchestrator/src/services/system-prompt.ts`
+```typescript
+describe('buildActiveGoalSection', () => {
+  it('strips resume preamble and wraps user message', () => {
+    const internal = dispatcher as unknown as {
+      buildActiveGoalSection: (prompt: string) => string;
+      buildResumePreamble: () => string;
+    };
+    const preamble = internal.buildResumePreamble();
+    const userMessage = '[PR Comment] New comment on PR #849\nFrom: @pbuchman\nThe commenter said:\nFix the bug';
+    const combined = preamble + userMessage;
 
-No changes. The `buildActiveGoalSection` lives in `task-dispatcher.ts` as a private method since it's only used there and depends on the preamble format defined there.
+    const result = internal.buildActiveGoalSection(combined);
 
-### Tests
+    expect(result).toContain('[ACTIVE GOAL');
+    expect(result).toContain('[PR Comment] New comment on PR #849');
+    expect(result).toContain('Fix the bug');
+    expect(result).not.toContain('[RESUME PRE-FLIGHT');
+  });
 
-Update `task-dispatcher.test.ts`:
-- Verify system prompt includes `[ACTIVE GOAL]` section when `continueSession: true`
-- Verify system prompt does NOT include it on initial attempts
-- Verify preamble is stripped from the goal text
+  it('handles prompt without preamble', () => {
+    const internal = dispatcher as unknown as {
+      buildActiveGoalSection: (prompt: string) => string;
+    };
+    const result = internal.buildActiveGoalSection('Just a plain message');
+
+    expect(result).toContain('[ACTIVE GOAL');
+    expect(result).toContain('Just a plain message');
+  });
+});
+```
+
+**Step 2: Run test to verify it fails**
+
+Run: `cd /home/pbuchman/personal/intexuraos-2 && pnpm --filter orchestrator test -- --run -t "buildActiveGoalSection"`
+Expected: FAIL — `buildActiveGoalSection` is not a function
+
+**Step 3: Implement `buildActiveGoalSection`**
+
+Add as a private method in `TaskDispatcher`, after `buildResumePreamble()` (after line 905):
+
+```typescript
+private buildActiveGoalSection(prompt: string): string {
+  const preamble = this.buildResumePreamble();
+  const goalText = prompt.startsWith(preamble)
+    ? prompt.slice(preamble.length)
+    : prompt;
+  return [
+    '',
+    '',
+    '[ACTIVE GOAL — HIGHEST PRIORITY]',
+    'A new user message has been received. This is your PRIMARY task.',
+    'Complete this goal before doing anything else. If context was compacted,',
+    'this section survives and takes absolute priority over conversation history.',
+    '',
+    goalText,
+  ].join('\n');
+}
+```
+
+**Step 4: Wire into `startWorkerAttempt`**
+
+In `startWorkerAttempt()` (line ~1068), change the `systemPrompt` construction:
+
+```typescript
+// Before:
+systemPrompt: buildSystemPrompt({
+  taskId: task.taskId,
+  ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+  ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
+  taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
+  linearIssueLabels: task.linearIssueLabels,
+  hasChildren: params.hasChildren,
+}) + (params.continueSession ? this.buildActiveGoalSection(params.prompt) : ''),
+
+// The v8 ignore comment stays around the spread, not the concatenation.
+```
+
+**Step 5: Run test to verify it passes**
+
+Run: `cd /home/pbuchman/personal/intexuraos-2 && pnpm --filter orchestrator test -- --run -t "buildActiveGoalSection"`
+Expected: PASS
+
+**Step 6: Commit**
+
+```bash
+git add workers/orchestrator/src/services/task-dispatcher.ts workers/orchestrator/src/__tests__/task-dispatcher.test.ts
+git commit -m "feat(orchestrator): inject active goal into system prompt on resume"
+```
+
+---
+
+### Task 2: Add integration test for resume systemPrompt content
+
+**Files:**
+- Modify: `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
+
+**Step 1: Write test that verifies systemPrompt contains ACTIVE GOAL on resume**
+
+Find the existing `resumedAfterSuccess` describe block (~line 2959). Add a test that submits a task, completes it, then sends a message, and asserts the `createWorker` call's `systemPrompt` contains `[ACTIVE GOAL`:
+
+```typescript
+it('includes active goal in system prompt when resuming completed task', async () => {
+  // ... (use the same setup pattern as existing resumedAfterSuccess tests)
+  // After task completes, call sendMessage
+  // Then check:
+  const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+  expect(createWorkerCall?.[0]?.systemPrompt).toContain('[ACTIVE GOAL');
+  expect(createWorkerCall?.[0]?.systemPrompt).toContain('User follow-up message');
+});
+```
+
+**Step 2: Add test that initial submission does NOT include ACTIVE GOAL**
+
+```typescript
+it('does not include active goal in system prompt for initial submission', async () => {
+  const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls[0];
+  expect(createWorkerCall?.[0]?.systemPrompt).not.toContain('[ACTIVE GOAL');
+});
+```
+
+**Step 3: Run tests**
+
+Run: `cd /home/pbuchman/personal/intexuraos-2 && pnpm --filter orchestrator test -- --run`
+Expected: ALL PASS
+
+**Step 4: Commit**
+
+```bash
+git add workers/orchestrator/src/__tests__/task-dispatcher.test.ts
+git commit -m "test(orchestrator): verify active goal injection on resume"
+```
+
+---
+
+### Task 3: Run full CI
+
+**Step 1: Run workspace verification**
+
+Run: `cd /home/pbuchman/personal/intexuraos-2 && pnpm run verify:workspace:tracked orchestrator`
+Expected: TypeCheck + Lint + Tests + Coverage all pass
+
+**Step 2: Run full CI**
+
+Run: `cd /home/pbuchman/personal/intexuraos-2 && pnpm run ci:tracked`
+Expected: ALL PASS
+
+**Step 3: Verify no terraform changes**
+
+Run: `git diff --name-only HEAD~2 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" || echo "No terraform changes"`
+Expected: No terraform changes
