@@ -13,6 +13,7 @@ If fixing one instance without fixing the others would leave the codebase incons
 **Signal:** Multiple `technical-debt.md` files report the same pattern or violation.
 
 **Examples:**
+
 - "Missing `logIncomingRequest()` at route entry" in 4 services → 1 issue: `[refactor] Add logIncomingRequest to all route entry points`
 - "ESLint disabled at file level" in 3 route files → 1 issue: `[refactor] Remove blanket eslint-disable from route files`
 - "Module-level mutable state" in 2 services → 1 issue: `[refactor] Replace module-level Maps with scoped state`
@@ -24,6 +25,7 @@ If fixing one instance without fixing the others would leave the codebase incons
 **Signal:** One debt file mentions an API producer issue and another mentions the corresponding consumer issue.
 
 **Examples:**
+
 - Service A's debt says "endpoint X returns inconsistent error format" + Service B's debt says "caller of endpoint X doesn't handle error cases" → 1 issue covering both
 - Package debt says "type export missing optional field" + App debt says "consumer uses `as` cast to work around missing field" → 1 issue
 
@@ -34,6 +36,7 @@ If fixing one instance without fixing the others would leave the codebase incons
 **Signal:** Multiple reports flag different symptoms of the same unused/partially-implemented feature.
 
 **Examples:**
+
 - Dead Pub/Sub publisher + unused Terraform topic + orphaned env var → 1 cleanup issue
 - Partially-implemented feature with TODO in use case + missing route wiring + placeholder in tests → 1 issue to either complete or remove
 
@@ -44,6 +47,7 @@ If fixing one instance without fixing the others would leave the codebase incons
 **Signal:** Multiple debt files flag identical code snippets or utility functions copied between services.
 
 **Examples:**
+
 - `generateWebhookSecret()` duplicated in 3 use cases → 1 issue: `[refactor] Extract shared webhook secret utility`
 - Same Firestore timestamp serialization pattern in 4 services → 1 issue: `[refactor] Create shared timestamp serialization helper`
 
@@ -54,6 +58,7 @@ If fixing one instance without fixing the others would leave the codebase incons
 **Signal:** Large files that handle overlapping concerns could be split as part of a single refactoring effort.
 
 **Examples:**
+
 - `codeRoutes.ts` (3500 lines) and `webhookRoutes.ts` (both in same service, both with ESLint disabled) → 1 issue: `[refactor] Split code-agent route files by domain concern`
 
 **How to detect:** Multiple debt items in the same service that share a remediation approach (e.g., "split into separate files").
