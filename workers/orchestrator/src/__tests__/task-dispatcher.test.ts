@@ -2985,6 +2985,63 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('active goal in systemPrompt (integration)', () => {
+    it('includes active goal in system prompt when resuming completed task', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'active-goal-resume-test',
+        workerType: 'auto',
+        prompt: 'Original task prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      // Mark task as completed so sendMessage triggers resume
+      const state = await statePersistence.load();
+      const task = state.tasks['active-goal-resume-test'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.createWorker).mockClear();
+
+      const result = await dispatcher.sendMessage('active-goal-resume-test', 'User follow-up message');
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls[0];
+      expect(createWorkerCall).toBeDefined();
+      const config = createWorkerCall?.[0];
+      expect(config?.systemPrompt).toContain('[ACTIVE GOAL');
+      expect(config?.systemPrompt).toContain('User follow-up message');
+    });
+
+    it('does not include active goal in system prompt for initial submission', async () => {
+      vi.mocked(mockIsolationProvider.createWorker).mockClear();
+
+      const request: CreateTaskRequest = {
+        taskId: 'active-goal-initial-test',
+        workerType: 'auto',
+        prompt: 'Initial task prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls[0];
+      expect(createWorkerCall).toBeDefined();
+      const config = createWorkerCall?.[0];
+      expect(config?.systemPrompt).not.toContain('[ACTIVE GOAL');
+    });
+  });
+
   describe('resumedAfterSuccess', () => {
     let resumedDispatcher: TaskDispatcher;
     let resumedStatePersistence: StatePersistence;
