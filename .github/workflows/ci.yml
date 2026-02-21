@@ -15,12 +15,20 @@ permissions:
 
 jobs:
   # =============================================================================
-  # Type Check & Lint - runs in parallel with other jobs
+  # Type Check & Lint - split across parallel runners for faster feedback
   # =============================================================================
   type-lint:
-    name: Type & Lint
+    name: ${{ matrix.check.name }}
     runs-on: ubuntu-latest
     if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - name: Type Check
+            run: pnpm run typecheck && pnpm run typecheck:tests
+          - name: Lint
+            run: pnpm run lint
     env:
       NODE_OPTIONS: '--max-old-space-size=6144'
 
@@ -45,22 +53,21 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Type Check
-        run: pnpm run typecheck
-
-      - name: Type Check Tests
-        run: pnpm run typecheck:tests
-
-      - name: Lint
-        run: pnpm run lint
+      - name: ${{ matrix.check.name }}
+        run: ${{ matrix.check.run }}
 
   # =============================================================================
-  # Tests - runs in parallel with other jobs (separate runner = fresh memory)
+  # Tests - sharded across 3 runners for ~3x speedup
+  # Each shard runs a subset of test files with blob reporter + coverage
   # =============================================================================
   tests:
-    name: Tests
+    name: Tests (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       NODE_OPTIONS: '--max-old-space-size=6144'
 
@@ -85,8 +92,70 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Run Tests with Coverage
-        run: pnpm run test:coverage
+      - name: Run Tests (shard ${{ matrix.shard }}/3)
+        run: >-
+          pnpm vitest run
+          --reporter=blob
+          --coverage
+          --coverage.thresholds.lines=0
+          --coverage.thresholds.branches=0
+          --coverage.thresholds.functions=0
+          --coverage.thresholds.statements=0
+          --shard=${{ matrix.shard }}/3
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: .vitest-reports/
+          include-hidden-files: true
+          retention-days: 1
+
+  # =============================================================================
+  # Merge test reports and coverage from all shards, verify thresholds
+  # =============================================================================
+  coverage-check:
+    name: Coverage Check
+    runs-on: ubuntu-latest
+    needs: tests
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Download all blob reports
+        uses: actions/download-artifact@v4
+        with:
+          path: .vitest-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge reports and check coverage
+        run: pnpm vitest --merge-reports --coverage
+
+      - name: Upload merged coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-merged
+          path: coverage/
+          retention-days: 7
 
   # =============================================================================
   # Static Validation - runs in parallel with other jobs

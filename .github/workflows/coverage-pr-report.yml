@@ -1,51 +1,51 @@
 name: Vitest Coverage Report
 
 on:
-  pull_request:
+  workflow_run:
+    workflows: ["CI"]
     types:
-      - opened
-      - synchronize
-      - reopened
+      - completed
 
 permissions:
   contents: read
   pull-requests: write
+  actions: read
 
 jobs:
   coverage:
     name: Coverage Report
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
     environment: copilot
 
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
         with:
-          version: 9
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download merged coverage from CI
+        uses: actions/download-artifact@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
+          name: coverage-merged
+          path: coverage/
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.PAT_TOKEN }}
 
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build
-        run: pnpm run build
-
-      - name: Run tests with coverage
-        run: pnpm run test:coverage
+      - name: Find PR number
+        id: find-pr
+        run: |
+          PR_NUMBER=$(gh pr list --head "${{ github.event.workflow_run.head_branch }}" --json number --jq '.[0].number')
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
       - name: Report Coverage
-        if: always()
+        if: steps.find-pr.outputs.pr_number != ''
         uses: davelosert/vitest-coverage-report-action@v2
         with:
           threshold-icons: "{94: '🔴', 95: '🟠', 96: '🟢'}"
           github-token: ${{ secrets.PAT_TOKEN }}
           file-coverage-mode: all
           comment-on: 'pr'
+          pr-number: ${{ steps.find-pr.outputs.pr_number }}
