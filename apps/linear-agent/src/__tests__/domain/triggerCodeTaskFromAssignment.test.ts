@@ -98,17 +98,21 @@ describe('triggerCodeTaskFromAssignment', () => {
     expect(req?.workerType).toBe('auto');
   });
 
-  it('uses webhookId for actionId and approvalEventId deduplication', async () => {
+  it('uses identifier and timestamp for actionId and approvalEventId deduplication', async () => {
     const client = new FakeCodeAgentClient();
     const logger = createFakeLogger();
+    const timestamp = 1706291940000;
 
-    await triggerCodeTaskFromAssignment(createEvent({ webhookId: 'wh-42' }), 'user-123', {
-      codeAgentClient: client,
-      logger,
-    });
+    await triggerCodeTaskFromAssignment(
+      createEvent({ webhookTimestamp: timestamp }),
+      'user-123',
+      { codeAgentClient: client, logger }
+    );
 
     const req = client.getLastRequest();
     expect(req).not.toBeNull();
+    expect(req?.actionId).toBe(`webhook-assign-INT-123-${String(timestamp)}`);
+    expect(req?.approvalEventId).toBe(`webhook-assign-INT-123-${String(timestamp)}`);
   });
 
   it('does not throw on successful trigger', async () => {
