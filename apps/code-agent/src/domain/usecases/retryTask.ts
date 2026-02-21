@@ -414,15 +414,16 @@ ${additionalContext.trim()}
     }
 
     // Step 12: Add comment to Linear issue
+    /* v8 ignore start -- ts-type: ternary operator with optional check creates type narrowing branch @preserve */
+    const additionalContextSection =
+      additionalContext !== undefined && additionalContext.trim().length > 0
+        ? `\n\n**Additional context provided:** ${additionalContext.trim()}`
+        : '';
+    /* v8 ignore stop @preserve */
+
     const commentBody = `Retrying ${originalTask.status} task **${originalTaskId}**.
 
-**New task:** ${retryTask.id}
-
-/* v8 ignore start -- ts-type: ternary operator with optional check creates type narrowing branch @preserve */
-${additionalContext !== undefined && additionalContext.trim().length > 0
-  ? `**Additional context provided:** ${additionalContext.trim()}`
-  : ''}
-/* v8 ignore stop @preserve */
+**New task:** ${retryTask.id}${additionalContextSection}
 
 ---
 
