@@ -524,8 +524,8 @@
         <div class="stat-label">Models</div>
       </div>
       <div class="stat">
-        <div class="stat-number">10</div>
-        <div class="stat-label">Apps Using LLM</div>
+        <div class="stat-number">11</div>
+        <div class="stat-label">Apps + Workers Using LLM</div>
       </div>
       <div class="stat">
         <div class="stat-number">8</div>
@@ -555,7 +555,7 @@
       <div class="section-title"><span class="num">1</span> Architecture Layers</div>
       <div class="layers">
         <div class="layer apps">
-          <div class="layer-label">Apps (HTTP Services &mdash; Cloud Run)</div>
+          <div class="layer-label">Apps (HTTP Services &mdash; Cloud Run) + Workers</div>
           <div class="layer-items">
             <span class="chip app">research-agent</span>
             <span class="chip app">commands-agent</span>
@@ -567,8 +567,11 @@
             <span class="chip app">web-agent</span>
             <span class="chip app">image-service</span>
             <span class="chip app">user-service</span>
+            <span class="chip app" style="background:rgba(57,211,238,0.1);border-color:rgba(57,211,238,0.3);color:var(--cyan)">orchestrator (worker)</span>
             <span class="chip app dim">bookmarks-agent*</span>
             <span class="chip app dim">actions-agent*</span>
+            <span class="chip app dim">app-settings-service**</span>
+            <span class="chip app dim">web (frontend)**</span>
           </div>
         </div>
         <div class="arrow-down">&darr;</div>
@@ -602,7 +605,7 @@
           </div>
         </div>
       </div>
-      <p style="font-size:0.75rem;color:var(--text-muted);text-align:center;">* bookmarks-agent delegates to web-agent via HTTP; actions-agent coordinates but doesn't call LLMs directly</p>
+      <p style="font-size:0.75rem;color:var(--text-muted);text-align:center;">* bookmarks-agent delegates to web-agent via HTTP; actions-agent coordinates but doesn't call LLMs directly<br>** app-settings-service is the pricing registry (llm-contract types only); web frontend uses llm-contract for model/provider UI constants</p>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════ -->
@@ -1090,6 +1093,37 @@
           <div class="source-file">infra/pagesummary/llmSummarizer.ts</div>
         </div>
 
+        <!-- orchestrator (worker) -->
+        <div class="app-card" style="border-color:rgba(57,211,238,0.3)">
+          <div class="app-name" style="color:var(--cyan)">orchestrator (worker)</div>
+          <div class="app-purpose">Task completion verification via LLM &mdash; adjudicates coding task pass/fail</div>
+          <div class="call-chain"><span class="route">CloudEvent trigger (task completion)</span>
+  <span class="domain">&rarr; OrchestratorCompletionVerifier</span>
+    <span class="infra">&rarr; createLlmClient({ model: gemini-2.5-flash })</span>
+      <span class="llm">&rarr; llmClient.generate(verificationPrompt)</span>
+      <span class="comment">// hardcoded Gemini 2.5 Flash with platform key</span></div>
+          <div class="provider-badges">
+            <span class="provider-badge google">Gemini</span>
+            <span style="font-size:0.65rem;color:var(--text-muted);margin-left:4px;">via factory (hardcoded model)</span>
+          </div>
+          <div class="source-file">workers/orchestrator/src/services/completion-verifier.ts</div>
+        </div>
+
+        <!-- app-settings-service (LLM-adjacent) -->
+        <div class="app-card" style="border-color:rgba(139,148,158,0.3)">
+          <div class="app-name" style="color:var(--text-muted)">app-settings-service (pricing registry)</div>
+          <div class="app-purpose">Central pricing store for all 16 models &mdash; no LLM calls, but serves pricing data to all other services</div>
+          <div class="call-chain"><span class="route">GET /internal/settings/pricing</span>
+  <span class="domain">&rarr; Validates coverage for ALL_LLM_MODELS</span>
+  <span class="domain">&rarr; Returns ProviderPricing for all 5 providers</span>
+  <span class="comment">// All other services fetch pricing from here</span>
+  <span class="comment">// Uses llm-contract for model/provider types</span></div>
+          <div class="provider-badges">
+            <span style="font-size:0.7rem;color:var(--text-muted);">No LLM calls &mdash; llm-contract types only</span>
+          </div>
+          <div class="source-file">apps/app-settings-service/src/routes/pricing.ts</div>
+        </div>
+
       </div>
     </div>
 
@@ -1201,6 +1235,15 @@
               <td><span class="dot empty"></span></td>
               <td><span class="dot factory"></span><br><span class="dot-label">summarize</span></td>
               <td style="color:var(--purple);font-size:0.75rem">Factory (user pref)</td>
+            </tr>
+            <tr>
+              <td style="color:var(--cyan)">orchestrator (worker)</td>
+              <td><span class="dot empty"></span></td>
+              <td><span class="dot factory"></span><br><span class="dot-label">verification</span></td>
+              <td><span class="dot empty"></span></td>
+              <td><span class="dot empty"></span></td>
+              <td><span class="dot empty"></span></td>
+              <td style="color:var(--purple);font-size:0.75rem">Factory (hardcoded)</td>
             </tr>
           </tbody>
         </table>
