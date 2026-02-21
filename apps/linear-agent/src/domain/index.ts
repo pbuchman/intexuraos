@@ -12,6 +12,9 @@ export type {
   ProcessedActionRepository,
   LinearIssueRepository,
   LinearCommentRepository,
+  CodeAgentClient,
+  CodeAgentError,
+  TriggerCodeTaskResponse,
 } from './ports.js';
 export {
   processLinearAction,
@@ -40,7 +43,7 @@ export {
   type ValidatedIssue,
   type ValidateIssueError,
 } from './useCases/validateIssue.js';
-export type { LinearWebhookEvent, LinearWebhookPayload, WebhookAction, LinearCommentWebhookEvent, LinearCommentWebhookPayload } from './webhookTypes.js';
+export type { LinearWebhookEvent, LinearWebhookPayload, LinearWebhookUpdatedFrom, WebhookAction, LinearCommentWebhookEvent, LinearCommentWebhookPayload } from './webhookTypes.js';
 export { mapWebhookToSyncedIssue, mapApiIssueToSyncedIssue } from './issueMapper.js';
 export {
   syncSingleIssue,
@@ -58,3 +61,8 @@ export {
   type FullSyncDeps,
   type SyncStats,
 } from './useCases/fullSyncUseCase.js';
+export {
+  shouldTriggerCodeTask,
+  triggerCodeTaskFromAssignment,
+  type TriggerCodeTaskDeps,
+} from './useCases/triggerCodeTaskFromAssignment.js';
