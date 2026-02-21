@@ -81,7 +81,7 @@ function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
                 ))}
               </span>
             )}
-            {issue.assignee !== undefined && (
+            {issue.assignee != null && (
               <span className="text-[10px] text-slate-400 dark:text-slate-500">{issue.assignee.name}</span>
             )}
           </div>
@@ -173,7 +173,7 @@ function SubIssuesList({ issues }: SubIssuesListProps): React.JSX.Element | null
                 ))}
               </span>
             )}
-            {child.assignee !== undefined && (
+            {child.assignee != null && (
               <span className="text-[10px] text-slate-400 dark:text-slate-500">{child.assignee.name}</span>
             )}
             <ExternalLink className="ml-auto h-3 w-3 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
