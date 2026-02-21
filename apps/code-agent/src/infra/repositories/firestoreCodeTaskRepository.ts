@@ -68,6 +68,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
             if (!approvalSnapshot.empty) {
               const existingTask = approvalSnapshot.docs[0]!;
+              logger.info({
+                dedupLayer: 0,
+                dedupType: 'DUPLICATE_APPROVAL',
+                existingTaskId: existingTask.id,
+                approvalEventId: input.approvalEventId,
+              }, 'Dedup triggered: duplicate approval event');
               return err({
                 code: 'DUPLICATE_APPROVAL',
                 message: 'Duplicate approval event',
@@ -83,6 +89,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
             if (!actionSnapshot.empty) {
               const existingTask = actionSnapshot.docs[0]!;
+              logger.info({
+                dedupLayer: 1,
+                dedupType: 'DUPLICATE_ACTION',
+                existingTaskId: existingTask.id,
+                actionId: input.actionId,
+              }, 'Dedup triggered: duplicate action');
               return err({
                 code: 'DUPLICATE_ACTION',
                 message: 'Duplicate action',
@@ -103,6 +115,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
             if (!dedupSnapshot.empty) {
               const existingTask = dedupSnapshot.docs[0]!;
+              logger.info({
+                dedupLayer: 2,
+                dedupType: 'DUPLICATE_PROMPT',
+                existingTaskId: existingTask.id,
+                dedupKey,
+              }, 'Dedup triggered: duplicate prompt within 5 minutes');
               return err({
                 code: 'DUPLICATE_PROMPT',
                 message: 'Duplicate prompt within 5 minutes',
@@ -122,6 +140,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
             if (!linearSnapshot.empty) {
               const existingTask = linearSnapshot.docs[0]!;
+              logger.info({
+                dedupLayer: 3,
+                dedupType: 'ACTIVE_TASK_EXISTS',
+                existingTaskId: existingTask.id,
+                linearIssueId: input.linearIssueId,
+              }, 'Dedup triggered: active task exists for Linear issue');
               return err({
                 code: 'ACTIVE_TASK_EXISTS',
                 message: 'Active task exists for Linear issue',
