@@ -304,6 +304,7 @@ function WorkerRow({
 }: WorkerRowProps): React.JSX.Element {
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -354,8 +355,13 @@ function WorkerRow({
   };
 
   const handleDelete = async (): Promise<void> => {
-    await onDelete();
-    setShowDeleteConfirm(false);
+    setDeleting(true);
+    try {
+      await onDelete();
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleTest = async (): Promise<void> => {
@@ -586,6 +592,8 @@ function WorkerRow({
               onClick={(): void => {
                 void handleDelete();
               }}
+              disabled={deleting}
+              isLoading={deleting}
             >
               Delete
             </Button>
@@ -596,6 +604,7 @@ function WorkerRow({
               onClick={(): void => {
                 setShowDeleteConfirm(false);
               }}
+              disabled={deleting}
             >
               Cancel
             </Button>

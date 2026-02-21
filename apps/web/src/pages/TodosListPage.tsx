@@ -255,8 +255,8 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
         </div>
       ) : null}
       {showDeleteConfirm ? (
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="text-xs text-red-600 dark:text-red-400">Delete?</span>
+        <div className="flex shrink-0 items-center gap-2 rounded-md border border-red-200 bg-red-50 px-2 py-1 dark:border-red-800 dark:bg-red-900/30">
+          <span className="text-xs text-red-800 dark:text-red-300">Delete?</span>
           <Button
             type="button"
             variant="danger"
@@ -267,7 +267,7 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
             disabled={deleting}
             isLoading={deleting}
           >
-            Yes
+            Delete
           </Button>
           <Button
             type="button"
@@ -278,7 +278,7 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
             }}
             disabled={deleting}
           >
-            No
+            Cancel
           </Button>
         </div>
       ) : null}
@@ -644,31 +644,33 @@ function TodoModal({
 
         <div className="flex items-center justify-between border-t border-slate-200 p-4 dark:border-slate-700">
           {showDeleteConfirm ? (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-red-600 dark:text-red-400">Delete this todo?</span>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={(): void => {
-                  void handleDelete();
-                }}
-                disabled={deleting}
-                isLoading={deleting}
-              >
-                Confirm
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={(): void => {
-                  setShowDeleteConfirm(false);
-                }}
-                disabled={deleting}
-              >
-                Cancel
-              </Button>
+            <div className="flex-1 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
+              <p className="mb-2 text-sm text-red-800 dark:text-red-300">Delete this todo?</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  onClick={(): void => {
+                    void handleDelete();
+                  }}
+                  disabled={deleting}
+                  isLoading={deleting}
+                >
+                  Delete
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={(): void => {
+                    setShowDeleteConfirm(false);
+                  }}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="flex gap-2">
