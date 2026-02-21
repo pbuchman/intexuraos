@@ -8,7 +8,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import type { FastifySchema } from 'fastify';
 import type { Logger } from 'pino';
 import { logIncomingRequest } from '@intexuraos/common-http';
-import { getServices, type ServiceContainer } from '../services.js';
+import { getServices } from '../services.js';
 
 // Augment Fastify types to include rawBody for webhook signature validation
 declare module 'fastify' {
@@ -21,7 +21,7 @@ declare module 'fastify' {
   }
 }
 import { validateLinearWebhookSignature } from '../infra/linearWebhookValidation.js';
-import { syncSingleIssue, syncCommentFromWebhook } from '../domain/index.js';
+import { syncSingleIssue, syncCommentFromWebhook, shouldTriggerCodeTask, triggerCodeTaskFromAssignment } from '../domain/index.js';
 import type { LinearWebhookEvent, LinearCommentWebhookEvent, LinearWebhookUpdatedFrom } from '../domain/webhookTypes.js';
 
 interface LinearWebhookBody {
@@ -70,35 +70,6 @@ interface LinearWebhookBody {
   updatedFrom?: LinearWebhookUpdatedFrom;
   webhookTimestamp: number;
   webhookId: string;
-}
-
-interface IssueData {
-  identifier: string;
-  title: string;
-  description: string | null;
-}
-
-async function triggerCodeTask(
-  services: ServiceContainer,
-  userId: string,
-  data: IssueData,
-  webhookId: string,
-  logger: Logger
-): Promise<void> {
-  const prompt = data.description ?? data.title;
-  const result = await services.codeAgentClient.triggerCodeTask({
-    userId,
-    linearIssueId: data.identifier,
-    prompt,
-    workerType: 'auto',
-    actionId: `webhook-assign-${webhookId}`,
-    approvalEventId: `webhook-assign-${webhookId}`,
-  });
-  if (result.ok) {
-    logger.info({ codeTaskId: result.value.codeTaskId, identifier: data.identifier }, 'Code task triggered from assignment');
-  } else {
-    logger.error({ error: result.error, identifier: data.identifier }, 'Failed to trigger code task from assignment');
-  }
 }
 
 async function handleLinearWebhook(
@@ -244,16 +215,11 @@ async function handleLinearWebhook(
 
     request.log.info({ action: syncResult.value.action, issueId: data.id, identifier: data.identifier, userId }, 'Issue synced from webhook');
 
-    if (action === 'update' && updatedFrom !== undefined) {
-      const isNewAssignment =
-        updatedFrom.assigneeId === null &&
-        data.assignee !== null &&
-        data.state.type === 'unstarted' &&
-        !data.labels.some(l => l.name === 'Code Task');
-
-      if (isNewAssignment) {
-        void triggerCodeTask(services, userId, data, webhookId, request.log as unknown as Logger);
-      }
+    if (shouldTriggerCodeTask(event)) {
+      void triggerCodeTaskFromAssignment(event, userId, {
+        codeAgentClient: services.codeAgentClient,
+        logger: request.log as unknown as Logger,
+      });
     }
 
     return await reply.ok({

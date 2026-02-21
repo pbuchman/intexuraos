@@ -26,7 +26,7 @@ import type {
   LinearComment,
 } from '../domain/index.js';
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
-import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../infra/http/codeAgentHttpClient.js';
+import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../domain/index.js';
 import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
 import type { LLMError, LLMErrorCode } from '@intexuraos/llm-contract';
 import type { IssueStateCategory, LinearPriority } from '../domain/models.js';

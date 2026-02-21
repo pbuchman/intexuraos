@@ -1,11 +1,9 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../../domain/ports.js';
 
-export interface CodeAgentError {
-  code: string;
-  message: string;
-}
+export type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse };
 
 export interface TriggerCodeTaskRequest {
   userId: string;
@@ -14,14 +12,6 @@ export interface TriggerCodeTaskRequest {
   workerType: 'opus' | 'auto' | 'glm';
   actionId: string;
   approvalEventId: string;
-}
-
-export interface TriggerCodeTaskResponse {
-  codeTaskId: string;
-}
-
-export interface CodeAgentClient {
-  triggerCodeTask(request: TriggerCodeTaskRequest): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>>;
 }
 
 export interface CodeAgentHttpClientConfig {

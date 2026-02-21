@@ -12,6 +12,9 @@ export type {
   ProcessedActionRepository,
   LinearIssueRepository,
   LinearCommentRepository,
+  CodeAgentClient,
+  CodeAgentError,
+  TriggerCodeTaskResponse,
 } from './ports.js';
 export {
   processLinearAction,
@@ -58,3 +61,8 @@ export {
   type FullSyncDeps,
   type SyncStats,
 } from './useCases/fullSyncUseCase.js';
+export {
+  shouldTriggerCodeTask,
+  triggerCodeTaskFromAssignment,
+  type TriggerCodeTaskDeps,
+} from './useCases/triggerCodeTaskFromAssignment.js';

@@ -650,45 +650,9 @@ describe('Linear Webhook Routes', () => {
         const lastRequest = codeAgentClient.getLastRequest();
         expect(lastRequest).not.toBeNull();
         expect(lastRequest?.linearIssueId).toBe('INT-123');
-        expect(lastRequest?.prompt).toBe('Implement the feature');
+        expect(lastRequest?.prompt).toBe('Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.');
         expect(lastRequest?.workerType).toBe('auto');
         expect(lastRequest?.userId).toBe(userId);
-      });
-
-      it('uses title as prompt when description is null', async () => {
-        const payload = createAssignmentPayload({
-          data: {
-            id: 'issue-uuid-2',
-            identifier: 'INT-124',
-            title: 'Fix the login bug',
-            description: null,
-            priority: 1,
-            url: 'https://linear.app/team/issue/INT-124',
-            createdAt: '2025-01-01T00:00:00.000Z',
-            updatedAt: '2025-01-02T00:00:00.000Z',
-            state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
-            assignee: { id: 'user-1', name: 'Test User' },
-            labels: [],
-            team: { id: teamId, key: 'INT' },
-          },
-        });
-        const signature = computeLinearSignature(payload);
-
-        await app.inject({
-          method: 'POST',
-          url: '/linear/webhook',
-          headers: {
-            'Linear-Signature': signature,
-            'content-type': 'application/json',
-          },
-          payload: JSON.stringify(payload),
-        });
-
-        await new Promise(resolve => { setTimeout(resolve, 50); });
-
-        const lastRequest = codeAgentClient.getLastRequest();
-        expect(lastRequest).not.toBeNull();
-        expect(lastRequest?.prompt).toBe('Fix the login bug');
       });
 
       it('does not trigger when reassigning (previous assignee was not null)', async () => {

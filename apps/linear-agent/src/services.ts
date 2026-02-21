@@ -10,6 +10,7 @@ import type {
   ProcessedActionRepository,
   LinearIssueRepository,
   LinearCommentRepository,
+  CodeAgentClient,
 } from './domain/index.js';
 import { createLinearConnectionRepository } from './infra/firestore/linearConnectionRepository.js';
 import { createLinearApiClient } from './infra/linear/linearApiClient.js';
@@ -19,7 +20,7 @@ import { createProcessedActionRepository } from './infra/firestore/processedActi
 import { createLinearIssueRepository } from './infra/firestore/linearIssueRepository.js';
 import { createLinearCommentRepository } from './infra/firestore/linearCommentRepository.js';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
-import { createCodeAgentHttpClient, type CodeAgentClient } from './infra/http/codeAgentHttpClient.js';
+import { createCodeAgentHttpClient } from './infra/http/codeAgentHttpClient.js';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 

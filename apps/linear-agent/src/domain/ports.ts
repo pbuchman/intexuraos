@@ -167,6 +167,29 @@ export interface LinearIssueRepository {
   deleteById(id: string): Promise<Result<void, LinearError>>;
 }
 
+/** Error from code-agent HTTP calls */
+export interface CodeAgentError {
+  code: string;
+  message: string;
+}
+
+/** Response from code-agent triggerCodeTask */
+export interface TriggerCodeTaskResponse {
+  codeTaskId: string;
+}
+
+/** Client for triggering code tasks via code-agent */
+export interface CodeAgentClient {
+  triggerCodeTask(request: {
+    userId: string;
+    linearIssueId: string;
+    prompt: string;
+    workerType: 'opus' | 'auto' | 'glm';
+    actionId: string;
+    approvalEventId: string;
+  }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>>;
+}
+
 /** Repository for locally synced Linear comments */
 export interface LinearCommentRepository {
   /** Save or update a synced comment */
