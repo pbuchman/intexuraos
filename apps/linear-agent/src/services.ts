@@ -19,6 +19,7 @@ import { createProcessedActionRepository } from './infra/firestore/processedActi
 import { createLinearIssueRepository } from './infra/firestore/linearIssueRepository.js';
 import { createLinearCommentRepository } from './infra/firestore/linearCommentRepository.js';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
+import { createCodeAgentHttpClient, type CodeAgentClient } from './infra/http/codeAgentHttpClient.js';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 
@@ -35,10 +36,12 @@ export interface ServiceContainer {
   issueRepository: LinearIssueRepository;
   commentRepository: LinearCommentRepository;
   userServiceClient: UserServiceClient;
+  codeAgentClient: CodeAgentClient;
 }
 
 export interface ServiceConfig {
   userServiceUrl: string;
+  codeAgentUrl: string;
   internalAuthToken: string;
   pricingContext: IPricingContext;
 }
@@ -57,6 +60,11 @@ export function initServices(config: ServiceConfig): void {
 
   const extractionService = createLinearActionExtractionService(userServiceClient, logger);
 
+  const codeAgentClient = createCodeAgentHttpClient(
+    { baseUrl: config.codeAgentUrl, internalAuthToken: config.internalAuthToken, timeoutMs: 30_000 },
+    logger
+  );
+
   container = {
     connectionRepository: createLinearConnectionRepository(),
     linearApiClient: createLinearApiClient(),
@@ -66,6 +74,7 @@ export function initServices(config: ServiceConfig): void {
     issueRepository: createLinearIssueRepository(),
     commentRepository: createLinearCommentRepository(),
     userServiceClient,
+    codeAgentClient,
   };
 }
 

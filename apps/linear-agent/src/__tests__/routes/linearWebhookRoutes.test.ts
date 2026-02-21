@@ -12,6 +12,7 @@ import {
   FakeProcessedActionRepository,
   FakeUserServiceClient,
   FakeLinearCommentRepository,
+  FakeCodeAgentClient,
 } from '../fakes.js';
 import { setServices, resetServices } from '../../services.js';
 import crypto from 'node:crypto';
@@ -26,6 +27,7 @@ describe('Linear Webhook Routes', () => {
   let failedIssueRepo: FakeFailedIssueRepository;
   let processedActionRepo: FakeProcessedActionRepository;
   let userServiceClient: FakeUserServiceClient;
+  let codeAgentClient: FakeCodeAgentClient;
 
   const webhookSecret = 'test-webhook-secret';
   const userId = 'user-123';
@@ -43,6 +45,7 @@ describe('Linear Webhook Routes', () => {
     failedIssueRepo = new FakeFailedIssueRepository();
     processedActionRepo = new FakeProcessedActionRepository();
     userServiceClient = new FakeUserServiceClient();
+    codeAgentClient = new FakeCodeAgentClient();
 
     // Seed a connection for the user WITH webhook secret
     connectionRepo.seedConnection({
@@ -65,6 +68,7 @@ describe('Linear Webhook Routes', () => {
       issueRepository: issueRepo,
       commentRepository: commentRepo,
       userServiceClient,
+      codeAgentClient,
     });
 
     app = await buildServer(undefined);
@@ -82,6 +86,7 @@ describe('Linear Webhook Routes', () => {
     failedIssueRepo.reset();
     processedActionRepo.reset();
     userServiceClient.reset();
+    codeAgentClient.reset();
   });
 
   function computeLinearSignature(body: unknown): string {
@@ -231,6 +236,7 @@ describe('Linear Webhook Routes', () => {
         issueRepository: issueRepo,
         commentRepository: commentRepo,
         userServiceClient,
+        codeAgentClient,
       });
 
       const payload = createLinearWebhookPayload({
@@ -594,6 +600,250 @@ describe('Linear Webhook Routes', () => {
         });
 
         expect(response.statusCode).toBe(500);
+      });
+    });
+
+    describe('Assignment-triggered code tasks', () => {
+      function createAssignmentPayload(overrides: Record<string, unknown> = {}): unknown {
+        return {
+          action: 'update',
+          type: 'Issue',
+          webhookTimestamp: Date.now(),
+          webhookId: 'webhook-assign-1',
+          updatedFrom: { assigneeId: null },
+          data: {
+            id: 'issue-uuid-1',
+            identifier: 'INT-123',
+            title: 'Test Issue',
+            description: 'Implement the feature',
+            priority: 2,
+            url: 'https://linear.app/team/issue/INT-123',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-02T00:00:00.000Z',
+            state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
+            assignee: { id: 'user-1', name: 'Test User' },
+            labels: [{ id: 'label-1', name: 'bug' }],
+            team: { id: teamId, key: 'INT' },
+          },
+          ...overrides,
+        };
+      }
+
+      it('triggers code task on new assignment in Todo status', async () => {
+        const payload = createAssignmentPayload();
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+
+        await new Promise(resolve => { setTimeout(resolve, 50); });
+
+        const lastRequest = codeAgentClient.getLastRequest();
+        expect(lastRequest).not.toBeNull();
+        expect(lastRequest?.linearIssueId).toBe('INT-123');
+        expect(lastRequest?.prompt).toBe('Implement the feature');
+        expect(lastRequest?.workerType).toBe('auto');
+        expect(lastRequest?.userId).toBe(userId);
+      });
+
+      it('uses title as prompt when description is null', async () => {
+        const payload = createAssignmentPayload({
+          data: {
+            id: 'issue-uuid-2',
+            identifier: 'INT-124',
+            title: 'Fix the login bug',
+            description: null,
+            priority: 1,
+            url: 'https://linear.app/team/issue/INT-124',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-02T00:00:00.000Z',
+            state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
+            assignee: { id: 'user-1', name: 'Test User' },
+            labels: [],
+            team: { id: teamId, key: 'INT' },
+          },
+        });
+        const signature = computeLinearSignature(payload);
+
+        await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        await new Promise(resolve => { setTimeout(resolve, 50); });
+
+        const lastRequest = codeAgentClient.getLastRequest();
+        expect(lastRequest).not.toBeNull();
+        expect(lastRequest?.prompt).toBe('Fix the login bug');
+      });
+
+      it('does not trigger when reassigning (previous assignee was not null)', async () => {
+        const payload = createAssignmentPayload({
+          updatedFrom: { assigneeId: 'previous-user-id' },
+        });
+        const signature = computeLinearSignature(payload);
+
+        await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        await new Promise(resolve => { setTimeout(resolve, 50); });
+
+        expect(codeAgentClient.getLastRequest()).toBeNull();
+      });
+
+      it('does not trigger when issue is not in Todo status', async () => {
+        const payload = createAssignmentPayload({
+          data: {
+            id: 'issue-uuid-1',
+            identifier: 'INT-123',
+            title: 'Test Issue',
+            description: 'Implement the feature',
+            priority: 2,
+            url: 'https://linear.app/team/issue/INT-123',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-02T00:00:00.000Z',
+            state: { id: 'state-2', name: 'In Progress', type: 'started' },
+            assignee: { id: 'user-1', name: 'Test User' },
+            labels: [],
+            team: { id: teamId, key: 'INT' },
+          },
+        });
+        const signature = computeLinearSignature(payload);
+
+        await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        await new Promise(resolve => { setTimeout(resolve, 50); });
+
+        expect(codeAgentClient.getLastRequest()).toBeNull();
+      });
+
+      it('does not trigger when issue has Code Task label', async () => {
+        const payload = createAssignmentPayload({
+          data: {
+            id: 'issue-uuid-1',
+            identifier: 'INT-123',
+            title: 'Test Issue',
+            description: 'Implement the feature',
+            priority: 2,
+            url: 'https://linear.app/team/issue/INT-123',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-02T00:00:00.000Z',
+            state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
+            assignee: { id: 'user-1', name: 'Test User' },
+            labels: [{ id: 'label-code', name: 'Code Task' }],
+            team: { id: teamId, key: 'INT' },
+          },
+        });
+        const signature = computeLinearSignature(payload);
+
+        await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        await new Promise(resolve => { setTimeout(resolve, 50); });
+
+        expect(codeAgentClient.getLastRequest()).toBeNull();
+      });
+
+      it('does not trigger on create action', async () => {
+        const payload = createAssignmentPayload({ action: 'create' });
+        const signature = computeLinearSignature(payload);
+
+        await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        await new Promise(resolve => { setTimeout(resolve, 50); });
+
+        expect(codeAgentClient.getLastRequest()).toBeNull();
+      });
+
+      it('does not trigger when updatedFrom has no assigneeId', async () => {
+        const payload = createAssignmentPayload({
+          updatedFrom: { stateId: 'some-state' },
+        });
+        const signature = computeLinearSignature(payload);
+
+        await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        await new Promise(resolve => { setTimeout(resolve, 50); });
+
+        expect(codeAgentClient.getLastRequest()).toBeNull();
+      });
+
+      it('webhook still succeeds when code task trigger fails', async () => {
+        codeAgentClient.setFailure(true, { code: 'UNAVAILABLE', message: 'code-agent down' });
+
+        const payload = createAssignmentPayload();
+        const signature = computeLinearSignature(payload);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/linear/webhook',
+          headers: {
+            'Linear-Signature': signature,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify(payload),
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+
+        await new Promise(resolve => { setTimeout(resolve, 50); });
+
+        const lastRequest = codeAgentClient.getLastRequest();
+        expect(lastRequest).not.toBeNull();
       });
     });
   });

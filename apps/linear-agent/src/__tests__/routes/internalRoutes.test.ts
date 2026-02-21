@@ -14,6 +14,7 @@ import {
   FakeUserServiceClient,
   FakeLlmGenerateClient,
   FakeLinearIssueRepository,
+  FakeCodeAgentClient,
 } from '../fakes.js';
 import { setServices, resetServices } from '../../services.js';
 
@@ -58,6 +59,7 @@ describe('internalRoutes', () => {
       issueRepository: fakeIssueRepo,
       userServiceClient: fakeUserServiceClient,
       commentRepository: null as unknown as import('../../domain/index.js').LinearCommentRepository,
+      codeAgentClient: new FakeCodeAgentClient(),
     });
 
     app = await buildServer();
