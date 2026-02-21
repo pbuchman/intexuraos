@@ -87,7 +87,7 @@ interface TestResults {
  */
 function groupModelsByProvider(
   configuredProviders: Set<string>,
-  testResults: TestResults | undefined
+  testResults?: TestResults
 ): { provider: string; label: string; models: { model: FastModel; name: string; disabled: boolean }[] }[] {
   const groups = new Map<string, { model: FastModel; name: string; disabled: boolean }[]>();
 
@@ -253,6 +253,7 @@ function ApiKeyRow({
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -286,8 +287,13 @@ function ApiKeyRow({
   };
 
   const handleDelete = async (): Promise<void> => {
-    await onDelete();
-    setShowDeleteConfirm(false);
+    setDeleting(true);
+    try {
+      await onDelete();
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleTest = async (): Promise<void> => {
@@ -493,6 +499,8 @@ function ApiKeyRow({
               onClick={(): void => {
                 void handleDelete();
               }}
+              disabled={deleting}
+              isLoading={deleting}
             >
               Delete
             </Button>
@@ -503,6 +511,7 @@ function ApiKeyRow({
               onClick={(): void => {
                 setShowDeleteConfirm(false);
               }}
+              disabled={deleting}
             >
               Cancel
             </Button>

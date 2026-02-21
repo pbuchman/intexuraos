@@ -166,31 +166,33 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
 
         <div className="flex items-center justify-between border-t border-slate-200 p-4 dark:border-slate-700">
           {showDeleteConfirm ? (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-red-600 dark:text-red-400">Delete this note?</span>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={(): void => {
-                  void handleDelete();
-                }}
-                disabled={deleting}
-                isLoading={deleting}
-              >
-                Confirm
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={(): void => {
-                  setShowDeleteConfirm(false);
-                }}
-                disabled={deleting}
-              >
-                Cancel
-              </Button>
+            <div className="flex-1 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
+              <p className="mb-2 text-sm text-red-800 dark:text-red-300">Delete this note?</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  onClick={(): void => {
+                    void handleDelete();
+                  }}
+                  disabled={deleting}
+                  isLoading={deleting}
+                >
+                  Delete
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={(): void => {
+                    setShowDeleteConfirm(false);
+                  }}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           ) : (
             <Button
