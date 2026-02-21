@@ -70,11 +70,37 @@ describe('codeAgentApi', () => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue({ tasks: [], nextCursor: undefined });
 
-      await listCodeTasks(mockAccessToken, { status: 'running' });
+      await listCodeTasks(mockAccessToken, { status: ['running'] });
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',
         '/code/tasks?status=running',
+        mockAccessToken
+      );
+    });
+
+    it('fetches tasks with multiple status filters', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      vi.mocked(apiRequest).mockResolvedValue({ tasks: [], nextCursor: undefined });
+
+      await listCodeTasks(mockAccessToken, { status: ['running', 'failed'] });
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/tasks?status=running%2Cfailed',
+        mockAccessToken
+      );
+    });
+
+    it('skips status param when status array is empty', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      vi.mocked(apiRequest).mockResolvedValue({ tasks: [], nextCursor: undefined });
+
+      await listCodeTasks(mockAccessToken, { status: [] });
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/tasks',
         mockAccessToken
       );
     });
@@ -109,7 +135,7 @@ describe('codeAgentApi', () => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue({ tasks: [], nextCursor: undefined });
 
-      await listCodeTasks(mockAccessToken, { status: 'completed', limit: 5, cursor: 'xyz789' });
+      await listCodeTasks(mockAccessToken, { status: ['completed'], limit: 5, cursor: 'xyz789' });
 
       expect(apiRequest).toHaveBeenCalledWith(
         'https://code-agent.test',

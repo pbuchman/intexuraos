@@ -20,14 +20,14 @@ import type {
 export async function listCodeTasks(
   accessToken: string,
   options?: {
-    status?: CodeTaskStatus;
+    status?: CodeTaskStatus[];
     limit?: number;
     cursor?: string;
   }
 ): Promise<ListCodeTasksResponse> {
   const params = new URLSearchParams();
-  if (options?.status !== undefined) {
-    params.set('status', options.status);
+  if (options?.status !== undefined && options.status.length > 0) {
+    params.set('status', options.status.join(','));
   }
   if (options?.limit !== undefined) {
     params.set('limit', String(options.limit));

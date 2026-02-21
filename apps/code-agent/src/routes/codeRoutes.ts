@@ -1408,7 +1408,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
   // GET /code/tasks - List user's tasks (public, Auth0 JWT)
   fastify.get<{
     Querystring: {
-      status?: TaskStatus;
+      status?: string;
       limit?: number;
       cursor?: string;
     };
@@ -1426,8 +1426,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             status: {
               type: 'string',
-              enum: ['dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled'],
-              description: 'Filter by task status',
+              description: 'Filter by task status. Comma-separated for multiple (e.g. "running,dispatched")',
             },
             limit: {
               type: 'integer',
@@ -1493,7 +1492,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Querystring: { status?: TaskStatus; limit?: number; cursor?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Querystring: { status?: string; limit?: number; cursor?: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to GET /code/tasks',
         includeParams: true,
@@ -1504,11 +1503,21 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
-      request.log.info({ userId, status: request.query.status }, 'Listing code tasks');
+      // Parse comma-separated status filter (matching actions-agent pattern)
+      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled'];
+      let statusFilter: TaskStatus[] | undefined;
+      if (request.query.status !== undefined) {
+        statusFilter = request.query.status
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s): s is TaskStatus => validStatuses.includes(s as TaskStatus));
+      }
+
+      request.log.info({ userId, status: statusFilter }, 'Listing code tasks');
 
       const listInput: {
         userId: string;
-        status?: TaskStatus;
+        status?: TaskStatus[];
         limit: number;
         cursor?: string;
       } = {
@@ -1519,9 +1528,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       };
 
       /* v8 ignore start -- ts-type: undefined check creates type narrowing branch @preserve */
-      if (request.query.status !== undefined) {
+      if (statusFilter !== undefined && statusFilter.length > 0) {
       /* v8 ignore stop @preserve */
-        listInput.status = request.query.status;
+        listInput.status = statusFilter;
       }
 
       /* v8 ignore start -- ts-type: undefined check creates type narrowing branch @preserve */
