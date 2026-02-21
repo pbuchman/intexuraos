@@ -21,12 +21,12 @@ import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSum
 import type { Logger } from 'pino';
 
 const BOT_LOGIN = 'intexuraos-code-worker[bot]';
-const CLAUDE_MENTION = '@claude';
+const EXTERNAL_AGENT_MENTIONS = ['@claude', '@codex'];
 
 /**
  * Dispatch a PR comment to the task that owns this PR via sendTaskMessage.
  * Fire-and-forget — webhook returns immediately.
- * Filters: skip our own bot (infinite loop) and @claude mentions (handled by GitHub Actions workflow).
+ * Filters: skip our own bot (infinite loop) and external agent mentions like @claude/@codex (handled by GitHub Actions workflow).
  * The worker decides what deserves a response for everything else.
  */
 async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Promise<void> {
@@ -39,10 +39,10 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
       return;
     }
 
-    if (event.body?.includes(CLAUDE_MENTION) === true) {
+    if (EXTERNAL_AGENT_MENTIONS.some((mention) => event.body?.includes(mention) === true)) {
       logger.debug(
         { repository: event.repository, prNumber: event.pullRequestNumber },
-        'Skipping @claude mention — handled by GitHub Actions workflow'
+        'Skipping external agent mention — handled by GitHub Actions workflow'
       );
       return;
     }
