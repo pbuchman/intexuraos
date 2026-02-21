@@ -440,6 +440,80 @@ describe('TurnMetricsCollector', () => {
       expect(result.tokens.apiCallCount).toBe(1);
     });
 
+    it('handles single-line JSONL file without trailing newline', async () => {
+      const sharedCollector = new TurnMetricsCollector(
+        { ...config, sharedCredsPath: '/tmp/shared-creds' },
+        mockLogger
+      );
+
+      const singleLine = JSON.stringify({
+        type: 'user',
+        timestamp: '2025-06-01T10:00:00Z',
+      });
+
+      async function* fakeGlob(): AsyncGenerator<string> {
+        yield '/tmp/shared-creds/projects/-repo/single.jsonl';
+      }
+      mockGlob.mockReturnValueOnce(fakeGlob() as never);
+      mockReadFile.mockResolvedValueOnce(singleLine);
+
+      const result = await sharedCollector.parseSessionJsonl('task1', {
+        startedAt: '2025-06-01T09:00:00Z',
+        completedAt: '2025-06-01T11:00:00Z',
+      });
+
+      expect(result.timeClassification.wallTimeSeconds).toBe(0);
+    });
+
+    it('skips file with empty first line in shared mode', async () => {
+      const sharedCollector = new TurnMetricsCollector(
+        { ...config, sharedCredsPath: '/tmp/shared-creds' },
+        mockLogger
+      );
+
+      async function* fakeGlob(): AsyncGenerator<string> {
+        yield '/tmp/shared-creds/projects/-repo/empty.jsonl';
+      }
+      mockGlob.mockReturnValueOnce(fakeGlob() as never);
+      mockReadFile.mockResolvedValueOnce('\n{"type":"user","timestamp":"2025-06-01T10:00:00Z"}');
+
+      const result = await sharedCollector.parseSessionJsonl('task1', {
+        startedAt: '2025-06-01T09:00:00Z',
+        completedAt: '2025-06-01T11:00:00Z',
+      });
+
+      expect(result.tokens.apiCallCount).toBe(0);
+    });
+
+    it('includes file when first entry has no timestamp field', async () => {
+      const sharedCollector = new TurnMetricsCollector(
+        { ...config, sharedCredsPath: '/tmp/shared-creds' },
+        mockLogger
+      );
+
+      const content = [
+        JSON.stringify({ type: 'queue-operation', operation: 'enqueue' }),
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2025-06-01T10:00:05Z',
+          message: { usage: { input_tokens: 42 } },
+        }),
+      ].join('\n');
+
+      async function* fakeGlob(): AsyncGenerator<string> {
+        yield '/tmp/shared-creds/projects/-repo/no-ts.jsonl';
+      }
+      mockGlob.mockReturnValueOnce(fakeGlob() as never);
+      mockReadFile.mockResolvedValueOnce(content);
+
+      const result = await sharedCollector.parseSessionJsonl('task1', {
+        startedAt: '2025-06-01T09:00:00Z',
+        completedAt: '2025-06-01T11:00:00Z',
+      });
+
+      expect(result.tokens.totalInputTokens).toBe(42);
+    });
+
     it('falls back to per-task path when sharedCredsPath not set', async () => {
       async function* fakeGlob(): AsyncGenerator<string> {
         // yield nothing
