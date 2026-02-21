@@ -360,6 +360,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
             ? FieldValue.delete()
             : input.implementationTaskId;
         }
+        if (input.prNumber !== undefined) {
+          updateData['prNumber'] = input.prNumber;
+        }
+        if (input.prBranch !== undefined) {
+          updateData['prBranch'] = input.prBranch;
+        }
 
         await docRef.update(updateData);
 
