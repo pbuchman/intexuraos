@@ -100,28 +100,30 @@ function deduplicateCommentEvents(events: GitHubPREvent[]): GitHubPREvent[] {
 }
 
 /**
- * Show PR description body only on the most recent pull_request event.
+ * Show PR description body once at the first pull_request event with the latest content.
+ * Consistent with comment dedup: first occurrence position, latest body.
  * GitHub sends the full PR body on every synchronize event — this prevents
  * the same "Summary" section from rendering multiple times in the timeline.
  */
 function deduplicatePRBody(events: GitHubPREvent[]): GitHubPREvent[] {
-  // Find the index of the last pull_request event with a non-empty body
-  let lastPRBodyIndex = -1;
-  for (let i = events.length - 1; i >= 0; i--) {
+  // Find first and last pull_request events with non-empty body
+  let firstPRBodyIndex = -1;
+  let latestBody: string | null = null;
+
+  for (let i = 0; i < events.length; i++) {
     const event = events[i];
     if (event?.eventType === 'pull_request' && event.body !== null && event.body !== '') {
-      lastPRBodyIndex = i;
-      break;
+      if (firstPRBodyIndex === -1) firstPRBodyIndex = i;
+      latestBody = event.body;
     }
   }
 
-  if (lastPRBodyIndex === -1) return events;
+  if (firstPRBodyIndex === -1) return events;
 
   return events.map((event, i) => {
-    if (event.eventType === 'pull_request' && i !== lastPRBodyIndex && event.body !== null && event.body !== '') {
-      return { ...event, body: null };
-    }
-    return event;
+    if (event.eventType !== 'pull_request' || event.body === null || event.body === '') return event;
+    if (i === firstPRBodyIndex) return { ...event, body: latestBody };
+    return { ...event, body: null };
   });
 }
 
