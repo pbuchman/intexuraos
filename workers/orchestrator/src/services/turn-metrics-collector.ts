@@ -183,17 +183,15 @@ export class TurnMetricsCollector {
     timeWindow?: { startedAt: string; completedAt: string }
   ): Promise<{ timeClassification: TimeClassification; tokens: TokenAggregation }> {
     const entries: SessionEntry[] = [];
-    const useSharedPath = this.config.sharedCredsPath !== undefined;
-    const basePath = useSharedPath
-      ? this.config.sharedCredsPath
-      : join(this.config.secretsBasePath, `claude-session-${taskId}`);
+    const sharedCredsPath = this.config.sharedCredsPath;
+    const basePath = sharedCredsPath ?? join(this.config.secretsBasePath, `claude-session-${taskId}`);
     const pattern = join(basePath, 'projects', '**', '*.jsonl');
 
     try {
       for await (const filePath of glob(pattern)) {
         const content = await readFile(filePath, 'utf-8');
 
-        if (useSharedPath && timeWindow !== undefined) {
+        if (sharedCredsPath !== undefined && timeWindow !== undefined) {
           const firstNewline = content.indexOf('\n');
           const firstLine = firstNewline === -1 ? content : content.slice(0, firstNewline);
           if (firstLine.trim() !== '') {
