@@ -94,7 +94,7 @@ describe('triggerCodeTaskFromAssignment', () => {
     expect(req).not.toBeNull();
     expect(req?.userId).toBe('user-123');
     expect(req?.linearIssueId).toBe('INT-123');
-    expect(req?.prompt).toBe('Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.');
+    expect(req?.prompt).toBe('Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.');
     expect(req?.workerType).toBe('auto');
   });
 

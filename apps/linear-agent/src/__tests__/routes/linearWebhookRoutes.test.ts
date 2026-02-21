@@ -650,7 +650,7 @@ describe('Linear Webhook Routes', () => {
         const lastRequest = codeAgentClient.getLastRequest();
         expect(lastRequest).not.toBeNull();
         expect(lastRequest?.linearIssueId).toBe('INT-123');
-        expect(lastRequest?.prompt).toBe('Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.');
+        expect(lastRequest?.prompt).toBe('Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.');
         expect(lastRequest?.workerType).toBe('auto');
         expect(lastRequest?.userId).toBe(userId);
       });
