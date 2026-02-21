@@ -254,9 +254,11 @@ export async function retryTask(
   };
 
   // Step 6: Reconstruct prompt with additional context
-  let retryPrompt = originalTask.prompt;
+  // Use sanitizedPrompt (what the original worker received) as the base, not the raw prompt,
+  // to avoid re-exposing credentials that were already stripped on the first dispatch.
+  let retryPrompt = originalTask.sanitizedPrompt;
   if (additionalContext !== undefined && additionalContext.trim().length > 0) {
-    retryPrompt = `${originalTask.prompt}
+    retryPrompt = `${originalTask.sanitizedPrompt}
 
 ---
 

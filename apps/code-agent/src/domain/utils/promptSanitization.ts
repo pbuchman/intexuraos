@@ -24,15 +24,25 @@ const AWS_KEY_PATTERN = /AKIA[0-9A-Z]{16}/g;
 const API_KEY_PATTERN = /sk-(?:ant-)?[a-zA-Z0-9_-]{20,}/g;
 
 /**
+ * Stripe secret key pattern: sk_live_ or sk_test_ followed by alphanumeric characters.
+ */
+const STRIPE_KEY_PATTERN = /sk_(?:live|test)_[a-zA-Z0-9]{24,}/g;
+
+/**
  * GitHub token patterns: ghp_, gho_, ghs_, ghr_ followed by alphanumeric characters.
  */
 const GITHUB_TOKEN_PATTERN = /gh[pors]_[a-zA-Z0-9]{16,}/g;
 
 /**
- * Bearer token pattern: "Bearer " followed by a JWT or opaque token.
- * Matches both inside and outside code blocks.
+ * Slack token patterns: xoxb-, xoxp-, xoxa-, xoxr-, xoxs- followed by token characters.
  */
-const BEARER_TOKEN_PATTERN = /Bearer\s+[a-zA-Z0-9._-]{20,}/g;
+const SLACK_TOKEN_PATTERN = /xox[bpars]-[0-9A-Za-z-]{24,}/g;
+
+/**
+ * Bearer token pattern: "Bearer " followed by a JWT token (three base64url segments).
+ * Tightened to JWT shape to avoid false positives on variable names.
+ */
+const BEARER_TOKEN_PATTERN = /Bearer\s+[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g;
 
 /**
  * Private key block pattern (PEM format).
@@ -41,15 +51,17 @@ const BEARER_TOKEN_PATTERN = /Bearer\s+[a-zA-Z0-9._-]{20,}/g;
 const PRIVATE_KEY_PATTERN = /-----BEGIN\s+(?:\w+\s+)?PRIVATE\s+KEY-----[\s\S]*?-----END\s+(?:\w+\s+)?PRIVATE\s+KEY-----/g;
 
 /**
- * Password assignment pattern in environment variables.
- * Matches KEY_PASSWORD= or KEY_SECRET= followed by value (quoted or unquoted).
+ * Secret assignment pattern in environment variables.
+ * Matches KEY_PASSWORD=, KEY_PASSWD=, KEY_SECRET= followed by value (quoted or unquoted).
  */
-const PASSWORD_ENV_PATTERN = /(\w*(?:PASSWORD|PASSWD)\w*)=["']?([^\s"']+)["']?/gi;
+const SECRET_ENV_PATTERN = /(\w*(?:PASSWORD|PASSWD|SECRET)\w*)=["']?([^\s"']+)["']?/gi;
 
 /**
  * Sensitive URL query parameter names.
+ * Note: 'password' is NOT included here — SECRET_ENV_PATTERN already handles it
+ * and including it would cause double-processing on URLs like ?password=value.
  */
-const SENSITIVE_PARAM_NAMES = ['token', 'api_key', 'apikey', 'secret', 'access_token', 'password'];
+const SENSITIVE_PARAM_NAMES = ['token', 'api_key', 'apikey', 'secret', 'access_token'];
 
 /**
  * Pattern to match sensitive query parameters in URLs.
@@ -89,19 +101,25 @@ export function sanitizePrompt(prompt: string): string {
   // Step 4: Redact API keys (OpenAI, Anthropic)
   result = result.replace(API_KEY_PATTERN, '[REDACTED_API_KEY]');
 
-  // Step 5: Redact GitHub tokens
+  // Step 5: Redact Stripe secret keys
+  result = result.replace(STRIPE_KEY_PATTERN, '[REDACTED_STRIPE_KEY]');
+
+  // Step 6: Redact GitHub tokens
   result = result.replace(GITHUB_TOKEN_PATTERN, '[REDACTED_GH_TOKEN]');
 
-  // Step 6: Redact Bearer tokens
+  // Step 7: Redact Slack tokens
+  result = result.replace(SLACK_TOKEN_PATTERN, '[REDACTED_SLACK_TOKEN]');
+
+  // Step 8: Redact Bearer tokens (JWT-shaped only to avoid false positives)
   result = result.replace(BEARER_TOKEN_PATTERN, 'Bearer [REDACTED_BEARER]');
 
-  // Step 7: Redact password env var assignments
-  result = result.replace(PASSWORD_ENV_PATTERN, '$1=[REDACTED_PASSWORD]');
+  // Step 9: Redact secret/password env var assignments
+  result = result.replace(SECRET_ENV_PATTERN, '$1=[REDACTED_SECRET]');
 
-  // Step 8: Redact sensitive URL query parameters (preserving ? or & prefix)
+  // Step 10: Redact sensitive URL query parameters (preserving ? or & prefix)
   result = result.replace(SENSITIVE_URL_PARAM_PATTERN, '$1$2=[REDACTED]');
 
-  // Step 9: Normalize whitespace
+  // Step 11: Normalize whitespace
   // - Trim leading and trailing whitespace
   result = result.trim();
   // - Collapse multiple consecutive spaces (within a line) to single space

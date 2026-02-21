@@ -816,5 +816,12 @@ describe('processCodeAction', () => {
         sanitizedPrompt: 'Use [REDACTED_AWS_KEY] to access bucket',
       })
     );
+
+    // Verify Linear service received sanitized prompt, not raw prompt
+    expect(linearIssueService.ensureIssueExists).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskPrompt: 'Use [REDACTED_AWS_KEY] to access bucket',
+      })
+    );
   });
 });

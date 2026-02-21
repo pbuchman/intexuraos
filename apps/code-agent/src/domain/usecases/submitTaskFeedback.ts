@@ -193,7 +193,9 @@ export async function submitTaskFeedback(
   };
 
   // Step 5: Build follow-up prompt with feedback context
-  const feedbackPrompt = `${originalTask.prompt}
+  // Use sanitizedPrompt (what the original worker received) as the base, not the raw prompt,
+  // to avoid re-exposing credentials that were already stripped on the first dispatch.
+  const feedbackPrompt = `${originalTask.sanitizedPrompt}
 
 ---
 
