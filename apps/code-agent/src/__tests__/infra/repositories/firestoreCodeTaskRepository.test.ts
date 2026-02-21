@@ -1012,6 +1012,28 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.implementationTaskId).toBe('task_phase2');
     });
 
+    it('sets prNumber and prBranch on update (INT-465)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        prNumber: 835,
+        prBranch: 'fix/login-bug',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.prNumber).toBe(835);
+      expect(result.value.prBranch).toBe('fix/login-bug');
+    });
+
     it('clears implementationTaskId when set to null', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,

@@ -178,11 +178,22 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 3: Update task based on status
       if (status === 'completed') {
+        // Extract PR number from prUrl for findByPR correlation (INT-465)
+        let prNumber: number | undefined;
+        if (result?.prUrl) {
+          const match = /\/pull\/(\d+)/.exec(result.prUrl);
+          if (match?.[1] !== undefined) {
+            prNumber = Number(match[1]);
+          }
+        }
+
         const resolvedStatus = task.executionPhase === 'execution' ? 'implemented' : 'designed';
         const updateResult = await codeTaskRepo.update(taskId, {
           status: resolvedStatus,
           completedAt,
           ...(result !== undefined && { result }),
+          ...(prNumber !== undefined && { prNumber }),
+          ...(result?.branch !== undefined && { prBranch: result.branch }),
           callbackReceived: true,
         });
 
