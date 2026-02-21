@@ -337,7 +337,7 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ teamCount: teams.length }, 'Successfully validated API key');
         return ok(teams);
       } catch (error) {
-        logger.error({ error: getErrorMessage(error) }, 'Failed to validate Linear API key');
+        logger.error({ error }, 'Failed to validate Linear API key');
         return err(mapLinearError(error));
       }
     },
@@ -375,7 +375,7 @@ export function createLinearApiClient(): LinearApiClient {
 
         return ok(mapped);
       } catch (error) {
-        logger.error({ error: getErrorMessage(error) }, 'Failed to create Linear issue');
+        logger.error({ error, teamId: input.teamId }, 'Failed to create Linear issue');
         return err(mapLinearError(error));
       }
     },
@@ -428,7 +428,7 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ issueCount: issues.length }, 'Fetched Linear issues');
         return ok(issues);
       } catch (error) {
-        logger.error({ error: getErrorMessage(error) }, 'Failed to list Linear issues');
+        logger.error({ error, teamId }, 'Failed to list Linear issues');
         return err(mapLinearError(error));
       }
     },
@@ -451,7 +451,7 @@ export function createLinearApiClient(): LinearApiClient {
 
         return ok(mapped);
       } catch (error) {
-        logger.error({ error: getErrorMessage(error) }, 'Failed to fetch Linear issue');
+        logger.error({ error, issueId }, 'Failed to fetch Linear issue');
         return err(mapLinearError(error));
       }
     },
@@ -480,7 +480,7 @@ export function createLinearApiClient(): LinearApiClient {
           logger.info({ identifier }, 'Issue not found by identifier');
           return ok(null);
         }
-        logger.error({ error: errorMessage }, 'Failed to fetch Linear issue by identifier');
+        logger.error({ error, identifier }, 'Failed to fetch Linear issue by identifier');
         return err(mapLinearError(error));
       }
     },
@@ -508,7 +508,7 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ issueId, newState: mapped.state.name }, 'Issue state updated');
         return ok(mapped);
       } catch (error) {
-        logger.error({ error: getErrorMessage(error) }, 'Failed to update Linear issue state');
+        logger.error({ error, issueId, stateId }, 'Failed to update Linear issue state');
         return err(mapLinearError(error));
       }
     },
@@ -538,7 +538,7 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ teamId, stateCount: states.length }, 'Fetched Linear workflow states');
         return ok(states);
       } catch (error) {
-        logger.error({ error: getErrorMessage(error) }, 'Failed to fetch Linear workflow states');
+        logger.error({ error, teamId }, 'Failed to fetch Linear workflow states');
         return err(mapLinearError(error));
       }
     },
