@@ -1,440 +1,539 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tech Debt Triage Skill — Decision Flow</title>
-<style>
-  :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text-muted: #8b949e;
-    --accent: #58a6ff;
-    --green: #3fb950;
-    --orange: #d29922;
-    --red: #f85149;
-    --purple: #bc8cff;
-    --pink: #f778ba;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    padding: 40px 20px;
-    min-height: 100vh;
-  }
-  h1 {
-    text-align: center;
-    font-size: 1.6rem;
-    margin-bottom: 8px;
-    color: var(--accent);
-  }
-  .subtitle {
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 0.9rem;
-    margin-bottom: 40px;
-  }
-  .flow {
-    max-width: 720px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0;
-  }
-  .node {
-    position: relative;
-    width: 100%;
-    max-width: 600px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px 24px;
-    background: var(--surface);
-    transition: border-color 0.2s;
-  }
-  .node:hover { border-color: var(--accent); }
-  .node-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-  .node-badge {
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 3px 8px;
-    border-radius: 6px;
-    white-space: nowrap;
-  }
-  .badge-gate { background: rgba(248,81,73,0.15); color: var(--red); }
-  .badge-action { background: rgba(63,185,80,0.15); color: var(--green); }
-  .badge-decision { background: rgba(210,153,34,0.15); color: var(--orange); }
-  .badge-output { background: rgba(88,166,255,0.15); color: var(--accent); }
-  .badge-linear { background: rgba(188,140,255,0.15); color: var(--purple); }
-  .badge-user { background: rgba(247,120,186,0.15); color: var(--pink); }
-  .node-title {
-    font-weight: 600;
-    font-size: 1rem;
-  }
-  .node-body {
-    color: var(--text-muted);
-    font-size: 0.88rem;
-    line-height: 1.55;
-  }
-  .node-body code {
-    background: rgba(110,118,129,0.15);
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-size: 0.82rem;
-    color: var(--text);
-  }
-  .node-body ul {
-    margin: 6px 0 0 18px;
-    list-style: disc;
-  }
-  .node-body ul li { margin-bottom: 3px; }
-  .node-outcomes {
-    margin-top: 12px;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .outcome {
-    font-size: 0.78rem;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-weight: 500;
-  }
-  .outcome-yes { background: rgba(63,185,80,0.12); color: var(--green); }
-  .outcome-no { background: rgba(248,81,73,0.12); color: var(--red); }
-  .outcome-info { background: rgba(88,166,255,0.1); color: var(--accent); }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tech Debt Triage Skill — Decision Flow</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --border: #30363d;
+        --text: #e6edf3;
+        --text-muted: #8b949e;
+        --accent: #58a6ff;
+        --green: #3fb950;
+        --orange: #d29922;
+        --red: #f85149;
+        --purple: #bc8cff;
+        --pink: #f778ba;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+        padding: 40px 20px;
+        min-height: 100vh;
+      }
+      h1 {
+        text-align: center;
+        font-size: 1.6rem;
+        margin-bottom: 8px;
+        color: var(--accent);
+      }
+      .subtitle {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        margin-bottom: 40px;
+      }
+      .flow {
+        max-width: 720px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+      }
+      .node {
+        position: relative;
+        width: 100%;
+        max-width: 600px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px 24px;
+        background: var(--surface);
+        transition: border-color 0.2s;
+      }
+      .node:hover {
+        border-color: var(--accent);
+      }
+      .node-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .node-badge {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 3px 8px;
+        border-radius: 6px;
+        white-space: nowrap;
+      }
+      .badge-gate {
+        background: rgba(248, 81, 73, 0.15);
+        color: var(--red);
+      }
+      .badge-action {
+        background: rgba(63, 185, 80, 0.15);
+        color: var(--green);
+      }
+      .badge-decision {
+        background: rgba(210, 153, 34, 0.15);
+        color: var(--orange);
+      }
+      .badge-output {
+        background: rgba(88, 166, 255, 0.15);
+        color: var(--accent);
+      }
+      .badge-linear {
+        background: rgba(188, 140, 255, 0.15);
+        color: var(--purple);
+      }
+      .badge-user {
+        background: rgba(247, 120, 186, 0.15);
+        color: var(--pink);
+      }
+      .node-title {
+        font-weight: 600;
+        font-size: 1rem;
+      }
+      .node-body {
+        color: var(--text-muted);
+        font-size: 0.88rem;
+        line-height: 1.55;
+      }
+      .node-body code {
+        background: rgba(110, 118, 129, 0.15);
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 0.82rem;
+        color: var(--text);
+      }
+      .node-body ul {
+        margin: 6px 0 0 18px;
+        list-style: disc;
+      }
+      .node-body ul li {
+        margin-bottom: 3px;
+      }
+      .node-outcomes {
+        margin-top: 12px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .outcome {
+        font-size: 0.78rem;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-weight: 500;
+      }
+      .outcome-yes {
+        background: rgba(63, 185, 80, 0.12);
+        color: var(--green);
+      }
+      .outcome-no {
+        background: rgba(248, 81, 73, 0.12);
+        color: var(--red);
+      }
+      .outcome-info {
+        background: rgba(88, 166, 255, 0.1);
+        color: var(--accent);
+      }
 
-  .arrow {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    height: 40px;
-    justify-content: center;
-  }
-  .arrow-line {
-    width: 2px;
-    height: 24px;
-    background: var(--border);
-  }
-  .arrow-head {
-    width: 0; height: 0;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-top: 8px solid var(--border);
-  }
-  .arrow-label {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    margin-top: -2px;
-  }
+      .arrow {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 40px;
+        justify-content: center;
+      }
+      .arrow-line {
+        width: 2px;
+        height: 24px;
+        background: var(--border);
+      }
+      .arrow-head {
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 8px solid var(--border);
+      }
+      .arrow-label {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        margin-top: -2px;
+      }
 
-  .phase-divider {
-    width: 100%;
-    max-width: 640px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin: 12px 0;
-  }
-  .phase-divider::before,
-  .phase-divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-  .phase-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
+      .phase-divider {
+        width: 100%;
+        max-width: 640px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin: 12px 0;
+      }
+      .phase-divider::before,
+      .phase-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .phase-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
 
-  .stop-node {
-    border-color: var(--red);
-    background: rgba(248,81,73,0.05);
-  }
-  .stop-node .node-title { color: var(--red); }
+      .stop-node {
+        border-color: var(--red);
+        background: rgba(248, 81, 73, 0.05);
+      }
+      .stop-node .node-title {
+        color: var(--red);
+      }
 
-  .legend {
-    max-width: 600px;
-    margin: 40px auto 0;
-    padding: 16px 20px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface);
-  }
-  .legend h3 {
-    font-size: 0.85rem;
-    margin-bottom: 10px;
-    color: var(--text-muted);
-  }
-  .legend-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-</style>
-</head>
-<body>
+      .legend {
+        max-width: 600px;
+        margin: 40px auto 0;
+        padding: 16px 20px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+      }
+      .legend h3 {
+        font-size: 0.85rem;
+        margin-bottom: 10px;
+        color: var(--text-muted);
+      }
+      .legend-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Tech Debt Triage Skill</h1>
+    <p class="subtitle">
+      Decision flow for consolidating technical debt into actionable Linear issues
+    </p>
 
-<h1>Tech Debt Triage Skill</h1>
-<p class="subtitle">Decision flow for consolidating technical debt into actionable Linear issues</p>
+    <div class="flow">
+      <!-- Phase 1: Gates -->
+      <div class="phase-divider"><span class="phase-label">Phase 1 — Pre-Flight Gates</span></div>
 
-<div class="flow">
+      <div class="node">
+        <div class="node-header">
+          <span class="node-badge badge-gate">Gate</span>
+          <span class="node-title">Step 1: Freshness Warning</span>
+        </div>
+        <div class="node-body">
+          Display <code>AskUserQuestion</code> warning the user:
+          <ul>
+            <li>
+              This skill analyzes <strong>existing tech debt docs only</strong>, not the actual
+              codebase
+            </li>
+            <li>
+              It assumes all <code>technical-debt.md</code> files are <strong>up to date</strong>
+            </li>
+            <li>
+              This skill is designed for a <strong>single run</strong> — consecutive runs will
+              create duplicate Linear issues
+            </li>
+          </ul>
+          <div class="node-outcomes">
+            <span class="outcome outcome-yes">Confirmed → continue</span>
+            <span class="outcome outcome-no">Declined → STOP</span>
+          </div>
+        </div>
+      </div>
 
-  <!-- Phase 1: Gates -->
-  <div class="phase-divider"><span class="phase-label">Phase 1 — Pre-Flight Gates</span></div>
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-head"></div>
+      </div>
 
-  <div class="node">
-    <div class="node-header">
-      <span class="node-badge badge-gate">Gate</span>
-      <span class="node-title">Step 1: Freshness Warning</span>
-    </div>
-    <div class="node-body">
-      Display <code>AskUserQuestion</code> warning the user:
-      <ul>
-        <li>This skill analyzes <strong>existing tech debt docs only</strong>, not the actual codebase</li>
-        <li>It assumes all <code>technical-debt.md</code> files are <strong>up to date</strong></li>
-        <li>This skill is designed for a <strong>single run</strong> — consecutive runs will create duplicate Linear issues</li>
-      </ul>
-      <div class="node-outcomes">
-        <span class="outcome outcome-yes">Confirmed → continue</span>
-        <span class="outcome outcome-no">Declined → STOP</span>
+      <!-- Phase 2: Discovery -->
+      <div class="phase-divider">
+        <span class="phase-label">Phase 2 — Discovery &amp; Scanning</span>
+      </div>
+
+      <div class="node">
+        <div class="node-header">
+          <span class="node-badge badge-action">Action</span>
+          <span class="node-title">Step 2: Scan All Tech Debt Files</span>
+        </div>
+        <div class="node-body">
+          Read all <code>technical-debt.md</code> files:
+          <ul>
+            <li><code>docs/services/*/technical-debt.md</code> (apps + workers)</li>
+            <li><code>docs/packages/*/technical-debt.md</code> (shared packages)</li>
+          </ul>
+          Parse summary tables, code smells, TODO comments, SRP violations, future plans, and
+          resolved issues from each.
+        </div>
+      </div>
+
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <div class="node">
+        <div class="node-header">
+          <span class="node-badge badge-action">Action</span>
+          <span class="node-title">Step 3: Extract &amp; Classify Issues</span>
+        </div>
+        <div class="node-body">
+          For each issue found, extract:
+          <ul>
+            <li><strong>Title</strong> — what the issue is</li>
+            <li><strong>Service(s)</strong> — which component(s) are affected</li>
+            <li><strong>Severity</strong> — Critical / High / Medium / Low</li>
+            <li>
+              <strong>Category</strong> — TODO, Code Smell, SRP, Coverage Gap, Deprecation,
+              TypeScript
+            </li>
+            <li>
+              <strong>Source file</strong> — path to the <code>technical-debt.md</code> that
+              reported it
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <!-- Phase 3: Severity Filter -->
+      <div class="phase-divider"><span class="phase-label">Phase 3 — Severity Selection</span></div>
+
+      <div class="node">
+        <div class="node-header">
+          <span class="node-badge badge-user">User Input</span>
+          <span class="node-title">Step 4: Select Severity Levels</span>
+        </div>
+        <div class="node-body">
+          Display <code>AskUserQuestion</code> (multiSelect) showing issue counts per severity:
+          <ul>
+            <li>Critical (N issues)</li>
+            <li>High (N issues)</li>
+            <li>Medium (N issues)</li>
+            <li>Low (N issues)</li>
+          </ul>
+          User selects which severity levels to proceed with.
+          <div class="node-outcomes">
+            <span class="outcome outcome-info">Selected levels → filter issues</span>
+            <span class="outcome outcome-no">None selected → STOP</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <!-- Phase 4: Consolidation -->
+      <div class="phase-divider">
+        <span class="phase-label">Phase 4 — Consolidation &amp; Grouping</span>
+      </div>
+
+      <div class="node">
+        <div class="node-header">
+          <span class="node-badge badge-action">Action</span>
+          <span class="node-title">Step 5: Consolidate Cross-Service Issues</span>
+        </div>
+        <div class="node-body">
+          Group issues that should be solved together:
+          <ul>
+            <li>
+              <strong>Same pattern across services</strong> — e.g. "missing
+              <code>logIncomingRequest()</code>" in 4 services → 1 consolidated issue
+            </li>
+            <li>
+              <strong>Client/server mismatch</strong> — e.g. API contract mismatch between producer
+              and consumer → 1 issue covering both sides
+            </li>
+            <li>
+              <strong>Shared infrastructure debt</strong> — e.g. dead Pub/Sub publisher + unused
+              Terraform resources → 1 cleanup issue
+            </li>
+          </ul>
+          Each consolidated issue gets:
+          <ul>
+            <li>A clear title describing the cross-cutting concern</li>
+            <li>List of all affected services/packages</li>
+            <li>References to all source <code>technical-debt.md</code> files</li>
+            <li>Brief analysis (NO fix design — just scoping)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <!-- Phase 5: User Approval -->
+      <div class="phase-divider"><span class="phase-label">Phase 5 — User Approval</span></div>
+
+      <div class="node">
+        <div class="node-header">
+          <span class="node-badge badge-user">User Input</span>
+          <span class="node-title">Step 6: Approve Issues One by One</span>
+        </div>
+        <div class="node-body">
+          Present each consolidated issue via <code>AskUserQuestion</code> (multiSelect) for
+          approval:
+          <ul>
+            <li>Issue title + affected services</li>
+            <li>Severity + category</li>
+            <li>Brief scope description</li>
+          </ul>
+          User checks which issues to create in Linear.
+          <div class="node-outcomes">
+            <span class="outcome outcome-yes">Approved items → create in Linear</span>
+            <span class="outcome outcome-no">All rejected → STOP</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <!-- Phase 6: Linear Creation -->
+      <div class="phase-divider">
+        <span class="phase-label">Phase 6 — Linear Issue Creation</span>
+      </div>
+
+      <div class="node">
+        <div class="node-header">
+          <span class="node-badge badge-linear">Linear</span>
+          <span class="node-title">Step 7: Create Parent Issue</span>
+        </div>
+        <div class="node-body">
+          Create top-level Linear issue via <code>mcp__linear__create_issue</code> containing:
+          <ul>
+            <li><strong>When</strong> — date the analysis was performed</li>
+            <li><strong>What</strong> — summary of all technical debt issues found</li>
+            <li><strong>Where</strong> — which services/packages were analyzed</li>
+            <li><strong>Scope</strong> — severity levels included</li>
+            <li><strong>Count</strong> — N approved subtasks to follow</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <div class="node">
+        <div class="node-header">
+          <span class="node-badge badge-linear">Linear</span>
+          <span class="node-title">Step 8: Create Subtasks</span>
+        </div>
+        <div class="node-body">
+          For each approved issue, create a Linear subtask under the parent:
+          <ul>
+            <li><strong>Title</strong> — descriptive issue title</li>
+            <li><strong>Description</strong> — brief analysis + affected services</li>
+            <li>
+              <strong>References</strong> — links to source <code>technical-debt.md</code> file(s)
+            </li>
+            <li><strong>Ready for</strong> — direct execution via <code>/linear INT-XXX</code></li>
+          </ul>
+          No fix design included — subtasks are scoped for autonomous agent execution.
+        </div>
+      </div>
+
+      <div class="arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <div class="node" style="border-color: var(--green); background: rgba(63, 185, 80, 0.05)">
+        <div class="node-header">
+          <span class="node-badge badge-output">Output</span>
+          <span class="node-title" style="color: var(--green)">Done</span>
+        </div>
+        <div class="node-body">
+          Summary displayed to user:
+          <ul>
+            <li>N tech debt files scanned</li>
+            <li>N issues found → N consolidated → N approved → N created in Linear</li>
+            <li>Link to parent Linear issue</li>
+          </ul>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
-
-  <!-- Phase 2: Discovery -->
-  <div class="phase-divider"><span class="phase-label">Phase 2 — Discovery &amp; Scanning</span></div>
-
-  <div class="node">
-    <div class="node-header">
-      <span class="node-badge badge-action">Action</span>
-      <span class="node-title">Step 2: Scan All Tech Debt Files</span>
-    </div>
-    <div class="node-body">
-      Read all <code>technical-debt.md</code> files:
-      <ul>
-        <li><code>docs/services/*/technical-debt.md</code> (apps + workers)</li>
-        <li><code>docs/packages/*/technical-debt.md</code> (shared packages)</li>
-      </ul>
-      Parse summary tables, code smells, TODO comments, SRP violations, future plans, and resolved issues from each.
-    </div>
-  </div>
-
-  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
-
-  <div class="node">
-    <div class="node-header">
-      <span class="node-badge badge-action">Action</span>
-      <span class="node-title">Step 3: Extract &amp; Classify Issues</span>
-    </div>
-    <div class="node-body">
-      For each issue found, extract:
-      <ul>
-        <li><strong>Title</strong> — what the issue is</li>
-        <li><strong>Service(s)</strong> — which component(s) are affected</li>
-        <li><strong>Severity</strong> — Critical / High / Medium / Low</li>
-        <li><strong>Category</strong> — TODO, Code Smell, SRP, Coverage Gap, Deprecation, TypeScript</li>
-        <li><strong>Source file</strong> — path to the <code>technical-debt.md</code> that reported it</li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
-
-  <!-- Phase 3: Severity Filter -->
-  <div class="phase-divider"><span class="phase-label">Phase 3 — Severity Selection</span></div>
-
-  <div class="node">
-    <div class="node-header">
-      <span class="node-badge badge-user">User Input</span>
-      <span class="node-title">Step 4: Select Severity Levels</span>
-    </div>
-    <div class="node-body">
-      Display <code>AskUserQuestion</code> (multiSelect) showing issue counts per severity:
-      <ul>
-        <li>Critical (N issues)</li>
-        <li>High (N issues)</li>
-        <li>Medium (N issues)</li>
-        <li>Low (N issues)</li>
-      </ul>
-      User selects which severity levels to proceed with.
-      <div class="node-outcomes">
-        <span class="outcome outcome-info">Selected levels → filter issues</span>
-        <span class="outcome outcome-no">None selected → STOP</span>
+    <!-- Stop nodes -->
+    <div class="flow" style="margin-top: 32px">
+      <div class="phase-divider"><span class="phase-label">Early Exit Points</span></div>
+      <div
+        style="display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 640px"
+      >
+        <div class="node stop-node" style="max-width: 280px; flex: 1">
+          <div class="node-header">
+            <span class="node-badge badge-gate">Stop</span>
+            <span class="node-title">Step 1 Declined</span>
+          </div>
+          <div class="node-body">
+            User did not confirm freshness assumption. Skill exits with no action.
+          </div>
+        </div>
+        <div class="node stop-node" style="max-width: 280px; flex: 1">
+          <div class="node-header">
+            <span class="node-badge badge-gate">Stop</span>
+            <span class="node-title">Step 4 Empty</span>
+          </div>
+          <div class="node-body">No severity levels selected. Skill exits with no action.</div>
+        </div>
+        <div class="node stop-node" style="max-width: 280px; flex: 1">
+          <div class="node-header">
+            <span class="node-badge badge-gate">Stop</span>
+            <span class="node-title">Step 6 All Rejected</span>
+          </div>
+          <div class="node-body">
+            User rejected all consolidated issues. Skill exits with no action.
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
-
-  <!-- Phase 4: Consolidation -->
-  <div class="phase-divider"><span class="phase-label">Phase 4 — Consolidation &amp; Grouping</span></div>
-
-  <div class="node">
-    <div class="node-header">
-      <span class="node-badge badge-action">Action</span>
-      <span class="node-title">Step 5: Consolidate Cross-Service Issues</span>
-    </div>
-    <div class="node-body">
-      Group issues that should be solved together:
-      <ul>
-        <li><strong>Same pattern across services</strong> — e.g. "missing <code>logIncomingRequest()</code>" in 4 services → 1 consolidated issue</li>
-        <li><strong>Client/server mismatch</strong> — e.g. API contract mismatch between producer and consumer → 1 issue covering both sides</li>
-        <li><strong>Shared infrastructure debt</strong> — e.g. dead Pub/Sub publisher + unused Terraform resources → 1 cleanup issue</li>
-      </ul>
-      Each consolidated issue gets:
-      <ul>
-        <li>A clear title describing the cross-cutting concern</li>
-        <li>List of all affected services/packages</li>
-        <li>References to all source <code>technical-debt.md</code> files</li>
-        <li>Brief analysis (NO fix design — just scoping)</li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
-
-  <!-- Phase 5: User Approval -->
-  <div class="phase-divider"><span class="phase-label">Phase 5 — User Approval</span></div>
-
-  <div class="node">
-    <div class="node-header">
-      <span class="node-badge badge-user">User Input</span>
-      <span class="node-title">Step 6: Approve Issues One by One</span>
-    </div>
-    <div class="node-body">
-      Present each consolidated issue via <code>AskUserQuestion</code> (multiSelect) for approval:
-      <ul>
-        <li>Issue title + affected services</li>
-        <li>Severity + category</li>
-        <li>Brief scope description</li>
-      </ul>
-      User checks which issues to create in Linear.
-      <div class="node-outcomes">
-        <span class="outcome outcome-yes">Approved items → create in Linear</span>
-        <span class="outcome outcome-no">All rejected → STOP</span>
+    <!-- Legend -->
+    <div class="legend">
+      <h3>Legend</h3>
+      <div class="legend-items">
+        <span class="node-badge badge-gate">Gate — User confirmation required</span>
+        <span class="node-badge badge-action">Action — Automated analysis</span>
+        <span class="node-badge badge-user">User Input — AskUserQuestion</span>
+        <span class="node-badge badge-decision">Decision — Branch point</span>
+        <span class="node-badge badge-linear">Linear — Issue creation via MCP</span>
+        <span class="node-badge badge-output">Output — Final result</span>
       </div>
     </div>
-  </div>
-
-  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
-
-  <!-- Phase 6: Linear Creation -->
-  <div class="phase-divider"><span class="phase-label">Phase 6 — Linear Issue Creation</span></div>
-
-  <div class="node">
-    <div class="node-header">
-      <span class="node-badge badge-linear">Linear</span>
-      <span class="node-title">Step 7: Create Parent Issue</span>
-    </div>
-    <div class="node-body">
-      Create top-level Linear issue via <code>mcp__linear__create_issue</code> containing:
-      <ul>
-        <li><strong>When</strong> — date the analysis was performed</li>
-        <li><strong>What</strong> — summary of all technical debt issues found</li>
-        <li><strong>Where</strong> — which services/packages were analyzed</li>
-        <li><strong>Scope</strong> — severity levels included</li>
-        <li><strong>Count</strong> — N approved subtasks to follow</li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
-
-  <div class="node">
-    <div class="node-header">
-      <span class="node-badge badge-linear">Linear</span>
-      <span class="node-title">Step 8: Create Subtasks</span>
-    </div>
-    <div class="node-body">
-      For each approved issue, create a Linear subtask under the parent:
-      <ul>
-        <li><strong>Title</strong> — descriptive issue title</li>
-        <li><strong>Description</strong> — brief analysis + affected services</li>
-        <li><strong>References</strong> — links to source <code>technical-debt.md</code> file(s)</li>
-        <li><strong>Ready for</strong> — direct execution via <code>/linear INT-XXX</code></li>
-      </ul>
-      No fix design included — subtasks are scoped for autonomous agent execution.
-    </div>
-  </div>
-
-  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
-
-  <div class="node" style="border-color: var(--green); background: rgba(63,185,80,0.05);">
-    <div class="node-header">
-      <span class="node-badge badge-output">Output</span>
-      <span class="node-title" style="color: var(--green);">Done</span>
-    </div>
-    <div class="node-body">
-      Summary displayed to user:
-      <ul>
-        <li>N tech debt files scanned</li>
-        <li>N issues found → N consolidated → N approved → N created in Linear</li>
-        <li>Link to parent Linear issue</li>
-      </ul>
-    </div>
-  </div>
-
-</div>
-
-<!-- Stop nodes -->
-<div class="flow" style="margin-top: 32px;">
-  <div class="phase-divider"><span class="phase-label">Early Exit Points</span></div>
-  <div style="display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 640px;">
-    <div class="node stop-node" style="max-width: 280px; flex: 1;">
-      <div class="node-header">
-        <span class="node-badge badge-gate">Stop</span>
-        <span class="node-title">Step 1 Declined</span>
-      </div>
-      <div class="node-body">User did not confirm freshness assumption. Skill exits with no action.</div>
-    </div>
-    <div class="node stop-node" style="max-width: 280px; flex: 1;">
-      <div class="node-header">
-        <span class="node-badge badge-gate">Stop</span>
-        <span class="node-title">Step 4 Empty</span>
-      </div>
-      <div class="node-body">No severity levels selected. Skill exits with no action.</div>
-    </div>
-    <div class="node stop-node" style="max-width: 280px; flex: 1;">
-      <div class="node-header">
-        <span class="node-badge badge-gate">Stop</span>
-        <span class="node-title">Step 6 All Rejected</span>
-      </div>
-      <div class="node-body">User rejected all consolidated issues. Skill exits with no action.</div>
-    </div>
-  </div>
-</div>
-
-<!-- Legend -->
-<div class="legend">
-  <h3>Legend</h3>
-  <div class="legend-items">
-    <span class="node-badge badge-gate">Gate — User confirmation required</span>
-    <span class="node-badge badge-action">Action — Automated analysis</span>
-    <span class="node-badge badge-user">User Input — AskUserQuestion</span>
-    <span class="node-badge badge-decision">Decision — Branch point</span>
-    <span class="node-badge badge-linear">Linear — Issue creation via MCP</span>
-    <span class="node-badge badge-output">Output — Final result</span>
-  </div>
-</div>
-
-</body>
+  </body>
 </html>
