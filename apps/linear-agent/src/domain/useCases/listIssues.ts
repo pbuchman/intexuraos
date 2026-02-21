@@ -59,6 +59,9 @@ function syncedToLinearIssue(synced: SyncedLinearIssue): LinearIssue {
       name: synced.state,
       type: synced.stateType,
     },
+    /* v8 ignore start -- ts-type: assigneeName always set when assigneeId is non-null @preserve */
+    assignee: synced.assigneeId !== null ? { id: synced.assigneeId, name: synced.assigneeName ?? '' } : null,
+    /* v8 ignore stop @preserve */
     url: synced.url,
     createdAt: synced.createdAt,
     updatedAt: synced.updatedAt,
