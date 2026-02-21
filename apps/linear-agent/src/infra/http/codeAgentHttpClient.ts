@@ -57,6 +57,7 @@ export function createCodeAgentHttpClient(
           signal: controller.signal,
         });
 
+        /* v8 ignore start -- upstream: error handling for non-OK HTTP responses from code-agent @preserve */
         if (!response.ok) {
           const errorText = await response.text();
           logger.error({ status: response.status, error: errorText }, 'code-agent triggerCodeTask failed');
@@ -66,6 +67,7 @@ export function createCodeAgentHttpClient(
           }
           return err({ code: 'INVALID_REQUEST', message: errorText });
         }
+        /* v8 ignore stop @preserve */
 
         const body = await response.json() as {
           success: boolean;

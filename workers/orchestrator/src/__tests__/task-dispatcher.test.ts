@@ -2956,6 +2956,220 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('resumedAfterSuccess', () => {
+    let resumedDispatcher: TaskDispatcher;
+    let resumedStatePersistence: StatePersistence;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      resumedStatePersistence = createStatePersistence();
+      resumedDispatcher = new TaskDispatcher(
+        mockConfig,
+        resumedStatePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('uses loosened verification when resumedAfterSuccess is set', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-loosened-test',
+        workerType: 'auto',
+        prompt: 'Test resumed loosened verification',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-loosened-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockClear();
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(singleAttemptCompletionControl.verifier.verify).not.toHaveBeenCalled();
+
+      const finalTask = await resumedDispatcher.getTask('resumed-loosened-test');
+      expect(finalTask?.status).toBe('completed');
+      expect(finalTask?.verificationHistory).toHaveLength(1);
+      expect(finalTask?.verificationHistory?.[0]?.usedLlm).toBe(false);
+      expect(finalTask?.verificationHistory?.[0]?.passed).toBe(true);
+      expect(finalTask?.verificationHistory?.[0]?.reasons).toContain(
+        'Loosened verification passed (resumed after success)'
+      );
+    });
+
+    it('fails on non-zero exit code with TASK_RESUMED_HARD_ERROR', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-exit-code-test',
+        workerType: 'auto',
+        prompt: 'Test resumed exit code failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onComplete).toBeDefined();
+      onComplete?.(1);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-exit-code-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('resumed-exit-code-test');
+      expect(finalTask?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RESUMED_HARD_ERROR',
+              message: expect.stringContaining('Non-zero exit code: 1'),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('fails on Claude error with TASK_RESUMED_HARD_ERROR', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-claude-error-test',
+        workerType: 'auto',
+        prompt: 'Test resumed Claude error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed: rate limited"}\n');
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-claude-error-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('resumed-claude-error-test');
+      expect(finalTask?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RESUMED_HARD_ERROR',
+              message: expect.stringContaining('Claude error'),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('delivers pending messages before finalizing', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-pending-msg-test',
+        workerType: 'auto',
+        prompt: 'Test resumed pending messages',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-pending-msg-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      const internal = resumedDispatcher as unknown as {
+        pendingMessages: Map<string, string[]>;
+      };
+      internal.pendingMessages.set('resumed-pending-msg-test', ['Follow-up message']);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const afterDelivery = await resumedDispatcher.getTask('resumed-pending-msg-test');
+      expect(afterDelivery?.status).toBe('running');
+
+      expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(2);
+      const deliveryCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      expect(deliveryCall?.[0]?.prompt).toBe('Follow-up message');
+    });
+
+    it('clears resumedAfterSuccess after finalization', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'resumed-flag-clear-test',
+        workerType: 'auto',
+        prompt: 'Test resumed flag clearing',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resumedDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const state = await resumedStatePersistence.load();
+      const task = state.tasks['resumed-flag-clear-test'];
+      if (!task) throw new Error('Task not found');
+      task.resumedAfterSuccess = true;
+      await resumedStatePersistence.save(state);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const finalTask = await resumedDispatcher.getTask('resumed-flag-clear-test');
+      expect(finalTask?.status).toBe('completed');
+      expect(finalTask?.resumedAfterSuccess).toBeUndefined();
+    });
+  });
+
   describe('activity heartbeat', () => {
     let heartbeatDispatcher: TaskDispatcher;
     let heartbeatStatePersistence: StatePersistence;
@@ -3000,9 +3214,9 @@ describe('TaskDispatcher', () => {
       // Advance 30s — triggers completion monitor, no output received
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
-      const heartbeatCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls.filter(
-        (call) => typeof call[1] === 'string' && call[1].includes('[system]')
-      );
+      const heartbeatCalls = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter((call) => typeof call[1] === 'string' && call[1].includes('[system]'));
       expect(heartbeatCalls.length).toBe(1);
       expect(heartbeatCalls[0]?.[1]).toContain('Still processing...');
       expect(heartbeatCalls[0]?.[1]).toContain('no output for 30s');
@@ -3038,9 +3252,9 @@ describe('TaskDispatcher', () => {
       // Advance another 15s to hit the 30s monitor tick — only 15s since last output
       await vi.advanceTimersByTimeAsync(15 * 1000);
 
-      const heartbeatCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls.filter(
-        (call) => typeof call[1] === 'string' && call[1].includes('[system]')
-      );
+      const heartbeatCalls = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter((call) => typeof call[1] === 'string' && call[1].includes('[system]'));
       expect(heartbeatCalls.length).toBe(0);
     });
 
@@ -3066,9 +3280,9 @@ describe('TaskDispatcher', () => {
       // Second tick at 60s
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
-      const heartbeatCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls.filter(
-        (call) => typeof call[1] === 'string' && call[1].includes('[system]')
-      );
+      const heartbeatCalls = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter((call) => typeof call[1] === 'string' && call[1].includes('[system]'));
       expect(heartbeatCalls.length).toBe(2);
       expect(heartbeatCalls[0]?.[1]).toContain('no output for 30s');
       expect(heartbeatCalls[1]?.[1]).toContain('no output for 60s');
