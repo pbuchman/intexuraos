@@ -699,7 +699,7 @@ describe('GET /code/github-pr-events', () => {
     expect(body.data.events[0].body).toBe('Updated review');
   });
 
-  it('should show PR body only on the most recent pull_request event', async () => {
+  it('should show PR body at first occurrence with latest content', async () => {
     const services = (await import('../../../services.js')).getServices();
     const repo = services.gitHubPREventRepo;
 
@@ -794,16 +794,16 @@ describe('GET /code/github-pr-events', () => {
     expect(body.success).toBe(true);
     expect(body.data.events).toHaveLength(4);
 
-    // First 3 events should have null body (deduped)
-    expect(body.data.events[0].body).toBeNull();
+    // First event keeps the body (first occurrence, latest content)
+    expect(body.data.events[0].body).toBe('## Summary\nPR description table');
+
+    // Remaining events should have null body (deduped)
     expect(body.data.events[1].body).toBeNull();
     expect(body.data.events[2].body).toBeNull();
-
-    // Last event keeps the body
-    expect(body.data.events[3].body).toBe('## Summary\nPR description table');
+    expect(body.data.events[3].body).toBeNull();
   });
 
-  it('should show latest PR body when body changes between pushes', async () => {
+  it('should show latest PR body at first occurrence when body changes between pushes', async () => {
     const services = (await import('../../../services.js')).getServices();
     const repo = services.gitHubPREventRepo;
 
@@ -857,11 +857,11 @@ describe('GET /code/github-pr-events', () => {
     const body = JSON.parse(response.body);
     expect(body.data.events).toHaveLength(2);
 
-    // First event body nulled out
-    expect(body.data.events[0].body).toBeNull();
+    // First event shows latest body (first occurrence, latest content)
+    expect(body.data.events[0].body).toBe('Version 2 of description');
 
-    // Last event shows latest body
-    expect(body.data.events[1].body).toBe('Version 2 of description');
+    // Second event body nulled out
+    expect(body.data.events[1].body).toBeNull();
   });
 
   it('should keep PR body when there is only one pull_request event', async () => {
