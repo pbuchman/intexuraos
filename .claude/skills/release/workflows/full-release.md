@@ -486,14 +486,46 @@ pnpm run ci:tracked
 3. Re-run CI
 4. Do NOT proceed until CI passes
 
-### 6.3 Stage All Changes
+### 6.3 Refresh RAG Embeddings
+
+After CI passes (all docs are finalized), re-generate embeddings for the chat-agent RAG pipeline:
+
+```bash
+FIRESTORE_EMULATOR_HOST="" \
+GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY \
+pnpm run embed-docs
+```
+
+**What this does:**
+
+1. Reads all `docs/**/*.md` files (250+ files)
+2. Chunks by markdown headers (max 8000 chars per chunk)
+3. Generates OpenAI `text-embedding-3-small` embeddings (1536-dim)
+4. Uploads to `doc_embeddings` Firestore collection (production)
+5. Cleans stale embeddings from deleted docs
+
+**Skip condition:** If `--skip-docs` was used, skip this step (no doc changes to re-embed).
+
+**Failure handling:** Log the error but do NOT block the release. Embeddings can be re-run manually:
+
+```bash
+FIRESTORE_EMULATOR_HOST="" GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY pnpm run embed-docs
+```
+
+**Environment note:** The `FIRESTORE_EMULATOR_HOST=""` and `GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman` overrides are required because direnv sets emulator variables locally. Without them, the script targets the non-running emulator instead of production Firestore.
+
+### 6.4 Stage All Changes
 
 ```bash
 git status
 git add -A
 ```
 
-### 6.4 Commit Release
+### 6.5 Commit Release
 
 ```bash
 NEW_VERSION="X.Y.Z"  # From Phase 1
@@ -506,20 +538,21 @@ Release vX.Y.Z
 - Updated docs/overview.md
 - Updated README "What's New" section
 - Website improvements
+- Refreshed RAG embeddings (doc_embeddings)
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 EOF
 )"
 ```
 
-### 6.5 Create and Push Tag
+### 6.6 Create and Push Tag
 
 ```bash
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 git push origin "v$NEW_VERSION"
 ```
 
-### 6.6 Display Summary
+### 6.7 Display Summary
 
 Use template from [`templates/release-summary.md`](../templates/release-summary.md).
 
