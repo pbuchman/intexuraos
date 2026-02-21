@@ -126,10 +126,9 @@ sequenceDiagram
 
 ### Internal Endpoints
 
-| Method | Path                               | Purpose                    | Caller                    |
-| ------ | ---------------------------------- | -------------------------- | ------------------------- |
-| POST   | `/internal/snapshots/refresh`      | Refresh all feed snapshots | Cloud Scheduler (Pub/Sub) |
-| POST   | `/internal/visualizations/compute` | Compute visualization data | Internal services         |
+| Method | Path                               | Purpose                    | Caller            |
+| ------ | ---------------------------------- | -------------------------- | ----------------- |
+| POST   | `/internal/visualizations/compute` | Compute visualization data | Internal services |
 
 ## Domain Model
 
@@ -226,14 +225,6 @@ sequenceDiagram
 
 **Limit:** Max 10 visualizations per composite feed.
 
-## Pub/Sub
-
-### Subscribed Events
-
-| Topic       | Handler                       | Action                                           |
-| ----------- | ----------------------------- | ------------------------------------------------ |
-| (scheduled) | `/internal/snapshots/refresh` | Refresh all feed snapshots + feed visualizations |
-
 ## Dependencies
 
 ### External Services
@@ -274,9 +265,8 @@ sequenceDiagram
 - **LLM repair pattern**: Analysis auto-retries with repair prompt on parse failure (INT-79)
 - **Empty insights**: Returns success with empty array and `noInsightsReason` instead of error (INT-77)
 - **Chart type IDs**: Use compact format (C1-C6) not full names in storage
-- **Snapshot expiration**: Snapshots expire after 15 minutes, scheduled job refreshes all feeds
+- **Snapshot refresh**: Snapshots are refreshed on feed creation/update via `refreshSnapshot`
 - **Visualization async compute**: `POST /visualizations` returns 201 immediately with `status: pending`; poll `GET /visualizations/:id` until `status: ready` or `error`
-- **Visualization auto-refresh**: Every scheduled snapshot refresh also recomputes all feed visualizations via `refreshFeedVisualizations`
 - **Visualization limit**: Max 10 per feed; creation returns 400 `INVALID_REQUEST` when exceeded
 - **Default LLM**: Gemini 2.5 Flash (with Gemini fallback); Zai available as alternative platform
 - **Internal client**: Uses `@intexuraos/internal-clients` package for user-service access (INT-269)
@@ -299,7 +289,7 @@ apps/data-insights-agent/src/
 │   ├── snapshot/            # Snapshot caching
 │   │   ├── models/          # Snapshot entity
 │   │   ├── ports/           # SnapshotRepository interface
-│   │   └── usecases/        # refreshSnapshot, refreshAllSnapshots, getDataInsightSnapshot
+│   │   └── usecases/        # refreshSnapshot, getDataInsightSnapshot
 │   ├── dataInsights/        # AI analysis capabilities
 │   │   ├── types.ts         # DataInsight, ChartTypeDefinition
 │   │   ├── chartTypes.ts    # CHART_TYPES array (C1-C6)
@@ -329,7 +319,7 @@ apps/data-insights-agent/src/
 │   ├── compositeFeedRoutes.ts
 │   ├── dataInsightsRoutes.ts
 │   ├── visualizationRoutes.ts  # Full visualization CRUD + refresh
-│   └── internalRoutes.ts    # Scheduled snapshot refresh + compute visualization
+│   └── internalRoutes.ts    # Compute visualization
 ├── services.ts              # DI container
 ├── config.ts                # Environment configuration
 ├── server.ts                # Fastify app builder
