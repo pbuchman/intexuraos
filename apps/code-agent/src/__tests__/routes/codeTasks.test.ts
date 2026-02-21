@@ -401,7 +401,7 @@ describe('GET /code/tasks endpoints', () => {
         }
       });
 
-      it('filters tasks by status', async () => {
+      it('filters tasks by single status', async () => {
         const response = await app.inject({
           method: 'GET',
           url: '/code/tasks?status=implemented',
@@ -414,6 +414,41 @@ describe('GET /code/tasks endpoints', () => {
         const body = JSON.parse(response.body);
         expect(body.success).toBe(true);
         expect(body.data.tasks).toBeDefined();
+        expect(body.data.tasks.every((task: CodeTask) => task.status === 'implemented')).toBe(true);
+      });
+
+      it('filters tasks by comma-separated statuses', async () => {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/code/tasks?status=implemented,failed',
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.tasks).toBeDefined();
+        const statuses = body.data.tasks.map((task: CodeTask) => task.status);
+        for (const s of statuses) {
+          expect(['implemented', 'failed']).toContain(s);
+        }
+      });
+
+      it('ignores invalid status tokens in comma-separated list', async () => {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/code/tasks?status=implemented,bogus',
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        // Only valid statuses are used; 'bogus' is dropped
         expect(body.data.tasks.every((task: CodeTask) => task.status === 'implemented')).toBe(true);
       });
     });

@@ -67,7 +67,7 @@ export interface UpdateTaskInput {
 
 export interface ListTasksInput {
   userId: string;
-  status?: TaskStatus;
+  status?: TaskStatus[];
   limit?: number;
   cursor?: string; // taskId for pagination
 }
