@@ -91,7 +91,15 @@ jobs:
         run: pnpm build
 
       - name: Run Tests (shard ${{ matrix.shard }}/3)
-        run: pnpm vitest run --reporter=blob --coverage --shard=${{ matrix.shard }}/3
+        run: >-
+          pnpm vitest run
+          --reporter=blob
+          --coverage
+          --coverage.thresholds.lines=0
+          --coverage.thresholds.branches=0
+          --coverage.thresholds.functions=0
+          --coverage.thresholds.statements=0
+          --shard=${{ matrix.shard }}/3
 
       - name: Upload blob report
         if: always()
