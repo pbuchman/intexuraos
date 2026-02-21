@@ -66,7 +66,9 @@ export function CodeTasksPage(): React.JSX.Element {
     }
     return [];
   });
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [isFilterExpanded, setIsFilterExpanded] = useState(
+    () => localStorage.getItem('code-tasks-filter-expanded') === 'true'
+  );
 
   const { tasks, loading, loadingMore, error, hasMore, loadMore, deleteTask } = useCodeTasks({
     status: statusFilter,
@@ -112,7 +114,10 @@ export function CodeTasksPage(): React.JSX.Element {
       <div className="mb-4">
         <button
           onClick={(): void => {
-            setIsFilterExpanded((prev) => !prev);
+            setIsFilterExpanded((prev) => {
+              localStorage.setItem('code-tasks-filter-expanded', String(!prev));
+              return !prev;
+            });
           }}
           className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
         >
