@@ -393,15 +393,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
       try {
         let query = collection.where('userId', '==', input.userId);
 
-        if (input.status !== undefined) {
-          query = query.where('status', '==', input.status);
+        // Firestore 'in' operator throws on empty array, so only add filter when non-empty
+        if (input.status !== undefined && input.status.length > 0) {
+          query = query.where('status', 'in', input.status);
         }
 
         query = query.orderBy('createdAt', 'desc');
-
-        if (input.limit !== undefined) {
-          query = query.limit(input.limit);
-        }
 
         if (input.cursor !== undefined) {
           // For cursor-based pagination, we'd start after the cursor
@@ -416,10 +413,19 @@ export const createFirestoreCodeTaskRepository = (deps: {
           }
         }
 
+        // Fetch limit + 1 to determine if there are more results
+        const limit = input.limit ?? 20;
+        query = query.limit(limit + 1);
+
         const snapshot = await query.get();
 
-         
-        const tasks = snapshot.docs.map((doc: any) => {
+        const docs = snapshot.docs;
+        const hasMore = docs.length > limit;
+
+        // Take only the requested number of results
+        const resultDocs = hasMore ? docs.slice(0, limit) : docs;
+
+        const tasks = resultDocs.map((doc: any) => {
           const data = doc.data();
           return {
             ...data,
@@ -429,13 +435,17 @@ export const createFirestoreCodeTaskRepository = (deps: {
           } as CodeTask;
         });
 
-        const nextCursor =
-          snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1]!.id : undefined;
+        const output: ListTasksOutput = { tasks };
 
-        const output: ListTasksOutput = {
-          tasks,
-          ...(nextCursor !== undefined && { nextCursor }),
-        };
+        // Only set nextCursor when there are actually more results
+        if (hasMore && resultDocs.length > 0) {
+          /* v8 ignore start -- ts-type: array last element check @preserve */
+          const lastDoc = resultDocs[resultDocs.length - 1];
+          if (lastDoc !== undefined) {
+          /* v8 ignore stop @preserve */
+            output.nextCursor = lastDoc.id;
+          }
+        }
 
         return ok(output);
       } catch (error) {

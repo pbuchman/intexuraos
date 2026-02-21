@@ -118,7 +118,9 @@ function filterMatchesUrl(filter: SavedNotificationFilter, search: string): bool
 
 export function Sidebar(): React.JSX.Element {
   const { getAccessToken } = useAuth();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(
+    () => localStorage.getItem('sidebar-collapsed') === 'true'
+  );
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -673,7 +675,9 @@ export function Sidebar(): React.JSX.Element {
         {/* Collapse button - desktop only */}
         <button
           onClick={(): void => {
-            setIsCollapsed(!isCollapsed);
+            const next = !isCollapsed;
+            localStorage.setItem('sidebar-collapsed', String(next));
+            setIsCollapsed(next);
           }}
           className="hidden items-center justify-center border-t border-slate-200 p-3 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 md:flex"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
