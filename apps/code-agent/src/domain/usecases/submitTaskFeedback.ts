@@ -18,6 +18,7 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 
 /**
  * Generate a deterministic webhook secret for a task.
@@ -233,7 +234,7 @@ ${feedback.trim()}
     id: followUpTaskId,
     userId,
     prompt: feedbackPrompt,
-    sanitizedPrompt: feedbackPrompt,
+    sanitizedPrompt: sanitizePrompt(feedbackPrompt),
     systemPromptHash: originalTask.systemPromptHash,
     workerType: originalTask.workerType,
     /* v8 ignore start -- ts-type: optional chaining with null fallback creates type narrowing branch @preserve */

@@ -15,6 +15,7 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 
 /**
  * Generate a deterministic webhook secret for a task.
@@ -218,7 +219,7 @@ export async function processCodeAction(
     id: taskId,
     userId,
     prompt,
-    sanitizedPrompt: prompt, // TODO: Add sanitization
+    sanitizedPrompt: sanitizePrompt(prompt),
     systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system prompt
     workerType,
     /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */

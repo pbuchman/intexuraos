@@ -182,13 +182,13 @@ At each checkpoint (Phases 3, 4, 5):
 
 ## Error Recovery
 
-| Error                         | Recovery                                        |
-| ----------------------------- | ----------------------------------------------- |
-| CI fails in Phase 6           | Fix issues, re-run CI, then commit              |
-| service-scribe agent fails    | Log error, continue with other services         |
-| RAG embeddings fail           | Log error, continue release (re-run manually)   |
-| User declines all checkpoints | Proceed with version-only release               |
-| Tool unavailable              | ABORT immediately with clear error              |
+| Error                         | Recovery                                      |
+| ----------------------------- | --------------------------------------------- |
+| CI fails in Phase 6           | Fix issues, re-run CI, then commit            |
+| service-scribe agent fails    | Log error, continue with other services       |
+| RAG embeddings fail           | Log error, continue release (re-run manually) |
+| User declines all checkpoints | Proceed with version-only release             |
+| Tool unavailable              | ABORT immediately with clear error            |
 
 ---
 

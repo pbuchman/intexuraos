@@ -18,6 +18,7 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 
 /**
  * Cool-off period before retry is allowed (1 minute).
@@ -274,7 +275,7 @@ ${additionalContext.trim()}
     id: retryTaskId,
     userId,
     prompt: retryPrompt,
-    sanitizedPrompt: retryPrompt,
+    sanitizedPrompt: sanitizePrompt(retryPrompt),
     systemPromptHash: originalTask.systemPromptHash,
     workerType: originalTask.workerType,
     // Safe to access [0] because we return early if enabledWorkers.length === 0
