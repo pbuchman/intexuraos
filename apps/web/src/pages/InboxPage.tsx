@@ -260,7 +260,9 @@ export function InboxPage(): React.JSX.Element {
     // Default: show awaiting_approval, failed, and processing
     return ['awaiting_approval', 'failed', 'processing'];
   });
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [isFilterExpanded, setIsFilterExpanded] = useState(
+    () => localStorage.getItem('inbox-filter-expanded') === 'true'
+  );
 
   // 💰 CostGuard: Real-time action listener - only enabled when Actions tab is active
   const {
@@ -680,7 +682,10 @@ export function InboxPage(): React.JSX.Element {
         <div className="mb-4">
           <button
             onClick={(): void => {
-              setIsFilterExpanded((prev) => !prev);
+              setIsFilterExpanded((prev) => {
+                localStorage.setItem('inbox-filter-expanded', String(!prev));
+                return !prev;
+              });
             }}
             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
           >
