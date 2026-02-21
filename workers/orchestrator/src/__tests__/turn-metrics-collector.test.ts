@@ -426,9 +426,7 @@ describe('TurnMetricsCollector', () => {
         yield '/tmp/shared-creds/projects/test/current.jsonl';
       }
       mockGlob.mockReturnValueOnce(fakeGlob() as never);
-      mockReadFile
-        .mockResolvedValueOnce(oldFileContent)
-        .mockResolvedValueOnce(inWindowContent);
+      mockReadFile.mockResolvedValueOnce(oldFileContent).mockResolvedValueOnce(inWindowContent);
 
       const result = await sharedCollector.parseSessionJsonl('task1', {
         startedAt: '2025-06-01T09:00:00Z',

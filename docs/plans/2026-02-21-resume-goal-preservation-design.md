@@ -13,6 +13,7 @@
 ### Task 1: Add `buildActiveGoalSection` method and wire it into `startWorkerAttempt`
 
 **Files:**
+
 - Modify: `workers/orchestrator/src/services/task-dispatcher.ts:885-905` (near `buildResumePreamble`)
 - Modify: `workers/orchestrator/src/services/task-dispatcher.ts:1063-1076` (in `startWorkerAttempt`)
 
@@ -28,7 +29,8 @@ describe('buildActiveGoalSection', () => {
       buildResumePreamble: () => string;
     };
     const preamble = internal.buildResumePreamble();
-    const userMessage = '[PR Comment] New comment on PR #849\nFrom: @pbuchman\nThe commenter said:\nFix the bug';
+    const userMessage =
+      '[PR Comment] New comment on PR #849\nFrom: @pbuchman\nThe commenter said:\nFix the bug';
     const combined = preamble + userMessage;
 
     const result = internal.buildActiveGoalSection(combined);
@@ -114,6 +116,7 @@ git commit -m "feat(orchestrator): inject active goal into system prompt on resu
 ### Task 2: Add integration test for resume systemPrompt content
 
 **Files:**
+
 - Modify: `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
 
 **Step 1: Write test that verifies systemPrompt contains ACTIVE GOAL on resume**

@@ -184,7 +184,8 @@ export class TurnMetricsCollector {
   ): Promise<{ timeClassification: TimeClassification; tokens: TokenAggregation }> {
     const entries: SessionEntry[] = [];
     const sharedCredsPath = this.config.sharedCredsPath;
-    const basePath = sharedCredsPath ?? join(this.config.secretsBasePath, `claude-session-${taskId}`);
+    const basePath =
+      sharedCredsPath ?? join(this.config.secretsBasePath, `claude-session-${taskId}`);
     const pattern = join(basePath, 'projects', '**', '*.jsonl');
 
     try {
