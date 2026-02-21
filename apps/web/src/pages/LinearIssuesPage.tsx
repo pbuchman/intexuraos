@@ -82,7 +82,7 @@ function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
               </span>
             )}
             {issue.assignee !== undefined && issue.assignee !== null && (
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">{issue.assignee.name}</span>
+              <span className="inline-flex items-center rounded-full bg-emerald-200 px-2 py-0.5 text-[10px] font-medium text-emerald-900 dark:bg-emerald-700 dark:text-emerald-100">{issue.assignee.name}</span>
             )}
           </div>
           <span
@@ -174,7 +174,7 @@ function SubIssuesList({ issues }: SubIssuesListProps): React.JSX.Element | null
               </span>
             )}
             {child.assignee !== undefined && child.assignee !== null && (
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">{child.assignee.name}</span>
+              <span className="inline-flex items-center rounded-full bg-emerald-200 px-2 py-0.5 text-[10px] font-medium text-emerald-900 dark:bg-emerald-700 dark:text-emerald-100">{child.assignee.name}</span>
             )}
             <ExternalLink className="ml-auto h-3 w-3 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
           </a>
