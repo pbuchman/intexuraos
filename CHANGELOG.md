@@ -1,5 +1,51 @@
 # Changelog
 
+## 3.1.0
+
+- Added auto-triggering of code tasks on Linear issue assignment — newly assigned Todo issues without "Code Task" label automatically dispatch to Phase 1 design
+- Added sender whitelist for webhook dispatch replacing scattered filters with single `isAllowedSender()` check for `claude[bot]`, `chatgpt-codex-connector[bot]`, and repo owner
+- Added dispatch and triage of edited `claude[bot]` review comments with review triage instructions
+- Added simplified PR comment auto-response — replaced Gemini classification and batching system with minimal dispatch to worker via `gh` CLI (INT-465)
+- Added PR body deduplication across `pull_request` events to prevent repeated Summary sections in timeline
+- Added dynamic CPU core detection via cgroup v2 `cpu.max` with formatted metrics in code task logs
+- Added activity heartbeat to code task log stream during Docker silence periods
+- Added retry logic with exponential backoff for GitHub token minting using `@octokit/plugin-retry`
+- Added git identity configuration for Docker worker containers via `INTEXURAOS_GIT_USER_NAME`/`INTEXURAOS_GIT_USER_EMAIL` env vars
+- Added active goal injection into orchestrator system prompt on resume
+- Added Phase 2 enhancements with planning stage, dual code review loop, and turn summary
+- Added collapsible tool output blocks in log viewer with per-block expand/collapse and `(+N lines)` badges
+- Added multi-status filtering for code tasks with comma-separated status support and `limit+1` pagination fix
+- Added expandable PR events timeline replacing static Summary card on code task detail page
+- Added assignee name display on Linear board issue cards
+- Added prompt sanitization utility stripping AWS keys, API tokens, PEM keys, and sensitive URL parameters from worker inputs (INT-612)
+- Added `/tech-debt-triage` skill for scanning technical debt docs and creating consolidated Linear issues
+- Changed completion verification to be lenient for user-resumed tasks
+- Changed `@claude` and `@codex` PR comment mentions to skip webhook dispatch (handled by GitHub Actions)
+- Improved 27 LLM prompts across all domains — fixed unsafe casts, XML delimiters, date injection, and migrated `approvalIntentPrompt` to PromptBuilder
+- Improved `/code/submit` timeout from 30s to 90s with server-side 120s safety net and timeout-aware error recovery UI (INT-505)
+- Improved CI pipeline from 5m to 3m43s with 3-way test sharding, parallel type/lint matrix, and artifact-based coverage reports
+- Removed scheduled snapshot refresh saving ~zł50/week in LLM token costs
+- Fixed worker reorder buttons not rendering in settings UI
+- Fixed webhook assignment dedup using unique `actionId` with identifier+timestamp format instead of per-team `webhookId`
+- Fixed dedup errors propagating as 409 instead of generic 500
+- Fixed delete confirmation patterns across 9 web pages using consistent red banner with Button components
+- Fixed filter panel and sidebar collapse state not persisting across page refresh
+- Fixed Linear issue not transitioning to In Review on task-complete webhook
+- Fixed auto-trigger prompt using Phase 2 language for Phase 1 design tasks
+- Fixed browser autofill on worker secret fields with `autoComplete="new-password"` (INT-501)
+- Fixed turn metrics JSONL collection reading from wrong path in shared credentials mode
+- Fixed `prNumber` and `prBranch` not populated on task completion breaking PR comment lookup (INT-465)
+- Fixed null assignee handling in Linear board display and issue list guards
+- Fixed `linearIssueId` missing from dedup key causing false duplicate rejections
+- Fixed assignee data loss during full sync in linear-agent (INT-573)
+- Fixed git identity in worker containers overridden by parent repo config
+- Fixed calendar approval linking to internal path instead of Google Calendar (INT-585)
+- Fixed auto-created Linear issues skipping Phase 1 by removing pre-applied "Code Task" label (INT-610)
+- Fixed calendar events requiring manual approval above 90% confidence threshold (INT-610)
+- Fixed error logging in orchestrator token refresh and linear-agent using raw error objects for stack traces
+- Fixed Docker container resource limits preventing proper execution
+- Fixed Terraform startup probe failure threshold for flaky deploys
+
 ## 3.0.0
 
 - Added Code Agent service for autonomous code task execution — receives tasks from WhatsApp, web UI, and GitHub webhooks, dispatches to workers with HMAC-signed requests via Cloudflare Access (INT-246)
