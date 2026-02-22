@@ -72,7 +72,7 @@ Aborting.
 2. Find last release tag: `git tag -l "v*" --sort=-v:refname | head -1`
 3. List merged PRs since last release
 4. Detect modified services (apps changed since last tag)
-5. Run semver-release logic to determine version bump
+5. Run semver analysis to determine version bump (see `reference/semver-analysis.md`)
 6. Ask user for release focus/highlights guidance
 
 ### Phase 2: Service Documentation (Silent)
