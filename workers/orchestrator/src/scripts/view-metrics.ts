@@ -1,6 +1,7 @@
 import { Firestore } from '@google-cloud/firestore';
 import type { TurnMetrics } from '../services/turn-metrics-collector.js';
 
+/* v8 ignore start -- module-init: standalone CLI script not imported by tests @preserve */
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 const DIM = '\x1b[2m';
@@ -39,7 +40,17 @@ function bar(pct: number, width: number, color: string): string {
   const fullBlocks = Math.floor(filled);
   const remainder = filled - fullBlocks;
 
-  const partials = [' ', BAR_ONE, BAR_TWO, BAR_THREE, BAR_FOUR, BAR_FIVE, BAR_SIX, BAR_SEVEN, BAR_FULL];
+  const partials = [
+    ' ',
+    BAR_ONE,
+    BAR_TWO,
+    BAR_THREE,
+    BAR_FOUR,
+    BAR_FIVE,
+    BAR_SIX,
+    BAR_SEVEN,
+    BAR_FULL,
+  ];
   const partialIdx = Math.round(remainder * 8);
   const partialChar = partials[partialIdx] ?? ' ';
 
@@ -78,7 +89,19 @@ function boxTop(width: number, title?: string): string {
     const remaining = width - 2 - titleStr.length;
     const left = Math.max(1, Math.floor(remaining / 2));
     const right = Math.max(1, remaining - left);
-    return DIM + BOX_TL + BOX_H.repeat(left) + RESET + BOLD + titleStr + RESET + DIM + BOX_H.repeat(right) + BOX_TR + RESET;
+    return (
+      DIM +
+      BOX_TL +
+      BOX_H.repeat(left) +
+      RESET +
+      BOLD +
+      titleStr +
+      RESET +
+      DIM +
+      BOX_H.repeat(right) +
+      BOX_TR +
+      RESET
+    );
   }
   return DIM + BOX_TL + BOX_H.repeat(width - 2) + BOX_TR + RESET;
 }
@@ -110,18 +133,36 @@ function renderMetrics(m: TurnMetrics, width: number): string {
   const cpuLabel = m.cpuCores % 1 === 0 ? String(m.cpuCores) : m.cpuCores.toFixed(1);
   const cpuPct = m.cpuUtilizationPercent;
   const cpuColor = cpuPct > 80 * m.cpuCores ? RED : cpuPct > 50 * m.cpuCores ? YELLOW : GREEN;
-  lines.push(boxRow(`${BOLD}CPU${RESET}  ${cpuColor}${cpuPct.toFixed(1)}%${RESET} ${DIM}of ${cpuLabel} cores (${formatDuration(m.cpuTimeSeconds)} used)${RESET}`, w));
-  lines.push(boxRow(bar(cpuPct / m.cpuCores, w - 6, cpuColor) + ` ${DIM}${(cpuPct / m.cpuCores).toFixed(0)}%/core${RESET}`, w));
+  lines.push(
+    boxRow(
+      `${BOLD}CPU${RESET}  ${cpuColor}${cpuPct.toFixed(1)}%${RESET} ${DIM}of ${cpuLabel} cores (${formatDuration(m.cpuTimeSeconds)} used)${RESET}`,
+      w
+    )
+  );
+  lines.push(
+    boxRow(
+      bar(cpuPct / m.cpuCores, w - 6, cpuColor) +
+        ` ${DIM}${(cpuPct / m.cpuCores).toFixed(0)}%/core${RESET}`,
+      w
+    )
+  );
   lines.push(boxRow('', w));
 
   const memGB = m.peakMemoryMB / 1024;
   const memColor = memGB > 6 ? RED : memGB > 3 ? YELLOW : GREEN;
-  lines.push(boxRow(`${BOLD}MEM${RESET}  ${memColor}${memGB.toFixed(1)} GB${RESET} ${DIM}peak (${m.peakMemoryMB.toFixed(0)} MB)${RESET}`, w));
+  lines.push(
+    boxRow(
+      `${BOLD}MEM${RESET}  ${memColor}${memGB.toFixed(1)} GB${RESET} ${DIM}peak (${m.peakMemoryMB.toFixed(0)} MB)${RESET}`,
+      w
+    )
+  );
   lines.push(boxBottom(w));
 
   lines.push('');
   lines.push(boxTop(w, `${BLUE}TIME BREAKDOWN${RESET}`));
-  lines.push(boxRow(`${BOLD}Wall${RESET}  ${WHITE}${formatDuration(m.wallTimeSeconds)}${RESET}`, w));
+  lines.push(
+    boxRow(`${BOLD}Wall${RESET}  ${WHITE}${formatDuration(m.wallTimeSeconds)}${RESET}`, w)
+  );
   lines.push(boxRow('', w));
 
   const total = m.wallTimeSeconds || 1;
@@ -131,11 +172,35 @@ function renderMetrics(m: TurnMetrics, width: number): string {
   const overPct = (m.overheadSeconds / total) * 100;
 
   const timeBarWidth = w - 20;
-  const timeEntries: Array<{ label: string; seconds: number; pct: number; color: string; bgColor: string }> = [
+  const timeEntries: Array<{
+    label: string;
+    seconds: number;
+    pct: number;
+    color: string;
+    bgColor: string;
+  }> = [
     { label: 'API Wait', seconds: m.apiWaitSeconds, pct: apiPct, color: BLUE, bgColor: BG_BLUE },
-    { label: 'Tool Exec', seconds: m.toolExecSeconds, pct: toolPct, color: MAGENTA, bgColor: BG_MAGENTA },
-    { label: 'BG Wait', seconds: m.backgroundWaitSeconds, pct: bgPct, color: CYAN, bgColor: BG_CYAN },
-    { label: 'Overhead', seconds: m.overheadSeconds, pct: overPct, color: YELLOW, bgColor: BG_YELLOW },
+    {
+      label: 'Tool Exec',
+      seconds: m.toolExecSeconds,
+      pct: toolPct,
+      color: MAGENTA,
+      bgColor: BG_MAGENTA,
+    },
+    {
+      label: 'BG Wait',
+      seconds: m.backgroundWaitSeconds,
+      pct: bgPct,
+      color: CYAN,
+      bgColor: BG_CYAN,
+    },
+    {
+      label: 'Overhead',
+      seconds: m.overheadSeconds,
+      pct: overPct,
+      color: YELLOW,
+      bgColor: BG_YELLOW,
+    },
   ];
 
   // Stacked bar
@@ -169,13 +234,22 @@ function renderMetrics(m: TurnMetrics, width: number): string {
   }
 
   lines.push(boxRow('', w));
-  lines.push(boxRow(`${DIM}Idle${RESET} ${CYAN}${m.idlePercent.toFixed(1)}%${RESET} ${DIM}(API + BG wait)${RESET}`, w));
+  lines.push(
+    boxRow(
+      `${DIM}Idle${RESET} ${CYAN}${m.idlePercent.toFixed(1)}%${RESET} ${DIM}(API + BG wait)${RESET}`,
+      w
+    )
+  );
   lines.push(boxBottom(w));
 
   if (m.toolExecSeconds > m.wallTimeSeconds * 2) {
     lines.push('');
-    lines.push(`  ${RED}${BOLD}⚠${RESET}  ${YELLOW}toolExecSeconds (${formatDuration(m.toolExecSeconds)}) exceeds wall time by ${(m.toolExecSeconds / m.wallTimeSeconds).toFixed(0)}x${RESET}`);
-    lines.push(`     ${DIM}Likely parallel tool durations summed without overlap correction${RESET}`);
+    lines.push(
+      `  ${RED}${BOLD}⚠${RESET}  ${YELLOW}toolExecSeconds (${formatDuration(m.toolExecSeconds)}) exceeds wall time by ${(m.toolExecSeconds / m.wallTimeSeconds).toFixed(0)}x${RESET}`
+    );
+    lines.push(
+      `     ${DIM}Likely parallel tool durations summed without overlap correction${RESET}`
+    );
   }
 
   lines.push('');
@@ -196,7 +270,13 @@ function renderMetrics(m: TurnMetrics, width: number): string {
   for (const entry of tokenEntries) {
     const pct = maxTokens > 0 ? (entry.value / maxTokens) * 100 : 0;
     const blocks = Math.max(0, Math.round((pct / 100) * tokenBarWidth));
-    const tokenBar = entry.color + BAR_FULL.repeat(blocks) + RESET + DIM + BAR_EMPTY.repeat(tokenBarWidth - blocks) + RESET;
+    const tokenBar =
+      entry.color +
+      BAR_FULL.repeat(blocks) +
+      RESET +
+      DIM +
+      BAR_EMPTY.repeat(tokenBarWidth - blocks) +
+      RESET;
     lines.push(
       boxRow(
         `  ${entry.label.padEnd(13)} ${entry.color}${formatNumber(entry.value).padStart(7)}${RESET} ${tokenBar}`,
@@ -205,11 +285,17 @@ function renderMetrics(m: TurnMetrics, width: number): string {
     );
   }
 
-  const totalTokens = m.totalInputTokens + m.totalOutputTokens + m.totalCacheReadTokens + m.totalCacheCreationTokens;
+  const totalTokens =
+    m.totalInputTokens + m.totalOutputTokens + m.totalCacheReadTokens + m.totalCacheCreationTokens;
   const cacheHitRate = totalTokens > 0 ? (m.totalCacheReadTokens / totalTokens) * 100 : 0;
 
   lines.push(boxRow('', w));
-  lines.push(boxRow(`${DIM}Total${RESET}  ${WHITE}${formatNumber(totalTokens)}${RESET}  ${DIM}│${RESET}  ${DIM}Cache hit rate${RESET} ${CYAN}${cacheHitRate.toFixed(1)}%${RESET}`, w));
+  lines.push(
+    boxRow(
+      `${DIM}Total${RESET}  ${WHITE}${formatNumber(totalTokens)}${RESET}  ${DIM}│${RESET}  ${DIM}Cache hit rate${RESET} ${CYAN}${cacheHitRate.toFixed(1)}%${RESET}`,
+      w
+    )
+  );
   lines.push(boxBottom(w));
 
   lines.push('');
@@ -228,7 +314,12 @@ async function readStdin(): Promise<string> {
 async function fetchFromFirestore(taskId: string): Promise<TurnMetrics[]> {
   const projectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? 'intexuraos-dev-pbuchman';
   const db = new Firestore({ projectId });
-  const snap = await db.collection('code_tasks').doc(taskId).collection('turn_metrics').orderBy('attempt').get();
+  const snap = await db
+    .collection('code_tasks')
+    .doc(taskId)
+    .collection('turn_metrics')
+    .orderBy('attempt')
+    .get();
   return snap.docs.map((doc) => doc.data() as TurnMetrics);
 }
 
@@ -267,3 +358,4 @@ main().catch((err: unknown) => {
   console.error('Error:', err);
   process.exit(1);
 });
+/* v8 ignore stop @preserve */
