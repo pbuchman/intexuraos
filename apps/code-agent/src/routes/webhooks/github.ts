@@ -171,12 +171,12 @@ function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unkn
       'Instructions:',
       `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged`,
       `2. Fetch inline comments for this review: gh api /repos/${repository}/pulls/${String(prNumber)}/reviews/${reviewId}/comments`,
-      '3. React with eyes to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=eyes',
+      '3. React with rocket to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=rocket',
       '4. Read all comments and understand the full context',
       '5. For questions: investigate codebase, reply with answer',
       '6. For fix requests: make changes, commit, reply with reasoning',
       '7. Reply to each comment: gh api /repos/${repository}/pulls/${prNumber}/comments -f body="..." -F in_reply_to={id}',
-      '8. If review body exists, react with eyes and reply to the review as well',
+      '8. If review body exists, react with rocket and reply to the review as well',
     ].join('\n');
   }
 
@@ -201,7 +201,7 @@ function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unkn
       '   If the review appears to still be in progress → do nothing, stop here.',
       '',
       '2. IF REVIEW IS FINALIZED — process it as a code review:',
-      `   a. React with eyes: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=eyes`,
+      `   a. React with rocket: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=rocket`,
       '   b. Read the full review body and extract EVERY finding/issue/suggestion',
       '   c. For EACH finding, decide: FIX or SKIP',
       '      - FIX: Clear actionable feedback, code change with clear intent, specific bug or gap',
@@ -234,7 +234,7 @@ function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unkn
     body ?? '(empty)',
     '',
     'Instructions:',
-    `1. React with eyes to the comment: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=eyes`,
+    `1. React with rocket to the comment: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=rocket`,
     '2. Read the comment and decide if it needs a response',
     `3. If actionable: investigate, then reply via gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
     '4. If not actionable (e.g. coverage report, "+1", bot noise): do nothing',

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # fetch-unprocessed-comments.sh
-# Fetches PR comments that haven't been processed (no 🚀 reaction from bot)
+# Fetches PR comments that haven't been processed (no 😄 reaction from bot)
 #
 # Usage: ./fetch-unprocessed-comments.sh [PR_NUMBER]
 #        If no PR_NUMBER, detects from current branch
@@ -32,22 +32,22 @@ REPO=$(echo "$REPO_INFO" | cut -d' ' -f2)
 # Get bot username (current authenticated user)
 BOT_USERNAME=$(gh api user --jq '.login')
 
-# Function to check if comment has bot's rocket reaction
-has_bot_rocket() {
+# Function to check if comment has bot's laugh reaction
+has_bot_laugh() {
   local reactions="$1"
   echo "$reactions" | jq -e --arg bot "$BOT_USERNAME" '
-    .nodes | any(.content == "ROCKET" and .user.login == $bot)
+    .nodes | any(.content == "LAUGH" and .user.login == $bot)
   ' > /dev/null 2>&1
 }
 
-# Function to check if comment has bot's rocket reaction (REST API format)
-has_bot_rocket_rest() {
+# Function to check if comment has bot's laugh reaction (REST API format)
+has_bot_laugh_rest() {
   local comment_id="$1"
-  local has_rocket
+  local has_laugh
   # Note: gh api --jq doesn't support --arg, so we pipe to jq separately
-  has_rocket=$(gh api "repos/${OWNER}/${REPO}/issues/comments/${comment_id}/reactions" 2>/dev/null \
-    | jq --arg bot "$BOT_USERNAME" '[.[] | select(.content == "rocket" and .user.login == $bot)] | length > 0' 2>/dev/null || echo "false")
-  [[ "$has_rocket" == "true" ]]
+  has_laugh=$(gh api "repos/${OWNER}/${REPO}/issues/comments/${comment_id}/reactions" 2>/dev/null \
+    | jq --arg bot "$BOT_USERNAME" '[.[] | select(.content == "laugh" and .user.login == $bot)] | length > 0' 2>/dev/null || echo "false")
+  [[ "$has_laugh" == "true" ]]
 }
 
 # Function to fetch using REST API (fallback for large PRs)
@@ -62,8 +62,8 @@ fetch_with_rest_api() {
 
     COMMENT_ID=$(echo "$comment" | jq -r '.id')
 
-    # Check if already has bot's rocket reaction
-    if has_bot_rocket_rest "$COMMENT_ID"; then
+    # Check if already has bot's laugh reaction
+    if has_bot_laugh_rest "$COMMENT_ID"; then
       continue
     fi
 
@@ -236,7 +236,7 @@ fetch_with_graphql() {
     [[ -z "$comment" || "$comment" == "null" ]] && continue
 
     REACTIONS=$(echo "$comment" | jq '.reactions')
-    if has_bot_rocket "$REACTIONS"; then
+    if has_bot_laugh "$REACTIONS"; then
       continue
     fi
 
@@ -266,7 +266,7 @@ fetch_with_graphql() {
     # Process review body if it has content
     if [[ -n "$REVIEW_BODY" && "$REVIEW_BODY" != "null" && "$REVIEW_BODY" != "" ]]; then
       REACTIONS=$(echo "$review" | jq '.reactions')
-      if ! has_bot_rocket "$REACTIONS"; then
+      if ! has_bot_laugh "$REACTIONS"; then
         PROCESSED=$(echo "$review" | jq '{
           id: .id,
           databaseId: .databaseId,
@@ -292,7 +292,7 @@ fetch_with_graphql() {
       [[ -z "$comment" || "$comment" == "null" ]] && continue
 
       REACTIONS=$(echo "$comment" | jq '.reactions')
-      if has_bot_rocket "$REACTIONS"; then
+      if has_bot_laugh "$REACTIONS"; then
         continue
       fi
 

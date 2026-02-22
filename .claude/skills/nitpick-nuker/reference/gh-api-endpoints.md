@@ -14,7 +14,7 @@ gh api repos/{owner}/{repo}/issues/comments/{comment_id}
 # Add reaction to issue comment
 gh api repos/{owner}/{repo}/issues/comments/{comment_id}/reactions \
   -X POST \
-  -f content=rocket
+  -f content=laugh
 ```
 
 ### Review Comments (Inline Code Comments)
@@ -29,7 +29,7 @@ gh api repos/{owner}/{repo}/pulls/comments/{comment_id}
 # Add reaction to review comment
 gh api repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions \
   -X POST \
-  -f content=rocket
+  -f content=laugh
 ```
 
 ### Reviews (Overall Review with Body)
@@ -46,7 +46,7 @@ gh api repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}
 # Add reaction to review body (GraphQL only)
 gh api graphql -f query='
   mutation($subjectId: ID!) {
-    addReaction(input: {subjectId: $subjectId, content: ROCKET}) {
+    addReaction(input: {subjectId: $subjectId, content: LAUGH}) {
       reaction {
         content
       }
