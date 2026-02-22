@@ -494,10 +494,10 @@ Prepend the changelog entry built during Phase 1 semver analysis (see `semver-re
 2. Insert new `## X.Y.Z` section at the top (below any file header)
 3. Use the priority-ordered, verb-first entries from Step 7
 
-Also write the GitHub Release notes file:
+Also verify the GitHub Release notes file:
 
-- Build the categorized release body per `semver-release.md` Step 7.1
-- Write to `/tmp/release-notes-$NEW_VERSION.md`
+- This was generated in Phase 1 step 1.5 per `semver-release.md` Step 7.1
+- Confirm `/tmp/release-notes-$NEW_VERSION.md` exists; if missing, rebuild per Step 7.1
 
 ### 6.3 CI Gate (MANDATORY)
 
@@ -672,14 +672,14 @@ CURRENT=$(git branch --show-current)
 
 **All checks must PASS.** If any check fails:
 
-| Failure                  | Recovery                                                                         |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| Tag not on main          | Delete tag, re-tag on correct SHA, push                                          |
-| GitHub Release missing   | Run `gh release create` manually                                                 |
+| Failure                   | Recovery                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| Tag not on main           | Delete tag, re-tag on correct SHA, push                                          |
+| GitHub Release missing    | Run `gh release create` manually                                                 |
 | CHANGELOG missing version | Edit CHANGELOG.md, create new fixup commit, push normally                        |
-| Package version mismatch | Fix mismatched files, create new fixup commit, push normally                     |
-| Merge to main fails      | Detect conflicts, STOP, ask user for guidance. Do NOT force-push or auto-resolve |
-| Wrong branch             | `git checkout development`                                                       |
+| Package version mismatch  | Fix mismatched files, create new fixup commit, push normally                     |
+| Merge to main fails       | Detect conflicts, STOP, ask user for guidance. Do NOT force-push or auto-resolve |
+| Wrong branch              | `git checkout development`                                                       |
 
 ### 6.11 Display Summary
 
@@ -707,7 +707,7 @@ If `pnpm run ci:tracked` fails:
 
 ### User Declines All Changes
 
-If user skips all checkpoint phases (3, 4, 5):
+If user skips all checkpoint phases (1.5 prioritization, 3, 4, 5):
 
 1. Phase 6 still runs
 2. Commit message reflects only version bump
