@@ -6,13 +6,13 @@ Machine-readable reference for AI agents interacting with the code-agent service
 
 ```yaml
 name: code-agent
-version: 2.1.0
+version: 3.1.0
 port: 8128
 framework: fastify
 runtime: node22
 deploy: cloud-run
 collections:
-  - code_tasks (subcollections: logs, turn_metrics)
+  - code_tasks (subcollections: logs, log_lines, turn_metrics)
   - user_spend
   - user_usage
   - code_worker_settings
@@ -50,11 +50,13 @@ interface SubmitCodeTaskRequest {
 }
 ```
 
+All prompts pass through `sanitizePrompt()` before reaching the worker. This strips AWS keys, OpenAI/Anthropic API keys, Stripe secrets, GitHub tokens, Slack tokens, Bearer JWTs, PEM private keys, and secret env var assignments. Sensitive URL query parameters are redacted.
+
 ### Task Lifecycle
 
 ```typescript
 // 'designed' = Phase 1 design task completed; 'implemented' = Phase 2 execution task completed
-// 'completed' is NOT used — tasks finish as 'designed' or 'implemented'
+// 'completed' is NOT used -- tasks finish as 'designed' or 'implemented'
 type TaskStatus =
   | 'dispatched'
   | 'running'
@@ -153,11 +155,36 @@ interface SendTaskMessageResult {
   action: 'queued' | 'resumed';
 }
 
-// 'queued'  — task is running; message held in pendingUserMessages, delivered at turn end
-// 'resumed' — task is in terminal state (designed/implemented/failed); task re-dispatched via --continue
+// 'queued'  -- task is running; message held in pendingUserMessages, delivered at turn end
+// 'resumed' -- task is in terminal state (designed/implemented/failed); task re-dispatched via --continue
 // Constraints:
 // - Task must be owned by userId
 // - Status must NOT be 'cancelled' or 'dispatched'
+// - User must have configured workers
+```
+
+### Phase 2 Implementation
+
+```typescript
+interface SubmitToPhase2Request {
+  originalTaskId: string;
+  userId: string;
+}
+
+interface SubmitToPhase2Result {
+  codeTaskId: string;
+  resourceUrl: string;
+  workerLocation: string;
+  implementationOf: string;
+}
+
+// Constraints:
+// - Original task must have status 'designed' and executionPhase 'design'
+// - Original task must have a linked Linear issue
+// - Linear issue must have 'code-task' label (set by Phase 1)
+// - Linear issue must NOT have 'unclear' label
+// - No existing implementationTaskId on Phase 1 task (optimistic lock)
+// - No active task on same Linear issue
 // - User must have configured workers
 ```
 
@@ -212,6 +239,26 @@ interface TurnMetrics {
 // Stored at: code_tasks/{taskId}/turn_metrics/{attempt:0001}
 ```
 
+### Prompt Sanitization
+
+```typescript
+// sanitizePrompt() is applied to all prompts at every entry point.
+// Returns the sanitized string (pure function, no side effects).
+//
+// Patterns stripped:
+// 1. PEM private key blocks (RSA, EC, DSA)
+// 2. AWS access key IDs (AKIA...)
+// 3. OpenAI / Anthropic API keys (sk-...)
+// 4. Stripe secret keys (sk_live_..., sk_test_...)
+// 5. GitHub tokens (ghp_, gho_, ghs_, ghr_)
+// 6. Slack tokens (xoxb-, xoxp-, xoxa-, xoxr-, xoxs-)
+// 7. Bearer JWTs (JWT-shaped only)
+// 8. Secret/password env var assignments (DB_PASSWORD=...)
+// 9. Sensitive URL query parameters (token, api_key, apikey, access_token)
+// 10. Max length enforcement (100,000 chars)
+// 11. Whitespace normalization
+```
+
 ### Cancel via Nonce
 
 ```typescript
@@ -260,6 +307,16 @@ type RateLimitErrorCode =
   | 'service_unavailable'; // 503 - usage DB unreachable
 ```
 
+### GitHub Webhook Sender Whitelist
+
+PR comment auto-dispatch only processes comments from:
+
+- `claude[bot]`
+- `chatgpt-codex-connector[bot]`
+- Repository owner (matches `repository.owner.login`)
+
+All other senders are silently ignored.
+
 ## Usage Patterns
 
 ### Submit task from actions-agent
@@ -303,10 +360,24 @@ Authorization: Bearer <auth0-jwt>
 ### List tasks
 
 ```
-GET /code/tasks?status=running&limit=10
+GET /code/tasks?status=running,dispatched&limit=10
 Authorization: Bearer <auth0-jwt>
 
 -> 200: { "success": true, "data": { "tasks": [...], "nextCursor": "cursor-id" } }
+```
+
+Note: The `status` parameter accepts comma-separated values (e.g., `running,dispatched`) to filter by multiple statuses simultaneously.
+
+### Start Phase 2 implementation
+
+```
+POST /code/tasks/:taskId/implement
+Authorization: Bearer <auth0-jwt>
+
+-> 200: { "success": true, "data": { "codeTaskId": "uuid", "resourceUrl": "/code/tasks/uuid", "workerLocation": "home-mac", "implementationOf": "original-task-id" } }
+-> 400: { "success": false, "error": { "code": "invalid_status", "message": "Task must be a completed design task to start implementation" } }
+-> 400: { "success": false, "error": { "code": "label_not_ready", "message": "The code-task label hasn't been added yet." } }
+-> 409: { "success": false, "error": { "code": "already_implemented", "message": "Implementation already started" } }
 ```
 
 ### GitHub PR summaries (list view)
@@ -363,7 +434,7 @@ Notes:
 
 - `pullRequestNumber` requires `repository` to also be set
 - Per-PR queries return oldest-first; repository/all queries return newest-first
-- Comment `edited` events are merged with their original — same position, latest body
+- Comment `edited` events are merged with their original -- same position, latest body
 - PR body appears only on the most recent `pull_request` event
 
 ### Send message to task
@@ -425,6 +496,37 @@ X-Webhook-Signature: sha256=<hmac>
 -> 200: { "received": true }
 ```
 
+### Receive turn metrics
+
+```
+POST /internal/turn-metrics
+X-Internal-Auth: <token>
+X-Webhook-Signature: sha256=<hmac>
+
+{
+  "taskId": "uuid",
+  "attempt": 1,
+  "timestamp": "2026-02-22T10:30:00.000Z",
+  "cpuTimeSeconds": 42.5,
+  "cpuCores": 10,
+  "peakMemoryMB": 2100,
+  "wallTimeSeconds": 120,
+  "apiWaitSeconds": 60,
+  "toolExecSeconds": 30,
+  "backgroundWaitSeconds": 10,
+  "overheadSeconds": 20,
+  "totalInputTokens": 45000,
+  "totalOutputTokens": 12000,
+  "totalCacheReadTokens": 35000,
+  "totalCacheCreationTokens": 5000,
+  "apiCallCount": 15,
+  "cpuUtilizationPercent": 42.5,
+  "idlePercent": 78.2
+}
+
+-> 200: { "received": true }
+```
+
 ## Error Handling
 
 ### Error Response Format
@@ -461,8 +563,9 @@ All errors follow the IntexuraOS contract:
 | Target        | Endpoint                                      | When                 |
 | ------------- | --------------------------------------------- | -------------------- |
 | Worker        | `POST {workerUrl}/tasks`                      | Task dispatch        |
-| Worker        | `DELETE {workerUrl}/tasks/{taskId}`           | Task cancellation    |
-| Worker        | `GET {workerUrl}/health`                      | Connectivity test    |
+| Worker        | `DELETE {workerUrl}/tasks/{taskId}`            | Task cancellation    |
+| Worker        | `POST {workerUrl}/tasks/{taskId}/messages`     | Send message         |
+| Worker        | `GET {workerUrl}/health`                       | Connectivity test    |
 | linear-agent  | `POST /internal/linear/issues`                | Issue creation       |
 | linear-agent  | `PATCH /internal/linear/issues/{id}/state`    | State transition     |
 | linear-agent  | `POST /internal/linear/issues/validate`       | Issue validation     |
@@ -478,11 +581,12 @@ All errors follow the IntexuraOS contract:
 
 ### Incoming Webhooks
 
-| Source       | Path                               | Trigger                           |
-| ------------ | ---------------------------------- | --------------------------------- |
+| Source       | Path                              | Trigger                            |
+| ------------ | --------------------------------- | ---------------------------------- |
 | Orchestrator | `/internal/webhooks/task-complete` | Task finished (completed/failed)  |
-| Orchestrator | `/internal/logs`                   | Log chunks during execution       |
-| GitHub       | `/webhooks/github`                 | PR events (push, review, comment) |
+| Orchestrator | `/internal/logs`                  | Log chunks during execution        |
+| Orchestrator | `/internal/turn-metrics`          | Per-turn resource metrics          |
+| GitHub       | `/webhooks/github`                | PR events (push, review, comment)  |
 
 ### Metrics (Cloud Monitoring)
 

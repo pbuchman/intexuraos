@@ -25,7 +25,7 @@ interface CalendarAgentTools {
     actionId: string;
     userId: string;
     text: string;
-    currentDate: string; // YYYY-MM-DD
+    currentDate: string; // YYYY-MM-DD DayOfWeek (e.g., "2026-02-22 Sunday")
   }): Promise<CalendarPreview>;
 
   // Get preview status
@@ -33,6 +33,7 @@ interface CalendarAgentTools {
 
   // Process calendar action (with preview support)
   // HTTP body: { action: { id, userId, title } }
+  // Returns resourceUrl pointing to Google Calendar event (htmlLink)
   processAction(params: {
     action: {
       id: string;
@@ -47,6 +48,7 @@ interface CalendarAgentTools {
     timeMin: string;
     timeMax: string;
     maxResults?: number;
+    q?: string;
   }): Promise<CalendarEvent[]>;
 
   // Create new event
@@ -94,7 +96,7 @@ interface CalendarAgentTools {
   queryFreeBusy(params: {
     timeMin: string;
     timeMax: string;
-    items: { id: string }[];
+    items?: { id: string }[];
   }): Promise<FreeBusyResponse>;
 
   // List failed event extractions
@@ -116,7 +118,7 @@ interface CalendarPreview {
   userId: string;
   status: 'pending' | 'ready' | 'failed';
   summary?: string;
-  start?: string; // ISO 8601
+  start?: string; // ISO 8601 or YYYY-MM-DD for all-day
   end?: string; // ISO 8601
   location?: string;
   description?: string;
@@ -141,10 +143,11 @@ interface CalendarEvent {
   end: EventDateTime;
   attendees?: { email: string; responseStatus?: string }[];
   location?: string;
-  htmlLink: string;
-  status: 'confirmed' | 'tentative' | 'cancelled';
-  created: string;
-  updated: string;
+  htmlLink?: string; // Direct link to Google Calendar event
+  status?: 'confirmed' | 'tentative' | 'cancelled';
+  created?: string;
+  updated?: string;
+  organizer?: { email?: string; displayName?: string };
 }
 
 interface FreeBusyResponse {
@@ -158,21 +161,24 @@ interface FreeBusyResponse {
 
 interface FailedEvent {
   id: string;
+  userId: string;
   actionId: string;
   originalText: string;
   summary: string;
-  start?: string;
-  end?: string;
+  start: string | null;
+  end: string | null;
+  location: string | null;
+  description: string | null;
   error: string;
   reasoning: string;
   createdAt: string;
 }
 
 interface ServiceFeedback {
-  status: 'success' | 'error' | 'info';
-  resourceUrl?: string;
-  resourceId?: string;
-  message?: string;
+  status: 'completed' | 'failed';
+  message: string;
+  resourceUrl?: string; // Google Calendar htmlLink (or /#/calendar fallback)
+  errorCode?: string;
 }
 ```
 
@@ -189,6 +195,7 @@ interface ServiceFeedback {
 | **Preview Lifecycle**     | Preview deleted after successful event creation                             |
 | **Retry Precondition**    | Failed event retry requires both start and end times to be set              |
 | **Ownership Check**       | Failed event delete/retry checks userId ownership (returns 404 if mismatch) |
+| **htmlLink Priority**     | processAction uses Google Calendar htmlLink; falls back to /#/calendar      |
 
 ---
 
@@ -203,7 +210,8 @@ interface ServiceFeedback {
 4. If status === 'failed': Show error and reasoning, allow manual edit
 5. On approval: Call POST /internal/calendar/process-action
 6. processAction uses preview data (skips LLM) and creates event
-7. Preview automatically cleaned up after successful creation
+7. Response includes resourceUrl (Google Calendar htmlLink)
+8. Preview automatically cleaned up after successful creation
 ```
 
 ### Pattern 2: Direct Event Creation
@@ -233,10 +241,16 @@ interface ServiceFeedback {
 
 ---
 
-## Public Endpoints (Failed Events Management)
+## Public Endpoints
 
 | Method | Path                                | Purpose                    | Auth         |
 | ------ | ----------------------------------- | -------------------------- | ------------ |
+| GET    | `/calendar/events`                  | List events with filters   | Bearer token |
+| GET    | `/calendar/events/:eventId`         | Get specific event         | Bearer token |
+| POST   | `/calendar/events`                  | Create event               | Bearer token |
+| PATCH  | `/calendar/events/:eventId`         | Update event               | Bearer token |
+| DELETE | `/calendar/events/:eventId`         | Delete event               | Bearer token |
+| POST   | `/calendar/freebusy`                | Get free/busy info         | Bearer token |
 | GET    | `/calendar/failed-events`           | List failed extractions    | Bearer token |
 | DELETE | `/calendar/failed-events/:id`       | Delete a failed event      | Bearer token |
 | POST   | `/calendar/failed-events/:id/retry` | Retry creating from failed | Bearer token |
@@ -267,40 +281,40 @@ interface ServiceFeedback {
 ## Preview Status State Machine
 
 ```
-        ┌──────────┐
-        │          │
-  ┌─────▶  pending │
-  │     │          │
-  │     └────┬─────┘
-  │          │
-  │          │ LLM extraction
-  │          │
-  │     ┌────▼─────┐     ┌──────────┐
-  │     │          │     │          │
-  │     │  ready   │────▶│ deleted  │ (after event creation)
-  │     │          │     │          │
-  │     └──────────┘     └──────────┘
-  │
-  │     ┌──────────┐
-  │     │          │
-  └────▶│  failed  │ (extraction error)
-        │          │
-        └──────────┘
+        +----------+
+        |          |
+  +----->  pending |
+  |     |          |
+  |     +----+-----+
+  |          |
+  |          | LLM extraction
+  |          |
+  |     +----v-----+     +----------+
+  |     |          |     |          |
+  |     |  ready   |---->| deleted  | (after event creation)
+  |     |          |     |          |
+  |     +----------+     +----------+
+  |
+  |     +----------+
+  |     |          |
+  +---->|  failed  | (extraction error)
+        |          |
+        +----------+
 ```
 
 ---
 
 ## Dependencies
 
-| Service                        | Why Needed                        | Failure Behavior           |
-| ------------------------------ | --------------------------------- | -------------------------- |
-| user-service                   | OAuth tokens, LLM API keys        | Reject request             |
-| Google Calendar                | Event CRUD, free/busy             | Map error to CalendarError |
+| Service                         | Why Needed                        | Failure Behavior           |
+| ------------------------------- | --------------------------------- | -------------------------- |
+| user-service                    | OAuth tokens, LLM API keys        | Reject request             |
+| Google Calendar                 | Event CRUD, free/busy             | Map error to CalendarError |
 | Gemini 2.5 Flash (primary LLM) | Event extraction from text        | Attempt fallback LLM       |
 | GLM-4.7 via Zai (fallback LLM) | Event extraction when Gemini down | Save to failed events      |
-| Firestore                      | Previews, processed actions       | Return INTERNAL_ERROR      |
-| app-settings-service           | LLM pricing context at startup    | Crash on startup           |
+| Firestore                       | Previews, processed actions       | Return INTERNAL_ERROR      |
+| app-settings-service            | LLM pricing context at startup    | Crash on startup           |
 
 ---
 
-**Last updated:** 2026-02-19 (v2.4.0 - Gemini 2.5 Flash default LLM, platform Zai fallback, Dash0 OpenTelemetry, fix processAction HTTP body shape)
+**Last updated:** 2026-02-22 (v3.1.0 - INT-585 htmlLink as resourceUrl, corrected ServiceFeedback type)

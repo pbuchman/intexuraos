@@ -1,14 +1,23 @@
 # Commands Agent - Tutorial
 
-This tutorial demonstrates command classification with the v2.0.0 improvements: URL keyword isolation, explicit intent detection, and Polish language support.
+> **Time:** 15-30 minutes
+> **Prerequisites:** Auth0 access token, Google or Zai API key configured in user-service, `curl` or HTTP client
+> **You'll learn:** How to classify commands, handle URL isolation, use Polish phrases, and manage command lifecycle
 
-## Prerequisites
+---
 
-- Auth0 access token
-- Google API key or Zai API key configured in user-service
-- `curl` or HTTP client
+## What You'll Build
 
-## Part 1: Basic Classification
+A working integration that:
+
+- Classifies natural language into action types (todo, research, link, code, etc.)
+- Handles URL keyword isolation correctly
+- Supports Polish command phrases
+- Manages the full command lifecycle (create, list, archive, delete)
+
+---
+
+## Part 1: Basic Classification (5 minutes)
 
 Create a simple todo command:
 
@@ -46,7 +55,9 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 
 **Checkpoint:** Status is `classified`, type is `todo`, confidence is high (0.90+).
 
-## Part 2: URL Keyword Isolation (v2.0.0)
+---
+
+## Part 2: URL Keyword Isolation (5 minutes)
 
 Test that keywords in URLs don't trigger incorrect classification:
 
@@ -79,7 +90,9 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 
 **Key Point:** Despite "research" in the URL, classification is `link` because Step 4 (URL presence) triggers before keyword matching, and the prompt's URL keyword isolation rule prevents the LLM from being misled.
 
-## Part 3: Explicit Intent Override (v2.0.0)
+---
+
+## Part 3: Explicit Intent Override (5 minutes)
 
 Test that explicit command phrases override URL presence:
 
@@ -112,7 +125,9 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 
 **Key Point:** Step 2 (explicit intent "research this") executes before Step 4 (URL presence), so the command is queued for research rather than saved as a bookmark.
 
-## Part 4: Polish Language Support (v2.0.0)
+---
+
+## Part 4: Polish Language Support (5 minutes)
 
 Test native Polish command phrases:
 
@@ -150,18 +165,20 @@ More Polish examples:
 curl -X POST https://commands-agent.intexuraos.com/commands \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"text": "stwórz zadanie: kupić mleko", "source": "pwa-shared"}'
-# → type: todo, confidence: 0.90+
+  -d '{"text": "stwórz zadanie: kupic mleko", "source": "pwa-shared"}'
+# -> type: todo, confidence: 0.90+
 
 # Research in Polish
 curl -X POST https://commands-agent.intexuraos.com/commands \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "zbadaj najnowsze trendy AI", "source": "pwa-shared"}'
-# → type: research, confidence: 0.90+
+# -> type: research, confidence: 0.90+
 ```
 
-## Part 5: Code Command Classification
+---
+
+## Part 5: Code Command Classification (5 minutes)
 
 Test that programming-related commands classify as `code`:
 
@@ -194,7 +211,9 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 
 **Key Point:** Commands with programming context (fix, refactor, debug, implement, deploy) classify as `code` rather than generic `todo`.
 
-## Part 6: Explicit Prefix Override
+---
+
+## Part 6: Explicit Prefix Override (5 minutes)
 
 Override classification with explicit prefix:
 
@@ -227,7 +246,9 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 
 **Key Point:** Step 1 (explicit prefix) takes absolute priority. Even though "buy groceries" would normally be a todo, the prefix forces Linear classification.
 
-## Part 7: Graceful Degradation
+---
+
+## Part 7: Graceful Degradation (5 minutes)
 
 When no API key is configured, commands enter pending state:
 
@@ -258,7 +279,9 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 
 **Solution:** Configure API key in user-service. Cloud Scheduler calls `/internal/retry-pending` every 5 minutes to process pending commands.
 
-## Part 8: Command Lifecycle Management
+---
+
+## Part 8: Command Lifecycle Management (5 minutes)
 
 ### List commands
 
@@ -287,16 +310,31 @@ curl -X PATCH https://commands-agent.intexuraos.com/commands/pwa-shared:456 \
 
 Only works for status: `classified`.
 
+---
+
 ## Troubleshooting
 
-| Symptom                            | Cause                       | Solution                                                |
-| ---------------------------------- | --------------------------- | ------------------------------------------------------- |
-| Status `pending_classification`    | No LLM API key              | Configure Google or Zai key in user-service             |
-| URL classified as `research`       | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
-| Polish phrases not recognized      | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
-| "Cannot delete classified command" | Wrong operation             | Use PATCH to archive instead                            |
-| Status `failed`                    | LLM error or actions-agent  | Check logs, delete and retry                            |
-| Duplicate command (isNew: false)   | Same externalId reprocessed | Normal idempotency behavior                             |
+| Symptom                            | Cause                      | Solution                                                |
+| ---------------------------------- | -------------------------- | ------------------------------------------------------- |
+| Status `pending_classification`    | No LLM API key            | Configure Google or Zai key in user-service             |
+| URL classified as `research`       | Old prompt version         | Check `promptVersion` in response; redeploy if outdated |
+| Polish phrases not recognized      | Old prompt version         | Check `promptVersion` in response; redeploy if outdated |
+| "Cannot delete classified command" | Wrong operation            | Use PATCH to archive instead                            |
+| Status `failed`                    | LLM error or actions-agent | Check logs, delete and retry                            |
+| Duplicate command (isNew: false)   | Same externalId reprocessed | Normal idempotency behavior                            |
+| 401 Unauthorized                   | Expired or invalid token   | Refresh Auth0 access token                              |
+
+---
+
+## Next Steps
+
+Now that you understand the basics:
+
+1. Explore the [Technical Reference](technical.md) for full API details and the classification prompt structure
+2. Review the [Agent Interface](agent.md) for programmatic integration patterns
+3. Check out [actions-agent](../actions-agent/features.md) to understand what happens after classification
+
+---
 
 ## Exercises
 
@@ -318,6 +356,35 @@ Only works for status: `classified`.
 2. Test idempotency by sending the same externalId twice
 3. Build a retry loop for failed commands
 
+<details>
+<summary>Solutions</summary>
+
+### Exercise 1: Commands for Each Type
+
+```bash
+# todo
+curl -X POST .../commands -d '{"text": "Buy groceries", "source": "pwa-shared"}'
+# research
+curl -X POST .../commands -d '{"text": "How does OAuth 2.0 work?", "source": "pwa-shared"}'
+# note
+curl -X POST .../commands -d '{"text": "Note: meeting went well, follow up next week", "source": "pwa-shared"}'
+# link
+curl -X POST .../commands -d '{"text": "https://example.com/article", "source": "pwa-shared"}'
+# code
+curl -X POST .../commands -d '{"text": "Fix the login bug in auth module", "source": "pwa-shared"}'
+```
+
+### Exercise 2: Idempotency Test
+
+```bash
+# Send the same externalId twice
+curl -X POST .../commands -d '{"text": "Test", "source": "pwa-shared", "externalId": "test-123"}'
+# Second call returns isNew: false
+curl -X POST .../commands -d '{"text": "Test", "source": "pwa-shared", "externalId": "test-123"}'
+```
+
+</details>
+
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22

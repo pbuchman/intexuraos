@@ -1,4 +1,4 @@
-# Web App — Tutorial
+# Web App -- Tutorial
 
 > **Time:** 20-30 minutes
 > **Prerequisites:** Node.js 22+, access to IntexuraOS project
@@ -41,10 +41,13 @@ pnpm install
 
 ### Step 1.2: Configure Environment
 
-The web app requires environment variables. Create a `.env` file:
+The web app requires environment variables. Use direnv (recommended) or create a `.env` file:
 
 ```bash
-# Copy from example or use direnv
+# Option A: direnv (recommended)
+direnv allow
+
+# Option B: Manual .env file
 cp .env.example .env
 ```
 
@@ -64,7 +67,7 @@ pnpm dev
 
 The app will be available at `http://localhost:3000`
 
-**Checkpoint:** You should see the landing page with the "Your brain is for thinking" hero section.
+**Checkpoint:** You should see the landing page with the brutalist-design hero section and animated terminal showing the autonomous pipeline.
 
 ---
 
@@ -76,31 +79,26 @@ The web app can connect to either:
 
 | Option         | When to Use       | How                                             |
 | -------------- | ----------------- | ----------------------------------------------- |
-| Cloud services | Production build  | `pnpm build` — uses absolute service URLs       |
-| Dev mode       | Local development | `pnpm dev` — Vite proxy routes `/api/*` locally |
+| Cloud services | Production build  | `pnpm build` -- uses absolute service URLs      |
+| Dev mode       | Local development | `pnpm dev` -- Vite proxy routes `/api/*` locally |
 
-### Step 2.2: Service URLs
+### Step 2.2: Vite Proxy Configuration
 
-Configure backend URLs in your `.env` file:
+In dev mode, Vite proxies API requests to local services. The proxy is configured in `vite.config.ts`:
 
-```bash
-# Production URLs (default)
-INTEXURAOS_USER_SERVICE_URL=https://user-service.intexuraos.com
-INTEXURAOS_COMMANDS_AGENT_URL=https://commands-agent.intexuraos.com
-INTEXURAOS_CODE_AGENT_URL=https://code-agent.intexuraos.com
-INTEXURAOS_CHAT_AGENT_URL=https://chat-agent.intexuraos.com
-# ... etc
-
-# Or local development (if running services locally)
-INTEXURAOS_USER_SERVICE_URL=http://localhost:8001
-INTEXURAOS_COMMANDS_AGENT_URL=http://localhost:8002
+```typescript
+// All /api/* requests are proxied to localhost services
+'/api/user':    { target: 'http://localhost:8110' },
+'/api/code':    { target: 'http://localhost:8128' },
+'/api/chat':    { target: 'http://localhost:8129' },
+// ... etc
 ```
 
-**Note:** In dev mode (`pnpm dev`), service URLs are ignored and requests go through Vite's proxy using relative API paths (e.g., `/api/code`).
+You do not need to set service URL environment variables in dev mode.
 
 ### Step 2.3: Firebase Configuration
 
-For Firestore, configure your project:
+For Firestore real-time features, configure your project:
 
 ```bash
 INTEXURAOS_FIREBASE_PROJECT_ID=intexuraos-production
@@ -126,9 +124,11 @@ import { Card } from '@/components/ui/Card';
 export function MySettingsPage(): React.JSX.Element {
   return (
     <Layout>
-      <h1 className="text-2xl font-bold">My Settings</h1>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+        My Settings
+      </h1>
       <Card title="">
-        <p>Settings content here</p>
+        <p className="text-slate-600 dark:text-slate-400">Settings content here</p>
       </Card>
     </Layout>
   );
@@ -157,55 +157,69 @@ import { MySettingsPage } from '@/pages';
 />
 ```
 
+**Step 3.4:** Add sidebar navigation in `Sidebar.tsx`:
+
+```typescript
+const settingsItems: NavItem[] = [
+  // ... existing items
+  { to: '/settings/my-feature', label: 'My Feature', icon: YourIcon },
+];
+```
+
 ### Task 2: Call a New API Endpoint
 
-**Step 3.4:** Create the API function:
+**Step 3.5:** Create the API function:
 
 ```typescript
 // apps/web/src/services/myFeatureApi.ts
-import { apiRequest } from './apiClient';
+import { apiRequest } from './apiClient.js';
+import { config } from '@/config';
+
+interface FeatureData {
+  id: string;
+  name: string;
+}
 
 export async function getMyFeature(token: string): Promise<FeatureData> {
   return await apiRequest<FeatureData>(
-    import.meta.env['INTEXURAOS_MY_SERVICE_URL'],
+    config.myServiceUrl,
     '/my-feature',
     token
   );
 }
 ```
 
-**Step 3.5:** Export from `services/index.ts`:
-
-```typescript
-export * from './myFeatureApi.js';
-```
-
-**Step 3.6:** Use in a component:
+**Step 3.6:** Use in a component with `useApiClient`:
 
 ```typescript
 import { useApiClient } from '@/hooks/useApiClient';
-import { getMyFeature } from '@/services';
+import { config } from '@/config';
 
-function MyComponent() {
+function MyComponent(): React.JSX.Element {
   const { request } = useApiClient();
+  const [data, setData] = useState<FeatureData | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const data = await request(getMyFeature);
-      // Use data
+    void (async () => {
+      const result = await request<FeatureData>(
+        config.myServiceUrl, '/my-feature'
+      );
+      setData(result);
     })();
   }, [request]);
+
+  return <div>{data?.name}</div>;
 }
 ```
 
 ### Task 3: Add a Linear Issue Selector
 
-Use `LinearIssueSelectorModal` when you need users to pick a Linear issue — it replaced the inline combobox for better mobile UX:
+Use `LinearIssueSelectorModal` when you need users to pick a Linear issue -- it replaced the inline combobox for better mobile UX:
 
 ```typescript
 import { LinearIssueSelectorModal } from '@/components/LinearIssueSelectorModal';
 
-function MyForm() {
+function MyForm(): React.JSX.Element {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
 
@@ -225,6 +239,31 @@ function MyForm() {
 }
 ```
 
+### Task 4: Persist UI State Across Page Refresh
+
+Follow the pattern used in InboxPage and CodeTasksPage for persisting filter state:
+
+```typescript
+// Initialize from localStorage
+const [myFilter, setMyFilter] = useState<string[]>(() => {
+  const stored = localStorage.getItem('my-page-filter');
+  if (stored !== null) {
+    try {
+      const parsed = JSON.parse(stored) as unknown;
+      if (Array.isArray(parsed)) return parsed as string[];
+    } catch {
+      // Invalid JSON, use defaults
+    }
+  }
+  return ['default'];
+});
+
+// Persist on change
+useEffect(() => {
+  localStorage.setItem('my-page-filter', JSON.stringify(myFilter));
+}, [myFilter]);
+```
+
 ---
 
 ## Part 4: Build for Production (5 minutes)
@@ -241,6 +280,7 @@ This creates a production-optimized build in `dist/` with:
 - Source maps for debugging
 - PWA service worker
 - Asset hashing for cache busting
+- Build version info injected (version, commit SHA, date)
 
 ### Step 4.2: Preview Build
 
@@ -256,16 +296,17 @@ Serves the production build locally at `http://localhost:3000`
 
 | Problem                                 | Solution                                                                                   |
 | --------------------------------------- | ------------------------------------------------------------------------------------------ |
-| "Missing required environment variable" | Check `.env` file has all `INTEXURAOS_*` variables                                         |
+| "Missing required environment variable" | Check `.env` file has all `INTEXURAOS_*` variables or run `direnv allow`                   |
 | "Auth0 unauthorized"                    | Verify `AUTH_AUDIENCE` matches your Auth0 API configuration                                |
 | "CORS errors"                           | Ensure backend service allows requests from localhost                                      |
 | "Service worker not registering"        | Clear site data and reload in DevTools Application tab                                     |
-| "Vite HMR not working"                  | Check port 3000 is not already in use                                                      |
+| "Vite HMR not working"                  | HMR is disabled by default (`hmr: false` in vite.config.ts); use full page reload         |
 | DevBar not showing                      | Only visible in dev mode (`pnpm dev`) or on `dev.intexuraos.cloud`, not in production      |
 | Chat not working as guest               | Guest sessions are rate-limited; clear `intex-guest-session-id` from localStorage to reset |
 | Dark mode not persisting                | Ensure localStorage is available (not in strict private mode)                              |
 | Linear board not updating               | Firestore listener may have expired; reload the page                                       |
 | Code task log stream blank              | Firebase auth may have failed; check the browser console for auth errors                   |
+| Filters lost on page refresh            | Verify localStorage is not being cleared; filters persist via localStorage keys            |
 
 ---
 
@@ -285,7 +326,7 @@ Tests use Vitest with:
 
 - jsdom environment for DOM testing
 - @testing-library/react for component testing
-- MSW for API mocking (if needed)
+- @testing-library/user-event for interaction testing
 
 ---
 
@@ -297,8 +338,9 @@ Now that you understand the basics:
 2. Read [`apiClient.ts`](../../../apps/web/src/services/apiClient.ts) for request handling
 3. Check [`App.tsx`](../../../apps/web/src/App.tsx) for routing structure
 4. Study the [`Chat`](../../../apps/web/src/components/Chat/Chat.tsx) component for the chat assistant architecture
-5. Review [`CodeTaskViewPage.tsx`](../../../apps/web/src/pages/CodeTaskViewPage.tsx) for the two-phase code task UI with LogStream, queued messaging, and design/implementation banners
+5. Review [`CodeTaskViewPage.tsx`](../../../apps/web/src/pages/CodeTaskViewPage.tsx) for collapsible tool output, two-phase banners, queued messaging, and LogStream
 6. See [`PREventsPage.tsx`](../../../apps/web/src/pages/PREventsPage.tsx) for lazy-loaded summaries with `useGitHubPRSummaries` + `useGitHubPREvents`
+7. Study [`CodeTasksPage.tsx`](../../../apps/web/src/pages/CodeTasksPage.tsx) for multi-status filtering with persistent state
 
 ---
 
@@ -307,7 +349,7 @@ Now that you understand the basics:
 Test your understanding:
 
 1. **Easy:** Add a new link to the sidebar in `Sidebar.tsx`
-2. **Medium:** Create a new page that fetches and displays a list of items from an API
+2. **Medium:** Create a new page that fetches and displays a list of items from an API with persistent filter state
 3. **Hard:** Implement real-time updates using Firestore listeners for a new data type
 
 <details>
@@ -315,53 +357,85 @@ Test your understanding:
 
 ### Exercise 1: Sidebar Link
 
-Edit `components/Sidebar.tsx`:
+Edit `components/Sidebar.tsx` and add to the appropriate section:
 
 ```typescript
-<Link
+<NavLink
   to="/my-page"
-  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100"
+  end
+  className={({ isActive }): string =>
+    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+      isActive
+        ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+    }`
+  }
 >
-  <Icon className="h-5 w-5" />
-  <span>My Page</span>
-</Link>
+  <MyIcon className="h-5 w-5 shrink-0" />
+  {!isCollapsed ? <span>My Page</span> : null}
+</NavLink>
 ```
 
-### Exercise 2: List Page
+### Exercise 2: List Page with Persistent Filter
 
 Create `apps/web/src/pages/MyListPage.tsx`:
 
 ```typescript
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Layout } from '@/components';
-import { useApiClient } from '@/hooks/useApiClient';
-import { getMyItems } from '@/services';
+import { Card } from '@/components/ui/Card';
+import { useAuth } from '@/context';
+import { apiRequest } from '@/services/apiClient';
+import { config } from '@/config';
 
-type Item = { id: string; name: string };
+type Item = { id: string; name: string; status: string };
 
 export function MyListPage(): React.JSX.Element {
+  const { getAccessToken } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const { request } = useApiClient();
+  const [statusFilter, setStatusFilter] = useState<string[]>(() => {
+    const stored = localStorage.getItem('my-list-filter');
+    if (stored !== null) {
+      try {
+        return JSON.parse(stored) as string[];
+      } catch { return []; }
+    }
+    return [];
+  });
 
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await request(getMyItems);
-        setItems(data);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [request]);
+    localStorage.setItem('my-list-filter', JSON.stringify(statusFilter));
+  }, [statusFilter]);
+
+  const fetchData = useCallback(async () => {
+    const token = await getAccessToken();
+    const data = await apiRequest<Item[]>(config.myServiceUrl, '/items', token);
+    setItems(data);
+    setLoading(false);
+  }, [getAccessToken]);
+
+  useEffect(() => { void fetchData(); }, [fetchData]);
+
+  const filtered = statusFilter.length > 0
+    ? items.filter((i) => statusFilter.includes(i.status))
+    : items;
 
   return (
     <Layout>
-      <h1 className="text-2xl font-bold">My Items</h1>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">My Items</h1>
       {loading ? (
-        <p>Loading...</p>
+        <div className="flex justify-center py-12">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        </div>
       ) : (
-        <ul>{items.map(item => <li key={item.id}>{item.name}</li>)}</ul>
+        <div className="space-y-3">
+          {filtered.map((item) => (
+            <Card key={item.id} title={item.name}>
+              <p className="text-slate-600 dark:text-slate-400">{item.status}</p>
+            </Card>
+          ))}
+        </div>
       )}
     </Layout>
   );
@@ -373,30 +447,44 @@ export function MyListPage(): React.JSX.Element {
 Create `apps/web/src/hooks/useMyItemsChanges.ts`:
 
 ```typescript
-import { useEffect, useState, useRef } from 'react';
-import { getFirestoreClient } from '@/services/firebase';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { getFirestoreClient, authenticateFirebase } from '@/services/firebase';
+import { useAuth } from '@/context';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
-export function useMyItemsChanges(enabled: boolean) {
+export function useMyItemsChanges(enabled: boolean): {
+  changedIds: string[];
+  clearChangedIds: () => void;
+} {
+  const { getAccessToken, isAuthenticated } = useAuth();
   const [changedIds, setChangedIds] = useState<string[]>([]);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const unsubRef = useRef<(() => void) | null>(null);
+
+  const clearChangedIds = useCallback(() => {
+    setChangedIds([]);
+  }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !isAuthenticated) return;
 
-    const firestore = getFirestoreClient();
-    const listener = firestore.collection('myItems').onSnapshot((snapshot) => {
-      const ids = snapshot.docs.map((doc) => doc.id);
-      setChangedIds(ids);
-    });
+    void (async () => {
+      const token = await getAccessToken();
+      await authenticateFirebase(token);
+      const db = getFirestoreClient();
+      const q = query(collection(db, 'myItems'), where('userId', '==', 'current'));
 
-    unsubscribeRef.current = () => listener();
+      unsubRef.current = onSnapshot(q, (snapshot) => {
+        const ids = snapshot.docChanges().map((change) => change.doc.id);
+        setChangedIds((prev) => [...new Set([...prev, ...ids])]);
+      });
+    })();
 
     return () => {
-      unsubscribeRef.current?.();
+      unsubRef.current?.();
     };
-  }, [enabled]);
+  }, [enabled, isAuthenticated, getAccessToken]);
 
-  return { changedIds };
+  return { changedIds, clearChangedIds };
 }
 ```
 
