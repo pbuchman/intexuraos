@@ -33,8 +33,14 @@ head -30 CHANGELOG.md
 # Check for version tags
 git tag -l "v*" --sort=-v:refname | head -5
 
-# Get the date of the last release tag
-git log -1 --format="%ci" v<last-version>
+# Get the date of the last release tag (with first-release guard)
+LAST_TAG=$(git tag -l "v*" --sort=-v:refname | head -1)
+if [[ -z "$LAST_TAG" ]]; then
+  echo "No previous release tag found. This is the first release."
+  LAST_TAG_DATE=$(git log --reverse --format="%ci" | head -1 | cut -d' ' -f1)
+else
+  LAST_TAG_DATE=$(git log -1 --format="%ci" $LAST_TAG | cut -d' ' -f1)
+fi
 ```
 
 ### 3. Collect ALL Data (Do Not Process Yet)
@@ -45,7 +51,7 @@ git log -1 --format="%ci" v<last-version>
 
 ```bash
 # List PRs merged since last release date
-gh pr list --state merged --base main --json number,title,body,mergedAt,author,labels --limit 100 | \
+gh pr list --state merged --base development --json number,title,body,mergedAt,author,labels --limit 100 | \
   jq --arg date "<last-release-date>" '[.[] | select(.mergedAt > $date)]'
 ```
 
@@ -136,6 +142,22 @@ Change Manifest:
 
 This manifest is the SINGLE source for all subsequent steps.
 
+#### 3.6 Validate Manifest
+
+If the manifest is empty (no PRs, no direct commits):
+
+Use `AskUserQuestion`:
+
+```
+"No changes detected since last release. How to proceed?"
+```
+
+**Options:**
+
+1. "Abort release" (Recommended)
+2. "Create version-only release" — bump version with empty changelog
+3. "Let me check" — pause for manual investigation
+
 ### 4. Net Out Cancelled Changes
 
 **CRITICAL:** Before categorizing, detect and remove changes that cancel each other out within this release window.
@@ -213,6 +235,51 @@ For each change, synthesize the best description by combining:
 
 Prefer user-facing language from Linear issues over technical language from commits.
 
+### 5.1 Prioritize Changes with User
+
+**CRITICAL:** Before building the changelog, present each categorized change to the user for priority assignment. This determines ordering in the CHANGELOG and which items become GitHub Release highlights.
+
+Use `AskUserQuestion` for each change (or batch related changes):
+
+```
+Change: [verb] [description]
+Source: PR #XXX / INT-XXX
+Category: [Feature | Bug Fix | Infrastructure]
+
+What priority should this have in the release notes?
+```
+
+**Options:**
+
+1. "High" — Top of changelog, candidate for GitHub Release highlights
+2. "Medium" — Included in changelog at standard position
+3. "Low" — Included at bottom of changelog
+4. "Skip" — Omit from changelog entirely
+
+**Batching rule:** If there are more than 8 changes, group related changes (e.g., "3 bug fixes for WhatsApp service") and ask about the group. Ask individually only for features and breaking changes.
+
+**After prioritization:**
+
+| Priority | CHANGELOG position          | GitHub Release Highlights |
+| -------- | --------------------------- | ------------------------- |
+| High     | First within its verb group | Top 3 become Highlights   |
+| Medium   | Standard position           | Not in Highlights         |
+| Low      | Last within its verb group  | Not in Highlights         |
+| Skip     | Omitted entirely            | Not in Highlights         |
+
+**Ordering within the CHANGELOG:**
+
+```
+1. Breaking changes (Removed) — always first, regardless of priority
+2. High-priority entries — ordered by verb: Added → Changed → Fixed → Improved
+3. Medium-priority entries — same verb ordering
+4. Low-priority entries — same verb ordering
+```
+
+**GitHub Release Highlights:** Pick the top 3 High-priority items. If fewer than 3 are High, promote the top Medium items.
+
+---
+
 ### 6. Determine Semver Version Bump
 
 Based on the categorized changes (post-netting):
@@ -272,6 +339,8 @@ ELSE:
 | Most recent at top      | New version goes above existing versions                   |
 | No netted-out changes   | If added AND removed in this release, omit entirely        |
 | Combine related commits | Multiple commits on same feature = single changelog entry  |
+| Priority ordering       | High → Medium → Low within each verb group (from Step 5.1) |
+| Skip = omit             | Changes marked "Skip" in Step 5.1 are not included         |
 
 **Verb Usage:**
 
@@ -313,7 +382,63 @@ If a parent Linear issue has subissues, decide:
 - Dependency updates (unless security-related)
 - **Changes that were netted out (added then removed in same release)**
 
+### 7.1 Build GitHub Release Body
+
+After building the CHANGELOG entry, generate a richer GitHub Release body. This is written to `/tmp/release-notes-$NEW_VERSION.md` for use by `gh release create` in Phase 6.
+
+**Format:**
+
+```markdown
+## Highlights
+
+- [Top 3 most impactful changes, one sentence each]
+
+## What's Changed
+
+### Features
+
+- [feature entries from changelog]
+
+### Bug Fixes
+
+- [fix entries from changelog]
+
+### Infrastructure & DevEx
+
+- [changed/improved entries from changelog]
+
+## CHANGELOG
+
+See [CHANGELOG.md](https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md) for all versions.
+
+**Full Changelog**: https://github.com/pbuchman/intexuraos/compare/vPREVIOUS...vNEW_VERSION
+```
+
+**Rules:**
+
+| Rule                    | Details                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| Highlights first        | Pick the top 3 High-priority items from Step 5.1                     |
+| Categorize changes      | Group by Features, Bug Fixes, Infrastructure & DevEx                 |
+| Skip empty categories   | If no bug fixes, omit the Bug Fixes section                         |
+| Reuse CHANGELOG wording | Use the same verb-first entries from Step 7                          |
+| Include comparison link | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view           |
+| Write to temp file      | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.9 |
+
+**Comparison link:** Use the previous version tag (from Step 2) as `vPREVIOUS`.
+
+```bash
+# Write the release notes file
+cat > /tmp/release-notes-$NEW_VERSION.md << 'RELEASE_EOF'
+[generated content]
+RELEASE_EOF
+```
+
+---
+
 ### 8. Update All Package Versions
+
+> **Note:** Steps 8-9 are for standalone `/semver-release` invocations only. When invoked from `full-release.md`, these steps are skipped — Phase 6 handles versioning and committing.
 
 **CRITICAL:** All package.json files must have the same version.
 
@@ -322,7 +447,7 @@ If a parent Linear issue has subissues, decide:
 NEW_VERSION="X.Y.Z"
 
 # Update root package.json
-pnpm version $NEW_VERSION --no-git-tag-version
+jq ".version = \"$NEW_VERSION\"" package.json > tmp.json && mv tmp.json package.json
 
 # Update all apps (excluding dist directories)
 for app in apps/*/package.json; do
