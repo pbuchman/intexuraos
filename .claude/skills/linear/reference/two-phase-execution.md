@@ -113,19 +113,25 @@ For complex architectural decisions that need preserved reasoning:
 
 **Trigger:** Issue HAS `code-task` label
 
-**Purpose:** Autonomous code execution
+**Purpose:** Autonomous code execution with iterative code review
 
 **Outputs:**
 
-1. Implementation code
-2. Tests (from Test Requirements)
-3. PR with passing CI
-4. Linear state updated to "In Review"
+1. Implementation plan (non-trivial tasks, via `writing-plans` skill)
+2. Implementation code
+3. Tests (from Test Requirements)
+4. PR with passing CI
+5. Dual code review loop (opus + sonnet in parallel, combined findings)
+6. PR comments with combined review summary and triage
+7. Linear state updated to "In Review"
+8. Turn summary (~5 statements for WhatsApp notification)
+9. Review iteration count
 
 **Exit Conditions:**
 
+- Code review returns zero Critical/Important issues
 - Completion validator verifies all artifacts present
-- Agent must state: PR, CI passed, Linear updated
+- Agent must state: PR, CI passed, review iterations, turn summary, Linear updated
 
 ## Label-Based Transitions
 
@@ -159,9 +165,11 @@ The `completion-validator.sh` hook enforces output requirements:
 
 **Required artifacts (all must be mentioned):**
 
-- PR created (URL or `#XXX` format)
-- CI passed (`CI passed` or `ci:tracked passed`)
+- PR created (URL format)
+- CI passed (`ci:tracked passed`)
 - Linear updated (`In Review` state)
+- Review iterations count
+- Turn summary (~5 statements)
 
 **Hook blocks if:** Any artifact missing from recent responses
 
