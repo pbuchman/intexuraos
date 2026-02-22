@@ -38,8 +38,7 @@ fi
 ### 1.3 Get Merged PRs Since Last Release
 
 ```bash
-# Get date of last tag for filtering
-LAST_TAG_DATE=$(git log -1 --format="%ci" $LAST_TAG | cut -d' ' -f1)
+# LAST_TAG_DATE was computed in step 1.2 (with first-release guard)
 
 # List merged PRs since that date
 gh pr list --state merged --base development --json number,title,body,mergedAt,author --limit 100 | \
@@ -63,11 +62,19 @@ MODIFIED_SERVICES="$MODIFIED_APPS $MODIFIED_WORKERS"
 echo "All modified services: $MODIFIED_SERVICES"
 ```
 
-### 1.5 Determine Version Bump
+### 1.5 Run Semver Analysis with Prioritization
 
-Execute the full semver analysis per step 1.7 below. The version bump is an output of that process.
+Execute the full semver-release analysis per `semver-release.md` Steps 3-7:
 
-Calculate new version: `CURRENT_VERSION` → `NEW_VERSION`
+1. Collect all data (3.1-3.5)
+2. Validate manifest is non-empty (3.6)
+3. Net out cancelled changes (4)
+4. Categorize remaining changes (5)
+5. Prioritize with user via AskUserQuestion (5.1)
+6. Determine version bump (6)
+7. Build changelog entry (7) and GitHub Release body (7.1)
+
+Store results for Phase 6.
 
 ### 1.6 Ask for Release Focus
 
@@ -89,20 +96,6 @@ What should be highlighted in this release? (optional)
 1. "Auto-detect from PRs" (Recommended)
 2. "Let me specify highlights"
 3. "Skip highlights"
-
-### 1.7 Run Semver Analysis with Prioritization
-
-Execute the full semver-release analysis per `semver-release.md` Steps 3-7:
-
-1. Collect all data (3.1-3.5)
-2. Validate manifest is non-empty (3.6)
-3. Net out cancelled changes (4)
-4. Categorize remaining changes (5)
-5. Prioritize with user via AskUserQuestion (5.1)
-6. Determine version bump (6)
-7. Build changelog entry (7) and GitHub Release body (7.1)
-
-Store results for Phase 6.
 
 ---
 
@@ -262,10 +255,10 @@ Approve this "What's New" section?
 
 ### 4.5 Apply Changes
 
-If approved, use Edit tool to:
+If approved, use Edit tool to apply the "What's New" section following the accumulation pattern (see step 4.6):
 
-1. Replace existing "What's New in vX.Y.Z" section
-2. Update version number in section header
+- **Patch/minor release:** APPEND new tiles to the existing section, update version in header
+- **Major release:** Replace entire section with only the new release tiles (move old tiles to VersionHistorySection)
 
 ### 4.6 Accumulation Pattern (MANDATORY)
 
@@ -603,6 +596,7 @@ else
     echo "  git push origin main"
     echo "  git checkout development"
     # STOP and ask user for guidance
+    exit 1
   fi
   git push origin main
   git checkout development
@@ -678,14 +672,14 @@ CURRENT=$(git branch --show-current)
 
 **All checks must PASS.** If any check fails:
 
-| Failure                    | Recovery                                                  |
-| -------------------------- | --------------------------------------------------------- |
-| Tag not on main            | Delete tag, re-tag on correct SHA, push                                          |
-| GitHub Release missing     | Run `gh release create` manually                                                 |
-| CHANGELOG missing version  | Edit CHANGELOG.md, create new fixup commit, push normally                        |
-| Package version mismatch   | Fix mismatched files, create new fixup commit, push normally                     |
-| Merge to main fails        | Detect conflicts, STOP, ask user for guidance. Do NOT force-push or auto-resolve |
-| Wrong branch               | `git checkout development`                                                       |
+| Failure                  | Recovery                                                                         |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| Tag not on main          | Delete tag, re-tag on correct SHA, push                                          |
+| GitHub Release missing   | Run `gh release create` manually                                                 |
+| CHANGELOG missing version | Edit CHANGELOG.md, create new fixup commit, push normally                        |
+| Package version mismatch | Fix mismatched files, create new fixup commit, push normally                     |
+| Merge to main fails      | Detect conflicts, STOP, ask user for guidance. Do NOT force-push or auto-resolve |
+| Wrong branch             | `git checkout development`                                                       |
 
 ### 6.11 Display Summary
 
@@ -723,12 +717,12 @@ If user skips all checkpoint phases (3, 4, 5):
 
 When resuming from `--phase N`, reconstruct state from:
 
-| Variable          | Source when resuming                                       |
-| ----------------- | ---------------------------------------------------------- |
-| NEW_VERSION       | `jq -r '.version' package.json`                           |
-| LAST_TAG          | `git tag -l "v*" --sort=-v:refname \| head -1`            |
-| MODIFIED_SERVICES | Re-run step 1.4 detection                                 |
-| Change Manifest   | Re-run semver analysis (steps 3-7) if resuming before Phase 6 |
+| Variable          | Source when resuming                                              |
+| ----------------- | ----------------------------------------------------------------- |
+| NEW_VERSION       | `jq -r '.version' package.json`                                  |
+| LAST_TAG          | `git tag -l "v*" --sort=-v:refname \| head -1`                   |
+| MODIFIED_SERVICES | Re-run step 1.4 detection                                        |
+| Change Manifest   | Re-run semver analysis (steps 3-7) if resuming before Phase 6    |
 
 For Phase 6 resume: version and changelog are already committed, so read from files.
 

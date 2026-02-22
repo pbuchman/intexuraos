@@ -423,7 +423,7 @@ See [CHANGELOG.md](https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md
 | Skip empty categories   | If no bug fixes, omit the Bug Fixes section                         |
 | Reuse CHANGELOG wording | Use the same verb-first entries from Step 7                          |
 | Include comparison link | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view           |
-| Write to temp file      | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.8 |
+| Write to temp file      | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.9 |
 
 **Comparison link:** Use the previous version tag (from Step 2) as `vPREVIOUS`.
 
@@ -437,6 +437,8 @@ RELEASE_EOF
 ---
 
 ### 8. Update All Package Versions
+
+> **Note:** Steps 8-9 are for standalone `/semver-release` invocations only. When invoked from `full-release.md`, these steps are skipped — Phase 6 handles versioning and committing.
 
 **CRITICAL:** All package.json files must have the same version.
 
