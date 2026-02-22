@@ -518,16 +518,12 @@ OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY pnpm run embed-docs
 
 **Environment note:** The `FIRESTORE_EMULATOR_HOST=""` and `GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman` overrides are required because direnv sets emulator variables locally. Without them, the script targets the non-running emulator instead of production Firestore.
 
-### 6.4 Stage All Changes
+### 6.4 Stage & Commit on Development
 
 ```bash
 git status
 git add -A
-```
 
-### 6.5 Commit Release
-
-```bash
 NEW_VERSION="X.Y.Z"  # From Phase 1
 
 git commit -m "$(cat <<'EOF'
@@ -540,21 +536,116 @@ Release vX.Y.Z
 - Website improvements
 - Refreshed RAG embeddings (doc_embeddings)
 
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 EOF
 )"
 ```
 
-### 6.6 Create and Push Tag
+### 6.5 Push Development
 
 ```bash
-git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+git push origin development
+```
+
+### 6.6 Merge Development → Main
+
+```bash
+# Check if a dev→main PR already exists
+EXISTING_PR=$(gh pr list --base main --head development --json number --jq '.[0].number // empty')
+
+if [ -n "$EXISTING_PR" ]; then
+  # Merge existing PR
+  gh pr merge $EXISTING_PR --merge
+else
+  # Fast path: merge directly
+  git checkout main
+  git pull origin main
+  git merge development
+  git push origin main
+  git checkout development
+fi
+```
+
+**Why merge before tagging?** Tags should point to `main` — the canonical release branch. Tagging on `development` means the tag references a commit that may never reach `main` in the same form (merge commits change SHAs).
+
+### 6.7 Tag on Main
+
+```bash
+# Tag the merge commit on main (not development)
+git fetch origin main
+MAIN_SHA=$(git rev-parse origin/main)
+git tag -a "v$NEW_VERSION" "$MAIN_SHA" -m "Release v$NEW_VERSION"
 git push origin "v$NEW_VERSION"
 ```
 
-### 6.7 Display Summary
+### 6.8 Create GitHub Release
+
+```bash
+gh release create "v$NEW_VERSION" \
+  --title "v$NEW_VERSION" \
+  --notes-file /tmp/release-notes-$NEW_VERSION.md \
+  --target main
+```
+
+The release notes file is built from the CHANGELOG entry (generated in step 6.2) plus a structured header with highlights. See the **Build GitHub Release Body** step in `semver-release.md` for the generation logic.
+
+### 6.9 Post-Release Validation
+
+Run all checks and report results. **Do NOT skip any check.**
+
+```bash
+# 1. Tag points to main
+echo "=== Tag target ==="
+TAG_COMMIT=$(git rev-parse "v$NEW_VERSION^{}")
+git branch -r --contains "$TAG_COMMIT" | grep "origin/main" && echo "PASS: Tag on main" || echo "FAIL: Tag NOT on main"
+
+# 2. GitHub Release exists and has content
+echo "=== GitHub Release ==="
+gh release view "v$NEW_VERSION" --json tagName,targetCommitish,body --jq '{tag: .tagName, target: .targetCommitish, bodyLength: (.body | length)}'
+
+# 3. CHANGELOG contains the version
+echo "=== CHANGELOG ==="
+grep -q "## $NEW_VERSION" CHANGELOG.md && echo "PASS: Version in CHANGELOG" || echo "FAIL: Version NOT in CHANGELOG"
+
+# 4. All package.json versions match
+echo "=== Package versions ==="
+MISMATCH=0
+for f in package.json apps/*/package.json packages/*/package.json workers/*/package.json; do
+  if [[ ! "$f" == *"/dist/"* ]] && [[ -f "$f" ]]; then
+    version=$(jq -r '.version' "$f")
+    if [[ "$version" != "$NEW_VERSION" ]]; then
+      echo "MISMATCH: $f has $version"
+      MISMATCH=1
+    fi
+  fi
+done
+[[ $MISMATCH -eq 0 ]] && echo "PASS: All versions match" || echo "FAIL: Version mismatch"
+
+# 5. Current branch is development (not stuck on main)
+echo "=== Current branch ==="
+CURRENT=$(git branch --show-current)
+[[ "$CURRENT" == "development" ]] && echo "PASS: On development" || echo "WARN: On $CURRENT (expected development)"
+```
+
+**All checks must PASS.** If any check fails:
+
+| Failure                    | Recovery                                                  |
+| -------------------------- | --------------------------------------------------------- |
+| Tag not on main            | Delete tag, re-tag on correct SHA, push                   |
+| GitHub Release missing     | Run `gh release create` manually                          |
+| CHANGELOG missing version  | Edit CHANGELOG, amend commit, force-push development      |
+| Package version mismatch   | Fix mismatched files, amend commit                        |
+| Wrong branch               | `git checkout development`                                |
+
+### 6.10 Display Summary
 
 Use template from [`templates/release-summary.md`](../templates/release-summary.md).
+
+Include the GitHub Release URL and validation results in the summary output:
+
+```
+https://github.com/pbuchman/intexuraos/releases/tag/v$NEW_VERSION
+```
 
 ---
 

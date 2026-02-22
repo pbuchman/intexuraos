@@ -213,6 +213,51 @@ For each change, synthesize the best description by combining:
 
 Prefer user-facing language from Linear issues over technical language from commits.
 
+### 5.1 Prioritize Changes with User
+
+**CRITICAL:** Before building the changelog, present each categorized change to the user for priority assignment. This determines ordering in the CHANGELOG and which items become GitHub Release highlights.
+
+Use `AskUserQuestion` for each change (or batch related changes):
+
+```
+Change: [verb] [description]
+Source: PR #XXX / INT-XXX
+Category: [Feature | Bug Fix | Infrastructure]
+
+What priority should this have in the release notes?
+```
+
+**Options:**
+
+1. "High" — Top of changelog, candidate for GitHub Release highlights
+2. "Medium" — Included in changelog at standard position
+3. "Low" — Included at bottom of changelog
+4. "Skip" — Omit from changelog entirely
+
+**Batching rule:** If there are more than 8 changes, group related changes (e.g., "3 bug fixes for WhatsApp service") and ask about the group. Ask individually only for features and breaking changes.
+
+**After prioritization:**
+
+| Priority | CHANGELOG position          | GitHub Release Highlights |
+| -------- | --------------------------- | ------------------------- |
+| High     | First within its verb group | Top 3 become Highlights   |
+| Medium   | Standard position           | Not in Highlights         |
+| Low      | Last within its verb group  | Not in Highlights         |
+| Skip     | Omitted entirely            | Not in Highlights         |
+
+**Ordering within the CHANGELOG:**
+
+```
+1. Breaking changes (Removed) — always first, regardless of priority
+2. High-priority entries — ordered by verb: Added → Changed → Fixed → Improved
+3. Medium-priority entries — same verb ordering
+4. Low-priority entries — same verb ordering
+```
+
+**GitHub Release Highlights:** Pick the top 3 High-priority items. If fewer than 3 are High, promote the top Medium items.
+
+---
+
 ### 6. Determine Semver Version Bump
 
 Based on the categorized changes (post-netting):
@@ -272,6 +317,8 @@ ELSE:
 | Most recent at top      | New version goes above existing versions                   |
 | No netted-out changes   | If added AND removed in this release, omit entirely        |
 | Combine related commits | Multiple commits on same feature = single changelog entry  |
+| Priority ordering       | High → Medium → Low within each verb group (from Step 5.1) |
+| Skip = omit             | Changes marked "Skip" in Step 5.1 are not included         |
 
 **Verb Usage:**
 
@@ -312,6 +359,60 @@ If a parent Linear issue has subissues, decide:
 - CI/tooling config changes
 - Dependency updates (unless security-related)
 - **Changes that were netted out (added then removed in same release)**
+
+### 7.1 Build GitHub Release Body
+
+After building the CHANGELOG entry, generate a richer GitHub Release body. This is written to `/tmp/release-notes-$NEW_VERSION.md` for use by `gh release create` in Phase 6.
+
+**Format:**
+
+```markdown
+## Highlights
+
+- [Top 3 most impactful changes, one sentence each]
+
+## What's Changed
+
+### Features
+
+- [feature entries from changelog]
+
+### Bug Fixes
+
+- [fix entries from changelog]
+
+### Infrastructure & DevEx
+
+- [changed/improved entries from changelog]
+
+## CHANGELOG
+
+See [CHANGELOG.md](https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md) for all versions.
+
+**Full Changelog**: https://github.com/pbuchman/intexuraos/compare/vPREVIOUS...vNEW_VERSION
+```
+
+**Rules:**
+
+| Rule                    | Details                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| Highlights first        | Pick the top 3 High-priority items from Step 5.1                     |
+| Categorize changes      | Group by Features, Bug Fixes, Infrastructure & DevEx                 |
+| Skip empty categories   | If no bug fixes, omit the Bug Fixes section                         |
+| Reuse CHANGELOG wording | Use the same verb-first entries from Step 7                          |
+| Include comparison link | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view           |
+| Write to temp file      | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.8 |
+
+**Comparison link:** Use the previous version tag (from Step 2) as `vPREVIOUS`.
+
+```bash
+# Write the release notes file
+cat > /tmp/release-notes-$NEW_VERSION.md << 'RELEASE_EOF'
+[generated content]
+RELEASE_EOF
+```
+
+---
 
 ### 8. Update All Package Versions
 

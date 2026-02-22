@@ -13,7 +13,14 @@ Use this template to display the final summary after Phase 6 completes.
 
 - **Version:** vX.Y.Z
 - **Tag pushed to:** origin/vX.Y.Z
+- **Tagged on:** `main` (merge commit)
 - **Commit:** [short SHA]
+
+## GitHub Release
+
+- **URL:** https://github.com/pbuchman/intexuraos/releases/tag/vX.Y.Z
+- **Release notes:** Categorized with highlights, features, fixes, and infrastructure changes
+- **Target branch:** `main`
 
 ## Services Documented
 
@@ -54,6 +61,16 @@ Use this template to display the final summary after Phase 6 completes.
 - **Chunks uploaded:** [N]
 - **Collection:** `doc_embeddings` (production Firestore)
 
+## Post-Release Validation
+
+| Check                      | Result |
+| -------------------------- | ------ |
+| Tag points to `main`       | PASS   |
+| GitHub Release exists      | PASS   |
+| CHANGELOG contains version | PASS   |
+| All package.json versions  | PASS   |
+| Current branch             | PASS   |
+
 ## CI Status
 
 - **Final CI run:** PASSED
@@ -63,10 +80,7 @@ Use this template to display the final summary after Phase 6 completes.
 ## Next Steps
 
 ```bash
-# Create GitHub release (optional)
-gh release create vX.Y.Z --generate-notes
-
-# View release on GitHub
+# View the GitHub Release
 open https://github.com/pbuchman/intexuraos/releases/tag/vX.Y.Z
 
 # Deploy to production
@@ -86,11 +100,12 @@ Release complete.
 
 ### Tag Created
 
-| Field       | Source                                |
-| ----------- | ------------------------------------- |
-| Version     | From Phase 1 version calculation      |
-| Tag pushed  | After `git push origin v{version}`    |
-| Commit      | From `git rev-parse --short HEAD`     |
+| Field      | Source                                          |
+| ---------- | ----------------------------------------------- |
+| Version    | From Phase 1 version calculation                |
+| Tag pushed | After `git push origin v{version}`              |
+| Tagged on  | Always `main` — tag points to merge commit      |
+| Commit     | From `git rev-parse --short origin/main`        |
 
 ### Services Documented
 
@@ -120,6 +135,16 @@ For each of the 3 suggestions:
 | Skipped     | User did not select this suggestion  |
 | Failed      | Implementation encountered error     |
 
+### Post-Release Validation
+
+| Check                      | What It Verifies                                                    |
+| -------------------------- | ------------------------------------------------------------------- |
+| Tag points to `main`       | Tag's dereferenced commit exists on `origin/main`                   |
+| GitHub Release exists      | `gh release view` returns valid release data                        |
+| CHANGELOG contains version | `grep` finds `## X.Y.Z` in CHANGELOG.md                            |
+| All package.json versions  | Root + all apps/packages/workers package.json match new version     |
+| Current branch             | Working tree is on `development` (not stuck on `main`)              |
+
 ### CI Status
 
 | Field    | Source                                    |
@@ -141,11 +166,20 @@ If user skips all optional phases:
 
 - **Version:** vX.Y.Z
 - **Tag pushed to:** origin/vX.Y.Z
+- **Tagged on:** `main`
 - **Commit:** abc1234
+
+## GitHub Release
+
+- **URL:** https://github.com/pbuchman/intexuraos/releases/tag/vX.Y.Z
 
 ## Documentation
 
 All documentation updates were skipped by user request.
+
+## Post-Release Validation
+
+All 5 checks PASSED.
 
 ## CI Status
 
@@ -154,7 +188,8 @@ All documentation updates were skipped by user request.
 ## Next Steps
 
 ```bash
-gh release create vX.Y.Z --generate-notes
+# View the GitHub Release
+open https://github.com/pbuchman/intexuraos/releases/tag/vX.Y.Z
 ````
 
 ---

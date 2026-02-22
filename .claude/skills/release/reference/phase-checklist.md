@@ -105,11 +105,19 @@ Multiple Task calls in single message for parallel execution
 - [ ] Update CHANGELOG.md with new version entry (Claude Code style)
 - [ ] Run `pnpm run ci:tracked` — **MUST PASS**
 - [ ] Refresh RAG embeddings: `pnpm run embed-docs` (with prod env overrides)
-- [ ] Stage all changes: `git add -A`
-- [ ] Commit with release message
-- [ ] Create tag: `git tag -a "vX.Y.Z"`
+- [ ] Stage & commit on `development`
+- [ ] Push `development` branch
+- [ ] Merge `development` → `main` (via existing PR or direct merge)
+- [ ] Tag on `main` (NOT `development`)
 - [ ] Push tag: `git push origin vX.Y.Z`
-- [ ] Display summary using template
+- [ ] Create GitHub Release with categorized release notes
+- [ ] **Post-release validation** — all 5 checks MUST pass:
+  - [ ] Tag points to commit on `main`
+  - [ ] GitHub Release exists and has correct content
+  - [ ] CHANGELOG.md contains new version entry
+  - [ ] All package.json versions match new version
+  - [ ] Current branch is `development`
+- [ ] Display summary using template (includes release URL and validation results)
 
 **Changelog Format (Claude Code Style):**
 
@@ -129,8 +137,29 @@ No subcategories, verb-first entries, single line each.
 pnpm run ci:tracked
 git add -A
 git commit -m "Release vX.Y.Z..."
-git tag -a "vX.Y.Z" -m "Release vX.Y.Z"
+git push origin development
+
+# Merge to main (via PR or direct)
+gh pr list --base main --head development --json number --jq '.[0].number // empty'
+gh pr merge $PR_NUMBER --merge
+# OR: git checkout main && git merge development && git push origin main
+
+# Tag on main
+git fetch origin main
+MAIN_SHA=$(git rev-parse origin/main)
+git tag -a "vX.Y.Z" "$MAIN_SHA" -m "Release vX.Y.Z"
 git push origin "vX.Y.Z"
+
+# GitHub Release
+gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/release-notes-X.Y.Z.md --target main
+
+# Post-release validation
+TAG_COMMIT=$(git rev-parse "vX.Y.Z^{}")
+git branch -r --contains "$TAG_COMMIT" | grep "origin/main"        # Check 1: tag on main
+gh release view "vX.Y.Z" --json tagName                            # Check 2: release exists
+grep -q "## X.Y.Z" CHANGELOG.md                                    # Check 3: changelog entry
+node -e "console.log(require('./package.json').version)"            # Check 4: version match
+git branch --show-current                                           # Check 5: on development
 ```
 
 **Template:** `templates/release-summary.md`
@@ -139,15 +168,22 @@ git push origin "vX.Y.Z"
 
 ## Quick Commands Reference
 
-| Action                   | Command                                        |
-| ------------------------ | ---------------------------------------------- |
-| Get current version      | `cat package.json \| jq -r '.version'`         |
-| Get last tag             | `git tag -l "v*" --sort=-v:refname \| head -1` |
-| List merged PRs          | `gh pr list --state merged --base development` |
-| Detect modified services | `git diff --name-only $TAG..HEAD -- apps/`     |
-| Run CI                   | `pnpm run ci:tracked`                          |
-| Create tag               | `git tag -a "vX.Y.Z" -m "Release vX.Y.Z"`      |
-| Push tag                 | `git push origin vX.Y.Z`                       |
+| Action                   | Command                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| Get current version      | `cat package.json \| jq -r '.version'`                                          |
+| Get last tag             | `git tag -l "v*" --sort=-v:refname \| head -1`                                  |
+| List merged PRs          | `gh pr list --state merged --base development`                                  |
+| Detect modified services | `git diff --name-only $TAG..HEAD -- apps/`                                      |
+| Run CI                   | `pnpm run ci:tracked`                                                           |
+| Push development         | `git push origin development`                                                   |
+| Check existing PR        | `gh pr list --base main --head development --json number`                       |
+| Merge PR                 | `gh pr merge $PR_NUMBER --merge`                                                |
+| Tag on main              | `git tag -a "vX.Y.Z" "$(git rev-parse origin/main)" -m "Release vX.Y.Z"`       |
+| Push tag                 | `git push origin vX.Y.Z`                                                        |
+| Create GitHub Release    | `gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/release-notes-X.Y.Z.md --target main` |
+| Validate tag on main     | `git branch -r --contains "$(git rev-parse vX.Y.Z^{})" \| grep origin/main`                          |
+| Validate GitHub Release  | `gh release view "vX.Y.Z" --json tagName`                                                             |
+| Validate CHANGELOG entry | `grep -q "## X.Y.Z" CHANGELOG.md`                                                                     |
 
 ---
 
@@ -182,13 +218,16 @@ At each checkpoint (Phases 3, 4, 5):
 
 ## Error Recovery
 
-| Error                         | Recovery                                      |
-| ----------------------------- | --------------------------------------------- |
-| CI fails in Phase 6           | Fix issues, re-run CI, then commit            |
-| service-scribe agent fails    | Log error, continue with other services       |
-| RAG embeddings fail           | Log error, continue release (re-run manually) |
-| User declines all checkpoints | Proceed with version-only release             |
-| Tool unavailable              | ABORT immediately with clear error            |
+| Error                         | Recovery                                                  |
+| ----------------------------- | --------------------------------------------------------- |
+| CI fails in Phase 6           | Fix issues, re-run CI, then commit                        |
+| service-scribe agent fails    | Log error, continue with other services                   |
+| RAG embeddings fail           | Log error, continue release (re-run manually)             |
+| User declines all checkpoints | Proceed with version-only release                         |
+| Tool unavailable              | ABORT immediately with clear error                        |
+| Merge to main fails           | Check for conflicts, resolve manually, retry              |
+| GitHub Release creation fails | Log error, provide manual `gh release create` command     |
+| Existing dev→main PR blocked  | Fall back to direct merge or report blocker               |
 
 ---
 
