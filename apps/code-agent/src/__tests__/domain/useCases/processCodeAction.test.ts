@@ -744,4 +744,84 @@ describe('processCodeAction', () => {
       'Failed to send task started notification'
     );
   });
+
+  it('stores sanitized prompt when prompt contains secret patterns', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-sanitized',
+        userId: 'user-789',
+        prompt: 'Use AKIAIOSFODNN7EXAMPLE to access bucket',
+        sanitizedPrompt: 'Use [REDACTED_AWS_KEY] to access bucket',
+        systemPromptHash: 'hash-123',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      })
+    );
+
+    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+      ok({ dispatched: true, workerLocation: 'mac' })
+    );
+
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-sanitized',
+        userId: 'user-789',
+        prompt: 'Use AKIAIOSFODNN7EXAMPLE to access bucket',
+        sanitizedPrompt: 'Use [REDACTED_AWS_KEY] to access bucket',
+        systemPromptHash: 'hash-123',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        cancelNonce: 'abcd',
+        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      })
+    );
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: 'Use AKIAIOSFODNN7EXAMPLE to access bucket',
+        workerType: 'auto',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+
+    // Verify codeTaskRepo.create was called with sanitized prompt
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Use AKIAIOSFODNN7EXAMPLE to access bucket',
+        sanitizedPrompt: 'Use [REDACTED_AWS_KEY] to access bucket',
+      })
+    );
+
+    // Verify Linear service received sanitized prompt, not raw prompt
+    expect(linearIssueService.ensureIssueExists).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskPrompt: 'Use [REDACTED_AWS_KEY] to access bucket',
+      })
+    );
+  });
 });

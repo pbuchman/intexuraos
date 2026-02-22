@@ -13,6 +13,7 @@ import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import { submitToPhase2 } from '../domain/usecases/submitToPhase2.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
+import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
@@ -1181,12 +1182,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('RATE_LIMITED', error.message);
       }
 
+      // Sanitize prompt early so raw prompt never leaks to external services
+      const sanitizedPromptText = sanitizePrompt(body.prompt);
+
       // Ensure Linear issue exists (create if not provided)
       const ensureParams: {
         userId: string;
         linearIssueId?: string;
         taskPrompt: string;
-      } = { userId, taskPrompt: body.prompt };
+      } = { userId, taskPrompt: sanitizedPromptText };
       if ('linearIssueId' in body && body.linearIssueId !== undefined) {
         ensureParams.linearIssueId = body.linearIssueId;
       }
@@ -1218,7 +1222,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         id: taskId,
         userId,
         prompt: body.prompt,
-        sanitizedPrompt: body.prompt.trim().replace(/\s+/g, ' '),
+        sanitizedPrompt: sanitizedPromptText,
         systemPromptHash: 'default', // TODO: Use actual system prompt hash
         workerType: body.workerType ?? 'auto',
         workerLocation: 'pending', // Updated after dispatch with actual worker location

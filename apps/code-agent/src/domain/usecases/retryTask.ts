@@ -18,6 +18,7 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 
 /**
  * Cool-off period before retry is allowed (1 minute).
@@ -253,9 +254,11 @@ export async function retryTask(
   };
 
   // Step 6: Reconstruct prompt with additional context
-  let retryPrompt = originalTask.prompt;
+  // Use sanitizedPrompt (what the original worker received) as the base, not the raw prompt,
+  // to avoid re-exposing credentials that were already stripped on the first dispatch.
+  let retryPrompt = originalTask.sanitizedPrompt;
   if (additionalContext !== undefined && additionalContext.trim().length > 0) {
-    retryPrompt = `${originalTask.prompt}
+    retryPrompt = `${originalTask.sanitizedPrompt}
 
 ---
 
@@ -274,7 +277,7 @@ ${additionalContext.trim()}
     id: retryTaskId,
     userId,
     prompt: retryPrompt,
-    sanitizedPrompt: retryPrompt,
+    sanitizedPrompt: sanitizePrompt(retryPrompt),
     systemPromptHash: originalTask.systemPromptHash,
     workerType: originalTask.workerType,
     // Safe to access [0] because we return early if enabledWorkers.length === 0
@@ -413,15 +416,17 @@ ${additionalContext.trim()}
     }
 
     // Step 12: Add comment to Linear issue
+    // Sanitize additionalContext before embedding in Linear comment to prevent secret leakage
+    /* v8 ignore start -- ts-type: ternary operator with optional check creates type narrowing branch @preserve */
+    const additionalContextSection =
+      additionalContext !== undefined && additionalContext.trim().length > 0
+        ? `\n\n**Additional context provided:** ${sanitizePrompt(additionalContext.trim())}`
+        : '';
+    /* v8 ignore stop @preserve */
+
     const commentBody = `Retrying ${originalTask.status} task **${originalTaskId}**.
 
-**New task:** ${retryTask.id}
-
-/* v8 ignore start -- ts-type: ternary operator with optional check creates type narrowing branch @preserve */
-${additionalContext !== undefined && additionalContext.trim().length > 0
-  ? `**Additional context provided:** ${additionalContext.trim()}`
-  : ''}
-/* v8 ignore stop @preserve */
+**New task:** ${retryTask.id}${additionalContextSection}
 
 ---
 
