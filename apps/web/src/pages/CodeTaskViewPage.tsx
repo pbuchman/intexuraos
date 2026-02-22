@@ -627,7 +627,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   const prevLogCountRef = useRef(0);
 
   // Tool block collapsing
-  const { bodyLineMap } = useMemo(() => {
+  const bodyLineMap = useMemo(() => {
     const blocks: ToolBlock[] = [];
     let current: ToolBlock | null = null;
 
@@ -671,7 +671,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
         map.set(j, block);
       }
     }
-    return { blocks, bodyLineMap: map };
+    return map;
   }, [logs]);
 
   // Auto-scroll when new logs arrive and follow mode is on
@@ -719,10 +719,10 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     }).catch(() => { /* clipboard unavailable */ });
   }, [logs]);
 
-  const toggleCompact = (): void => {
+  const toggleCompact = useCallback((): void => {
     setCompactMode((prev) => !prev);
     setBlockOverrides(new Set());
-  };
+  }, []);
 
   const toggleBlock = useCallback((headerIdx: number): void => {
     setBlockOverrides((prev) => {
@@ -780,7 +780,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
                 }`}
               >
-                {compactMode ? 'Compact' : 'Expand All'}
+                {compactMode ? 'Collapse All' : 'Expand All'}
               </button>
               <button
                 type="button"
@@ -972,8 +972,16 @@ const MemoLogLineRow = memo(function LogLineRow({ line, collapsible, collapsed, 
     const Chevron = collapsed === true ? ChevronRight : ChevronDown;
     return (
       <div
+        role="button"
+        tabIndex={0}
         className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}${extraClass} cursor-pointer select-none flex items-start gap-1 hover:bg-slate-800/50 -mx-1 px-1 rounded`}
         onClick={(): void => { if (headerIdx !== undefined) onToggle?.(headerIdx); }}
+        onKeyDown={(e): void => {
+          if ((e.key === 'Enter' || e.key === ' ') && headerIdx !== undefined) {
+            e.preventDefault();
+            onToggle?.(headerIdx);
+          }
+        }}
       >
         <Chevron className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" />
         <span className="flex-1">
@@ -994,5 +1002,6 @@ const MemoLogLineRow = memo(function LogLineRow({ line, collapsible, collapsed, 
 }, (prev, next) =>
   prev.line === next.line &&
   prev.collapsed === next.collapsed &&
-  prev.collapsible === next.collapsible
+  prev.collapsible === next.collapsible &&
+  prev.hiddenCount === next.hiddenCount
 );
