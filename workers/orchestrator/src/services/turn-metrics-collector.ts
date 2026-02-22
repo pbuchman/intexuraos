@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { glob } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
 import { join } from 'node:path';
+import { availableParallelism } from 'node:os';
 import type { Logger } from '@intexuraos/common-core';
 
 export interface TurnMetrics {
@@ -67,8 +68,6 @@ interface TokenAggregation {
   apiCallCount: number;
 }
 
-const CPU_CORES = 2; // Container allocation
-
 export class TurnMetricsCollector {
   constructor(
     private readonly config: TurnMetricsCollectorConfig,
@@ -85,9 +84,10 @@ export class TurnMetricsCollector {
     try {
       const cgroupPath = `/sys/fs/cgroup/system.slice/docker-${params.containerId}.scope`;
 
-      const [cpuTimeSeconds, peakMemoryMB, sessionData] = await Promise.all([
+      const [cpuTimeSeconds, peakMemoryMB, cpuCores, sessionData] = await Promise.all([
         this.readCpuTimeSec(cgroupPath),
         this.readPeakMemoryMB(cgroupPath),
+        this.readCpuCores(cgroupPath),
         this.parseSessionJsonl(params.taskId, {
           startedAt: params.startedAt,
           completedAt: params.completedAt,
@@ -101,7 +101,7 @@ export class TurnMetricsCollector {
       const tokens = sessionData.tokens;
 
       const cpuUtilizationPercent =
-        wallTimeSeconds > 0 ? (cpuTimeSeconds / (wallTimeSeconds * CPU_CORES)) * 100 : 0;
+        wallTimeSeconds > 0 ? (cpuTimeSeconds / (wallTimeSeconds * cpuCores)) * 100 : 0;
       const idlePercent =
         wallTimeSeconds > 0
           ? ((timeClassification.apiWaitSeconds + timeClassification.backgroundWaitSeconds) /
@@ -114,7 +114,7 @@ export class TurnMetricsCollector {
         attempt: params.attempt,
         timestamp: params.completedAt,
         cpuTimeSeconds,
-        cpuCores: CPU_CORES,
+        cpuCores,
         peakMemoryMB,
         wallTimeSeconds,
         apiWaitSeconds: timeClassification.apiWaitSeconds,
@@ -175,6 +175,26 @@ export class TurnMetricsCollector {
       } catch {
         return 0;
       }
+    }
+  }
+
+  async readCpuCores(cgroupPath: string): Promise<number> {
+    try {
+      const content = await readFile(join(cgroupPath, 'cpu.max'), 'utf-8');
+      const match = /^(\S+)\s+(\d+)$/m.exec(content.trim());
+      if (match?.[1] !== undefined && match[2] !== undefined) {
+        if (match[1] === 'max') {
+          return availableParallelism();
+        }
+        const quota = parseInt(match[1], 10);
+        const period = parseInt(match[2], 10);
+        if (period > 0) {
+          return quota / period;
+        }
+      }
+      return availableParallelism();
+    } catch {
+      return availableParallelism();
     }
   }
 
