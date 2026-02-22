@@ -244,6 +244,23 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     }
   }
 
+  async clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(userId);
+      await docRef.update({
+        llmPreferences: FieldValue.delete(),
+        updatedAt: new Date().toISOString(),
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to clear LLM preferences: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
   async updateLlmPreferences(
     userId: string,
     defaultModel: LLMModel
