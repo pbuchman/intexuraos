@@ -992,6 +992,9 @@ module "api_docs_hub" {
     INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL              = "${module.bookmarks_agent.service_url}/openapi.json"
     INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL               = "${module.calendar_agent.service_url}/openapi.json"
     INTEXURAOS_CHAT_AGENT_OPENAPI_URL                   = "${module.chat_agent.service_url}/openapi.json"
+    INTEXURAOS_CODE_AGENT_OPENAPI_URL                   = "${module.code_agent.service_url}/openapi.json"
+    INTEXURAOS_LINEAR_AGENT_OPENAPI_URL                 = "${module.linear_agent.service_url}/openapi.json"
+    INTEXURAOS_WEB_AGENT_OPENAPI_URL                    = "${module.web_agent.service_url}/openapi.json"
   })
 
   depends_on = [
