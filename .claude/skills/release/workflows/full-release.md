@@ -24,19 +24,21 @@ If any fails, ABORT with clear error message.
 # Current version
 cat package.json | jq -r '.version'
 
-# Last release tag
+# Last release tag (with first-release guard)
 LAST_TAG=$(git tag -l "v*" --sort=-v:refname | head -1)
-echo "Last tag: $LAST_TAG"
-
-# Date of last release
-git log -1 --format="%ci" $LAST_TAG
+if [[ -z "$LAST_TAG" ]]; then
+  echo "No previous release tag found. This is the first release."
+  LAST_TAG_DATE=$(git log --reverse --format="%ci" | head -1 | cut -d' ' -f1)
+else
+  echo "Last tag: $LAST_TAG"
+  LAST_TAG_DATE=$(git log -1 --format="%ci" $LAST_TAG | cut -d' ' -f1)
+fi
 ```
 
 ### 1.3 Get Merged PRs Since Last Release
 
 ```bash
-# Get date of last tag for filtering
-LAST_TAG_DATE=$(git log -1 --format="%ci" $LAST_TAG | cut -d' ' -f1)
+# LAST_TAG_DATE was computed in step 1.2 (with first-release guard)
 
 # List merged PRs since that date
 gh pr list --state merged --base development --json number,title,body,mergedAt,author --limit 100 | \
@@ -60,17 +62,19 @@ MODIFIED_SERVICES="$MODIFIED_APPS $MODIFIED_WORKERS"
 echo "All modified services: $MODIFIED_SERVICES"
 ```
 
-### 1.5 Determine Version Bump
+### 1.5 Run Semver Analysis with Prioritization
 
-Follow the semver-release logic:
+Execute the full semver-release analysis per `semver-release.md` Steps 3-7:
 
-| Change Type       | Version Bump | Detection                      |
-| ----------------- | ------------ | ------------------------------ |
-| Breaking changes  | MAJOR        | `breaking` label, API removal  |
-| New features      | MINOR        | `feature` label, new endpoints |
-| Bug fixes/patches | PATCH        | `bug` label, `fix:` prefix     |
+1. Collect all data (3.1-3.5)
+2. Validate manifest is non-empty (3.6)
+3. Net out cancelled changes (4)
+4. Categorize remaining changes (5)
+5. Prioritize with user via AskUserQuestion (5.1)
+6. Determine version bump (6)
+7. Build changelog entry (7) and GitHub Release body (7.1)
 
-Calculate new version: `CURRENT_VERSION` → `NEW_VERSION`
+Store results for Phase 6.
 
 ### 1.6 Ask for Release Focus
 
@@ -251,10 +255,10 @@ Approve this "What's New" section?
 
 ### 4.5 Apply Changes
 
-If approved, use Edit tool to:
+If approved, use Edit tool to apply the "What's New" section following the accumulation pattern (see step 4.6):
 
-1. Replace existing "What's New in vX.Y.Z" section
-2. Update version number in section header
+- **Patch/minor release:** APPEND new tiles to the existing section, update version in header
+- **Major release:** Replace entire section with only the new release tiles (move old tiles to VersionHistorySection)
 
 ### 4.6 Accumulation Pattern (MANDATORY)
 
@@ -370,6 +374,12 @@ Combine audit results into EXACTLY 3 suggestions:
 | [IMPROVE] | Enhance hero section       | Reflect new capabilities | Medium |
 | [CONTENT] | Add testimonial/case study | Social proof             | Medium |
 
+**Selection rules:**
+
+- At least 1 release-driven suggestion
+- At least 1 Low effort suggestion
+- Maximum 1 High effort suggestion
+
 ### 5.6 CHECKPOINT
 
 Use `AskUserQuestion` tool:
@@ -465,6 +475,9 @@ if [[ $MISMATCH -eq 1 ]]; then
   exit 1
 fi
 echo "All package.json files updated to $NEW_VERSION"
+
+# Regenerate lock file after version changes
+pnpm install
 ```
 
 **Why all packages?** In a monorepo, version consistency ensures:
@@ -473,7 +486,20 @@ echo "All package.json files updated to $NEW_VERSION"
 - Deployment scripts can rely on consistent versioning
 - No confusion about which service is at which version
 
-### 6.2 CI Gate (MANDATORY)
+### 6.2 Update CHANGELOG.md and Release Notes
+
+Prepend the changelog entry built during Phase 1 semver analysis (see `semver-release.md` Step 7):
+
+1. Read current CHANGELOG.md
+2. Insert new `## X.Y.Z` section at the top (below any file header)
+3. Use the priority-ordered, verb-first entries from Step 7
+
+Also verify the GitHub Release notes file:
+
+- This was generated in Phase 1 step 1.5 per `semver-release.md` Step 7.1
+- Confirm `/tmp/release-notes-$NEW_VERSION.md` exists; if missing, rebuild per Step 7.1
+
+### 6.3 CI Gate (MANDATORY)
 
 ```bash
 pnpm run ci:tracked
@@ -486,7 +512,7 @@ pnpm run ci:tracked
 3. Re-run CI
 4. Do NOT proceed until CI passes
 
-### 6.3 Refresh RAG Embeddings
+### 6.4 Refresh RAG Embeddings
 
 After CI passes (all docs are finalized), re-generate embeddings for the chat-agent RAG pipeline:
 
@@ -518,16 +544,14 @@ OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY pnpm run embed-docs
 
 **Environment note:** The `FIRESTORE_EMULATOR_HOST=""` and `GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman` overrides are required because direnv sets emulator variables locally. Without them, the script targets the non-running emulator instead of production Firestore.
 
-### 6.4 Stage All Changes
+### 6.5 Stage & Commit on Development
 
 ```bash
 git status
-git add -A
-```
+git add CHANGELOG.md package.json pnpm-lock.yaml \
+  apps/*/package.json packages/*/package.json workers/*/package.json \
+  docs/ README.md apps/web/src/
 
-### 6.5 Commit Release
-
-```bash
 NEW_VERSION="X.Y.Z"  # From Phase 1
 
 git commit -m "$(cat <<'EOF'
@@ -540,21 +564,132 @@ Release vX.Y.Z
 - Website improvements
 - Refreshed RAG embeddings (doc_embeddings)
 
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 EOF
 )"
 ```
 
-### 6.6 Create and Push Tag
+### 6.6 Push Development
 
 ```bash
-git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+git push origin development
+```
+
+### 6.7 Merge Development → Main
+
+```bash
+# Check if a dev→main PR already exists
+EXISTING_PR=$(gh pr list --base main --head development --json number --jq '.[0].number // empty')
+
+if [ -n "$EXISTING_PR" ]; then
+  # Merge existing PR
+  gh pr merge $EXISTING_PR --merge
+else
+  # Direct merge path
+  git checkout main
+  git pull origin main
+  git merge development --no-edit
+  if [[ $? -ne 0 ]]; then
+    echo "MERGE CONFLICT detected. Resolve conflicts, then:"
+    echo "  git add <resolved-files>"
+    echo "  git merge --continue"
+    echo "  git push origin main"
+    echo "  git checkout development"
+    # STOP and ask user for guidance
+    exit 1
+  fi
+  git push origin main
+  git checkout development
+fi
+```
+
+**Why merge before tagging?** Tags should point to `main` — the canonical release branch. Tagging on `development` means the tag references a commit that may never reach `main` in the same form (merge commits change SHAs).
+
+### 6.8 Tag on Main
+
+```bash
+# Tag the merge commit on main (not development)
+git fetch origin main
+MAIN_SHA=$(git rev-parse origin/main)
+git tag -a "v$NEW_VERSION" "$MAIN_SHA" -m "Release v$NEW_VERSION"
 git push origin "v$NEW_VERSION"
 ```
 
-### 6.7 Display Summary
+### 6.9 Create GitHub Release
+
+```bash
+# Verify release notes file exists
+if [[ ! -f "/tmp/release-notes-$NEW_VERSION.md" ]]; then
+  echo "WARNING: Release notes file not found. Building from CHANGELOG..."
+  # Fallback: extract the current version's section from CHANGELOG.md
+fi
+
+gh release create "v$NEW_VERSION" \
+  --title "v$NEW_VERSION" \
+  --notes-file /tmp/release-notes-$NEW_VERSION.md \
+  --target main
+```
+
+The release notes file is built during step 6.2 (CHANGELOG and release notes generation). See the **Build GitHub Release Body** step in `semver-release.md` for the generation logic.
+
+### 6.10 Post-Release Validation
+
+Run all checks and report results. **Do NOT skip any check.**
+
+```bash
+# 1. Tag points to main
+echo "=== Tag target ==="
+TAG_COMMIT=$(git rev-parse "v$NEW_VERSION^{}")
+git branch -r --contains "$TAG_COMMIT" | grep "origin/main" && echo "PASS: Tag on main" || echo "FAIL: Tag NOT on main"
+
+# 2. GitHub Release exists and has content
+echo "=== GitHub Release ==="
+gh release view "v$NEW_VERSION" --json tagName,targetCommitish,body --jq '{tag: .tagName, target: .targetCommitish, bodyLength: (.body | length)}'
+
+# 3. CHANGELOG contains the version
+echo "=== CHANGELOG ==="
+grep -q "## $NEW_VERSION" CHANGELOG.md && echo "PASS: Version in CHANGELOG" || echo "FAIL: Version NOT in CHANGELOG"
+
+# 4. All package.json versions match
+echo "=== Package versions ==="
+MISMATCH=0
+for f in package.json apps/*/package.json packages/*/package.json workers/*/package.json; do
+  if [[ ! "$f" == *"/dist/"* ]] && [[ -f "$f" ]]; then
+    version=$(jq -r '.version' "$f")
+    if [[ "$version" != "$NEW_VERSION" ]]; then
+      echo "MISMATCH: $f has $version"
+      MISMATCH=1
+    fi
+  fi
+done
+[[ $MISMATCH -eq 0 ]] && echo "PASS: All versions match" || echo "FAIL: Version mismatch"
+
+# 5. Current branch is development (not stuck on main)
+echo "=== Current branch ==="
+CURRENT=$(git branch --show-current)
+[[ "$CURRENT" == "development" ]] && echo "PASS: On development" || echo "WARN: On $CURRENT (expected development)"
+```
+
+**All checks must PASS.** If any check fails:
+
+| Failure                   | Recovery                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| Tag not on main           | Delete tag, re-tag on correct SHA, push                                          |
+| GitHub Release missing    | Run `gh release create` manually                                                 |
+| CHANGELOG missing version | Edit CHANGELOG.md, create new fixup commit, push normally                        |
+| Package version mismatch  | Fix mismatched files, create new fixup commit, push normally                     |
+| Merge to main fails       | Detect conflicts, STOP, ask user for guidance. Do NOT force-push or auto-resolve |
+| Wrong branch              | `git checkout development`                                                       |
+
+### 6.11 Display Summary
 
 Use template from [`templates/release-summary.md`](../templates/release-summary.md).
+
+Include the GitHub Release URL and validation results in the summary output:
+
+```
+https://github.com/pbuchman/intexuraos/releases/tag/v$NEW_VERSION
+```
 
 ---
 
@@ -572,11 +707,24 @@ If `pnpm run ci:tracked` fails:
 
 ### User Declines All Changes
 
-If user skips all checkpoint phases (3, 4, 5):
+If user skips all checkpoint phases (1.5 prioritization, 3, 4, 5):
 
 1. Phase 6 still runs
 2. Commit message reflects only version bump
 3. Tag is still created and pushed
+
+### Resume State
+
+When resuming from `--phase N`, reconstruct state from:
+
+| Variable          | Source when resuming                                              |
+| ----------------- | ----------------------------------------------------------------- |
+| NEW_VERSION       | `jq -r '.version' package.json`                                  |
+| LAST_TAG          | `git tag -l "v*" --sort=-v:refname \| head -1`                   |
+| MODIFIED_SERVICES | Re-run step 1.4 detection                                        |
+| Change Manifest   | Re-run semver analysis (steps 3-7) if resuming before Phase 6    |
+
+For Phase 6 resume: version and changelog are already committed, so read from files.
 
 ### Agent Failure in Phase 2
 
