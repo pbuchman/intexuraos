@@ -599,8 +599,22 @@ interface ToolBlock {
   finalized: boolean;
 }
 
+const TIMESTAMP_PREFIX_RE = /^\d{2}:\d{2}:\d{2}\.\d{3} /;
+
 function isBodyLine(text: string): boolean {
-  return text.startsWith('  \u2192 ') || text.startsWith('  \u2717 ') || text.startsWith('    ');
+  const stripped = text.replace(TIMESTAMP_PREFIX_RE, '');
+  return stripped.startsWith('  \u2192 ') || stripped.startsWith('  \u2717 ') || stripped.startsWith('    ');
+}
+
+function countVisualLines(logs: LogLine[], start: number, end: number): number {
+  let count = 0;
+  for (let i = start; i < end; i++) {
+    const line = logs[i];
+    if (line !== undefined) {
+      count += line.text.split('\n').length;
+    }
+  }
+  return count;
 }
 
 interface LogStreamProps {
@@ -815,7 +829,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
             return <MemoLogLineRow key={line.sequence} line={line} />;
           }
           const isHeader = idx === block.headerIdx;
-          const collapsible = block.finalized && (block.bodyEnd - block.bodyStart) >= 2;
+          const collapsible = block.finalized && countVisualLines(logs, block.bodyStart, block.bodyEnd) >= 2;
           const collapsed = collapsible && (compactMode !== blockOverrides.has(block.headerIdx));
 
           if (!isHeader && collapsed) return null;
@@ -826,7 +840,7 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
               line={line}
               collapsible={isHeader && collapsible}
               collapsed={isHeader && collapsed}
-              hiddenCount={isHeader ? block.bodyEnd - block.bodyStart : 0}
+              hiddenCount={isHeader ? countVisualLines(logs, block.bodyStart, block.bodyEnd) : 0}
               {...(isHeader && collapsible ? { onToggle: toggleBlock } : {})}
               headerIdx={block.headerIdx}
             />
