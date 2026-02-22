@@ -186,6 +186,21 @@ MIIBugIBAAKBgQDN1pSqHA07XWWKP9m3JbPi7r
     expect(result).not.toContain('my-secret-pass');
   });
 
+  it('redacts quoted secret assignments containing spaces (P1 — full value consumed)', () => {
+    const input = 'DB_PASSWORD="my secret value" in .env';
+    const result = sanitizePrompt(input);
+    expect(result).toContain('DB_PASSWORD=[REDACTED_SECRET]');
+    expect(result).not.toContain('my secret value');
+    expect(result).not.toContain('secret value"');
+  });
+
+  it('redacts single-quoted secret assignments containing spaces', () => {
+    const input = "APP_SECRET='space separated secret' in config";
+    const result = sanitizePrompt(input);
+    expect(result).toContain('APP_SECRET=[REDACTED_SECRET]');
+    expect(result).not.toContain('space separated secret');
+  });
+
   it('redacts PASSWD assignments', () => {
     const input = 'MYSQL_PASSWD=rootpass123';
     const result = sanitizePrompt(input);
@@ -303,6 +318,25 @@ MIIBugIBAAKBgQDN1pSqHA07XWWKP9m3JbPi7r
     const input = 'a'.repeat(MAX_PROMPT_LENGTH);
     const result = sanitizePrompt(input);
     expect(result.length).toBe(MAX_PROMPT_LENGTH);
+  });
+
+  it('redacts secrets that would straddle the truncation boundary (P2)', () => {
+    // Place a PEM key block such that its END marker crosses MAX_PROMPT_LENGTH.
+    // With redact-before-truncate, the entire block is redacted first.
+    const pemBlock = [
+      '-----BEGIN RSA PRIVATE KEY-----',
+      'MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn',
+      '-----END RSA PRIVATE KEY-----',
+    ].join('\n');
+    // Pad so the redacted result fits, but raw PEM would have straddled the boundary.
+    // [REDACTED_PRIVATE_KEY] is 22 chars, PEM block is ~96 chars.
+    const padding = 'x'.repeat(MAX_PROMPT_LENGTH - 30);
+    const input = padding + pemBlock;
+    const result = sanitizePrompt(input);
+    // The PEM block must be fully redacted — no partial base64 material
+    expect(result).toContain('[REDACTED_PRIVATE_KEY]');
+    expect(result).not.toContain('MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn');
+    expect(result).not.toContain('BEGIN RSA PRIVATE KEY');
   });
 
   // ─── Edge cases ───────────────────────────────────────────────────

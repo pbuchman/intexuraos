@@ -53,9 +53,10 @@ const PRIVATE_KEY_PATTERN = /-----BEGIN\s+(?:\w+\s+)?PRIVATE\s+KEY-----[\s\S]*?-
 /**
  * Secret assignment pattern in environment variables.
  * Matches KEY_PASSWORD=, KEY_PASSWD=, KEY_SECRET= followed by value (quoted or unquoted).
+ * Quoted values with spaces are fully consumed (e.g. DB_PASSWORD="my secret value").
  * Word boundary anchors prevent quadratic backtracking on long word-character strings.
  */
-const SECRET_ENV_PATTERN = /\b(\w*(?:PASSWORD|PASSWD|SECRET)\w*)=["']?([^\s"']+)["']?/gi;
+const SECRET_ENV_PATTERN = /\b(\w*(?:PASSWORD|PASSWD|SECRET)\w*)=(?:"[^"]*"|'[^']*'|[^\s"']+)/gi;
 
 /**
  * Sensitive URL query parameter names.
@@ -90,37 +91,39 @@ export function sanitizePrompt(prompt: string): string {
 
   let result = prompt;
 
-  // Step 1: Enforce maximum length early to avoid expensive regex on huge strings
+  // Step 1: Redact private key blocks (must run before other patterns to avoid partial matches)
+  result = result.replace(PRIVATE_KEY_PATTERN, '[REDACTED_PRIVATE_KEY]');
+
+  // Step 2: Redact AWS access key IDs
+  result = result.replace(AWS_KEY_PATTERN, '[REDACTED_AWS_KEY]');
+
+  // Step 3: Redact API keys (OpenAI, Anthropic)
+  result = result.replace(API_KEY_PATTERN, '[REDACTED_API_KEY]');
+
+  // Step 4: Redact Stripe secret keys
+  result = result.replace(STRIPE_KEY_PATTERN, '[REDACTED_STRIPE_KEY]');
+
+  // Step 5: Redact GitHub tokens
+  result = result.replace(GITHUB_TOKEN_PATTERN, '[REDACTED_GH_TOKEN]');
+
+  // Step 6: Redact Slack tokens
+  result = result.replace(SLACK_TOKEN_PATTERN, '[REDACTED_SLACK_TOKEN]');
+
+  // Step 7: Redact Bearer tokens (JWT-shaped only to avoid false positives)
+  result = result.replace(BEARER_TOKEN_PATTERN, 'Bearer [REDACTED_BEARER]');
+
+  // Step 8: Redact secret/password env var assignments
+  result = result.replace(SECRET_ENV_PATTERN, '$1=[REDACTED_SECRET]');
+
+  // Step 9: Redact sensitive URL query parameters (preserving ? or & prefix)
+  result = result.replace(SENSITIVE_URL_PARAM_PATTERN, '$1$2=[REDACTED]');
+
+  // Step 10: Enforce maximum length AFTER redaction to prevent secrets straddling
+  // the truncation boundary from being only partially redacted (e.g. a PEM block
+  // whose BEGIN and body are kept but END is cut, preventing pattern match).
   if (result.length > MAX_PROMPT_LENGTH) {
     result = result.substring(0, MAX_PROMPT_LENGTH);
   }
-
-  // Step 2: Redact private key blocks (must run before other patterns to avoid partial matches)
-  result = result.replace(PRIVATE_KEY_PATTERN, '[REDACTED_PRIVATE_KEY]');
-
-  // Step 3: Redact AWS access key IDs
-  result = result.replace(AWS_KEY_PATTERN, '[REDACTED_AWS_KEY]');
-
-  // Step 4: Redact API keys (OpenAI, Anthropic)
-  result = result.replace(API_KEY_PATTERN, '[REDACTED_API_KEY]');
-
-  // Step 5: Redact Stripe secret keys
-  result = result.replace(STRIPE_KEY_PATTERN, '[REDACTED_STRIPE_KEY]');
-
-  // Step 6: Redact GitHub tokens
-  result = result.replace(GITHUB_TOKEN_PATTERN, '[REDACTED_GH_TOKEN]');
-
-  // Step 7: Redact Slack tokens
-  result = result.replace(SLACK_TOKEN_PATTERN, '[REDACTED_SLACK_TOKEN]');
-
-  // Step 8: Redact Bearer tokens (JWT-shaped only to avoid false positives)
-  result = result.replace(BEARER_TOKEN_PATTERN, 'Bearer [REDACTED_BEARER]');
-
-  // Step 9: Redact secret/password env var assignments
-  result = result.replace(SECRET_ENV_PATTERN, '$1=[REDACTED_SECRET]');
-
-  // Step 10: Redact sensitive URL query parameters (preserving ? or & prefix)
-  result = result.replace(SENSITIVE_URL_PARAM_PATTERN, '$1$2=[REDACTED]');
 
   // Step 11: Normalize whitespace
   // - Trim leading and trailing whitespace
