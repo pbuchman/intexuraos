@@ -716,9 +716,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 4: Append formatted metrics as log lines (non-fatal)
       const metricsLines = formatMetricsLogLines(metrics);
-      const METRICS_SEQUENCE_BASE = 9_000_000_000 + (metrics.attempt - 1) * 10_000;
+      const now = Date.now();
       const formattedLines = metricsLines.map((text, i) => ({
-        sequence: METRICS_SEQUENCE_BASE + i,
+        sequence: now * 1000 + i,
         text,
         timestamp: Timestamp.fromDate(new Date(metrics.timestamp)),
       }));
