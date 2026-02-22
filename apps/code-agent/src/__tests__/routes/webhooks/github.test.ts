@@ -1090,5 +1090,151 @@ describe('POST /webhooks/github', () => {
       await new Promise((resolve) => { setTimeout(resolve, 50); });
       expect(mockFindByPR).toHaveBeenCalledWith('test/intexuraos', 42);
     });
+
+    it('dispatches edited issue_comment from claude[bot] to task', async () => {
+      const claudeBotEditedPayload = {
+        action: 'edited',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 99999,
+          body: 'Finalized implementation plan for the task.',
+          user: { login: 'claude[bot]', id: 999, type: 'Bot' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: { login: 'test', id: 789 },
+        },
+        sender: { login: 'claude[bot]', id: 999, type: 'Bot' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 99999,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'edited' as const,
+        senderLogin: 'claude[bot]',
+        senderId: 999,
+        senderType: 'Bot',
+        title: 'Test PR',
+        body: 'Finalized implementation plan for the task.',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: claudeBotEditedPayload,
+      }));
+
+      const { payload, signature } = signPayload(claudeBotEditedPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Edited claude[bot] comment should pass through dispatch gate — findByPR should be called
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).toHaveBeenCalledWith('test/intexuraos', 42);
+    });
+
+    it('does not dispatch edited issue_comment from regular user', async () => {
+      const regularUserEditedPayload = {
+        action: 'edited',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 11111,
+          body: 'Updated my review comment with more details.',
+          user: { login: 'reviewer', id: 222, type: 'User' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: { login: 'test', id: 789 },
+        },
+        sender: { login: 'reviewer', id: 222, type: 'User' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 11111,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'edited' as const,
+        senderLogin: 'reviewer',
+        senderId: 222,
+        senderType: 'User',
+        title: 'Test PR',
+        body: 'Updated my review comment with more details.',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: regularUserEditedPayload,
+      }));
+
+      const { payload, signature } = signPayload(regularUserEditedPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Regular user edited comment should NOT pass through dispatch gate
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).not.toHaveBeenCalled();
+    });
   });
 });
