@@ -26,6 +26,19 @@ IntexuraOS is an autonomous agent platform that turned a single developer into a
 
 ---
 
+## What's New in v3.1.0
+
+| Improvement                    | Impact                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| **Auto-Trigger Code Tasks**    | Linear issue assignment automatically dispatches Phase 1 design              |
+| **Simplified PR Dispatch**     | Direct worker dispatch replaces Gemini classification for PR comments        |
+| **Phase 2 Enhancements**       | Planning stage, dual code review loop, and turn summary for execution agents |
+| **Prompt Sanitization**        | AWS keys, API tokens, PEM keys stripped from worker inputs                   |
+| **CI Pipeline Optimization**   | 5m to 3m43s with 3-way test sharding and parallel type/lint matrix           |
+| **Log Viewer Improvements**    | Collapsible tool output blocks with per-block expand/collapse                |
+
+---
+
 ## The Self-Building System
 
 Most AI coding tools wait for you to sit at a keyboard. IntexuraOS doesn't.

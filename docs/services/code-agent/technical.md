@@ -1,12 +1,12 @@
-# Code Agent - Technical Reference
+# Code Agent -- Technical Reference
 
 ## Overview
 
-The code-agent service orchestrates autonomous code execution tasks. It accepts task submissions from the web UI (Auth0 JWT) and the actions-agent (internal auth), creates Firestore documents with three-layer deduplication, dispatches HMAC-signed requests to user-configured workers via Cloudflare Access, streams log chunks into Firestore subcollections, processes completion webhooks, and mirrors state transitions to Linear and the actions-agent.
+The code-agent service orchestrates autonomous code execution tasks. It accepts task submissions from the web UI (Auth0 JWT) and the actions-agent (internal auth), sanitizes prompts to strip embedded secrets, creates Firestore documents with four-layer deduplication, dispatches HMAC-signed requests to user-configured workers via Cloudflare Access, streams log chunks into Firestore subcollections, processes completion webhooks, receives GitHub PR events and dispatches follow-up instructions, and mirrors state transitions to Linear and the actions-agent.
 
 - **Framework:** Fastify 5 on Node.js 22+
 - **Port:** 8128 (local), 8080 (Cloud Run)
-- **Package:** `@intexuraos/code-agent` v2.1.0
+- **Package:** `@intexuraos/code-agent` v3.1.0
 - **Deploy:** Cloud Run (scale 0-1)
 
 ## Architecture
@@ -42,6 +42,7 @@ graph TD
     GitHub -->|POST /webhooks/github| Routes
     Worker -->|POST /internal/webhooks/task-complete| Routes
     Worker -->|POST /internal/logs| Routes
+    Worker -->|POST /internal/turn-metrics| Routes
 
     Routes --> UseCases
     UseCases --> DomainServices
@@ -62,6 +63,7 @@ graph TD
 sequenceDiagram
     participant Client
     participant CodeAgent as code-agent
+    participant Sanitizer as Prompt Sanitizer
     participant RateLimit as Rate Limit Service
     participant Linear as linear-agent
     participant Firestore
@@ -69,13 +71,15 @@ sequenceDiagram
     participant WhatsApp as WhatsApp Service
 
     Client->>CodeAgent: POST /code/submit or /internal/code/process
+    CodeAgent->>Sanitizer: sanitizePrompt(prompt)
+    Sanitizer-->>CodeAgent: sanitized prompt (secrets stripped)
     CodeAgent->>RateLimit: checkLimits(userId, promptLength)
     RateLimit-->>CodeAgent: ok / rate_limited
 
     CodeAgent->>Linear: ensureIssueExists(userId, prompt)
     Linear-->>CodeAgent: issueId, title, type, labels
 
-    CodeAgent->>Firestore: create(task) with 3-layer dedup
+    CodeAgent->>Firestore: create(task) with 4-layer dedup
     Firestore-->>CodeAgent: CodeTask document
 
     CodeAgent->>Worker: HMAC-signed POST /tasks
@@ -90,6 +94,9 @@ sequenceDiagram
     Worker->>CodeAgent: POST /internal/logs (streaming)
     CodeAgent->>Firestore: storeBatch(taskId, logChunks)
 
+    Worker->>CodeAgent: POST /internal/turn-metrics
+    CodeAgent->>Firestore: store(taskId, attempt, metrics)
+
     Worker->>CodeAgent: POST /internal/webhooks/task-complete
     CodeAgent->>Firestore: update(status, result)
     CodeAgent->>WhatsApp: notifyTaskComplete(userId, task)
@@ -98,16 +105,21 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                    | Date         |
-| ---------- | -------------------------------------------------------------- | ------------ |
-| `e5637ce5` | Deduplicate PR body across pull_request events in API response | 4 hours ago  |
-| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)    | 5 hours ago  |
-| `c1bc9883` | Truncate oversized tool results and unparseable log lines      | 6 hours ago  |
-| `27ef6a7b` | Show compare URL for PR synchronize events in timeline         | 15 hours ago |
-| `60e029a8` | Deduplicate edited comments in PR events API response          | 15 hours ago |
-| `0a48ed4e` | Display comment body on PR events page in GitHub style         | 15 hours ago |
-| `5ead960d` | Add clickable GitHub links to PR event items                   | 17 hours ago |
-| `554b716c` | Add gitHubPRSummaryRepo to ServiceContainer                    | 18 hours ago |
+| Commit     | Description                                                     | Date         |
+| ---------- | --------------------------------------------------------------- | ------------ |
+| `c33321e4` | Use Date.now() for metrics log line sequences                   | 52 min ago   |
+| `9be25162` | Dynamic CPU cores from cgroup + metrics in task logs            | 5 hours ago  |
+| `878c08b9` | Implement prompt sanitization for worker inputs (INT-612)       | 6 hours ago  |
+| `483c476a` | Replace scattered webhook filters with sender whitelist         | 6 hours ago  |
+| `95161acb` | Dispatch and triage edited claude[bot] review comments          | 7 hours ago  |
+| `d5810213` | Use unique actionId for webhook dedup, propagate all dedup errors | 22 hours ago |
+| `1db69f2a` | Transition Linear to In Review on task-complete webhook         | 28 hours ago |
+| `bcbd5075` | Add multi-status filtering and fix pagination for code tasks    | 28 hours ago |
+| `f6420f4b` | Populate prNumber and prBranch on task completion (INT-465)     | 2 days ago   |
+| `2e7039c3` | Simplify PR comment auto-response (INT-465)                     | 2 days ago   |
+| `e5637ce5` | Deduplicate PR body across pull_request events                  | 3 days ago   |
+| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)     | 3 days ago   |
+| `c1bc9883` | Truncate oversized tool results and unparseable log lines       | 3 days ago   |
 
 ## API Endpoints
 
@@ -122,6 +134,7 @@ sequenceDiagram
 | POST   | `/code/tasks/:taskId/retry`                | Retry a failed/cancelled task      | Auth0 |
 | POST   | `/code/tasks/:taskId/feedback`             | Submit feedback on completed task  | Auth0 |
 | POST   | `/code/tasks/:taskId/messages`             | Send message to running/ended task | Auth0 |
+| POST   | `/code/tasks/:taskId/implement`            | Start Phase 2 from design task     | Auth0 |
 | GET    | `/code/github-pr-events`                   | Query GitHub PR events             | Auth0 |
 | GET    | `/code/github-pr-summaries`                | List PRs active in last 30 days    | Auth0 |
 | GET    | `/code/worker-settings`                    | Get worker settings (masked)       | Auth0 |
@@ -146,11 +159,12 @@ sequenceDiagram
 
 ### Webhook Routes (HMAC Signature)
 
-| Method | Path                               | Description                        | Auth          |
-| ------ | ---------------------------------- | ---------------------------------- | ------------- |
-| POST   | `/internal/webhooks/task-complete` | Task completion callback           | Internal+HMAC |
-| POST   | `/internal/logs`                   | Log chunk upload from orchestrator | Internal+HMAC |
-| POST   | `/webhooks/github`                 | GitHub webhook events              | GitHub HMAC   |
+| Method | Path                               | Description                          | Auth          |
+| ------ | ---------------------------------- | ------------------------------------ | ------------- |
+| POST   | `/internal/webhooks/task-complete` | Task completion callback             | Internal+HMAC |
+| POST   | `/internal/logs`                   | Log chunk upload from orchestrator   | Internal+HMAC |
+| POST   | `/internal/turn-metrics`           | Turn metrics upload from orchestrator | Internal+HMAC |
+| POST   | `/webhooks/github`                 | GitHub webhook events                | GitHub HMAC   |
 
 ### Utility Routes
 
@@ -176,17 +190,16 @@ interface CodeTask {
   userId: string;
   workerType: 'opus' | 'auto' | 'glm';
   workerLocation: string;
-  // Lifecycle — 'designed'/'implemented' are Phase 1/2 completions; 'completed' is not used
   status:
     | 'dispatched'
     | 'running'
-    | 'designed'
-    | 'implemented'
+    | 'designed'     // Phase 1 design completed
+    | 'implemented'  // Phase 2 execution completed
     | 'failed'
     | 'interrupted'
     | 'cancelled';
   prompt: string;
-  sanitizedPrompt: string;
+  sanitizedPrompt: string;    // After secret stripping
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
@@ -195,12 +208,12 @@ interface CodeTask {
   linearIssueUrl?: string;
   linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
   linearFallback?: boolean;
-  prNumber?: number;
+  prNumber?: number;          // Populated on completion
   prBranch?: string;
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
   executionPhase?: 'design' | 'execution';
-  implementationTaskId?: string; // Set on design task to point at Phase 2 task
+  implementationTaskId?: string;
   result?: TaskResult;
   error?: TaskError;
   createdAt: Timestamp;
@@ -212,7 +225,7 @@ interface CodeTask {
   lastHeartbeat?: Timestamp;
   logChunksDropped?: number;
   statusSummary?: StatusSummary;
-  pendingUserMessages?: string[]; // Accumulated while task is running
+  pendingUserMessages?: string[];
   dedupKey: string;
   cancelNonce?: string;
   cancelNonceExpiresAt?: string;
@@ -230,6 +243,18 @@ interface LogChunk {
   content: string; // May contain ANSI codes
   timestamp: Timestamp;
   size: number; // Byte size
+}
+```
+
+### LogLine (subcollection: `code_tasks/{taskId}/log_lines`)
+
+Formatted log lines parsed from chunks, plus system-generated status markers and metrics blocks.
+
+```typescript
+interface LogLine {
+  sequence: number;
+  text: string;        // Prefixed: [assistant], [tool], [user], [system], [queued], [resumed]
+  timestamp: Timestamp;
 }
 ```
 
@@ -274,23 +299,19 @@ interface TurnMetrics {
   taskId: string;
   attempt: number;
   timestamp: string;
-  // Resource (cgroup-measured)
   cpuTimeSeconds: number;
-  cpuCores: number;
+  cpuCores: number;         // Dynamic from cgroup
   peakMemoryMB: number;
-  // Time classification (session JSONL)
   wallTimeSeconds: number;
   apiWaitSeconds: number;
   toolExecSeconds: number;
   backgroundWaitSeconds: number;
   overheadSeconds: number;
-  // Token accounting
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCacheReadTokens: number;
   totalCacheCreationTokens: number;
   apiCallCount: number;
-  // Derived
   cpuUtilizationPercent: number;
   idlePercent: number;
 }
@@ -302,7 +323,7 @@ Normalized GitHub webhook events for PR timeline display.
 
 ### GitHubPRSummary (collection: `github-pr-summaries`)
 
-One document per unique PR, upserted on every webhook event. Used for the 30-day PR list view — O(PRs) instead of O(events).
+One document per unique PR, upserted on every webhook event. Used for the 30-day PR list view -- O(PRs) instead of O(events).
 
 ```typescript
 interface GitHubPRSummary {
@@ -318,35 +339,31 @@ interface GitHubPRSummary {
 
 Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 
-### PRTaskLock (collection: `pr_task_locks`)
-
-Per-PR locks to prevent concurrent tasks on the same pull request. Documents use the format `${repository}:${prNumber}` as the document ID. Locks expire after 30 minutes.
-
 ## Firestore Collections Owned
 
-| Collection             | Description                                                   |
-| ---------------------- | ------------------------------------------------------------- |
-| `code_tasks`           | Code execution tasks (subcollections: `logs`, `turn_metrics`) |
-| `user_spend`           | User cost tracking for rate limiting                          |
-| `user_usage`           | Rate limiting counters (concurrent, hourly, cost)             |
-| `code_worker_settings` | Per-user worker configs with encrypted credentials            |
-| `github-pr-events`     | GitHub PR webhook events for timeline display                 |
-| `github-pr-summaries`  | Per-PR rollup documents for O(PRs) list view (30-day window)  |
-| `pr_task_locks`        | Per-PR task locks preventing concurrent modifications         |
+| Collection             | Description                                                        |
+| ---------------------- | ------------------------------------------------------------------ |
+| `code_tasks`           | Code execution tasks (subcollections: `logs`, `log_lines`, `turn_metrics`) |
+| `user_spend`           | User cost tracking for rate limiting                               |
+| `user_usage`           | Rate limiting counters (concurrent, hourly, cost)                  |
+| `code_worker_settings` | Per-user worker configs with encrypted credentials                 |
+| `github-pr-events`     | GitHub PR webhook events for timeline display                      |
+| `github-pr-summaries`  | Per-PR rollup documents for O(PRs) list view (30-day window)       |
+| `pr_task_locks`        | Per-PR task locks preventing concurrent modifications              |
 
 ## Use Cases
 
-| Use Case            | File                                     | Description                                           |
-| ------------------- | ---------------------------------------- | ----------------------------------------------------- |
-| processCodeAction   | `domain/usecases/processCodeAction.ts`   | Create task with dedup, dispatch to worker            |
-| cancelTaskWithNonce | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation                  |
-| handlePRComment     | `domain/usecases/handlePRComment.ts`     | Detect actionable PR comments, prepare task           |
-| processHeartbeat    | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection      |
-| detectZombieTasks   | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)               |
-| cleanupTaskLogs     | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                       |
-| retryTask           | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context      |
-| submitTaskFeedback  | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback            |
-| sendTaskMessage     | `domain/usecases/sendTaskMessage.ts`     | Send message to running task (queued) or resume ended |
+| Use Case            | File                                     | Description                                              |
+| ------------------- | ---------------------------------------- | -------------------------------------------------------- |
+| processCodeAction   | `domain/usecases/processCodeAction.ts`   | Create task with dedup, sanitize prompt, dispatch        |
+| cancelTaskWithNonce | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation                     |
+| processHeartbeat    | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection         |
+| detectZombieTasks   | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)                  |
+| cleanupTaskLogs     | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                          |
+| retryTask           | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context         |
+| submitTaskFeedback  | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback               |
+| sendTaskMessage     | `domain/usecases/sendTaskMessage.ts`     | Send message to running task (queued) or resume ended    |
+| submitToPhase2      | `domain/usecases/submitToPhase2.ts`      | Start Phase 2 implementation from completed design task  |
 
 ## Domain Services
 
@@ -359,6 +376,14 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 | StatusMirrorService   | `infra/services/statusMirrorServiceImpl.ts` | Mirror task status to actions-agent               |
 | MetricsClient         | `domain/services/metrics.ts`                | Record Cloud Monitoring metrics                   |
 
+## Domain Utilities
+
+| Utility             | File                                     | Purpose                                                    |
+| ------------------- | ---------------------------------------- | ---------------------------------------------------------- |
+| sanitizePrompt      | `domain/utils/promptSanitization.ts`     | Strip secrets (AWS, API keys, PEM, env vars) from prompts  |
+| labelUtils          | `domain/utils/labelUtils.ts`             | Check Linear issue labels for code-task/unclear markers    |
+| metricsLogFormatter | `domain/formatters/metricsLogFormatter.ts` | Format TurnMetrics as visual log blocks for the transcript |
+
 ## Dependencies (Service-to-Service)
 
 | Target Service      | Communication         | Purpose                                         |
@@ -366,7 +391,7 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 | linear-agent        | HTTP (internal auth)  | Issue CRUD, state transitions, title generation |
 | actions-agent       | HTTP (internal auth)  | Action status updates                           |
 | whatsapp-service    | Pub/Sub               | WhatsApp message sending                        |
-| Worker/Orchestrator | HTTP (CF Access+HMAC) | Task dispatch and cancellation                  |
+| Worker/Orchestrator | HTTP (CF Access+HMAC) | Task dispatch, cancellation, messaging          |
 
 ## Configuration
 
@@ -383,16 +408,16 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 
 ### Production-Only Environment Variables
 
-| Variable                                | Description                                  |
-| --------------------------------------- | -------------------------------------------- |
-| `INTEXURAOS_WHATSAPP_SERVICE_URL`       | WhatsApp service URL                         |
+| Variable                                 | Description                                  |
+| ---------------------------------------- | -------------------------------------------- |
+| `INTEXURAOS_WHATSAPP_SERVICE_URL`        | WhatsApp service URL                         |
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Pub/Sub topic for WhatsApp messages          |
-| `INTEXURAOS_LINEAR_AGENT_URL`           | linear-agent service URL                     |
-| `INTEXURAOS_ACTIONS_AGENT_URL`          | actions-agent service URL                    |
-| `INTEXURAOS_SERVICE_URL`                | This service's public URL (for webhook URLs) |
-| `INTEXURAOS_AUTH_AUDIENCE`              | Auth0 audience                               |
-| `INTEXURAOS_AUTH_ISSUER`                | Auth0 issuer                                 |
-| `INTEXURAOS_AUTH_JWKS_URL`              | Auth0 JWKS endpoint                          |
+| `INTEXURAOS_LINEAR_AGENT_URL`            | linear-agent service URL                     |
+| `INTEXURAOS_ACTIONS_AGENT_URL`           | actions-agent service URL                    |
+| `INTEXURAOS_SERVICE_URL`                 | This service's public URL (for webhook URLs) |
+| `INTEXURAOS_AUTH_AUDIENCE`               | Auth0 audience                               |
+| `INTEXURAOS_AUTH_ISSUER`                 | Auth0 issuer                                 |
+| `INTEXURAOS_AUTH_JWKS_URL`               | Auth0 JWKS endpoint                          |
 
 ### Rate Limit Defaults
 
@@ -414,11 +439,14 @@ Per-PR locks to prevent concurrent tasks on the same pull request. Documents use
 1. **Worker credentials are per-user.** There are no global/fallback workers. If a user has no configured workers, task submission fails with `worker_not_configured`.
 2. **HMAC validation requires raw body.** Fastify parses JSON, so the GitHub webhook handler reconstructs the raw body via `JSON.stringify(request.body)` for signature verification.
 3. **Log chunk sequence 0 triggers status transition.** When the first log chunk arrives, the service transitions the task from `dispatched` to `running`.
-4. **PR task locks have a 30-minute TTL.** Expired locks are automatically overwritten when a new task attempts to acquire the same lock.
-5. **Cancelled tasks bypass the 5-minute retry cool-off.** Only failed tasks enforce the cool-off period.
-6. **E2E mode replaces all external clients with no-ops.** Set `E2E_MODE=true` to use mock Linear, WhatsApp, and actions-agent clients.
-7. **PR events API applies two deduplication passes.** `GET /code/github-pr-events` runs `deduplicateCommentEvents` (keeps first occurrence, updates body to latest) then `deduplicatePRBody` (removes PR body from all but the most recent `pull_request` event) before returning results. The raw events in Firestore are unmodified.
-8. **`github-pr-summaries` documents use `__` instead of `/` in repository names.** Firestore path separator conflicts with repo slugs, so `owner/repo` becomes `owner__repo#prNumber` as the document ID.
+4. **Cancelled tasks bypass the 5-minute retry cool-off.** Only failed tasks enforce the cool-off period.
+5. **E2E mode replaces all external clients with no-ops.** Set `E2E_MODE=true` to use mock Linear, WhatsApp, and actions-agent clients.
+6. **PR events API applies two deduplication passes.** `GET /code/github-pr-events` runs `deduplicateCommentEvents` (keeps first occurrence, updates body to latest) then `deduplicatePRBody` (removes PR body from all but the most recent `pull_request` event) before returning results. The raw events in Firestore are unmodified.
+7. **`github-pr-summaries` documents use `__` instead of `/` in repository names.** Firestore path separator conflicts with repo slugs, so `owner/repo` becomes `owner__repo#prNumber` as the document ID.
+8. **Prompt sanitization runs before dispatch but after dedup key generation.** The `dedupKey` is computed from the raw prompt so that repeated submissions of the same prompt (with or without secrets) are correctly deduplicated. The worker only ever sees the sanitized version.
+9. **Sender whitelist for PR comment dispatch.** Only comments from `claude[bot]`, `chatgpt-codex-connector[bot]`, and the repository owner trigger task dispatch. Other senders are silently ignored.
+10. **Bot review edit triage.** When a whitelisted bot edits its comment, the dispatch message instructs the agent to check whether the review is still in progress (spinner, short body, unchecked items) before acting. This prevents premature reactions to incomplete reviews.
+11. **Turn metrics use orchestrator HMAC, not per-task HMAC.** The `/internal/turn-metrics` endpoint validates signatures against `INTEXURAOS_ORCHESTRATOR_SECRET`, not the per-task webhook secret.
 
 ## File Structure
 
@@ -435,13 +463,12 @@ apps/code-agent/src/
       gitHubPRSummary.ts            # Per-PR summary for list view
       logChunk.ts                   # Log chunk model (HMAC-signed uploads)
       logLine.ts                    # FormattedLogLine (for LogLineRepository)
-      prTaskLock.ts                 # PR task lock model
       signing.ts                    # Signing error types
       turnMetrics.ts                # Per-turn CPU/memory/token metrics
       userSpend.ts                  # User spend tracking model
       userUsage.ts                  # User usage + DEFAULT_LIMITS
-      worker.ts                    # WorkerConfig, WorkerHealth, WorkerError
-      workerSettings.ts            # UserWorkerSettings, WorkerCredentials
+      worker.ts                     # WorkerLocation type
+      workerSettings.ts             # UserWorkerSettings, WorkerCredentials, WorkerHealthState
     ports/
       linearAgentClient.ts          # Linear agent client interface
       userUsageRepository.ts        # User usage repository interface
@@ -452,27 +479,31 @@ apps/code-agent/src/
       gitHubPREventRepository.ts    # GitHub PR event repository interface
       gitHubPRSummaryRepository.ts  # PR summary repository interface
       logChunkRepository.ts         # Log chunk storage interface
-      logLineRepository.ts          # LogLine storage interface (for sendTaskMessage)
-      prTaskLockRepository.ts       # PR task lock interface
+      logLineRepository.ts          # LogLine storage interface
       turnMetricsRepository.ts      # Turn metrics storage interface
     services/
       linearIssueService.ts         # Linear issue management service
+      logFormatter.ts               # Log chunk -> log line parser
       metrics.ts                    # MetricsClient interface
       rateLimitService.ts           # Rate limit checking and recording
+      statusMirrorService.ts        # Status mirror service interface
       taskDispatcher.ts             # Task dispatch interface + types
       whatsappNotifier.ts           # WhatsApp notification interface
     usecases/
       cancelTaskWithNonce.ts        # Cancel via nonce
       cleanupTaskLogs.ts            # Log archival
       detectZombieTasks.ts          # Zombie detection
-      handlePRComment.ts            # PR comment -> task
       processCodeAction.ts          # Main task creation + dispatch
       processHeartbeat.ts           # Heartbeat processing
       retryTask.ts                  # Task retry with cool-off
       sendTaskMessage.ts            # Send message to running/ended task
       submitTaskFeedback.ts         # Feedback follow-up
+      submitToPhase2.ts             # Phase 2 execution from design
     utils/
-      isActionableComment.ts        # PR comment actionability check
+      labelUtils.ts                 # Linear label checks (code-task, unclear)
+      promptSanitization.ts         # Secret stripping and whitespace normalization
+    formatters/
+      metricsLogFormatter.ts        # TurnMetrics -> formatted log block
   infra/
     auth/
       index.ts                     # Auth exports
@@ -481,7 +512,6 @@ apps/code-agent/src/
       actionsAgentClient.ts        # Actions agent HTTP client
     firestore/
       encryption.ts                # AES-256-GCM encryption for worker creds
-      firestorePRTaskLockRepository.ts  # PR task lock Firestore impl
       gitHubPREventsRepository.ts  # GitHub PR events Firestore impl
       gitHubPRSummariesRepository.ts    # PR summary Firestore impl (upsert + list)
       userUsageFirestoreRepository.ts   # User usage Firestore impl
@@ -491,7 +521,7 @@ apps/code-agent/src/
     repositories/
       firestoreCodeTaskRepository.ts    # CodeTask Firestore impl
       firestoreLogChunkRepository.ts    # LogChunk Firestore impl
-      firestoreLogLineRepository.ts     # LogLine Firestore impl (sendTaskMessage logs)
+      firestoreLogLineRepository.ts     # LogLine Firestore impl
       firestoreTurnMetricsRepository.ts # TurnMetrics subcollection impl
     services/
       hmacSigning.ts               # HMAC signing utilities
@@ -505,15 +535,15 @@ apps/code-agent/src/
     webhookValidation.ts           # Webhook HMAC validation
   routes/
     index.ts                       # Route registration
-    codeRoutes.ts                  # Main code task routes (internal + public, ~3500 lines)
-    webhookRoutes.ts               # Task completion + log webhooks
+    codeRoutes.ts                  # Main code task routes (internal + public, ~3600 lines)
+    webhookRoutes.ts               # Task completion + log + turn-metrics webhooks
     workerSettingsRoutes.ts        # Worker settings CRUD routes
     code/
       index.ts                     # Code route exports
+      extractEventUrl.ts           # Extract clickable GitHub URLs from webhook payloads
       github-pre-events.ts         # GitHub PR events query route (with dedup passes)
       github-pr-summaries.ts       # PR summaries list route (30-day window)
-      extractEventUrl.ts           # Extract clickable GitHub URLs from webhook payloads
     webhooks/
       index.ts                     # Webhook route aggregator
-      github.ts                    # GitHub webhook handler
+      github.ts                    # GitHub webhook handler + PR comment dispatch
 ```

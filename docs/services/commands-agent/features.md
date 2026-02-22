@@ -57,6 +57,10 @@ Commands identified by `{sourceType}:{externalId}` prevent duplicate processing.
 
 When a user's LLM API key is unavailable, commands enter `pending_classification` status. Cloud Scheduler retries every 5 minutes.
 
+### Prompt Version Tracking
+
+Every classified command stores which prompt version produced its result. This enables auditability, regression tracking across prompt upgrades, and per-classification traceability.
+
 ## Use Case
 
 You share a link via the PWA share sheet: "Check out this great tool https://research-tracker.io"
@@ -79,10 +83,11 @@ Result: Link saved to bookmarks, not queued for research.
 - Explicit commands ("save bookmark", "create todo") always respected
 - Duplicate prevention across WhatsApp message retries
 - No manual action type selection required
+- Full auditability via prompt version tracking per classification
 
 ## Limitations
 
-**Classification models** - Requires Gemini 2.5 Flash, GLM-4.7, or GLM-4.7-Flash API access
+**Classification models** - Requires Gemini 2.5 Flash (default), GLM-4.7, or GLM-4.7-Flash API access
 
 **Reminder handler** - Classification recognizes `reminder` but actions-agent handler not yet implemented
 
@@ -96,7 +101,13 @@ Result: Link saved to bookmarks, not queued for research.
 
 ## Recent Changes
 
+- **v3.1.0 (2026-02-22):** Version bump for monorepo release.
+
+- **v3.0.0 (2026-02-19):** Major release with prompt version tracking, Gemini 2.5 Flash as default model, standardized API key naming (`INTEXURAOS_ZAI_APP_API_KEY`), dev-mode log formatting via `createLogStream()`, and Dash0 OpenTelemetry integration for distributed tracing.
+
 - **2026-02-19:** Persist prompt version with each classification. Every classified command now stores which prompt version produced its result, enabling auditability and regression tracking across prompt upgrades.
+
+- **2026-02-16:** Gemini 2.5 Flash set as default classification model (faster than GLM-4.7-Flash). Platform Gemini API key added as primary fallback.
 
 - **2026-02-08:** Add `code` command type for programming-related commands. Adopt standardized response contract (`reply.ok()`/`reply.fail()`). Migrate to Sentry-enabled logging via `createAppLogger()`. Consolidate user service client into shared `@intexuraos/internal-clients` package. Register `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` as required env var.
 

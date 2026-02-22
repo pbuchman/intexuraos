@@ -1,8 +1,8 @@
-# Web App — Technical Reference
+# Web App -- Technical Reference
 
 ## Overview
 
-Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to 15+ backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, an AI chat assistant (Intex Chat), a two-phase code task management system, saved data visualizations, and a developer toolbar (DevBar) for local and dev machine environments.
+Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to 15+ backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, an AI chat assistant (Intex Chat), a two-phase code task management system with collapsible tool output, multi-status filtering, saved data visualizations, assignee display on Linear boards, and a developer toolbar (DevBar) for local and dev machine environments.
 
 ## Architecture
 
@@ -61,24 +61,24 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                          | Date       |
-| ---------- | -------------------------------------------------------------------- | ---------- |
-| `27ef6a7b` | INT-505: Show compare URL for PR synchronize events                  | 2026-02-19 |
-| `2a187f90` | Fix: render HTML in PR event comment bodies with rehype-raw          | 2026-02-19 |
-| `0a48ed4e` | Display comment body on PR events page in GitHub style               | 2026-02-19 |
-| `5ead960d` | Add clickable GitHub links to PR event items                         | 2026-02-19 |
-| `0e07e938` | Show two-phase flow banner on design tasks with implementation link  | 2026-02-19 |
-| `e8bbacd7` | GitHub PR summaries with lazy event loading                          | 2026-02-19 |
-| `75cc9eb7` | linearIssueUrl threading, UI badge improvements                      | 2026-02-19 |
-| `6f6b6fd8` | Add executionPhase field and Phase 2 implementation trigger          | 2026-02-18 |
-| `f00798da` | Add saved visualizations feature                                     | 2026-02-18 |
-| `5fa51f75` | Clean up CodeTaskViewPage migration                                  | 2026-02-17 |
-| `a59e194b` | Redesign code task detail page with useTaskView hook                 | 2026-02-17 |
-| `935d3210` | Queue-based task messaging (no interrupt)                            | 2026-02-16 |
-| `08dbaf84` | Show sub-issues under parent issues on Linear board                  | 2026-02-14 |
-| `340971a8` | INT-491: Replace text log viewer with xterm.js terminal              | 2026-02-08 |
-| `5fa51f75` | Delete TerminalLogViewer and xterm.js; replace with custom LogStream | 2026-02-17 |
-| `f86bdbf3` | Add webhook secret configuration UI to Linear settings               | 2026-02-08 |
+| Commit     | Description                                                         | Date       |
+| ---------- | ------------------------------------------------------------------- | ---------- |
+| `1ee7e8c6` | Fix single-space timestamp strip in isBodyLine for log viewer       | 2026-02-22 |
+| `ef2724df` | Fix collapsible tool output in code task logs                       | 2026-02-22 |
+| `fbe7c944` | Fix worker reorder buttons in settings UI                           | 2026-02-22 |
+| `27f15cfc` | Collapsible tool output blocks in log viewer                        | 2026-02-22 |
+| `c9acdce3` | Standardize delete confirmations across all pages                   | 2026-02-21 |
+| `2e3ae30c` | Persist filter and sidebar collapse state across page refresh       | 2026-02-21 |
+| `bcbd5075` | Multi-status filtering and fix pagination for code tasks            | 2026-02-21 |
+| `3b081686` | INT-501: Prevent browser autofill on worker secret fields           | 2026-02-21 |
+| `19442f43` | Handle null assignee in LinearIssuesPage guards                     | 2026-02-20 |
+| `d36c76dd` | Add null to LinearIssue assignee type to match API response         | 2026-02-20 |
+| `c221efd5` | Use emerald green for Linear board assignee badges                  | 2026-02-20 |
+| `20a106c0` | Replace code task Summary with expandable PR events timeline        | 2026-02-20 |
+| `6df58b52` | Display assignee name on Linear board issue cards                   | 2026-02-20 |
+| `27ef6a7b` | INT-505: Show compare URL for PR synchronize events                 | 2026-02-19 |
+| `0e07e938` | Show two-phase flow banner on design tasks with implementation link | 2026-02-19 |
+| `e8bbacd7` | GitHub PR summaries with lazy event loading                         | 2026-02-19 |
 
 ## Application Structure
 
@@ -92,6 +92,7 @@ apps/web/src/
 │   ├── DevBar.tsx              # Developer toolbar (dev only)
 │   ├── Layout.tsx              # Main app layout with sidebar
 │   ├── Header.tsx              # Top navigation bar with theme toggle
+│   ├── PREventsGroup.tsx       # PR events grouping component
 │   ├── LinearIssueSelectorModal.tsx  # Modal for selecting Linear issues
 │   ├── TaskConflictModal.tsx   # 409 conflict resolution modal
 │   ├── TaskErrorModal.tsx      # Error-code-specific modal with actions
@@ -109,7 +110,7 @@ apps/web/src/
 │   ├── useCalendarEvents.ts  # Calendar event list with filtering
 │   ├── useChartDefinition.ts # Chart definition management
 │   ├── useChartPreview.ts    # Chart preview rendering
-│   ├── useCodeTasks.ts    # Code task CRUD + polling
+│   ├── useCodeTasks.ts    # Code task CRUD + polling + multi-status filter
 │   ├── useCompositeFeeds.ts  # Composite feed management
 │   ├── useCreateVisualization.ts # Create visualization mutations
 │   ├── useDataInsights.ts    # Data insights feed data
@@ -132,17 +133,17 @@ apps/web/src/
 │   ├── useWorkerSettings.ts # Worker config management
 │   └── ...
 ├── pages/              # Route components
-│   ├── HomePage.tsx       # Public landing page
+│   ├── HomePage.tsx       # Public landing page (brutalist design)
 │   ├── LoginPage.tsx      # Auth0 login
 │   ├── InboxPage.tsx      # Unified commands/actions inbox
-│   ├── CodeTasksPage.tsx  # Code task list
+│   ├── CodeTasksPage.tsx  # Code task list with multi-status filter
 │   ├── CodeTaskNewPage.tsx # Create new code task (form + modal)
-│   ├── CodeTaskViewPage.tsx # Code task detail with terminal and two-phase UI
+│   ├── CodeTaskViewPage.tsx # Code task detail with collapsible log viewer
 │   ├── PREventsPage.tsx   # GitHub PR events with lazy-loaded summaries
-│   ├── WorkerSettingsPage.tsx # Worker configuration management
+│   ├── WorkerSettingsPage.tsx # Worker configuration with reorder
 │   ├── ResearchAgentPage.tsx # Research query form
 │   ├── CalendarPage.tsx   # Calendar events list
-│   ├── LinearIssuesPage.tsx  # 3-column board with sub-issues and labels
+│   ├── LinearIssuesPage.tsx  # 3-column board with sub-issues and assignees
 │   ├── VisualizationsListPage.tsx # Saved data visualizations
 │   └── ...
 ├── services/           # API client functions
@@ -156,6 +157,7 @@ apps/web/src/
 │   ├── workerSettingsApi.ts # Worker settings CRUD + connectivity testing
 │   └── ...
 ├── types/              # TypeScript type definitions
+│   ├── actionConfig.ts    # Action button config types
 │   ├── chat.ts            # Chat message, session, response types
 │   └── index.ts           # All shared types
 ├── utils/              # Utility functions
@@ -163,7 +165,7 @@ apps/web/src/
 │   ├── dateUtils.ts       # Calendar date utilities
 │   ├── markdownUtils.ts   # Markdown/HTML stripping
 │   ├── todoItemSort.ts    # Todo sorting logic
-│   └── ...
+│   └── imageProxy.ts      # Image proxy URL builder
 ├── config.ts           # Environment configuration
 ├── App.tsx             # Main app with routing
 └── index.tsx           # Application entry point
@@ -195,8 +197,8 @@ apps/web/src/
 | `/data-insights`                        | CompositeFeedsListPage            | Yes                             | Data insights feeds             |
 | `/data-insights/new`                    | CompositeFeedFormPage             | Yes                             | Create composite feed           |
 | `/data-insights/visualizations`         | VisualizationsListPage            | Yes                             | Saved visualizations            |
-| `/data-insights/:feedId/visualizations` | VisualizationsListPage            | Yes                             | Saved visualizations for a feed |
-| `/data-insights/:id`                    | DataInsightsPage                  | Yes                             | Feed visualizations             |
+| `/data-insights/:feedId/visualizations` | DataInsightsPage                  | Yes                             | Saved visualizations for a feed |
+| `/data-insights/:id`                    | CompositeFeedFormPage             | Yes                             | Edit composite feed             |
 | `/data-insights/static-sources`         | DataSourcesListPage               | Yes                             | Static data sources             |
 | `/data-insights/static-sources/new`     | DataSourceFormPage                | Yes                             | Create data source              |
 | `/data-insights/static-sources/:id`     | DataSourceFormPage                | Yes                             | Edit data source                |
@@ -213,7 +215,7 @@ apps/web/src/
 | `/settings/share-history`               | ShareHistoryPage                  | Yes                             | PWA share history               |
 | `/share-target`                         | ShareTargetPage                   | Yes                             | PWA share target handler        |
 
-**Note:** All routes use hash routing (`/#/path`) because the app is served from a GCS backend bucket which doesn't support SPA fallback. Legacy routes (`/notion`, `/whatsapp`, `/whatsapp-notes`, `/mobile-notifications`, `/mobile-notifications/list`) redirect to their canonical paths.
+**Note:** All routes use hash routing (`/#/path`) because the app is served from a GCS backend bucket which does not support SPA fallback. Legacy routes (`/notion`, `/whatsapp`, `/whatsapp-notes`, `/mobile-notifications`, `/mobile-notifications/list`) redirect to their canonical paths.
 
 ## API Client Pattern
 
@@ -260,16 +262,28 @@ The app uses Firestore listeners for real-time updates:
 
 - Firestore-backed real-time board; no polling needed
 - Supports parent-child sub-issues displayed with indentation
+- Assignee names displayed with emerald green badges
+- Null assignee values handled gracefully
 
-## Code Task Two-Phase Flow
+## Code Task Features
 
-Code tasks support a `executionPhase` field: `design` or `execution`.
+### Multi-Status Filtering
+
+Code tasks support simultaneous filtering by multiple statuses. The filter state persists in localStorage across page refreshes. All seven statuses are filterable: dispatched, running, designed, implemented, failed, interrupted, cancelled.
+
+### Two-Phase Flow
+
+Code tasks support an `executionPhase` field: `design` or `execution`.
 
 - **Design phase:** Task produces a design artifact. When an implementation task is linked (`implementationTaskId`), an `ImplementationLinkBanner` appears (emerald color) linking to the implementation task.
 - **Execution phase:** Runs the code changes. A `DesignTaskBanner` (violet color) links back to the parent design task with the label "DESIGN".
 - **Single-phase tasks:** No banner shown.
 
-## Log Stream
+### Collapsible Tool Output
+
+Log lines from tool calls are grouped into collapsible sections. The log viewer detects `[tool]` tagged lines and groups subsequent indented output lines into expandable blocks. This prevents long tool results (file listings, test output, etc.) from overwhelming the log view. Each block shows a toggle to expand/collapse.
+
+### Log Stream
 
 Code task logs render via the `LogStream` component (inline in `CodeTaskViewPage.tsx`). Log lines are color-coded by tag:
 
@@ -288,13 +302,17 @@ Code task logs render via the `LogStream` component (inline in `CodeTaskViewPage
 | `[init]`                    | cyan    |
 | `[system]`/`[orchestrator]` | slate   |
 
-Features: follow mode (auto-scroll), manual scroll override, copy-all-logs button, live indicator, line count. Log data streams from Firestore in real time.
+Features: follow mode (auto-scroll), manual scroll override, copy-all-logs button, live indicator, line count, collapsible tool output blocks. Log data streams from Firestore in real time.
+
+### Standardized Delete Confirmations
+
+All delete actions across the app (code tasks, data sources, todos, notes, bookmarks) use standardized confirmation dialogs to prevent accidental deletion.
 
 ## State Management
 
 - **React Context** for global state (auth, sync queue, PWA, theme)
 - **Component State** (`useState`) for local UI state
-- **localStorage** for user preferences (active tab, filters, theme, chat sessions, chat panel size, DevBar state)
+- **localStorage** for user preferences (active tab, filters, sidebar collapse state, filter expanded state, theme, chat sessions, chat panel size, DevBar state)
 - **sessionStorage** for one-time flags (deep link fetch tracking)
 - **Firestore** for real-time data synchronization (actions, commands, code task logs, Linear issues)
 
@@ -345,7 +363,7 @@ The app uses `vite-plugin-pwa` with Workbox:
   - Fonts: CacheFirst (1 year)
   - API requests: No caching (bypassed)
 - **Service Worker:** Auto-update with skipWaiting: true
-- **Max file size:** 4MB (for large libraries like Vega + Auth0 Lock)
+- **Max file size:** 5MB (for large libraries like Vega + Auth0 Lock + Chat)
 
 ## Action Configuration
 
@@ -399,36 +417,39 @@ The `actionConfigLoader` reads this at runtime and `ActionItem` renders buttons 
 
 ## Gotchas
 
-- **Hash routing required:** Backend buckets don't support SPA fallback, all routes use `/#/path`
+- **Hash routing required:** Backend buckets do not support SPA fallback, all routes use `/#/path`
 - **Firestore listener cleanup:** Listeners must be unsubscribed when components unmount or tabs switch
 - **Auth0 token cache:** Uses `localstorage` to persist sessions across reloads
 - **PWA share target:** Handles URL parameters differently due to hash routing (see `App.tsx` share redirect handler)
-- **CostGuard markers:** Comments marked with `#CostGuard` indicate cost optimization patterns (batching, debouncing, conditional listeners)
-- **Vega bundle size:** Chart library is large; maximum file size for service worker caching is 4MB
+- **CostGuard markers:** Comments marked with `CostGuard` indicate cost optimization patterns (batching, debouncing, conditional listeners)
+- **Vega bundle size:** Chart library is large; maximum file size for service worker caching is 5MB
 - **Deep linking:** URL query parameters work with hash routing (`/#/inbox?action=xyz`)
 - **Dev mode:** When `import.meta.env.DEV` is true (Vite dev server), service URLs use relative API paths (e.g., `/api/code`) proxied by Vite instead of absolute service URLs
 - **DevBar visibility:** Only renders in dev environments (`import.meta.env.DEV`) and on `dev.intexuraos.cloud`; never in production
 - **Chat guest sessions:** Unauthenticated users can use the chat with rate limiting via `X-Guest-Session` header; session ID persists in localStorage
-- **Log stream (no xterm.js):** Code task logs use a custom `LogStream` component (inside `CodeTaskViewPage.tsx`) with CSS color classes per tag — no external terminal library
+- **Log stream (no xterm.js):** Code task logs use a custom `LogStream` component (inside `CodeTaskViewPage.tsx`) with CSS color classes per tag -- no external terminal library
+- **Collapsible tool output:** Tool result lines are detected by `[tool]` tag and subsequent indented lines; they collapse into expandable blocks with `isBodyLine` checking for single-space timestamp prefix
 - **CodeTaskViewPage keying:** The route mounts `CodeTaskViewPage` with `key={id}` to fully remount when navigating between tasks
 - **PR events lazy loading:** `PREventsPage` loads summaries first via `useGitHubPRSummaries`; individual event details load lazily via `useGitHubPREvents` when a PR group is expanded
+- **Worker secret autofill:** Secret input fields use `autoComplete="new-password"` to prevent browser autofill (INT-501)
+- **Null assignee handling:** `LinearIssuesPage` guards against null assignee values from the API response
 
 ## Technology Stack
 
-| Layer      | Technology                                                      |
-| ---------- | --------------------------------------------------------------- |
-| Framework  | React 19.1 with TypeScript                                      |
-| Build      | Vite 7.3                                                        |
-| Styling    | TailwindCSS 4.1 (dark mode support)                             |
-| Auth       | Auth0 SPA SDK                                                   |
-| Real-time  | Firebase SDK (Firestore)                                        |
-| PWA        | vite-plugin-pwa, workbox                                        |
-| Icons      | lucide-react                                                    |
-| Charts     | Vega, Vega-Lite, Vega-Embed                                     |
-| Log stream | Custom `LogStream` component (CSS color-coded, no external lib) |
-| Markdown   | @uiw/react-md-editor                                            |
-| HTML parse | rehype-raw (PR event comment bodies)                            |
-| Deployment | GCS + Cloud Load Balancer                                       |
+| Layer      | Technology                                                             |
+| ---------- | ---------------------------------------------------------------------- |
+| Framework  | React 19.1 with TypeScript                                            |
+| Build      | Vite 7.3                                                               |
+| Styling    | TailwindCSS 4.1 (dark mode support)                                   |
+| Auth       | Auth0 SPA SDK                                                          |
+| Real-time  | Firebase SDK (Firestore)                                               |
+| PWA        | vite-plugin-pwa, workbox                                               |
+| Icons      | lucide-react                                                           |
+| Charts     | Vega, Vega-Lite, Vega-Embed                                           |
+| Log stream | Custom `LogStream` component (CSS color-coded, collapsible tool blocks) |
+| Markdown   | @uiw/react-md-editor                                                   |
+| HTML parse | rehype-raw (PR event comment bodies)                                   |
+| Deployment | GCS + Cloud Load Balancer                                              |
 
 ## Deployment
 

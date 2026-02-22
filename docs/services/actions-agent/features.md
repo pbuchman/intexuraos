@@ -18,8 +18,8 @@ Actions-agent is the **central coordinator** for all user-initiated actions in I
 
 1. **commands-agent** classifies your command and publishes an event
 2. **actions-agent** receives the event, creates an Action record, and publishes `action.created`
-3. The appropriate handler (research, todo, note, link) picks up the event
-4. The handler sends you a WhatsApp notification with interactive **Approve** and **Reject** buttons
+3. The appropriate handler (research, todo, note, link, calendar, linear, code) picks up the event
+4. High-confidence actions (>= 90%) auto-execute immediately; lower confidence actions prompt you via WhatsApp with interactive **Approve** and **Reject** buttons
 5. You tap the button in WhatsApp
 6. Upon approval, the target service (research-agent, todos-agent, etc.) executes the action directly
 7. Actions-agent updates the action status and sends you a completion notification
@@ -28,13 +28,19 @@ Actions-agent is the **central coordinator** for all user-initiated actions in I
 
 ### WhatsApp Interactive Button Approval (v2.0.0, unified in v4.0.0)
 
-Approve or reject actions by tapping interactive buttons in WhatsApp — no typing required:
+Approve or reject actions by tapping interactive buttons in WhatsApp -- no typing required:
 
 - Tap **Approve** to approve any action
 - Tap **Reject** (or **Cancel**) to reject
 - Code actions get an extra **Convert to Issue** button
 - Text replies re-send fresh buttons (no LLM, no guessing)
-- Deterministic, instant intent resolution — no API calls needed
+- Deterministic, instant intent resolution -- no API calls needed
+
+### Confidence-Based Auto-Execution
+
+All action types with >= 90% classification confidence execute immediately without waiting for manual approval. This reduces friction for high-confidence commands while still protecting against misclassification on ambiguous inputs.
+
+**Example:** "Save https://example.com/article" classified as `link` with 0.95 confidence auto-creates the bookmark immediately, sending you a completion notification.
 
 ### Atomic Status Transitions
 
@@ -46,13 +52,13 @@ Firestore transactions prevent race conditions when multiple systems try to upda
 
 ### Event-Driven Architecture
 
-After WhatsApp approval, actions-agent executes actions directly or publishes `action.created` events to trigger downstream processing:
+After WhatsApp approval (or auto-execution), actions-agent executes actions directly or publishes `action.created` events to trigger downstream processing:
 
 - Research requests go to research-agent
 - Todo items go to todos-agent
 - Notes go to notes-agent
 - Links go to bookmarks-agent
-- Calendar events go to calendar-agent
+- Calendar events go to calendar-agent (with Google Calendar integration)
 - Linear issues go to linear-agent
 - Code tasks go to code-agent
 
@@ -86,7 +92,7 @@ After WhatsApp approval, actions-agent executes actions directly or publishes `a
 
 - "Schedule a meeting with John tomorrow at 3pm"
 - "Add event: Team standup every Monday 9am"
-- Action flows: pending -> awaiting_approval -> (WhatsApp button tap) -> processing -> completed
+- Action flows: pending -> awaiting_approval -> (WhatsApp button tap) -> processing -> completed (Google Calendar event created with direct link)
 
 ### Linear Actions
 
@@ -136,14 +142,18 @@ When classification is wrong:
 
 **Graceful deletion handling** - Deleted/expired actions return a clear WhatsApp notification instead of retrying forever
 
+**Google Calendar integration** - Calendar actions link directly to the created Google Calendar event
+
 ## Limitations
 
 **No reminder handler** - The reminder action type is defined but has no handler (action stays in pending)
-
-**High-confidence auto-execution** - Any action type with >= 90% confidence auto-executes immediately without manual approval
 
 **WhatsApp-only notifications** - Success/failure notifications currently only sent via WhatsApp
 
 **No bulk actions** - Actions are executed individually; batch execution is not supported
 
 **WhatsApp interactive buttons required** - Approval relies on interactive button support; if a client doesn't support buttons, text replies re-send fresh buttons
+
+---
+
+_Part of [IntexuraOS](../overview.md) -- From command to action, across every service._

@@ -1,19 +1,43 @@
-# Notes Agent - Tutorial
+# Notes Agent -- Tutorial
 
-Getting started with the notes-agent service.
+> **Time:** 15-20 minutes
+> **Prerequisites:** IntexuraOS development environment, Auth0 access token
+> **You will learn:** How to create, read, update, and delete notes via the REST API, and how internal services create notes programmatically
+
+---
+
+## What You Will Build
+
+A working integration that:
+
+- Creates notes with tags and source tracking
+- Lists and retrieves notes for an authenticated user
+- Updates note content using partial PATCH requests
+- Deletes notes with ownership verification
+- Creates notes via the internal service endpoint
+
+---
 
 ## Prerequisites
 
-- IntexuraOS development environment running
-- Auth0 access token for API requests
+Before starting, ensure you have:
 
-## Part 1: Create Your First Note
+- [ ] IntexuraOS development environment running (`pnpm dev` or PM2)
+- [ ] Valid Auth0 access token (`$TOKEN`)
+- [ ] Internal auth token (`$INTERNAL_TOKEN`) for Part 5
+- [ ] `curl` and `jq` installed
 
-### Step 1: Create a note
+**Base URL:** `http://localhost:8121` (local) or `https://intexuraos-notes-agent-cj44trunra-lm.a.run.app` (Cloud Run)
+
+---
+
+## Part 1: Create Your First Note (3 minutes)
+
+### Step 1.1: Create a Note
 
 ```bash
-curl -X POST https://notes-agent.intexuraos.com/notes \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+curl -X POST http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Meeting Notes",
@@ -24,32 +48,54 @@ curl -X POST https://notes-agent.intexuraos.com/notes \
   }'
 ```
 
-**Expected response:**
+**Expected response (201):**
 
 ```json
 {
   "success": true,
   "data": {
-    "id": "note_abc123",
-    "userId": "user_xyz",
+    "id": "abc123def456",
+    "userId": "auth0|user_xyz",
     "title": "Meeting Notes",
     "content": "Discussed Q4 roadmap and deliverables.",
     "tags": ["work", "planning"],
     "source": "manual",
     "sourceId": "local-1",
-    "createdAt": "2026-01-13T10:00:00.000Z",
-    "updatedAt": "2026-01-13T10:00:00.000Z"
+    "createdAt": "2026-02-22T10:00:00.000Z",
+    "updatedAt": "2026-02-22T10:00:00.000Z"
   }
 }
 ```
 
-> **Note:** The `status` field is stored internally but is **not** returned in API responses.
+### What Just Happened?
 
-### Step 2: List your notes
+The notes-agent authenticated your JWT, extracted your `userId` from the `sub` claim, created a Firestore document in the `notes` collection, and returned the full note with auto-generated ID and timestamps. The `status` field defaults to `'active'` but is intentionally omitted from the API response.
+
+**Save the note ID for the next steps:**
 
 ```bash
-curl https://notes-agent.intexuraos.com/notes \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+NOTE_ID=$(curl -s -X POST http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Meeting Notes",
+    "content": "Discussed Q4 roadmap and deliverables.",
+    "tags": ["work", "planning"],
+    "source": "manual",
+    "sourceId": "local-1"
+  }' | jq -r '.data.id')
+echo "Created note: $NOTE_ID"
+```
+
+---
+
+## Part 2: List and Retrieve Notes (3 minutes)
+
+### Step 2.1: List All Your Notes
+
+```bash
+curl -s http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" | jq
 ```
 
 **Expected response:**
@@ -59,99 +105,281 @@ curl https://notes-agent.intexuraos.com/notes \
   "success": true,
   "data": [
     {
-      "id": "note_abc123",
+      "id": "abc123def456",
+      "userId": "auth0|user_xyz",
       "title": "Meeting Notes",
       "content": "Discussed Q4 roadmap and deliverables.",
       "tags": ["work", "planning"],
-      ...
+      "source": "manual",
+      "sourceId": "local-1",
+      "createdAt": "2026-02-22T10:00:00.000Z",
+      "updatedAt": "2026-02-22T10:00:00.000Z"
     }
   ]
 }
 ```
 
-### Step 3: Get a specific note
+Notes are returned ordered by `updatedAt` descending -- most recently updated first. Only notes belonging to your `userId` are returned.
+
+### Step 2.2: Get a Specific Note
 
 ```bash
-curl https://notes-agent.intexuraos.com/notes/note_abc123 \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+curl -s http://localhost:8121/notes/$NOTE_ID \
+  -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-### Step 4: Update a note
+**Checkpoint:** You should see the exact note you created, with all fields populated.
+
+---
+
+## Part 3: Update a Note (3 minutes)
+
+### Step 3.1: Update the Content
+
+PATCH requests allow partial updates. You can update `title`, `content`, and `tags` independently.
 
 ```bash
-curl -X PATCH https://notes-agent.intexuraos.com/notes/note_abc123 \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+curl -s -X PATCH http://localhost:8121/notes/$NOTE_ID \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "Discussed Q4 roadmap, deliverables, and timeline adjustments."
-  }'
-```
-
-You can update `title`, `content`, and `tags`. Other fields cannot be changed via PATCH.
-
-### Step 5: Delete a note
-
-```bash
-curl -X DELETE https://notes-agent.intexuraos.com/notes/note_abc123 \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    "content": "Discussed Q4 roadmap, deliverables, and timeline adjustments.",
+    "tags": ["work", "planning", "q4"]
+  }' | jq
 ```
 
 **Expected response:**
 
 ```json
-{ "success": true, "data": {} }
+{
+  "success": true,
+  "data": {
+    "id": "abc123def456",
+    "title": "Meeting Notes",
+    "content": "Discussed Q4 roadmap, deliverables, and timeline adjustments.",
+    "tags": ["work", "planning", "q4"],
+    "updatedAt": "2026-02-22T10:05:00.000Z"
+  }
+}
 ```
 
-## Part 2: Creating Notes via Internal Endpoint
+Notice that `updatedAt` changed but `createdAt` remains the same. Fields you did not include in the PATCH body (`title`) remain unchanged.
 
-Other services create notes programmatically using the internal endpoint, which supports the optional `status` field:
+### What You Cannot Update
+
+The following fields are immutable after creation: `status`, `source`, `sourceId`, `userId`. Attempting to include them in a PATCH body has no effect (they are not in the `UpdateNoteInput` schema).
+
+---
+
+## Part 4: Delete a Note (2 minutes)
+
+### Step 4.1: Delete the Note
 
 ```bash
-curl -X POST https://notes-agent.intexuraos.com/internal/notes \
-  -H "X-Internal-Auth: YOUR_INTERNAL_AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "user_xyz",
-    "title": "Draft Idea",
-    "content": "Work in progress...",
-    "tags": [],
-    "source": "actions-agent",
-    "sourceId": "act_456",
-    "status": "draft"
-  }'
+curl -s -X DELETE http://localhost:8121/notes/$NOTE_ID \
+  -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-**Expected response** (ServiceFeedback format, not a Note object):
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+### Step 4.2: Verify Deletion
+
+```bash
+curl -s http://localhost:8121/notes/$NOTE_ID \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+**Expected response (404):**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Note not found"
+  }
+}
+```
+
+---
+
+## Part 5: Internal Note Creation (5 minutes)
+
+Other IntexuraOS services create notes programmatically using the internal endpoint. This bypasses JWT auth and uses the `X-Internal-Auth` header instead.
+
+### Step 5.1: Create a Note via Internal Endpoint
+
+```bash
+curl -s -X POST http://localhost:8121/internal/notes \
+  -H "X-Internal-Auth: $INTERNAL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "auth0|user_xyz",
+    "title": "Research Results: AI Trends 2026",
+    "content": "Key findings from multi-model research query...",
+    "tags": ["research", "ai"],
+    "source": "actions-agent",
+    "sourceId": "act_789",
+    "status": "draft"
+  }' | jq
+```
+
+**Expected response (201, ServiceFeedback format):**
 
 ```json
 {
   "success": true,
   "data": {
     "status": "completed",
-    "message": "Note \"Draft Idea\" created successfully",
-    "resourceUrl": "/#/notes/note_abc123"
+    "message": "Note \"Research Results: AI Trends 2026\" created successfully",
+    "resourceUrl": "/#/notes/xyz789abc"
   }
 }
 ```
 
-## Part 3: Tag-Based Organization
+### Key Differences from Public Endpoint
 
-Tags are stored and returned with each note. While tag-based filtering in the list endpoint is not yet available, you can use tags to organize notes and filter client-side:
+| Aspect        | Public (`POST /notes`)                | Internal (`POST /internal/notes`)        |
+| ------------- | ------------------------------------- | ---------------------------------------- |
+| Auth          | Bearer JWT (userId from `sub` claim)  | `X-Internal-Auth` header                 |
+| userId        | Extracted from JWT automatically      | Provided in request body                 |
+| status field  | Not accepted (always `active`)        | Optional (`draft` or `active`)           |
+| Response body | Full Note object                      | ServiceFeedback with `resourceUrl`       |
+
+---
+
+## Part 6: Tag-Based Organization (3 minutes)
+
+Tags are stored and returned with each note. While server-side tag filtering is not yet available, you can filter client-side.
+
+### Step 6.1: Create Notes with Different Tags
 
 ```bash
-# Get all notes and filter by tag client-side
-curl https://notes-agent.intexuraos.com/notes \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  | jq '.data[] | select(.tags[] | contains("work"))'
+# Work note
+curl -s -X POST http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Sprint Review","content":"Demo went well","tags":["work","sprint"],"source":"manual","sourceId":"m-1"}'
+
+# Personal note
+curl -s -X POST http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Grocery List","content":"Milk, eggs, bread","tags":["personal","shopping"],"source":"manual","sourceId":"m-2"}'
 ```
 
-> **Roadmap:** Server-side tag filtering is planned for a future release.
+### Step 6.2: Filter by Tag (Client-Side)
+
+```bash
+curl -s http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.data[] | select(.tags | index("work"))'
+```
+
+> **Roadmap:** Server-side tag filtering via query parameters is planned for a future release.
+
+---
 
 ## Troubleshooting
 
-| Issue           | Symptom          | Solution                                                       |
-| --------------- | ---------------- | -------------------------------------------------------------- |
-| Auth failed     | 401 Unauthorized | Check token validity                                           |
-| Note not found  | 404 error        | Verify note ID belongs to your account                         |
-| Invalid request | 400 error        | Check required fields (title, content, tags, source, sourceId) |
-| Access denied   | 403 error        | Note belongs to a different user                               |
+| Problem         | Symptom                  | Solution                                                       |
+| --------------- | ------------------------ | -------------------------------------------------------------- |
+| Auth failed     | 401 Unauthorized         | Check JWT token validity and ensure correct audience/issuer    |
+| Note not found  | 404 NOT_FOUND            | Verify note ID exists and belongs to your account              |
+| Access denied   | 403 FORBIDDEN            | Note belongs to a different user                               |
+| Invalid request | 400 Bad Request          | Check required fields: title, content, tags, source, sourceId  |
+| Server error    | 500 INTERNAL_ERROR       | Check Firestore connectivity; review service logs              |
+| Internal auth   | 401 on /internal/notes   | Verify X-Internal-Auth header matches INTEXURAOS_INTERNAL_AUTH_TOKEN |
+
+---
+
+## Next Steps
+
+Now that you understand the basics:
+
+1. Read the [Technical Reference](technical.md) for full API details and domain model documentation
+2. Explore the [Agent Interface](agent.md) for programmatic integration patterns
+3. Check [Technical Debt](technical-debt.md) for planned features like tag filtering
+
+---
+
+## Exercises
+
+Test your understanding:
+
+1. **Easy:** Create a note with three tags and verify they are returned in the list response
+2. **Medium:** Create two notes, update one, then list notes and confirm the updated note appears first (ordered by `updatedAt`)
+3. **Hard:** Write a script that creates a note via the internal endpoint, then retrieves it via the public endpoint using the ID from the `resourceUrl` field
+
+<details>
+<summary>Solutions</summary>
+
+### Exercise 1: Three Tags
+
+```bash
+curl -s -X POST http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Tagged Note","content":"Testing tags","tags":["alpha","beta","gamma"],"source":"manual","sourceId":"ex-1"}' \
+  | jq '.data.tags'
+# Expected: ["alpha", "beta", "gamma"]
+```
+
+### Exercise 2: Update Ordering
+
+```bash
+# Create two notes
+ID1=$(curl -s -X POST http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"First Note","content":"Created first","tags":[],"source":"manual","sourceId":"ex-2a"}' \
+  | jq -r '.data.id')
+
+sleep 1
+
+ID2=$(curl -s -X POST http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Second Note","content":"Created second","tags":[],"source":"manual","sourceId":"ex-2b"}' \
+  | jq -r '.data.id')
+
+# Update the first note
+curl -s -X PATCH http://localhost:8121/notes/$ID1 \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"First Note (Updated)"}' > /dev/null
+
+# List and check order -- first note should now be at index 0
+curl -s http://localhost:8121/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.data[0].title'
+# Expected: "First Note (Updated)"
+```
+
+### Exercise 3: Internal Create then Public Retrieve
+
+```bash
+# Create via internal endpoint
+RESOURCE_URL=$(curl -s -X POST http://localhost:8121/internal/notes \
+  -H "X-Internal-Auth: $INTERNAL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"auth0|user_xyz","title":"From Internal","content":"Created internally","tags":["internal"],"source":"test","sourceId":"ex-3"}' \
+  | jq -r '.data.resourceUrl')
+
+# Extract note ID from resourceUrl (format: /#/notes/<id>)
+INTERNAL_NOTE_ID=$(echo $RESOURCE_URL | sed 's|/#/notes/||')
+
+# Retrieve via public endpoint
+curl -s http://localhost:8121/notes/$INTERNAL_NOTE_ID \
+  -H "Authorization: Bearer $TOKEN" | jq '.data.title'
+# Expected: "From Internal"
+```
+
+</details>

@@ -22,8 +22,8 @@ Research-agent automates multi-model AI research:
 3. **Cost tracking** - Shows token usage and cost for each model in real-time
 4. **Public sharing** - Generates shareable URLs with AI-generated cover images
 5. **Context enhancement** - Add your own articles, notes, or previous research as context
-6. **Intelligent model selection** - LLM-powered extraction of model preferences from natural language (v2.0.0)
-7. **Notion export** - Automatic and manual export of completed research to Notion as structured pages (v2.2.0)
+6. **Intelligent model selection** - LLM-powered extraction of model preferences from natural language
+7. **Notion export** - Automatic and manual export of completed research to Notion as structured pages
 
 ## Use Cases
 
@@ -34,7 +34,7 @@ Research-agent automates multi-model AI research:
 - Each model provides its unique perspective and sources
 - Results are synthesized into a comprehensive answer
 
-### Natural Language Model Selection (v2.0.0)
+### Natural Language Model Selection
 
 - "Use Claude and Gemini to research sustainable energy" automatically selects those models
 - "Research quantum computing with deep research models" selects deep research variants
@@ -61,7 +61,7 @@ Research-agent automates multi-model AI research:
 - Share URL includes attribution and sources
 - Unsharing removes the public page and deletes associated media
 
-### Notion Export (v2.2.0)
+### Notion Export
 
 - Completed research can be automatically exported to Notion as structured pages
 - Automatic fire-and-forget export triggers after synthesis completion
@@ -86,17 +86,29 @@ Research-agent automates multi-model AI research:
 
 **Public sharing** - Share research results with clean, attributed URLs
 
-**Type-safe validation** - Zod schema validation for all LLM responses ensures data integrity (v2.0.0)
+**Type-safe validation** - Zod schema validation for all LLM responses ensures data integrity
 
-**Self-healing responses** - Parser + repair pattern automatically fixes malformed LLM JSON (v2.0.0)
+**Self-healing responses** - Parser + repair pattern automatically fixes malformed LLM JSON
 
-**Notion integration** - Automatic export to Notion with structured page hierarchy and markdown conversion (v2.2.0)
+**Notion integration** - Automatic export to Notion with structured page hierarchy and markdown conversion
+
+**Distributed tracing** - Dash0 OpenTelemetry provides end-to-end visibility across all service boundaries
+
+## Recent Changes (v3.1.0)
+
+### LLM Prompt Audit
+
+Adversarial dual-agent review (Opus architect + Sonnet challenger) audited and improved 27 prompts across all domains. Research-agent changes include simplified `ContextInferenceAdapter` with safer fallbacks replacing unsafe casts. Prompt versions bumped per semver rules.
+
+### Version Bumps (v3.0.0, v3.1.0)
+
+Package version aligned to v3.1.0 as part of the monorepo-wide release. No research-agent-specific code changes in these releases.
 
 ## Recent Changes (v2.4.0)
 
 ### Distributed Tracing (Observability)
 
-Research-agent now emits distributed traces to Dash0 via OpenTelemetry:
+Research-agent emits distributed traces to Dash0 via OpenTelemetry:
 
 - Traces propagate across Pub/Sub, HTTP, and Firestore boundaries
 - Enabled by `INTEXURAOS_DASH0_OTLP_ENDPOINT` environment variable
@@ -105,7 +117,7 @@ Research-agent now emits distributed traces to Dash0 via OpenTelemetry:
 
 ### Dev-Mode Log Formatting
 
-PM2 log output is now colorized and readable in development environments:
+PM2 log output is colorized and readable in development environments:
 
 ```
 research-agent | 10:30:00 | INFO  | Research created | {id: "abc123"}
@@ -117,11 +129,11 @@ Production JSON logging is unchanged.
 
 ### Platform API Key Fallbacks
 
-Research-agent now supports platform-owned API keys as fallbacks for users without their own LLM provider keys:
+Research-agent supports platform-owned API keys as fallbacks for users without their own LLM provider keys:
 
-- **Gemini primary fallback** — `INTEXURAOS_GEMINI_APP_API_KEY` enables `gemini-2.0-flash` for users without a Google API key
-- **Zai secondary fallback** — `INTEXURAOS_ZAI_APP_API_KEY` enables `glm-4.7-flash` when Gemini fallback is unavailable
-- Fallback ordering: user key → Gemini platform key → Zai platform key → error
+- **Gemini primary fallback** -- `INTEXURAOS_GEMINI_APP_API_KEY` enables `gemini-2.0-flash` for users without a Google API key
+- **Zai secondary fallback** -- `INTEXURAOS_ZAI_APP_API_KEY` enables `glm-4.7-flash` when Gemini fallback is unavailable
+- Fallback ordering: user key -> Gemini platform key -> Zai platform key -> error
 
 ### Gemini 2.0 Flash for Internal Operations
 
@@ -130,98 +142,9 @@ Switched title generation and context inference fast model from `glm-4.7-flash` 
 - `glm-4.7-flash` was taking 29s for title generation, exceeding the 10s HTTP timeout
 - `gemini-2.0-flash` is faster and already available via the platform Gemini key
 
-### API Key Naming Convention
-
-Standardized platform-owned API key environment variables to the `INTEXURAOS_<PROVIDER>_APP_API_KEY` pattern:
-
-- `INTEXURAOS_GUEST_ZAI_API_KEY` + `INTEXURAOS_ZAI_API_KEY` → `INTEXURAOS_ZAI_APP_API_KEY`
-
-### LLM Prompt Improvements
-
-- Simplified `buildSynthesisContextRepairPrompt` call signature in `ContextInferenceAdapter` — passes `originalPrompt` directly instead of a full params object, matching updated `@intexuraos/llm-prompts` API
-
-## Recent Changes (v2.2.0)
-
-### Notion Export Integration
-
-- Automatic fire-and-forget Notion export after synthesis completes
-- Manual export endpoint `POST /research/:id/export-notion` for on-demand export
-- Markdown-to-Notion block converter supporting headings, lists, code blocks, tables, inline formatting, and links
-- Batch append for exports exceeding Notion's 100-block API limit
-- Cover image inclusion in Notion pages when available
-- `NotionExportInfo` tracked on research model with `mainPageId`, `mainPageUrl`, and `llmReportPageIds`
-- Duplicate export prevention via `notionExportInfo` check
-
-### Research Export Settings
-
-- New `research_export_settings` Firestore collection for user-level Notion configuration
-- Settings endpoints: `GET/POST /research/settings/notion` for page configuration
-- Validation endpoint: `POST /research/settings/notion/validate` with page preview via notion-service
-- Page ID format validation (32 hex or UUID format) with normalization
-
-### Auth0 Claims Namespace Support
-
-- `extractGeneratedByInfo` now reads Auth0 claims under `https://intexuraos.cloud/` namespace
-- Fallback to bare `name`/`email` claims for ID token compatibility
-- Logging added for claims extraction diagnostics
-
-### Response Contract Standardization
-
-- Internal routes migrated from raw `reply.send()` to `reply.ok()`/`reply.fail()`
-- PubSub endpoints consistently return 200 OK with errors logged separately
-- Schema definitions updated with proper `required` fields and `const` boolean types
-
-### 100% Branch Coverage Enforcement (INT-427)
-
-- Strict 100% branch coverage with inline v8 ignore exemptions
-- Comprehensive test suites for Notion exporter, markdown converter, export settings, and export routes
-- Coverage exemptions use validated categories (`ts-type`, `test-infra`, `source-map`)
-
-### Sentry Logger Migration
-
-- Migrated to `createAppLogger()` from `@intexuraos/infra-sentry` for error forwarding to Sentry
-
-## Recent Changes (v2.1.0)
-
-### INT-269: Internal Clients Migration
-
-- Migrated user-service client to `@intexuraos/internal-clients` package
-- Standardized HTTP client across all services via shared infrastructure
-- Improved error handling with typed `UserServiceError` codes
-- Flat exports enable proper esbuild bundling for Docker deployment
-
-### INT-218: Input Validation Zod Migration
-
-- Created `InputQualitySchema` with backwards compatibility for `quality_scale` alias
-- Migrated `InputValidationAdapter` to use Zod validation
-- Added `formatZodErrors()` utility for detailed field-level error messages
-- Comprehensive test coverage for schema validation scenarios
-
-## Recent Changes (v2.0.0)
-
-### INT-178: LLM Model Selection
-
-- Natural language model preferences extraction during draft creation
-- Users can specify models in conversational form ("use Claude and Gemini")
-- Automatic filtering based on user's configured API keys
-- One model per provider constraint enforced automatically
-
-### INT-86: Zod Schema Migration
-
-- Context inference guards migrated from manual type guards to Zod schemas
-- ResearchContext and SynthesisContext validated with type-safe schemas
-- Parser + repair pattern for resilient LLM response handling
-- Detailed error messages for validation failures
-
-### INT-167: Test Coverage Improvements
-
-- Comprehensive test coverage for extractModelPreferences use case
-- ContextInferenceAdapter tests with repair scenarios
-- Route-level integration tests for model extraction flow
-
 ## Limitations
 
-**API key required** - Users must provide their own API keys for each LLM provider
+**API key required** - Users must provide their own API keys for each LLM provider (unless platform fallback keys are configured)
 
 **Max 6 models** - Research is limited to 6 simultaneous models to control costs
 
@@ -241,4 +164,4 @@ Standardized platform-owned API key environment variables to the `INTEXURAOS_<PR
 
 ---
 
-_Part of [IntexuraOS](../overview.md) — AI-powered research orchestration._
+_Part of [IntexuraOS](../overview.md) -- AI-powered research orchestration._

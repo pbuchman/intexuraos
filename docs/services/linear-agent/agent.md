@@ -9,8 +9,8 @@
 | Field    | Value                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------- |
 | **Name** | linear-agent                                                                                            |
-| **Role** | Linear Issue Management with AI Extraction, Webhook Sync, and Programmatic Issue Control                |
-| **Goal** | Create and manage Linear issues from natural language, sync via webhooks, and serve code agent requests |
+| **Role** | Linear Issue Management with AI Extraction, Webhook Sync, Auto-Trigger, and Programmatic Issue Control          |
+| **Goal** | Create and manage Linear issues from natural language, sync via webhooks, auto-trigger code tasks, and serve code agent requests |
 
 ---
 
@@ -451,6 +451,8 @@ interface ConnectionOutput {
 | **Dashboard from Firestore** | `GET /linear/issues` reads local cache; sync first if data looks stale   |
 | **Labels in POST /issues**   | `labels` field accepted but not forwarded to Linear API yet              |
 | **sync-all Auth**            | Accepts OIDC (Cloud Scheduler) or X-Internal-Auth                        |
+| **Auto-Trigger Guards**      | Only fires on first assignment, unstarted state, no "Code Task" label    |
+| **Auto-Trigger Fire-Forget** | Code task trigger does not block webhook response; errors logged only    |
 
 ---
 
@@ -490,7 +492,18 @@ interface ConnectionOutput {
 5. For comments: GET /linear/issues/:identifier/comments
 ```
 
-### Pattern 4: Webhook-Based Real-Time Sync
+### Pattern 4: Auto-Trigger Code Task on Assignment
+
+```
+1. User assigns themselves to an unstarted issue in Linear
+2. Linear sends webhook update event to POST /linear/webhook
+3. shouldTriggerCodeTask validates: first assignment, unstarted state, no "Code Task" label
+4. triggerCodeTaskFromAssignment calls code-agent POST /internal/code/process (fire-and-forget)
+5. Code agent enriches issue with requirements, acceptance criteria, test plan
+6. Issue is marked ready for execution (or flagged as unclear)
+```
+
+### Pattern 5: Webhook-Based Real-Time Sync
 
 ```
 1. User configures webhook in Linear (URL from GET /linear/webhook-config)
@@ -501,7 +514,7 @@ interface ConnectionOutput {
 6. Dashboard shows updated data on next load
 ```
 
-### Pattern 5: Full Sync Recovery
+### Pattern 6: Full Sync Recovery
 
 ```
 1. User triggers POST /linear/sync (or Cloud Scheduler calls POST /internal/linear/sync-all)
@@ -511,7 +524,7 @@ interface ConnectionOutput {
 5. Returns SyncStats with created/updated/deleted/total/durationMs
 ```
 
-### Pattern 6: Handle Extraction Failures
+### Pattern 7: Handle Extraction Failures
 
 ```
 1. Monitor GET /linear/failed-issues for pending items
@@ -562,12 +575,13 @@ Linear state names map to dashboard columns:
 
 ## Dependencies
 
-| Service              | Why Needed                | Failure Behavior     |
-| -------------------- | ------------------------- | -------------------- |
-| user-service         | Get LLM API key for user  | Return NOT_CONNECTED |
-| app-settings-service | LLM pricing context       | Use default pricing  |
-| Linear API           | Create/list/update issues | Return API_ERROR     |
-| Linear Webhooks      | Real-time issue events    | Retry by Linear      |
+| Service              | Why Needed                         | Failure Behavior        |
+| -------------------- | ---------------------------------- | ----------------------- |
+| user-service         | Get LLM API key for user           | Return NOT_CONNECTED    |
+| app-settings-service | LLM pricing context                | Use default pricing     |
+| code-agent           | Auto-trigger code tasks on assign  | Error logged, not fatal |
+| Linear API           | Create/list/update issues          | Return API_ERROR        |
+| Linear Webhooks      | Real-time issue events             | Retry by Linear         |
 
 ---
 
@@ -585,4 +599,4 @@ Linear state names map to dashboard columns:
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22

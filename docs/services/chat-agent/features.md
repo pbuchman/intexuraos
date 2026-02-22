@@ -22,7 +22,7 @@ Tell the assistant what you want to do, and it proposes the command for you. Con
 
 ### Guest Access Without Sign-Up
 
-Visitors can try the assistant without creating an account. Guest sessions use a platform-provided model at zero cost, with rate limiting to prevent abuse. Authenticated users run on their configured model -- defaulting to Gemini 2.5 Flash for the best response quality.
+Visitors can try the assistant without creating an account. Guest sessions use a platform-provided GLM-4.7-Flash model at zero cost, with rate limiting to prevent abuse. Authenticated users run on their configured model -- defaulting to Gemini 2.5 Flash, with GLM-4.7 and GLM-4.7-Flash as alternatives.
 
 **Example:** A prospective user lands on the marketing page, opens the chat widget, and asks "What can IntexuraOS do?" -- no login required, instant response.
 

@@ -1,81 +1,59 @@
 # Image Service
 
-AI-powered image generation and prompt enhancement for IntexuraOS. Creates cover images for research and generates optimized prompts from text content.
+Generate AI-powered cover images and optimized prompts for IntexuraOS research and content.
 
 ## The Problem
 
-AI-generated content needs visual elements:
-
-1. **Cover images** - Research and notes need thumbnails for sharing
-2. **Prompt enhancement** - Raw text needs refinement for image generation
-3. **Storage management** - Generated images need persistent storage with CDN access
-4. **Cost tracking** - Image generation costs should be tracked per user
+AI-generated content like research reports and notes needs compelling visual elements for sharing and browsing. Creating cover images manually is time-consuming and requires design skills. Raw text descriptions produce poor results when fed directly to image generation models. Teams need a centralized way to generate, store, and manage images with per-user cost tracking and automatic cleanup.
 
 ## How It Helps
 
-Image-service provides two core capabilities:
+### AI-Powered Prompt Generation
 
-1. **Image generation** - Creates images using OpenAI GPT Image 1 or Google Gemini Flash Image
-2. **Prompt generation** - Converts text content into optimized image prompts using LLMs
+Transforms raw text content into structured, optimized image generation prompts using LLMs. The service analyzes input text and produces a complete prompt specification including title, visual metaphor, detailed generation prompt, negative prompt, and rendering parameters like framing and realism style.
 
-Generated images are:
+**Example:** You submit a research title "Quantum Computing Advances" -- the service returns a structured prompt with visual metaphor, style parameters, and a detailed image generation prompt optimized for photorealistic or illustration styles.
 
-- Stored in Google Cloud Storage with signed URLs
-- Automatically thumbnailed (256px max edge)
-- Tracked in Firestore for cost attribution
-- Can be deleted when content is unshared
+### Multi-Provider Image Generation
 
-## Use Cases
+Creates images using either OpenAI GPT Image 1 or Google Gemini 2.5 Flash Image, selecting the provider based on the user's configured API keys. Generated images are automatically uploaded to Google Cloud Storage with both full-size PNG and compressed JPEG thumbnails.
 
-### Research Cover Images
+**Example:** A research-agent calls the image generation endpoint with an enhanced prompt and model choice. The service generates the image, creates a 256px thumbnail, uploads both to GCS, and returns public URLs ready for embedding.
 
-When research completes:
+### Automatic Thumbnail Creation
 
-1. Research-agent calls image-service with research title
-2. Image-service generates an optimized prompt from the title
-3. Image is generated using GPT Image 1 or Gemini Flash Image
-4. Image stored in GCS with signed URLs
-5. Research updated with cover image ID
-6. When research is unshared, image is deleted
+Every generated image produces both a full-size PNG and a 256px JPEG thumbnail (80% quality) in a single operation. Thumbnails maintain the original aspect ratio with the longest edge capped at 256 pixels, optimized for fast loading in feed views and previews.
 
-### Thumbnail Prompts
+**Example:** A 1024x768 image generates a 256x192 JPEG thumbnail alongside the full-size PNG, both served from GCS with one-year cache headers.
 
-For notes and bookmarks:
+### Clean Lifecycle Management
 
-1. Text content (title + excerpt) sent to image-service
-2. LLM generates an optimized image generation prompt
-3. Prompt returned to caller (image not generated yet)
+Images follow the lifecycle of the content they belong to. When research is unshared, the cover image is deleted from both GCS storage and the Firestore metadata record in a single operation, preventing orphaned files from accumulating.
+
+**Example:** A user unshares their research report. The research-agent calls DELETE on the image ID, and both the GCS objects (full-size and thumbnail) and the Firestore record are removed.
+
+## Use Case
+
+A research-agent completes a report on "AI Safety and Alignment Strategies." It calls image-service with the research title. The service generates an optimized image prompt using Gemini 2.5 Pro, producing a structured specification with visual metaphor and style parameters. The research-agent then calls the image generation endpoint with that prompt and the user's preferred model. Image-service generates the cover image, creates a thumbnail, uploads both to GCS, saves metadata to Firestore, and returns the public URLs. The research-agent stores the image ID in the research document. When the user later unshares the research, the image is automatically deleted.
 
 ## Key Benefits
 
-**Multi-provider support** - Choose between OpenAI GPT Image 1 and Google Gemini Flash Image
-
-**Smart prompt generation** - LLM-powered prompt enhancement for better results
-
-**Automatic thumbnailing** - 256px thumbnails generated alongside full-size images
-
-**Cost transparency** - Image generation tracked per user for billing
-
-**Platform key fallback** - Users without personal API keys automatically fall back to platform-owned keys, enabling image generation for all users
-
-**Distributed tracing** - OpenTelemetry instrumentation via Dash0 for end-to-end request visibility
-
-**Standardized response contract** - All endpoints use `reply.ok(data)` / `reply.fail(code, message)` for consistent error handling
-
-**Sentry error tracking** - Logger integrated with Sentry for automatic error reporting
-
-**Clean deletion** - Images removed from GCS when content is unshared
+- Multi-provider flexibility -- choose between OpenAI and Google image generation models
+- Structured prompt enhancement turns raw text into optimized generation prompts
+- Automatic thumbnail creation reduces client-side processing
+- Platform key fallback enables image generation for users without personal API keys
+- Clean deletion prevents storage waste when content is removed
+- Per-user cost tracking through LLM pricing integration
 
 ## Limitations
 
-**No image editing** - Only generates new images; cannot modify existing images
+- Only generates new images; cannot edit, inpaint, or create variations of existing images
+- Prompt text input limited to 10-60000 characters; image prompts limited to 10-2000 characters
+- No batch generation -- each image requires a separate API call
+- No style presets or pre-defined artistic filters
+- Thumbnail size fixed at 256px maximum edge; not configurable per request
+- Internal-only access -- no public-facing API endpoints
 
-**Fixed aspect ratio** - Images generated with 1:1 square aspect ratio only
+---
 
-**No image variations** - Cannot generate variations of an existing image
-
-**Prompt-only mode** - Some operations return prompts without generating images
-
-**No style presets** - No pre-defined artistic styles or filters
-
-**Size limit** - Generated images are 1024x1024 maximum
+_Part of [IntexuraOS](../overview.md) -- AI-powered visual content generation._

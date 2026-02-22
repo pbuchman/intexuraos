@@ -1,19 +1,40 @@
 # User Service - Tutorial
 
-This tutorial covers authentication, LLM API key management, and OAuth integration using the user-service.
+> **Time:** 20-30 minutes
+> **Prerequisites:** Node.js 20+, IntexuraOS dev environment, Auth0 tenant
+> **You'll learn:** How to authenticate, manage LLM API keys, set default models, and connect Google OAuth
+
+---
+
+## What You'll Build
+
+A working integration that:
+
+- Authenticates via the device code flow
+- Stores and validates LLM API keys
+- Tests keys with real provider calls
+- Sets a default LLM model for all agents
+- Connects a Google account for calendar access
+- Accesses internal endpoints for service-to-service communication
+
+---
 
 ## Prerequisites
 
-- IntexuraOS development environment running
-- Auth0 tenant configured
-- Encryption key generated (32 bytes hex)
-- At least one LLM API key (Google, OpenAI, Anthropic, Perplexity, or Zai)
+Before starting, ensure you have:
 
-## Part 1: Hello World - Get Auth Config
+- [ ] IntexuraOS development environment running
+- [ ] Auth0 tenant configured
+- [ ] Encryption key generated (32 bytes hex)
+- [ ] At least one LLM API key (Google, OpenAI, Anthropic, Perplexity, or Zai)
+
+---
+
+## Part 1: Hello World - Get Auth Config (2 minutes)
 
 The simplest endpoint returns non-secret Auth0 configuration for troubleshooting.
 
-### Step 1: Get Auth configuration
+### Step 1.1: Get Auth configuration
 
 ```bash
 curl https://user-service.intexuraos.com/auth/config
@@ -23,10 +44,13 @@ curl https://user-service.intexuraos.com/auth/config
 
 ```json
 {
-  "issuer": "https://YOUR_AUTH0_DOMAIN/",
-  "audience": "urn:intexuraos:api",
-  "jwksUrl": "https://YOUR_AUTH0_DOMAIN/.well-known/jwks.json",
-  "domain": "YOUR_AUTH0_DOMAIN"
+  "success": true,
+  "data": {
+    "issuer": "https://YOUR_AUTH0_DOMAIN/",
+    "audience": "urn:intexuraos:api",
+    "jwksUrl": "https://YOUR_AUTH0_DOMAIN/.well-known/jwks.json",
+    "domain": "YOUR_AUTH0_DOMAIN"
+  }
 }
 ```
 
@@ -34,11 +58,13 @@ curl https://user-service.intexuraos.com/auth/config
 
 You can verify the Auth0 domain and audience are correctly configured for your tenant.
 
-## Part 2: Device Code Flow Authentication
+---
+
+## Part 2: Device Code Flow Authentication (5 minutes)
 
 Authenticate without a browser (for CLI/mobile apps).
 
-### Step 1: Request device code
+### Step 2.1: Request device code
 
 ```bash
 curl -X POST https://user-service.intexuraos.com/auth/device/start \
@@ -53,23 +79,26 @@ curl -X POST https://user-service.intexuraos.com/auth/device/start \
 
 ```json
 {
-  "device_code": "LoremIpsumDolorSitAmet",
-  "user_code": "ABCD-EFGH",
-  "verification_uri": "https://YOUR_AUTH0_DOMAIN/activate",
-  "verification_uri_complete": "https://YOUR_AUTH0_DOMAIN/activate?user_code=ABCD-EFGH",
-  "expires_in": 900,
-  "interval": 5
+  "success": true,
+  "data": {
+    "device_code": "LoremIpsumDolorSitAmet",
+    "user_code": "ABCD-EFGH",
+    "verification_uri": "https://YOUR_AUTH0_DOMAIN/activate",
+    "verification_uri_complete": "https://YOUR_AUTH0_DOMAIN/activate?user_code=ABCD-EFGH",
+    "expires_in": 900,
+    "interval": 5
+  }
 }
 ```
 
-### Step 2: User completes authentication
+### Step 2.2: User completes authentication
 
 1. Display `verification_uri_complete` to the user
 2. User visits the URL (opens in browser)
 3. User enters `user_code` if required
 4. User logs in and authorizes the device
 
-### Step 3: Poll for token
+### Step 2.3: Poll for token
 
 ```bash
 # Poll every 5 seconds (respecting the interval)
@@ -80,25 +109,31 @@ curl -X POST https://user-service.intexuraos.com/auth/device/poll \
   }'
 ```
 
-**Before user authenticates:**
+**Before user authenticates (409 Conflict):**
 
 ```json
 {
-  "error": "authorization_pending",
-  "error_description": "Authorization pending"
+  "success": false,
+  "error": {
+    "code": "CONFLICT",
+    "message": "Authorization pending. User has not yet completed authentication."
+  }
 }
 ```
 
-**After user authenticates:**
+**After user authenticates (200 OK):**
 
 ```json
 {
-  "access_token": "eyJhbGciOiJSUzI1NiIs...",
-  "token_type": "Bearer",
-  "expires_in": 86400,
-  "refresh_token": "DefrgHijKlmnOpq...",
-  "scope": "openid profile email offline_access",
-  "id_token": "eyJhbGciOiJSUzI1NiIs..."
+  "success": true,
+  "data": {
+    "access_token": "eyJhbGciOiJSUzI1NiIs...",
+    "token_type": "Bearer",
+    "expires_in": 86400,
+    "refresh_token": "DefrgHijKlmnOpq...",
+    "scope": "openid profile email offline_access",
+    "id_token": "eyJhbGciOiJSUzI1NiIs..."
+  }
 }
 ```
 
@@ -106,11 +141,13 @@ curl -X POST https://user-service.intexuraos.com/auth/device/poll \
 
 You now have an access token to authenticate other requests.
 
-## Part 3: Add and Validate an LLM API Key
+---
+
+## Part 3: Add and Validate an LLM API Key (5 minutes)
 
 Store an LLM provider API key with real-time validation.
 
-### Step 1: Add an API key
+### Step 3.1: Add an API key
 
 ```bash
 curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
@@ -160,7 +197,7 @@ The service validates the key by making a test call to OpenAI before storing it.
 }
 ```
 
-### Step 2: Verify the key is stored
+### Step 3.2: Verify the key is stored
 
 ```bash
 curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
@@ -194,11 +231,13 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
 
 Your API key is encrypted and stored. The masked preview shows it was saved correctly.
 
-## Part 4: Test an LLM API Key
+---
+
+## Part 4: Test an LLM API Key (5 minutes)
 
 Test a stored key by making a real LLM call.
 
-### Step 1: Test the key
+### Step 4.1: Test the key
 
 ```bash
 curl -X POST https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys/openai/test \
@@ -244,7 +283,7 @@ curl -X POST https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm
 }
 ```
 
-### Step 2: Check test results
+### Step 4.2: Check test results
 
 ```bash
 curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
@@ -274,11 +313,13 @@ Test results are now visible in the response:
 
 The test result is stored and displayed alongside the key status.
 
-## Part 5: Delete an LLM API Key
+---
+
+## Part 5: Delete an LLM API Key (2 minutes)
 
 Remove a stored API key.
 
-### Step 1: Delete the key
+### Step 5.1: Delete the key
 
 ```bash
 curl -X DELETE https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys/openai \
@@ -293,7 +334,7 @@ curl -X DELETE https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/l
 }
 ```
 
-### Step 2: Verify deletion
+### Step 5.2: Verify deletion
 
 ```bash
 curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
@@ -302,11 +343,13 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
 
 The provider now shows `null`.
 
-## Part 6: Set Default LLM Model
+---
+
+## Part 6: Set Default LLM Model (3 minutes)
 
 Configure which fast model all agents use by default.
 
-### Step 1: Set a default model
+### Step 6.1: Set a default model
 
 ```bash
 curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
@@ -344,11 +387,13 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 
 All agents now use "claude-haiku-3-5" by default. If the user has no Anthropic API key, the platform falls back to GLM-4.7-Flash automatically.
 
-## Part 8: Connect Google OAuth
+---
+
+## Part 7: Connect Google OAuth (5 minutes)
 
 Connect a Google account for calendar integration.
 
-### Step 1: Initiate OAuth flow
+### Step 7.1: Initiate OAuth flow
 
 ```bash
 curl -X POST https://user-service.intexuraos.com/oauth/connections/google/initiate \
@@ -366,14 +411,14 @@ curl -X POST https://user-service.intexuraos.com/oauth/connections/google/initia
 }
 ```
 
-### Step 2: Complete OAuth flow
+### Step 7.2: Complete OAuth flow
 
 1. Redirect user to `authorizationUrl`
 2. User grants calendar permissions
 3. Google redirects back to callback URL
 4. Service stores encrypted tokens
 
-### Step 3: Check connection status
+### Step 7.3: Check connection status
 
 ```bash
 curl https://user-service.intexuraos.com/oauth/connections/google/status \
@@ -399,11 +444,13 @@ curl https://user-service.intexuraos.com/oauth/connections/google/status \
 
 Google account is connected. Calendar-agent can now access the user's calendar through internal endpoints.
 
-## Part 9: Internal Service Access (Service-to-Service)
+---
+
+## Part 8: Internal Service Access (Service-to-Service) (5 minutes)
 
 Simulate how another service (like research-agent) accesses API keys.
 
-### Step 1: Internal request with shared secret
+### Step 8.1: Internal request with shared secret
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
@@ -425,7 +472,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
 }
 ```
 
-### Step 2: Update last used timestamp
+### Step 8.2: Update last used timestamp
 
 ```bash
 curl -X POST https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys/openai/last-used \
@@ -434,7 +481,7 @@ curl -X POST https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm
 
 Returns 204 No Content on success.
 
-### Step 3: Get Google OAuth token (for calendar-agent)
+### Step 8.3: Get Google OAuth token (for calendar-agent)
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/google/token \
@@ -455,7 +502,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/oauth/googl
 
 This automatically refreshes the token if expired.
 
-### Step 4: Get user LLM preferences
+### Step 8.4: Get user LLM preferences
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
@@ -469,13 +516,15 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
   "success": true,
   "data": {
     "llmPreferences": {
-      "defaultModel": "gpt-4o"
+      "defaultModel": "claude-haiku-3-5"
     }
   }
 }
 ```
 
-## Part 10: Handle Errors
+---
+
+## Part 9: Handle Errors (3 minutes)
 
 ### Error: Invalid API key format
 
@@ -547,6 +596,8 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 
 **Solution:** Set `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID` and `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET`.
 
+---
+
 ## Troubleshooting
 
 | Issue                   | Symptom                         | Solution                                                  |
@@ -558,6 +609,20 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 | Token refresh fails     | Access token expired            | User may have revoked access; re-authentication required  |
 | Rate limit shown as key | "Invalid API key" for 429 error | Update to v2.0.0 - rate limits now correctly identified   |
 | Test costs money        | Charges on provider account     | Test endpoint makes real API calls; use sparingly         |
+| Pricing fetch fails     | Service fails to start          | Ensure app-settings-service is running and accessible     |
+| Default model rejected  | 400 INVALID_REQUEST             | Model must pass `isFastModel()` validation                |
+
+---
+
+## Next Steps
+
+Now that you understand the basics:
+
+1. Explore the [Technical Reference](technical.md) for full API details
+2. Read [agent.md](agent.md) for machine-readable interface definitions
+3. Check out the web app Settings page to see the UI built on these APIs
+
+---
 
 ## Exercises
 
@@ -572,9 +637,70 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 1. Complete the device code flow end-to-end
 2. Add an API key and verify it's encrypted in Firestore
 3. Test an API key and verify the result is stored
+4. Set a default model and read it back via the internal endpoint
 
 ### Hard
 
 1. Build a CLI client that completes device code flow
 2. Implement a service that fetches internal API keys
 3. Create a full OAuth flow handler for calendar integration
+
+<details>
+<summary>Solutions</summary>
+
+### Exercise 1: Easy - Get Auth Config
+
+```bash
+curl https://user-service.intexuraos.com/auth/config
+```
+
+### Exercise 2: Medium - Add and Test Key
+
+```bash
+# Add key
+curl -X PATCH https://user-service.intexuraos.com/users/$UID/settings/llm-keys \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "openai", "apiKey": "sk-proj-..."}'
+
+# Test key
+curl -X POST https://user-service.intexuraos.com/users/$UID/settings/llm-keys/openai/test \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Exercise 3: Hard - CLI Device Code Flow
+
+```typescript
+async function deviceLogin(): Promise<string> {
+  // Start
+  const start = await fetch('/auth/device/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      audience: 'urn:intexuraos:api',
+      scope: 'openid profile email offline_access',
+    }),
+  });
+  const { data } = await start.json();
+
+  console.log(`Visit ${data.verification_uri_complete}`);
+  console.log(`Enter code: ${data.user_code}`);
+
+  // Poll
+  while (true) {
+    await new Promise((r) => setTimeout(r, data.interval * 1000));
+    const poll = await fetch('/auth/device/poll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_code: data.device_code }),
+    });
+
+    if (poll.status === 200) {
+      const { data: tokens } = await poll.json();
+      return tokens.access_token;
+    }
+  }
+}
+```
+
+</details>

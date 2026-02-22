@@ -4,25 +4,27 @@
       "id": "actions-agent",
       "name": "Actions Agent",
       "category": "infrastructure",
-      "summary": "Central action lifecycle with atomic status transitions, button-based WhatsApp approval, and race condition prevention (v3.0.0)",
+      "summary": "Central action lifecycle with atomic status transitions, button-based WhatsApp approval, confidence-based auto-execution, and Google Calendar linking (v4.1.0)",
       "features": [
-        "Atomic status transitions via Firestore transactions (v2.0.0)",
+        "Confidence-based auto-execution for all action types at >= 90% (v4.1.0)",
         "Button-based WhatsApp approval — LLM removed, buttonId resolves intent deterministically (v4.0.0)",
+        "Atomic status transitions via Firestore transactions (v2.0.0)",
         "Race condition prevention via updateStatusIf (v2.0.0)",
+        "Calendar auto-execute and Google Calendar event linking (v3.1.0)",
+        "Code action dispatch with cancel-task and convert-to-issue buttons (v3.0.0)",
         "Centralized user service client via @intexuraos/internal-clients (v2.1.0)",
-        "Unified action queue",
-        "Status workflow management",
-        "Pub/Sub event distribution",
-        "Agent orchestration"
+        "Unified action queue with 8 action types",
+        "Resource status tracking for code tasks (dispatched/running/completed/failed/cancelled/interrupted)",
+        "Pub/Sub event distribution and agent orchestration"
       ],
-      "endpoints": 8,
+      "endpoints": 13,
       "docs": "services/actions-agent"
     },
     {
       "id": "research-agent",
       "name": "Research Agent",
       "category": "ai-research",
-      "summary": "Multi-LLM research orchestration with Notion export, platform API key fallbacks, and natural language model selection (v2.3.0)",
+      "summary": "Multi-LLM research orchestration with Notion export, distributed tracing, platform API key fallbacks, and natural language model selection (v3.1.0)",
       "features": [
         "5 LLM providers (Claude, OpenAI, Google, Perplexity, Zai)",
         "Natural language model selection (v2.0.0)",
@@ -32,7 +34,9 @@
         "Input validation with Zod schemas (v2.1.0)",
         "User service client via @intexuraos/internal-clients (v2.1.0)",
         "Notion export with per-model report pages (v2.2.0)",
-        "Platform API key fallbacks for Gemini and Zai when user has no key (v2.3.0)"
+        "Platform API key fallbacks for Gemini and Zai when user has no key (v2.3.0)",
+        "Distributed tracing via Dash0 OpenTelemetry (v2.4.0)",
+        "Adversarial prompt audit with safer fallbacks (v3.1.0)"
       ],
       "endpoints": 19,
       "docs": "services/research-agent"
@@ -107,15 +111,17 @@
       "id": "whatsapp-service",
       "name": "WhatsApp Service",
       "category": "integrations",
-      "summary": "WhatsApp Business API with approval workflows via text replies and emoji reactions (v2.0.0)",
+      "summary": "WhatsApp Business API with interactive button approvals, phone verification, and voice transcription (v4.0.0)",
       "features": [
-        "Approval via text replies with LLM intent classification (v2.0.0)",
-        "Approval via emoji reactions: approve, reject (v2.0.0)",
+        "Interactive approval buttons with intent:actionId format (v4.0.0)",
+        "Read receipts and typing indicator on button tap (v4.0.0)",
+        "Phone number verification via 6-digit code (v3.0.0)",
         "OutboundMessage correlation for reply tracking (v2.0.0)",
-        "Webhook signature validation",
-        "Text, image, and audio support",
-        "Media download to GCS",
-        "Async transcription"
+        "Webhook HMAC-SHA256 signature validation",
+        "Text, image, and audio message handling",
+        "Media download to GCS with thumbnails",
+        "Speechmatics audio transcription with AI summary",
+        "Link preview extraction via Open Graph"
       ],
       "endpoints": 14,
       "docs": "services/whatsapp-service"
@@ -295,18 +301,21 @@
       "id": "code-agent",
       "name": "Code Agent",
       "category": "ai-research",
-      "summary": "Autonomous code execution with worker dispatch, HMAC signing, and GitHub PR lifecycle",
+      "summary": "Autonomous code execution with worker dispatch, prompt sanitization, two-phase execution, and GitHub PR lifecycle (v3.1.0)",
       "features": [
         "Submit-and-forget code tasks from web UI or WhatsApp",
-        "Multi-layer deduplication (approval event, action ID, sha256 dedup key)",
-        "GitHub PR event tracking with Firestore persistence",
-        "Per-user worker infrastructure with encrypted credentials",
-        "Retry and feedback loops with cool-off periods",
+        "Prompt sanitization stripping 9 secret categories before dispatch (v3.1.0)",
+        "Four-layer deduplication (approval event, action ID, sha256 dedup key, Linear active check)",
+        "Two-phase execution: design (Phase 1) then implementation (Phase 2) (v3.0.0)",
+        "GitHub PR comment auto-response with sender whitelist (v3.1.0)",
+        "Per-user worker infrastructure with AES-256-GCM encrypted credentials",
+        "Retry, feedback, and mid-task messaging with task resume",
+        "Turn-level metrics: CPU, memory, tokens, API wait times per worker turn (v3.1.0)",
         "Rate limiting (3 concurrent, 10/hour, $20/day, $200/month)",
         "Real-time log streaming via chunked HMAC-signed uploads",
         "Zombie task detection (30-minute heartbeat threshold)"
       ],
-      "endpoints": 27,
+      "endpoints": 28,
       "docs": "services/code-agent"
     },
     {
@@ -781,6 +790,6 @@
     "documentedServices": 46,
     "completion": 100,
     "version": "3.0.0",
-    "lastUpdated": "2026-02-19"
+    "lastUpdated": "2026-02-22"
   }
 }
