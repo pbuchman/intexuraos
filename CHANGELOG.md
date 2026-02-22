@@ -39,8 +39,6 @@
 - Fixed queued messages tracked in orchestrator memory instead of Firestore, causing loss on restart
 - Fixed worker health status showing false positives for offline workers
 - Fixed secrets directory inode corruption during worker container preservation
-- Fixed 20 gaps in release skill — CHANGELOG step ordering, `pnpm install` after version bumps, `jq` consistency, `--base development`, force-push removal, first-release guard, empty manifest guard, merge conflict detection, and accumulation pattern
-- Fixed 10 code review findings in release skill — stale step cross-references, merge conflict handler halt, redundant `LAST_TAG_DATE`, table alignment, release notes timing clarification, and standalone-only note for semver Steps 8-9
 
 ## 2.1.0
 
