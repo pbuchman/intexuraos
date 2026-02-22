@@ -14,20 +14,21 @@ When `claude[bot]` finishes editing its review comment, dispatch the finalized b
 
 **Current behavior** (`github.ts:371-376`):
 
-| Event                         | Result  |
-| ----------------------------- | ------- |
-| `issue_comment` + `created`   | Dispatch |
-| `issue_comment` + `edited`    | Dropped  |
+| Event                       | Result   |
+| --------------------------- | -------- |
+| `issue_comment` + `created` | Dispatch |
+| `issue_comment` + `edited`  | Dropped  |
 
 **New behavior:**
 
-| Event                                          | Result           |
-| ---------------------------------------------- | ---------------- |
-| `issue_comment` + `created`                    | Dispatch (unchanged) |
-| `issue_comment` + `edited` + `sender=claude[bot]` | Dispatch (NEW)   |
-| `issue_comment` + `edited` + `sender=anyone else` | Dropped (unchanged) |
+| Event                                             | Result               |
+| ------------------------------------------------- | -------------------- |
+| `issue_comment` + `created`                       | Dispatch (unchanged) |
+| `issue_comment` + `edited` + `sender=claude[bot]` | Dispatch (NEW)       |
+| `issue_comment` + `edited` + `sender=anyone else` | Dropped (unchanged)  |
 
 Existing filters remain:
+
 - `BOT_LOGIN` (`intexuraos-code-worker[bot]`) — prevents self-loops
 - `EXTERNAL_AGENT_MENTIONS` (`@claude`, `@codex`) — finalized body says "Claude finished" not "@claude", so not caught
 
@@ -82,17 +83,18 @@ Instructions:
 ```markdown
 ## Review Triage — Comment #${commentId}
 
-| # | Finding | Verdict | Reasoning | Action |
-|---|---------|---------|-----------|--------|
-| 1 | SECRET env var variant not caught | FIX | Valid gap in pattern coverage | Fixed in abc123 |
-| 2 | apikey URL param not tested | FIX | Test gap — pattern exists but untested | Fixed in abc123 |
-| 3 | ghr_ token not directly tested | SKIP | Low value — regex provably covers it | — |
-| 4 | Integration test dispatch assertion | FIX | High value — verifies secrets don't reach workers | Fixed in def456 |
+| #   | Finding                             | Verdict | Reasoning                                         | Action          |
+| --- | ----------------------------------- | ------- | ------------------------------------------------- | --------------- |
+| 1   | SECRET env var variant not caught   | FIX     | Valid gap in pattern coverage                     | Fixed in abc123 |
+| 2   | apikey URL param not tested         | FIX     | Test gap — pattern exists but untested            | Fixed in abc123 |
+| 3   | ghr\_ token not directly tested     | SKIP    | Low value — regex provably covers it              | —               |
+| 4   | Integration test dispatch assertion | FIX     | High value — verifies secrets don't reach workers | Fixed in def456 |
 ```
 
 ### 4. Deduplication
 
 Multiple `edited` events arrive as `claude[bot]` appends content. The worker handles this naturally:
+
 - If body shows "working" indicators → does nothing
 - Once finalized → processes and implements
 - If a duplicate finalized edit arrives → worker sees review was already addressed (eyes reaction present, triage comment exists)
@@ -101,11 +103,11 @@ No code-level dedup needed.
 
 ### 5. Files to Modify
 
-| File                                                         | Change                                           |
-| ------------------------------------------------------------ | ------------------------------------------------ |
-| `apps/code-agent/src/routes/webhooks/github.ts:371-376`     | Expand gate for `edited` + `claude[bot]`         |
-| `apps/code-agent/src/routes/webhooks/github.ts:133-176`     | New message format branch in `buildDispatchMessage()` |
-| `apps/code-agent/src/__tests__/routes/webhooks/github.test.ts` | Tests for new gate + message format             |
+| File                                                           | Change                                                |
+| -------------------------------------------------------------- | ----------------------------------------------------- |
+| `apps/code-agent/src/routes/webhooks/github.ts:371-376`        | Expand gate for `edited` + `claude[bot]`              |
+| `apps/code-agent/src/routes/webhooks/github.ts:133-176`        | New message format branch in `buildDispatchMessage()` |
+| `apps/code-agent/src/__tests__/routes/webhooks/github.test.ts` | Tests for new gate + message format                   |
 
 No orchestrator changes needed — dispatch, resume, and message queue infrastructure works as-is.
 

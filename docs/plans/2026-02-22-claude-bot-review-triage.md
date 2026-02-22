@@ -13,6 +13,7 @@
 ### Task 1: Add constant for claude[bot] sender login
 
 **Files:**
+
 - Modify: `apps/code-agent/src/routes/webhooks/github.ts:23-24`
 - Test: `apps/code-agent/src/__tests__/routes/webhooks/github.test.ts`
 
@@ -41,6 +42,7 @@ git commit -m "refactor(code-agent): add CLAUDE_BOT_LOGIN constant"
 ### Task 2: Expand the dispatch gate for edited claude[bot] events
 
 **Files:**
+
 - Modify: `apps/code-agent/src/routes/webhooks/github.ts:371-377`
 - Test: `apps/code-agent/src/__tests__/routes/webhooks/github.test.ts`
 
@@ -49,55 +51,57 @@ git commit -m "refactor(code-agent): add CLAUDE_BOT_LOGIN constant"
 In `apps/code-agent/src/__tests__/routes/webhooks/github.test.ts`, inside the `describe('PR comment dispatch events')` block (after the existing `@codex` test around line 1020), add:
 
 ```typescript
-    it('dispatches edited issue_comment from claude[bot] to task', async () => {
-      const claudeBotEditPayload = {
-        action: 'edited',
-        issue: {
-          id: 101,
-          number: 42,
-          title: 'Test PR',
-          body: 'Test PR description',
-          state: 'open',
-          user: { login: 'author', id: 111, type: 'User' },
-          pull_request: {
-            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
-          },
-        },
-        comment: {
-          id: 77777,
-          body: '**Claude finished @pbuchman\'s task in 4m 51s**\n\n### Summary\nFound 2 issues.',
-          user: { login: 'claude[bot]', id: 999, type: 'Bot' },
-        },
-        repository: {
-          id: 456,
-          name: 'intexuraos',
-          full_name: 'test/intexuraos',
-          owner: { login: 'test', id: 789 },
-        },
-        sender: { login: 'claude[bot]', id: 999, type: 'Bot' },
-      };
+it('dispatches edited issue_comment from claude[bot] to task', async () => {
+  const claudeBotEditPayload = {
+    action: 'edited',
+    issue: {
+      id: 101,
+      number: 42,
+      title: 'Test PR',
+      body: 'Test PR description',
+      state: 'open',
+      user: { login: 'author', id: 111, type: 'User' },
+      pull_request: {
+        url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+      },
+    },
+    comment: {
+      id: 77777,
+      body: "**Claude finished @pbuchman's task in 4m 51s**\n\n### Summary\nFound 2 issues.",
+      user: { login: 'claude[bot]', id: 999, type: 'Bot' },
+    },
+    repository: {
+      id: 456,
+      name: 'intexuraos',
+      full_name: 'test/intexuraos',
+      owner: { login: 'test', id: 789 },
+    },
+    sender: { login: 'claude[bot]', id: 999, type: 'Bot' },
+  };
 
-      const mockTask = {
-        id: 'task-for-pr-42',
-        userId: 'user-1',
-        prompt: 'test',
-        status: 'completed' as const,
-        linearIssueId: 'INT-999',
-        linearIssueLabels: ['code-task'],
-        hasChildren: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const mockFindByPR = vi.fn().mockResolvedValue(ok(mockTask));
-      const mockSendTaskMessage = vi.fn().mockResolvedValue(ok({ action: 'resumed' }));
-      const services = (await import('../../../services.js')).getServices();
-      services.codeTaskRepo.findByPR = mockFindByPR;
+  const mockTask = {
+    id: 'task-for-pr-42',
+    userId: 'user-1',
+    prompt: 'test',
+    status: 'completed' as const,
+    linearIssueId: 'INT-999',
+    linearIssueLabels: ['code-task'],
+    hasChildren: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const mockFindByPR = vi.fn().mockResolvedValue(ok(mockTask));
+  const mockSendTaskMessage = vi.fn().mockResolvedValue(ok({ action: 'resumed' }));
+  const services = (await import('../../../services.js')).getServices();
+  services.codeTaskRepo.findByPR = mockFindByPR;
 
-      // Mock sendTaskMessage module
-      const sendTaskMessageModule = await import('../../../domain/usecases/sendTaskMessage.js');
-      vi.spyOn(sendTaskMessageModule, 'sendTaskMessage').mockImplementation(mockSendTaskMessage);
+  // Mock sendTaskMessage module
+  const sendTaskMessageModule = await import('../../../domain/usecases/sendTaskMessage.js');
+  vi.spyOn(sendTaskMessageModule, 'sendTaskMessage').mockImplementation(mockSendTaskMessage);
 
-      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+  mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> =>
+    Promise.resolve(
+      ok({
         id: 'test-event-id',
         githubEventId: 77777,
         repository: 'test/intexuraos',
@@ -110,71 +114,76 @@ In `apps/code-agent/src/__tests__/routes/webhooks/github.test.ts`, inside the `d
         senderId: 999,
         senderType: 'Bot',
         title: 'Test PR',
-        body: '**Claude finished @pbuchman\'s task in 4m 51s**\n\n### Summary\nFound 2 issues.',
+        body: "**Claude finished @pbuchman's task in 4m 51s**\n\n### Summary\nFound 2 issues.",
         state: 'open',
         mergedAt: null,
         createdAt: new Date(),
         processedAt: new Date(),
         payload: claudeBotEditPayload,
-      }));
+      })
+    );
 
-      const { payload, signature } = signPayload(claudeBotEditPayload);
+  const { payload, signature } = signPayload(claudeBotEditPayload);
 
-      const response = await app.inject({
-        method: 'POST',
-        url: '/webhooks/github',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-          'x-github-event': 'issue_comment',
-        },
-        body: payload,
-      });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/webhooks/github',
+    headers: {
+      'content-type': 'application/json',
+      'x-hub-signature-256': signature,
+      'x-github-event': 'issue_comment',
+    },
+    body: payload,
+  });
 
-      expect(response.statusCode).toBe(200);
+  expect(response.statusCode).toBe(200);
 
-      // Wait for fire-and-forget dispatch to settle
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockFindByPR).toHaveBeenCalledWith('test/intexuraos', 42);
-    });
+  // Wait for fire-and-forget dispatch to settle
+  await new Promise((resolve) => {
+    setTimeout(resolve, 50);
+  });
+  expect(mockFindByPR).toHaveBeenCalledWith('test/intexuraos', 42);
+});
 ```
 
 **Step 2: Write the failing test — edited comment from regular user does NOT dispatch**
 
 ```typescript
-    it('does not dispatch edited issue_comment from regular user', async () => {
-      const userEditPayload = {
-        action: 'edited',
-        issue: {
-          id: 101,
-          number: 42,
-          title: 'Test PR',
-          body: 'Test PR description',
-          state: 'open',
-          user: { login: 'author', id: 111, type: 'User' },
-          pull_request: {
-            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
-          },
-        },
-        comment: {
-          id: 88888,
-          body: 'Updated my comment with more details',
-          user: { login: 'reviewer', id: 222, type: 'User' },
-        },
-        repository: {
-          id: 456,
-          name: 'intexuraos',
-          full_name: 'test/intexuraos',
-          owner: { login: 'test', id: 789 },
-        },
-        sender: { login: 'reviewer', id: 222, type: 'User' },
-      };
+it('does not dispatch edited issue_comment from regular user', async () => {
+  const userEditPayload = {
+    action: 'edited',
+    issue: {
+      id: 101,
+      number: 42,
+      title: 'Test PR',
+      body: 'Test PR description',
+      state: 'open',
+      user: { login: 'author', id: 111, type: 'User' },
+      pull_request: {
+        url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+      },
+    },
+    comment: {
+      id: 88888,
+      body: 'Updated my comment with more details',
+      user: { login: 'reviewer', id: 222, type: 'User' },
+    },
+    repository: {
+      id: 456,
+      name: 'intexuraos',
+      full_name: 'test/intexuraos',
+      owner: { login: 'test', id: 789 },
+    },
+    sender: { login: 'reviewer', id: 222, type: 'User' },
+  };
 
-      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
-      const services = (await import('../../../services.js')).getServices();
-      services.codeTaskRepo.findByPR = mockFindByPR;
+  const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+  const services = (await import('../../../services.js')).getServices();
+  services.codeTaskRepo.findByPR = mockFindByPR;
 
-      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+  mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> =>
+    Promise.resolve(
+      ok({
         id: 'test-event-id',
         githubEventId: 88888,
         repository: 'test/intexuraos',
@@ -193,27 +202,30 @@ In `apps/code-agent/src/__tests__/routes/webhooks/github.test.ts`, inside the `d
         createdAt: new Date(),
         processedAt: new Date(),
         payload: userEditPayload,
-      }));
+      })
+    );
 
-      const { payload, signature } = signPayload(userEditPayload);
+  const { payload, signature } = signPayload(userEditPayload);
 
-      const response = await app.inject({
-        method: 'POST',
-        url: '/webhooks/github',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-          'x-github-event': 'issue_comment',
-        },
-        body: payload,
-      });
+  const response = await app.inject({
+    method: 'POST',
+    url: '/webhooks/github',
+    headers: {
+      'content-type': 'application/json',
+      'x-hub-signature-256': signature,
+      'x-github-event': 'issue_comment',
+    },
+    body: payload,
+  });
 
-      expect(response.statusCode).toBe(200);
+  expect(response.statusCode).toBe(200);
 
-      // Wait for fire-and-forget to settle — regular user edits should NOT dispatch
-      await new Promise((resolve) => { setTimeout(resolve, 50); });
-      expect(mockFindByPR).not.toHaveBeenCalled();
-    });
+  // Wait for fire-and-forget to settle — regular user edits should NOT dispatch
+  await new Promise((resolve) => {
+    setTimeout(resolve, 50);
+  });
+  expect(mockFindByPR).not.toHaveBeenCalled();
+});
 ```
 
 **Step 3: Run tests to verify they fail**
@@ -226,23 +238,23 @@ Expected: FAIL — first test fails because `edited` events are not dispatched y
 In `apps/code-agent/src/routes/webhooks/github.ts`, replace lines 371-373:
 
 ```typescript
-      const isActionablePRCommentEvent =
-        (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') ||
-        (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted');
+const isActionablePRCommentEvent =
+  (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') ||
+  (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted');
 ```
 
 With:
 
 ```typescript
-      const isEditedClaudeBotComment =
-        parsedEvent.eventType === 'issue_comment' &&
-        parsedEvent.action === 'edited' &&
-        parsedEvent.senderLogin === CLAUDE_BOT_LOGIN;
+const isEditedClaudeBotComment =
+  parsedEvent.eventType === 'issue_comment' &&
+  parsedEvent.action === 'edited' &&
+  parsedEvent.senderLogin === CLAUDE_BOT_LOGIN;
 
-      const isActionablePRCommentEvent =
-        (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') ||
-        (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted') ||
-        isEditedClaudeBotComment;
+const isActionablePRCommentEvent =
+  (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') ||
+  (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted') ||
+  isEditedClaudeBotComment;
 ```
 
 `parsedEvent` is a `GitHubPREvent` which has `senderLogin: string` (see `apps/code-agent/src/domain/models/gitHubPREvent.ts:54`). The `CLAUDE_BOT_LOGIN` constant was added in Task 1.
@@ -264,6 +276,7 @@ git commit -m "feat(code-agent): dispatch edited issue_comment from claude[bot]"
 ### Task 3: Add new message format for edited bot review comments
 
 **Files:**
+
 - Modify: `apps/code-agent/src/routes/webhooks/github.ts:133-176` (inside `buildDispatchMessage()`)
 - Test: `apps/code-agent/src/__tests__/routes/webhooks/github.test.ts`
 
@@ -274,48 +287,48 @@ This task modifies the `buildDispatchMessage()` function which is inside a `/* v
 In `apps/code-agent/src/routes/webhooks/github.ts`, inside `buildDispatchMessage()`, after the `pull_request_review` branch (line 158) and before the generic `issue_comment` branch (line 160), add:
 
 ```typescript
-  if (event.action === 'edited' && event.senderLogin === CLAUDE_BOT_LOGIN) {
-    const commentId = extractId(payload, 'comment');
-    return [
-      `[PR Comment — Bot Review Edit] Comment updated on PR #${String(prNumber)} in ${repository}`,
-      `From: @${senderLogin}`,
-      `Comment ID: ${commentId}`,
-      'Type: issue_comment (edited)',
-      '',
-      'Full comment body:',
-      body ?? '(empty)',
-      '',
-      'Instructions:',
-      '1. CHECK IF REVIEW IS STILL IN PROGRESS:',
-      '   Look for indicators that the review is NOT finished:',
-      '   - Body contains "is working" / "working..." / spinner image',
-      '   - Body is very short (< 200 chars) with no findings',
-      '   - Checklist items are unchecked ([ ] without [x])',
-      '',
-      '   If the review appears to still be in progress → do nothing, stop here.',
-      '',
-      '2. IF REVIEW IS FINALIZED — process it as a code review:',
-      `   a. React with eyes: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=eyes`,
-      '   b. Read the full review body and extract EVERY finding/issue/suggestion',
-      '   c. For EACH finding, decide: FIX or SKIP',
-      '      - FIX: Clear actionable feedback, code change with clear intent, specific bug or gap',
-      '      - SKIP: Discussion/question, intentional design disagreement, out of PR scope, pure status report',
-      '   d. Post a response comment with a triage table:',
-      '      - One row per finding',
-      '      - Columns: # | Finding | Verdict (FIX/SKIP) | Reasoning | Action',
-      '      - For SKIP items: explain why in the Reasoning column',
-      '      - For FIX items: write "Will fix" in the Action column',
-      '',
-      '   ⚠ MANDATORY — DO NOT STOP AFTER POSTING THE TABLE ⚠',
-      '   e. IMMEDIATELY after posting the triage comment, implement ALL fixes',
-      '      marked as FIX in the table. This is not optional. Do not end your turn',
-      '      until every FIX item has been implemented, committed, and pushed.',
-      '      Skipping implementation after posting the table is a contract violation.',
-      '   f. After all fixes: commit, push, verify CI passes',
-      `   g. Update your triage comment (gh api PATCH /repos/${repository}/issues/comments/{your-comment-id})`,
-      '      to replace "Will fix" with the actual commit SHA for each implemented fix',
-    ].join('\n');
-  }
+if (event.action === 'edited' && event.senderLogin === CLAUDE_BOT_LOGIN) {
+  const commentId = extractId(payload, 'comment');
+  return [
+    `[PR Comment — Bot Review Edit] Comment updated on PR #${String(prNumber)} in ${repository}`,
+    `From: @${senderLogin}`,
+    `Comment ID: ${commentId}`,
+    'Type: issue_comment (edited)',
+    '',
+    'Full comment body:',
+    body ?? '(empty)',
+    '',
+    'Instructions:',
+    '1. CHECK IF REVIEW IS STILL IN PROGRESS:',
+    '   Look for indicators that the review is NOT finished:',
+    '   - Body contains "is working" / "working..." / spinner image',
+    '   - Body is very short (< 200 chars) with no findings',
+    '   - Checklist items are unchecked ([ ] without [x])',
+    '',
+    '   If the review appears to still be in progress → do nothing, stop here.',
+    '',
+    '2. IF REVIEW IS FINALIZED — process it as a code review:',
+    `   a. React with eyes: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=eyes`,
+    '   b. Read the full review body and extract EVERY finding/issue/suggestion',
+    '   c. For EACH finding, decide: FIX or SKIP',
+    '      - FIX: Clear actionable feedback, code change with clear intent, specific bug or gap',
+    '      - SKIP: Discussion/question, intentional design disagreement, out of PR scope, pure status report',
+    '   d. Post a response comment with a triage table:',
+    '      - One row per finding',
+    '      - Columns: # | Finding | Verdict (FIX/SKIP) | Reasoning | Action',
+    '      - For SKIP items: explain why in the Reasoning column',
+    '      - For FIX items: write "Will fix" in the Action column',
+    '',
+    '   ⚠ MANDATORY — DO NOT STOP AFTER POSTING THE TABLE ⚠',
+    '   e. IMMEDIATELY after posting the triage comment, implement ALL fixes',
+    '      marked as FIX in the table. This is not optional. Do not end your turn',
+    '      until every FIX item has been implemented, committed, and pushed.',
+    '      Skipping implementation after posting the table is a contract violation.',
+    '   f. After all fixes: commit, push, verify CI passes',
+    `   g. Update your triage comment (gh api PATCH /repos/${repository}/issues/comments/{your-comment-id})`,
+    '      to replace "Will fix" with the actual commit SHA for each implemented fix',
+  ].join('\n');
+}
 ```
 
 **Step 2: Run tests to verify everything passes**
