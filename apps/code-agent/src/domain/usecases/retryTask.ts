@@ -416,10 +416,11 @@ ${additionalContext.trim()}
     }
 
     // Step 12: Add comment to Linear issue
+    // Sanitize additionalContext before embedding in Linear comment to prevent secret leakage
     /* v8 ignore start -- ts-type: ternary operator with optional check creates type narrowing branch @preserve */
     const additionalContextSection =
       additionalContext !== undefined && additionalContext.trim().length > 0
-        ? `\n\n**Additional context provided:** ${additionalContext.trim()}`
+        ? `\n\n**Additional context provided:** ${sanitizePrompt(additionalContext.trim())}`
         : '';
     /* v8 ignore stop @preserve */
 

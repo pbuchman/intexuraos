@@ -53,15 +53,18 @@ const PRIVATE_KEY_PATTERN = /-----BEGIN\s+(?:\w+\s+)?PRIVATE\s+KEY-----[\s\S]*?-
 /**
  * Secret assignment pattern in environment variables.
  * Matches KEY_PASSWORD=, KEY_PASSWD=, KEY_SECRET= followed by value (quoted or unquoted).
+ * Word boundary anchors prevent quadratic backtracking on long word-character strings.
  */
-const SECRET_ENV_PATTERN = /(\w*(?:PASSWORD|PASSWD|SECRET)\w*)=["']?([^\s"']+)["']?/gi;
+const SECRET_ENV_PATTERN = /\b(\w*(?:PASSWORD|PASSWD|SECRET)\w*)=["']?([^\s"']+)["']?/gi;
 
 /**
  * Sensitive URL query parameter names.
- * Note: 'password' is NOT included here — SECRET_ENV_PATTERN already handles it
- * and including it would cause double-processing on URLs like ?password=value.
+ * Note: 'password' and 'secret' are NOT included here — SECRET_ENV_PATTERN (case-insensitive)
+ * already handles any param containing PASSWORD/PASSWD/SECRET. Including them here would
+ * cause double-processing (SECRET_ENV_PATTERN runs first, then this would overwrite the
+ * redaction marker from [REDACTED_SECRET] to [REDACTED]).
  */
-const SENSITIVE_PARAM_NAMES = ['token', 'api_key', 'apikey', 'secret', 'access_token'];
+const SENSITIVE_PARAM_NAMES = ['token', 'api_key', 'apikey', 'access_token'];
 
 /**
  * Pattern to match sensitive query parameters in URLs.

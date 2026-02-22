@@ -162,6 +162,15 @@ MHQCAQEEIBkg4LVWM9nuwNSk3yByxZpYRTBnVJk+W
     expect(result).not.toContain('MHQCAQEEIBkg4LVWM9nuwNSk3yByxZpYRTBnVJk');
   });
 
+  it('redacts DSA private key blocks', () => {
+    const input = `-----BEGIN DSA PRIVATE KEY-----
+MIIBugIBAAKBgQDN1pSqHA07XWWKP9m3JbPi7r
+-----END DSA PRIVATE KEY-----`;
+    const result = sanitizePrompt(input);
+    expect(result).toContain('[REDACTED_PRIVATE_KEY]');
+    expect(result).not.toContain('MIIBugIBAAKBgQDN1pSqHA07XWWKP9m3JbPi7r');
+  });
+
   // ─── Secret/Password Env Var Assignments ──────────────────────────
   it('redacts PASSWORD assignments in environment variables', () => {
     const input = 'Set DB_PASSWORD=super_secret_123 in .env';
@@ -220,10 +229,12 @@ MHQCAQEEIBkg4LVWM9nuwNSk3yByxZpYRTBnVJk+W
     expect(result).not.toContain('mykey456');
   });
 
-  it('redacts URLs with secret query params', () => {
+  it('redacts URLs with secret query params (via SECRET_ENV_PATTERN)', () => {
+    // ?secret=value is handled by SECRET_ENV_PATTERN (case-insensitive), not SENSITIVE_URL_PARAM_PATTERN,
+    // to avoid double-processing. The result uses [REDACTED_SECRET] consistently.
     const input = 'URL: https://hooks.example.com/callback?secret=abc123xyz';
     const result = sanitizePrompt(input);
-    expect(result).toContain('secret=[REDACTED]');
+    expect(result).toContain('secret=[REDACTED_SECRET]');
     expect(result).not.toContain('abc123xyz');
   });
 
@@ -239,18 +250,19 @@ MHQCAQEEIBkg4LVWM9nuwNSk3yByxZpYRTBnVJk+W
     const result = sanitizePrompt(input);
     expect(result).toContain('token=[REDACTED]');
     expect(result).toContain('api_key=[REDACTED]');
-    expect(result).toContain('secret=[REDACTED]');
+    // 'secret' is handled by SECRET_ENV_PATTERN (case-insensitive), producing [REDACTED_SECRET]
+    expect(result).toContain('secret=[REDACTED_SECRET]');
     expect(result).not.toContain('abc123');
     expect(result).not.toContain('def456');
     expect(result).not.toContain('ghi789');
   });
 
   it('does not double-process ?password= in URLs (handled by SECRET_ENV_PATTERN)', () => {
-    // The SECRET_ENV_PATTERN catches PASSWORD=value; URL param pattern doesn't include 'password'
-    // to avoid double processing. Either way the value should be redacted.
+    // SECRET_ENV_PATTERN catches PASSWORD=value and SECRET=value;
+    // these are NOT in SENSITIVE_PARAM_NAMES to avoid double-processing.
     const input = 'URL: https://db.example.com?password=dbpass123';
     const result = sanitizePrompt(input);
-    // password= is matched by SECRET_ENV_PATTERN since it sees PASSWORD=dbpass123
+    expect(result).toContain('password=[REDACTED_SECRET]');
     expect(result).not.toContain('dbpass123');
   });
 

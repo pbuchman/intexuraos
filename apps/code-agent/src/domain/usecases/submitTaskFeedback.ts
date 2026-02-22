@@ -297,6 +297,8 @@ ${feedback.trim()}
     }
 
     // Step 9: Add comment to Linear issue with feedback details
+    // Sanitize feedback before embedding in Linear comment to prevent secret leakage
+    const sanitizedFeedback = sanitizePrompt(feedback.trim());
     const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
     const commentBody = `🔄 **Follow-up task created** based on user feedback
 
@@ -304,7 +306,7 @@ ${feedback.trim()}
 **Follow-up task:** [${followUpTask.id}](${webUrl}/#/code-tasks/${followUpTask.id})
 
 **Feedback:**
-> ${feedback.trim().split('\n').join('\n> ')}`;
+> ${sanitizedFeedback.split('\n').join('\n> ')}`;
 
     const commentResult = await linearAgentClient.addComment({
       userId,
