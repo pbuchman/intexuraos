@@ -103,6 +103,14 @@ if [[ "$PHASE" == "2" ]]; then
     MISSING+=("Linear issue URL line")
   fi
 
+  if ! echo "$RECENT_RESPONSES" | grep -qE '^- Review iterations: [0-9]+$'; then
+    MISSING+=("Review iterations line")
+  fi
+
+  if ! echo "$RECENT_RESPONSES" | grep -qE '^- Turn summary: .+'; then
+    MISSING+=("Turn summary line")
+  fi
+
   if ! echo "$RECENT_RESPONSES" | grep -qE '^- Summary: .+'; then
     MISSING+=("Summary line")
   fi
@@ -119,7 +127,7 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
   if [[ "$PHASE" == "1" ]]; then
     EXAMPLE="PHASE1_FINAL:\n- Linear label set: code-task\n- Phase 2 ready: yes\n- Linear issue: https://linear.app/intexuraos/issue/INT-XXX\n- Summary: Prepared issue for phase 2"
   else
-    EXAMPLE="PHASE2_FINAL:\n- PR: https://github.com/intexuraos/intexuraos/pull/XXX\n- CI evidence: pnpm run ci:tracked successful\n- Linear issue: https://linear.app/intexuraos/issue/INT-XXX\n- Summary: Implemented requested changes"
+    EXAMPLE="PHASE2_FINAL:\n- PR: https://github.com/intexuraos/intexuraos/pull/XXX\n- CI evidence: pnpm run ci:tracked successful\n- Linear issue: https://linear.app/intexuraos/issue/INT-XXX\n- Review iterations: 2\n- Turn summary: Planned auth refactor | Wrote 8 tests | Implemented changes | Review clean after 2 iterations | PR ready\n- Summary: Implemented requested changes"
   fi
 
   cat << EOF2

@@ -10,8 +10,6 @@ export interface DockerProviderConfig {
   imagePullPolicy: 'always' | 'if-not-present';
   networkName: string;
   maxConcurrent: number;
-  memoryLimitBytes: number;
-  cpuCount: number;
   timeoutMs: number;
   secretsBasePath: string;
   gcpSaKeyPath: string;
@@ -29,8 +27,6 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   imagePullPolicy: 'always',
   networkName: 'claude-worker-net',
   maxConcurrent: 4,
-  memoryLimitBytes: 30 * 1024 * 1024 * 1024,
-  cpuCount: 20,
   timeoutMs: 2 * 60 * 60 * 1000,
   secretsBasePath: '/tmp/claude-secrets',
   gcpSaKeyPath: '',
@@ -392,9 +388,6 @@ export class DockerProvider implements IsolationProvider {
             ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
             /* v8 ignore stop @preserve */
           ],
-          Memory: this.config.memoryLimitBytes,
-          MemorySwap: this.config.memoryLimitBytes,
-          NanoCpus: this.config.cpuCount * 1e9,
           NetworkMode: this.config.networkName,
           ReadonlyRootfs: false,
           Tmpfs: {

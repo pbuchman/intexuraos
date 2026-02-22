@@ -799,7 +799,7 @@ describe('POST /webhooks/github', () => {
       expect(body.success).toBe(true);
     });
 
-    it('skips dispatch for comments from our own bot', async () => {
+    it('blocks dispatch for non-whitelisted bot (intexuraos-code-worker[bot])', async () => {
       const botCommentPayload = {
         action: 'created',
         issue: {
@@ -867,13 +867,13 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Dispatch was fire-and-forget but bot check should prevent findByPR from being called
+      // Non-whitelisted bot should NOT dispatch
       // Wait a tick to let the async dispatch settle
       await new Promise((resolve) => { setTimeout(resolve, 50); });
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
-    it('skips dispatch for external agent mentions handled by GitHub Actions', async () => {
+    it('blocks dispatch for non-owner user (even with @claude mention)', async () => {
       const claudeMentionPayload = {
         action: 'created',
         issue: {
@@ -941,12 +941,12 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // external agent mention should prevent findByPR from being called
+      // Non-owner sender should NOT dispatch (regardless of body content)
       await new Promise((resolve) => { setTimeout(resolve, 50); });
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
-    it('skips dispatch for @codex mentions', async () => {
+    it('blocks dispatch for non-owner user (even with @codex mention)', async () => {
       const codexMentionPayload = {
         action: 'created',
         issue: {
@@ -1018,7 +1018,7 @@ describe('POST /webhooks/github', () => {
       expect(mockFindByPR).not.toHaveBeenCalled();
     });
 
-    it('dispatches other bot comments (non-worker bot)', async () => {
+    it('blocks dispatch for non-whitelisted bots (codecov[bot])', async () => {
       const otherBotPayload = {
         action: 'created',
         issue: {
@@ -1086,9 +1086,373 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Other bots pass through — dispatch should call findByPR
+      // Non-whitelisted bot should NOT dispatch
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).not.toHaveBeenCalled();
+    });
+
+    it('dispatches issue_comment from repo owner', async () => {
+      const ownerCommentPayload = {
+        action: 'created',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/pbuchman/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 55555,
+          body: 'please fix the linting errors',
+          user: { login: 'pbuchman', id: 368465, type: 'User' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'pbuchman/intexuraos',
+          owner: { login: 'pbuchman', id: 368465 },
+        },
+        sender: { login: 'pbuchman', id: 368465, type: 'User' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 55555,
+        repository: 'pbuchman/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'created' as const,
+        senderLogin: 'pbuchman',
+        senderId: 368465,
+        senderType: 'User',
+        title: 'Test PR',
+        body: 'please fix the linting errors',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: ownerCommentPayload,
+      }));
+
+      const { payload, signature } = signPayload(ownerCommentPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Repo owner should be allowed — findByPR should be called
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
+    });
+
+    it('dispatches issue_comment from chatgpt-codex-connector[bot]', async () => {
+      const codexBotPayload = {
+        action: 'created',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/pbuchman/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 44444,
+          body: 'Codex Review: Found 2 issues.',
+          user: { login: 'chatgpt-codex-connector[bot]', id: 555, type: 'Bot' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'pbuchman/intexuraos',
+          owner: { login: 'pbuchman', id: 368465 },
+        },
+        sender: { login: 'chatgpt-codex-connector[bot]', id: 555, type: 'Bot' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 44444,
+        repository: 'pbuchman/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'created' as const,
+        senderLogin: 'chatgpt-codex-connector[bot]',
+        senderId: 555,
+        senderType: 'Bot',
+        title: 'Test PR',
+        body: 'Codex Review: Found 2 issues.',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: codexBotPayload,
+      }));
+
+      const { payload, signature } = signPayload(codexBotPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Whitelisted bot should dispatch
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).toHaveBeenCalledWith('pbuchman/intexuraos', 42);
+    });
+
+    it('blocks dispatch when payload has no repository owner', async () => {
+      const noOwnerPayload = {
+        action: 'created',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 33333,
+          body: 'some comment',
+          user: { login: 'randomuser', id: 444, type: 'User' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+        },
+        sender: { login: 'randomuser', id: 444, type: 'User' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 33333,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'created' as const,
+        senderLogin: 'randomuser',
+        senderId: 444,
+        senderType: 'User',
+        title: 'Test PR',
+        body: 'some comment',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: noOwnerPayload,
+      }));
+
+      const { payload, signature } = signPayload(noOwnerPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // No owner in payload + not whitelisted bot = blocked
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).not.toHaveBeenCalled();
+    });
+
+    it('dispatches edited issue_comment from claude[bot] to task', async () => {
+      const claudeBotEditedPayload = {
+        action: 'edited',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 99999,
+          body: 'Finalized implementation plan for the task.',
+          user: { login: 'claude[bot]', id: 999, type: 'Bot' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: { login: 'test', id: 789 },
+        },
+        sender: { login: 'claude[bot]', id: 999, type: 'Bot' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 99999,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'edited' as const,
+        senderLogin: 'claude[bot]',
+        senderId: 999,
+        senderType: 'Bot',
+        title: 'Test PR',
+        body: 'Finalized implementation plan for the task.',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: claudeBotEditedPayload,
+      }));
+
+      const { payload, signature } = signPayload(claudeBotEditedPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Edited claude[bot] comment should pass through dispatch gate — findByPR should be called
       await new Promise((resolve) => { setTimeout(resolve, 50); });
       expect(mockFindByPR).toHaveBeenCalledWith('test/intexuraos', 42);
+    });
+
+    it('does not dispatch edited issue_comment from regular user', async () => {
+      const regularUserEditedPayload = {
+        action: 'edited',
+        issue: {
+          id: 101,
+          number: 42,
+          title: 'Test PR',
+          body: 'Test PR description',
+          state: 'open',
+          user: { login: 'author', id: 111, type: 'User' },
+          pull_request: {
+            url: 'https://api.github.com/repos/test/intexuraos/pulls/42',
+          },
+        },
+        comment: {
+          id: 11111,
+          body: 'Updated my review comment with more details.',
+          user: { login: 'reviewer', id: 222, type: 'User' },
+        },
+        repository: {
+          id: 456,
+          name: 'intexuraos',
+          full_name: 'test/intexuraos',
+          owner: { login: 'test', id: 789 },
+        },
+        sender: { login: 'reviewer', id: 222, type: 'User' },
+      };
+
+      const mockFindByPR = vi.fn().mockResolvedValue(ok(null));
+      const services = (await import('../../../services.js')).getServices();
+      services.codeTaskRepo.findByPR = mockFindByPR;
+
+      mockEventRepo.save = (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
+        id: 'test-event-id',
+        githubEventId: 11111,
+        repository: 'test/intexuraos',
+        repositoryId: 456,
+        pullRequestNumber: 42,
+        pullRequestId: 0,
+        eventType: 'issue_comment' as const,
+        action: 'edited' as const,
+        senderLogin: 'reviewer',
+        senderId: 222,
+        senderType: 'User',
+        title: 'Test PR',
+        body: 'Updated my review comment with more details.',
+        state: 'open',
+        mergedAt: null,
+        createdAt: new Date(),
+        processedAt: new Date(),
+        payload: regularUserEditedPayload,
+      }));
+
+      const { payload, signature } = signPayload(regularUserEditedPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/github',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+          'x-github-event': 'issue_comment',
+        },
+        body: payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Regular user edited comment should NOT pass through dispatch gate
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(mockFindByPR).not.toHaveBeenCalled();
     });
   });
 });
