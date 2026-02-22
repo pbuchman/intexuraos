@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # add-reaction.sh
-# Adds 🚀 reaction to a PR comment to mark it as processed
+# Adds 😄 reaction to a PR comment to mark it as processed
 #
 # Usage: ./add-reaction.sh <comment_type> <comment_id>
 #        comment_type: "issue_comment", "review_comment", or "review_body"
@@ -46,7 +46,7 @@ case "$COMMENT_TYPE" in
 
     gh api "repos/${REPO_INFO}/issues/comments/${DB_ID}/reactions" \
       -X POST \
-      -f content=rocket \
+      -f content=laugh \
       --silent
     ;;
 
@@ -69,7 +69,7 @@ case "$COMMENT_TYPE" in
 
     gh api "repos/${REPO_INFO}/pulls/comments/${DB_ID}/reactions" \
       -X POST \
-      -f content=rocket \
+      -f content=laugh \
       --silent
     ;;
 
@@ -83,7 +83,7 @@ case "$COMMENT_TYPE" in
 
     gh api graphql -f query='
       mutation($subjectId: ID!) {
-        addReaction(input: {subjectId: $subjectId, content: ROCKET}) {
+        addReaction(input: {subjectId: $subjectId, content: LAUGH}) {
           reaction {
             content
           }
@@ -99,4 +99,4 @@ case "$COMMENT_TYPE" in
     ;;
 esac
 
-echo "Added 🚀 reaction to $COMMENT_TYPE $COMMENT_ID"
+echo "Added 😄 reaction to $COMMENT_TYPE $COMMENT_ID"
