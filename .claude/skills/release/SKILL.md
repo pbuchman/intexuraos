@@ -25,6 +25,10 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 5. **Three Suggestions Only**: Phase 5 website audit produces EXACTLY 3 improvement suggestions
 6. **Monorepo Version Sync**: Phase 6 MUST update ALL package.json files (root, apps/\*, packages/\*, workers/\*) to the new version — not just the root
 7. **Claude Code Changelog Style**: All changelog entries use simplified format — version headers, verb-first bullets, no subcategories
+8. **Tag on Main**: Tag MUST be created on `main` after merge, not on `development`
+9. **GitHub Release**: Phase 6 MUST create a GitHub Release with categorized release notes
+10. **Post-Release Validation**: Phase 6 MUST run 5 validation checks after release creation — all must PASS
+11. **Change Prioritization**: Step 5.1 MUST ask user to assign High/Medium/Low/Skip priority to each change before building the CHANGELOG
 
 ## Phase Overview
 
@@ -35,7 +39,7 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 | 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait                            |
 | 4     | README          | **Checkpoint** | Propose "What's New" section, wait                                |
 | 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions                              |
-| 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, RAG embeddings, commit, tag push |
+| 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, RAG embeddings, commit, merge dev→main, tag on main, GitHub Release |
 
 ## Tool Verification (Fail Fast)
 
@@ -205,11 +209,14 @@ When releasing a NEW major version (e.g., v3.0.0):
 2. **Update CHANGELOG.md** using Claude Code style (see Changelog Format below)
 3. Run `pnpm run ci:tracked` — MUST pass
 4. **Refresh RAG embeddings** — re-embed all docs into production Firestore (see below)
-5. Stage all changes
-6. Commit with release message
-7. Create version tag
-8. Push tag to remote
-9. Display release summary
+5. Stage & commit on `development`
+6. Push `development` to remote
+7. **Merge `development` → `main`** — via existing PR or direct merge
+8. **Tag on `main`** — tag the merge commit, not `development` (CRITICAL)
+9. Push tag to remote
+10. **Create GitHub Release** — with categorized release notes from Step 7.1
+11. **Post-release validation** — verify tag on main, GitHub Release exists, CHANGELOG committed, versions match, on development branch
+12. Display release summary (including release URL and validation results)
 
 #### RAG Embeddings Refresh (Step 4)
 

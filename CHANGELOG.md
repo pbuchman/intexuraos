@@ -40,6 +40,14 @@
 - Fixed worker health status showing false positives for offline workers
 - Fixed secrets directory inode corruption during worker container preservation
 
+## 2.1.0
+
+- Added `@intexuraos/internal-clients` package — eliminated ~4,200 lines of duplicate code across 8 services with shared user-service client (INT-269)
+- Added Zod schema validation for all 8 LLM response types with field-level error messages (INT-218)
+- Added structured `UsageLogger` class across all 5 LLM client packages with proper dependency injection (INT-266)
+- Changed Cloud Build machine types for 63% cost reduction ($98 to $36/month) while staying under 15-minute SLA (INT-243)
+- Fixed race condition causing duplicate WhatsApp approval notifications by extending direct execution pattern to all action types
+
 ## 2.0.0
 
 - Added WhatsApp text reply support for approval requests with LLM-based intent classification (INT-161, INT-203)
