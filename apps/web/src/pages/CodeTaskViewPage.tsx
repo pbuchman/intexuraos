@@ -643,7 +643,9 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     };
 
     for (let i = 0; i < logs.length; i++) {
-      const text = logs[i]!.text;
+      const line = logs[i];
+      if (line === undefined) continue;
+      const text = line.text;
       const tag = extractTag(text);
 
       if (tag === 'tool') {
