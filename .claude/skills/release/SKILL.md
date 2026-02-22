@@ -28,13 +28,13 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 
 ## Phase Overview
 
-| Phase | Name            | Interaction    | Key Actions                                       |
-| ----- | --------------- | -------------- | ------------------------------------------------- |
-| 1     | Kickoff         | User Input     | Run semver analysis, detect modified services     |
-| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel           |
-| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait            |
-| 4     | README          | **Checkpoint** | Propose "What's New" section, wait                |
-| 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions              |
+| Phase | Name            | Interaction    | Key Actions                                                       |
+| ----- | --------------- | -------------- | ----------------------------------------------------------------- |
+| 1     | Kickoff         | User Input     | Run semver analysis, detect modified services                     |
+| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel                           |
+| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait                            |
+| 4     | README          | **Checkpoint** | Propose "What's New" section, wait                                |
+| 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions                              |
 | 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, RAG embeddings, commit, tag push |
 
 ## Tool Verification (Fail Fast)
