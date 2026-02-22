@@ -412,6 +412,15 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
     return Promise.resolve(ok(undefined));
   }
 
+  clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>> {
+    const existing = this.settings.get(userId);
+    if (existing !== undefined) {
+      const { llmPreferences: _removed, ...rest } = existing;
+      this.settings.set(userId, { ...rest, updatedAt: new Date().toISOString() });
+    }
+    return Promise.resolve(ok(undefined));
+  }
+
   updateLlmPreferences(
     userId: string,
     defaultModel: LLMModel
