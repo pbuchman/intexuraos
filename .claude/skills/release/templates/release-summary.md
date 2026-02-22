@@ -83,8 +83,7 @@ Use this template to display the final summary after Phase 6 completes.
 # View the GitHub Release
 open https://github.com/pbuchman/intexuraos/releases/tag/vX.Y.Z
 
-# Deploy to production
-./scripts/deploy-production.sh
+# Deploy is handled automatically by CI/CD on push to main
 ```
 ````
 

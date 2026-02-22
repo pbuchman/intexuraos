@@ -61,6 +61,8 @@ Multiple Task calls in single message for parallel execution
 
 - [ ] Read current README.md
 - [ ] Generate "What's New" section using template
+- [ ] For each feature: ask user ONE BY ONE (tile-worthy or skip)
+- [ ] Track approved features for Phase 5 website tiles
 - [ ] **CHECKPOINT**: Present, wait for approval
 - [ ] If approved: replace section with Edit tool
 
@@ -135,7 +137,9 @@ No subcategories, verb-first entries, single line each.
 
 ```bash
 pnpm run ci:tracked
-git add -A
+git add CHANGELOG.md package.json pnpm-lock.yaml \
+  apps/*/package.json packages/*/package.json workers/*/package.json \
+  docs/ README.md apps/web/src/
 git commit -m "Release vX.Y.Z..."
 git push origin development
 

@@ -33,8 +33,14 @@ head -30 CHANGELOG.md
 # Check for version tags
 git tag -l "v*" --sort=-v:refname | head -5
 
-# Get the date of the last release tag
-git log -1 --format="%ci" v<last-version>
+# Get the date of the last release tag (with first-release guard)
+LAST_TAG=$(git tag -l "v*" --sort=-v:refname | head -1)
+if [[ -z "$LAST_TAG" ]]; then
+  echo "No previous release tag found. This is the first release."
+  LAST_TAG_DATE=$(git log --reverse --format="%ci" | head -1 | cut -d' ' -f1)
+else
+  LAST_TAG_DATE=$(git log -1 --format="%ci" $LAST_TAG | cut -d' ' -f1)
+fi
 ```
 
 ### 3. Collect ALL Data (Do Not Process Yet)
@@ -45,7 +51,7 @@ git log -1 --format="%ci" v<last-version>
 
 ```bash
 # List PRs merged since last release date
-gh pr list --state merged --base main --json number,title,body,mergedAt,author,labels --limit 100 | \
+gh pr list --state merged --base development --json number,title,body,mergedAt,author,labels --limit 100 | \
   jq --arg date "<last-release-date>" '[.[] | select(.mergedAt > $date)]'
 ```
 
@@ -135,6 +141,22 @@ Change Manifest:
 ```
 
 This manifest is the SINGLE source for all subsequent steps.
+
+#### 3.6 Validate Manifest
+
+If the manifest is empty (no PRs, no direct commits):
+
+Use `AskUserQuestion`:
+
+```
+"No changes detected since last release. How to proceed?"
+```
+
+**Options:**
+
+1. "Abort release" (Recommended)
+2. "Create version-only release" — bump version with empty changelog
+3. "Let me check" — pause for manual investigation
 
 ### 4. Net Out Cancelled Changes
 
@@ -423,7 +445,7 @@ RELEASE_EOF
 NEW_VERSION="X.Y.Z"
 
 # Update root package.json
-pnpm version $NEW_VERSION --no-git-tag-version
+jq ".version = \"$NEW_VERSION\"" package.json > tmp.json && mv tmp.json package.json
 
 # Update all apps (excluding dist directories)
 for app in apps/*/package.json; do
