@@ -623,7 +623,7 @@ Use the AskUserQuestion tool for each question separately. Do not batch multiple
 
 ## Skills & Extensions
 
-**Skills** (invoke via `/skill-name`): `/linear`, `/sentry`, `/document-service`, `/release`, `/coverage`, `/tech-debt-triage`
+**Skills** (invoke via `/skill-name`): `/linear`, `/sentry`, `/document-service`, `/release`, `/coverage`, `/tech-debt-triage`, `/share`
 
 **Agents** (Task tool): `llm-manager`, `service-creator`, `service-scribe`, `whatsapp-sender`
 
