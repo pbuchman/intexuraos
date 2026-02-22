@@ -15,15 +15,15 @@ Task management needs flexibility and automation:
 
 ### AI Item Extraction
 
-Send a description, get structured items. The service uses your configured LLM to parse natural language into todo items with titles, priorities, and due dates.
+Send a description, get structured items. The service uses your configured LLM (Gemini 2.5 Flash or GLM-4.7) to parse natural language into todo items with titles, priorities, and due dates.
 
-**Example:** Send "Buy milk, eggs, and bread from grocery store by Friday" — the service extracts three items: "Buy milk", "Buy eggs", "Buy bread", each with appropriate priority and the Friday due date.
+**Example:** Send "Buy milk, eggs, and bread from grocery store by Friday" -- the service extracts three items: "Buy milk", "Buy eggs", "Buy bread", each with appropriate priority and the Friday due date.
 
 ### Sub-items with Custom Ordering
 
 Break down large tasks into checklists. Drag and drop items to arrange them in your preferred order.
 
-**Example:** A "Q4 Planning" todo contains items: "Review Q3 results", "Set Q4 objectives", "Schedule team meetings" — reorder them as priorities change.
+**Example:** A "Q4 Planning" todo contains items: "Review Q3 results", "Set Q4 objectives", "Schedule team meetings" -- reorder them as priorities change.
 
 ### Priority Levels
 
@@ -33,7 +33,11 @@ Four priority levels help you focus on what matters: low, medium, high, urgent. 
 
 ### Status Workflow
 
-Track todos through a complete lifecycle: draft → processing → pending → in_progress → completed (or cancelled). Archive completed todos to clear your active view without losing history.
+Track todos through a complete lifecycle: draft -> processing -> pending -> in_progress -> completed (or cancelled). Archive completed todos to clear your active view without losing history.
+
+### Automatic Status Tracking
+
+When you complete all items in a todo, the todo automatically transitions to `completed`. When you add a new item to a completed todo, it transitions back to `in_progress`. The service tracks these transitions without manual intervention.
 
 ## Use Case
 
@@ -48,6 +52,7 @@ The service creates one todo with three items. Each item gets a due date. The pr
 - Flexible priority levels match your workflow
 - Archive keeps history without cluttering active views
 - Item reordering adapts to changing priorities
+- Automatic status tracking reduces manual overhead
 
 ## Limitations
 
@@ -56,7 +61,8 @@ The service creates one todo with three items. Each item gets a due date. The pr
 - No reminders or notifications
 - No collaboration or sharing features
 - One level of sub-items only (no nested subtasks)
+- Description limit of 10,000 characters for AI extraction
 
 ---
 
-_Part of [IntexuraOS](../overview.md) — Task management that thinks with you._
+_Part of [IntexuraOS](../overview.md) -- Task management that thinks with you._

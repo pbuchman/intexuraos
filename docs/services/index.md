@@ -22,8 +22,8 @@ Complete documentation for all IntexuraOS services, workers, and packages.
 
 | Service              | Key Changes                                             |
 | -------------------- | ------------------------------------------------------- |
-| **whatsapp-service** | Approval via text replies and emoji reactions           |
-| **actions-agent**    | Atomic status transitions, race condition prevention    |
+| **whatsapp-service** | Interactive approval buttons, phone verification, voice transcription |
+| **actions-agent**    | Confidence-based auto-execution, Google Calendar linking, resource status tracking |
 | **calendar-agent**   | Preview generation before commit                        |
 | **research-agent**   | Natural language model selection, Zod schema validation |
 | **commands-agent**   | 5-step classification, URL isolation, Polish support    |
@@ -123,7 +123,7 @@ graph TB
 
 | Service                                          | AI Models    | Capability                                                    |
 | ------------------------------------------------ | ------------ | ------------------------------------------------------------- |
-| [whatsapp-service](whatsapp-service/features.md) | Speechmatics | Voice-to-text transcription, approval via replies & reactions |
+| [whatsapp-service](whatsapp-service/features.md) | Speechmatics | Voice-to-text transcription, approval via buttons & text replies |
 
 ---
 
@@ -432,6 +432,6 @@ graph TD
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22
 
 **Components documented:** 20 apps + 4 workers + 22 packages = 46 total (100%)

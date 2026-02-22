@@ -1,79 +1,24 @@
 # Bookmarks Agent - Technical Debt
 
+**Last Updated:** 2026-02-22
+**Analysis Run:** [2026-02-22 documentation-runs.md entry](../../documentation-runs.md)
+
+---
+
 ## Summary
 
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
-| TODO/FIXME Comments | 0     | -        |
+| Code Smells         | 0     | -        |
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 0     | -        |
-| SRP Violations      | 0     | -        |
-| Code Duplicates     | 0     | -        |
+| TODO/FIXME Comments | 0     | -        |
+| SRP Violations      | 1     | Low      |
+| Code Duplicates     | 1     | Low      |
 | Deprecations        | 0     | -        |
+| **Total**           | **2** | Low      |
 
-Last updated: 2026-02-19
-
-## Recent Improvements
-
-### Dash0 OpenTelemetry Integration
-
-Added Dash0 OpenTelemetry tracing via package-level integration (`apps/bookmarks-agent/package.json` and `Dockerfile`):
-
-- **Pattern:** OpenTelemetry instrumentation injected at the runtime layer, no application code changes required
-- **Benefit:** Distributed tracing for all incoming HTTP requests and outgoing web-agent calls without code coupling
-- **Change:** Dockerfile and package.json updated; no service logic changed
-
-### Dev-Mode Log Formatting for PM2 Readability
-
-Added development-mode log stream formatting in `server.ts`:
-
-- **Pattern:** `createLogStream()` from `@intexuraos/infra-sentry` wraps the Pino logger in dev environments
-- **Benefit:** Human-readable log output in PM2 instead of raw JSON, improving local debugging
-- **Change:** Applies only when `NODE_ENV !== 'test'`; production JSON logging unaffected
-
-### PM2 Ecosystem Migration to pnpm --filter
-
-Updated start:local scripts to use `tsx` instead of `node --experimental-strip-types`:
-
-- **Benefit:** More reliable local development startup, consistent with rest of monorepo
-- **Impact:** No runtime behavior change; tooling/DX improvement only
-
-### INT-198: Pub/Sub Retry for Transient Errors
-
-Added transient error classification to the summarization pipeline:
-
-- **Pattern:** `SummaryError` now includes `transient?: boolean` flag; summarize Pub/Sub route returns HTTP 503 for transient errors
-- **Benefit:** Rate limits (HTTP 429), timeouts, and network failures automatically retry via Pub/Sub exponential backoff instead of silently failing
-- **Transient errors:** HTTP 429/503/504, network failures, TIMEOUT, FETCH_FAILED, RATE_LIMITED error codes
-- **Permanent errors:** HTTP 400/500, NO_CONTENT, invalid responses (graceful degradation, no retry)
-
-### Sentry-Enabled Logging
-
-Migrated all logger instances in `services.ts` from `pino()` to `createAppLogger()` from `@intexuraos/infra-sentry`, ensuring errors are automatically reported to Sentry.
-
-### Response Contract Compliance
-
-Migrated internal routes and Pub/Sub routes from raw `reply.send()`/`return { ... }` to standardized `reply.ok()`/`reply.fail()`. Image proxy routes annotated with `@allow-raw-send` (binary response endpoint).
-
-### Env Var Registration
-
-Added `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH` and `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` to `REQUIRED_ENV` in `index.ts`, ensuring startup validation catches missing Pub/Sub topic configuration.
-
-### 100% Branch Coverage Enforcement
-
-Added v8 ignore comments with valid categories for untestable branches (defensive TypeScript type guards, test infrastructure limitations, upstream contract dependencies).
-
-### INT-210: WhatsApp Delivery (v2.0.0)
-
-The v2.0.0 release added decoupled WhatsApp delivery for bookmark summaries:
-
-- **Pattern:** Uses `WhatsAppSendPublisher` from `@intexuraos/infra-pubsub`
-- **Benefit:** bookmarks-agent doesn't need to know about phone numbers or WhatsApp API details
-- **Architecture:** Publishes `SendMessageEvent` to Pub/Sub; whatsapp-service handles delivery
-
-### INT-172: Test Coverage
-
-Improved test coverage for the enrichment pipeline, ensuring all error paths are tested.
+---
 
 ## Future Plans
 
@@ -92,60 +37,39 @@ Features that are planned but not yet implemented:
 1. **Web archive integration** - Wayback Machine snapshot for dead links
 2. **Annotation support** - User notes attached to bookmarks
 3. **Reading list queue** - Track read/unread status with time estimates
-4. **Summary regeneration** - Re-run AI summary on demand (currently only OG refresh)
+4. **Summary regeneration** - Re-run AI summary on demand (currently only OG refresh via force-refresh)
 5. **Configurable WhatsApp notifications** - User preference to enable/disable summary delivery
+6. **Public API enrichment trigger** - Allow enrichment from the public `POST /bookmarks` endpoint (currently only internal create triggers it)
 
-## Architecture Considerations
+---
 
-### WhatsApp Delivery Pattern
+## SRP Violations
 
-The INT-210 implementation uses a fire-and-forget pattern for WhatsApp notifications:
+### Low Priority
 
-```typescript
-// summarizeBookmark.ts
-const publishResult = await whatsAppSendPublisher.publishSendMessage({
-  userId,
-  message: summaryMessage,
-  correlationId: bookmarkId,
-});
+| File                | Lines | Issue                                             | Suggestion                                             |
+| ------------------- | ----- | ------------------------------------------------- | ------------------------------------------------------ |
+| `bookmarkRoutes.ts` | 662   | CRUD routes + image proxy + schema definitions    | Extract image proxy to separate routes file             |
 
-if (!publishResult.ok) {
-  logger.warn({ bookmarkId, error: publishResult.error }, 'Failed to publish WhatsApp send event');
-}
-// Note: Failure to publish does not fail the summarization
-```
+The `bookmarkRoutes.ts` file handles 7 CRUD endpoints plus the image proxy endpoint, with inline JSON schema definitions for each. While still readable, the image proxy is a distinct concern that could be extracted to `imageRoutes.ts`.
 
-**Tradeoff:** If Pub/Sub publish fails, the user won't receive the WhatsApp notification but the bookmark summary is still saved. This is acceptable because:
+---
 
-1. The primary value (summary) is persisted
-2. Users can view summaries in the web dashboard
-3. WhatsApp notification is a convenience feature
+## Code Duplicates
 
-**Alternative considered:** Retry with exponential backoff, but rejected because it would complicate the use case for marginal benefit.
+### Low Priority
 
-### Event Ordering
+| Pattern                    | Locations                                        | Suggestion                                                 |
+| -------------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
+| `formatBookmark()` function | `bookmarkRoutes.ts`, `internalRoutes.ts`        | Extract to shared utility in `domain/` or `routes/shared/` |
 
-The three-stage pipeline (create -> enrich -> summarize) uses separate Pub/Sub topics. This ensures:
+Both route files define an identical `formatBookmark()` function that converts domain `Bookmark` objects to JSON-serializable response objects. This could be a single shared function.
 
-1. Each stage can fail independently
-2. Retries don't re-process earlier stages
-3. Clear observability of where failures occur
+---
 
-**Potential issue:** If `bookmarks.summarize` event is processed before `bookmarks.enrich` completes (race condition in local dev), the summary might be generated from incomplete data. In production, Pub/Sub ordering and the sequential event chain prevent this.
-
-## Code Smells
+## Test Coverage Gaps
 
 ### None Detected
-
-No active code smells found in current codebase.
-
-Previous code smells (resolved):
-
-- ~~**Long enrichBookmark function** - Split into separate enrichment and summarization steps~~ (Fixed in INT-210)
-
-## Test Coverage
-
-### Current Status
 
 All endpoints and use cases have test coverage. The 100% branch coverage threshold is met (with valid v8 ignore exemptions for untestable branches).
 
@@ -160,46 +84,81 @@ All endpoints and use cases have test coverage. The 100% branch coverage thresho
 | WhatsApp publisher | Tested | Mocked in summarizeBookmark tests                           |
 | Infrastructure     | Tested | Tested via route integration tests                          |
 
-### Recent Coverage Improvements (INT-172, INT-198, INT-427)
-
-- Added tests for Pub/Sub authentication bypass (Google's OIDC)
-- Added tests for malformed Pub/Sub message handling
-- Added tests for WhatsApp publish failure path
-- Added tests for transient error classification in `webAgentSummaryClient` (13 cases)
-- Added tests for transient vs permanent error handling in `summarizeBookmark` use case
-- Added tests for HTTP 503 retry response in Pub/Sub summarize route
-- Added test for legacy bookmark status defaulting in Firestore repository
+---
 
 ## TypeScript Issues
 
 ### None Detected
 
-No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
+No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found in source files.
 
-## SRP Violations
+---
 
-### None Detected
-
-All files are within reasonable size limits:
-
-| File                           | Lines | Status |
-| ------------------------------ | ----- | ------ |
-| internalRoutes.ts              | ~440  | OK     |
-| firestoreBookmarkRepository.ts | ~271  | OK     |
-| bookmarkRoutes.ts              | ~350  | OK     |
-| pubsubRoutes.ts                | ~267  | OK     |
-
-## Code Duplicates
+## TODOs / FIXMEs
 
 ### None Detected
 
-No significant code duplication patterns identified.
+No TODO, FIXME, HACK, or XXX comments found in source files.
+
+---
+
+## Code Smells
+
+### None Detected
+
+No active code smells found in current codebase.
+
+---
 
 ## Deprecations
 
 ### None Detected
 
 No deprecated APIs or dependencies in use.
+
+---
+
+## Architecture Considerations
+
+### WhatsApp Delivery Pattern
+
+The summarization use case uses a fire-and-forget pattern for WhatsApp notifications:
+
+```typescript
+// summarizeBookmark.ts
+const publishResult = await whatsAppSendPublisher.publishSendMessage({
+  userId,
+  message: summaryMessage,
+  correlationId: `bookmark-${bookmarkId}`,
+});
+
+if (!publishResult.ok) {
+  logger.error({ bookmarkId, error: publishResult.error }, 'Failed to send WhatsApp message');
+}
+// Failure to publish does not fail the summarization
+```
+
+**Tradeoff:** If Pub/Sub publish fails, the user will not receive the WhatsApp notification but the bookmark summary is still saved. This is acceptable because:
+
+1. The primary value (summary) is persisted
+2. Users can view summaries in the web dashboard
+3. WhatsApp notification is a convenience feature
+
+### Event Ordering
+
+The three-stage pipeline (create -> enrich -> summarize) uses separate Pub/Sub topics. This ensures:
+
+1. Each stage can fail independently
+2. Retries do not re-process earlier stages
+3. Clear observability of where failures occur
+
+**Potential issue:** If `bookmarks.summarize` event is processed before `bookmarks.enrich` completes (race condition in local dev), the summary might be generated from incomplete data. In production, Pub/Sub ordering and the sequential event chain prevent this.
+
+### Enrichment Asymmetry
+
+The public `POST /bookmarks` endpoint does not trigger enrichment -- only the internal `POST /internal/bookmarks` does. This means bookmarks created directly by end users via the public API will remain in `ogFetchStatus: pending` unless manually force-refreshed or enriched through another mechanism. This is by design because the public endpoint is currently only used by the web dashboard, which has its own enrichment trigger.
+
+---
 
 ## Resolved Issues
 
@@ -215,3 +174,23 @@ No deprecated APIs or dependencies in use.
 | INT-210 | WhatsApp delivery tightly coupled           | Decoupled via WhatsAppSendPublisher                         | 2026-01-24 |
 | INT-172 | Enrichment pipeline test coverage gaps      | Added comprehensive tests                                   | 2026-01-20 |
 | -       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline                           | 2026-01-15 |
+
+### Recent Improvements (v3.0.0 - v3.1.0)
+
+| Improvement                       | Description                                                        | Date       |
+| --------------------------------- | ------------------------------------------------------------------ | ---------- |
+| Dash0 OpenTelemetry integration   | Distributed tracing via package-level OTel instrumentation         | 2026-02-16 |
+| Dev-mode log formatting           | Human-readable logs in PM2 via createLogStream()                   | 2026-02-16 |
+| PM2 ecosystem migration           | Switched to pnpm --filter with start:local for reliable local dev  | 2026-02-14 |
+| 100% branch coverage enforcement  | v8 ignore exemptions with valid categories for untestable branches | 2026-01-31 |
+| Sentry-enabled logging            | All loggers migrated to createAppLogger()                          | 2026-01-30 |
+| Response contract compliance      | All routes migrated to reply.ok()/reply.fail()                     | 2026-01-30 |
+
+---
+
+## Related
+
+- [Features](features.md) - User-facing documentation
+- [Technical](technical.md) - Developer reference
+- [Agent Interface](agent.md) - Machine-readable specification
+- [Documentation Run Log](../../documentation-runs.md)
