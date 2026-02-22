@@ -1,19 +1,44 @@
-# Mobile Notifications Service - Tutorial
+# Mobile Notifications Service -- Tutorial
 
-Push notification gateway for Android devices via Tasker/Automate.
+> **Time:** 20-30 minutes
+> **Prerequisites:** Auth0 access token, Android device with Tasker or Automate
+> **You will learn:** How to pair a device, capture notifications, browse and filter them, and manage saved filters
+
+---
+
+## What You Will Build
+
+A working integration that:
+
+- Pairs an Android device with IntexuraOS via signature token
+- Captures mobile notifications through a webhook pipeline
+- Lists and filters stored notifications
+- Creates and manages saved filter presets
+
+---
 
 ## Prerequisites
 
-- Auth0 access token (Bearer JWT)
-- Android device with Tasker or Automate app installed
-- Internal auth token (for internal queries only)
+Before starting, ensure you have:
 
-## Part 1: Connect Device
+- [ ] Auth0 access token (Bearer JWT) for public endpoints
+- [ ] Internal auth token (for internal query endpoint only)
+- [ ] Android device with Tasker or Automate installed
+- [ ] Access to the IntexuraOS environment (local or Cloud Run)
 
-Register your device to receive a signature token:
+**Base URL (local):** `http://localhost:8114`
+**Base URL (Cloud Run):** `https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app`
+
+---
+
+## Part 1: Connect Your Device (5 minutes)
+
+Register your device to receive a signature token.
+
+### Step 1.1: Create a Connection
 
 ```bash
-curl -X POST https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/mobile-notifications/connect \
+curl -X POST http://localhost:8114/mobile-notifications/connect \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -21,94 +46,129 @@ curl -X POST https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run
   }'
 ```
 
-**Response:**
+**Expected response:**
 
 ```json
 {
   "success": true,
   "data": {
-    "connectionId": "conn_abc123",
-    "signature": "a1b2c3d4..." // Save this - shown only once!
+    "connectionId": "abc123def456",
+    "signature": "a1b2c3d4e5f6...64-hex-characters"
   }
 }
 ```
 
-**Important:** Copy the `signature` immediately. It is shown only once; the service stores only a SHA-256 hash. Creating a new connection also deletes any previous signature for your account — only one active signature per user.
+**Important:** Copy the `signature` value immediately. It is shown only once. The service stores only a SHA-256 hash. If you lose this token, you must create a new connection (which deletes the previous one).
 
-## Part 2: Check Connection Status
-
-Verify the device is connected:
+### Step 1.2: Verify Connection Status
 
 ```bash
-curl https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/mobile-notifications/status \
+curl http://localhost:8114/mobile-notifications/status \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-**Response:**
+**Expected response:**
 
 ```json
 {
   "success": true,
   "data": {
     "configured": true,
-    "lastNotificationAt": "2026-02-19T11:59:00Z"
+    "lastNotificationAt": null
   }
 }
 ```
 
-## Part 3: Send Notification from Device
+`lastNotificationAt` is null because no notifications have been received yet.
 
-Configure Tasker/Automate to POST to the webhook endpoint. The `notification_id` must be unique per user per notification (acts as idempotency key):
+### What Just Happened?
+
+The service generated a 256-bit random token (64 hex characters), computed its SHA-256 hash, stored the hash in Firestore, and returned the plaintext to you. Any existing signature for your user was deleted first -- only one active signature per user.
+
+---
+
+## Part 2: Send a Test Notification (5 minutes)
+
+Simulate what Tasker/Automate sends when a notification appears on your device.
+
+### Step 2.1: Post to the Webhook
 
 ```bash
-curl -X POST https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/mobile-notifications/webhooks \
-  -H "X-Mobile-Notifications-Signature: a1b2c3d4..." \
+curl -X POST http://localhost:8114/mobile-notifications/webhooks \
+  -H "X-Mobile-Notifications-Signature: a1b2c3d4e5f6...your-signature-here" \
   -H "Content-Type: application/json" \
   -d '{
     "source": "tasker",
     "device": "Pixel 8 Pro",
     "app": "com.whatsapp",
-    "notification_id": "unique-id-from-device-001",
+    "notification_id": "test-notif-001",
     "title": "Alice: hey!",
     "text": "are you free tonight?",
     "timestamp": 1708345200000,
-    "post_time": "2026-02-19 12:00:00"
+    "post_time": "2026-02-22 12:00:00"
   }'
 ```
 
-**Response:**
+**Expected response:**
 
 ```json
 {
   "success": true,
   "data": {
     "status": "accepted",
-    "id": "notif_xyz789"
+    "id": "firestore-doc-id"
   }
 }
 ```
 
-If `notification_id` was already received, `status` will be `"ignored"` with `"reason": "duplicate"`.
+### Step 2.2: Test Idempotency
 
-## Part 4: List Notifications
-
-Retrieve stored notifications with optional filtering:
+Send the same request again with the same `notification_id`:
 
 ```bash
-# All notifications, default limit 50
-curl "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/mobile-notifications" \
-  -H "Authorization: Bearer YOUR_TOKEN"
+curl -X POST http://localhost:8114/mobile-notifications/webhooks \
+  -H "X-Mobile-Notifications-Signature: a1b2c3d4e5f6...your-signature-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "tasker",
+    "device": "Pixel 8 Pro",
+    "app": "com.whatsapp",
+    "notification_id": "test-notif-001",
+    "title": "Alice: hey!",
+    "text": "are you free tonight?",
+    "timestamp": 1708345200000,
+    "post_time": "2026-02-22 12:00:00"
+  }'
+```
 
-# Filter by app (comma-separated)
-curl "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/mobile-notifications?app=com.whatsapp,com.telegram&limit=20" \
-  -H "Authorization: Bearer YOUR_TOKEN"
+**Expected response:**
 
-# Title search
-curl "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/mobile-notifications?title=alice" \
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ignored",
+    "reason": "duplicate"
+  }
+}
+```
+
+The duplicate is silently ignored. No error, no duplicate entry.
+
+**Checkpoint:** Your connection status should now show `lastNotificationAt` with a timestamp.
+
+---
+
+## Part 3: List and Filter Notifications (10 minutes)
+
+### Step 3.1: List All Notifications
+
+```bash
+curl "http://localhost:8114/mobile-notifications" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-**Response:**
+**Expected response:**
 
 ```json
 {
@@ -116,36 +176,65 @@ curl "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/mo
   "data": {
     "notifications": [
       {
-        "id": "notif_xyz789",
-        "userId": "user123",
+        "id": "firestore-doc-id",
         "source": "tasker",
         "device": "Pixel 8 Pro",
         "app": "com.whatsapp",
         "title": "Alice: hey!",
         "text": "are you free tonight?",
         "timestamp": 1708345200000,
-        "postTime": "2026-02-19 12:00:00",
-        "receivedAt": "2026-02-19T12:00:00.123Z",
-        "notificationId": "unique-id-from-device-001"
+        "postTime": "2026-02-22 12:00:00",
+        "receivedAt": "2026-02-22T12:00:00.123Z"
       }
-    ],
-    "nextCursor": "cursor_abc"
+    ]
   }
 }
 ```
 
-Pass `cursor=cursor_abc` to fetch the next page.
-
-## Part 5: Manage Saved Filters
-
-### Get current filter options
+### Step 3.2: Filter by App
 
 ```bash
-curl "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/notifications/filters" \
+curl "http://localhost:8114/mobile-notifications?app=com.whatsapp" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-**Response:**
+Multiple apps use comma separation: `?app=com.whatsapp,com.telegram`
+
+### Step 3.3: Search by Title
+
+```bash
+curl "http://localhost:8114/mobile-notifications?title=alice" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+Title search is case-insensitive partial match.
+
+### Step 3.4: Paginate Results
+
+```bash
+curl "http://localhost:8114/mobile-notifications?limit=2" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+If the response includes `nextCursor`, pass it to get the next page:
+
+```bash
+curl "http://localhost:8114/mobile-notifications?limit=2&cursor=CURSOR_VALUE" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## Part 4: Manage Saved Filters (5 minutes)
+
+### Step 4.1: View Available Filter Options
+
+```bash
+curl "http://localhost:8114/notifications/filters" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Expected response:**
 
 ```json
 {
@@ -153,23 +242,23 @@ curl "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/no
   "data": {
     "userId": "user123",
     "options": {
-      "app": ["com.whatsapp", "com.telegram", "com.slack"],
+      "app": ["com.whatsapp"],
       "device": ["Pixel 8 Pro"],
       "source": ["tasker"]
     },
     "savedFilters": [],
-    "createdAt": "2026-02-19T10:00:00Z",
-    "updatedAt": "2026-02-19T12:00:00Z"
+    "createdAt": "2026-02-22T12:00:00Z",
+    "updatedAt": "2026-02-22T12:00:01Z"
   }
 }
 ```
 
-`options` auto-populates from received notifications. Empty arrays until first notification arrives.
+The `options` arrays are auto-populated from received notifications.
 
-### Create a saved filter
+### Step 4.2: Create a Saved Filter
 
 ```bash
-curl -X POST "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/notifications/filters/saved" \
+curl -X POST "http://localhost:8114/notifications/filters/saved" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -178,37 +267,39 @@ curl -X POST "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.ru
   }'
 ```
 
-**Response (201):**
+**Expected response (201):**
 
 ```json
 {
   "success": true,
   "data": {
-    "id": "filter_abc",
+    "id": "uuid-of-saved-filter",
     "name": "Work Chats",
     "app": ["com.slack", "com.microsoft.teams"],
-    "createdAt": "2026-02-19T12:00:00Z"
+    "createdAt": "2026-02-22T12:05:00Z"
   }
 }
 ```
 
-### Delete a saved filter
+### Step 4.3: Delete a Saved Filter
 
 ```bash
-curl -X DELETE "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/notifications/filters/saved/filter_abc" \
+curl -X DELETE "http://localhost:8114/notifications/filters/saved/uuid-of-saved-filter" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-Returns **204 No Content** on success.
+Returns **204 No Content** on success (empty body).
 
-## Part 6: Delete a Notification
+---
+
+## Part 5: Delete a Notification (2 minutes)
 
 ```bash
-curl -X DELETE "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app/mobile-notifications/notif_xyz789" \
+curl -X DELETE "http://localhost:8114/mobile-notifications/firestore-doc-id" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-**Response (200):**
+**Expected response (200):**
 
 ```json
 {
@@ -217,7 +308,54 @@ curl -X DELETE "https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.
 }
 ```
 
-Returns 403 if the notification belongs to another user, 404 if not found.
+Returns 404 if not found, 403 if the notification belongs to another user.
+
+---
+
+## Part 6: Handle Errors (3 minutes)
+
+### Missing Signature Header
+
+```bash
+curl -X POST http://localhost:8114/mobile-notifications/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{ "source": "tasker", ... }'
+```
+
+**Response (400):**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Missing X-Mobile-Notifications-Signature header"
+  }
+}
+```
+
+### Invalid Signature
+
+```bash
+curl -X POST http://localhost:8114/mobile-notifications/webhooks \
+  -H "X-Mobile-Notifications-Signature: wrong-token" \
+  -H "Content-Type: application/json" \
+  -d '{ "source": "tasker", ... }'
+```
+
+**Response (401):**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Invalid signature"
+  }
+}
+```
+
+---
 
 ## Response Format
 
@@ -227,19 +365,88 @@ All endpoints return a standardized response contract:
 - **Error:** `{ "success": false, "error": { "code": "...", "message": "..." } }`
 - **Exception:** `DELETE /notifications/filters/saved/:id` returns 204 No Content (empty body)
 
-## Exercises
-
-1. **Connect and test**: Register a connection, send a test webhook, list notifications to verify storage
-2. **Pagination**: Send 5+ notifications and paginate through them with `limit=2`
-3. **Filtering**: Send from two apps, then list with `app=` filter to verify
-4. **Saved filter**: Create a saved filter for your most-used apps, then delete it
+---
 
 ## Troubleshooting
 
-| Issue                           | Solution                                               |
-| ------------------------------- | ------------------------------------------------------ |
-| Lost signature                  | Reconnect device (`POST /connect` → new signature)     |
-| Webhook 400 (missing header)    | Ensure `X-Mobile-Notifications-Signature` header sent  |
-| Webhook 401 (invalid signature) | Signature doesn't match stored hash; reconnect         |
-| Empty filter options            | No notifications received yet; options auto-populate   |
-| Duplicate notification ignored  | Normal; `notification_id` deduplication is intentional |
+| Issue                           | Solution                                                |
+| ------------------------------- | ------------------------------------------------------- |
+| Lost signature                  | Reconnect device (`POST /connect` gives new signature)  |
+| Webhook 400 (missing header)    | Ensure `X-Mobile-Notifications-Signature` header is set |
+| Webhook 401 (invalid signature) | Signature does not match stored hash; reconnect         |
+| Empty filter options            | No notifications received yet; options auto-populate    |
+| Duplicate notification ignored  | Normal; `notification_id` deduplication is intentional  |
+| 403 on DELETE                   | You do not own that notification                        |
+
+---
+
+## Exercises
+
+Test your understanding:
+
+1. **Easy:** Connect a device, send 3 notifications from different apps, and list them filtered by one app
+2. **Medium:** Send 5+ notifications and paginate through them with `limit=2`, following the `nextCursor` chain
+3. **Hard:** Create a saved filter for two apps, verify it appears in `GET /notifications/filters`, then delete it
+
+<details>
+<summary>Solutions</summary>
+
+### Exercise 1: Connect and Filter
+
+```bash
+# Connect
+curl -X POST http://localhost:8114/mobile-notifications/connect \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"deviceLabel": "Test Device"}'
+
+# Save the signature from the response
+
+# Send 3 notifications from different apps
+for APP in com.whatsapp com.telegram com.slack; do
+  curl -X POST http://localhost:8114/mobile-notifications/webhooks \
+    -H "X-Mobile-Notifications-Signature: $SIGNATURE" \
+    -H "Content-Type: application/json" \
+    -d "{\"source\":\"tasker\",\"device\":\"Test\",\"app\":\"$APP\",\"notification_id\":\"$APP-001\",\"title\":\"Test\",\"text\":\"Hello\",\"timestamp\":$(date +%s)000,\"post_time\":\"$(date)\"}"
+done
+
+# Filter by one app
+curl "http://localhost:8114/mobile-notifications?app=com.whatsapp" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Exercise 2: Pagination
+
+```bash
+# List with limit=2
+curl "http://localhost:8114/mobile-notifications?limit=2" -H "Authorization: Bearer $TOKEN"
+# Copy nextCursor from response
+curl "http://localhost:8114/mobile-notifications?limit=2&cursor=CURSOR" -H "Authorization: Bearer $TOKEN"
+```
+
+### Exercise 3: Saved Filters
+
+```bash
+# Create saved filter
+curl -X POST "http://localhost:8114/notifications/filters/saved" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"Messaging","app":["com.whatsapp","com.telegram"]}'
+
+# Verify it appears
+curl "http://localhost:8114/notifications/filters" -H "Authorization: Bearer $TOKEN"
+
+# Delete it (use the id from the create response)
+curl -X DELETE "http://localhost:8114/notifications/filters/saved/FILTER_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+</details>
+
+---
+
+## Next Steps
+
+Now that you understand the basics:
+
+1. Configure Tasker/Automate on your Android device to forward all notifications to the webhook
+2. Read the [Technical Reference](technical.md) for full API details and domain model documentation
+3. Explore the internal query endpoint for building data aggregation pipelines

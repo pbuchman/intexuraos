@@ -1,67 +1,130 @@
-# API Docs Hub - Technical Reference
+# API Docs Hub -- Technical Reference
 
 ## Overview
 
-API-docs-hub is a lightweight Fastify server that aggregates OpenAPI specifications from all IntexuraOS services into a
-single Swagger UI instance.
+API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 15 IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration -- it exists solely to serve a configured Swagger UI.
 
-**Versions:** Package `2.1.0` · OpenAPI spec `0.0.4`
+**Versions:** Package `3.1.0` / OpenAPI spec `0.0.4`
 
 ## Architecture
 
 ```mermaid
 graph LR
-    Browser[Browser] -->|/docs| Hub[API Docs Hub]
-    Hub -->|Fetch OpenAPI| S1[Service 1]
-    Hub -->|Fetch OpenAPI| S2[Service 2]
-    Hub -->|Fetch OpenAPI| SN[Service N]
+    Browser[Browser] -->|GET /docs| Hub[API Docs Hub<br>Fastify + Swagger UI]
+    Hub -->|serves HTML| Browser
 
-    Hub -->|/health| Health[Config Check]
+    Browser -->|fetch /openapi.json| S1[User Service]
+    Browser -->|fetch /openapi.json| S2[Research Agent]
+    Browser -->|fetch /openapi.json| SN[... 13 more services]
+
+    Hub -->|GET /health| Health[Config Validation]
 ```
+
+Note: The hub serves the Swagger UI HTML/JS. The browser then fetches individual OpenAPI specs directly from each service. The hub itself does not proxy spec requests.
+
+## Data Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Browser
+    participant Hub as API Docs Hub
+    participant Service as Target Service
+
+    Browser->>+Hub: GET /docs
+    Hub-->>-Browser: Swagger UI HTML (with urls config)
+    Browser->>+Service: GET /openapi.json (client-side fetch)
+    Service-->>-Browser: OpenAPI JSON spec
+    Note over Browser: Renders interactive API docs
+```
+
+## Recent Changes
+
+| Commit     | Description                                               | Date       |
+| ---------- | --------------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0                                            | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                            | 2026-02-19 |
+| `6063175b` | Dev-mode log formatting for PM2 readability               | 2026-02-16 |
+| `a52a6bbc` | Dash0 OpenTelemetry integration                           | 2026-02-16 |
+| `d5fbb354` | Fix start:local to use tsx instead of experimental flags  | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local    | 2026-02-14 |
+| `40d83a23` | Implement Intex Chat MVP -- added Chat Agent spec         | 2026-02-01 |
+| `7c5e9153` | Remove PromptVault feature, keep Notion connector         | 2026-01-26 |
 
 ## API Endpoints
 
-| Method | Path      | Description  | Auth |
-| ------ | --------- | ------------ | ---- |
-| GET    | `/docs`   | Swagger UI   | None |
-| GET    | `/health` | Health check | None |
+### Public Endpoints
 
-## Configuration
+| Method | Path      | Purpose                                         | Auth |
+| ------ | --------- | ----------------------------------------------- | ---- |
+| GET    | `/docs`   | Swagger UI with multi-spec dropdown             | None |
+| GET    | `/health` | Health check -- validates config source count   | None |
 
-The service loads `openApiSources` from config:
+There are no internal endpoints. This service does not expose any `/internal/*` routes.
+
+## Domain Model
+
+This service has no domain model. It is a configuration-driven static documentation server.
+
+### Configuration Model
 
 ```typescript
 interface OpenApiSource {
-  name: string; // Display name in dropdown
-  url: string; // URL to OpenAPI JSON/YAML
+  name: string;  // Display name in Swagger UI dropdown
+  url: string;   // URL to service's OpenAPI JSON endpoint
+}
+
+interface Config {
+  port: number;
+  host: string;
+  openApiSources: OpenApiSource[];  // Exactly 15 sources required at startup
 }
 ```
 
-All 15 sources are **required** at startup — missing any env var causes a fail-fast error.
+## Aggregated Services (15)
 
-## Health Check
+| Display Name                     | Environment Variable                                      |
+| -------------------------------- | --------------------------------------------------------- |
+| User Service API                 | `INTEXURAOS_USER_SERVICE_OPENAPI_URL`                     |
+| Notion Service API               | `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`                   |
+| WhatsApp Service API             | `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`                 |
+| Mobile Notifications Service API | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL`     |
+| Research Agent API               | `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`                   |
+| Commands Agent API               | `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`                   |
+| Actions Agent API                | `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                    |
+| Data Insights Agent API          | `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL`              |
+| Image Service API                | `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                    |
+| Notes Agent API                  | `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                      |
+| Todos Agent API                  | `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                      |
+| Application Settings API         | `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`             |
+| Bookmarks Agent API              | `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`                  |
+| Calendar Agent API               | `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`                   |
+| Chat Agent API                   | `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                       |
 
-Response includes:
+## Pub/Sub
 
-- `status`: "ok" if sources configured, "down" otherwise
-- `sourceCount`: Number of configured sources
-
-Note: The health endpoint uses raw `reply.send()` deliberately — health check format must remain independent of the app-level response contract (`reply.ok()` / `reply.fail()`).
+None. This service does not publish or subscribe to any Pub/Sub topics.
 
 ## Dependencies
 
-**Packages:**
+### Packages
 
-- `@fastify/swagger` - OpenAPI 3.1.1 generation
-- `@fastify/swagger-ui` - Swagger UI with multi-spec support
-- `@intexuraos/common-http` - `intexuraFastifyPlugin`, `registerQuietHealthCheckLogging`
-- `@intexuraos/http-server` - `buildHealthResponse`, `HealthCheck` types
-- `@intexuraos/infra-sentry` - Sentry error capture, `createLogStream()`
-- `@intexuraos/infra-otel` - Dash0 OpenTelemetry integration (optional, via env var)
+| Package                      | Purpose                                             |
+| ---------------------------- | --------------------------------------------------- |
+| `@fastify/swagger`           | OpenAPI 3.1.1 spec generation                       |
+| `@fastify/swagger-ui`        | Swagger UI with multi-spec `urls` support           |
+| `@intexuraos/common-http`    | `intexuraFastifyPlugin`, quiet health check logging |
+| `@intexuraos/http-server`    | `buildHealthResponse`, `HealthCheck` types          |
+| `@intexuraos/infra-sentry`   | Sentry error capture, `createLogStream()`           |
+| `@intexuraos/infra-otel`     | Dash0 OpenTelemetry log forwarding (optional)       |
 
-**No external service dependencies.**
+### External Services
 
-**No database dependencies.**
+None. The hub has no direct external service dependencies.
+
+### Internal Services
+
+None. The hub does not call any internal service APIs. It only provides URLs for the browser to fetch specs from.
 
 ## Logging Pipeline
 
@@ -76,59 +139,78 @@ Note: The health endpoint uses raw `reply.send()` deliberately — health check 
 
 Health check routes are excluded from request logging via `registerQuietHealthCheckLogging`.
 
-## Environment Variables
+## Configuration
 
-| Variable                                              | Required | Description                                                        |
-| ----------------------------------------------------- | -------- | ------------------------------------------------------------------ |
-| `INTEXURAOS_USER_SERVICE_OPENAPI_URL`                 | Yes      | User Service OpenAPI JSON URL                                      |
-| `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`               | Yes      | Notion Service OpenAPI JSON URL                                    |
-| `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`             | Yes      | WhatsApp Service OpenAPI URL                                       |
-| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL` | Yes      | Mobile Notifications URL                                           |
-| `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`               | Yes      | Research Agent OpenAPI URL                                         |
-| `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`               | Yes      | Commands Agent OpenAPI URL                                         |
-| `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                | Yes      | Actions Agent OpenAPI URL                                          |
-| `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL`          | Yes      | Data Insights Agent OpenAPI URL                                    |
-| `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                | Yes      | Image Service OpenAPI URL                                          |
-| `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                  | Yes      | Notes Agent OpenAPI URL                                            |
-| `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                  | Yes      | Todos Agent OpenAPI URL                                            |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`         | Yes      | Application Settings URL                                           |
-| `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`              | Yes      | Bookmarks Agent OpenAPI URL                                        |
-| `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`               | Yes      | Calendar Agent OpenAPI URL                                         |
-| `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                   | Yes      | Chat Agent OpenAPI URL                                             |
-| `INTEXURAOS_SENTRY_DSN`                               | No       | Sentry DSN for error tracking                                      |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`                      | No       | Dash0 OTLP endpoint for log forwarding                             |
-| `INTEXURAOS_ENVIRONMENT`                              | No       | Runtime environment name passed to Sentry (default: "development") |
-| `PORT`                                                | No       | Server port (default: 8080)                                        |
-| `HOST`                                                | No       | Server host (default: 0.0.0.0)                                     |
+### Required Environment Variables (15)
+
+| Variable                                              | Description                   |
+| ----------------------------------------------------- | ----------------------------- |
+| `INTEXURAOS_USER_SERVICE_OPENAPI_URL`                 | User Service OpenAPI JSON URL |
+| `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`               | Notion Service OpenAPI URL    |
+| `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`             | WhatsApp Service OpenAPI URL  |
+| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL` | Mobile Notifications URL      |
+| `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`               | Research Agent OpenAPI URL    |
+| `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`               | Commands Agent OpenAPI URL    |
+| `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                | Actions Agent OpenAPI URL     |
+| `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL`          | Data Insights Agent URL       |
+| `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                | Image Service OpenAPI URL     |
+| `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                  | Notes Agent OpenAPI URL       |
+| `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                  | Todos Agent OpenAPI URL       |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL`         | Application Settings URL      |
+| `INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL`              | Bookmarks Agent OpenAPI URL   |
+| `INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL`               | Calendar Agent OpenAPI URL    |
+| `INTEXURAOS_CHAT_AGENT_OPENAPI_URL`                   | Chat Agent OpenAPI URL        |
+
+### Optional Environment Variables
+
+| Variable                         | Default         | Description                          |
+| -------------------------------- | --------------- | ------------------------------------ |
+| `INTEXURAOS_SENTRY_DSN`         | -               | Sentry DSN for error tracking        |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT` | -               | Dash0 OTLP endpoint for log export   |
+| `INTEXURAOS_ENVIRONMENT`         | `development`   | Environment name for Sentry          |
+| `PORT`                           | `8080`          | Server listen port                   |
+| `HOST`                           | `0.0.0.0`       | Server listen host                   |
+| `LOG_LEVEL`                      | `info`          | Pino log level                       |
 
 ## Gotchas
 
-**Config validation** - Empty `openApiSources` array returns health status "down".
+- **Client-side spec fetching** -- Swagger UI fetches specs in the browser, not on the server. Services must be accessible from the browser's network and must allow CORS from the hub's origin.
+- **Config validation scope** -- The health check only validates that env vars were present at startup. It does not verify that the service URLs are reachable or returning valid OpenAPI specs.
+- **Empty sources = "down"** -- If `openApiSources` array is empty (which cannot happen in practice due to fail-fast), the health check returns status `"down"`.
+- **Static config** -- OpenAPI source URLs are loaded once at startup. Adding or removing a service requires redeployment.
+- **Health endpoint uses raw reply.send()** -- The `/health` endpoint bypasses the `reply.ok()` / `reply.fail()` response contract. This is intentional for infrastructure monitoring stability.
+- **Not in ecosystem.config.cjs** -- This service is not listed in `ecosystem.config.cjs` for local PM2 development. It must be run manually via `pnpm --filter api-docs-hub start:local`.
+- **Max scale 1** -- Terraform limits this service to a single Cloud Run instance, which is appropriate for a documentation-only service.
 
-**URL accessibility** - Swagger UI fetches specs client-side. Services must be accessible from browser.
+## Terraform Configuration
 
-**CORS** - Services must allow cross-origin requests from docs hub.
+```hcl
+module "api_docs_hub" {
+  source       = "../../modules/cloud-run-service"
+  service_name = "intexuraos-api-docs-hub"
+  port         = 8080
+  min_scale    = 0
+  max_scale    = 1
 
-**Static config** - Changes require redeployment.
+  # OpenAPI URLs reference other module outputs
+  env_vars = {
+    INTEXURAOS_USER_SERVICE_OPENAPI_URL = "${module.user_service.service_url}/openapi.json"
+    # ... 14 more service URLs
+  }
 
-**15 sources** - Currently aggregates 15 service OpenAPI specs: User Service, Notion Service, WhatsApp Service, Mobile Notifications Service, Research Agent, Commands Agent, Actions Agent, Data Insights Agent, Image Service, Notes Agent, Todos Agent, Application Settings, Bookmarks Agent, Calendar Agent, and Chat Agent.
+  depends_on = [module.user_service, module.notion_service, ...]
+}
+```
+
+The Terraform module uses `depends_on` for all 15 upstream services to ensure their Cloud Run URLs are available before the hub deploys.
 
 ## File Structure
 
 ```
 apps/api-docs-hub/src/
-  config.ts         # OpenAPI sources configuration + env var validation
-  server.ts         # Fastify server with Swagger UI + health endpoint
-  index.ts          # Entry point: Sentry init, loadConfig, listen
+  config.ts         # OpenApiSource[] config + env var validation (108 lines)
+  server.ts         # Fastify server, Swagger UI registration, health endpoint (92 lines)
+  index.ts          # Entry point: Sentry init, loadConfig(), listen (29 lines)
 ```
 
-## Recent Changes
-
-| Date       | Change                                                                                   |
-| ---------- | ---------------------------------------------------------------------------------------- |
-| 2026-02-16 | `@intexuraos/infra-otel` added as dependency; Dash0 OTLP log forwarding enabled          |
-| 2026-02-16 | Dev-mode log formatting: PM2 runs now emit human-readable output via `createLogStream()` |
-| 2026-02-14 | `start:local` script switched from `node --experimental-strip-types` to `tsx`            |
-| 2026-02-14 | PM2 ecosystem updated to use `pnpm --filter` with `start:local` scripts                  |
-| 2026-02-01 | Chat Agent spec added (`INTEXURAOS_CHAT_AGENT_OPENAPI_URL`) — INT-431                    |
-| 2026-01-27 | PromptVault spec removed — INT-319                                                       |
+Total: 229 lines of source code across 3 files. This is one of the simplest services in the monorepo.

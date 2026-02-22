@@ -23,8 +23,9 @@ interface UserServiceTools {
   // Authentication
   startDeviceAuth(): Promise<DeviceAuthStartResult>;
   pollDeviceAuth(params: { deviceCode: string }): Promise<DeviceAuthPollResult>;
-  refreshToken(params: { refreshToken: string }): Promise<TokenResult>;
-  getFirebaseToken(): Promise<FirebaseTokenResult>;
+  refreshToken(params: { userId: string }): Promise<TokenResult>;
+  getFirebaseToken(): Promise<{ customToken: string }>;
+  getCurrentUser(): Promise<UserProfile>;
 
   // User Settings
   getUserSettings(userId: string): Promise<UserSettings>;
@@ -50,7 +51,7 @@ interface UserServiceTools {
   getGoogleOAuthStatus(): Promise<OAuthConnectionStatus>;
   disconnectGoogleOAuth(): Promise<void>;
 
-  // Internal (service-to-service) — all wrapped in response contract
+  // Internal (service-to-service) -- all wrapped in response contract
   getDecryptedLlmKeys(userId: string): Promise<ApiResponse<DecryptedLlmKeys>>;
   updateLlmLastUsed(userId: string, provider: LlmProvider): Promise<void>;
   getGoogleOAuthToken(userId: string): Promise<ApiResponse<{ accessToken: string; email: string }>>;
@@ -63,6 +64,11 @@ interface UserServiceTools {
 ```typescript
 type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
 type OAuthProvider = 'google';
+
+interface ApiResponse<T> {
+  success: true;
+  data: T;
+}
 
 interface DeviceAuthStartResult {
   deviceCode: string;
@@ -82,8 +88,18 @@ interface DeviceAuthPollResult {
 
 interface TokenResult {
   accessToken: string;
-  refreshToken: string;
+  tokenType: string;
   expiresIn: number;
+  scope?: string;
+  idToken?: string;
+}
+
+interface UserProfile {
+  userId: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+  hasRefreshToken: boolean;
 }
 
 interface UserSettings {
@@ -98,7 +114,7 @@ interface LlmPreferences {
 }
 
 interface LlmKeysStatus {
-  defaultModel: string | null; // User's preferred default LLM model (from llmPreferences)
+  defaultModel: string | null; // User's preferred default LLM model
   google: string | null; // Masked key preview (e.g., "AIza...XXXX")
   openai: string | null;
   anthropic: string | null;
@@ -148,6 +164,7 @@ interface OAuthConnectionStatus {
 | **Rate Limit Precedence** | Error parser checks rate limits before API key errors           |
 | **Internal Auth**         | Service-to-service calls require X-Internal-Auth header         |
 | **Model Validation**      | `defaultModel` must pass `isFastModel()` or request is rejected |
+| **OAuth2 Raw Responses**  | `/auth/oauth/*` routes use flat OAuth2-spec responses           |
 
 ---
 
@@ -228,6 +245,18 @@ const keys = await getLlmApiKeys(userId);
 // keys.testResults.google shows last test result
 ```
 
+### Set Default Model
+
+```typescript
+// Set preferred fast model (validates against isFastModel())
+const result = await updateUserSettings(userId, { defaultModel: 'claude-haiku-3-5' });
+// All agents now use claude-haiku-3-5 by default
+
+// Read back via internal endpoint
+const prefs = await getUserLlmPreferences(userId);
+// prefs.data.llmPreferences.defaultModel === 'claude-haiku-3-5'
+```
+
 ### Internal Service Access
 
 ```typescript
@@ -244,12 +273,25 @@ const oauth = await getGoogleOAuthToken(userId);
 
 ## Internal Endpoints
 
-| Method | Path                                         | Purpose                                           |
-| ------ | -------------------------------------------- | ------------------------------------------------- |
-| GET    | `/internal/users/:uid/llm-keys`              | Get decrypted LLM keys (called by research-agent) |
-| POST   | `/internal/users/:uid/llm-keys/:p/last-used` | Update last used timestamp                        |
-| GET    | `/internal/users/:uid/oauth/google/token`    | Get valid OAuth token (called by calendar-agent)  |
-| GET    | `/internal/users/:uid/settings`              | Get user LLM preferences (default model)          |
+| Method | Path                                                | Purpose                                           |
+| ------ | --------------------------------------------------- | ------------------------------------------------- |
+| GET    | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM keys (called by research-agent) |
+| POST   | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp                        |
+| GET    | `/internal/users/:uid/oauth/google/token`           | Get valid OAuth token (called by calendar-agent)  |
+| GET    | `/internal/users/:uid/settings`                     | Get user LLM preferences (default model)          |
+
+---
+
+## Error Handling
+
+| Error Code   | HTTP | Meaning                                 | Recovery Action                     |
+| ------------ | ---- | --------------------------------------- | ----------------------------------- |
+| UNAUTHORIZED | 401  | Invalid or missing token                | Refresh access token                |
+| FORBIDDEN    | 403  | Cannot access other user's data         | Use the authenticated user's own ID |
+| NOT_FOUND    | 404  | Resource not found (key, connection)    | Verify resource exists              |
+| CONFLICT     | 409  | Auth pending (device flow)              | Continue polling                    |
+| MISCONFIGURED| 503  | Service dependency not configured       | Check env vars                      |
+| DOWNSTREAM   | 502  | External service (Auth0, Google) failed | Retry with backoff                  |
 
 ---
 
@@ -260,6 +302,7 @@ const oauth = await getGoogleOAuthToken(userId);
 - Masked previews show only first 4 and last 4 characters
 - OAuth tokens refreshed automatically when near expiration
 - Internal endpoints require X-Internal-Auth header matching shared secret
+- Auth0 namespaced claims (`https://intexuraos.cloud/`) used for API audience tokens
 
 ---
 
@@ -277,4 +320,17 @@ Keys are validated using cheap, fast models to minimize cost:
 
 ---
 
-**Last updated:** 2026-02-19
+## Dependencies
+
+| Service              | Why Needed                 | Failure Behavior                       |
+| -------------------- | -------------------------- | -------------------------------------- |
+| Auth0                | User authentication        | Auth endpoints return 503              |
+| Google OAuth         | Calendar token management  | OAuth endpoints return 503             |
+| app-settings-service | LLM pricing at startup     | Service fails to start                 |
+| Firebase Admin SDK   | Custom token generation    | Firebase token endpoint returns 500    |
+| Firestore            | All persistent state       | Endpoints return 500                   |
+| LLM APIs (5)         | Key validation and testing | Validation/test returns formatted error|
+
+---
+
+**Last updated:** 2026-02-22

@@ -34,7 +34,7 @@ Transform provider-specific error responses into clear, actionable messages. The
 
 ### Default Model Selection
 
-Set a preferred fast model that all agents use for quick generation tasks. The service validates the chosen model against a supported list and persists the preference — no API key required, works with platform-owned keys.
+Set a preferred fast model that all agents use for quick generation tasks. The service validates the chosen model against a supported list and persists the preference -- no API key required, works with platform-owned keys.
 
 **Example:** User opens Settings, selects "Claude Haiku 3.5" from the provider-grouped dropdown. All subsequent `generate()` calls across every agent default to that model unless the calling service overrides it. If the user has no Anthropic API key, the platform falls back to Zai's GLM-4.7-Flash automatically.
 

@@ -217,7 +217,7 @@ function HeroSection(): React.JSX.Element {
             </div>
 
             <p className="mb-3 font-mono text-sm font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-400">
-              IntexuraOS v3.0.0
+              IntexuraOS v3.1.0
             </p>
 
             <h1 className="mb-8 text-5xl font-black uppercase leading-[0.9] tracking-tighter text-black dark:text-white md:text-7xl lg:text-[5.5rem]">
@@ -575,7 +575,7 @@ function Footer(): React.JSX.Element {
         <div>
           <h3 className="mb-1 text-2xl font-black uppercase tracking-tighter dark:text-white">IntexuraOS</h3>
           <p className="font-mono text-xs text-neutral-500 dark:text-neutral-400">
-            The software that builds itself. v3.0.0
+            The software that builds itself. v3.1.0
           </p>
         </div>
         <p className="font-mono text-xs text-neutral-400">

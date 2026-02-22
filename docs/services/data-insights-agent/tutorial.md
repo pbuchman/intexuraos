@@ -1,4 +1,4 @@
-# Data Insights Agent — Tutorial
+# Data Insights Agent -- Tutorial
 
 > **Time:** 30-40 minutes
 > **Prerequisites:** Node.js 22+, Auth0 access token, configured LLM API key
@@ -14,7 +14,7 @@ A complete data analysis workflow:
 - Composite feed combining multiple sources
 - AI-powered data insights with chart recommendations
 - Ready-to-render Vega-Lite chart specifications
-- Persistent visualization that auto-refreshes with new data
+- Persistent visualization with on-demand refresh
 
 ---
 
@@ -35,7 +35,7 @@ Let's start by storing some data to analyze.
 ### Step 1.1: Create a Data Source
 
 ```bash
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/data-sources \
+curl -X POST http://localhost:8119/data-sources \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -54,8 +54,8 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/data
     "userId": "user-xyz",
     "title": "Q1 Sales Data",
     "content": "month,revenue,expenses,profit\nJan,50000,30000,20000...",
-    "createdAt": "2025-01-25T10:00:00Z",
-    "updatedAt": "2025-01-25T10:00:00Z"
+    "createdAt": "2026-02-22T10:00:00Z",
+    "updatedAt": "2026-02-22T10:00:00Z"
   },
   "diagnostics": {
     "requestId": "req-123",
@@ -66,7 +66,9 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/data
 
 ### What Just Happened?
 
-Your data was stored in Firestore and assigned a unique ID. Save the `id` from the response — you'll need it to create composite feeds.
+Your data was stored in Firestore and assigned a unique ID. Save the `id` from the response -- you need it to create composite feeds.
+
+**Limits:** Content is capped at 60,000 characters, title at 200 characters.
 
 ---
 
@@ -77,7 +79,7 @@ Let the AI create a descriptive title from raw content.
 ### Step 2.1: Request Title Generation
 
 ```bash
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/data-sources/generate-title \
+curl -X POST http://localhost:8119/data-sources/generate-title \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -109,7 +111,7 @@ Combine multiple data sources and notification filters into a unified feed.
 ### Step 3.1: Create the Feed
 
 ```bash
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/composite-feeds \
+curl -X POST http://localhost:8119/composite-feeds \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -136,7 +138,7 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/comp
     "purpose": "Track monthly sales performance and inventory alerts",
     "staticSourceIds": ["ds-abc123"],
     "notificationFilters": [...],
-    "createdAt": "2025-01-25T10:05:00Z"
+    "createdAt": "2026-02-22T10:05:00Z"
   }
 }
 ```
@@ -146,7 +148,9 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/comp
 1. The feed was created with your data sources
 2. The LLM generated a descriptive name: "Sales & Inventory Tracker"
 3. A background job started to fetch matching notifications
-4. A snapshot was created for fast analysis
+4. A snapshot was created automatically for fast analysis
+
+**Limits:** Max 5 static sources, max 3 notification filters per feed.
 
 **Checkpoint:** You should have a feed ID. Save it for the next steps.
 
@@ -159,7 +163,7 @@ Extract insights from your composite feed.
 ### Step 4.1: Request Analysis
 
 ```bash
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/composite-feeds/feed-xyz789/analyze \
+curl -X POST http://localhost:8119/composite-feeds/feed-xyz789/analyze \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -176,7 +180,7 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/comp
         "description": "Revenue increased by 20% from January to March, with profit margins improving steadily.",
         "trackableMetric": "Monthly revenue growth rate",
         "suggestedChartType": "C1",
-        "generatedAt": "2025-01-25T10:10:00Z"
+        "generatedAt": "2026-02-22T10:10:00Z"
       },
       {
         "id": "feed-xyz789-insight-2",
@@ -184,7 +188,7 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/comp
         "description": "Expenses consistently represent 60% of revenue, suggesting stable operational costs.",
         "trackableMetric": "Expense-to-revenue ratio",
         "suggestedChartType": "C2",
-        "generatedAt": "2025-01-25T10:10:00Z"
+        "generatedAt": "2026-02-22T10:10:00Z"
       }
     ]
   }
@@ -219,7 +223,7 @@ Get a Vega-Lite specification for rendering the chart.
 ### Step 5.1: Request Chart Definition
 
 ```bash
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/composite-feeds/feed-xyz789/insights/feed-xyz789-insight-1/chart-definition \
+curl -X POST http://localhost:8119/composite-feeds/feed-xyz789/insights/feed-xyz789-insight-1/chart-definition \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -258,18 +262,18 @@ The LLM generated a complete Vega-Lite specification based on:
 - The insight type (trend analysis)
 - The recommended chart type (line chart)
 
-You can now pass this spec directly to any Vega-Lite renderer.
+You can pass this spec directly to any Vega-Lite renderer. The `dataTransformInstructions` tells the data transform service how to reshape the snapshot data for the chart.
 
 ---
 
 ## Part 6: Save a Persistent Visualization (5 minutes)
 
-Save the chart as a visualization that automatically refreshes with new snapshot data.
+Save the chart as a visualization that can be refreshed on demand.
 
 ### Step 6.1: Create the Visualization
 
 ```bash
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizations \
+curl -X POST http://localhost:8119/visualizations \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -299,8 +303,8 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visu
     "insightTitle": "Revenue Growth Trend",
     "status": "pending",
     "chartData": null,
-    "createdAt": "2025-01-25T10:15:00Z",
-    "updatedAt": "2025-01-25T10:15:00Z"
+    "createdAt": "2026-02-22T10:15:00Z",
+    "updatedAt": "2026-02-22T10:15:00Z"
   }
 }
 ```
@@ -310,7 +314,7 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visu
 Computation runs asynchronously. Poll `GET /visualizations/:id` until `status` changes from `pending` to `ready`.
 
 ```bash
-curl https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizations/viz-001 \
+curl http://localhost:8119/visualizations/viz-001 \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -323,13 +327,27 @@ curl https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizatio
     "id": "viz-001",
     "status": "ready",
     "chartData": [
-      { "month": "2025-01-01", "revenue": 50000 },
-      { "month": "2025-02-01", "revenue": 55000 },
-      { "month": "2025-03-01", "revenue": 60000 }
+      { "month": "2026-01-01", "revenue": 50000 },
+      { "month": "2026-02-01", "revenue": 55000 },
+      { "month": "2026-03-01", "revenue": 60000 }
     ],
-    "lastRefreshedAt": "2025-01-25T10:15:08Z"
+    "lastRefreshedAt": "2026-02-22T10:15:08Z"
   }
 }
+```
+
+### Step 6.3: Manually Refresh
+
+When your feed data changes, refresh the snapshot then trigger a visualization refresh:
+
+```bash
+# First, refresh the snapshot
+curl "http://localhost:8119/composite-feeds/feed-xyz789/snapshot?refresh=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Then, refresh the visualization
+curl -X POST http://localhost:8119/visualizations/viz-001/refresh \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### What Just Happened?
@@ -337,7 +355,7 @@ curl https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizatio
 1. A visualization record was created in `pending` state (returns immediately)
 2. The service fired an async job to transform the snapshot data using LLM instructions
 3. The visualization updated to `ready` with the computed `chartData`
-4. Every 15 minutes when the snapshot refreshes, this visualization **automatically recomputes** — no further action needed
+4. When you need fresh data, use the snapshot refresh query param and then the visualization refresh endpoint
 
 ---
 
@@ -348,7 +366,7 @@ curl https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizatio
 | "MISCONFIGURED"             | Configure your LLM API key in user-service settings first  |
 | 409 Conflict                | Data source is used by a composite feed -- remove it first |
 | "No insights generated"     | Your data may not have enough patterns -- add more data    |
-| "Snapshot not found"        | Wait for snapshot generation (up to 30 seconds)            |
+| "Snapshot not found"        | Request `GET /snapshot?refresh=true` to force generation   |
 | "UNAUTHORIZED"              | Verify your Auth0 token is valid and not expired           |
 | "INTERNAL_ERROR"            | Server-side error -- check logs and retry with backoff     |
 | Visualization stays pending | LLM transform may have failed -- check `lastError` field   |
@@ -362,10 +380,10 @@ curl https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizatio
 
 Now that you understand the basics:
 
-1. **Add more data sources** — Combine CSV exports with live notifications
-2. **Explore chart types** — Try different visualizations for your insights
-3. **Set up scheduled refreshes** — Configure Cloud Scheduler for automatic snapshots
-4. **List your visualizations** — `GET /visualizations` to see all saved charts
+1. **Add more data sources** -- Combine CSV exports with live notifications
+2. **Explore chart types** -- Try different visualizations for your insights
+3. **Use the preview endpoint** -- `POST /composite-feeds/:id/preview` for one-time chart data without saving
+4. **List your visualizations** -- `GET /visualizations` to see all saved charts
 5. **Read the [Technical Reference](technical.md)** for full API details
 
 ---
@@ -375,8 +393,8 @@ Now that you understand the basics:
 Test your understanding:
 
 1. **Easy:** Create a data source with JSON content instead of CSV
-2. **Medium:** Create a composite feed with 2 notification filters
-3. **Hard:** Create a visualization and manually trigger a refresh with `POST /visualizations/:id/refresh`
+2. **Medium:** Create a composite feed with 2 notification filters and analyze it
+3. **Hard:** Create a visualization, then manually refresh it after updating the feed snapshot
 
 <details>
 <summary>Solutions</summary>
@@ -384,19 +402,19 @@ Test your understanding:
 ### Exercise 1: JSON Data Source
 
 ```bash
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/data-sources \
+curl -X POST http://localhost:8119/data-sources \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Website Traffic",
-    "content": "{\"page\":\"/home\",\"visitors\":1200},{\"page\":\"/about\",\"visitors\":800}"
+    "content": "[{\"page\":\"/home\",\"visitors\":1200},{\"page\":\"/about\",\"visitors\":800}]"
   }'
 ```
 
 ### Exercise 2: Multiple Notification Filters
 
 ```bash
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/composite-feeds \
+curl -X POST http://localhost:8119/composite-feeds \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -416,12 +434,22 @@ curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/comp
   }'
 ```
 
+Then analyze:
+
+```bash
+curl -X POST http://localhost:8119/composite-feeds/FEED_ID/analyze \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
 ### Exercise 3: Manual Visualization Refresh
 
 ```bash
-# First create a visualization (steps from Part 6)
-# Then manually trigger refresh:
-curl -X POST https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app/visualizations/viz-001/refresh \
+# First, update the snapshot with fresh data
+curl "http://localhost:8119/composite-feeds/FEED_ID/snapshot?refresh=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Then trigger visualization refresh
+curl -X POST http://localhost:8119/visualizations/VIZ_ID/refresh \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
