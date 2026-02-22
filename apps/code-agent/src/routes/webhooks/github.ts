@@ -20,30 +20,50 @@ import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import type { Logger } from 'pino';
 
-const BOT_LOGIN = 'intexuraos-code-worker[bot]';
-const EXTERNAL_AGENT_MENTIONS = ['@claude', '@codex'];
-const CLAUDE_BOT_LOGIN = 'claude[bot]';
+const ALLOWED_BOTS = new Set([
+  'claude[bot]',
+  'chatgpt-codex-connector[bot]',
+]);
+
+/**
+ * Check if a sender is allowed to trigger dispatch.
+ * Allowed: whitelisted bots OR the repository owner (extracted from payload).
+ */
+function isAllowedSender(event: GitHubPREvent): boolean {
+  if (ALLOWED_BOTS.has(event.senderLogin)) return true;
+
+  const payload = event.payload;
+  if (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'repository' in payload
+  ) {
+    const repo = (payload as Record<string, unknown>)['repository'];
+    if (typeof repo === 'object' && repo !== null && 'owner' in repo) {
+      const owner = (repo as Record<string, unknown>)['owner'];
+      if (typeof owner === 'object' && owner !== null && 'login' in owner) {
+        const login = (owner as Record<string, unknown>)['login'];
+        if (typeof login === 'string') {
+          return event.senderLogin === login;
+        }
+      }
+    }
+  }
+
+  return false;
+}
 
 /**
  * Dispatch a PR comment to the task that owns this PR via sendTaskMessage.
  * Fire-and-forget — webhook returns immediately.
- * Filters: skip our own bot (infinite loop) and external agent mentions like @claude/@codex (handled by GitHub Actions workflow).
- * The worker decides what deserves a response for everything else.
+ * Only whitelisted bots and the repository owner can trigger dispatch.
  */
 async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Promise<void> {
   try {
-    if (event.senderLogin === BOT_LOGIN) {
+    if (!isAllowedSender(event)) {
       logger.debug(
-        { repository: event.repository, prNumber: event.pullRequestNumber },
-        'Skipping own bot comment to prevent loop'
-      );
-      return;
-    }
-
-    if (EXTERNAL_AGENT_MENTIONS.some((mention) => event.body?.includes(mention) === true)) {
-      logger.debug(
-        { repository: event.repository, prNumber: event.pullRequestNumber },
-        'Skipping external agent mention — handled by GitHub Actions workflow'
+        { senderLogin: event.senderLogin, repository: event.repository, prNumber: event.pullRequestNumber },
+        'Sender not in allowed list, skipping dispatch'
       );
       return;
     }
@@ -158,7 +178,7 @@ function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unkn
     ].join('\n');
   }
 
-  if (event.action === 'edited' && event.senderLogin === CLAUDE_BOT_LOGIN) {
+  if (event.action === 'edited' && ALLOWED_BOTS.has(event.senderLogin)) {
     const commentId = extractId(payload, 'comment');
     return [
       `[PR Comment — Bot Review Edit] Comment updated on PR #${String(prNumber)} in ${repository}`,
@@ -412,15 +432,15 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
-      const isEditedClaudeBotComment =
+      const isEditedByAllowedBot =
         parsedEvent.eventType === 'issue_comment' &&
         parsedEvent.action === 'edited' &&
-        parsedEvent.senderLogin === CLAUDE_BOT_LOGIN;
+        ALLOWED_BOTS.has(parsedEvent.senderLogin);
 
       const isActionablePRCommentEvent =
         (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') ||
         (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted') ||
-        isEditedClaudeBotComment;
+        isEditedByAllowedBot;
 
       if (isActionablePRCommentEvent) {
         void dispatchPRCommentToTask(savedEvent, logger);
