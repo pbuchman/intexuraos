@@ -1,4 +1,4 @@
-## 🚀 Nitpick Nuker Report
+## 😄 Nitpick Nuker Report
 
 **PR:** #${PR_NUMBER} | **Run:** ${TIMESTAMP} | **Commit:** `${COMMIT_SHA}`
 
@@ -18,4 +18,4 @@ ${SKIPPED_ROWS}
 
 ---
 
-_🚀 reactions added to all processed comments_
+_😄 reactions added to all processed comments_
