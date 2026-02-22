@@ -1,8 +1,10 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Clock,
   Copy,
   Loader2,
@@ -588,6 +590,19 @@ const MemoTaskError = memo(TaskError, (prev, next) =>
   prev.task.error === next.task.error
 );
 
+// --- Tool block collapsing ---
+
+interface ToolBlock {
+  headerIdx: number;
+  bodyStart: number;
+  bodyEnd: number;
+  finalized: boolean;
+}
+
+function isBodyLine(text: string): boolean {
+  return text.startsWith('  \u2192 ') || text.startsWith('  \u2717 ') || text.startsWith('    ');
+}
+
 interface LogStreamProps {
   logs: LogLine[];
   isActive: boolean;
@@ -606,8 +621,56 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
   const containerRef = useRef<HTMLDivElement>(null);
   const [followLogs, setFollowLogs] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [compactMode, setCompactMode] = useState(true);
+  const [blockOverrides, setBlockOverrides] = useState<Set<number>>(() => new Set());
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
+
+  // Tool block collapsing
+  const { bodyLineMap } = useMemo(() => {
+    const blocks: ToolBlock[] = [];
+    let current: ToolBlock | null = null;
+
+    const finalizeBlock = (endIdx: number): void => {
+      if (current !== null) {
+        current.bodyEnd = endIdx;
+        current.finalized = true;
+        if (current.bodyEnd > current.bodyStart) {
+          blocks.push(current);
+        }
+        current = null;
+      }
+    };
+
+    for (let i = 0; i < logs.length; i++) {
+      const text = logs[i]!.text;
+      const tag = extractTag(text);
+
+      if (tag === 'tool') {
+        finalizeBlock(i);
+        current = { headerIdx: i, bodyStart: i + 1, bodyEnd: i + 1, finalized: false };
+      } else if (tag !== null) {
+        finalizeBlock(i);
+      } else if (current !== null && isBodyLine(text)) {
+        current.bodyEnd = i + 1;
+      } else {
+        finalizeBlock(i);
+      }
+    }
+    // Last open block stays unfinalized (still streaming)
+    if (current !== null && current.bodyEnd > current.bodyStart) {
+      blocks.push(current);
+    }
+
+    const map = new Map<number, ToolBlock>();
+    for (const block of blocks) {
+      map.set(block.headerIdx, block);
+      for (let j = block.bodyStart; j < block.bodyEnd; j++) {
+        map.set(j, block);
+      }
+    }
+    return { blocks, bodyLineMap: map };
+  }, [logs]);
 
   // Auto-scroll when new logs arrive and follow mode is on
   useEffect(() => {
@@ -654,6 +717,23 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
     }).catch(() => { /* clipboard unavailable */ });
   }, [logs]);
 
+  const toggleCompact = (): void => {
+    setCompactMode((prev) => !prev);
+    setBlockOverrides(new Set());
+  };
+
+  const toggleBlock = useCallback((headerIdx: number): void => {
+    setBlockOverrides((prev) => {
+      const next = new Set(prev);
+      if (next.has(headerIdx)) {
+        next.delete(headerIdx);
+      } else {
+        next.add(headerIdx);
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <div className="mt-6 mb-6">
       {/* Terminal header */}
@@ -691,6 +771,17 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
               </button>
               <button
                 type="button"
+                onClick={toggleCompact}
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  compactMode
+                    ? 'text-blue-400 bg-blue-900/30 hover:text-blue-300'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                }`}
+              >
+                {compactMode ? 'Compact' : 'Expand All'}
+              </button>
+              <button
+                type="button"
                 onClick={copyAllLogs}
                 className="rounded p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
                 title={copied ? 'Copied!' : 'Copy all logs'}
@@ -716,9 +807,29 @@ function LogStream({ logs, isActive, listenerHealthy, taskStatus, onSendMessage,
         {logs.length === 0 && !isActive ? (
           <p className="text-slate-500">No logs available.</p>
         ) : null}
-        {logs.map((line) => (
-          <MemoLogLineRow key={line.sequence} line={line} />
-        ))}
+        {logs.map((line, idx) => {
+          const block = bodyLineMap.get(idx);
+          if (block === undefined) {
+            return <MemoLogLineRow key={line.sequence} line={line} />;
+          }
+          const isHeader = idx === block.headerIdx;
+          const collapsible = block.finalized && (block.bodyEnd - block.bodyStart) >= 2;
+          const collapsed = collapsible && (compactMode !== blockOverrides.has(block.headerIdx));
+
+          if (!isHeader && collapsed) return null;
+
+          return (
+            <MemoLogLineRow
+              key={line.sequence}
+              line={line}
+              collapsible={isHeader && collapsible}
+              collapsed={isHeader && collapsed}
+              hiddenCount={isHeader ? block.bodyEnd - block.bodyStart : 0}
+              {...(isHeader && collapsible ? { onToggle: toggleBlock } : {})}
+              headerIdx={block.headerIdx}
+            />
+          );
+        })}
         <div ref={bottomRef} />
       </div>
 
@@ -840,15 +951,46 @@ function MessageInput({ onSendMessage, sending, sendError, messageStatus, worker
 
 const MemoLogStream = memo(LogStream);
 
-const MemoLogLineRow = memo(function LogLineRow({ line }: { line: LogLine }): React.JSX.Element {
+interface LogLineRowProps {
+  line: LogLine;
+  collapsible?: boolean;
+  collapsed?: boolean;
+  hiddenCount?: number;
+  onToggle?: (headerIdx: number) => void;
+  headerIdx?: number;
+}
+
+const MemoLogLineRow = memo(function LogLineRow({ line, collapsible, collapsed, hiddenCount, onToggle, headerIdx }: LogLineRowProps): React.JSX.Element {
   const tag = extractTag(line.text);
   const style = tag !== null ? TAG_STYLES[tag] : undefined;
   const border = style?.border;
   const extraClass = border !== undefined ? ` border-l-2 ${border} ${style?.bg ?? ''} pl-2` : '';
+
+  if (collapsible === true) {
+    const Chevron = collapsed === true ? ChevronRight : ChevronDown;
+    return (
+      <div
+        className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}${extraClass} cursor-pointer select-none flex items-start gap-1 hover:bg-slate-800/50 -mx-1 px-1 rounded`}
+        onClick={(): void => { if (headerIdx !== undefined) onToggle?.(headerIdx); }}
+      >
+        <Chevron className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" />
+        <span className="flex-1">
+          {line.text}
+          {collapsed === true && hiddenCount !== undefined && hiddenCount > 0 ? (
+            <span className="ml-2 text-xs text-slate-500">(+{String(hiddenCount)} lines)</span>
+          ) : null}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className={`whitespace-pre-wrap break-all ${getLogLineClass(line.text)}${extraClass}`}>
       {line.text}
     </div>
   );
-});
+}, (prev, next) =>
+  prev.line === next.line &&
+  prev.collapsed === next.collapsed &&
+  prev.collapsible === next.collapsible
+);
