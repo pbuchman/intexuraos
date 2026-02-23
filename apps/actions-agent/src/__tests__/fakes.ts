@@ -65,7 +65,6 @@ import type {
   PublishError,
   WhatsAppInteractiveButton,
   WhatsAppSendPublisher,
-  CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
 import type { Logger } from 'pino';
@@ -413,48 +412,6 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
       messageEntry.buttons = params.buttons;
     }
     this.sentMessages.push(messageEntry);
-    return ok(undefined);
-  }
-}
-
-export class FakeCalendarPreviewPublisher implements CalendarPreviewPublisher {
-  private publishedRequests: {
-    actionId: string;
-    userId: string;
-    text: string;
-    currentDate: string;
-    correlationId: string;
-  }[] = [];
-  private failNext = false;
-  private failError: PublishError | null = null;
-
-  getPublishedRequests(): typeof this.publishedRequests {
-    return this.publishedRequests;
-  }
-
-  setFailNext(fail: boolean, error?: PublishError): void {
-    this.failNext = fail;
-    this.failError = error ?? null;
-  }
-
-  async publishGeneratePreview(params: {
-    actionId: string;
-    userId: string;
-    text: string;
-    currentDate: string;
-    correlationId?: string;
-  }): Promise<Result<void, PublishError>> {
-    if (this.failNext) {
-      this.failNext = false;
-      return err(this.failError ?? { code: 'PUBLISH_FAILED', message: 'Simulated failure' });
-    }
-    this.publishedRequests.push({
-      actionId: params.actionId,
-      userId: params.userId,
-      text: params.text,
-      currentDate: params.currentDate,
-      correlationId: params.correlationId ?? '',
-    });
     return ok(undefined);
   }
 }
@@ -1291,7 +1248,6 @@ export function createFakeServices(deps: {
   codeAgentClient?: FakeCodeAgentClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
-  calendarPreviewPublisher?: FakeCalendarPreviewPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
   executeTodoActionUseCase?: FakeExecuteTodoActionUseCase;
   executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
@@ -1306,8 +1262,6 @@ export function createFakeServices(deps: {
   handleApprovalReplyUseCase?: HandleApprovalReplyUseCase;
 }): Services {
   const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
-  const calendarPreviewPublisher =
-    deps.calendarPreviewPublisher ?? new FakeCalendarPreviewPublisher();
   const actionRepository = deps.actionRepository ?? new FakeActionRepository();
   const actionTransitionRepository =
     deps.actionTransitionRepository ?? new FakeActionTransitionRepository();
@@ -1419,7 +1373,6 @@ export function createFakeServices(deps: {
     codeAgentClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
-    calendarPreviewPublisher,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,

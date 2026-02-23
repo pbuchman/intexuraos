@@ -1,7 +1,7 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
-import type { CalendarServiceClient } from '../ports/calendarServiceClient.js';
+import type { CalendarServiceClient, CalendarPreview } from '../ports/calendarServiceClient.js';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import type { ExecuteCalendarActionUseCase } from './executeCalendarAction.js';
@@ -70,7 +70,7 @@ export function createHandleCalendarActionUseCase(
       const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
       const currentDate = `${now.toISOString().substring(0, 10)} ${dayOfWeek}`;
 
-      let previewForMessage: import('../ports/calendarServiceClient.js').CalendarPreview | null = null;
+      let previewForMessage: CalendarPreview | null = null;
 
       const previewResult = await calendarServiceClient.generatePreview({
         actionId: event.actionId,
