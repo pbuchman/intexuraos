@@ -74,9 +74,8 @@ export type DataInsight = z.infer<typeof DataInsightSchema>;
 /**
  * Schema for transformed data array.
  * Each item must be an object (passthrough allows any properties).
+ * Empty arrays are valid when transformations yield zero matching rows.
  */
-export const TransformedDataSchema = z
-  .array(z.object({}).passthrough())
-  .min(1, { message: 'Data array cannot be empty' });
+export const TransformedDataSchema = z.array(z.object({}).passthrough());
 
 export type TransformedData = z.infer<typeof TransformedDataSchema>;
