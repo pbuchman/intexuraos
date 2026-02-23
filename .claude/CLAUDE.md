@@ -623,11 +623,11 @@ Use the AskUserQuestion tool for each question separately. Do not batch multiple
 
 ## Skills & Extensions
 
-**Skills** (invoke via `/skill-name`): `/linear`, `/sentry`, `/document-service`, `/release`, `/coverage`, `/tech-debt-triage`, `/share`
+**Skills** (invoke via `/skill-name`): `/linear`, `/sentry`, `/document-service`, `/release`, `/coverage`, `/tech-debt-triage`, `/share`, `/features-rewrite`
 
 **Agents** (Task tool): `llm-manager`, `service-creator`, `service-scribe`, `whatsapp-sender`
 
-**Commands**: `/analyze-ci-failures`, `/analyze-logs`, `/create-service`, `/refactoring`, `/teach-me-something`, `/verify-deployment`
+**Commands**: `/analyze-ci-failures`, `/analyze-logs`, `/create-service`, `/features-rewrite`, `/refactoring`, `/teach-me-something`, `/verify-deployment`
 
 All skill documentation in `.claude/skills/<name>/SKILL.md`. For complex multi-step tasks, use `/linear` with auto-splitting. See [Linear Continuity Pattern](../docs/patterns/linear-continuity.md).
 

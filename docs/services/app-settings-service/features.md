@@ -1,51 +1,41 @@
 # App Settings Service
 
-Centralized LLM pricing configuration and per-user usage cost analytics for the entire IntexuraOS platform.
+The cost transparency layer for IntexuraOS — know exactly what every AI interaction costs before you start, and track where every dollar goes after.
 
 ## The Problem
 
-IntexuraOS orchestrates 16 LLM models across 5 providers (Google, OpenAI, Anthropic, Perplexity, Zai). Every service that calls an LLM needs accurate, up-to-date pricing to calculate costs. Without a single source of truth, pricing data would be scattered across services, drift out of sync, and leave users unable to understand what they are spending.
+AI services bill by the token, and every provider prices differently. Google charges one rate, OpenAI another, Anthropic a third. Some models charge for cache reads, others for web searches, others for image generation. Multiply that by five providers and dozens of models, and the true cost of any given interaction becomes nearly impossible to calculate on your own.
+
+Without visibility, usage creeps upward unnoticed. A month passes and the bill arrives with no explanation of which models drove the cost, which workflows consumed the most tokens, or how spending shifted week over week. You are left guessing.
+
+## Use Case: Understanding What You Spend
+
+Built for anyone managing AI costs across multiple providers and workflows.
+
+You open the dashboard before kicking off a batch of research tasks. The pricing page shows current rates for all five providers — Google, OpenAI, Anthropic, Perplexity, and Zai — broken down by model, with input and output token costs displayed per million tokens. Specialty costs are listed too: cache read multipliers, web search fees, grounding charges, image pricing. You compare two models side by side and pick the one that fits your budget.
+
+A week later, you check your usage. The system shows your total spend, total calls, and total tokens consumed — input and output counted separately. The breakdown splits by month, by model, and by call type. Each segment includes its dollar cost, call count, and percentage of your total. You adjust the time window from the default ninety days down to thirty to focus on recent activity.
 
 ## How It Helps
 
-### Single Source of Truth for LLM Pricing
+Every model in the system has verified pricing. At startup, the service checks that every registered model has a complete pricing entry. If any model is missing, the service refuses to start. This guarantee means the costs you see are never stale and never incomplete.
 
-All 16 model prices live in one place. Every service fetches pricing from app-settings-service at startup, guaranteeing consistent cost calculations across the platform.
-
-**Example:** research-agent starts up, calls `/internal/settings/pricing`, and loads per-token costs for all models into its PricingContext. Every subsequent research query is costed accurately.
-
-### Startup Integrity Validation
-
-The service refuses to start if any model in the platform lacks pricing data. This fail-fast behavior prevents services from running with stale or missing pricing.
-
-**Example:** A new model is added to `@intexuraos/llm-contract` but the Firestore migration has not run yet. app-settings-service logs the missing model and exits, blocking any downstream service from booting with incomplete pricing.
-
-### Personal Usage Analytics
-
-Authenticated users see their own LLM spending broken down by month, model, and call type with configurable time windows.
-
-**Example:** A user opens the settings page and sees that 65% of their spend last month went to Gemini 2.5 Pro research queries. They switch some workflows to Gemini 2.5 Flash and cut costs by 40%.
-
-## Use Case
-
-A developer adds a new LLM model to the platform. They run the Firestore pricing migration to populate the new model's per-token rates. When app-settings-service restarts, it validates that all 16 models have pricing, boots successfully, and begins serving the updated pricing to every downstream service. Users immediately see the new model's costs reflected in their usage dashboards.
+Other services in the platform pull pricing data at launch so they can track costs in real time as they process your requests. The result: by the time you check your usage, the numbers are already there — aggregated, categorized, and rounded to six decimal places.
 
 ## Key Benefits
 
-- Consistent pricing across all 20 microservices through a single internal API
-- Fail-fast startup validation prevents services from running with missing pricing
-- Per-user cost visibility with monthly, by-model, and by-call-type breakdowns
-- Parallel provider fetching keeps response times low despite 5 providers
-- Both internal (service-to-service) and public (user-facing) endpoints from one service
+- **All providers, one view** — Five providers and every model they offer, displayed in a single pricing endpoint
+- **Verified completeness** — The service will not run unless every model has pricing data, so gaps are impossible
+- **Personal cost tracking** — See your own usage broken down by month, model, and call type
+- **Flexible time range** — Query anywhere from the last day to the last year of usage, with a sensible ninety-day default
 
 ## Limitations
 
-- **Read-only** -- Pricing is configured via Firestore migrations, not through an admin API
-- **90-day default window** -- Usage costs default to 90 days of history, maximum 365
-- **No cost forecasting** -- Reports historical usage only, no predictive spending
-- **No budget alerts** -- No spending limits or threshold notifications
-- **Monthly granularity** -- Usage aggregates by month, not by individual day
+- **Read-only** — Pricing is configured by administrators; there is no self-service pricing management
+- **No budgets or alerts** — The service reports costs but does not enforce spending limits
+- **No forecasting** — Historical data only; no projected cost estimates
+- **Monthly aggregates** — The API groups usage by month; there is no daily breakdown in the response
 
 ---
 
-_Part of [IntexuraOS](../overview.md) -- Know what your AI costs before you ask._
+_Part of [IntexuraOS](../overview.md) — Cost transparency across every AI provider, every model, every call._
