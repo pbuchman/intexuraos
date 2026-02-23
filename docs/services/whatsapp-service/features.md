@@ -1,84 +1,74 @@
 # WhatsApp Service
 
-Bridge between WhatsApp messaging and IntexuraOS workflows - receive messages, approve actions via buttons and replies, and get AI-transcribed voice notes.
+The mobile command center for IntexuraOS — an operating system of specialized AI agents that handle research, coding, scheduling, and more. Send a voice note, tap an approval button, get notified when something needs your attention, all without leaving WhatsApp.
 
 ## The Problem
 
-Mobile productivity requires frictionless input methods. Traditional apps force context-switching - opening apps, navigating menus, typing carefully. When you're walking, driving, or in meetings, these barriers cause valuable ideas and tasks to slip away. WhatsApp is already in your pocket and muscle memory.
+The best ideas arrive at the worst times. You are walking to lunch when a research question surfaces. You are in a cab when a decision needs sign-off. You are between meetings when three different agents need answers. Every one of these moments demands the same thing: pull out a laptop, open a dashboard, navigate, act. Most people just let the moment pass.
 
-Additionally, approval workflows often require logging into dashboards or checking emails. When an automated action needs human approval, the delay between notification and response can bottleneck entire workflows.
+Meanwhile, the system keeps working. Agents research, code ships, calendars shift — and each event generates a notification that sits unread in some tab you closed an hour ago. The gap between what your system knows and what you know widens with every minute you are away from a screen.
+
+## Use Case: A Morning in Motion
+
+Built for founders, operators, and knowledge workers juggling multiple projects from their phone.
+
+You are in transit when your phone buzzes:
+
+1. A notification arrives: "Monthly report draft is ready for review." You glance at it and keep walking.
+2. Seconds later, an approval request: "Create automation: 'Weekly team sync reminder' every Monday 9am?" You tap Approve.
+3. You remember something — record a quick voice note about a topic you want researched. The transcript arrives as a reply to your voice note, and the system routes it to the right agent for processing.
+4. A calendar confirmation: "Team sync moved to Tuesday 10am. Acknowledge?" You reply "yes" without breaking stride.
+
+Four interactions with four different agents. None required opening an app, logging in, or switching contexts. WhatsApp handled all of it.
 
 ## How It Helps
 
+### One Channel for Every Agent
+
+Unlike Slack bots or Telegram integrations — where each workflow lives in a separate bot — this one handles an entire operating system through a single conversation. No new app and no behavior change. WhatsApp is already in your pocket.
+
+Every message you send — text, voice, or image — flows into IntexuraOS and reaches the right agent. The system reads your intent and routes it automatically: a research question reaches the research-agent, a task update reaches the code-agent, a scheduling request reaches the calendar-agent. You send the message. The system decides where it belongs. If it gets one wrong, sending a follow-up to clarify usually does the trick.
+
+The flow works in both directions. When an agent has something to report — a research result, a status update, a scheduling confirmation — it sends a notification to your phone. Every notification arrives in the same conversation thread, formatted for quick scanning on a small screen.
+
+### Voice That Understands Your Domain
+
+Record a voice note and Speechmatics transcribes it with precision — including the domain-specific vocabulary that generic transcription services mangle. The system maintains a custom vocabulary of 90 domain-specific terms: project names, technical jargon, product codes. When you say them, the transcription gets them right. The vocabulary is maintained in the service codebase and updated as the project's terminology evolves.
+
+**Example:** You record a voice note about a project update while walking. Within seconds, the transcript arrives as a reply threaded beneath your original voice note, along with an AI-generated summary. From there, the system routes it to the right agent — if it contains a research question, the research-agent picks it up; if it describes a task, the code-agent gets it. You just talked. The system figured out the rest.
+
+### Approvals at the Speed of a Tap
+
+When an agent needs your sign-off, an interactive message arrives with clearly labeled buttons. Tap Approve. Tap Reject. Done. The decision happens immediately — no login, no dashboard, no context switch. If buttons are not convenient, reply with plain text. "Yes" works just as well.
+
+**Example:** The bookmarks-agent wants to add a URL to your reading list. You receive "Add 'AI Trends Report' to Reading List?" with Approve and Cancel buttons. One tap, and you are back to your conversation. The entire interaction takes two seconds.
+
 ### Instant Message Capture
 
-Send any message to your connected WhatsApp number - text, images, or voice notes. Everything is automatically stored, processed, and routed to the appropriate IntexuraOS service.
+Send any thought the moment it strikes. A text message becomes a command. An image gets stored with an auto-generated thumbnail. A link becomes a bookmark with a rich preview automatically attached. The system captures everything and routes it to the right agent based on what you sent.
 
-**Example:** Walking to lunch, you remember a research idea. Send "research quantum computing market trends 2026" via WhatsApp. By the time you return, the research-agent has gathered relevant articles and summarized findings.
+**Example:** Walking to lunch, you remember a research question. Send "research quantum computing market trends 2026" via WhatsApp. By the time you sit down, the research-agent has already started gathering sources.
 
-### Voice Note Transcription with AI Summary
+## Getting Connected
 
-Speak your thoughts naturally. Voice notes are transcribed using Speechmatics, then enhanced with AI-generated summaries that extract key action items.
-
-**Example:** Record a 90-second voice memo about a project status update. Within 30 seconds, you receive the full transcript plus a bullet-point summary highlighting "schedule meeting with vendor" and "review contract by Friday" as actionable items.
-
-### Approval via Interactive Buttons and Replies
-
-Respond to action approval requests directly in WhatsApp. Tap interactive buttons (Approve, Cancel, Reject, Convert) or reply with text ("yes", "no") for instant decisions. The service correlates your response to the original action automatically.
-
-**Example:** The bookmarks-agent wants to add a URL to your reading list. You receive "Add 'AI Trends Report' to Reading List?" with Approve/Cancel buttons. Tap Approve to confirm instantly — or reply "yes" as a text fallback.
-
-### Image Handling with Thumbnails
-
-Share images that get stored securely in Cloud Storage with auto-generated thumbnails for fast preview loading.
-
-**Example:** Snap a photo of a whiteboard during a meeting. The image is stored with a 256px thumbnail, accessible from any IntexuraOS interface for quick reference.
-
-### Link Preview Extraction
-
-URLs in your messages automatically trigger Open Graph metadata extraction, providing rich previews with titles, descriptions, and images.
-
-**Example:** Send a link to an interesting article. The service extracts the title, author, featured image, and summary - making your bookmarks immediately useful without manual curation.
-
-### Phone Number Verification
-
-Before connecting a WhatsApp number, verify ownership via a 6-digit code. The service sends a 🔐 verification code to the phone number, and you confirm it to prove ownership.
-
-**Example:** You enter your phone number in the IntexuraOS web app. A 6-digit code arrives via WhatsApp within seconds. Enter the code in the app, and your number is verified and ready to connect.
-
-## Use Case: Mobile Action Approval
-
-You're in transit when your todo-agent identifies a recurring task that should become automated:
-
-1. WhatsApp notification arrives with interactive buttons: "👷 Create automation: 'Weekly team sync reminder' every Monday 9am?" [Approve] [Cancel]
-2. You tap the Approve button (or reply "yes" as text)
-3. Whatsapp-service marks the message as read (blue checkmarks appear) and shows a typing indicator
-4. ApprovalReplyEvent published to actions-agent with button intent and actionId
-5. Automation is created without any app-switching
-
-The entire interaction takes 2 seconds while you continue walking.
+Verify your WhatsApp number with a one-time six-digit code sent to your phone. Enter the code in the web dashboard, and your number is linked to your IntexuraOS account. Linking your number to your account lets agents know who sent each message. From that point on, WhatsApp and the web dashboard serve as your two interfaces into the system — one for mobile, one for desktop.
 
 ## Key Benefits
 
-- **Zero friction capture** - WhatsApp is always accessible, no app switching required
-- **Natural voice input** - AI transcription with smart summaries extracts actionable items
-- **Instant approvals** - Interactive buttons or text replies for sub-second decisions
-- **Phone verification** - SMS-style code verification proves phone number ownership before connecting
-- **Automatic enrichment** - Link previews, thumbnails, and transcriptions happen automatically
-- **Message correlation** - Outbound messages tracked via wamid for reliable reply threading
-- **Immediate feedback** - Read receipts and typing indicator appear on button tap
+- **Domain-aware voice** — Custom vocabulary with 90 terms tuned to your organization's language
+- **Tap-to-decide** — Interactive buttons or plain text replies for instant approvals on the move
+- **Unified interface** — Every agent in the system reports to one conversation thread on your phone
+- **Capture anything** — Text, voice, and images flow into the system the moment you send them
+- **Nothing to install** — Works inside WhatsApp, the app already on your phone
 
 ## Limitations
 
-- **WhatsApp Business API required** - Meta Business verification and API access needed
-- **24-hour messaging window** - WhatsApp limits proactive messages to 24 hours after last user message
-- **No video support** - Video messages are currently ignored
-- **Phone verification required** - Phone numbers must be verified before connecting
-- **Single phone number per user** - Each user maps to one WhatsApp number (multiple not yet supported)
-- **Rate limits** - Subject to WhatsApp API rate limits (varies by tier)
-- **No message editing** - Sent messages cannot be modified
-- **No emoji reaction approvals** - Emoji reactions are no longer processed; use buttons or text replies
+- **WhatsApp Business API required** — The service connects through Meta's Business API, which requires business verification and API access from Meta
+- **24-hour messaging window** — WhatsApp only allows proactive messages within 24 hours of your last message; the system is designed to keep you engaged with useful notifications, but if 24 hours pass without a message from you, it cannot reach out until you do
+- **No video support** — Video messages are not currently processed
+- **One user per phone number** — Each phone number can only be connected to one IntexuraOS account
+- **Platform rate limits** — Subject to WhatsApp API rate limits, which vary by tier
 
 ---
 
-_Part of [IntexuraOS](../overview.md) - Capture thoughts and approve actions from anywhere._
+_Part of [IntexuraOS](../overview.md) — Your mobile command center for capturing thoughts and making decisions from anywhere._

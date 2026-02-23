@@ -1,68 +1,47 @@
 # API Docs Hub
 
-OpenAPI documentation aggregator - unified Swagger UI for all IntexuraOS services.
+The single front door to every API in IntexuraOS — fifteen services, one search bar, one URL.
 
 ## The Problem
 
-API documentation is scattered:
+You are building against a platform with fifteen services. The research agent has an API. So does the calendar agent, the WhatsApp service, the image service, and eleven others. Each publishes its own OpenAPI specification at its own URL. To find the endpoint you need, you have to remember which service owns it, recall or look up that service's documentation URL, navigate there, and search. Multiply that by the number of times a day you check a request schema or verify a response shape, and scattered documentation becomes a genuine drag on velocity.
 
-1. **Multiple service docs** - Each service has its own Swagger UI
-2. **Inconsistent URLs** - Different endpoints for documentation
-3. **Hard to discover** - Developers must know each service URL
+The issue is not that the documentation does not exist. Every service already publishes a complete spec. The issue is that it exists in fifteen different places, and no one can hold fifteen URLs in their head.
+
+## Use Case: Finding What You Need
+
+Built for any developer integrating with IntexuraOS — whether building a new feature, debugging a request, or onboarding to the platform for the first time.
+
+You need to check the shape of a calendar event payload. Instead of hunting for the calendar agent's documentation URL, you open one bookmark: the docs hub. A dropdown at the top lists every service in the system. You select Calendar Agent API, and the full spec loads — endpoints, schemas, example payloads, all of it. You find what you need, then switch to the Research Agent API from the same dropdown to check a second endpoint. Two services, one tab, no context switch.
 
 ## How It Helps
 
-API-docs-hub provides centralized documentation:
+### One URL, Every Service
 
-1. **Single URL** - One Swagger UI for all services
-2. **Service selector** - Dropdown to switch between services
-3. **Multi-spec aggregation** - Loads OpenAPI specs from all services
-4. **Health check** - Config validation endpoint
+Fifteen services publish their API specifications independently. The docs hub collects all fifteen into a single Swagger UI instance with a dropdown selector at the top. Pick a service, and its complete OpenAPI spec loads in the same interface. No bookmarks to maintain, no URLs to remember, no tabs to juggle.
 
-## Key Features
+### Always Current
 
-**Aggregated Specs:**
+The hub does not store copies of each specification. When you select a service, your browser fetches the live spec directly from that service. If an endpoint was added five minutes ago, it appears in the docs hub now. Documentation stays in sync with the running system without any manual refresh or redeployment step.
 
-- Fetches OpenAPI from configured services
-- Displays in unified Swagger UI
-- Service dropdown for navigation
+### Instant Discoverability
 
-**Health Endpoint:**
-
-- `/health` - Checks configuration validity
-- Returns source count
-
-## Use Cases
-
-### API exploration
-
-1. Developer visits `/docs`
-2. Selects service from dropdown
-3. Explores endpoints and schemas
-4. Tests API directly from Swagger UI
+A developer's first visit to the docs hub reveals the full surface area of IntexuraOS in one glance. The dropdown lists every service by name — User Service, Research Agent, WhatsApp Service, and twelve more. For someone new to the platform, this is the fastest way to understand what exists and where to start.
 
 ## Key Benefits
 
-**Single source of truth** - All API docs in one place
-
-**Always current** - Fetches live specs from services
-
-**Discoverable** - Easy to find all available APIs
+- **Single bookmark** — One URL replaces fifteen, and the dropdown puts every service within two clicks
+- **Live specifications** — Fetched directly from running services, so docs are never stale
+- **Full platform map** — The dropdown doubles as a directory of every API in the system
+- **Standard tooling** — Swagger UI means request testing, schema inspection, and example generation work out of the box
 
 ## Limitations
 
-**Read-only** - No API testing capabilities beyond standard Swagger
+- **Service must be running** — If a service is down, its specification will not load in the dropdown
+- **No version history** — The hub always shows the current spec; there is no way to view a previous version
+- **No built-in authentication** — To test authenticated endpoints through Swagger UI, you must manually provide a token
+- **Static configuration** — Adding or removing a service from the hub requires a redeployment
 
-**Service availability** - If service is down, its spec won't load
+---
 
-**No versioning** - Shows latest docs only
-
-**No auth helper** - Must manually provide tokens
-
-## Recent Changes
-
-- **Dash0 OpenTelemetry integration** - Log pipeline now forwards to Dash0 via OTLP when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is configured, enabling centralized observability across all services
-- **Dev-mode log formatting** - PM2 local runs now display human-readable log output instead of raw JSON, improving debugging experience
-- **PromptVault removed** - PromptVault Service spec removed from aggregated sources following the feature removal (INT-319)
-- **Chat Agent added** - New Chat Agent API spec added to the aggregated documentation hub
-- **15 service specs** - Now aggregates OpenAPI specs from 15 services (was 16, minus PromptVault, plus Chat Agent)
+_Part of [IntexuraOS](../overview.md) — One interface for every API in the system._
