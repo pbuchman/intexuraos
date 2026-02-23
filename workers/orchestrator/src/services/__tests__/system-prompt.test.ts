@@ -45,14 +45,15 @@ describe('system-prompt', () => {
         expect(result).toContain('code-task');
       });
 
-      it('should include optional design document section in Phase 1', () => {
+      it('should include design documentation section in Phase 1', () => {
         const result = buildSystemPrompt({
           ...baseParams,
           linearIssueLabels: [],
         });
 
-        expect(result).toContain('Design Document PR (Complex Cases Only)');
+        expect(result).toContain('Design Documentation (Non-Trivial Designs)');
         expect(result).toContain('docs/plans/INT-123-design.md');
+        expect(result).toContain('/share');
       });
 
       it('should include completion criteria in Phase 1', () => {
