@@ -18,7 +18,7 @@ You are a founder who lives in WhatsApp and sends half a dozen requests a day.
 
 2. Minutes later, you send: "Add a task to fix the onboarding flow." Confidence is high again. The actions agent routes it straight to the to-dos agent. Done.
 
-3. Then: "Schedule a deep dive with engineering next Thursday." This one is different. Calendar actions always require your approval — the consequences of a wrong meeting invite are hard to undo. A WhatsApp message arrives with two buttons: Approve and Reject. One tap, and the calendar agent takes over.
+3. Then: "Create an issue to redesign the onboarding metrics dashboard." This one is different. Project tracking actions always require your approval — an accidental issue in your tracker affects your team. A WhatsApp message arrives with two buttons: Approve and Reject. One tap, and the project tracking agent takes over.
 
 4. Later, you open the web dashboard and notice an action that was classified as a note but should have been a to-do. You change the type with one click. The system immediately routes it to the right specialist — and quietly records the correction so future classifications improve.
 
@@ -38,9 +38,9 @@ An eighth category — reminders — is recognized by the system but not yet con
 
 Every action arrives with a confidence score from the classification step. At ninety percent or above, the actions agent executes immediately — no approval step, no delay. Below that threshold, it pauses and asks you first.
 
-Two categories override this rule entirely. Calendar events and project tracking issues always require explicit approval, regardless of confidence. A misplaced calendar invite or an accidental issue in your project tracker creates real consequences for other people, so the system never assumes.
+One category overrides this rule entirely. Project tracking issues always require explicit approval, regardless of confidence. An accidental issue in your project tracker creates real consequences for other people, so the system never assumes.
 
-**Example:** "Draft a research brief on EU carbon tariffs" arrives at ninety-three percent confidence. The research agent starts working before you finish reading your next message. But "Create a ticket to refactor the auth module" — a project tracking action — waits for your approval even at ninety-nine percent confidence, because creating issues affects your team.
+**Example:** "Draft a research brief on EU carbon tariffs" arrives at ninety-three percent confidence. The research agent starts working before you finish reading your next message. But "Create a ticket to refactor the auth module" — a project tracking action — waits for your approval even at ninety-nine percent confidence, because creating issues in your project tracker affects your team.
 
 ### Approve with One Tap, Not a Conversation
 
@@ -62,7 +62,7 @@ But the correction does more than fix one mistake. The system records the correc
 
 ### Recover Quietly from Edge Cases
 
-Actions stuck in a pending state retry automatically on a schedule. You do not need to notice, escalate, or re-send anything. If you delete an action before the approval reply arrives, the system handles it gracefully — it notifies you via WhatsApp that the action no longer exists and cleans up. No zombie tasks, no silent failures, no error messages that require your intervention.
+Actions stuck in a pending state retry automatically on a schedule. You do not need to notice, escalate, or re-send anything. If you tap an approval button on an action that has already been deleted, the system handles it gracefully — it notifies you via WhatsApp that the action no longer exists. No zombie tasks, no silent failures, no error messages that require your intervention.
 
 **Example:** You approve an action, but the specialist service is momentarily unavailable. The action stays in a pending state. The system retries it automatically on a schedule. You never knew there was a problem.
 
@@ -73,7 +73,7 @@ Every message you send through IntexuraOS is already routed through the actions 
 ## Key Benefits
 
 - **Instant execution for high-confidence actions** — At ninety percent confidence or above, actions execute immediately with no approval step and no delay
-- **Mandatory approval where mistakes are costly** — Calendar events and project tracking issues always ask first, regardless of confidence
+- **Mandatory approval where mistakes are costly** — Project tracking issues always ask first, regardless of confidence
 - **One-tap approval via WhatsApp** — Approve or Reject with a single button tap; code actions show estimated cost and time upfront
 - **Seven specialized agents, one dispatcher** — Research, to-dos, notes, bookmarks, calendar, project tracking, and engineering tasks each have a dedicated service
 - **Corrections that compound** — Every type change you make in the dashboard is stored as training data, improving future classification accuracy

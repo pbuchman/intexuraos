@@ -53,9 +53,9 @@ You can list upcoming events with filters — by calendar, by time range, by key
 
 ### Add Attendees Without Leaving the Flow
 
-When you create or update an event, you can include attendee email addresses. Invitations go out through Google Calendar's native system — the same invitations your attendees are used to receiving, with the same accept/decline/maybe buttons.
+When you create or update an event through the dashboard, you can include attendee email addresses. Invitations go out through Google Calendar's native system — the same invitations your attendees are used to receiving, with the same accept/decline/maybe buttons.
 
-**Example:** You say "Product review Friday at 2pm" and before approving the preview, you add your co-founder's email. The event lands on both calendars with a standard Google Calendar invitation.
+**Example:** You create a "Product review Friday at 2pm" event and add your co-founder's email. The event lands on both calendars with a standard Google Calendar invitation.
 
 ### Recover What the AI Could Not Parse
 
@@ -63,11 +63,11 @@ Not every voice note contains enough information for a calendar event. Some are 
 
 Most voice scheduling tools silently drop what they cannot parse. You never know the message was lost until you realize the event is not on your calendar — days later, if at all. Calendar Agent takes the opposite approach: every attempt is visible, every failure is recoverable, and you decide what to do with the ambiguous ones.
 
-**Example:** You said "Catch up with Jakub sometime next week" — no day, no time. The system saves it with the AI's best attempt: it extracted the title and a rough week, but no specific slot. Two days later, you open the review list, see the attempt, and re-record with more detail: "Catch up with Jakub, Wednesday 11am." This time, the preview generates cleanly.
+**Example:** You said "Catch up with Jakub sometime next week" — no day, no time. The system saves it with the AI's best attempt: it extracted the title and a rough week, but no specific slot. You dismiss it from the review list and send a new voice note with more detail: "Catch up with Jakub, Wednesday 11am." This time, the preview generates cleanly.
 
 ## Getting Connected
 
-Connect your Google account by signing in through Google's standard login screen. Once linked, Calendar Agent can read and write to your calendars. If you have not connected yet, the system tells you clearly what is missing and how to fix it — no cryptic error, no silent failure.
+Connect your Google account through your IntexuraOS profile settings. Once linked, Calendar Agent can read and write to your calendars. If you have not connected yet, the system tells you clearly what is missing and how to fix it — no cryptic error, no silent failure.
 
 ## Key Benefits
 

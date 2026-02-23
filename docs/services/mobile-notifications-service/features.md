@@ -26,7 +26,7 @@ Every notification is stored with its source, device, app name, title, content, 
 
 ### Flexible Filtering and Search
 
-Filter by source or app, combine several at once, search by title with partial matching, and page through results at your own pace. Filter options populate automatically as notifications arrive -- no setup required.
+Filter by source, app, or device, combine several at once, search by title with partial matching, and page through results at your own pace. Filter options populate automatically as notifications arrive -- no setup required.
 
 ### Saved Filter Presets
 
