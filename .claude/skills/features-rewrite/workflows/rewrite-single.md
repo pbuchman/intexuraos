@@ -232,8 +232,26 @@ Ask:
 > 1. "Accept" — features.md is done
 > 2. "Additional direction" — provide feedback for another pass
 
-If user accepts → done.
+If user accepts → log the run (Phase 6.3), then done.
 If user provides direction → incorporate as `{{FEEDBACK}}`, return to Phase 2 (respecting 3-round max for automated loops, but user-directed rounds can continue).
+
+### 6.3 Log to Rewrite History
+
+Append a row to the service table in `docs/features-rewrite-history.md` under the current date heading. If today's date heading doesn't exist, create a new section.
+
+Each row records:
+
+```
+| <service-name> | <PA score> | <Dev score> | <Strat score> | <EU score> | <Build score> | <Comp score> | <avg> | <SHIP count>/6 | <outcome> |
+```
+
+Append **R** after scores with REVISE verdicts. Outcome is one of: Done, Targeted edits, Full rewrite.
+
+If the PA applied factual corrections, append a row to the "Key PA Corrections Applied" table:
+
+```
+| <service-name> | <1-line summary of each correction> |
+```
 
 ---
 
