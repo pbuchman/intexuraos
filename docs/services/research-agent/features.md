@@ -1,167 +1,107 @@
 # Research Agent
 
-The AI-powered research orchestration engine that queries multiple LLM providers simultaneously and synthesizes comprehensive answers with intelligent model selection.
+AI answers you can actually cross-reference.
 
 ## The Problem
 
-Getting comprehensive information from AI models today is fragmented:
+You ask an AI a question and get a confident answer. You ask a different AI the same question and get a different confident answer. One says the study was published in 2019, the other says 2021. One attributes a policy shift to economic pressure, the other to regulatory change. Both sound authoritative. Neither mentions the other possibility exists.
 
-1. **Single-model limitations** - Each AI model has unique knowledge and perspectives
-2. **Manual aggregation** - Users must query multiple sources and combine results themselves
-3. **Missing attribution** - AI responses often lack source citations
-4. **Cost uncertainty** - Token usage and costs are unclear until after the fact
-5. **No sharing** - Research results cannot be easily shared with others
-6. **Manual model selection** - Users must know which models to use for different topics
+The people who bother to check — consultants vetting a market claim, researchers surveying a new field, founders making a bet on a trend — routinely find these contradictions. A date one model states as fact, another omits entirely. A causal relationship one model treats as settled, another qualifies heavily. Sources one model cites that the others never surface. These disagreements are not noise. They are the most valuable part of any research, because they tell you where certainty ends and judgment begins.
+
+But finding them by hand means copying your question into multiple tools, waiting for each response, reading them side by side, and mentally tracking where they diverge. It takes longer than the research itself. So most people skip it and trust one model's answer — never knowing what they missed.
+
+## Use Case: Evaluating a Remote Work Policy
+
+You are an HR director finalizing your company's position on permanent remote work. The executive team wants evidence, not opinions.
+
+1. You type your question into IntexuraOS: "What does current research say about the long-term effects of fully remote work on employee productivity, mental health, and retention?" You attach two internal survey reports and a recent industry whitepaper — three of the five source slots, totaling well under the 60,000-character limit (about 40 pages of text) per attachment.
+
+2. You mention you want "Claude, Gemini, and Perplexity — plus whatever rounds it out." The system interprets your natural language and selects Claude Sonnet, Gemini Pro, and Perplexity Deep Research, adding two more models to reach five providers. If the interpretation seems off, you can adjust before anything runs.
+
+3. Before any model is queried, the system refines your question. It identifies the domain (workplace psychology, HR policy), sets a time scope (last five years), infers you want a standard-depth analysis rather than a quick summary, generates sub-questions about productivity metrics and attrition drivers, and builds a research plan. You see a draft: the refined prompt, the selected models, your attached sources. Nothing happens until you approve.
+
+4. You approve. All five models receive the same structured plan and your attached materials simultaneously. Each works independently — Perplexity's deep research model runs actual web searches while generating its answer, pulling in sources the other models cannot access. Claude draws on its training data with different emphasis. Gemini surfaces a meta-analysis the others miss. This mix matters — when a web-grounded model and a training-data model disagree, the conflict tells you something different than when two training-data models disagree.
+
+5. One model fails partway through — a timeout, an API hiccup. The system does not discard the other four. It flags the failure and asks: proceed with what completed, retry the failed model, or cancel? You choose to proceed.
+
+6. The system synthesizes. It does not simply concatenate. It runs a structured conflict analysis — topic by topic, naming which models reached which conclusions, rating each disagreement by severity. Minor discrepancies (a date off by one year) are distinguished from major contradictions (one model says remote work reduces burnout, another says it increases it). The synthesis weaves agreement and disagreement together, with every claim attributed to its source model.
+
+7. You open each model's original report. Claude's full response with its citations. Gemini's analysis with the meta-analysis it found. Perplexity's web-sourced findings. You can trace any claim in the synthesis back to the model that made it and the sources that model cited.
+
+8. Satisfied, you share the research as a public page — the system generates a cover image and a clean URL. You also export to Notion: the synthesis becomes the main page, each model's full report becomes a child page beneath it, complete with sources. A WhatsApp notification confirms the whole process is done (if you have connected WhatsApp to your account).
+
+9. Two weeks later, a new study drops. You enhance the completed research by adding the new study as context material. The system re-synthesizes, folding the new perspective into the existing work without re-querying the models that already completed.
 
 ## How It Helps
 
-Research-agent automates multi-model AI research:
+### See Where the Models Disagree
 
-1. **Parallel queries** - Sends your prompt to multiple LLMs simultaneously (Claude, GPT, Gemini, Perplexity, GLM)
-2. **Smart synthesis** - Combines all responses into a comprehensive, attributed summary
-3. **Cost tracking** - Shows token usage and cost for each model in real-time
-4. **Public sharing** - Generates shareable URLs with AI-generated cover images
-5. **Context enhancement** - Add your own articles, notes, or previous research as context
-6. **Intelligent model selection** - LLM-powered extraction of model preferences from natural language
-7. **Notion export** - Automatic and manual export of completed research to Notion as structured pages
+Most tools that query multiple AI models hand you a blended summary. The contradictions vanish into smooth prose. Research Agent does the opposite. After all models respond, it runs a separate analytical pass — comparing conclusions topic by topic, naming which models are involved, and rating each disagreement by severity. A minor date discrepancy looks different from a fundamental dispute about whether a treatment works or a policy backfires.
 
-## Use Cases
+Because every model received the same structured research plan and the same attached materials, their responses are directly comparable. The conflict analysis is not comparing apples to oranges — it is comparing five answers to the same carefully framed question.
 
-### Multi-Model Research
+**Example:** You research whether a specific drug interaction is clinically significant. Three models say yes with strong evidence. One says the evidence is mixed. One says no. The synthesis flags this as a high-severity conflict, names the dissenting models, and presents the specific claims side by side. You do not get a reassuring average — you get the full disagreement, attributed and rated.
 
-- "What are the latest developments in quantum computing?"
-- Research-agent queries Claude, GPT, Gemini, and Perplexity in parallel
-- Each model provides its unique perspective and sources
-- Results are synthesized into a comprehensive answer
+### Refine Your Question Before You Spend
 
-### Natural Language Model Selection
+Your question does not go to the models unchanged. The system analyzes it and constructs a research plan: the subject domain, key sub-questions, preferred source types, relevant time window, geographic scope, and answer style. It infers whether you need a quick comparison or a deep audit. It flags potential red flags or safety considerations. Each model receives this structured context alongside a sharpened version of your original question.
 
-- "Use Claude and Gemini to research sustainable energy" automatically selects those models
-- "Research quantum computing with deep research models" selects deep research variants
-- Model preferences are extracted from natural language using LLM-based inference
-- Users no longer need to manually configure models for every research
+This matters because comparable inputs produce comparable outputs. When five models all interpret a vague question differently, the resulting conflict analysis is noise. When they all receive the same precise framing, disagreements reflect genuine differences in evidence or reasoning — not differences in interpretation.
 
-### Enhanced Research with Context
+**Example:** You type "Is intermittent fasting good for you?" The system infers a health domain, sets a five-year time scope, generates sub-questions about metabolic effects, cardiovascular outcomes, and contraindications, and notes that safety information and red flags are relevant. Each model gets this structured plan instead of your six-word question. The responses come back focused and directly comparable.
 
-- Add your own articles as input context
-- Reference previous research as source material
-- The synthesis includes and attributes your provided context
+### Trace Every Claim to Its Source
 
-### Draft Research Approval Flow
+The synthesis is not a black box. Every claim in the combined report is attributed to the model or models that made it. And each model's original report — with its full reasoning, citations, and sources — is available as a separate document. You can follow any thread from the synthesis down to a specific model's response and from there to the external sources that model cited.
 
-- Actions-agent creates a "draft" research when confidence is low
-- User reviews the draft in the web UI
-- User approves and research-agent processes the query
-- User receives WhatsApp notification when complete
+The synthesis is checked for citation completeness before you see it. If any attributions are missing or incomplete, the system attempts to repair them automatically. Most of the time, the repair succeeds — so every section of the final report traces back to the model reports it drew from.
 
-### Research Sharing
+**Example:** The synthesis states that three models agree on a 15% productivity increase for remote workers, citing overlapping sources. You open Gemini's individual report and find it referenced a 2024 meta-analysis the others did not. You open Perplexity's report and see its web search surfaced a contradicting 2025 study. The synthesis flagged the contradiction; the individual reports let you evaluate the evidence yourself.
 
-- Completed research automatically generates a shareable URL
-- AI generates a cover image for the research
-- Share URL includes attribution and sources
-- Unsharing removes the public page and deletes associated media
+### Bring Your Own Context
 
-### Notion Export
+Attach up to five documents — articles, internal reports, previous research, raw notes — each up to 60,000 characters (roughly 40 pages of text). Every model receives your materials alongside the research plan. Your existing knowledge shapes the research from the start, rather than being something you reconcile with the results after the fact.
 
-- Completed research can be automatically exported to Notion as structured pages
-- Automatic fire-and-forget export triggers after synthesis completion
-- Manual export via `POST /research/:id/export-notion` for on-demand export
-- Hierarchical page structure: main research page with child LLM report pages
-- Markdown-to-Notion block conversion preserves formatting (headings, lists, code, bold, italic, links)
-- Cover images included in Notion export when available
-- Configurable target page via export settings UI
-- Duplicate export prevention (skips if already exported)
+**Example:** You are researching competitor pricing strategies. You attach your company's current pricing sheet, two competitor teardowns from your strategy team, and a recent analyst report. All five models factor in your specific context, so their responses address your competitive position directly rather than speaking in generalities.
+
+### Choose Models in Plain Language
+
+Say "use Claude and Gemini" or "use the two strongest" or "add Perplexity for web search." The system extracts your preferences and selects specific models. If the extraction fails or you do not specify, the draft presents the selection for you to adjust manually. One model per provider, up to five providers — you are paying for five distinct perspectives, not five versions of the same answer.
+
+Perplexity's models are worth knowing about specifically: they perform live web searches while generating answers, returning more current information than models limited to training data. They take longer, but surface sources the others cannot reach — and when a web-grounded result contradicts a training-data result, that disagreement carries different weight than two closed models disagreeing with each other.
+
+**Example:** You say "use the deep research models." The system selects Perplexity Deep Research, OpenAI's o4-mini deep research, and fills the remaining slots with strong general models. The draft shows exactly what was chosen. You swap one out and approve.
+
+### Share, Export, and Extend
+
+Completed research becomes a shareable artifact. The system generates a cover image and a public URL with a clean slug. Unsharing removes the page and deletes the cover image — nothing lingers. Research also exports to Notion: a main page with the synthesis and sources, child pages for each model's full report. Large exports are handled automatically regardless of length. Re-exporting the same research is blocked to prevent duplicates.
+
+After completion, research is not frozen. You can enhance it — add models that were not in the original run or attach new context material. The system reuses your existing model reports and queries only the new additions, so you pay only for the new models. It then re-synthesizes, integrating fresh perspectives into the existing work. The cost display separates what you already paid from what the enhancement added.
+
+**Example:** You share a competitive analysis with your board. A week later, a major competitor announces a pivot. You enhance the research with the announcement as new context and add a Perplexity model for live web coverage. The updated synthesis reflects the new reality. You reshare the page — same URL, updated content.
+
+## Getting Started
+
+Start a new research from the IntexuraOS web app. Type your question, optionally attach source materials, and indicate which models you want — or let the system choose. Review the draft, approve it, and wait for results. A WhatsApp message notifies you when the synthesis is ready. You do not need your own API keys to start — the platform provides fallback access to a subset of models, so you can run your first research immediately and configure additional providers later.
 
 ## Key Benefits
 
-**Comprehensive answers** - Multiple AI perspectives provide more complete information
-
-**Cost transparency** - See exactly what each query costs before and after execution
-
-**Attribution tracking** - Know which model contributed which information
-
-**Idempotent processing** - Safe retry of failed LLM calls without duplication
-
-**Smart failure handling** - Partial failures do not block completion; users decide how to proceed
-
-**Public sharing** - Share research results with clean, attributed URLs
-
-**Type-safe validation** - Zod schema validation for all LLM responses ensures data integrity
-
-**Self-healing responses** - Parser + repair pattern automatically fixes malformed LLM JSON
-
-**Notion integration** - Automatic export to Notion with structured page hierarchy and markdown conversion
-
-**Distributed tracing** - Dash0 OpenTelemetry provides end-to-end visibility across all service boundaries
-
-## Recent Changes (v3.1.0)
-
-### LLM Prompt Audit
-
-Adversarial dual-agent review (Opus architect + Sonnet challenger) audited and improved 27 prompts across all domains. Research-agent changes include simplified `ContextInferenceAdapter` with safer fallbacks replacing unsafe casts. Prompt versions bumped per semver rules.
-
-### Version Bumps (v3.0.0, v3.1.0)
-
-Package version aligned to v3.1.0 as part of the monorepo-wide release. No research-agent-specific code changes in these releases.
-
-## Recent Changes (v2.4.0)
-
-### Distributed Tracing (Observability)
-
-Research-agent emits distributed traces to Dash0 via OpenTelemetry:
-
-- Traces propagate across Pub/Sub, HTTP, and Firestore boundaries
-- Enabled by `INTEXURAOS_DASH0_OTLP_ENDPOINT` environment variable
-- No-op in local development when endpoint is unset
-- Powered by `packages/infra-otel` preloaded via Node `--import` flag in Dockerfile
-
-### Dev-Mode Log Formatting
-
-PM2 log output is colorized and readable in development environments:
-
-```
-research-agent | 10:30:00 | INFO  | Research created | {id: "abc123"}
-```
-
-Production JSON logging is unchanged.
-
-## Recent Changes (v2.3.0)
-
-### Platform API Key Fallbacks
-
-Research-agent supports platform-owned API keys as fallbacks for users without their own LLM provider keys:
-
-- **Gemini primary fallback** -- `INTEXURAOS_GEMINI_APP_API_KEY` enables `gemini-2.0-flash` for users without a Google API key
-- **Zai secondary fallback** -- `INTEXURAOS_ZAI_APP_API_KEY` enables `glm-4.7-flash` when Gemini fallback is unavailable
-- Fallback ordering: user key -> Gemini platform key -> Zai platform key -> error
-
-### Gemini 2.0 Flash for Internal Operations
-
-Switched title generation and context inference fast model from `glm-4.7-flash` to `gemini-2.0-flash`:
-
-- `glm-4.7-flash` was taking 29s for title generation, exceeding the 10s HTTP timeout
-- `gemini-2.0-flash` is faster and already available via the platform Gemini key
+- **Structured conflict detection** — Disagreements identified topic by topic, rated by severity, attributed to specific models — not buried in a blended summary
+- **Review before you spend** — The draft step shows you the refined prompt, selected models, and attached materials before any model is queried, so misclassifications and wrong selections are caught early
+- **Full cost visibility** — Per-model cost tracked and displayed for every research, including auxiliary costs for generated images and enhanced research runs
+- **Resilient to partial failure** — If one model fails, the rest complete; you choose whether to proceed with partial results, retry the failed model, or cancel entirely
+- **Start without API keys** — The platform provides fallback access to a subset of models, so you can run research immediately and add more providers over time
+- **Safe to retry** — Retrying a failed or partial research does not create duplicate queries or duplicate results
 
 ## Limitations
 
-**API key required** - Users must provide their own API keys for each LLM provider (unless platform fallback keys are configured)
-
-**Max 6 models** - Research is limited to 6 simultaneous models to control costs
-
-**Max 5 input contexts** - Each context max 60k characters for context window limits
-
-**No streaming** - Research results are returned in bulk when complete (not real-time)
-
-**Perplexity special handling** - Perplexity requires online search and has longer response times
-
-**Zai API limitations** - Zai (GLM-4.7) has specific rate limits and regional availability
-
-**No editing** - Once research is completed, it cannot be edited (only enhanced or deleted)
-
-**One model per provider** - Model selection enforces maximum one model from each provider
-
-**Single Notion export** - Each research can only be exported to Notion once (no re-export)
+- **No streaming** — Results arrive together once all models respond and synthesis completes, rather than appearing incrementally
+- **Five models maximum** — Each research queries up to five providers, one model per provider
+- **Five attachments, 60,000 characters each** — Source material slots are capped to keep model context manageable
+- **No in-place editing** — Completed research can be enhanced with additional models or context, favourited, shared, exported, or deleted — but the existing synthesis cannot be manually edited
+- **Single Notion export** — Re-exporting the same research to Notion is blocked; delete the previous export first
+- **Deep research models are slow** — Perplexity's sonar-deep-research and OpenAI's o4-mini-deep-research perform extensive searches during inference, which can take several minutes
 
 ---
 
-_Part of [IntexuraOS](../overview.md) -- AI-powered research orchestration._
+_Part of [IntexuraOS](../overview.md) — trustworthy answers through structured comparison._

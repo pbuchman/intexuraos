@@ -717,12 +717,12 @@ If user skips all checkpoint phases (1.5 prioritization, 3, 4, 5):
 
 When resuming from `--phase N`, reconstruct state from:
 
-| Variable          | Source when resuming                                              |
-| ----------------- | ----------------------------------------------------------------- |
-| NEW_VERSION       | `jq -r '.version' package.json`                                  |
-| LAST_TAG          | `git tag -l "v*" --sort=-v:refname \| head -1`                   |
-| MODIFIED_SERVICES | Re-run step 1.4 detection                                        |
-| Change Manifest   | Re-run semver analysis (steps 3-7) if resuming before Phase 6    |
+| Variable          | Source when resuming                                          |
+| ----------------- | ------------------------------------------------------------- |
+| NEW_VERSION       | `jq -r '.version' package.json`                               |
+| LAST_TAG          | `git tag -l "v*" --sort=-v:refname \| head -1`                |
+| MODIFIED_SERVICES | Re-run step 1.4 detection                                     |
+| Change Manifest   | Re-run semver analysis (steps 3-7) if resuming before Phase 6 |
 
 For Phase 6 resume: version and changelog are already committed, so read from files.
 

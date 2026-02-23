@@ -1,108 +1,63 @@
-# VM Lifecycle Worker
+# VM Lifecycle
 
-Cloud Functions for starting and stopping a GCE VM instance with health checks and graceful shutdown.
+The infrastructure timekeeper for IntexuraOS — automated start and stop of the dedicated machine that runs AI coding agents, so it works when you work and sleeps when you sleep.
 
 ## The Problem
 
-IntexuraOS runs long-running tasks on a dedicated GCE VM. The VM should not run 24/7:
+IntexuraOS runs its coding agents on a dedicated virtual machine. The orchestrator — the software that coordinates your coding tasks — the Claude Code workers, the entire pipeline that turns your requests into working code — all of it lives on a single cloud server. That server costs money every hour it runs, whether someone is using it or not.
 
-1. **Cost waste** - An idle VM during nights and weekends costs money
-2. **Manual start/stop** - Operators forget to start or stop the VM
-3. **Ungraceful shutdown** - Stopping a VM mid-task can lose work
-4. **No health verification** - Starting a VM does not guarantee the application is ready
+Leave it on overnight, and you are paying for an empty office. Leave it on over the weekend, and the bill compounds for 48 hours of silence. The obvious solution is to turn it off when nobody needs it. But "obvious" and "reliable" are different things.
+
+Manual start and stop is a recipe for forgotten mornings and lost evenings. Forget to start it, and the first request of the day fails. Forget to stop it, and you pay for hours of idle compute. Worse, stopping a machine while a coding task is mid-flight — the agent halfway through implementing a feature, files partially written — risks corrupting work that took minutes of AI processing to produce.
+
+What you need is a system that handles the schedule, verifies the machine is actually ready before declaring victory, and never pulls the plug on work in progress.
+
+## Use Case: A Workday Without Thinking About Infrastructure
+
+It is 6:58 AM on a Tuesday. You have not touched a terminal. You have not opened a dashboard. You are making coffee.
+
+At 7:00 AM, the system sends a start command to the coding machine. The machine boots. The system does not just wait for the operating system to load — it keeps checking until the orchestrator and all coding agents report that they are ready to accept work. Only then does it consider the startup complete.
+
+You sit down at your desk. Your first coding request goes through immediately. The machine was already warmed up and waiting.
+
+At 11:00 PM, the nightly shutdown signal fires. But a coding task is still running — a complex refactor across multiple files. Instead of killing the machine, the system asks the orchestrator: "How many tasks are still running?" The answer comes back: one. So it waits. It checks again thirty seconds later. Still running. It keeps waiting, giving the task up to ten minutes to finish. The task completes at 11:04 PM. The system confirms zero active tasks, then powers down the machine.
+
+You never knew any of this happened. Your work was preserved, and the machine stopped billing the moment it was no longer needed.
 
 ## How It Helps
 
-VM-lifecycle provides two HTTP-triggered Cloud Functions:
+### Starts That Actually Work
 
-1. **startVm** - Starts the VM, waits for the RUNNING state, and polls a health endpoint until the application reports ready
-2. **stopVm** - Notifies the orchestrator of pending shutdown, waits for running tasks to complete, then stops the VM
+Turning on a virtual machine is not the same as having a working system. The machine can be "running" at the operating system level while the coding agents are still initializing, loading models, or recovering from a previous crash. A naive scheduler that fires a start command and walks away leaves you with a machine that looks alive but cannot do anything.
 
-Cloud Scheduler invokes these functions on a weekday schedule: start at 7 AM and stop at 11 PM (Europe/Warsaw timezone).
+This system waits until the application layer — the orchestrator and the coding workers — reports ready. If the machine is already running but the application is unresponsive, the system does not shrug and move on. It restarts the machine entirely, then waits for a clean startup. The goal is not a running server. The goal is a server that can accept your first request of the day.
 
-## Key Features
+### Shutdowns That Protect Your Work
 
-**Scheduled start/stop:**
+The shutdown sequence is where most automated systems fail. A cron job that runs "stop server" at 11 PM does not care whether something important is happening. This system does.
 
-- Start VM: Monday-Friday at 7 AM (Europe/Warsaw)
-- Stop VM: Daily at 11 PM (Europe/Warsaw)
-- Retries: 3 attempts with exponential backoff
+Before powering down, it notifies the orchestrator that a shutdown is coming. The orchestrator reports how many coding tasks are currently in progress. If the answer is zero, the machine stops immediately. If tasks are running, the system enters a ten-minute grace period — checking every thirty seconds, waiting for active work to finish. A complex coding task that started at 10:45 PM gets the time it needs to complete cleanly.
 
-**Health-aware startup:**
+If the orchestrator becomes unresponsive during this process — perhaps it crashed, perhaps the network hiked — the system waits two minutes before proceeding with a forced shutdown. It does not wait forever, and it does not give up immediately. The balance between patience and pragmatism is deliberate.
 
-- After the VM reaches RUNNING state, the function polls a health endpoint
-- The health endpoint must return `{ "status": "ready" }` for the VM to be considered healthy
-- Timeout: 3 minutes of polling with 10-second intervals
-- If the VM is already running but unhealthy, it is restarted automatically
+### A Schedule You Do Not Manage
 
-**Graceful shutdown:**
-
-- Before stopping, the function calls the orchestrator's shutdown endpoint
-- The orchestrator responds with the number of running tasks
-- If tasks are running, the function waits up to 10 minutes for them to complete
-- If the orchestrator is unresponsive for 2 minutes, the function proceeds with forced shutdown
-- Polling interval during grace period: 30 seconds
-
-**Internal auth:**
-
-- Both functions require `X-Internal-Auth` header with a Bearer token
-- The token is stored in Secret Manager as `INTEXURAOS_INTERNAL_AUTH_TOKEN`
-
-## Use Cases
-
-### Scheduled weekday start
-
-**User Goal:** VM automatically starts before the workday begins.
-
-**Steps:**
-
-1. Cloud Scheduler sends a POST request to the startVm function at 7 AM Mon-Fri
-2. The function checks the VM's current state
-3. If RUNNING and healthy, returns immediately
-4. If RUNNING but unhealthy, stops the VM, waits for TERMINATED, then starts it
-5. If not RUNNING, sends a start command
-6. Polls the health endpoint until the application is ready or timeout
-
-### Scheduled nightly stop
-
-**User Goal:** VM shuts down after business hours to save costs.
-
-**Steps:**
-
-1. Cloud Scheduler sends a POST request to the stopVm function at 11 PM daily
-2. The function checks the VM's current state
-3. If not RUNNING, returns immediately (already stopped)
-4. If RUNNING, sends a shutdown notification to the orchestrator
-5. Waits for running tasks to complete (up to 10 minutes)
-6. Sends a stop command to the VM
-7. Returns the number of tasks that were running at shutdown time
-
-### Manual start via HTTP
-
-**User Goal:** Start the VM outside the normal schedule.
-
-**Steps:**
-
-1. Send a POST request to the startVm function URL with the auth header
-2. The function follows the same health-check flow as scheduled starts
-3. Returns success with startup duration or failure with error message
+The machine starts every weekday morning and stops every night — including weekends, so a machine left running on Saturday still powers down automatically. No cron jobs to maintain, no scripts to remember, no calendar reminders to set. The schedule runs on its own, and each operation is safe to repeat — calling start on a running, healthy machine simply confirms it is fine and returns. Calling stop on an already-stopped machine does nothing. There is no penalty for redundancy.
 
 ## Key Benefits
 
-**Cost savings** - VM runs only during business hours (Mon-Fri 7 AM to 11 PM)
-
-**Zero data loss** - Graceful shutdown waits for tasks to complete before stopping
-
-**Self-healing** - Unhealthy running VMs are automatically restarted
-
-**Observable** - Startup duration and running task counts are logged and returned
+- **Cost savings** — The machine runs only during business hours, eliminating overnight and weekend compute charges
+- **Zero data loss** — Active coding tasks finish before the machine powers down, so no work is ever interrupted mid-flight
+- **Self-healing startup** — A machine that is running but unresponsive gets automatically restarted rather than left in a broken state
+- **Invisible operation** — The entire lifecycle runs without human intervention on weekdays, from morning boot to nightly shutdown
 
 ## Limitations
 
-**Single VM** - The worker manages one specific VM instance. Multi-VM support would require parameterization.
+- **Single machine** — Manages one specific virtual machine instance, not a fleet
+- **Fixed schedule** — The weekday start and nightly stop times are defined in infrastructure configuration and require a deployment to change
+- **No weekend starts** — The machine does not start automatically on weekends; manual intervention is required for weekend work
+- **Health endpoint dependency** — Startup verification relies on the application's health reporting; a misconfigured health check can cause false failures even when the machine is functioning
 
-**Fixed schedule** - The start/stop schedule is hardcoded in Terraform. Changing it requires a Terraform apply.
+---
 
-**Health check dependency** - Startup success depends on the VM's health endpoint. If the endpoint is misconfigured, the function reports failure even if the VM is actually running.
-
-**No weekend support** - The VM does not start on weekends. Manual intervention is needed for weekend work.
+_Part of [IntexuraOS](../overview.md) — Automated infrastructure scheduling that saves money and never interrupts your work._
