@@ -212,6 +212,49 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).not.toContain('Branch:');
       expect(callArgs.message).not.toContain('Commits:');
     });
+
+    it('formats completion with summary only (Phase 1, no branch/commits)', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Analyze auth flow',
+        result: {
+          summary: 'Analyzed the feature request and identified three approaches. Created design with test requirements. Task is ready for Phase 2.',
+        },
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskComplete('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('✅ Code task completed: Analyze auth flow');
+      expect(callArgs.message).toContain('Analyzed the feature request');
+      expect(callArgs.message).not.toContain('Branch:');
+      expect(callArgs.message).not.toContain('Commits:');
+      expect(callArgs.message).not.toContain('PR:');
+    });
+
+    it('formats completion with no summary', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Quick fix',
+        result: {
+          prUrl: 'https://github.com/org/repo/pull/99',
+          branch: 'fix/quick',
+          commits: 1,
+        },
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskComplete('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('✅ Code task completed: Quick fix');
+      expect(callArgs.message).toContain('PR: https://github.com/org/repo/pull/99');
+      expect(callArgs.message).toContain('Branch: fix/quick');
+      expect(callArgs.message).toContain('Commits: 1');
+    });
   });
 
   describe('formatFailureMessage', () => {
