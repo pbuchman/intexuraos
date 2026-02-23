@@ -351,6 +351,57 @@ resource "google_cloudbuild_trigger" "claude_worker" {
 }
 
 # -----------------------------------------------------------------------------
+# claude-worker Daily Rebuild Schedule
+# -----------------------------------------------------------------------------
+# Rebuilds the claude-worker image daily to pick up latest Claude CLI releases.
+# Anthropic's peak release window is 3-6 PM PST (23:00-02:00 UTC).
+# Schedule: 4 AM UTC (8 PM PST) — after the release window closes.
+
+resource "google_cloud_scheduler_job" "claude_worker_daily_rebuild" {
+  name        = "claude-worker-daily-rebuild-${var.environment}"
+  description = "Daily rebuild of claude-worker Docker image to pick up latest Claude CLI"
+  schedule    = "0 4 * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://cloudbuild.googleapis.com/v1/projects/${var.project_id}/locations/${var.region}/triggers/${google_cloudbuild_trigger.claude_worker.trigger_id}:run"
+    body = base64encode(jsonencode({
+      source = {
+        branchName = var.github_branch
+      }
+    }))
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    oauth_token {
+      service_account_email = google_service_account.cloud_build.email
+    }
+  }
+
+  retry_config {
+    retry_count          = 2
+    max_retry_duration   = "120s"
+    min_backoff_duration = "10s"
+    max_backoff_duration = "60s"
+  }
+
+  depends_on = [
+    google_cloudbuild_trigger.claude_worker,
+    google_project_iam_member.cloud_build_scheduler,
+  ]
+}
+
+# Cloud Build SA needs permission to run triggers via the API
+resource "google_project_iam_member" "cloud_build_scheduler" {
+  project = var.project_id
+  role    = "roles/cloudbuild.builds.editor"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# -----------------------------------------------------------------------------
 # Workload Identity Federation (GitHub Actions → GCP)
 # -----------------------------------------------------------------------------
 # Allows GitHub Actions to authenticate to GCP without service account keys.
