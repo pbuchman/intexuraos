@@ -1,66 +1,47 @@
 # API Docs Hub
 
-Unified Swagger UI for all IntexuraOS service APIs -- one URL to explore every endpoint.
+The single front door to every API in IntexuraOS — fifteen services, one search bar, one URL.
 
 ## The Problem
 
-API documentation is scattered across 15 separate microservices. Each service hosts its own OpenAPI spec at its own URL. Developers must know every service URL, navigate to each individually, and mentally stitch together how APIs relate. Discovering available endpoints requires tribal knowledge or digging through code.
+You are building against a platform with fifteen services. The research agent has an API. So does the calendar agent, the WhatsApp service, the image service, and eleven others. Each publishes its own OpenAPI specification at its own URL. To find the endpoint you need, you have to remember which service owns it, recall or look up that service's documentation URL, navigate there, and search. Multiply that by the number of times a day you check a request schema or verify a response shape, and scattered documentation slows you down every single day.
+
+The issue is not that the documentation does not exist. Every service already publishes a complete spec. The issue is that it exists in fifteen different places, and no one can hold fifteen URLs in their head.
+
+## Use Case: Finding What You Need
+
+Built for any developer integrating with IntexuraOS — whether building a new feature, debugging a request, or onboarding to the platform for the first time.
+
+You need to check the shape of a calendar event payload. Instead of hunting for the calendar agent's documentation URL, you open one bookmark: the docs hub. A dropdown at the top lists every service in the system. You select Calendar Agent API, and the full spec loads — endpoints, schemas, example payloads, all of it. You find what you need, then switch to the Research Agent API from the same dropdown to check a second endpoint. Two services, one tab, no context switch.
 
 ## How It Helps
 
-### Single-URL Documentation Portal
+### One URL, Every Service
 
-Access all 15 service APIs from one browser tab. No bookmarks, no URL hunting, no guessing which service handles what.
+Fifteen services publish their API specifications independently. The docs hub collects all fifteen into a single interactive documentation interface — Swagger UI — with a dropdown selector at the top. Pick a service, and its complete OpenAPI spec loads in the same interface. No bookmarks to maintain, no URLs to remember, no tabs to juggle.
 
-**Example:** A developer building a new integration visits `/docs`, selects "Research Agent API" from the dropdown, and immediately sees every endpoint with request/response schemas.
+### Always Current
 
-### Service Selector Dropdown
+The hub does not store copies of each specification. When you select a service, your browser fetches the live spec directly from that service. If an endpoint was added five minutes ago, it appears in the docs hub now. Documentation stays in sync with the running system without any manual refresh or redeployment step.
 
-Switch between service specs instantly using the built-in Swagger UI dropdown. Each service appears by its display name, making discovery intuitive.
+### Instant Discoverability
 
-**Example:** While testing the Actions Agent API, you realize you need the User Service endpoint format. Switch services in the dropdown without opening a new tab.
-
-### Live Spec Fetching
-
-Swagger UI fetches OpenAPI specs directly from each running service. Documentation always reflects the currently deployed API, not a stale snapshot.
-
-**Example:** After deploying a new endpoint to commands-agent, the documentation in the hub updates automatically -- no rebuild or redeployment of the hub required.
-
-### Health Monitoring
-
-The `/health` endpoint validates that all 15 service sources are configured, providing a quick check that the documentation hub is operational.
-
-**Example:** Infrastructure monitoring hits `/health` and confirms `sourceCount: 15` with status `ok`, ensuring no service was accidentally dropped from the configuration.
-
-## Use Case
-
-A new developer joins the team and needs to understand the IntexuraOS API surface. They visit `https://api-docs-hub.intexuraos.com/docs`, see a dropdown listing all 15 services, and systematically explore each one. They find the endpoint they need, use "Try it out" to send a test request, and verify the response format -- all without leaving the browser.
+A developer's first visit to the docs hub reveals the full surface area of IntexuraOS in one glance. The dropdown lists every service by name — User Service, Research Agent, WhatsApp Service, and twelve more. For someone new to the platform, this is the fastest way to understand what exists and where to start.
 
 ## Key Benefits
 
-- All API documentation accessible from a single URL
-- Always up-to-date with currently deployed services
-- Zero maintenance for documentation content -- specs are fetched live
-- Fail-fast startup prevents silent misconfiguration
+- **Single bookmark** — One URL replaces fifteen, and the dropdown puts every service within two clicks
+- **Live specifications** — Fetched directly from running services, so docs are never stale
+- **Full platform map** — The dropdown doubles as a directory of every API in the system
+- **Zero learning curve** — built on Swagger UI, so any developer who has used API documentation before already knows how to navigate, test requests, and inspect schemas
 
 ## Limitations
 
-- Read-only documentation -- no API testing capabilities beyond standard Swagger "Try it out"
-- If a service is down, its spec will not load in the UI
-- Shows only the latest API version -- no historical version support
-- No built-in authentication helper -- tokens must be entered manually
-- Static configuration -- adding or removing a service requires redeployment
-
-## Recent Changes
-
-- **v3.1.0** (2026-02-22) -- Release version bump
-- **v3.0.0** (2026-02-19) -- Release version bump
-- **Dash0 OpenTelemetry integration** -- Log pipeline forwards to Dash0 via OTLP when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is configured
-- **Dev-mode log formatting** -- PM2 local runs display human-readable log output instead of raw JSON
-- **PromptVault removed** -- PromptVault Service spec removed following feature removal (INT-319)
-- **Chat Agent added** -- Chat Agent API spec added to the aggregated documentation hub
-- **15 service specs** -- Aggregates OpenAPI specs from 15 services
+- **Service must be running** — If a service is down, its specification will not load in the dropdown
+- **No version history** — The hub always shows the current spec; there is no way to view a previous version
+- **No built-in authentication** — To test authenticated endpoints through Swagger UI, you must manually provide a token
+- **Static configuration** — Adding or removing a service from the hub requires a redeployment
 
 ---
 
-_Part of [IntexuraOS](../overview.md) -- All your APIs, one place._
+_Part of [IntexuraOS](../overview.md) — One interface for every API in the system._
