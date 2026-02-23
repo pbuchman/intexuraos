@@ -84,17 +84,19 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Hash       | Description                                              | Age     |
-| ---------- | -------------------------------------------------------- | ------- |
-| `6063175b` | Add dev-mode log formatting for PM2 readability          | 3 days  |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                      | 3 days  |
-| `e60eafc1` | Standardize API key secrets to APP naming convention     | 4 days  |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback | 4 days  |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local   | 5 days  |
-| `0f69a74b` | Add default model selector with platform Zai fallback    | 11 days |
-| `63170e4a` | Remove "free" GLM terminology, use createLlmClient       | 12 days |
-| `996c4179` | Add chat-agent to Cloud Build pipeline                   | 13 days |
-| `ea6652f7` | Add guest chat sessions with rate limiting               | 13 days |
+| Hash       | Description                                              | Date       |
+| ---------- | -------------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0                                           | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                           | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting for PM2 readability          | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration                      | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention     | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback | 2026-02-15 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local   | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform Zai fallback    | 2026-02-09 |
+| `63170e4a` | Remove "free" GLM terminology, use createLlmClient       | 2026-02-07 |
+| `996c4179` | Add chat-agent to Cloud Build pipeline                   | 2026-02-06 |
+| `ea6652f7` | Add guest chat sessions with rate limiting               | 2026-02-06 |
 
 ## API Endpoints
 
@@ -174,9 +176,9 @@ sequenceDiagram
 ### ChatMessage
 
 | Field             | Type                         | Description             |
-| ----------------- | ---------------------------- | ----------------------- | --------- | ------------------- |
+| ----------------- | ---------------------------- | ----------------------- |
 | `id`              | `string`                     | Unique message ID       |
-| `role`            | `'user' \                    | 'assistant' \           | 'system'` | Message sender role |
+| `role`            | `'user' \| 'assistant' \| 'system'` | Message sender role |
 | `content`         | `string`                     | Message text content    |
 | `timestamp`       | `number`                     | Unix timestamp          |
 | `sources`         | `DocSource[]` (optional)     | Documentation citations |
@@ -184,15 +186,15 @@ sequenceDiagram
 
 ### DocChunk (Firestore: `doc_embeddings`)
 
-| Field       | Type                  | Description                            |
-| ----------- | --------------------- | -------------------------------------- | ------------- |
-| `id`        | `string`              | Firestore document ID                  |
-| `content`   | `string`              | Chunk text content                     |
-| `embedding` | `number[]`            | 1536-dimension OpenAI embedding vector |
-| `filePath`  | `string`              | Source file path                       |
-| `section`   | `string`              | Section heading within the source file |
-| `docType`   | `'markdown' \         | 'openapi'`                             | Document type |
-| `createdAt` | `Firestore.Timestamp` | Creation timestamp                     |
+| Field       | Type                         | Description                            |
+| ----------- | ---------------------------- | -------------------------------------- |
+| `id`        | `string`                     | Firestore document ID                  |
+| `content`   | `string`                     | Chunk text content                     |
+| `embedding` | `number[]`                   | 1536-dimension OpenAI embedding vector |
+| `filePath`  | `string`                     | Source file path                       |
+| `section`   | `string`                     | Section heading within the source file |
+| `docType`   | `'markdown' \| 'openapi'`   | Document type                          |
+| `createdAt` | `Firestore.Timestamp`        | Creation timestamp                     |
 
 ### SuggestedAction
 
@@ -204,10 +206,10 @@ sequenceDiagram
 
 ### ConversationHistory
 
-| Field     | Type       | Description  |
-| --------- | ---------- | ------------ | -------------- |
-| `role`    | `'user' \  | 'assistant'` | Message sender |
-| `content` | `string`   | Message text |
+| Field     | Type                       | Description    |
+| --------- | -------------------------- | -------------- |
+| `role`    | `'user' \| 'assistant'`   | Message sender |
+| `content` | `string`                   | Message text   |
 
 ## Pub/Sub Events
 
@@ -239,7 +241,6 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | `@intexuraos/http-server`      | Health checks, env validation       |
 | `@intexuraos/http-contracts`   | Core API schema definitions         |
 | `@intexuraos/infra-firestore`  | Firestore singleton + vector search |
-| `@intexuraos/infra-glm`        | GLM LLM provider integration        |
 | `@intexuraos/infra-otel`       | Dash0 OpenTelemetry instrumentation |
 | `@intexuraos/infra-sentry`     | Sentry logging, error handler       |
 | `@intexuraos/internal-clients` | user-service client                 |
@@ -270,6 +271,16 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | `PORT`                                | No       | Server port (defaults to `8080`)                              |
 | `HOST`                                | No       | Server host (defaults to `0.0.0.0`)                           |
 | `LOG_LEVEL`                           | No       | Pino log level (defaults to `info`)                           |
+
+### Supported Chat Models
+
+The following models are validated at startup for pricing availability:
+
+| Model              | Provider | Role                                       |
+| ------------------ | -------- | ------------------------------------------ |
+| Gemini 2.5 Flash   | Google   | Default for authenticated users             |
+| GLM-4.7            | Zai      | Alternative for authenticated users         |
+| GLM-4.7-Flash      | Zai      | Guest sessions (platform-provided, no cost) |
 
 ### Terraform
 

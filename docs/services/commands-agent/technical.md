@@ -2,7 +2,7 @@
 
 ## Overview
 
-Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt. It receives commands from WhatsApp (via Pub/Sub) and PWA (via REST), creates actions through actions-agent, and publishes events for downstream processing.
+Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt. It receives commands from WhatsApp (via Pub/Sub) and PWA (via REST), creates actions through actions-agent, and publishes events for downstream processing. Runs on Cloud Run with Fastify, Firestore persistence, and Dash0 OpenTelemetry for distributed tracing.
 
 ## Architecture
 
@@ -61,9 +61,9 @@ The classification prompt in `packages/llm-prompts/src/classification/commandCla
 If message starts with a category keyword (with or without colon), that category wins.
 
 ```
-"linear: buy groceries" → linear
-"todo: meeting tomorrow" → todo
-"do lineara: fix bug" → linear (Polish)
+"linear: buy groceries" -> linear
+"todo: meeting tomorrow" -> todo
+"do lineara: fix bug" -> linear (Polish)
 ```
 
 ### Step 2: Explicit Intent Command Detection (HIGH PRIORITY)
@@ -72,8 +72,8 @@ Explicit command phrases override all other signals including URL content.
 
 **Critical: Linear vs Code Disambiguation**
 
-- `linear` — ONLY when the user EXPLICITLY wants to create/track a Linear issue (must include "linear", "issue", "track", "log", or "report")
-- `code` — ANY engineering task describing work to do (fix, implement, design, add, refactor, change, update, build, etc.)
+- `linear` -- ONLY when the user EXPLICITLY wants to create/track a Linear issue (must include "linear", "issue", "track", "log", or "report")
+- `code` -- ANY engineering task describing work to do (fix, implement, design, add, refactor, change, update, build, etc.)
 
 When ambiguous, prefer `code`. Engineering tasks default to code execution. Code actions automatically create a Linear issue, so tracking is never lost.
 
@@ -90,13 +90,13 @@ When ambiguous, prefer `code`. Engineering tasks default to code execution. Code
 
 **Polish phrases:**
 
-- link: "zapisz link", "dodaj zakładkę"
+- link: "zapisz link", "dodaj zakladke"
 - todo: "stwórz zadanie", "dodaj zadanie"
-- research: "zbadaj", "sprawdź", "przeprowadź research"
-- note: "stwórz notatkę", "zapisz notatkę"
+- research: "zbadaj", "sprawdz", "przeprowadz research"
+- note: "stwórz notatke", "zapisz notatke"
 - reminder: "przypomnij mi"
 - calendar: "zaplanuj", "dodaj do kalendarza"
-- linear: "zgłoś błąd", "stwórz issue", "dodaj do lineara"
+- linear: "zglos blad", "stwórz issue", "dodaj do lineara"
 
 ### Step 3: Code Detection (Engineering Task Fallback)
 
@@ -105,7 +105,7 @@ Engineering tasks that didn't match an explicit phrase in Step 2 classify as `co
 - Action verbs: fix, implement, design, add, remove, refactor, change, update, build
 - Bug descriptions, feature descriptions
 
-**Exception:** Math/science context ("linear regression", "linear algebra") → `research`, not `linear`.
+**Exception:** Math/science context ("linear regression", "linear algebra") classifies as `research`, not `linear`.
 
 ### Step 4: URL Presence Check
 
@@ -206,7 +206,7 @@ sequenceDiagram
 | `type`          | CommandType | todo, research, note, link, calendar, linear, reminder, code |
 | `confidence`    | number      | 0-1 confidence score                                         |
 | `reasoning`     | string      | LLM explanation for classification                           |
-| `promptVersion` | string      | Semver version of the prompt that produced this result       |
+| `promptVersion` | string      | Semver version of the prompt that produced this result        |
 | `classifiedAt`  | string      | ISO 8601 classification timestamp                            |
 
 ### Confidence Semantics
@@ -246,10 +246,11 @@ sequenceDiagram
 
 ### Internal Services
 
-| Service         | Purpose                                 |
-| --------------- | --------------------------------------- |
-| `user-service`  | Fetch LLM client for classification     |
-| `actions-agent` | Create actions from classified commands |
+| Service              | Purpose                                          |
+| -------------------- | ------------------------------------------------ |
+| `user-service`       | Fetch LLM client for classification              |
+| `actions-agent`      | Create actions from classified commands           |
+| `app-settings-service` | Fetch LLM pricing data at startup              |
 
 ### Packages
 
@@ -261,34 +262,41 @@ sequenceDiagram
 | `llm-contract`     | Shared `LlmModels` enum and type contracts    |
 | `internal-clients` | Shared user-service HTTP client               |
 | `infra-sentry`     | Sentry-enabled logger factory                 |
+| `infra-otel`       | OpenTelemetry distributed tracing via Dash0   |
 
 ### Infrastructure
 
-| Component                         | Purpose                   |
-| --------------------------------- | ------------------------- |
-| Firestore (`commands` collection) | Command persistence       |
-| Pub/Sub (`command-ingest` topic)  | Command ingestion events  |
-| Pub/Sub (`actions` topic)         | Action creation events    |
-| Cloud Scheduler                   | Retry pending every 5 min |
+| Component                         | Purpose                               |
+| --------------------------------- | ------------------------------------- |
+| Firestore (`commands` collection) | Command persistence                   |
+| Pub/Sub (`command-ingest` topic)  | Command ingestion events              |
+| Pub/Sub (`actions` topic)         | Action creation events                |
+| Cloud Scheduler                   | Retry pending every 5 min             |
+| Dash0 (via OTLP/HTTP)            | Distributed tracing and metrics       |
 
 ### External APIs
 
-| Service                                    | Purpose                |
-| ------------------------------------------ | ---------------------- |
+| Service                                     | Purpose                |
+| ------------------------------------------- | ---------------------- |
 | Gemini 2.5 Flash / GLM-4.7 / GLM-4.7-Flash | Command classification |
 
 ## Configuration
 
-| Environment Variable                  | Required | Description                                                     |
-| ------------------------------------- | -------- | --------------------------------------------------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                                           |
-| `INTEXURAOS_ACTIONS_AGENT_URL`        | Yes      | actions-agent base URL                                          |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL (pricing data fetched at startup) |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                                 |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                                         |
-| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                        |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform-level Zai fallback API key for classification          |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key for classification       |
+| Environment Variable                  | Required | Description                                                       |
+| ------------------------------------- | -------- | ----------------------------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | Google Cloud project ID                                           |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS URL for JWT validation                                 |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer for JWT validation                                   |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience for JWT validation                                 |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                                             |
+| `INTEXURAOS_ACTIONS_AGENT_URL`        | Yes      | actions-agent base URL                                            |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL (pricing data fetched at startup)   |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                                   |
+| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                          |
+| `INTEXURAOS_ZAI_APP_API_KEY`         | No       | Platform-level Zai fallback API key for classification            |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key (primary fallback)         |
+| `INTEXURAOS_SENTRY_DSN`              | No       | Sentry DSN for error tracking                                     |
+| `INTEXURAOS_ENVIRONMENT`             | No       | Environment name for Sentry (defaults to "development")           |
 
 ## Gotchas
 
@@ -300,7 +308,7 @@ sequenceDiagram
 
 **Idempotency key format** - `{sourceType}:{externalId}` must be unique. WhatsApp message IDs can be reused across different phone numbers.
 
-**Classification pricing** - Uses Gemini 2.5 Flash at ~$0.001 per classification, GLM-4.7-Flash at $0.
+**Default classification model** - Gemini 2.5 Flash is the default (switched from GLM-4.7-Flash due to latency). GLM-4.7 and GLM-4.7-Flash remain as supported alternatives.
 
 **Pub/Sub push authentication** - Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls.
 
@@ -310,7 +318,9 @@ sequenceDiagram
 
 **Response contract** - All endpoints use `reply.ok(data)` and `reply.fail(code, message)`. Responses wrap data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
 
-**Logging** - All loggers use `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`), which sends errors to Sentry automatically.
+**Logging** - All loggers use `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`), which sends errors to Sentry automatically. In development mode, `createLogStream()` provides colorized formatted log output for PM2 readability.
+
+**OpenTelemetry** - The Dockerfile uses `--import` flag to preload the `@intexuraos/infra-otel` register module. Tracing data is exported to Dash0 via OTLP/HTTP when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is set. No-op when unset.
 
 ## File Structure
 
@@ -353,16 +363,24 @@ packages/llm-prompts/src/
     index.ts
 ```
 
-**Removed files:** `domain/ports/userServiceClient.ts` and `infra/user/` directory. The user service client now imports directly from `@intexuraos/internal-clients`.
-
 ---
 
 ## Recent Changes
 
-- **2026-02-19:** Persist `promptVersion` with each classification. `CommandClassification` and `ClassificationResult` now include a `promptVersion: string` field sourced from `commandClassifierPrompt.version`. Stored in Firestore alongside confidence and reasoning. Enables auditability of which prompt version produced each classification result.
+| Commit     | Description                                                     | Date       |
+| ---------- | --------------------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0                                                  | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                                  | 2026-02-19 |
+| `35abc346` | Persist prompt version with command classification              | 2026-02-19 |
+| `6063175b` | Dev-mode log formatting via createLogStream()                   | 2026-02-16 |
+| `a52a6bbc` | Dash0 OpenTelemetry integration                                 | 2026-02-16 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention            | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback   | 2026-02-15 |
+| `d5fbb354` | Fix start:local to use tsx instead of node experimental types   | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform Zai fallback           | 2026-02-08 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement                         | 2026-02-01 |
+| `9723dc24` | Standardize DELETE endpoints to consistent response contract    | 2026-02-01 |
+| `02728b75` | Add 'code' type to classification schema                        | 2026-01-25 |
+| `1faa1d3b` | Consolidate user service client architecture                    | 2026-01-25 |
 
-- **2026-02-16:** Add LLM pricing context to `initServices()`. `services.ts` now calls `fetchAllPricing()` from `app-settings-service` at startup and passes a `pricingContext` to `createUserServiceClient`. Add optional platform fallback API keys (`INTEXURAOS_ZAI_APP_API_KEY`, `INTEXURAOS_GEMINI_APP_API_KEY`). Add `@intexuraos/llm-pricing` and `@intexuraos/llm-contract` package dependencies.
-
-- **2026-02-08:** Add `code` command/action type for programming-related commands. Adopt standardized response contract (`reply.ok()`/`reply.fail()`). Migrate to Sentry-enabled logging via `createAppLogger()`. Remove local user service client adapter; import `UserServiceClient` directly from `@intexuraos/internal-clients`. Add `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` and `INTEXURAOS_APP_SETTINGS_SERVICE_URL` to required env vars. Delete `infra/user/` directory and `domain/ports/userServiceClient.ts`.
-
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22

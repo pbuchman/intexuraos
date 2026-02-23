@@ -103,6 +103,8 @@ sequenceDiagram
 
 | Commit     | Description                                                            | Date       |
 | ---------- | ---------------------------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0                                                         | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                                         | 2026-02-19 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability                        | 2026-02-16 |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration                                    | 2026-02-16 |
 | `e60eafc1` | Rename SPEECHMATICS_API_KEY to SPEECHMATICS_APP_API_KEY                | 2026-02-15 |

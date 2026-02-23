@@ -1,4 +1,4 @@
-# Code Agent - Getting Started Tutorial
+# Code Agent -- Getting Started Tutorial
 
 **Time estimate:** 30-45 minutes
 
@@ -80,7 +80,7 @@ Expected response:
   "data": {
     "testStatus": "success",
     "testMessage": "Connection successful",
-    "lastTestedAt": "2026-02-08T10:30:00.000Z"
+    "lastTestedAt": "2026-02-22T10:30:00.000Z"
   }
 }
 ```
@@ -115,10 +115,12 @@ Expected response:
   "success": true,
   "data": {
     "status": "submitted",
-    "codeTaskId": "abc123-def456-..."
+    "codeTaskId": "task_abc123-def456-..."
   }
 }
 ```
+
+Note: If you accidentally include a secret in your prompt (e.g., `DB_PASSWORD=s3cr3t`), Code Agent strips it before the prompt reaches the worker. The sanitized version is stored in the `sanitizedPrompt` field.
 
 ### Step 2: Check task status
 
@@ -127,12 +129,19 @@ curl http://localhost:8128/code/tasks/<codeTaskId> \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
-The task progresses through statuses: `dispatched` -> `running` -> `designed` or `implemented` (or `failed`). Tasks never reach a generic `completed` status — they finish as `designed` (Phase 1) or `implemented` (Phase 2).
+The task progresses through statuses: `dispatched` -> `running` -> `designed` or `implemented` (or `failed`). Tasks never reach a generic `completed` status -- they finish as `designed` (Phase 1) or `implemented` (Phase 2).
 
 ### Step 3: List your tasks
 
 ```bash
 curl "http://localhost:8128/code/tasks?limit=10" \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+You can filter by status (supports multiple statuses):
+
+```bash
+curl "http://localhost:8128/code/tasks?status=running&status=dispatched&limit=10" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -198,6 +207,17 @@ Expected response when task has ended (task resumed):
 { "success": true, "data": { "action": "resumed" } }
 ```
 
+### Start Phase 2 implementation
+
+After a Phase 1 design task completes (`status: 'designed'`), you can trigger Phase 2 execution:
+
+```bash
+curl -X POST http://localhost:8128/code/tasks/<designedTaskId>/implement \
+  -H "Authorization: Bearer <your-auth0-jwt>"
+```
+
+Phase 2 tasks reuse the original prompt but run in strict execution mode, and the Linear issue must have the `code-task` label (set by Phase 1).
+
 ### Query GitHub PR summaries
 
 View the list of PRs with recent activity (30-day window):
@@ -249,6 +269,7 @@ curl -X POST http://localhost:8128/internal/code/process \
 | Logs not appearing in UI              | Log chunks failing HMAC validation                | Check `INTEXURAOS_WEBHOOK_VERIFY_SECRET` matches on worker and server |
 | `too_soon` error on retry             | 5-minute cool-off period not elapsed              | Wait the specified number of minutes before retrying                  |
 | GitHub webhook returning 401          | GitHub webhook secret mismatch                    | Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub app settings |
+| `WORKER_NOT_CONFIGURED` on submit     | User has workers but none are enabled             | Enable at least one worker in Settings                                |
 
 ## Exercises
 
@@ -310,7 +331,7 @@ curl -X POST http://localhost:8128/internal/code/detect-zombies \
 Fetch events for a specific PR and observe the deduplication in action:
 
 ```bash
-curl "http://localhost:8128/code/github-pr-events?repository=intexuraos/intexuraos&pullRequestNumber=42" \
+curl "http://localhost:8128/code/github-pr-events?repository=pbuchman/intexuraos&pullRequestNumber=42" \
   -H "Authorization: Bearer <your-auth0-jwt>"
 ```
 
@@ -318,7 +339,7 @@ Look at the response:
 
 - Each comment appears **once** even if it was edited (body reflects the latest version).
 - The PR description (`body`) appears only on the **most recent** `pull_request` event.
-- `synchronize` events (new commits pushed) include a `eventUrl` compare link: `https://github.com/org/repo/compare/before...after`.
+- `synchronize` events (new commits pushed) include an `eventUrl` compare link: `https://github.com/org/repo/compare/before...after`.
 - Other events include a direct link to the comment or review on GitHub.
 
 **Solution verification:** If the same PR received 3 commits (3 `synchronize` events) and 1 edited comment, you should see 3 synchronize events (each with a unique compare URL) and 1 comment entry (not 2).
