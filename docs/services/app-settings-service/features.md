@@ -34,7 +34,7 @@ Other services in the platform pull pricing data at launch so they can track cos
 - **Read-only** — Pricing is configured by administrators; there is no self-service pricing management
 - **No budgets or alerts** — The service reports costs but does not enforce spending limits
 - **No forecasting** — Historical data only; no projected cost estimates
-- **Monthly granularity** — Usage aggregates by month, not by day
+- **Monthly aggregates** — The API groups usage by month; there is no daily breakdown in the response
 
 ---
 

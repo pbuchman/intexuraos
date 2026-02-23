@@ -49,11 +49,11 @@ Summarization uses the user's own LLM credentials when available, keeping costs 
 - **Zero-configuration start** -- Platform fallback means summaries work before users add their own API keys
 - **User-controlled costs** -- When users bring their own keys, their keys are used
 - **Batch-friendly** -- Link preview requests handle multiple URLs at once with per-URL success tracking
-- **Browser-like fetching** -- Realistic request headers reduce the chance of being blocked by protective sites
+- **Reads pages that block scrapers** -- Realistic browser headers mean sites that reject automated requests still return content
 
 ## Limitations
 
-- **Internal utility only** -- No public-facing endpoints; other agents use it, users do not interact with it directly
+- **Works behind the scenes** -- End users never interact with this service directly; it runs in the background, called by other agents in the platform
 - **Summarization quality varies** -- Pages with poor structure, heavy JavaScript rendering, or minimal text content may produce weaker summaries
 - **Some sites block automated access** -- Despite browser-like headers, certain websites still reject non-browser requests
 - **No result caching** -- Every request fetches fresh content from the source URL

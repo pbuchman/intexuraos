@@ -6,7 +6,7 @@ Your tasks, structured automatically. Say what needs doing, and todos-agent brea
 
 Most task management starts the same way: you think of something that needs doing, open an app, create a task, set a priority, add a due date, break it into subtasks. By the time you have finished organizing the work, you have spent more energy on the system than on the actual thinking. Worse, half the tasks that occur to you never make it into the system at all — because the friction of capture is higher than the urgency of the thought.
 
-The irony of productivity tools is that they demand productivity to maintain. You end up managing your task manager instead of managing your work. And if you use IntexuraOS for research, coding, and scheduling, your tasks live somewhere else entirely — disconnected from the system that already understands your projects.
+The irony of productivity tools is that they demand productivity to maintain. You end up managing your task manager instead of managing your work. And if you use IntexuraOS for research, coding, and scheduling, your tasks live somewhere else entirely — disconnected from the platform that already understands your projects, your conversations, and your priorities.
 
 ## Use Case: Quick Capture, Instant Structure
 
@@ -30,6 +30,12 @@ The extraction uses your own configured API key, which means the model responds 
 
 Four priority levels — low, medium, high, and urgent — apply to both the todo itself and each individual item within it. When your list grows, filter by priority, status, tags, or archived state to surface exactly what matters right now. Tags let you group related todos across projects without rigid folder structures.
 
+### Tasks That Arrive Without You Creating Them
+
+Other agents in the system can create todos on your behalf. A research session surfaces a follow-up action — the research agent files it as a todo. A voice command mentions a next step — the actions agent routes it here. You do not need to be "using the task manager" for tasks to appear in it. The more you use IntexuraOS, the more your task list reflects what actually needs doing — even the things you would have forgotten to write down.
+
+This is the difference between a standalone task app and one embedded in a platform. A standalone app only knows what you tell it. Todos-agent knows what every other agent tells it, too.
+
 ### Lifecycle Without the Overhead
 
 Todos move through a natural progression: created, processed by AI, ready to work, in progress, completed. You can also cancel a todo that is no longer relevant and archive anything you have finished — clearing your active view without losing the record. Unarchive if you need it back.
@@ -41,8 +47,8 @@ The mechanics stay out of your way. You focus on doing the work. The system trac
 - **Capture in seconds** — Describe tasks in natural language from WhatsApp or the web dashboard; AI handles the structuring
 - **Automatic decomposition** — A single description becomes a prioritized checklist with deadlines, no manual entry required
 - **Flexible filtering** — Narrow your view by priority, status, tags, or archive state to focus on what matters now
-- **Native to the platform** — Your tasks live alongside your research, code, and calendar inside IntexuraOS
-- **Future integration point** — Designed as a foundation for connecting to external task management systems you already use
+- **Tasks from every channel** — Other agents create todos on your behalf — a research finding, a follow-up from a voice command, a next step from a coding session — so your task list fills even when you are not actively capturing
+- **Native to the platform** — Your tasks live alongside your research, code, and calendar inside IntexuraOS, not in a disconnected third-party app
 
 ## Limitations
 
