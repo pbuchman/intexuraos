@@ -53,7 +53,7 @@ The system will not save the same link twice. If you bookmark a URL you have alr
 - **No folder hierarchy** -- Organization is flat and tag-based only; no nested folders or categories
 - **No full-text search** -- Filter by tags and processing status, but no keyword search across bookmark content
 - **No sharing or collaboration** -- Bookmarks are private to each user
-- **No browser extension** -- Bookmarks are created through platform agents, not from a browser toolbar
+- **Conversation-first, not browser-first** -- Bookmarks are saved from WhatsApp and platform agents, not from a browser toolbar; capture happens where you are already talking
 - **Summary quality varies** -- Pages with poor structure or heavy JavaScript rendering produce weaker summaries
 - **WhatsApp connection required** -- Automatic summary delivery depends on an active WhatsApp connection
 

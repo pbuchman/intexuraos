@@ -30,7 +30,7 @@ You are an HR director finalizing your company's position on permanent remote wo
 
 8. Satisfied, you share the research as a public page — the system generates a cover image and a clean URL. You also export to Notion: the synthesis becomes the main page, each model's full report becomes a child page beneath it, complete with sources. A WhatsApp notification confirms the whole process is done (if you have connected WhatsApp to your account).
 
-9. Two weeks later, a new study drops. You enhance the completed research by adding a sixth model and the new study as context. The system runs only the new query and re-synthesizes, folding the new perspective into the existing work.
+9. Two weeks later, a new study drops. You enhance the completed research by adding the new study as context material. The system re-synthesizes, folding the new perspective into the existing work without re-querying the models that already completed.
 
 ## How It Helps
 
@@ -54,7 +54,7 @@ This matters because comparable inputs produce comparable outputs. When five mod
 
 The synthesis is not a black box. Every claim in the combined report is attributed to the model or models that made it. And each model's original report — with its full reasoning, citations, and sources — is available as a separate document. You can follow any thread from the synthesis down to a specific model's response and from there to the external sources that model cited.
 
-The synthesis is checked for citation completeness before you see it. If any attributions are missing or incomplete, the system fills in the gaps automatically — so every section of the final report traces back to the model reports it drew from.
+The synthesis is checked for citation completeness before you see it. If any attributions are missing or incomplete, the system attempts to repair them automatically. Most of the time, the repair succeeds — so every section of the final report traces back to the model reports it drew from.
 
 **Example:** The synthesis states that three models agree on a 15% productivity increase for remote workers, citing overlapping sources. You open Gemini's individual report and find it referenced a 2024 meta-analysis the others did not. You open Perplexity's report and see its web search surfaced a contradicting 2025 study. The synthesis flagged the contradiction; the individual reports let you evaluate the evidence yourself.
 
@@ -74,7 +74,7 @@ Perplexity's models are worth knowing about specifically: they perform live web 
 
 ### Share, Export, and Extend
 
-Completed research becomes a shareable artifact. The system generates a cover image and a public URL with a clean slug. Unsharing removes the page and deletes the cover image — nothing lingers. Research also exports to Notion: a main page with the synthesis and sources, child pages for each model's full report. The 100-block limit per Notion API call is handled automatically through batch appending. Re-exporting the same research is blocked to prevent duplicates.
+Completed research becomes a shareable artifact. The system generates a cover image and a public URL with a clean slug. Unsharing removes the page and deletes the cover image — nothing lingers. Research also exports to Notion: a main page with the synthesis and sources, child pages for each model's full report. Large exports are handled automatically regardless of length. Re-exporting the same research is blocked to prevent duplicates.
 
 After completion, research is not frozen. You can enhance it — add models that were not in the original run or attach new context material. The system reuses your existing model reports and queries only the new additions, so you pay only for the new models. It then re-synthesizes, integrating fresh perspectives into the existing work. The cost display separates what you already paid from what the enhancement added.
 
@@ -82,7 +82,7 @@ After completion, research is not frozen. You can enhance it — add models that
 
 ## Getting Started
 
-Start a new research from the IntexuraOS web app. Type your question, optionally attach source materials, and indicate which models you want — or let the system choose. Review the draft, approve it, and wait for results. A WhatsApp message notifies you when the synthesis is ready. You do not need accounts with any AI provider — the platform connects to models on your behalf as a fallback if you have not configured your own credentials.
+Start a new research from the IntexuraOS web app. Type your question, optionally attach source materials, and indicate which models you want — or let the system choose. Review the draft, approve it, and wait for results. A WhatsApp message notifies you when the synthesis is ready. You do not need your own API keys to start — the platform provides fallback access to a subset of models, so you can run your first research immediately and configure additional providers later.
 
 ## Key Benefits
 
@@ -90,7 +90,7 @@ Start a new research from the IntexuraOS web app. Type your question, optionally
 - **Review before you spend** — The draft step shows you the refined prompt, selected models, and attached materials before any model is queried, so misclassifications and wrong selections are caught early
 - **Full cost visibility** — Per-model cost tracked and displayed for every research, including auxiliary costs for generated images and enhanced research runs
 - **Resilient to partial failure** — If one model fails, the rest complete; you choose whether to proceed with partial results, retry the failed model, or cancel entirely
-- **No AI provider accounts needed** — The platform connects to models on your behalf, so you can research without configuring credentials for each provider
+- **Start without API keys** — The platform provides fallback access to a subset of models, so you can run research immediately and add more providers over time
 - **Safe to retry** — Retrying a failed or partial research does not create duplicate queries or duplicate results
 
 ## Limitations

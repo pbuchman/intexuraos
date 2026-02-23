@@ -1,6 +1,6 @@
 # Data Insights Agent
 
-Your data, visualized. Feed it anything -- spreadsheets, text files, live notifications -- and the AI finds the patterns, picks the charts, and keeps them current.
+Your data, visualized. Feed it anything -- CSV exports, text files, live notifications -- and the AI finds the patterns, picks the charts, and keeps them current.
 
 ## The Problem
 
@@ -16,9 +16,9 @@ You upload all three as data sources. Then you create a composite feed called "S
 
 You tap Analyze. Within seconds, the AI returns five insights: a seasonal revenue trend best shown as a line chart, a product category comparison suited to a bar chart, a correlation between low stock and sales spikes rendered as a scatter plot, a breakdown of promotional impact as a pie chart, and a daily order volume pattern displayed as a heatmap.
 
-Each insight carries a trackable metric and a recommended visualization. You preview the revenue trend chart, confirm it looks right, and save it. That visualization now refreshes automatically as new data flows in -- no manual re-runs, no formulas, no spreadsheet gymnastics.
+Each insight carries a trackable metric and a recommended visualization. You preview the revenue trend chart, confirm it looks right, and save it. No formulas, no spreadsheet gymnastics.
 
-Next week, when you check your dashboard, the chart reflects your latest sales figures and inventory alerts without you having touched it.
+Next week, when you check your dashboard, you tap refresh and the chart pulls your latest sales figures and inventory alerts -- current data in seconds, not hours of manual rework.
 
 ## How It Helps
 
@@ -36,7 +36,7 @@ Before saving a visualization, you can preview it. The system generates a chart 
 
 ### Saved Visualizations That Stay Current
 
-Save up to ten visualizations per feed. Each one is computed asynchronously -- the system returns immediately and you check back when it is ready. Once saved, visualizations refresh automatically as the underlying feed data updates. You can also trigger a manual refresh whenever you want the latest view.
+Save up to ten visualizations per feed. Each one is computed asynchronously -- the system returns immediately and you check back when it is ready. Once saved, you can trigger a refresh whenever you want the latest view, pulling in the most recent data from the underlying feed.
 
 ### Data Sources Are Protected
 
@@ -47,7 +47,7 @@ If a data source is part of an active composite feed, it cannot be deleted. The 
 - **No SQL, no formulas** -- AI extracts insights directly from raw, unstructured data
 - **Multi-source analysis** -- Combine custom uploads with live mobile notifications in a single feed
 - **Six chart types** -- Line, bar, scatter, area, pie, and heatmap, matched automatically to your data
-- **Persistent dashboards** -- Saved visualizations refresh on their own as new data arrives
+- **Persistent dashboards** -- Saved visualizations stay current with a single tap to refresh
 - **AI-generated names** -- Feed titles created automatically so you spend time analyzing, not labeling
 - **Safe data management** -- Delete protection ensures active feeds never lose their underlying sources
 - **Works with your keys** -- Analysis runs on your own LLM API keys, with a platform fallback available
@@ -59,7 +59,7 @@ If a data source is part of an active composite feed, it cannot be deleted. The 
 - **Up to 5 insights per analysis** -- Each feed analysis returns a maximum of five insights to keep results focused
 - **Up to 5 data sources per feed** -- Composite feeds accept a maximum of five static sources
 - **Up to 10 visualizations per feed** -- Each feed supports a maximum of ten saved visualizations
-- **Periodic refresh, not real-time** -- Visualizations update on a refresh cycle, not via continuous streaming
+- **Manual refresh, not real-time** -- Visualizations update when you trigger a refresh, not via continuous streaming
 - **No export** -- Charts cannot yet be exported to CSV, image, or external tools
 
 ---

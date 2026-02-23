@@ -28,17 +28,17 @@ A product lead driving home from a client demo. She noticed the onboarding flow 
 
 Say what is on your mind and let AI do the formatting. The Linear Agent takes natural language — a rambling voice note, a quick typed message, a half-formed idea — and extracts a structured Linear issue from it. The title stays under 100 characters. The description splits into two sections: Functional Requirements (what should happen) and Technical Details (how it might be built). You get an issue your team can pick up and work on, not a sticky note they need to decode.
 
-The AI works in any language you speak. The system selects the best model for the job — you never choose, and you never need to switch a setting.
+The AI supports multilingual input — English and Polish are natively understood, and other languages may work through general pattern matching. The model used for extraction is determined by your account configuration.
 
 **Example:** You send a WhatsApp message: "Users on the free plan can see the billing page but the upgrade button does nothing. Low priority, fix when you have time." The agent creates an issue titled "Upgrade button non-functional on free plan billing page," sets priority to Low (it caught "when you have time"), and writes a description separating the user-facing bug from the likely implementation fix.
 
 ### Read Urgency Between the Lines
 
-Priority is not a dropdown you remember to set — it is a signal the agent picks up from your words. Say "production is down" and the issue arrives marked Urgent. Say "important" or "critical" and it lands as High. Mention "nice to have" or "someday" and it files as Low. Everything else defaults to Normal. Four tiers, zero manual triage.
+Priority is not a dropdown you remember to set — it is a signal the agent picks up from your words. Say "urgent" or "ASAP" and the issue arrives marked Urgent. Say "high priority" or "important" and it lands as High. Mention "low priority" or "when you have time" and it files as Low. Everything else defaults to Normal. The same cues work in Polish — "pilne" triggers Urgent, "ważne" triggers High.
 
-This matters most when you are capturing issues in the heat of a moment. The words you naturally reach for when something is on fire — "blocker," "ASAP," "production down" — are exactly the cues the agent listens for. Your urgency translates directly into your board's priority column.
+This matters most when you are capturing issues in the heat of a moment. The words you naturally reach for when something is on fire — "blocker," "ASAP," "critical" — are exactly the cues the agent listens for. Your urgency translates directly into your board's priority column.
 
-**Example:** A developer messages: "The deploy pipeline is stuck, this is a blocker for the release." The agent marks the issue Urgent. An hour later the same developer sends: "Also, we should probably rename that config variable someday." That one lands as Low. Neither required opening a dropdown.
+**Example:** A developer messages: "The deploy pipeline is stuck, this is a blocker for the release — ASAP." The agent marks the issue Urgent. An hour later the same developer sends: "Also, we should rename that config variable when you have time." That one lands as Low. Neither required opening a dropdown.
 
 ### Load Your Board Before You Blink
 
@@ -58,11 +58,11 @@ This keeps context where you need it. You do not bounce between IntexuraOS and L
 
 ### Let Your Code Agent Update the Board
 
-The Code Agent — another IntexuraOS service that picks up Linear issues and autonomously writes the code to resolve them — updates your board as it works. It creates sub-issues when implementation breaks into pieces, and it moves workflow states forward as each piece progresses. Your board reflects what the Code Agent has done without any manual status updates from you.
+The Code Agent — another IntexuraOS service that picks up Linear issues and autonomously writes the code to resolve them — updates your board as it works. It creates related issues when implementation breaks into pieces and moves workflow states forward as each piece progresses. Your board reflects what the Code Agent has done without any manual status updates from you.
 
 This is where the full loop closes. You describe a problem by voice. The Linear Agent structures it into an issue. The Code Agent picks it up and implements it. Your board tracks the progress in real time. You watch the whole thing happen without touching Linear.
 
-**Example:** You created an issue from a voice note about a broken CSV export. The code agent picks it up, creates two sub-issues — one for the parsing fix, one for adding a test — and moves the parent to "In Progress." An hour later you glance at the dashboard and see both sub-issues marked "In Review," nested under the parent. You never touched Linear.
+**Example:** You created an issue from a voice note about a broken CSV export. The code agent picks it up, creates related issues for the parsing fix and the test, and moves workflow states forward as it works. An hour later you glance at the dashboard and see the progress reflected on your board. You never touched Linear.
 
 ### Generate Titles from Descriptions
 
@@ -72,7 +72,7 @@ Sometimes you write the description first and the title is an afterthought. The 
 
 ### Catch Duplicates and Handle Failures
 
-Send the same message twice — from a spotty connection, an accidental re-send, a double tap — and the agent creates one issue, not two. Each incoming message gets a fingerprint, and the agent checks it before creating anything.
+Send the same message twice — from a spotty connection, an accidental re-send, a double tap — and the agent creates one issue, not two. Each action is processed with idempotency checks, so duplicate submissions return the existing result rather than creating a second issue.
 
 When something does go wrong — the AI cannot parse your message, the input is too ambiguous, the extraction fails — the system does not swallow the error. Failed extractions land in a review queue where you can inspect them, retry them, or dismiss them. Nothing disappears into a void.
 

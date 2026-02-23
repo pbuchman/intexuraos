@@ -1,6 +1,6 @@
 # Claude Worker
 
-A ready-to-go coding environment in a box — your credentials, your machine, nothing shared.
+A ready-to-go coding environment in a box — your credentials, your machine, your control.
 
 ## The Problem
 
@@ -25,7 +25,7 @@ A team lead who wants a complex feature implemented by morning — without babys
 
 ### Keeps Your Credentials on Your Machine
 
-You can set spending caps, monitor usage in real time, and revoke access instantly if something looks wrong — because the agent runs under your team's own Anthropic subscription, managed by whoever administers your host machine. No tokens pass through a third-party cloud. No usage appears on someone else's invoice.
+You can set spending caps, monitor usage in real time, and revoke access instantly if something looks wrong — because the agent runs under your team's own Anthropic subscription, managed by whoever administers your host machine. No usage appears on someone else's invoice. No audit trail lives in a vendor's log store.
 
 This matters because autonomous agents can be expensive. When you control the subscription directly, you see exactly how much each task consumed and you can cut off a runaway task without filing a support ticket with a vendor.
 
@@ -45,13 +45,13 @@ Each environment starts without administrator access and cannot escalate its pri
 
 Network access is scoped to the public internet: package registries, source control, and external APIs are reachable. Private IP ranges, the host machine's local services, and cloud infrastructure metadata endpoints are blocked. The agent can pull a dependency from npm or call a public API, but it cannot probe the internal network or discover other workloads running on the same machine.
 
-Each task gets its own isolated copy of the repository, so concurrent tasks cannot step on each other's work. Resource limits — 30 GB of memory, 20 CPU cores, and a two-hour maximum per attempt — prevent any single task from starving the system.
+Each task gets its own isolated copy of the repository, so concurrent tasks cannot step on each other's work. A two-hour maximum per attempt prevents any single task from running indefinitely.
 
 **Example:** Two tasks run simultaneously on the same machine. One is refactoring authentication logic; the other is building a new API endpoint. Each operates in its own copy of the codebase with its own resource allocation. Neither can see the other's work, read the other's secrets, or compete for the other's memory.
 
 ### Preserves Continuity Across Attempts
 
-An "attempt" is a single run of the agent against a task. If the first try does not succeed — a test fails, a timeout is hit, or the approach needs rethinking — the system retries with a fresh strategy. But the environment stays warm. Installed packages, session history, and the agent's prior reasoning all carry forward.
+An "attempt" is a single run of the agent against a task. If the first try does not succeed — a test fails, a timeout is hit, or the approach needs rethinking — the system retries with a fresh strategy. But the environment stays warm. Installed packages persist. The agent's previous session is resumed, so it starts the next attempt with context about what it tried and why it failed — though long sessions may be summarized to fit within the model's context window.
 
 This is the difference between a system that retries and a system that recovers. A naive retry discards everything and starts from scratch — reinstalling dependencies, re-reading the codebase, re-discovering the same dead ends. A recovery picks up where the last attempt left off, skips the work that already succeeded, and tries a different path through the parts that failed.
 
@@ -76,7 +76,7 @@ Claude Worker runs as part of the IntexuraOS platform. When you assign a coding 
 - **Ephemeral by default** — when the task ends, the environment is destroyed. No persistent traces, no stale credentials, no cleanup checklists.
 - **Shared dependency cache** — package installations persist across environments, so repeated builds skip minutes of redundant downloads.
 - **Real-time visibility** — logs stream to the dashboard as the agent works, and a pull request appears when it finishes.
-- **Multiple tasks at once, no interference** — up to four tasks run simultaneously, each in its own isolated copy of the repository with its own resource allocation.
+- **Multiple tasks at once, no interference** — concurrent tasks each run in their own isolated copy of the repository with their own resource allocation. The concurrency ceiling is configurable by whoever operates the host.
 
 ## Limitations
 
@@ -85,7 +85,7 @@ Claude Worker runs as part of the IntexuraOS platform. When you assign a coding 
 - **Credentials are accessible during execution** — secrets are mounted read-only and destroyed with the environment when the task ends, so there are no stale credentials to rotate. But while the task runs, the agent can read them.
 - **Two-hour maximum per attempt** — individual attempts are capped. The system retries automatically, but each run has a hard ceiling.
 - **No persistent storage** — anything not committed to version control or pushed to a remote is lost when the environment is destroyed.
-- **Four concurrent environments** — the system runs up to four tasks at once. Additional tasks wait in the queue.
+- **Configurable concurrency** — the number of simultaneous environments is set by whoever operates the host. Additional tasks wait in the queue.
 
 ---
 

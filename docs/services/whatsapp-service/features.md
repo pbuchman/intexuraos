@@ -45,7 +45,7 @@ When an agent needs your sign-off, an interactive message arrives with clearly l
 
 ### Instant Message Capture
 
-Send any thought the moment it strikes. A text message becomes a command. An image gets stored with an auto-generated thumbnail. A link becomes a bookmark with a rich preview automatically attached. The system captures everything and routes it to the right agent based on what you sent.
+Send any thought the moment it strikes — and the system acts on it immediately. A text message becomes a command routed to the right agent. An image gets stored for later reference. A link becomes a bookmark with the page title, description, and image automatically pulled in. Unlike a notes app, sending a message does not just store it. It triggers the right agent to start working.
 
 **Example:** Walking to lunch, you remember a research question. Send "research quantum computing market trends 2026" via WhatsApp. By the time you sit down, the research-agent has already started gathering sources.
 
@@ -58,7 +58,7 @@ Verify your WhatsApp number with a one-time six-digit code sent to your phone. E
 - **Domain-aware voice** — Custom vocabulary with 90 terms tuned to your organization's language
 - **Tap-to-decide** — Interactive buttons or plain text replies for instant approvals on the move
 - **Unified interface** — Every agent in the system reports to one conversation thread on your phone
-- **Capture anything** — Text, voice, and images flow into the system the moment you send them
+- **Capture and route** — Text, voice, and images flow into the system and trigger the right agent immediately
 - **Nothing to install** — Works inside WhatsApp, the app already on your phone
 
 ## Limitations

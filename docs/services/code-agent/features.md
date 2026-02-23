@@ -16,15 +16,15 @@ You run a SaaS product and your morning is already full. This is what happens wh
 
 1. You are driving when you realize the onboarding flow sends a confusing error message. You record a voice note on WhatsApp: "Fix the signup error — when someone uses an email that already exists, tell them the account exists instead of showing a generic failure."
 
-2. By the time you park, the code agent has transcribed your note, classified it as a code task, and created a project issue in Linear — your team's project tracker — with a clear title and description.
+2. By the time you park, your voice note has been transcribed and classified as a code task, and a project issue has appeared in Linear — your team's project tracker — with a clear title and description.
 
 3. The agent produces a design: which file handles the signup flow, what the new error message should say, which tests need updating, and how it plans to verify the fix. It stops there and waits.
 
 4. Over coffee the next morning, you open the dashboard and read the design. It looks right. You approve it.
 
-5. The agent picks up the task on your own machine, writes the code inside a sandboxed environment that cannot touch anything outside the task at hand, runs the tests, and opens a pull request. A WhatsApp notification arrives with a link to the PR.
+5. The agent picks up the task on your own machine, writes the code inside an isolated environment, runs the tests, and opens a pull request. A WhatsApp notification arrives with a link to the PR.
 
-6. Later that day, your co-founder reviews the PR and leaves a comment: "Can we also handle the case where the email has a different capitalization?" The agent detects the comment, creates a follow-up task carrying forward the full context, and pushes an update. You never opened a code editor.
+6. Later that day, your co-founder reviews the PR and leaves a comment: "Can we also handle the case where the email has a different capitalization?" The agent detects the comment, picks up the feedback with the full context of the original work, and pushes an update. You never opened a code editor.
 
 ## How It Helps
 
@@ -38,7 +38,7 @@ This checkpoint exists because the most expensive mistake an AI coding tool can 
 
 ### Your Infrastructure, Your Code
 
-Every line of code the agent writes is produced inside a sandboxed environment running on a machine you configure and control. Your source code never leaves your infrastructure. The agent connects to your worker through your own network, using your own Claude subscription for the AI compute. You own the machine, you own the code, you own the bill.
+Every line of code the agent writes is produced inside an isolated environment running on a machine you configure and control. Your source code never leaves your infrastructure. The agent connects to your worker through your own network, using your own Claude subscription for the AI compute. You own the machine, you own the code, you own the bill.
 
 You can configure up to two worker machines, ordered by priority. If the primary worker is occupied with another task, the agent automatically routes to the secondary — no manual intervention, no waiting in a queue. Health checks confirm each worker is reachable before dispatching, so you know immediately if something is misconfigured rather than discovering it mid-task.
 
@@ -48,7 +48,7 @@ You can configure up to two worker machines, ordered by priority. If the primary
 
 The conversation between you and the agent does not end when you press submit. While a task is running, you can send it new instructions through the dashboard — the message is queued and delivered at the next safe pause. Realized you forgot to mention an edge case? Send it. Changed your mind about the approach? Say so. The agent picks up your message and adjusts course.
 
-After a pull request is open, the feedback loop shifts to where developers already work — the PR itself. Leave a review comment or mention the agent, and it detects the actionable feedback automatically. A follow-up task is created carrying forward the full context of the original work: the design, the code, the review thread. The agent does not start from scratch; it picks up where it left off.
+After a pull request is open, the feedback loop shifts to where developers already work — the PR itself. Leave a review comment, and the agent detects the actionable feedback automatically. The comment is forwarded to the existing task — queued if the task is still running, or used to resume it if it has finished. The agent picks up where it left off with the full context of the original work intact.
 
 If a task fails or produces a result that is close but not quite right, you can retry it with additional guidance. Failed tasks observe a one-minute cooling period — long enough to prevent runaway retries, short enough to keep you moving. Completed tasks can be resumed with new context, pushing further without losing what was already built.
 
@@ -58,7 +58,7 @@ If a task fails or produces a result that is close but not quite right, you can 
 
 While the agent works, a live terminal view in the web dashboard streams its output as it happens — every file it reads, every test it runs, every decision it makes. You are not waiting for an email that says "done." You are watching the work unfold.
 
-Each task is tracked from the moment you submit it through completion. Per-task metrics break down exactly what happened: processing time, memory used, AI tokens consumed, and how time was split between thinking and acting. A timeline view on the dashboard shows every pull request event — new versions pushed, reviews submitted, comments left — with links back to the source. Logs are retained for ninety days.
+Each task is tracked from the moment you submit it through completion. Per-task metrics break down exactly what happened: processing time, memory used, AI tokens consumed, and how time was split across API calls, tool execution, and overhead. A timeline view on the dashboard shows every pull request event — new versions pushed, reviews submitted, comments left — with links back to the source. Logs are retained for ninety days.
 
 **Example:** A task has been running for twenty minutes and you want to know if it is stuck or making progress. You open the dashboard, see the live log stream showing the agent is midway through running the test suite, and close the tab. No guessing, no pinging, no waiting.
 
@@ -68,7 +68,7 @@ The agent enforces per-user limits on concurrent tasks (three at a time), hourly
 
 Tasks that go silent for thirty minutes are automatically interrupted, so a hung process does not burn through your budget overnight. WhatsApp notifications arrive when a task starts, finishes, or fails — each with a link to the pull request or a one-tap button to cancel. You stay informed without checking a dashboard.
 
-**Example:** You submit a task before bed. The agent finishes at 2 a.m. and sends a WhatsApp notification with a link to the pull request. When you wake up, you tap the link, review the PR, and merge it before breakfast. If the task had failed, you would have seen that notification too — with a button to retry or cancel, valid for fifteen minutes.
+**Example:** You submit a task before bed. The agent finishes at 2 a.m. and sends a WhatsApp notification with a link to the pull request. When you wake up, you tap the link, review the PR, and merge it before breakfast. If the task had failed, you would have seen that notification too — and you can cancel any running task with a single tap from the start notification.
 
 ## Getting Started
 
@@ -78,7 +78,7 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 
 - **Design before code** — You approve the plan before a single line is written, so no compute is wasted on wrong assumptions
 - **Your machines, your code** — Source code stays on infrastructure you own and control, using your own Claude subscription
-- **Responds to PR feedback** — Review comments on the pull request trigger automatic follow-up tasks that carry forward the full context
+- **Responds to PR feedback** — Review comments on the pull request are forwarded to the agent, which picks up where it left off with full context
 - **Submit from anywhere** — WhatsApp voice note, typed message, or web dashboard, every path leads to the same workflow
 - **Predictable spend** — Per-user limits on concurrency, hourly rate, daily and monthly cost, enforced before the work begins
 - **Always watching** — Live log streaming, per-task metrics, and WhatsApp notifications mean you know what is happening without checking

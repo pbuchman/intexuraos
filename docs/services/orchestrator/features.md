@@ -8,7 +8,7 @@ Every AI coding agent on the market asks for the same thing: send us your code. 
 
 The workaround is obvious in theory: run the agent on your own machine. But anyone who has tried knows what follows. You need isolated environments so concurrent tasks do not corrupt each other. You need credential management that does not leave API keys sitting in plaintext. You need crash recovery, because the spare server under the desk will eventually lose power, and a half-finished pull request should not become an orphan. You need log streaming, because an autonomous agent working in silence is an autonomous agent you cannot trust. Each of these problems is solvable individually. Solving all of them together, reliably, on hardware you manage yourself — that is the work the orchestrator eliminates.
 
-The result is a system where the only data that leaves your network is task logs and metrics. Your source code stays on your hardware. Your infrastructure stays under your control. The platform sees an endpoint, not your codebase.
+The result is a system where your source code never leaves your network. The orchestrator sends task status, logs, and performance metrics to the platform. AI inference calls go directly from your machine to the model provider. Your infrastructure stays under your control. The platform sees an endpoint, not your codebase.
 
 ## Use Case: A Spare Server Becomes a Development Team
 
@@ -35,11 +35,11 @@ You can run one orchestrator or several, each on different hardware, each in a d
 
 ### Isolate Every Task Automatically
 
-When a task arrives, the orchestrator creates a dedicated copy of the repository on its own branch. It then spawns a Docker container locked to that workspace — each container runs with the minimum permissions needed to do its job and cannot reach outside its own workspace or modify the host machine. Two tasks running simultaneously never see each other's files, credentials, or output. The default capacity is two concurrent tasks, configurable based on your hardware.
+When a task arrives, the orchestrator creates a dedicated copy of the repository on its own branch. It then spawns a Docker container locked to that workspace — each container runs with restricted capabilities and cannot reach outside its own workspace or modify the host machine. Two tasks running simultaneously never see each other's files, credentials, or output. The default capacity is two concurrent tasks, configurable based on your hardware.
 
 A sensitive file guard scans every commit for credential patterns — over twenty rules covering environment files, certificates, private keys, infrastructure state, and more. If a worker commits something it should not, the guard reverts the file before results are pushed to your repository.
 
-**Example:** Two developers file issues at the same time — one for a payment integration, another for a dashboard redesign. The orchestrator runs both concurrently in separate containers. Each gets 8GB of memory, four CPUs, and its own mounted workspace. The payment task's API keys are never visible to the dashboard task. Neither worker can interfere with the other's branch.
+**Example:** Two developers file issues at the same time — one for a payment integration, another for a dashboard redesign. The orchestrator runs both concurrently in separate containers, each with its own mounted workspace and credentials. The payment task's API keys are never visible to the dashboard task. Neither worker can interfere with the other's branch.
 
 ### Verify Completion Independently
 
@@ -55,7 +55,7 @@ Logs stream back to the platform as they happen, flushed every three seconds, so
 
 A heartbeat pings the platform every ten minutes. If the orchestrator goes silent, the platform knows immediately rather than waiting for a timeout. No stalled task occupies capacity without someone noticing.
 
-**Example:** A team lead watches the orchestrator work through a complex refactoring task. Forty minutes in, she notices the worker is heading down the wrong path. She sends a mid-task message with a clarification, which the orchestrator queues for delivery. The worker incorporates the feedback in its next step. Without real-time visibility, she would have discovered the problem only after reviewing a flawed pull request.
+**Example:** A team lead watches the orchestrator work through a complex refactoring task. Forty minutes in, she notices the worker is heading down the wrong path. She sends a mid-task message with a clarification, which the orchestrator queues and delivers when the current attempt finishes — triggering a follow-up with her feedback incorporated. Without real-time visibility, she would have discovered the problem only after reviewing a flawed pull request.
 
 ### Split Design From Execution
 
@@ -79,7 +79,7 @@ Install the orchestrator on any Unix machine with Docker, set up a Cloudflare tu
 
 ## Key Benefits
 
-- **Infrastructure sovereignty** — Your source code never leaves your network; the only outbound data is task logs and metrics
+- **Infrastructure sovereignty** — Your source code never leaves your network; outbound data is limited to task status, logs, and performance metrics
 - **Location independence** — Any Unix machine with Docker becomes a worker station, connected through a single outbound tunnel
 - **Concurrent isolation** — Each task gets its own branch, container, credentials, and resource limits with no cross-task visibility
 - **Independent verification** — Completion is confirmed by a fixed checklist and an independent AI review, not worker self-reporting

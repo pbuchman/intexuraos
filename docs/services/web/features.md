@@ -68,7 +68,7 @@ A floating chat assistant is available on every page. It connects to an AI assis
 
 The web app is a Progressive Web App. On Android and iOS, you install it to your home screen and it runs in standalone mode — no browser bar, no tabs, just the app. It auto-updates silently, and the shell loads even when your connection drops momentarily. The share target integration means you can share a link or text from any app on your phone directly into IntexuraOS, the same way you would share to Messages or Email.
 
-**Example:** You are reading an article on your phone and spot a competitor announcement worth tracking. You hit the share button, select IntexuraOS from the share sheet, and the link flows into the system. Later, when you open the web app, you see it in your bookmarks — already there, no manual copy-paste required.
+**Example:** You are reading an article on your phone and spot a competitor announcement worth tracking. You hit the share button, select IntexuraOS from the share sheet, and the link flows into the system as a command in your inbox — ready for the system to process. No manual copy-paste required.
 
 ## Getting Started
 
