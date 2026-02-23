@@ -48,9 +48,13 @@ Issues automatically sort into sections based on Linear state names. Parent issu
 
 **Example:** A parent issue "Implement authentication" appears in "In Progress" with its child issues ("Add OAuth provider", "Write tests") nested below.
 
+### Assignee-Aware Dashboard
+
+The dashboard displays assignee information on each issue card. Assignee data is preserved during full sync (fetched from the Linear API alongside each issue) and captured from webhook payloads during real-time sync. The `listIssues` response mapper includes assignee ID and name for frontend display.
+
 ### Fast Local-First Issue Listing
 
-The dashboard reads from a local Firestore cache populated by webhooks and full sync — not from the Linear API at request time. This means the board loads instantly, even under poor connectivity, and handles large workspaces without rate limiting concerns.
+The dashboard reads from a local Firestore cache populated by webhooks and full sync -- not from the Linear API at request time. This means the board loads instantly, even under poor connectivity, and handles large workspaces without rate limiting concerns.
 
 ### Issue Detail and Comments
 
@@ -76,9 +80,15 @@ Code agents create Linear issues and update workflow states through internal ser
 
 Failed AI extractions are saved for manual review. Users can retry creation from the original text via `POST /linear/failed-issues/:id/retry`, which re-attempts the Linear API call using the user's real team ID and cleans up on success. Failed issues can also be dismissed via `DELETE /linear/failed-issues/:id`.
 
+### Auto-Trigger Code Tasks on Assignment
+
+When a Linear issue is assigned for the first time (from no assignee to an assignee), Linear Agent automatically triggers a code task to enrich the issue. The auto-trigger fires only when the issue is in an "unstarted" state and does not already carry a "Code Task" label, preventing duplicate automation. The triggered task analyzes the issue, enriches the description with requirements and acceptance criteria, and marks it ready for execution.
+
+**Example:** A developer assigns themselves to "INT-600: Add dark mode support." Linear Agent detects the assignment via webhook, triggers a code task that enriches the issue with detailed requirements, a test plan, and acceptance criteria -- all before the developer starts coding.
+
 ### Idempotent Processing
 
-Send the same message twice? No duplicate issues. Linear Agent tracks processed actions and returns the existing issue URL instead of creating duplicates.
+Send the same message twice? No duplicate issues. Linear Agent tracks processed actions and returns the existing issue URL instead of creating duplicates. Webhook-triggered code tasks use unique action IDs derived from the issue identifier and webhook timestamp to prevent duplicate triggers.
 
 **Example:** Network hiccup causes a retry. Instead of two identical issues, you get the same issue link both times.
 
@@ -142,6 +152,8 @@ An AI code agent working on a task needs to break it into subtasks:
 | Programmatic Access  | Internal API for code agents to manage issues              |
 | Issue Validation     | Verify issue existence and team ownership before use       |
 | AI Title Generation  | LLM-powered title generation with retry-on-failure         |
+| Auto-Trigger on Assign | Assigning an issue triggers automatic code task enrichment |
+| Assignee Visibility  | Assignee names appear on dashboard issue cards             |
 
 ## Limitations
 

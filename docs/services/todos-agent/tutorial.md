@@ -1,4 +1,4 @@
-# Todos Agent — Tutorial
+# Todos Agent -- Tutorial
 
 > **Time:** 20-30 minutes
 > **Prerequisites:** Node.js 22+, GCP project access, Auth0 access token
@@ -24,7 +24,7 @@ Before starting, ensure you have:
 - [ ] Access to the IntexuraOS project
 - [ ] Auth0 device code flow for access token
 - [ ] Basic understanding of TypeScript/Node.js
-- [ ] todos-agent service running locally or deployed
+- [ ] todos-agent service running locally (port 8123) or deployed
 
 ---
 
@@ -35,7 +35,7 @@ Let's start with the simplest possible interaction.
 ### Step 1.1: Make Your First Request
 
 ```bash
-curl -X POST https://todos-agent.intexuraos.com/todos \
+curl -X POST http://localhost:8123/todos \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -82,28 +82,35 @@ You created a todo. The service assigned a unique ID, set the status to `pending
 ### Step 2.1: List All Your Todos
 
 ```bash
-curl "https://todos-agent.intexuraos.com/todos" \
+curl "http://localhost:8123/todos" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 ### Step 2.2: Filter by Status
 
 ```bash
-curl "https://todos-agent.intexuraos.com/todos?status=pending" \
+curl "http://localhost:8123/todos?status=pending" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 ### Step 2.3: Filter by Priority
 
 ```bash
-curl "https://todos-agent.intexuraos.com/todos?priority=high" \
+curl "http://localhost:8123/todos?priority=high" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 ### Step 2.4: Filter by Tags
 
 ```bash
-curl "https://todos-agent.intexuraos.com/todos?tags=work,urgent" \
+curl "http://localhost:8123/todos?tags=work,urgent" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### Step 2.5: Filter by Archived Status
+
+```bash
+curl "http://localhost:8123/todos?archived=false" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -118,7 +125,7 @@ Now let's create a todo with sub-items.
 ### Step 3.1: Create with Pre-defined Items
 
 ```bash
-curl -X POST https://todos-agent.intexuraos.com/todos \
+curl -X POST http://localhost:8123/todos \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -141,7 +148,7 @@ curl -X POST https://todos-agent.intexuraos.com/todos \
 ### Step 3.2: Add an Item to Existing Todo
 
 ```bash
-curl -X POST https://todos-agent.intexuraos.com/todos/todo_abc123/items \
+curl -X POST http://localhost:8123/todos/TODO_ID/items \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -159,7 +166,7 @@ curl -X POST https://todos-agent.intexuraos.com/todos/todo_abc123/items \
 ### Step 4.1: Update an Item's Status
 
 ```bash
-curl -X PATCH https://todos-agent.intexuraos.com/todos/todo_abc123/items/item_456 \
+curl -X PATCH http://localhost:8123/todos/TODO_ID/items/ITEM_ID \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -167,14 +174,16 @@ curl -X PATCH https://todos-agent.intexuraos.com/todos/todo_abc123/items/item_45
   }'
 ```
 
+**Note:** When all items in a todo are marked completed, the todo automatically transitions to `completed` status. When some items are completed but not all, the todo transitions to `in_progress`.
+
 ### Step 4.2: Reorder Items
 
 ```bash
-curl -X POST https://todos-agent.intexuraos.com/todos/todo_abc123/items/reorder \
+curl -X POST http://localhost:8123/todos/TODO_ID/items/reorder \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "itemIds": ["item_456", "item_789", "item_123"]
+    "itemIds": ["ITEM_3", "ITEM_1", "ITEM_2"]
   }'
 ```
 
@@ -183,7 +192,7 @@ curl -X POST https://todos-agent.intexuraos.com/todos/todo_abc123/items/reorder 
 ### Step 4.3: Delete an Item
 
 ```bash
-curl -X DELETE https://todos-agent.intexuraos.com/todos/todo_abc123/items/item_456 \
+curl -X DELETE http://localhost:8123/todos/TODO_ID/items/ITEM_ID \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -196,7 +205,7 @@ curl -X DELETE https://todos-agent.intexuraos.com/todos/todo_abc123/items/item_4
 ### Step 5.1: Update a Todo
 
 ```bash
-curl -X PATCH https://todos-agent.intexuraos.com/todos/todo_abc123 \
+curl -X PATCH http://localhost:8123/todos/TODO_ID \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -204,28 +213,28 @@ curl -X PATCH https://todos-agent.intexuraos.com/todos/todo_abc123 \
   }'
 ```
 
-### Step 5.2: Archive a Completed Todo
+### Step 5.2: Cancel a Todo
 
 ```bash
-curl -X POST https://todos-agent.intexuraos.com/todos/todo_abc123/archive \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-**Note:** Only completed or cancelled todos can be archived. You'll get a 422 error if you try to archive a pending todo.
-
-### Step 5.3: Cancel a Todo
-
-```bash
-curl -X POST https://todos-agent.intexuraos.com/todos/todo_abc123/cancel \
+curl -X POST http://localhost:8123/todos/TODO_ID/cancel \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 **Note:** Cannot cancel already completed todos.
 
+### Step 5.3: Archive a Completed or Cancelled Todo
+
+```bash
+curl -X POST http://localhost:8123/todos/TODO_ID/archive \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Note:** Only completed or cancelled todos can be archived.
+
 ### Step 5.4: Unarchive a Todo
 
 ```bash
-curl -X POST https://todos-agent.intexuraos.com/todos/todo_abc123/unarchive \
+curl -X POST http://localhost:8123/todos/TODO_ID/unarchive \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -237,13 +246,14 @@ curl -X POST https://todos-agent.intexuraos.com/todos/todo_abc123/unarchive \
 
 ### Scenario: Natural Language to Structured Items
 
-When you create a todo with a detailed description, the AI extracts actionable items automatically.
+When a todo is created via the internal endpoint with a detailed description, the AI extracts actionable items automatically.
 
 ```bash
-curl -X POST https://todos-agent.intexuraos.com/todos \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+curl -X POST http://localhost:8123/internal/todos \
+  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
+    "userId": "YOUR_USER_ID",
     "title": "Weekly Planning",
     "description": "Plan my week: finish sales presentation by Wednesday, call dentist on Tuesday afternoon, review team updates on Friday morning",
     "tags": ["planning"],
@@ -257,7 +267,7 @@ curl -X POST https://todos-agent.intexuraos.com/todos \
 
 1. Todo created with `status: processing`
 2. Pub/Sub event triggers the AI extraction
-3. Your LLM (Gemini or GLM) parses the description
+3. Your LLM (Gemini 2.5 Flash or GLM-4.7) parses the description
 4. Items added: "Finish sales presentation", "Call dentist", "Review team updates"
 5. Due dates and priorities inferred from context
 6. Status changes to `pending`
@@ -266,7 +276,7 @@ curl -X POST https://todos-agent.intexuraos.com/todos \
 
 ```bash
 # Wait 2-3 seconds, then:
-curl "https://todos-agent.intexuraos.com/todos/todo_abc123" \
+curl "http://localhost:8123/todos/TODO_ID" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -274,14 +284,15 @@ curl "https://todos-agent.intexuraos.com/todos/todo_abc123" \
 
 ## Troubleshooting
 
-| Issue             | Symptom          | Solution                               |
-| ----------------- | ---------------- | -------------------------------------- |
-| Auth failed       | 401 Unauthorized | Check your access token is valid       |
-| Todo not found    | 404 error        | Verify the todo ID                     |
-| Invalid request   | 400 error        | Check required fields (title, tags)    |
-| Invalid operation | 422 error        | Todo already completed / wrong status  |
-| Archive failed    | 422 error        | Only completed/cancelled todos archive |
-| Cancel failed     | 422 error        | Cannot cancel already completed todos  |
+| Issue             | Symptom            | Solution                               |
+| ----------------- | ------------------ | -------------------------------------- |
+| Auth failed       | 401 Unauthorized   | Check your access token is valid       |
+| Todo not found    | 404 error          | Verify the todo ID                     |
+| Invalid request   | 400 error          | Check required fields (title, tags)    |
+| Invalid operation | 400 error          | Check status restrictions              |
+| Archive failed    | 400 error          | Only completed/cancelled todos archive |
+| Cancel failed     | 400 error          | Cannot cancel already completed todos  |
+| No extraction     | Items not added    | Check if user has LLM API key set      |
 
 ---
 
@@ -291,7 +302,7 @@ Now that you understand the basics:
 
 1. Explore the [Technical Reference](technical.md) for full API details
 2. Learn about the [AI item extraction](technical.md#ai-item-extraction) feature
-3. Check out [commands-agent](../commands-agent/features.md) for creating todos from natural language
+3. Check out [commands-agent](../commands-agent/features.md) for creating todos from natural language via WhatsApp
 
 ---
 
@@ -300,8 +311,8 @@ Now that you understand the basics:
 Test your understanding:
 
 1. **Easy:** Create a todo with 3 items and mark one as completed
-2. **Medium:** Create a todo, filter it by tag, update its priority, then archive it
-3. **Hard:** Create a todo with a complex description, wait for AI extraction, verify items
+2. **Medium:** Create a todo, filter it by tag, update its priority, then cancel and archive it
+3. **Hard:** Create a todo via the internal endpoint with a complex description, wait for AI extraction, verify items were created with priorities and due dates
 
 <details>
 <summary>Solutions</summary>
@@ -310,7 +321,7 @@ Test your understanding:
 
 ```bash
 # Create todo with items
-curl -X POST https://todos-agent.intexuraos.com/todos \
+curl -X POST http://localhost:8123/todos \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -327,17 +338,17 @@ curl -X POST https://todos-agent.intexuraos.com/todos \
   }'
 
 # Mark first item completed (use returned todo and item IDs)
-curl -X PATCH https://todos-agent.intexuraos.com/todos/TODO_ID/items/ITEM_ID \
+curl -X PATCH http://localhost:8123/todos/TODO_ID/items/ITEM_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "completed"}'
 ```
 
-### Exercise 2: Filter, Update, Archive
+### Exercise 2: Filter, Update, Cancel, Archive
 
 ```bash
 # Create with specific tag
-curl -X POST https://todos-agent.intexuraos.com/todos \
+curl -X POST http://localhost:8123/todos \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -349,35 +360,33 @@ curl -X POST https://todos-agent.intexuraos.com/todos \
   }'
 
 # Filter by tag
-curl "https://todos-agent.intexuraos.com/todos?tags=work" \
+curl "http://localhost:8123/todos?tags=work" \
   -H "Authorization: Bearer $TOKEN"
 
 # Update priority
-curl -X PATCH https://todos-agent.intexuraos.com/todos/TODO_ID \
+curl -X PATCH http://localhost:8123/todos/TODO_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"priority": "urgent"}'
 
-# Mark completed (required before archive)
-# Note: There's no direct "complete" endpoint, so update status
-curl -X PATCH https://todos-agent.intexuraos.com/todos/TODO_ID \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "completed"}'
+# Cancel the todo
+curl -X POST http://localhost:8123/todos/TODO_ID/cancel \
+  -H "Authorization: Bearer $TOKEN"
 
-# Archive
-curl -X POST https://todos-agent.intexuraos.com/todos/TODO_ID/archive \
+# Archive (now allowed since it is cancelled)
+curl -X POST http://localhost:8123/todos/TODO_ID/archive \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Exercise 3: AI Extraction
 
 ```bash
-# Create with complex description
-curl -X POST https://todos-agent.intexuraos.com/todos \
-  -H "Authorization: Bearer $TOKEN" \
+# Create with complex description via internal endpoint
+curl -X POST http://localhost:8123/internal/todos \
+  -H "X-Internal-Auth: $INTERNAL_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
+    "userId": "YOUR_USER_ID",
     "title": "Project Launch",
     "description": "Prepare for product launch next month: finalize marketing copy by end of week, schedule press release for Monday, coordinate with sales team on pricing, prepare demo video for launch day",
     "tags": ["work", "launch"],
@@ -388,7 +397,7 @@ curl -X POST https://todos-agent.intexuraos.com/todos \
 
 # Wait 3-5 seconds, then retrieve to see extracted items
 sleep 5
-curl "https://todos-agent.intexuraos.com/todos/TODO_ID" \
+curl "http://localhost:8123/todos/TODO_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

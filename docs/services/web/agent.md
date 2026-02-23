@@ -1,4 +1,4 @@
-# Web App — Agent Interface
+# Web App -- Agent Interface
 
 > **Machine-readable specification for AI agent integration**
 
@@ -31,6 +31,7 @@
 - Batch fetching with debouncing (500ms delay, 50 item limit)
 - Infinite scroll pagination
 - Action detail modals with configurable buttons
+- Standardized delete confirmations on all destructive actions
 
 ### Execute Action Buttons
 
@@ -112,6 +113,8 @@ interface Action {
 - State-to-column mapping
 - Sub-issues displayed indented under parent issues
 - Labels shown as colored badges
+- Assignee names displayed with emerald green badges
+- Null assignee values handled gracefully (no crash on missing data)
 - Real-time Firestore updates (no polling)
 - Issue creation and management
 - Full sync from Linear (`POST /linear/sync`)
@@ -125,10 +128,12 @@ interface Action {
 
 **Features:**
 
-- Task list with status filtering and cursor-based pagination
+- Task list with multi-status filtering (dispatched, running, designed, implemented, failed, interrupted, cancelled) and cursor-based pagination
+- Filter state persists in localStorage across page refreshes
 - Task creation with markdown editor, model selection (auto/opus/glm), and Linear issue linking (via `LinearIssueSelectorModal`)
 - Task detail view (`CodeTaskViewPage`) with:
   - Real-time `LogStream` component (Firestore-backed, custom CSS color-coded log lines)
+  - Collapsible tool output blocks: `[tool]` tagged lines and subsequent indented lines group into expandable sections, preventing long tool results from overwhelming the log
   - Two-phase design/execution flow with `DesignTaskBanner` (violet, links to design) and `ImplementationLinkBanner` (emerald, links to implementation)
   - Queue-based follow-up messaging without interrupting running tasks
   - Worker offline banner with worker name
@@ -138,13 +143,14 @@ interface Action {
 - Task retry, cancel, and conflict resolution (409 handling)
 - Worker status monitoring (health checks with color coding by health)
 - GitHub PR events aggregated view (`GET /code/github-pr-events`)
+- Standardized delete confirmations
 
 **Two-Phase Code Task Flow:**
 
 ```
-executionPhase: 'design'  → Shows DesignTaskBanner when implementationTaskId is set
-executionPhase: 'execution' → Banner label changes to indicate execution phase
-No executionPhase → Single-phase task, no banner
+executionPhase: 'design'  -> Shows ImplementationLinkBanner when implementationTaskId is set
+executionPhase: 'execution' -> Shows DesignTaskBanner linking back to design task
+No executionPhase -> Single-phase task, no banner
 ```
 
 ### GitHub PR Events
@@ -189,6 +195,7 @@ No executionPhase → Single-phase task, no banner
 - Connectivity testing per worker
 - Masked secret display (Cloudflare Access credentials, orchestrator secret)
 - Color-coded status badges by health (green/red/gray)
+- Secret fields use `autoComplete="new-password"` to prevent browser autofill
 
 ### Manage Saved Visualizations
 
@@ -217,6 +224,25 @@ No executionPhase → Single-phase task, no banner
 - **API Keys:** `GET /api-keys` from user-service
 - **Workers:** `GET /code/worker-settings` from code-agent
 
+### Persistent User Preferences
+
+**When to use:** Automatically applied across all pages
+
+**localStorage Keys:**
+
+| Key                          | Purpose                              | Scope            |
+| ---------------------------- | ------------------------------------ | ---------------- |
+| `inbox-active-tab`           | Active tab (actions/commands)        | InboxPage        |
+| `inbox-status-filter`        | Selected status filter               | InboxPage        |
+| `code-tasks-status-filter`   | Multi-status filter array            | CodeTasksPage    |
+| `sidebar-collapsed`          | Sidebar collapse state               | Global           |
+| `theme`                      | Light/dark/system preference         | Global           |
+| `intex-chat-session`         | Chat conversation history            | Chat             |
+| `intex-chat-panel-size`      | Chat panel dimensions                | Chat             |
+| `intex-guest-session-id`     | Guest session identifier             | Chat (guest)     |
+| `devbar-*`                   | DevBar tabs, height, logs, filters   | DevBar           |
+| `my-page-filter`             | Generic filter pattern (per page)    | Various pages    |
+
 ## Constraints
 
 **Do NOT:**
@@ -225,6 +251,7 @@ No executionPhase → Single-phase task, no banner
 - Bypass the `apiRequest` function for HTTP calls
 - Create routes without hash prefix (`/#/path` required for GCS hosting)
 - Use browser `pushState` for navigation (hash routing only)
+- Delete items without showing a confirmation dialog first
 
 **Requires:**
 
@@ -237,9 +264,9 @@ No executionPhase → Single-phase task, no banner
 ### Pattern 1: Real-Time Data Updates
 
 ```
-1. Component mounts → useXXXChanges hook creates Firestore listener
-2. Firestore detects change → Changed ID added to state
-3. Debounce timeout (500ms) expires → Batch API call
+1. Component mounts -> useXXXChanges hook creates Firestore listener
+2. Firestore detects change -> Changed ID added to state
+3. Debounce timeout (500ms) expires -> Batch API call
 4. Local state updated with fresh data
 5. UI re-renders with new data
 ```
@@ -258,7 +285,7 @@ No executionPhase → Single-phase task, no banner
 
 ```
 1. External link: https://app.intexuraos.com/#/inbox?action=abc123
-2. InboxPage mounts → Parses query parameter from hash
+2. InboxPage mounts -> Parses query parameter from hash
 3. Cleans URL immediately (prevents modal re-appearing)
 4. Checks local state for action
 5. If not found, fetches via batchGetActions
@@ -268,18 +295,38 @@ No executionPhase → Single-phase task, no banner
 ### Pattern 4: Code Task Two-Phase Navigation
 
 ```
-1. User views design task → DesignTaskBanner renders if implementationTaskId present
-2. User clicks banner link → Navigates to /code-tasks/:implementationTaskId
+1. User views design task -> ImplementationLinkBanner renders if implementationTaskId present
+2. User clicks banner link -> Navigates to /code-tasks/:implementationTaskId
 3. CodeTaskViewPage remounts (key={id}) for the implementation task
-4. Execution phase terminal shows live logs
+4. Execution phase log stream shows live progress
 ```
 
 ### Pattern 5: PR Events Lazy Loading
 
 ```
-1. PREventsPage loads → useGitHubPRSummaries fetches PR list (lightweight)
-2. User expands a PR group → useGitHubPREvents fetches detail for that PR only
+1. PREventsPage loads -> useGitHubPRSummaries fetches PR list (lightweight)
+2. User expands a PR group -> useGitHubPREvents fetches detail for that PR only
 3. Events render with HTML comment bodies and clickable GitHub links
+```
+
+### Pattern 6: Multi-Status Filtering with Persistence
+
+```
+1. User selects multiple status checkboxes on CodeTasksPage
+2. Filter state saved to localStorage immediately
+3. API call made with selected statuses as query parameters
+4. User navigates away and returns -> filter restored from localStorage
+5. Page renders with previously selected filters active
+```
+
+### Pattern 7: Collapsible Tool Output in Log Stream
+
+```
+1. LogStream receives log lines from Firestore
+2. Parser detects [tool] tagged line -> starts new collapsible group
+3. Subsequent indented lines (isBodyLine) added to group
+4. Group renders collapsed by default with "Show tool output" toggle
+5. User clicks toggle -> expands to show full tool result
 ```
 
 ## Error Handling
@@ -294,6 +341,8 @@ No executionPhase → Single-phase task, no banner
 | 429         | Rate Limited    | Show rate limit message                      |
 | 500+        | Server Error    | Show error banner with retry option          |
 | 502/503/504 | Gateway Error   | Show user-friendly non-JSON error message    |
+
+**Declarative Error Display:** `errorConfig.ts` maps error codes to icons, colors, titles, messages, and action buttons. `TaskErrorModal` renders error-code-specific modals (e.g., `WORKER_NOT_CONFIGURED` navigates to worker settings).
 
 ## Rate Limits
 

@@ -1,5 +1,10 @@
 # Chat Agent -- Technical Debt
 
+**Last Updated:** 2026-02-22
+**Analysis Run:** [2026-02-22 entry](../../documentation-runs.md)
+
+---
+
 ## Summary
 
 | Category               | Count | Severity |
@@ -8,6 +13,9 @@
 | Architectural concerns | 3     | Medium   |
 | Missing features       | 4     | Medium   |
 | Test coverage gaps     | 1     | Low      |
+| **Total**              | **13** | --      |
+
+---
 
 ## Future Plans
 
@@ -26,6 +34,8 @@ The `doc_embeddings` collection requires manual population. A pipeline to automa
 ### Streaming Responses
 
 The current implementation waits for the full LLM response before returning. Server-Sent Events (SSE) or WebSocket streaming would improve perceived latency for long responses.
+
+---
 
 ## Architectural Concerns
 
@@ -53,6 +63,8 @@ The `extractSuggestedAction` function uses a regex (`/\[ACTION:\s*(create_comman
 
 **Severity:** Medium -- action detection silently fails on format variations.
 
+---
+
 ## Code Smells
 
 ### Duplicate Firestore Data Extraction
@@ -69,15 +81,21 @@ The field extraction logic (reading `content`, `filePath`, `section`, `docType`,
 
 The entire `generate` method (lines 44-91) is wrapped in a v8 ignore block. This covers a significant amount of logic: prompt building, LLM calling, error handling, and action extraction. While the exemption reason is valid (LLM output-dependent paths tested through fakes), the block size is large.
 
+---
+
 ## Test Coverage Gaps
 
 ### chatClient.ts Real Integration
 
 The `chatClient.ts` adapter is largely covered by v8 ignore exemptions because its behavior depends on real LLM output format. Integration tests with recorded LLM responses (snapshot testing) would increase confidence without requiring live LLM calls.
 
+---
+
 ## TypeScript Issues
 
 No open TypeScript issues. The codebase uses strict mode with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
+
+---
 
 ## TODOs and FIXMEs
 
@@ -85,6 +103,8 @@ No open TypeScript issues. The codebase uses strict mode with `noUncheckedIndexe
 | ---- | ---- | ---- | ----------- |
 
 No TODO or FIXME comments found in the codebase.
+
+---
 
 ## v8 Ignore Exemptions
 
@@ -96,12 +116,16 @@ No TODO or FIXME comments found in the codebase.
 | `infra/llm/chatClient.ts`             | 128-133 | upstream   | String.replace branch depends on action being present       |
 | `domain/usecases/generateResponse.ts` | 226-228 | test-infra | Fallback impossible to trigger (split always returns array) |
 
+---
+
 ## SRP Violations (Files > 300 Lines)
 
 | File                                  | Lines | Concern                                                                            |
 | ------------------------------------- | ----- | ---------------------------------------------------------------------------------- |
 | `__tests__/fakes.fixture.ts`          | 317   | Contains 6 fake classes. Could split into per-class files if it grows.             |
 | `domain/usecases/generateResponse.ts` | 300   | At the threshold. Contains main use case + 4 helper functions. Acceptable for now. |
+
+---
 
 ## Resolved Issues
 
@@ -112,3 +136,11 @@ No TODO or FIXME comments found in the codebase.
 | `0f37ed41` | Shared LLM client across all users                    | Refactored to per-request client from user-service               |
 | `63170e4a` | Inconsistent GLM "free" terminology in LLM factory    | Removed; all clients now created via `createLlmClient` uniformly |
 | `c72b7c53` | Default LLM (GLM) had no Gemini fallback for platform | Switched default to Gemini 2.5 Flash; added Gemini platform key  |
+
+---
+
+## Related
+
+- [Features](features.md) -- User-facing documentation
+- [Technical](technical.md) -- Developer reference
+- [Documentation Run Log](../../documentation-runs.md)

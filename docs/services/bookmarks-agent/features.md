@@ -29,7 +29,7 @@ Links are analyzed by AI to generate concise summaries of the content. After sum
 
 Bookmarks are processed asynchronously through a three-stage pipeline: create, enrich (fetch metadata), and summarize (AI analysis). Each stage is decoupled via Pub/Sub, ensuring reliability and scalability. Transient failures (rate limits, timeouts, network errors) trigger automatic Pub/Sub retries with exponential backoff.
 
-**Example:** Bookmark creation returns immediately. Metadata fetching and AI summarization happen in the background, with WhatsApp notification on completion. If Crawl4AI returns HTTP 429, the summarization automatically retries.
+**Example:** Bookmark creation returns immediately. Metadata fetching and AI summarization happen in the background, with WhatsApp notification on completion. If the upstream service returns HTTP 429, the summarization automatically retries.
 
 ### Tag-Based Organization
 
@@ -42,6 +42,12 @@ Organize bookmarks with custom tags. Filter by tags, archived status, or process
 Prevents saving the same URL twice per user. If you try to bookmark an existing URL, you get the existing bookmark ID back.
 
 **Example:** Someone shares the same article in two group chats. You save it once, and the second attempt returns the existing bookmark without creating a duplicate.
+
+### Image Proxy for CORS Bypass
+
+External OpenGraph images are served through a built-in proxy, bypassing CORS restrictions so the web dashboard can display bookmark thumbnails without browser security errors.
+
+**Example:** A bookmarked page has an OG image hosted on a CDN that blocks cross-origin requests. The image proxy fetches and serves it with proper CORS headers.
 
 ## Use Cases
 
@@ -67,9 +73,10 @@ Prevents saving the same URL twice per user. If you try to bookmark an existing 
 - **Zero-friction capture** - Save links from WhatsApp without app-switching
 - **Rich metadata** - Title, description, images automatically extracted
 - **AI summaries** - Quick overview without visiting the page
-- **WhatsApp delivery** - Summaries sent directly to your chat (INT-210)
-- **Reliable processing** - Event-driven pipeline with automatic retry for transient failures (INT-198)
+- **WhatsApp delivery** - Summaries sent directly to your chat
+- **Reliable processing** - Event-driven pipeline with automatic retry for transient failures
 - **Tag-based filtering** - Organize by project, topic, or priority
+- **CORS-free images** - Built-in image proxy for seamless thumbnail display
 
 ## Limitations
 
