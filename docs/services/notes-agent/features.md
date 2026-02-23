@@ -20,18 +20,18 @@ At the end of the week, you open your notes, scan the most recently updated ones
 
 Notes-agent provides a simple, tag-organized home for text notes inside IntexuraOS. Create a note with a title, body, and any number of tags. Retrieve your full list -- sorted by most recently updated -- or pull up a specific note by ID. Edit the title, content, or tags whenever you need to. Delete what you no longer want.
 
-There is no formatting engine, no folder hierarchy, no collaboration layer. That is by design. This is a capture surface, not a document editor. The goal is speed: get the thought down, tag it, come back later.
+There is no formatting engine, no folder hierarchy, no collaboration layer. That is by design -- a notes service that tries to be a document editor ends up being neither. This is a capture surface: get the thought down, tag it, come back later.
 
-### Cross-Agent Note Creation
+### Notes That Write Themselves
 
-Other agents in the system can create notes on your behalf through an internal endpoint. When the actions-agent processes a voice command that should become a note, or when another service needs to preserve a piece of information for you, the note appears in your list automatically -- same tags, same structure, same place. You do not need to know which agent created it. It just shows up.
+Other agents in the system can create notes on your behalf. When you send a voice command via WhatsApp -- "save a note about the quarterly budget review" -- the actions-agent picks it up and a note appears in your list automatically, tagged and timestamped, without you lifting a finger. Any agent in IntexuraOS can do the same: preserve a finding, capture a result, store a reference. The more agents you use, the more your note store fills with things worth remembering -- even when you were not actively taking notes.
 
 ## Key Benefits
 
 - **Tag-based organization** -- Attach any tags to notes for lightweight grouping and retrieval
 - **Capture from anywhere** -- Create notes from the web dashboard, or let agents create them from WhatsApp and other channels
 - **Most-recent-first** -- Notes sorted by last update, so recent thoughts surface naturally
-- **Future integration point** -- A native store today, a bridge to external notes systems tomorrow
+- **Grows without effort** -- Every agent that creates a note adds to your collection, so the store fills with useful context even when you are not actively capturing
 
 ## Limitations
 

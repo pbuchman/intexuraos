@@ -35,11 +35,11 @@ You can also re-test stored keys at any time. Test results — pass or fail, wit
 
 ### Error Messages You Can Act On
 
-When a provider returns an error, the raw response is often opaque: a 429 status code with an organization ID and token math. The service parses errors from each provider individually and translates them into plain language. A rate limit message becomes "tokens: 85,000/90,000 used, need 10,000 more." A billing error becomes "Insufficient credits — add funds at the provider console." Critically, the parser checks for rate limits before checking for key errors, which prevents a common misdiagnosis where a temporary rate limit looks like a broken key.
+When a provider returns an error, the raw response is often opaque — a cryptic error code with an organization ID and token math that means nothing to a human. The service parses errors from each provider individually and translates them into plain language. A rate limit message becomes "tokens: 85,000/90,000 used, need 10,000 more." A billing error becomes "Insufficient credits — add funds at the provider console." Critically, the parser checks for rate limits before checking for key errors, which prevents a common misdiagnosis where a temporary rate limit looks like a broken key.
 
 ### Authentication Everywhere
 
-Login works across every surface the platform supports. The web dashboard uses Auth0 Universal Login. The command-line tool and mobile apps use a device code flow — you see a short code on screen, visit a URL on any device, enter the code, and you are authenticated without a browser redirect. Token refresh happens silently. A separate OAuth2-compatible endpoint exists for third-party integrations.
+Login works across every surface the platform supports. The web dashboard uses Auth0 Universal Login. No browser available? The command-line tool and mobile apps show you a short code on screen. You visit a URL on any device, enter the code, and you are authenticated — no redirect, no pop-up. Token refresh happens silently. A separate OAuth2-compatible endpoint exists for third-party integrations.
 
 Google OAuth connects your Google account for calendar access. Tokens are encrypted with the same AES-256-GCM encryption used for API keys, and the service refreshes them automatically within five minutes of expiry. Connect once, and the calendar-agent handles the rest.
 

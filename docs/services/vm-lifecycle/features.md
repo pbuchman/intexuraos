@@ -4,7 +4,7 @@ The infrastructure timekeeper for IntexuraOS — automated start and stop of the
 
 ## The Problem
 
-IntexuraOS runs its coding agents on a dedicated virtual machine. The orchestrator, the Claude Code workers, the entire pipeline that turns your requests into working code — all of it lives on a single cloud server. That server costs money every hour it runs, whether someone is using it or not.
+IntexuraOS runs its coding agents on a dedicated virtual machine. The orchestrator — the software that coordinates your coding tasks — the Claude Code workers, the entire pipeline that turns your requests into working code — all of it lives on a single cloud server. That server costs money every hour it runs, whether someone is using it or not.
 
 Leave it on overnight, and you are paying for an empty office. Leave it on over the weekend, and the bill compounds for 48 hours of silence. The obvious solution is to turn it off when nobody needs it. But "obvious" and "reliable" are different things.
 
@@ -36,13 +36,13 @@ This system waits until the application layer — the orchestrator and the codin
 
 The shutdown sequence is where most automated systems fail. A cron job that runs "stop server" at 11 PM does not care whether something important is happening. This system does.
 
-Before powering down, it notifies the orchestrator that a shutdown is coming. The orchestrator reports how many coding tasks are currently in progress. If the answer is zero, the machine stops immediately. If tasks are running, the system enters a grace period — polling every thirty seconds, waiting for active work to finish. A complex coding task that started at 10:45 PM gets the time it needs to complete cleanly.
+Before powering down, it notifies the orchestrator that a shutdown is coming. The orchestrator reports how many coding tasks are currently in progress. If the answer is zero, the machine stops immediately. If tasks are running, the system enters a ten-minute grace period — checking every thirty seconds, waiting for active work to finish. A complex coding task that started at 10:45 PM gets the time it needs to complete cleanly.
 
-If the orchestrator becomes unresponsive during this process — perhaps it crashed, perhaps the network hiked — the system waits a reasonable interval before proceeding with a forced shutdown. It does not wait forever, and it does not give up immediately. The balance between patience and pragmatism is deliberate.
+If the orchestrator becomes unresponsive during this process — perhaps it crashed, perhaps the network hiked — the system waits two minutes before proceeding with a forced shutdown. It does not wait forever, and it does not give up immediately. The balance between patience and pragmatism is deliberate.
 
 ### A Schedule You Do Not Manage
 
-The machine starts every weekday morning and stops every night. No cron jobs to maintain, no scripts to remember, no calendar reminders to set. The schedule runs on its own, and each operation is safe to repeat — calling start on a running, healthy machine simply confirms it is fine and returns. Calling stop on an already-stopped machine does nothing. There is no penalty for redundancy.
+The machine starts every weekday morning and stops every night — including weekends, so a machine left running on Saturday still powers down automatically. No cron jobs to maintain, no scripts to remember, no calendar reminders to set. The schedule runs on its own, and each operation is safe to repeat — calling start on a running, healthy machine simply confirms it is fine and returns. Calling stop on an already-stopped machine does nothing. There is no penalty for redundancy.
 
 ## Key Benefits
 

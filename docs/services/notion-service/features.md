@@ -26,7 +26,7 @@ Before the research-agent writes to a Notion page, it needs to know two things: 
 
 ### Clean Disconnection
 
-Removing the integration clears the stored token and any cached data. No orphaned credentials, no lingering state.
+Removing the integration marks the connection as inactive. The stored token is retained in case you reconnect, but no service will use it while the connection is off. Reconnecting later replaces the old token with a fresh one.
 
 ## Key Benefits
 
@@ -40,7 +40,7 @@ Removing the integration clears the stored token and any cached data. No orphane
 - **Manual token generation** — You must create the integration token in Notion's settings yourself; there is no OAuth flow
 - **No sync** — The service manages the connection lifecycle and validates export targets, but does not sync content between systems
 - **No page creation or browsing** — You point to an existing page; the service does not create pages or list your workspace contents
-- **Webhook events not yet processed** — The service accepts incoming Notion webhook payloads but does not act on them; processing is planned for a future release
+- **No automatic sync from Notion** — Changes made in Notion are not reflected in IntexuraOS automatically; the connection is one-directional for now
 - **Connection failures require manual reconnect** — If a token expires or is revoked, you must connect again with a new one
 
 ---
