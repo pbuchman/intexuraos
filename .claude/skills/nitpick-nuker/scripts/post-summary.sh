@@ -127,7 +127,7 @@ if [[ -f "$TEMPLATE_FILE" ]]; then
   COMMENT_BODY=$(cat "$TEMPLATE_FILE")
 else
   # Fallback template if file not found
-  COMMENT_BODY='## 🚀 Nitpick Nuker Report
+  COMMENT_BODY='## 😄 Nitpick Nuker Report
 
 **PR:** #${PR_NUMBER} | **Run:** ${TIMESTAMP} | **Commit:** `${COMMIT_SHA}`
 
@@ -144,7 +144,7 @@ ${FIXED_ROWS}
 ${SKIPPED_ROWS}
 
 ---
-*🚀 reactions added to all processed comments*'
+*😄 reactions added to all processed comments*'
 fi
 
 # Perform substitutions

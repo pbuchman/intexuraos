@@ -615,17 +615,16 @@ describe('formatLogChunk', () => {
       expect(result[0]?.text).toBe('[error] Task failed');
     });
 
-    it('success with result text (no truncation)', () => {
-      const longText = 'C'.repeat(350);
+    it('success with result text does not duplicate assistant output', () => {
       const json = JSON.stringify({
         type: 'result',
         duration_ms: 5000,
         num_turns: 2,
         total_cost_usd: 0.5,
-        result: longText
+        result: 'Final summary text'
       });
       const result = formatLogChunk(json, 0, ts());
-      expect(result[0]?.text).toBe(`[done] 5.0s, 2 turns, $0.500\n${longText}`);
+      expect(result[0]?.text).toBe('[done] 5.0s, 2 turns, $0.500');
     });
 
     it('success with empty result text', () => {

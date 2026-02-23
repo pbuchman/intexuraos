@@ -107,6 +107,55 @@ describe('TurnMetricsCollector', () => {
     });
   });
 
+  describe('readCpuCores', () => {
+    it('parses quota/period from cpu.max to compute cores', async () => {
+      mockReadFile.mockResolvedValueOnce('200000 100000\n');
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/test');
+
+      expect(result).toBe(2);
+      expect(mockReadFile).toHaveBeenCalledWith('/sys/fs/cgroup/test/cpu.max', 'utf-8');
+    });
+
+    it('returns fractional cores for partial quota', async () => {
+      mockReadFile.mockResolvedValueOnce('50000 100000\n');
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/test');
+
+      expect(result).toBe(0.5);
+    });
+
+    it('falls back to os.availableParallelism when cpu.max is "max"', async () => {
+      mockReadFile.mockResolvedValueOnce('max 100000\n');
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/test');
+
+      const os = await import('node:os');
+      const expected = os.availableParallelism();
+      expect(result).toBe(expected);
+    });
+
+    it('falls back to os.availableParallelism when file is missing', async () => {
+      mockReadFile.mockRejectedValueOnce(new Error('ENOENT'));
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/missing');
+
+      const os = await import('node:os');
+      const expected = os.availableParallelism();
+      expect(result).toBe(expected);
+    });
+
+    it('falls back to os.availableParallelism when content is malformed', async () => {
+      mockReadFile.mockResolvedValueOnce('garbage data\n');
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/test');
+
+      const os = await import('node:os');
+      const expected = os.availableParallelism();
+      expect(result).toBe(expected);
+    });
+  });
+
   describe('classifyTime', () => {
     const baseTime = new Date('2025-01-01T00:00:00Z').getTime();
 
@@ -426,9 +475,7 @@ describe('TurnMetricsCollector', () => {
         yield '/tmp/shared-creds/projects/test/current.jsonl';
       }
       mockGlob.mockReturnValueOnce(fakeGlob() as never);
-      mockReadFile
-        .mockResolvedValueOnce(oldFileContent)
-        .mockResolvedValueOnce(inWindowContent);
+      mockReadFile.mockResolvedValueOnce(oldFileContent).mockResolvedValueOnce(inWindowContent);
 
       const result = await sharedCollector.parseSessionJsonl('task1', {
         startedAt: '2025-06-01T09:00:00Z',
@@ -543,7 +590,9 @@ describe('TurnMetricsCollector', () => {
         // cpu.stat
         .mockResolvedValueOnce('usage_usec 3600000000\n')
         // memory.peak
-        .mockResolvedValueOnce('2147483648\n'); // 2 GB
+        .mockResolvedValueOnce('2147483648\n') // 2 GB
+        // cpu.max
+        .mockResolvedValueOnce('200000 100000\n'); // 2 cores
 
       // Mock glob for JSONL (empty)
       async function* emptyGlob(): AsyncGenerator<string> {
@@ -596,7 +645,10 @@ describe('TurnMetricsCollector', () => {
     });
 
     it('sets utilization and idle to 0 when wall time is 0', async () => {
-      mockReadFile.mockResolvedValueOnce('usage_usec 1000000\n').mockResolvedValueOnce('1048576\n'); // 1 MB
+      mockReadFile
+        .mockResolvedValueOnce('usage_usec 1000000\n')
+        .mockResolvedValueOnce('1048576\n') // 1 MB
+        .mockResolvedValueOnce('200000 100000\n'); // cpu.max
 
       async function* emptyGlob(): AsyncGenerator<string> {
         // yield nothing

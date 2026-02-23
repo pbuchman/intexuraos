@@ -18,6 +18,7 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 
 /**
  * Generate a deterministic webhook secret for a task.
@@ -192,7 +193,9 @@ export async function submitTaskFeedback(
   };
 
   // Step 5: Build follow-up prompt with feedback context
-  const feedbackPrompt = `${originalTask.prompt}
+  // Use sanitizedPrompt (what the original worker received) as the base, not the raw prompt,
+  // to avoid re-exposing credentials that were already stripped on the first dispatch.
+  const feedbackPrompt = `${originalTask.sanitizedPrompt}
 
 ---
 
@@ -233,7 +236,7 @@ ${feedback.trim()}
     id: followUpTaskId,
     userId,
     prompt: feedbackPrompt,
-    sanitizedPrompt: feedbackPrompt,
+    sanitizedPrompt: sanitizePrompt(feedbackPrompt),
     systemPromptHash: originalTask.systemPromptHash,
     workerType: originalTask.workerType,
     /* v8 ignore start -- ts-type: optional chaining with null fallback creates type narrowing branch @preserve */
@@ -294,6 +297,8 @@ ${feedback.trim()}
     }
 
     // Step 9: Add comment to Linear issue with feedback details
+    // Sanitize feedback before embedding in Linear comment to prevent secret leakage
+    const sanitizedFeedback = sanitizePrompt(feedback.trim());
     const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
     const commentBody = `🔄 **Follow-up task created** based on user feedback
 
@@ -301,7 +306,7 @@ ${feedback.trim()}
 **Follow-up task:** [${followUpTask.id}](${webUrl}/#/code-tasks/${followUpTask.id})
 
 **Feedback:**
-> ${feedback.trim().split('\n').join('\n> ')}`;
+> ${sanitizedFeedback.split('\n').join('\n> ')}`;
 
     const commentResult = await linearAgentClient.addComment({
       userId,

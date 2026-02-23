@@ -15,6 +15,7 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 
 /**
  * Generate a deterministic webhook secret for a task.
@@ -70,6 +71,8 @@ export type ProcessCodeActionErrorCode =
   | 'unauthorized'
   | 'duplicate_approval'
   | 'duplicate_action'
+  | 'duplicate_prompt'
+  | 'active_task_exists'
   | 'worker_unavailable'
   | 'worker_not_configured'
   | 'internal_error';
@@ -151,11 +154,14 @@ export async function processCodeAction(
     })),
   };
 
-  // Step 2: Ensure Linear issue exists and get labels/childCount
+  // Step 2: Sanitize prompt early so the raw prompt never leaks to external services
+  const sanitizedPromptText = sanitizePrompt(prompt);
+
+  // Step 3: Ensure Linear issue exists and get labels/childCount
   const issueResult = await linearIssueService.ensureIssueExists({
     userId,
     ...(linearIssueId !== undefined && { linearIssueId }),
-    taskPrompt: prompt,
+    taskPrompt: sanitizedPromptText,
   });
 
   // CRITICAL: If user provided an issue ID but we're in fallback mode, this is an error
@@ -188,11 +194,11 @@ export async function processCodeAction(
     'Linear issue processed'
   );
 
-  // Step 3: Pre-generate task ID and derive deterministic webhook secret
+  // Step 4: Pre-generate task ID and derive deterministic webhook secret
   const taskId = `task_${randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, taskId);
 
-  // Step 4: Create code task with deduplication
+  // Step 5: Create code task with deduplication
   const createInput: {
     id: string;
     userId: string;
@@ -216,7 +222,7 @@ export async function processCodeAction(
     id: taskId,
     userId,
     prompt,
-    sanitizedPrompt: prompt, // TODO: Add sanitization
+    sanitizedPrompt: sanitizedPromptText,
     systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system prompt
     workerType,
     /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
@@ -248,9 +254,18 @@ export async function processCodeAction(
   if (!createResult.ok) {
     // Handle deduplication errors specifically
     const error = createResult.error;
-    if (error.code === 'DUPLICATE_APPROVAL' || error.code === 'DUPLICATE_ACTION') {
+    if (
+      error.code === 'DUPLICATE_APPROVAL' ||
+      error.code === 'DUPLICATE_ACTION' ||
+      error.code === 'DUPLICATE_PROMPT' ||
+      error.code === 'ACTIVE_TASK_EXISTS'
+    ) {
       return err({
-        code: error.code.toLowerCase() as 'duplicate_approval' | 'duplicate_action',
+        code: error.code.toLowerCase() as
+          | 'duplicate_approval'
+          | 'duplicate_action'
+          | 'duplicate_prompt'
+          | 'active_task_exists',
         message: error.message,
         existingTaskId: error.existingTaskId,
       });
@@ -264,11 +279,11 @@ export async function processCodeAction(
 
   const task = createResult.value;
 
-  // Step 5: Build webhook URL for callback (use SERVICE_URL for local/E2E environments)
+  // Step 6: Build webhook URL for callback (use SERVICE_URL for local/E2E environments)
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
   const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
 
-  // Step 6: Dispatch to worker with per-user credentials
+  // Step 7: Dispatch to worker with per-user credentials
   const dispatchRequest: {
     taskId: string;
     linearIssueId?: string;
@@ -326,7 +341,7 @@ export async function processCodeAction(
 
   const dispatchValue = dispatchResult.value;
 
-  // Step 7: Record metrics for task submission
+  // Step 8: Record metrics for task submission
   const source = request.source ?? 'web';
   try {
     await deps.metricsClient.incrementTasksSubmitted(workerType, source);
@@ -334,7 +349,7 @@ export async function processCodeAction(
     logger.error({ error, taskId: task.id, workerType, source }, 'Failed to record task submission metric');
   }
 
-  // Step 8: Generate cancel nonce and send task started notification (INT-379)
+  // Step 9: Generate cancel nonce and send task started notification (INT-379)
   const cancelNonce = generateCancelNonce();
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
@@ -354,7 +369,7 @@ export async function processCodeAction(
     logger.warn({ taskId: task.id, error: updateResult.error }, 'Failed to update task with cancel nonce');
   }
 
-  // Step 9: Return success
+  // Step 10: Return success
   return ok({
     codeTaskId: task.id,
     resourceUrl: `/#/code-tasks/${task.id}`,

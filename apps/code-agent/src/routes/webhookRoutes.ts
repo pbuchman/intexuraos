@@ -8,6 +8,7 @@ import { validateWebhookSignature, validateOrchestratorSignature } from '../infr
 import { formatLogChunk, createFormatterState, type FormatterState } from '../domain/services/logFormatter.js';
 import { loadConfig } from '../config.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
+import { formatMetricsLogLines } from '../domain/formatters/metricsLogFormatter.js';
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // Per-task formatter state: persists tool_use_id→name mappings across HTTP requests
@@ -144,7 +145,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, logger } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, linearIssueService, logger } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -201,6 +202,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+
+        // Transition Linear issue to In Review when PR is created (best-effort)
+        /* v8 ignore start -- ts-type: optional property checks create type narrowing branches @preserve */
+        if (prNumber !== undefined && task.linearIssueId !== undefined) {
+          await linearIssueService.markInReview(task.userId, task.linearIssueId);
+        }
+        /* v8 ignore stop @preserve */
 
         // Notify actions-agent if task has actionId
         if (task.actionId) {
@@ -692,7 +700,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Step 3: Store metrics
-      const { turnMetricsRepo } = getServices();
+      const { turnMetricsRepo, logLineRepo } = getServices();
       const metrics = request.body;
 
       const storeResult = await turnMetricsRepo.store(
@@ -706,9 +714,26 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
+      // Step 4: Append formatted metrics as log lines (non-fatal)
+      const metricsLines = formatMetricsLogLines(metrics);
+      const now = Date.now();
+      const formattedLines = metricsLines.map((text, i) => ({
+        sequence: now * 1000 + i,
+        text,
+        timestamp: Timestamp.fromDate(new Date(metrics.timestamp)),
+      }));
+
+      const lineResult = await logLineRepo.storeBatch(metrics.taskId, formattedLines);
+      if (!lineResult.ok) {
+        request.log.warn(
+          { taskId: metrics.taskId, error: lineResult.error },
+          'Failed to store metrics log lines (non-fatal, metrics stored OK)'
+        );
+      }
+
       request.log.info(
-        { taskId: metrics.taskId, attempt: metrics.attempt },
-        'Turn metrics stored'
+        { taskId: metrics.taskId, attempt: metrics.attempt, logLines: metricsLines.length },
+        'Turn metrics stored with log lines'
       );
       // @allow-raw-send: internal webhook callback - orchestrator expects { received: true }
       return await reply.send({ received: true });

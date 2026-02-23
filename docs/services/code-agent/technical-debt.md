@@ -4,7 +4,7 @@
 
 | Category       | Count | Severity |
 | -------------- | ----- | -------- |
-| TODO comments  | 3     | Medium   |
+| TODO comments  | 2     | Medium   |
 | Code smells    | 4     | Low-Med  |
 | Future plans   | 2     | Medium   |
 | TS strictness  | 1     | Low      |
@@ -14,21 +14,7 @@
 
 ## TODO Comments
 
-### 1. Prompt sanitization not implemented
-
-**File:** `apps/code-agent/src/domain/usecases/processCodeAction.ts:214`
-
-```typescript
-sanitizedPrompt: prompt, // TODO: Add sanitization
-```
-
-The `sanitizedPrompt` field exists in the domain model but currently stores the raw prompt verbatim. The design doc references sanitization logic (lines 1130-1165) including removal of secrets, PII, and injection patterns. Without sanitization, prompts containing sensitive data pass through to workers unfiltered.
-
-**Impact:** Security risk -- prompts may contain credentials, API keys, or other sensitive data that should be stripped before reaching the worker.
-
-**Remediation:** Implement a `sanitizePrompt()` function that removes code blocks with known secret patterns, strips URLs with tokens, and validates against injection patterns.
-
-### 2. System prompt hash is a static placeholder
+### 1. System prompt hash is a static placeholder
 
 **File:** `apps/code-agent/src/domain/usecases/processCodeAction.ts:215`
 
@@ -48,7 +34,7 @@ The `systemPromptHash` field is designed for audit tracking -- recording which v
 
 **Remediation:** Compute SHA-256 of the actual system prompt template at startup and inject it via config.
 
-### 3. PR comment dispatch not yet wired
+### 2. PR comment dispatch not yet wired
 
 **File:** `apps/code-agent/src/routes/webhooks/github.ts:73`
 
@@ -183,3 +169,4 @@ Common exemption categories in this service:
 | —       | Turn-end metrics not collected                  | TurnMetrics subcollection + FirestoreTurnMetricsRepository     |
 | —       | No way to send mid-task messages or resume      | sendTaskMessage use case + POST /code/tasks/:id/messages       |
 | —       | PR list view requires O(events) query           | github-pr-summaries collection + GET /code/github-pr-summaries |
+| INT-612 | Prompt sanitization not implemented             | sanitizePrompt() utility applied at all prompt entry points    |

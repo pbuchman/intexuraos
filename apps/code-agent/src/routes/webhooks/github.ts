@@ -20,20 +20,52 @@ import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import type { Logger } from 'pino';
 
-const BOT_LOGIN = 'intexuraos-code-worker[bot]';
+const ALLOWED_BOTS = new Set([
+  'claude[bot]',
+  'chatgpt-codex-connector[bot]',
+]);
+
+/**
+ * Check if a sender is allowed to trigger dispatch.
+ * Allowed: whitelisted bots OR the repository owner (extracted from payload).
+ */
+function isAllowedSender(event: GitHubPREvent): boolean {
+  if (ALLOWED_BOTS.has(event.senderLogin)) return true;
+
+  const payload = event.payload;
+  if (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'repository' in payload
+  ) {
+    const repo = (payload as Record<string, unknown>)['repository'];
+    if (typeof repo === 'object' && repo !== null && 'owner' in repo) {
+      const owner = (repo as Record<string, unknown>)['owner'];
+      /* v8 ignore start -- ts-type: defensive narrowing of untyped webhook owner object @preserve */
+      if (typeof owner === 'object' && owner !== null && 'login' in owner) {
+        const login = (owner as Record<string, unknown>)['login'];
+        if (typeof login === 'string') {
+        /* v8 ignore stop @preserve */
+          return event.senderLogin === login;
+        }
+      }
+    }
+  }
+
+  return false;
+}
 
 /**
  * Dispatch a PR comment to the task that owns this PR via sendTaskMessage.
  * Fire-and-forget — webhook returns immediately.
- * Only filter: skip our own bot to prevent infinite loops.
- * The worker decides what deserves a response.
+ * Only whitelisted bots and the repository owner can trigger dispatch.
  */
 async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Promise<void> {
   try {
-    if (event.senderLogin === BOT_LOGIN) {
+    if (!isAllowedSender(event)) {
       logger.debug(
-        { repository: event.repository, prNumber: event.pullRequestNumber },
-        'Skipping own bot comment to prevent loop'
+        { senderLogin: event.senderLogin, repository: event.repository, prNumber: event.pullRequestNumber },
+        'Sender not in allowed list, skipping dispatch'
       );
       return;
     }
@@ -139,12 +171,55 @@ function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unkn
       'Instructions:',
       `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged`,
       `2. Fetch inline comments for this review: gh api /repos/${repository}/pulls/${String(prNumber)}/reviews/${reviewId}/comments`,
-      '3. React with eyes to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=eyes',
+      '3. React with rocket to each inline comment: gh api /repos/${repository}/pulls/comments/{id}/reactions -f content=rocket',
       '4. Read all comments and understand the full context',
       '5. For questions: investigate codebase, reply with answer',
       '6. For fix requests: make changes, commit, reply with reasoning',
       '7. Reply to each comment: gh api /repos/${repository}/pulls/${prNumber}/comments -f body="..." -F in_reply_to={id}',
-      '8. If review body exists, react with eyes and reply to the review as well',
+      '8. If review body exists, react with rocket and reply to the review as well',
+    ].join('\n');
+  }
+
+  if (event.action === 'edited' && ALLOWED_BOTS.has(event.senderLogin)) {
+    const commentId = extractId(payload, 'comment');
+    return [
+      `[PR Comment — Bot Review Edit] Comment updated on PR #${String(prNumber)} in ${repository}`,
+      `From: @${senderLogin}`,
+      `Comment ID: ${commentId}`,
+      'Type: issue_comment (edited)',
+      '',
+      'Full comment body:',
+      body ?? '(empty)',
+      '',
+      'Instructions:',
+      '1. CHECK IF REVIEW IS STILL IN PROGRESS:',
+      '   Look for indicators that the review is NOT finished:',
+      '   - Body contains "is working" / "working..." / spinner image',
+      '   - Body is very short (< 200 chars) with no findings',
+      '   - Checklist items are unchecked ([ ] without [x])',
+      '',
+      '   If the review appears to still be in progress → do nothing, stop here.',
+      '',
+      '2. IF REVIEW IS FINALIZED — process it as a code review:',
+      `   a. React with rocket: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=rocket`,
+      '   b. Read the full review body and extract EVERY finding/issue/suggestion',
+      '   c. For EACH finding, decide: FIX or SKIP',
+      '      - FIX: Clear actionable feedback, code change with clear intent, specific bug or gap',
+      '      - SKIP: Discussion/question, intentional design disagreement, out of PR scope, pure status report',
+      '   d. Post a response comment with a triage table:',
+      '      - One row per finding',
+      '      - Columns: # | Finding | Verdict (FIX/SKIP) | Reasoning | Action',
+      '      - For SKIP items: explain why in the Reasoning column',
+      '      - For FIX items: write "Will fix" in the Action column',
+      '',
+      '   ⚠ MANDATORY — DO NOT STOP AFTER POSTING THE TABLE ⚠',
+      '   e. IMMEDIATELY after posting the triage comment, implement ALL fixes',
+      '      marked as FIX in the table. This is not optional. Do not end your turn',
+      '      until every FIX item has been implemented, committed, and pushed.',
+      '      Skipping implementation after posting the table is a contract violation.',
+      '   f. After all fixes: commit, push, verify CI passes',
+      `   g. Update your triage comment (gh api PATCH /repos/${repository}/issues/comments/{your-comment-id})`,
+      '      to replace "Will fix" with the actual commit SHA for each implemented fix',
     ].join('\n');
   }
 
@@ -159,7 +234,7 @@ function buildDispatchMessage(event: GitHubPREvent, payload: Record<string, unkn
     body ?? '(empty)',
     '',
     'Instructions:',
-    `1. React with eyes to the comment: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=eyes`,
+    `1. React with rocket to the comment: gh api /repos/${repository}/issues/comments/${commentId}/reactions -f content=rocket`,
     '2. Read the comment and decide if it needs a response',
     `3. If actionable: investigate, then reply via gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
     '4. If not actionable (e.g. coverage report, "+1", bot noise): do nothing',
@@ -359,9 +434,15 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
+      const isEditedByAllowedBot =
+        parsedEvent.eventType === 'issue_comment' &&
+        parsedEvent.action === 'edited' &&
+        ALLOWED_BOTS.has(parsedEvent.senderLogin);
+
       const isActionablePRCommentEvent =
         (parsedEvent.eventType === 'issue_comment' && parsedEvent.action === 'created') ||
-        (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted');
+        (parsedEvent.eventType === 'pull_request_review' && parsedEvent.action === 'submitted') ||
+        isEditedByAllowedBot;
 
       if (isActionablePRCommentEvent) {
         void dispatchPRCommentToTask(savedEvent, logger);
