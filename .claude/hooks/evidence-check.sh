@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Ownership Violation Detector
-# Checks Claude's response for forbidden ownership-deflecting language
-# Forces Claude to rephrase if detected
+# Evidence Check Detector
+# Checks Claude's response for speculative/unverified language
+# Forces Claude to either provide proof or rephrase with "I haven't verified yet"
 
 set -euo pipefail
 
@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/log.sh
 source "${SCRIPT_DIR}/lib/log.sh"
 
-HOOK_NAME="ownership-check"
+HOOK_NAME="evidence-check"
 START_TIME=$(date +%s%N 2>/dev/null || date +%s)
 
 INPUT=$(cat)
@@ -24,10 +24,6 @@ fi
 
 # WORKAROUND: Brief delay to ensure transcript file is fully written to disk.
 # Stop hooks can trigger before the filesystem flush completes (race condition).
-# Ideally, Claude Code should either:
-#   1. Pass response text directly in hook input, or
-#   2. Ensure file is flushed before triggering Stop hooks
-# See: https://github.com/anthropics/claude-code/issues/XXX (if filed)
 sleep 0.1
 
 # Get text content from the CURRENT assistant message only
@@ -72,27 +68,25 @@ check_pattern() {
     done <<< "$stripped"
 
     if [[ "$found_violation" == "true" ]]; then
-      log_blocked "$HOOK_NAME" "ownership-violation" \
-          "Used forbidden language: '$pattern' ($description)" \
-          "State ownership explicitly with action"
+      log_blocked "$HOOK_NAME" "evidence-violation" \
+          "Used speculative language: '$pattern' ($description)" \
+          "Provide evidence or say 'I haven't verified yet'"
 
       VIOLATIONS+="• '$pattern' ($description)\n"
     fi
   fi
 }
 
-check_pattern "pre-existing" "deflecting to prior state"
-check_pattern "already broken" "deflecting blame to prior state"
-check_pattern "legacy issue" "deflecting to legacy as excuse"
-check_pattern "CI should now pass" "assuming CI passes without verification"
-check_pattern "unrelated to my changes" "deflecting blame to prior state"
+check_pattern "likely" "speculative without evidence"
+check_pattern "should work" "assuming without verification — prove it works, don't guess"
+check_pattern "probably" "speculative without evidence"
 
 # Output all violations at once
 if [[ -n "$VIOLATIONS" ]]; then
   cat << EOF
 {
   "decision": "block",
-  "reason": "⚠️ OWNERSHIP CHECK: Your response contains ownership-deflecting language:\n${VIOLATIONS}\nDon't piss the user off with excuses. Stop, rethink, and figure out how to fix it instead of explaining it away.\n\nTo continue, you MUST:\n1. Acknowledge the issue: 'I own [specific problem]'\n2. State your action: '[What I will do to fix it]'\n\nExample: 'I own the failing tests in auth-service. Fixing them now.'\n\nSee CLAUDE.md: Ownership Mindset (MANDATORY) section."
+  "reason": "⚠️ EVIDENCE CHECK: Your response contains speculative/unverified language:\n${VIOLATIONS}\nThe 'Evidence Before Assertions' rule requires proof for every claim. No proof = no claim.\n\nTo continue, you MUST either:\n1. Provide evidence: Run a command, show output, cite a file\n2. Rephrase honestly: 'I haven't verified yet, but my hypothesis is...'\n\nSee CLAUDE.md: Evidence Before Assertions section.\nWRONG: [make change] → 'This should work now.'\nRIGHT: [make change] → [run test] → 'Verified: [exact output]'"
 }
 EOF
 
