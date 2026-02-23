@@ -1,125 +1,68 @@
 # Calendar Agent
 
-Google Calendar integration with intelligent event preview and natural language scheduling.
+Say it, it's on your calendar. Voice-to-calendar scheduling that works with the Google Calendar you already use.
 
 ## The Problem
 
-Users need calendar management without leaving IntexuraOS:
+Scheduling should take less effort than the event itself. Instead, most calendar workflows demand that you stop what you are doing, open a calendar app, tap through a form, pick a date from a grid, set a start time, set an end time, type a title, and hit save. Seven steps for a dentist appointment. And if the thought occurs to you while you are talking, driving, or mid-conversation on WhatsApp, the appointment lives in your memory until you get around to entering it -- which, often enough, means it never gets entered at all.
 
-1. **Event creation** - Schedule meetings and appointments from natural language
-2. **Preview before commit** - See what will be created before approving
-3. **Availability checking** - Find free slots for scheduling
-4. **Multi-calendar support** - Work with primary and secondary calendars
+The friction is not in the calendar. It is in the distance between thinking "I need to schedule this" and the event actually appearing on your calendar.
+
+## Use Case: From Voice Note to Calendar Event
+
+You are in a WhatsApp conversation when you remember an appointment. You send a voice note: "Dentist next Tuesday at 3pm." That is the entire interaction on your end.
+
+Behind the scenes, the system interprets your message, extracts the event details, and generates a preview. When you open your dashboard, the preview is waiting: event title, date, start and end times, duration, and a brief explanation of how the system interpreted your words. You glance at it, confirm it looks right, and tap approve. The event appears in your Google Calendar. No form. No app-switching. No typing.
+
+If you had said "holiday on March 15th" without mentioning a time, the system would have recognized it as an all-day event and set it up accordingly. If you had included a location -- "Lunch at Cafe Moro, Friday noon" -- the location would appear in the preview too.
 
 ## How It Helps
 
-### Natural Language Event Creation
+### Preview Before You Commit
 
-Transform casual messages into calendar events with AI extraction.
+Nothing reaches your calendar without your approval. Every event the system extracts from your words is presented as a preview first. You see the title, the start and end times, the calculated duration in plain language ("1 hour 30 minutes"), whether it is an all-day event, and any location or description the system detected. You also see the reasoning -- how the AI interpreted what you said -- so there are no surprises. Approve it, and the event is created. The AI is only involved once, during the preview. When you approve, the event is created directly from the preview data, with no second round of interpretation.
 
-**Example:** User says "Dentist appointment next Tuesday at 2pm for 1 hour" via WhatsApp. The system extracts event details, generates a preview, and waits for approval before creating the Google Calendar event.
+### Any Language, Any Phrasing
 
-### Event Preview Generation
+The system does not require English or any particular sentence structure. It understands relative date expressions in any language. A Polish speaker can say "nastepny czwartek o dziesiatej" -- next Thursday at ten -- and the system resolves the correct date, because it knows what day of the week "today" is and can count forward in any language. The same applies to informal phrasing, abbreviations, and conversational shorthand. You describe the event the way you would tell a friend, and the system figures out the rest.
 
-See exactly what will be created before committing. The preview includes:
+### Your Existing Google Calendar
 
-- Event summary (title)
-- Start and end times
-- Duration calculation (e.g., "1 hour 30 minutes")
-- All-day event detection
-- Location and description
-- LLM reasoning for transparency
+Calendar-agent works with the Google Calendar you already use. Your primary calendar is the default, but it also supports secondary and shared calendars. There is no new calendar system to learn, no migration, no parallel universe of events. Check your availability across multiple calendars, list upcoming events, update or cancel existing ones -- all through the same interface, all synced to Google.
 
-**Example:** Before creating "Team standup tomorrow 10am", you see: Summary: "Team standup", Start: "2026-01-25T10:00:00", Duration: "30 minutes", reasoning explaining how it interpreted "tomorrow".
+### Availability at a Glance
 
-### Full CRUD Operations
+Need to find a free slot? Query availability across one or more calendars for any time range. The system returns the busy periods for each calendar, so you can identify open windows without flipping between tabs.
 
-Complete control over calendar events with standard REST operations.
+### Events with Attendees
 
-**Operations:**
+When you create or update an event, you can include attendee email addresses. Invitations are handled through Google Calendar's native system -- no separate notification mechanism.
 
-- `listEvents` - List with time range, search, pagination
-- `getEvent` - Get single event by ID
-- `createEvent` - Create new event
-- `updateEvent` - Patch existing event
-- `deleteEvent` - Remove event
-- `getFreeBusy` - Check availability across calendars
+### When the AI Cannot Figure It Out
 
-### Failed Event Recovery
-
-When extraction fails (ambiguous dates, missing info), events are saved for manual review rather than lost. Failed events can be retried directly if start/end times are present, or deleted to dismiss.
-
-**Example:** "Meeting sometime next week" is too vague for automatic creation. The failed event is stored with the LLM's reasoning, allowing you to manually complete the details later.
-
-### LLM Extraction Repair
-
-When the initial LLM extraction produces invalid JSON or fails schema validation, the service automatically sends a repair prompt with the error details. This self-healing mechanism reduces failed extractions without user intervention.
-
-**Example:** If the LLM returns malformed JSON like `{summary: "Meeting"...`, the repair prompt includes the raw response and the specific parse error, giving the LLM a second chance to produce valid output.
-
-### Improved Date Parsing
-
-Date context now includes the day of week alongside the date, enabling accurate interpretation of relative date expressions in any language (e.g., Polish "nastepny czwartek" for "next Thursday"). Date-only formats (YYYY-MM-DD) are supported for all-day events.
-
-## Use Cases
-
-### Voice-to-Calendar Flow (v2.3.0)
-
-1. User sends "Schedule dentist Tuesday 3pm" via WhatsApp
-2. commands-agent classifies as `calendar` action
-3. actions-agent creates action and publishes to `calendar-preview` topic
-4. calendar-agent generates preview asynchronously (pending -> ready)
-5. If LLM response is malformed, automatic repair attempt is made
-6. UI polls preview status and displays when ready
-7. User approves preview
-8. calendar-agent creates Google Calendar event using preview data (skips LLM)
-9. Preview is cleaned up after successful creation
-
-### Check Availability Flow
-
-1. User asks "When is everyone free next week?"
-2. Frontend calls getFreeBusy with team calendars
-3. Returns busy slots for each calendar
-4. UI shows available time windows
-
-### List Upcoming Events Flow
-
-1. Dashboard loads user's calendar
-2. Calls listEvents with timeMin=now
-3. Displays next 10 events
+Not every message contains enough information for an event. "Meeting sometime next week" is too vague -- there is no date, no time, no duration. Rather than discard these ambiguous requests, the system saves them to a review list. You can see what the AI attempted to extract, retry the ones that have enough detail, or dismiss the ones that do not. Nothing is lost to a silent failure.
 
 ## Key Benefits
 
-**Preview before commit** - See exactly what will be created with duration and all-day detection
-
-**Natural language** - No need for structured input, AI extracts event details
-
-**Failed event recovery** - Vague requests aren't lost, saved for manual completion with retry and delete support
-
-**Self-healing extraction** - Automatic repair prompt when LLM returns invalid output
-
-**Native Google Calendar** - Works directly with user's existing calendar
-
-**Multi-calendar** - Access to primary, secondary, and shared calendars
-
-**Non-blocking cleanup** - Preview deletion doesn't block event creation response
+- **Voice-to-calendar in seconds** -- Describe an event in natural language from WhatsApp and it appears as a preview, ready for approval
+- **Preview before commit** -- See exactly what will be created, including duration and all-day detection, before anything touches your calendar
+- **Multilingual understanding** -- Works with relative dates and natural phrasing in any language, including Polish
+- **All-day event detection** -- Mention a date without a time and the system creates an all-day event automatically
+- **Multi-calendar support** -- Access primary, secondary, and shared Google Calendars from one place
+- **Availability checking** -- Query free/busy status across multiple calendars for any time range
+- **Failed event recovery** -- Vague requests are saved for review, not silently discarded
+- **No new system to learn** -- Events live in your existing Google Calendar
 
 ## Limitations
 
-**Google only** - No support for Outlook, Apple Calendar, or other providers
-
-**OAuth required** - User must connect Google account via user-service
-
-**Rate limits** - Subject to Google Calendar API quotas
-
-**No recurring events** - Recurring event expansion not supported
-
-**No reminders** - Reminder management not exposed
-
-**No colors** - Event color customization not available
-
-**No attachments** - File attachments not supported
+- **Google Calendar only** -- No support for Outlook, Apple Calendar, or other providers
+- **Google account connection required** -- You must connect your Google account before calendar features work; a clear error explains what is missing if you have not
+- **Google API rate limits** -- Subject to Google Calendar API quotas for high-volume usage
+- **No recurring events** -- Single events only; recurring event patterns are not supported
+- **No reminders** -- Reminder configuration is not available through the agent
+- **No event colors** -- Color customization is not exposed
+- **No attachments** -- File attachments on events are not supported
 
 ---
 
-_Part of [IntexuraOS](../overview.md) - Schedule events with natural language._
+_Part of [IntexuraOS](../overview.md) -- Say it, it's on your calendar._

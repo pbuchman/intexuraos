@@ -1,101 +1,58 @@
 # Mobile Notifications Service
 
-Push notification gateway for mobile devices via signature-based authentication.
+Your phone's notifications, inside the platform -- captured, structured, and ready for analysis alongside everything else.
 
 ## The Problem
 
-Mobile apps need real-time notifications:
+Dozens of notifications arrive on your phone each day -- banking alerts, delivery updates, fitness milestones, app reminders. Each one is a data point about your life. But they scroll past in seconds, trapped in a notification shade with no search, no filtering, and no connection to anything else.
 
-1. **Authentication** - Devices need secure push token access
-2. **Filtering** - Users should control which notifications they receive
-3. **Multi-device** - Users have multiple devices (phone, tablet)
-4. **Webhook delivery** - Push providers send webhooks, not polling
+The real loss is not individual alerts. It is the pattern. When notifications from different apps never meet in one place, the connections stay invisible. These patterns only emerge when the data is collected, structured, and available for analysis.
+
+## Use Case: Turning Alerts into Insight
+
+You run a small business. Payment confirmations, supplier alerts, delivery updates, and scheduling reminders arrive on your phone all day. You connect your phone to the platform once, and from that point every notification flows into IntexuraOS automatically -- filterable by app, searchable by title, browsable in full.
+
+The real value emerges when you combine notifications with the platform's analysis tools. The AI queries your history directly -- pulling banking alerts alongside a sales spreadsheet, surfacing a correlation between supplier timing and cash flow dips you never noticed from the alerts alone.
 
 ## How It Helps
 
-Mobile-notifications-service manages the entire push flow:
+### One-Time Connection, Continuous Capture
 
-1. **Signature connections** - Cryptographic tokens for device auth
-2. **Notification storage** - Persistent notification history
-3. **Saved filters** - Per-user named filter presets (by app, device, source, title)
-4. **Webhooks** - Receive push from mobile devices via Tasker/Automate
-5. **Internal query** - Feed notifications to data-insights-agent
+Connect your phone once. The setup returns a secure credential shown exactly once -- store it, and every future notification arrives automatically. Creating a new connection replaces the previous one, keeping one active link per user.
 
-## Key Features
+### Automatic Deduplication
 
-**Connection Types:**
+Every notification is stored with its source, device, app name, title, content, and timestamp. Duplicates are silently ignored, keeping your history clean.
 
-- Signature-based (plaintext returned once, stored hashed)
-- Device labeling for identification
-- Single active signature per user — reconnecting replaces the previous signature
+### Flexible Filtering and Search
 
-**Notification Filters:**
+Filter by source or app, combine several at once, search by title with partial matching, and page through results at your own pace. Filter options populate automatically as notifications arrive -- no setup required.
 
-- Create named saved filters by app, device, source, or title
-- Filter options auto-populate from received notifications
-- Delete saved filters when no longer needed
+### Saved Filter Presets
 
-**Webhook Support:**
+Name and save filter combinations you use often -- "Banking Alerts" for your finance app, "Deliveries" for logistics notifications. Retrieve or delete them at any time.
 
-- Receive push from mobile devices (Tasker, Automate)
-- Verify signatures via SHA-256 hash comparison
-- Idempotency via device-provided `notification_id`
-- Route to Firestore for persistent storage
+### Platform-Wide Data Access
 
-## Use Cases
-
-### Connect device
-
-1. App requests connection with device label
-2. Service deletes any previous signature for this user (single active signature per user)
-3. Service generates new signature token, returns `{ connectionId, signature }`
-4. App stores plaintext token (shown only once)
-5. Service stores SHA-256 hash for verification
-6. App uses token as `X-Mobile-Notifications-Signature` header on webhooks
-
-### Receive notification
-
-1. Tasker/Automate POSTs to `/mobile-notifications/webhooks`
-2. SHA-256 signature verified against stored hash
-3. Duplicate check via `notification_id` idempotency key
-4. Notification stored in Firestore
-5. Available for listing and internal queries
-
-### Create saved filter
-
-1. User selects filter criteria (app, device, source, title)
-2. POST to `/notifications/filters/saved` with a name
-3. Filter stored in user's filters document
-4. Retrieve with GET `/notifications/filters`
+Notification data is not locked inside this service. The platform's analysis tools query your notifications directly, turning your alert stream into a data source for trend detection and visualization.
 
 ## Key Benefits
 
-**Secure** - SHA-256 hashed signatures, plaintext shown once
-
-**Multi-device** - Multiple connections per user
-
-**Idempotent** - Device-provided notification IDs prevent duplicates
-
-**Audit trail** - All notifications stored persistently in Firestore
-
-**Observable** - Full request/signature/result logging for webhook debugging; Dash0 OpenTelemetry tracing
+- **Passive capture** -- Once connected, notifications flow in with no daily action required
+- **Clean history** -- Duplicates detected and ignored automatically
+- **Multi-app filtering** -- Filter by any combination of app, source, or title keyword
+- **Saved presets** -- Name and save filter configurations you use repeatedly
+- **AI-ready data** -- Structured for direct use by the platform's analysis and visualization tools
+- **Ownership controls** -- Delete individual notifications at any time; only owners access their own data
 
 ## Limitations
 
-**Android-only** - Requires Tasker or Automate app on Android device
+- **Android only** -- Requires a compatible automation app on Android to forward notifications
+- **Credential shown once** -- Losing the connection credential requires reconnecting
+- **No push back to device** -- Captures notifications from your phone but does not send alerts to it
+- **Text-based only** -- Notification images, icons, and rich media are not captured
+- **Single active connection** -- Only one device credential is active per user at a time
 
-**Signature only shown once** - Lost tokens require reconnect
+---
 
-**No sound/badge customization** - Basic notification forwarding only
-
-**No push fanout** - Does not push back to devices; stores for polling/internal queries
-
-## Recent Changes
-
-- **Dash0 OpenTelemetry integration** - Added distributed tracing via `@intexuraos/infra-sentry` Dash0 integration; all service calls now emit traces
-- **Dev-mode log formatting** - Structured log output reformatted for PM2 readability in local development
-- **PM2 ecosystem migration** - Service startup switched to `pnpm --filter` with `start:local` scripts
-- **Response contract standardization** - All endpoints now use `reply.ok(data)` / `reply.fail(code, message)` for consistent `{ success, data }` or `{ success, error: { code, message } }` responses
-- **DELETE endpoint updated** - `DELETE /mobile-notifications/:notification_id` returns 200 with `{ success: true, data: {} }` instead of 204 No Content
-- **Sentry-enabled logging** - Migrated from direct `pino()` to `createAppLogger()` for automatic Sentry error reporting
-- **100% branch coverage** - Added v8 ignore exemptions for TypeScript-only safety branches
+_Part of [IntexuraOS](../overview.md) -- Your phone's notifications, structured and ready for analysis._
