@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildInsightRepairPrompt } from '../buildInsightRepairPrompt.js';
+import { DEFAULT_CHART_IDS } from '../parseInsightResponse.js';
 
 describe('buildInsightRepairPrompt', () => {
   it('builds repair prompt with all required sections', () => {
@@ -62,5 +63,35 @@ Third line`;
     const result = buildInsightRepairPrompt('prompt', 'response', errorMessage);
 
     expect(result).toContain(errorMessage);
+  });
+
+  describe('chart ID contract unification', () => {
+    it('uses DEFAULT_CHART_IDS when no validChartIds provided', () => {
+      const result = buildInsightRepairPrompt('prompt', 'response', 'error');
+
+      expect(result).toContain(`ChartType must be exactly one of: ${DEFAULT_CHART_IDS.join(', ')}`);
+    });
+
+    it('uses custom chart IDs when provided', () => {
+      const customIds = ['BAR', 'LINE', 'PIE'];
+      const result = buildInsightRepairPrompt('prompt', 'response', 'error', customIds);
+
+      expect(result).toContain('ChartType must be exactly one of: BAR, LINE, PIE');
+      expect(result).not.toContain('C1, C2, C3, C4, C5, C6');
+    });
+
+    it('includes custom chart IDs in INSIGHT format line', () => {
+      const customIds = ['X1', 'X2'];
+      const result = buildInsightRepairPrompt('prompt', 'response', 'error', customIds);
+
+      expect(result).toContain(`ChartType=<${customIds.join('|')}>`);
+    });
+
+    it('includes custom chart IDs in invalid output examples', () => {
+      const customIds = ['BAR', 'LINE'];
+      const result = buildInsightRepairPrompt('prompt', 'response', 'error', customIds);
+
+      expect(result).toContain(`must use ${customIds.join('|')} codes`);
+    });
   });
 });
