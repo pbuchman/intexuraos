@@ -56,14 +56,16 @@ describe('parseTransformedData', () => {
     expect(() => parseTransformedData(response)).toThrow(/Invalid data array/);
   });
 
-  it('throws when array is empty', () => {
+  it('accepts empty array when transformation yields zero rows', () => {
     const response = `
       DATA_START
       []
       DATA_END
     `;
 
-    expect(() => parseTransformedData(response)).toThrow(/cannot be empty/);
+    const result = parseTransformedData(response);
+
+    expect(result).toEqual([]);
   });
 
   it('throws when array item is not an object', () => {
