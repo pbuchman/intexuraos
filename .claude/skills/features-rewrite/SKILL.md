@@ -21,6 +21,7 @@ Rewrite a service's `features.md` using 1 Opus writer + 6 critic agents iteratin
 2. **`technical.md` is the sole fact source** — Every claim must be verifiable against it
 3. **Maximum 3 rounds** — Diminishing returns proven over 24 rewrites
 4. **User approves final output** — Never overwrite features.md without explicit approval
+5. **Log every run** — Append scores, outcome, and key corrections to `docs/features-rewrite-history.md`
 
 ## Invocation Detection
 
@@ -74,3 +75,4 @@ Execute: `workflows/rewrite-single.md`
 | `templates/writer-prompt.md` | Writer agent prompt with placeholders |
 | `templates/critic-*.md` | 6 critic prompts with placeholders |
 | `templates/scorecard.md` | Structured output format for all critics |
+| `docs/features-rewrite-history.md` | Rewrite audit trail — scores, outcomes, corrections per service |
