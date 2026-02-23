@@ -32,11 +32,12 @@ function formatCompletionMessage(task: CodeTask): string {
   const prLine = result.prUrl !== undefined && result.prUrl.length > 0
     ? `PR: ${result.prUrl}\n`
     : '';
+  const branchLine = result.branch !== undefined ? `Branch: ${result.branch}\n` : '';
+  const commitsLine = result.commits !== undefined ? `Commits: ${String(result.commits)}\n` : '';
+  const summaryLine = result.summary ?? '';
   return `✅ Code task completed: ${title}
 
-${prLine}Branch: ${result.branch}
-Commits: ${String(result.commits)}
-${result.summary}${fallbackWarning}`;
+${prLine}${branchLine}${commitsLine}${summaryLine}${fallbackWarning}`;
 }
 
 /**

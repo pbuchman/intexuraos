@@ -166,9 +166,9 @@ function taskToApiResponse(task: {
   followUpReason?: string;
   result?: {
     prUrl?: string;
-    branch: string;
-    commits: number;
-    summary: string;
+    branch?: string;
+    commits?: number;
+    summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
@@ -215,9 +215,9 @@ function taskToApiResponse(task: {
   followUpReason?: string;
   result?: {
     prUrl?: string;
-    branch: string;
-    commits: number;
-    summary: string;
+    branch?: string;
+    commits?: number;
+    summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
     rebaseResult?: 'success' | 'conflict' | 'skipped';
@@ -631,7 +631,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 partialWork: { type: 'boolean', nullable: true },
                 rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'], nullable: true },
               },
-              required: ['branch', 'commits', 'summary'],
+              required: [],
             },
             error: {
               type: 'object',

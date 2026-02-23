@@ -31,6 +31,7 @@ export interface CompletionVerifierVerdict {
   resumeInstruction: string;
   usedLlm: boolean;
   verifierFailure?: boolean;
+  extractedSummary?: string;
 }
 
 export interface CompletionVerifier {
@@ -57,6 +58,7 @@ const LLM_VERDICT_SCHEMA = z.object({
   reasons: z.array(z.string()),
   missingCriteria: z.array(z.string()),
   resumeInstruction: z.string(),
+  extractedSummary: z.string().optional(),
 });
 
 type LlmVerdict = z.infer<typeof LLM_VERDICT_SCHEMA>;
@@ -250,6 +252,10 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       resumeInstruction: parsedVerdict.resumeInstruction,
       usedLlm: true,
       verifierFailure: false,
+      ...(parsedVerdict.extractedSummary !== undefined &&
+        parsedVerdict.extractedSummary !== '' && {
+          extractedSummary: parsedVerdict.extractedSummary,
+        }),
     };
   }
 
@@ -330,14 +336,14 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
             '- Linear label set: <code-task|unclear>',
             '- Phase 2 ready: <yes|no>',
             '- Linear issue: <full Linear URL>',
-            '- Summary: <one short sentence>',
+            '- Summary: <3-5 sentences>',
           ].join('\n')
         : [
             'PHASE2_FINAL:',
             '- PR: <full GitHub PR URL>',
             '- CI evidence: pnpm run ci:tracked successful',
             '- Linear issue: <full Linear URL>',
-            '- Summary: <one short sentence>',
+            '- Summary: <3-5 sentences>',
           ].join('\n');
 
     const verifierPrompt = [
@@ -347,7 +353,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       'Do not judge code quality.',
       'If evidence is missing, return FAIL.',
       'Return JSON only with the exact schema:',
-      '{"passed":boolean,"confidence":number,"reasons":string[],"missingCriteria":string[],"resumeInstruction":string}',
+      '{"passed":boolean,"confidence":number,"reasons":string[],"missingCriteria":string[],"resumeInstruction":string,"extractedSummary":string}',
       '',
       `TASK ${input.taskId} ATTEMPT ${String(input.attempt)}/${String(input.maxAttempts)} PHASE ${input.phase}`,
       '',
@@ -370,6 +376,14 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       '',
       'Last logs excerpt:',
       terminalExcerpt,
+      '',
+      'Summary extraction:',
+      '- Always include "extractedSummary": a 3-5 sentence objective narrative of what happened.',
+      '- First, look for the "- Summary:" line in the assistant\'s PHASE_FINAL block and use its content.',
+      '- If that line is missing or contains only a few words, write your own summary based on the assistant messages and logs.',
+      '- Describe what was analyzed/implemented, key decisions, outcomes, and deliverables.',
+      '- If the task failed, describe what was attempted and where it failed.',
+      '- Keep it factual and third-person.',
       '',
       'Hard rules for this decision:',
       '- If deterministic signals show explicit Claude error, non-zero worker exit, or missing required final contract lines, return passed=false.',

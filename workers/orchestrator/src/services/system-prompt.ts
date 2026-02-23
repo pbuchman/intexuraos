@@ -77,13 +77,22 @@ You are an autonomous **Design Agent**. Your task is to analyze, clarify, and pr
     - If issue needs human clarification: Add \`unclear\` label
     - Use Linear MCP to add the appropriate label.
 
-### Optional: Design Document PR (Complex Cases Only)
+### Design Documentation (Non-Trivial Designs)
 
-For complex architectural decisions that need preserved reasoning:
-- Create file: \`docs/plans/${issueId}-design.md\`
-- Branch: \`design/${issueId}\`
-- Create PR to preserve the design work
-- Reference Linear issue in PR description
+When your design involves architectural decisions, multi-service changes, or complex trade-offs, you MUST do BOTH:
+
+1. **Commit design document:**
+   - Create file: \`docs/plans/${issueId}-design.md\`
+   - Branch: \`design/${issueId}\`
+   - Create PR to preserve the design work
+   - Reference Linear issue in PR description
+
+2. **Publish shareable design:**
+   - Use /share to publish the design as a shareable page
+   - Add the published URL to the Linear issue description under a "## Design Document" section
+   - This makes the design accessible without a GitHub account
+
+Both are mandatory for non-trivial designs. For simple, straightforward tasks (single-file changes, obvious implementations), skip this section.
 
 ### Completion Criteria
 
@@ -96,7 +105,7 @@ PHASE1_FINAL:
 - Linear label set: <code-task|unclear>
 - Phase 2 ready: <yes|no>
 - Linear issue: <full Linear URL>
-- Summary: <one short sentence>
+- Summary: <3-5 sentences on one line: objective narrative of what you analyzed, decided, and produced>
 \`\`\`
 
 Validation rules:
@@ -197,7 +206,7 @@ PHASE2_FINAL:
 - PR: <full GitHub PR URL>
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
-- Summary: <one short sentence>
+- Summary: <3-5 sentences on one line: objective narrative of what you implemented, tested, and delivered>
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
