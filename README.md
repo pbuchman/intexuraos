@@ -1,12 +1,7 @@
 <div align="center">
-  <img src="apps/web/public/branding/logo-primary-light.png" alt="IntexuraOS Logo" width="320">
-
-  <h2><a href="https://intexuraos.cloud/" target="_blank">intexuraos.cloud</a></h2>
-
-  <p>
-    <em>From Latin <strong>intexere</strong> (to weave together) + <strong>textura</strong> (structure)</em><br>
-    <strong>The software that builds itself.</strong>
-  </p>
+  <a href="https://intexuraos.cloud/" target="_blank">
+    <img src="docs/assets/screenshots/dashboard.png" alt="IntexuraOS Dashboard" width="100%">
+  </a>
 
   <p>
     <a href="https://github.com/pbuchman/intexuraos/actions"><img src="https://img.shields.io/github/actions/workflow/status/pbuchman/intexuraos/ci.yml?branch=main&label=CI&style=flat-square&logo=github" alt="CI Status"></a>
@@ -17,8 +12,6 @@
     <img src="https://img.shields.io/badge/Infrastructure-Terraform-623CE4?style=flat-square&logo=terraform&logoColor=white" alt="Terraform">
   </p>
 </div>
-
----
 
 > Send a WhatsApp message describing a bug. Walk away. Come back to a pull request — with tests passing, Linear issue updated, and a code review waiting.
 
@@ -138,11 +131,12 @@ Speak to WhatsApp. IntexuraOS classifies your intent, routes to the right agent,
 | _"Fix the login redirect on Safari"_               | Code Agent dispatches to worker, you get a PR         |
 | _"Research quantum computing with Claude and GPT"_ | Council of AI queries specified models, synthesizes   |
 | _"Schedule a sync with engineering Tuesday at 2"_  | Shows preview, waits for approval, then creates event |
-| _"Remind me to review the Q4 report by Friday"_    | Extracts task with priority and deadline              |
+| _"Add a task to review the Q4 report by Friday"_    | Extracts task with priority and deadline              |
 | _"Save this link about TypeScript 5.0"_            | AI-generated summary with metadata extraction         |
 | _"Create a Linear issue for the auth refactor"_    | Issue filed with AI-generated title and description   |
+| _"Remind me to follow up with the designer"_       | Reminder created with extracted deadline               |
 
-**7 action types**: research, todo, note, link, calendar, linear, code — classified by a 5-step decision tree that isolates URL keywords, detects explicit intent, and supports Polish language input.
+**8 action types**: research, todo, note, link, calendar, linear, reminder, code — classified by a 5-step decision tree that isolates URL keywords, detects explicit intent, and supports Polish language input.
 
 **Approval built in.** Reply "yes" or react with an emoji to approve calendar events, code tasks, or any action requiring confirmation. The system understands natural language intent — "looks good", "go ahead", "nah" all work.
 
@@ -175,7 +169,10 @@ graph TD
         CAL[calendar-agent]
         LIN3[linear-agent]
         BOOK[bookmarks-agent]
+        NOTE[notes-agent]
+        DATA[data-insights-agent]
         IMG[image-service]
+        WEBAG[web-agent]
     end
 
     subgraph "Worker Layer"
@@ -185,7 +182,7 @@ graph TD
 
     WA3 & WEB3 & CHAT --> CMD3 --> ACT
     GH --> CODE3
-    ACT --> RES & CODE3 & TODO & CAL & LIN3 & BOOK
+    ACT --> RES & CODE3 & TODO & CAL & LIN3 & BOOK & NOTE & DATA
     CODE3 --> ORCH3 --> CW3
 ```
 
@@ -273,21 +270,39 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 
 | Document                                                    | Description                                        |
 | ----------------------------------------------------------- | -------------------------------------------------- |
-| **[Platform Overview](docs/overview.md)**                   | Architecture, agents, and the self-building system |
-| **[Services Catalog](docs/services/index.md)**              | All 20 apps + 4 workers + 22 packages              |
+| **[Platform Overview](docs/overview.md)**                   | What IntexuraOS does — 24 agents, from voice notes to finished code |
+| **[Services Catalog](docs/services/index.md)**              | All 20 apps + 4 workers + 22 packages with technical details |
 | **[AI Architecture](docs/architecture/ai-architecture.md)** | Deep dive into 17 models across 5 providers        |
 | **[Setup Guide](docs/setup/01-gcp-project.md)**             | Step-by-step GCP and local environment setup       |
 
-### Key Services
+### All Services
 
-| Service                                                            | What It Does                                                                               |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| **[code-agent](docs/services/code-agent/features.md)**             | Autonomous code execution — task dispatch, deduplication, rate limiting, PR lifecycle      |
-| **[orchestrator](docs/services/orchestrator/features.md)**         | Docker-isolated Claude Code sessions with worktree parallelism and completion verification |
-| **[chat-agent](docs/services/chat-agent/features.md)**             | In-app AI assistant with RAG-powered documentation Q&A and guest access                    |
-| **[research-agent](docs/services/research-agent/features.md)**     | Multi-model research with parallel synthesis across 11 models                              |
-| **[commands-agent](docs/services/commands-agent/features.md)**     | 5-step intent classification with URL isolation and Polish support                         |
-| **[whatsapp-service](docs/services/whatsapp-service/features.md)** | Voice transcription, message handling, approval workflows                                  |
+| Service                                                                                          | What It Does                                                          |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| **[code-agent](docs/services/code-agent/features.md)**                                           | Autonomous code execution — design review, PR lifecycle, cost controls |
+| **[orchestrator](docs/services/orchestrator/features.md)**                                       | Container-isolated coding sessions with completion verification       |
+| **[claude-worker](docs/services/claude-worker/features.md)**                                     | Pre-configured coding environment inside each container               |
+| **[research-agent](docs/services/research-agent/features.md)**                                   | Multi-model research with conflict analysis across 5 providers        |
+| **[web-agent](docs/services/web-agent/features.md)**                                             | Reads web pages for other agents, preserving source language           |
+| **[commands-agent](docs/services/commands-agent/features.md)**                                   | 8-category intent classification with URL isolation and Polish support |
+| **[actions-agent](docs/services/actions-agent/features.md)**                                     | Confidence-based dispatch — auto-execute or ask for approval          |
+| **[whatsapp-service](docs/services/whatsapp-service/features.md)**                               | Voice transcription, message routing, interactive approval workflows   |
+| **[chat-agent](docs/services/chat-agent/features.md)**                                           | In-app AI assistant with RAG documentation Q&A and guest access        |
+| **[calendar-agent](docs/services/calendar-agent/features.md)**                                   | Voice-to-calendar with preview, multilingual dates, failed event recovery |
+| **[todos-agent](docs/services/todos-agent/features.md)**                                         | Auto-structured tasks with priority and deadline extraction            |
+| **[notes-agent](docs/services/notes-agent/features.md)**                                         | Tag-based notes from dashboard or voice commands                       |
+| **[bookmarks-agent](docs/services/bookmarks-agent/features.md)**                                 | Link saving with AI-generated summary and metadata extraction          |
+| **[linear-agent](docs/services/linear-agent/features.md)**                                       | Voice-to-issue with AI-generated titles and urgency mapping            |
+| **[data-insights-agent](docs/services/data-insights-agent/features.md)**                         | AI-powered data visualization from uploads and notification streams    |
+| **[mobile-notifications-service](docs/services/mobile-notifications-service/features.md)**       | Android notification capture with filtering and pattern discovery       |
+| **[user-service](docs/services/user-service/features.md)**                                       | Encrypted API key vault, multi-method auth, provider key validation    |
+| **[app-settings-service](docs/services/app-settings-service/features.md)**                       | AI cost tracking per provider, model, and call type                    |
+| **[image-service](docs/services/image-service/features.md)**                                     | AI-generated cover images for shared research reports                   |
+| **[notion-service](docs/services/notion-service/features.md)**                                   | Research export to Notion with synthesis and per-model child pages      |
+| **[web](docs/services/web/features.md)**                                                         | Real-time dashboard with code streaming, approvals, and share menu     |
+| **[vm-lifecycle](docs/services/vm-lifecycle/features.md)**                                       | Weekday auto-start/stop for coding worker machines                     |
+| **[log-cleanup](docs/services/log-cleanup/features.md)**                                         | Nightly log rotation in controlled batches                             |
+| **[api-docs-hub](docs/services/api-docs-hub/features.md)**                                       | Unified interactive API reference for all backend services             |
 
 ---
 
