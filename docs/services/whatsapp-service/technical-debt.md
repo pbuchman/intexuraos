@@ -1,6 +1,6 @@
 # WhatsApp Service - Technical Debt
 
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-02-22
 **Version:** 4.0.0
 
 ---
@@ -110,7 +110,7 @@ No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
 
 | File                      | Lines | Issue                                               | Suggestion                                                                        |
 | ------------------------- | ----- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `routes/webhookRoutes.ts` | ~1300 | Handles webhook validation, routing, and 5 handlers | Extract handleTextMessage, handleReactionMessage, handleButtonMessage to usecases |
+| `routes/webhookRoutes.ts` | ~1160 | Handles webhook validation, routing, and 5 handlers | Extract handleTextMessage, handleButtonMessage to usecases |
 
 **Details:** `webhookRoutes.ts` contains:
 

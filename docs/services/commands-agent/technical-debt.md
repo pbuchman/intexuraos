@@ -1,7 +1,7 @@
 # Commands Agent - Technical Debt
 
-**Last Updated:** 2026-02-19
-**Analysis Run:** Service documentation generation (v2.3.0 context)
+**Last Updated:** 2026-02-22
+**Analysis Run:** Service documentation generation (v3.1.0 context)
 
 ---
 
@@ -9,10 +9,14 @@
 
 | Category       | Count | Severity |
 | -------------- | ----- | -------- |
-| TODO/FIXME     | 0     | -        |
 | Code Smells    | 2     | Low      |
 | Test Coverage  | 0     | -        |
+| Type Issues    | 0     | -        |
+| TODO/FIXME     | 0     | -        |
 | SRP Violations | 0     | -        |
+| **Total**      | **2** | Low      |
+
+---
 
 ## Future Plans
 
@@ -27,6 +31,12 @@ Based on code analysis and git history:
 4. **Confidence threshold tuning** - Low confidence commands default to `note`; could offer user confirmation flow for ambiguous inputs
 
 5. **Structured output mode** - Consider using Gemini function calling or OpenAI JSON mode instead of regex JSON extraction
+
+6. **Circuit breaker for actions-agent** - Commands fail with `failed` status when actions-agent is unavailable; circuit breaker pattern would improve resilience
+
+7. **Graceful degradation for startup pricing** - `initServices()` hard-fails when app-settings-service is unreachable; cached or default pricing would improve boot resilience
+
+---
 
 ## Code Smells
 
@@ -52,7 +62,69 @@ Based on code analysis and git history:
 const LOG_RESPONSE_PREVIEW_LENGTH = 500;
 ```
 
-## Resolved Issues (v2.0.0 - v2.1.0)
+---
+
+## Test Coverage
+
+No test coverage gaps identified. Core paths tested:
+
+- Classification for all command types (including `code`)
+- URL keyword isolation
+- Explicit intent detection
+- Polish language support
+- PWA-shared confidence boost
+- Error handling (invalid JSON, API errors, timeouts)
+- Confidence clamping
+- Title/reasoning truncation
+- Idempotent command processing
+- Pending classification retry logic
+
+---
+
+## TypeScript Issues
+
+- No `any` types detected in source code
+- No `@ts-ignore` or `@ts-expect-error` usage
+- Strict mode compliance: Pass
+- Zod schema validation: Implemented (v2.1.0)
+- Response contract compliance: `reply.ok()`/`reply.fail()` (v2.2.0)
+- Sentry-enabled logging: `createAppLogger()` (v2.2.0)
+
+---
+
+## TODOs/FIXMEs
+
+No TODO, FIXME, HACK, or XXX comments found in codebase.
+
+---
+
+## Deprecations
+
+No deprecated API usage detected.
+
+---
+
+## Integration Considerations
+
+### actions-agent dependency
+
+Commands-agent creates actions via HTTP to actions-agent. If actions-agent is unavailable, commands fail with `failed` status. Consider circuit breaker pattern for resilience.
+
+### app-settings-service startup dependency
+
+`initServices()` calls `fetchAllPricing()` from `app-settings-service` at startup before accepting requests. If app-settings-service is unreachable at boot, commands-agent fails to initialize entirely. This creates a hard coupling at startup. Consider graceful degradation (e.g., cached/default pricing) to improve resilience.
+
+### Prompt versioning
+
+Classification prompt lives in `packages/llm-prompts`. Changes require package rebuild and service redeploy. Consider runtime prompt loading for faster iteration. The `promptVersion` field stored with each classification enables tracking which prompt version produced each result.
+
+### Pub/Sub push authentication
+
+Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls. This is reliable but implicitly couples to Google's infrastructure behavior.
+
+---
+
+## Resolved Issues
 
 ### URL keyword misclassification
 
@@ -110,56 +182,22 @@ const LOG_RESPONSE_PREVIEW_LENGTH = 500;
 
 **Solution:** All loggers now use `createAppLogger()` from `@intexuraos/infra-sentry`, which automatically sends errors to Sentry.
 
-## Test Coverage
+### GLM-4.7-Flash latency issues
 
-No test coverage gaps identified. Core paths tested:
+**Resolved in:** v3.0.0 (2026-02-15)
 
-- Classification for all command types (including `code`)
-- URL keyword isolation
-- Explicit intent detection
-- Polish language support
-- PWA-shared confidence boost
-- Error handling (invalid JSON, API errors, timeouts)
-- Confidence clamping
-- Title/reasoning truncation
-- Idempotent command processing
-- Pending classification retry logic
+**Previous issue:** GLM-4.7-Flash was the default classification model but was taking 29s for simple tasks, exceeding HTTP timeouts.
 
-## TypeScript Issues
-
-- No `any` types detected
-- No `@ts-ignore` or `@ts-expect-error` usage
-- Strict mode compliance: Pass
-- Zod schema validation: Implemented (v2.1.0)
-- Response contract compliance: `reply.ok()`/`reply.fail()` (v2.2.0)
-- Sentry-enabled logging: `createAppLogger()` (v2.2.0)
-
-## TODOs/FIXMEs
-
-No TODO, FIXME, HACK, or XXX comments found in codebase.
-
-## Deprecations
-
-No deprecated API usage detected.
-
-## Integration Considerations
-
-### actions-agent dependency
-
-Commands-agent creates actions via HTTP to actions-agent. If actions-agent is unavailable, commands fail with `failed` status. Consider circuit breaker pattern for resilience.
-
-### app-settings-service startup dependency
-
-`initServices()` now calls `fetchAllPricing()` from `app-settings-service` at startup before accepting requests. If app-settings-service is unreachable at boot, commands-agent fails to initialize entirely. This creates a hard coupling at startup that did not previously exist. Consider graceful degradation (e.g., cached/default pricing) to improve resilience.
-
-### Prompt versioning
-
-Classification prompt lives in `packages/llm-prompts`. Changes require package rebuild and service redeploy. Consider runtime prompt loading for faster iteration.
-
-### Pub/Sub push authentication
-
-Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls. This is reliable but implicitly couples to Google's infrastructure behavior.
+**Solution:** Switched default LLM to Gemini 2.5 Flash (faster, already supported). Added platform Gemini API key as primary fallback before Zai.
 
 ---
 
-**Last updated:** 2026-02-19
+## Related
+
+- [Features](features.md) -- User-facing documentation
+- [Technical](technical.md) -- Developer reference
+- [Documentation Run Log](../../documentation-runs.md)
+
+---
+
+**Last updated:** 2026-02-22
