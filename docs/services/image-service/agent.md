@@ -1,4 +1,4 @@
-# image-service — Agent Interface
+# image-service -- Agent Interface
 
 > Machine-readable specification for AI agents interacting with image-service.
 
@@ -9,7 +9,7 @@
 | Attribute | Value                                                                                |
 | --------- | ------------------------------------------------------------------------------------ |
 | **Name**  | image-service                                                                        |
-| **Role**  | AI Image Generation Service                                                          |
+| **Role**  | AI image generation and prompt enhancement service                                   |
 | **Goal**  | Generate cover images and optimized prompts using GPT Image 1 and Gemini Flash Image |
 
 ---
@@ -20,15 +20,15 @@
 
 **Endpoint:** `POST /internal/images/prompts/generate`
 
-**When to use:** When you need to convert text content into an optimized image generation prompt
+**When to use:** When you have text content (research title, article excerpt, note body) that needs to be converted into an optimized image generation prompt. Call this before calling the image generation endpoint.
 
 **Input Schema:**
 
 ```typescript
 interface GeneratePromptInput {
-  text: string; // Content to visualize (10-60000 characters)
-  model: 'gpt-4.1' | 'gemini-2.5-pro'; // LLM for prompt generation
-  userId: string; // User ID for API key lookup
+  text: string;   // Content to visualize (10-60000 characters)
+  model: 'gpt-4.1' | 'gemini-2.5-pro';  // LLM for prompt generation
+  userId: string;  // User ID for API key lookup
 }
 ```
 
@@ -36,10 +36,10 @@ interface GeneratePromptInput {
 
 ```typescript
 interface ThumbnailPrompt {
-  title: string; // Short title (max 10 words)
-  visualSummary: string; // One sentence visual metaphor
-  prompt: string; // Image generation prompt (80-180 words)
-  negativePrompt: string; // What to avoid (20-80 words)
+  title: string;           // Short title (max 10 words)
+  visualSummary: string;   // One sentence visual metaphor (max 25 words)
+  prompt: string;          // Image generation prompt (80-180 words)
+  negativePrompt: string;  // What to avoid (20-80 words)
   parameters: {
     aspectRatio: '16:9';
     framing: string;
@@ -48,14 +48,6 @@ interface ThumbnailPrompt {
     people: string;
     logosTrademarks: 'none';
   };
-}
-
-interface GeneratePromptOutput {
-  title: string;
-  visualSummary: string;
-  prompt: string;
-  negativePrompt: string;
-  parameters: ThumbnailPromptParameters;
 }
 ```
 
@@ -71,17 +63,20 @@ interface GeneratePromptOutput {
 
 // Response
 {
-  "title": "AI and Machine Learning Research",
-  "visualSummary": "A futuristic digital artwork featuring neural networks",
-  "prompt": "A professional visualization of artificial intelligence research, featuring neural network patterns and data flow in a modern digital art style with deep blue and purple colors",
-  "negativePrompt": "blurry, low quality, distorted, ugly, poorly drawn",
-  "parameters": {
-    "aspectRatio": "16:9",
-    "framing": "centered composition with leading space",
-    "textOnImage": "none",
-    "realism": "cinematic illustration",
-    "people": "no people",
-    "logosTrademarks": "none"
+  "success": true,
+  "data": {
+    "title": "AI and Machine Learning Research",
+    "visualSummary": "A futuristic digital artwork featuring neural networks",
+    "prompt": "A professional visualization of artificial intelligence research, featuring neural network patterns and data flow in a modern digital art style with deep blue and purple colors",
+    "negativePrompt": "blurry, low quality, distorted, ugly, poorly drawn, text, watermark",
+    "parameters": {
+      "aspectRatio": "16:9",
+      "framing": "centered composition with leading space",
+      "textOnImage": "none",
+      "realism": "cinematic illustration",
+      "people": "no people",
+      "logosTrademarks": "none"
+    }
   }
 }
 ```
@@ -90,32 +85,26 @@ interface GeneratePromptOutput {
 
 **Endpoint:** `POST /internal/images/generate`
 
-**When to use:** When you need to generate an actual image from a prompt
+**When to use:** When you have a prompt (either from the prompt generation endpoint or crafted manually) and need to create an actual image. The image is automatically stored in GCS with both full-size and thumbnail versions.
 
 **Input Schema:**
 
 ```typescript
 interface GenerateImageInput {
-  prompt: string; // Image generation prompt (10-2000 chars)
-  model: 'gpt-image-1' | 'gemini-2.5-flash-image'; // Image generation model
-  userId: string; // User ID for API key lookup and ownership
-  title?: string; // Optional title for slug-based filename
+  prompt: string;  // Image generation prompt (10-2000 characters)
+  model: 'gpt-image-1' | 'gemini-2.5-flash-image';  // Image generation model
+  userId: string;  // User ID for API key lookup and ownership
+  title?: string;  // Optional title for slug-based filename (max 100 chars)
 }
 ```
 
 **Output Schema:**
 
 ```typescript
-interface GenerateImageData {
-  id: string; // Unique image identifier
-  thumbnailUrl: string; // GCS public URL for 256px thumbnail
-  fullSizeUrl: string; // GCS public URL for full-size image
-}
-
 interface GenerateImageOutput {
-  id: string;
-  thumbnailUrl: string;
-  fullSizeUrl: string;
+  id: string;            // Unique image identifier (UUID v4)
+  thumbnailUrl: string;  // GCS public URL for 256px JPEG thumbnail
+  fullSizeUrl: string;   // GCS public URL for full-size PNG image
 }
 ```
 
@@ -132,9 +121,12 @@ interface GenerateImageOutput {
 
 // Response
 {
-  "id": "img_xyz789",
-  "thumbnailUrl": "https://storage.googleapis.com/bucket/images/img_xyz789-mountain-sunset-thumb.jpg",
-  "fullSizeUrl": "https://storage.googleapis.com/bucket/images/img_xyz789-mountain-sunset.png"
+  "success": true,
+  "data": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "thumbnailUrl": "https://storage.googleapis.com/bucket/images/a1b2c3d4-mountain-sunset-thumb.jpg",
+    "fullSizeUrl": "https://storage.googleapis.com/bucket/images/a1b2c3d4-mountain-sunset.png"
+  }
 }
 ```
 
@@ -142,13 +134,13 @@ interface GenerateImageOutput {
 
 **Endpoint:** `DELETE /internal/images/:id`
 
-**When to use:** When content is unshared and the cover image should be removed
+**When to use:** When content that owns an image is unshared or deleted. Removes both GCS objects (full-size and thumbnail) and the Firestore metadata record.
 
 **Input Schema:**
 
 ```typescript
 interface DeleteImageInput {
-  id: string; // Image ID to delete
+  id: string;  // Image ID (UUID, passed as URL path parameter)
 }
 ```
 
@@ -160,21 +152,36 @@ interface DeleteImageOutput {
 }
 ```
 
+**Example:**
+
+```json
+// Request: DELETE /internal/images/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+
+// Response
+{
+  "success": true,
+  "data": {
+    "deleted": true
+  }
+}
+```
+
 ---
 
 ## Constraints
 
 **Do NOT:**
 
-- Generate images without a valid API key for the selected provider
-- Use prompt generation for text under 10 characters or over 60000 characters
-- Generate images with prompts under 10 characters or over 2000 characters
-- Expect image editing - only generation is supported
+- Call image generation without first ensuring the user has the required provider API key (or platform fallback keys are configured)
+- Send prompt text under 10 characters or over 60000 characters
+- Send image generation prompts under 10 characters or over 2000 characters
+- Expect image editing, inpainting, or variation generation -- only new image creation is supported
+- Assume deduplication -- identical prompts generate separate images with unique IDs
 
 **Requires:**
 
+- `X-Internal-Auth` header must be set with valid internal token on all requests
 - User must have the required provider API key configured in user-service, OR platform fallback keys must be set (`INTEXURAOS_GEMINI_APP_API_KEY`, `INTEXURAOS_ZAI_APP_API_KEY`)
-- `X-Internal-Auth` header must be set with valid internal token
 - GCS bucket must be accessible for upload/delete operations
 
 ---
@@ -184,37 +191,46 @@ interface DeleteImageOutput {
 ### Pattern 1: Research Cover Image Generation
 
 ```
-1. Research-agent receives research with title
-2. Call POST /internal/images/prompts/generate with research title
-3. Receive enhanced prompt with visual parameters
-4. Call POST /internal/images/generate with enhanced prompt
-5. Receive image URLs
-6. Store image ID in research document
-7. On unshare: DELETE /internal/images/:id
+1. Research-agent receives completed research with title
+2. Call POST /internal/images/prompts/generate with research title as text
+3. Extract data.prompt from response
+4. Call POST /internal/images/generate with extracted prompt and title
+5. Receive {id, thumbnailUrl, fullSizeUrl}
+6. Store image ID in research document as coverImageId
+7. When research is unshared: DELETE /internal/images/:id
 ```
 
 ### Pattern 2: Prompt-Only Workflow
 
 ```
 1. Caller has text content that needs visualization
-2. Call POST /internal/images/prompts/generate
-3. Receive structured prompt with title, summary, parameters
-4. Caller may modify prompt before calling image generation
-5. Image generation is a separate step
+2. Call POST /internal/images/prompts/generate with text
+3. Receive structured prompt with title, summary, and parameters
+4. Caller may inspect or modify the prompt before image generation
+5. Image generation is a separate step via POST /internal/images/generate
+```
+
+### Pattern 3: Direct Image Generation (Skip Prompt Enhancement)
+
+```
+1. Caller already has an optimized prompt
+2. Call POST /internal/images/generate directly with prompt, model, userId
+3. Optionally include title for slug-based filenames
+4. Receive {id, thumbnailUrl, fullSizeUrl}
 ```
 
 ---
 
 ## Error Handling
 
-| Error Code      | Meaning                      | Recovery Action                      |
-| --------------- | ---------------------------- | ------------------------------------ |
-| `INVALID_KEY`   | User's API key is invalid    | User must update API key in settings |
-| `RATE_LIMITED`  | Provider rate limit exceeded | Retry with exponential backoff (429) |
-| `TIMEOUT`       | Provider request timed out   | Retry with longer timeout            |
-| `API_ERROR`     | Provider API error           | Check provider status, retry         |
-| `STORAGE_ERROR` | GCS upload failed            | Check GCS permissions, retry         |
-| `PARSE_ERROR`   | LLM response parsing failed  | Retry with different model           |
+| Error Code         | HTTP Status | Meaning                      | Recovery Action                           |
+| ------------------ | ----------- | ---------------------------- | ----------------------------------------- |
+| `UNAUTHORIZED`     | 401         | Invalid internal auth header | Fix X-Internal-Auth header value          |
+| `INVALID_REQUEST`  | 400         | Missing API key for provider | User must add API key or configure fallback |
+| `RATE_LIMITED`     | 429         | Provider rate limit exceeded | Retry with exponential backoff            |
+| `DOWNSTREAM_ERROR` | 502         | Provider or user-service failure | Check provider/service status, retry    |
+| `INTERNAL_ERROR`   | 500         | Firestore save failed        | GCS image cleaned up; retry full operation |
+| `PARSE_ERROR`      | 502         | LLM response malformed       | Retry with same or different model        |
 
 ---
 
@@ -237,12 +253,14 @@ None. Image-service does not publish Pub/Sub events.
 
 ## Dependencies
 
-| Service      | Why Needed                            | Failure Behavior                   |
-| ------------ | ------------------------------------- | ---------------------------------- |
-| user-service | Fetch encrypted API keys per provider | Rejects request with 400 error     |
-| GCS          | Store generated images and thumbnails | Returns storage error to caller    |
-| Firestore    | Persist image metadata for tracking   | Cleans up GCS image, returns error |
+| Service        | Why Needed                            | Failure Behavior                                |
+| -------------- | ------------------------------------- | ----------------------------------------------- |
+| user-service   | Fetch encrypted API keys per provider | Rejects request with 502 DOWNSTREAM_ERROR       |
+| GCS            | Store generated images and thumbnails | Returns STORAGE_ERROR; image generation reverted |
+| Firestore      | Persist image metadata for tracking   | Cleans up GCS image, returns 500 INTERNAL_ERROR |
+| OpenAI API     | GPT Image 1 generation, GPT-4.1 prompts | Returns DOWNSTREAM_ERROR to caller           |
+| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro prompts | Returns DOWNSTREAM_ERROR to caller       |
 
 ---
 
-**Last updated:** 2026-02-19 (re-run)
+**Last updated:** 2026-02-22

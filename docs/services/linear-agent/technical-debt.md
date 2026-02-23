@@ -1,7 +1,7 @@
 # Linear Agent - Technical Debt
 
-**Last Updated:** 2026-02-19
-**Analysis Run:** v4.1.0 documentation update (label serialization fix, OpenTelemetry/Dash0 integration)
+**Last Updated:** 2026-02-22
+**Analysis Run:** v3.1.0 documentation update (auto-trigger on assignment, assignee sync, webhook dedup)
 
 ---
 
@@ -12,8 +12,8 @@
 | TODOs/FIXMEs       | 0     | -        |
 | Test Coverage Gaps | 0     | -        |
 | TypeScript Issues  | 0     | -        |
-| Code Smells        | 1     | Low      |
-| **Total**          | **1** | Low      |
+| Code Smells        | 2     | Low      |
+| **Total**          | **2** | Low      |
 
 ---
 
@@ -43,13 +43,16 @@ Based on code analysis, git history, and domain patterns:
 
 ### Low Priority
 
-| File                                  | Issue                     | Impact                                    |
-| ------------------------------------- | ------------------------- | ----------------------------------------- |
-| `src/infra/linear/linearApiClient.ts` | Module-level client cache | Global state, harder to test in isolation |
+| File                                                       | Issue                          | Impact                                    |
+| ---------------------------------------------------------- | ------------------------------ | ----------------------------------------- |
+| `src/infra/linear/linearApiClient.ts`                      | Module-level client cache      | Global state, harder to test in isolation |
+| `src/domain/useCases/triggerCodeTaskFromAssignment.ts`      | Fire-and-forget async pattern  | Errors logged but not propagated to caller |
 
-**Details:** The Linear API client uses module-level `Map` instances for client caching and request deduplication. While this enables performance optimizations (INT-95), it makes the code harder to test without coverage exemption pragmas.
+**Details (client cache):** The Linear API client uses module-level `Map` instances for client caching and request deduplication. While this enables performance optimizations (INT-95), it makes the code harder to test without coverage exemption pragmas.
 
 **Mitigation:** The caching behavior is well-isolated with exported functions (`clearClientCache`, `getClientCacheSize`) for test cleanup.
+
+**Details (fire-and-forget):** `triggerCodeTaskFromAssignment` uses `void` to discard the promise, meaning code-agent failures are only logged, not surfaced to the webhook caller. This is by design (webhook responses should not be blocked), but means trigger failures require log monitoring to detect.
 
 ---
 
@@ -83,9 +86,9 @@ None identified. Files are appropriately sized:
 | ------------------------------- | ----- | ---------------------------------------- |
 | `linearRoutes.ts`               | ~1005 | Borderline (14 endpoints). Watch closely |
 | `internalRoutes.ts`             | ~595  | OK (5 endpoints)                         |
+| `internalIssuesRoutes.ts`       | ~563  | OK (3 endpoints + helpers)               |
+| `linearWebhookRoutes.ts`        | ~401  | OK                                       |
 | `linearApiClient.ts`            | ~360  | OK (includes optimizations)              |
-| `internalIssuesRoutes.ts`       | ~400  | OK                                       |
-| `linearWebhookRoutes.ts`        | ~300  | OK                                       |
 | `processLinearAction.ts`        | ~233  | OK                                       |
 | `generateIssueTitle.ts`         | ~134  | OK                                       |
 | `fullSyncUseCase.ts`            | ~158  | OK                                       |
@@ -127,6 +130,11 @@ None. The service uses current versions of:
 
 | Date       | Issue                                                | Resolution                                                       |
 | ---------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
+| 2026-02-21 | Webhook dedup action IDs could collide               | Unique actionId format: `webhook-assign-{id}-{timestamp}`        |
+| 2026-02-21 | Auto-trigger prompt misaligned with Phase 1 design   | Aligned prompt to analyze/enrich/mark-ready behavior             |
+| 2026-02-20 | Assignee lost during full sync                       | Fetch assignee data from Linear API in listIssues (INT-573)     |
+| 2026-02-20 | Assignee missing from dashboard response             | Include assignee in syncedToLinearIssue mapper                   |
+| 2026-02-20 | Raw errors not passed to pino logger                 | Pass raw error objects to logger for structured logging          |
 | 2026-02-19 | validateIssue labels serialized as "[object Object]" | Map LinearLabel[] to string[] at HTTP boundary in internalRoutes |
 | 2026-02-15 | Silent title degradation on LLM failure              | Removed regex fallback, return err() after 2 retries             |
 | 2026-02-10 | Hardcoded `teamId: 'TODO'` in retry                  | Fixed to use `connectionRepository.getFullConnection`            |
@@ -166,8 +174,10 @@ None. The service uses current versions of:
 12. **OIDC + Internal Auth**: sync-all accepts both Cloud Scheduler OIDC and internal auth tokens
 13. **Signature Security**: HMAC-SHA256 with timing-safe comparison prevents timing attacks
 14. **Comment Sync**: Comments stored in Firestore and exposed via paginated API
-15. **HTTP Boundary Type Mapping**: `validateIssue` maps `LinearLabel[]` to `string[]` at the route layer — domain types stay clean
+15. **HTTP Boundary Type Mapping**: `validateIssue` maps `LinearLabel[]` to `string[]` at the route layer -- domain types stay clean
 16. **OpenTelemetry**: Distributed tracing and metrics via Dash0 loaded transparently at process start (no-op when unconfigured)
+17. **Auto-Trigger on Assignment**: Webhook-driven code task creation with strict guard conditions
+18. **Assignee Preservation**: Full sync preserves assignee data from the Linear API for dashboard display
 
 ### Areas for Improvement
 
@@ -176,6 +186,7 @@ None. The service uses current versions of:
 3. **Module-Level State**: Client cache uses global state (isolated but harder to test)
 4. **Route File Size**: `linearRoutes.ts` at ~1005 lines could benefit from splitting
 5. **Comment Full Sync**: No bulk comment reconciliation for initial setup
+6. **Fire-and-Forget Auto-Trigger**: `triggerCodeTaskFromAssignment` errors only logged, not surfaced
 
 ---
 
@@ -188,5 +199,5 @@ None. The service uses current versions of:
 
 ---
 
-**Last analyzed:** 2026-02-19 (v4.1.0)
+**Last analyzed:** 2026-02-22 (v3.1.0)
 **Analyzed by:** service-scribe (autonomous)

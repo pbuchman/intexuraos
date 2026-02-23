@@ -1,10 +1,10 @@
-# Web Agent - Technical Reference
+# Web Agent -- Technical Reference
 
 ## Overview
 
-Web-agent extracts web content and generates AI summaries. It uses Crawl4AI for headless browser crawling, Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash → ZAI fallback) for summarization with automatic response repair.
+Web-agent extracts web content and generates AI summaries. It uses Crawl4AI for headless browser crawling, Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash, then ZAI fallback) for summarization with automatic response repair.
 
-Runs on Cloud Run with auto-scaling (0-1 instances). Distributed tracing via Dash0 OpenTelemetry (transparent preload).
+Runs on Cloud Run with auto-scaling (0-1 instances). Port 8127 on local/dev. Distributed tracing via Dash0 OpenTelemetry (transparent preload).
 
 ## Architecture
 
@@ -33,6 +33,7 @@ graph TB
 
     subgraph "Internal Services"
         US[user-service]
+        AS[app-settings-service]
     end
 
     RA -->|POST /internal/page-summaries| Routes
@@ -55,16 +56,18 @@ graph TB
     OGF -->|fetch HTML| Target
     OGF -->|parse| Cheerio[Cheerio]
 
+    AS -.->|pricing at startup| Routes
+
     classDef service fill:#e1f5ff
     classDef external fill:#f0f0f0
     classDef internal fill:#fff4e6
 
     class Routes,PCF,LLM,OGF,Parser,Repair service
     class C4AI,UserLLM,PlatformLLM,Target external
-    class US internal
+    class US,AS internal
 ```
 
-## Data Flow - Page Summarization
+## Data Flow -- Page Summarization
 
 ```mermaid
 sequenceDiagram
@@ -79,7 +82,7 @@ sequenceDiagram
     WebAgent->>Crawl4AI: Crawl URL (browser strategy)
     Crawl4AI-->>WebAgent: markdown content
     WebAgent->>UserService: getLlmClient(userId)
-    UserService-->>WebAgent: LLM client (user key → Gemini fallback → ZAI fallback)
+    UserService-->>WebAgent: LLM client (user key -> Gemini fallback -> ZAI fallback)
     WebAgent->>LLM: Generate summary
     LLM-->>WebAgent: "Here is the summary: {...}"
     WebAgent->>WebAgent: parseSummaryResponse()
@@ -94,10 +97,12 @@ sequenceDiagram
 
 | Commit     | Description                                                  | Date       |
 | ---------- | ------------------------------------------------------------ | ---------- |
+| `b3f34d85` | Release v3.1.0                                               | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                               | 2026-02-19 |
 | `884bc168` | Add semver `version` field to PromptBuilder (1.0.0)          | 2026-02-19 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability              | 2026-02-16 |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration (transparent preload)    | 2026-02-16 |
-| `e60eafc1` | Rename `CRAWL4AI_API_KEY` → `CRAWL4AI_APP_API_KEY`           | 2026-02-15 |
+| `e60eafc1` | Rename `CRAWL4AI_API_KEY` to `CRAWL4AI_APP_API_KEY`          | 2026-02-15 |
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback | 2026-02-15 |
 | `0f69a74b` | Add platform ZAI fallback for users without API keys         | 2026-02-09 |
 | `3a5d9380` | INT-533 Add content focus instructions to summary prompt     | 2026-02-07 |
@@ -115,6 +120,14 @@ sequenceDiagram
 | ------ | -------------------------- | -------------------------------------------- | -------------- |
 | POST   | `/internal/link-previews`  | Fetch OpenGraph metadata for URLs            | Internal token |
 | POST   | `/internal/page-summaries` | Crawl and summarize a web page with user LLM | Internal token |
+
+### System Endpoints
+
+| Method | Path            | Description               | Auth |
+| ------ | --------------- | ------------------------- | ---- |
+| GET    | `/health`       | Health check              | None |
+| GET    | `/docs`         | Swagger UI                | None |
+| GET    | `/openapi.json` | OpenAPI spec (JSON)       | None |
 
 ### Link Previews Request
 
@@ -189,7 +202,7 @@ interface PageSummary {
 | `TIMEOUT`       | Request exceeded timeout               |
 | `TOO_LARGE`     | Response over 2MB                      |
 | `INVALID_URL`   | Malformed URL or unsupported protocol  |
-| `ACCESS_DENIED` | HTTP 403 - website blocked the request |
+| `ACCESS_DENIED` | HTTP 403 -- website blocked the request |
 
 ### PageSummaryError
 
@@ -291,16 +304,17 @@ Fetches and parses OpenGraph metadata.
 
 ### Internal Services
 
-| Service      | Endpoint               | Purpose                                        |
-| ------------ | ---------------------- | ---------------------------------------------- |
-| user-service | `getLlmClient(userId)` | Get LLM client (user key or platform fallback) |
+| Service              | Endpoint               | Purpose                                        |
+| -------------------- | ---------------------- | ---------------------------------------------- |
+| user-service         | `getLlmClient(userId)` | Get LLM client (user key or platform fallback) |
+| app-settings-service | `fetchAllPricing()`    | LLM pricing context at startup                 |
 
-**Integration Note (v2.1.0):** web-agent uses `@intexuraos/internal-clients/user-service` for type-safe, validated communication with user-service. This package provides:
+**Integration Note:** web-agent uses `@intexuraos/internal-clients/user-service` for type-safe, validated communication with user-service. This package provides:
 
-- `createUserServiceClient()` - Factory for configured client
+- `createUserServiceClient()` -- Factory for configured client
 - `UserServiceClient` interface with `getLlmClient()` method
 - Automatic error handling and result types
-- Platform Gemini 2.5 Flash → ZAI fallback when user has no API key
+- Platform Gemini 2.5 Flash, then ZAI fallback when user has no API key
 
 ## Configuration
 
@@ -313,41 +327,45 @@ Fetches and parses OpenGraph metadata.
 | `INTEXURAOS_SENTRY_DSN`               | Error tracking                     | Yes      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback | Optional |
 | `INTEXURAOS_ZAI_APP_API_KEY`          | Platform ZAI secondary fallback    | Optional |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | Dash0 OpenTelemetry endpoint       | Optional |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`     | Dash0 OpenTelemetry endpoint       | Optional |
 
-All five required vars are validated at startup via `validateRequiredEnv()`. Optional fallback keys are passed to `createUserServiceClient()` and are no-ops when unset.
+All five required vars are validated at startup via `validateRequiredEnv()`. Note that `INTEXURAOS_SENTRY_DSN` is validated separately with a direct check. Optional fallback keys are passed to `createUserServiceClient()` and are no-ops when unset.
 
 ## Gotchas
 
-**Crawl vs Summary separation** - PageContentFetcher only crawls; LlmSummarizer handles AI. This allows using user's LLM keys rather than shared infrastructure.
+**Crawl vs Summary separation** -- PageContentFetcher only crawls; LlmSummarizer handles AI. This allows using user's LLM keys rather than shared infrastructure.
 
-**Platform fallback chain** - When a user has no API key for their chosen provider, `getLlmClient()` falls back to Gemini 2.5 Flash (platform key), then to ZAI (platform key). `API_ERROR` with "No API key" only surfaces if both platform keys are also unset.
+**Platform fallback chain** -- When a user has no API key for their chosen provider, `getLlmClient()` falls back to Gemini 2.5 Flash (platform key), then to ZAI (platform key). `API_ERROR` with "No API key" only surfaces if both platform keys are also unset.
 
-**Repair mechanism** - If LLM returns JSON, parser detects it and triggers repair prompt automatically. Only retries once.
+**Repair mechanism** -- If LLM returns JSON, parser detects it and triggers repair prompt automatically. Only retries once.
 
-**Language preservation** - Summary prompt explicitly instructs "Write in SAME LANGUAGE as original content" to prevent English summaries of non-English articles.
+**Language preservation** -- Summary prompt explicitly instructs "Write in SAME LANGUAGE as original content" to prevent English summaries of non-English articles.
 
-**403 handling** - Returns `ACCESS_DENIED` error code specifically for 403 responses, distinct from general `FETCH_FAILED`.
+**403 handling** -- Returns `ACCESS_DENIED` error code specifically for 403 responses, distinct from general `FETCH_FAILED`.
 
-**Browser-like headers** - OpenGraphFetcher sends Chrome-like headers including Sec-Fetch-\* to bypass basic bot detection.
+**Browser-like headers** -- OpenGraphFetcher sends Chrome-like headers including Sec-Fetch-* to bypass basic bot detection.
 
-**User LLM client** - Summaries use user's API key from user-service when available; pricing tracked per-user regardless of which key is used.
+**User LLM client** -- Summaries use user's API key from user-service when available; pricing tracked per-user regardless of which key is used.
 
-**Empty response handling** - `nonEmpty()` helper treats empty strings same as undefined for fallback logic.
+**Empty response handling** -- `nonEmpty()` helper treats empty strings same as undefined for fallback logic.
 
-**Concurrent link previews** - All URLs fetched in parallel via Promise.all. One timeout doesn't affect others.
+**Concurrent link previews** -- All URLs fetched in parallel via Promise.all. One timeout does not affect others.
 
-**Rate limiting (429)** - Crawl4AI 429 responses return `RATE_LIMITED` error code, distinct from general `API_ERROR`.
+**Rate limiting (429)** -- Crawl4AI 429 responses return `RATE_LIMITED` error code, distinct from general `API_ERROR`.
 
-**Content focus prompting** - Summary prompts include a CONTENT FOCUS section that prevents LLM from describing the platform instead of the actual content (e.g., avoids "LinkedIn is a professional network" preambles).
+**Content focus prompting** -- Summary prompts include a CONTENT FOCUS section that prevents LLM from describing the platform instead of the actual content (e.g., avoids "LinkedIn is a professional network" preambles).
 
-**PromptBuilder versioning** - Both `summaryPrompt` and `summaryRepairPrompt` use the `PromptBuilder` interface with semver `version: '1.0.0'`. Bump the version when changing prompt content.
+**PromptBuilder versioning** -- Both `summaryPrompt` and `summaryRepairPrompt` use the `PromptBuilder` interface with semver `version: '1.0.0'`. Bump the version when changing prompt content.
 
-**Sentry logging** - Uses `createAppLogger()` from `@intexuraos/infra-sentry` for automatic error forwarding to Sentry.
+**Sentry logging** -- Uses `createAppLogger()` from `@intexuraos/infra-sentry` for automatic error forwarding to Sentry.
 
-**Response contract** - All internal routes use `reply.ok()` / `reply.fail()` instead of raw `reply.send()` / `reply.status()`.
+**Response contract** -- All internal routes use `reply.ok()` / `reply.fail()` instead of raw `reply.send()` / `reply.status()`.
 
-**Dash0 OpenTelemetry** - Distributed tracing is loaded via `--import ./dist/otel-register.js` in the Dockerfile CMD. It is a no-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset, so local dev is unaffected.
+**Dash0 OpenTelemetry** -- Distributed tracing is loaded via `--import ./dist/otel-register.js` in the Dockerfile CMD. It is a no-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset, so local dev is unaffected.
+
+**No Firestore** -- This service is stateless. It does not own any Firestore collections.
+
+**Pricing at startup** -- The service fetches LLM pricing from app-settings-service at startup and passes it to the user service client for cost tracking.
 
 ## File Structure
 
@@ -383,11 +401,12 @@ apps/web-agent/src/
   index.ts                       # Entry point
 ```
 
-**Package Dependencies (v2.1.0+):**
+**Package Dependencies:**
 
-- `@intexuraos/internal-clients` - Type-safe clients for internal services (with fallback chain)
-- `@intexuraos/llm-pricing` - Pricing context for LLM cost tracking
-- `@intexuraos/llm-factory` - User's LLM client generation
-- `@intexuraos/infra-otel` - OpenTelemetry preload for Dash0 tracing
-- `@intexuraos/llm-prompts` - PromptBuilder interface with semver versioning
-- `@intexuraos/llm-utils` - `createDetailedParseErrorMessage()` for structured LLM parse error context
+- `@intexuraos/internal-clients` -- Type-safe clients for internal services (with fallback chain)
+- `@intexuraos/llm-pricing` -- Pricing context for LLM cost tracking
+- `@intexuraos/llm-factory` -- User's LLM client generation
+- `@intexuraos/infra-otel` -- OpenTelemetry preload for Dash0 tracing
+- `@intexuraos/llm-prompts` -- PromptBuilder interface with semver versioning
+- `@intexuraos/llm-utils` -- `createDetailedParseErrorMessage()` for structured LLM parse error context
+- `cheerio` -- HTML parsing for OpenGraph metadata extraction

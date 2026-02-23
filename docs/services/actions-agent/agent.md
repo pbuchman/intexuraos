@@ -16,58 +16,222 @@
 
 ## Capabilities
 
-### Tools (Endpoints)
+### List Actions
+
+**Endpoint:** `GET /actions`
+
+**When to use:** Retrieve all actions for the current user, optionally filtered by status.
+
+**Input Schema:**
 
 ```typescript
-interface ActionsAgentTools {
-  // List actions with optional status filter
-  listActions(params?: { status?: ActionStatus | ActionStatus[] }): Promise<{ actions: Action[] }>;
-
-  // Update action status or type
-  updateAction(
-    actionId: string,
-    params: {
-      status?: 'processing' | 'rejected' | 'archived';
-      type?: ActionType;
-    }
-  ): Promise<{ action: Action }>;
-
-  // Delete action
-  deleteAction(actionId: string): Promise<void>;
-
-  // Batch fetch multiple actions by IDs (max 50)
-  batchGetActions(params: { actionIds: string[] }): Promise<{ actions: Action[] }>;
-
-  // Execute action synchronously
-  executeAction(actionId: string): Promise<{
-    actionId: string;
-    status: 'completed' | 'failed';
-    resourceUrl?: string;
-    message?: string;
-    errorCode?: string;
-    existingBookmarkId?: string;
-  }>;
-
-  // Get calendar action preview
-  getActionPreview(actionId: string): Promise<{
-    preview: CalendarPreview | null;
-  }>;
-
-  // Resolve duplicate bookmark conflict
-  resolveDuplicateAction(
-    actionId: string,
-    params: {
-      action: 'skip' | 'update';
-    }
-  ): Promise<{
-    actionId: string;
-    status: 'rejected' | 'completed';
-    resourceUrl?: string;
-  }>;
+interface ListActionsParams {
+  status?: string; // Comma-separated: "pending,awaiting_approval"
 }
 ```
 
-### Types
+**Output Schema:**
+
+```typescript
+interface ListActionsResponse {
+  actions: Action[];
+}
+```
+
+**Example:**
+
+```json
+// Request
+// GET /actions?status=pending,awaiting_approval
+
+// Response
+{
+  "success": true,
+  "data": {
+    "actions": [
+      {
+        "id": "abc-123",
+        "userId": "user_1",
+        "commandId": "cmd_1",
+        "type": "research",
+        "confidence": 0.92,
+        "title": "Research quantum computing",
+        "status": "awaiting_approval",
+        "payload": {},
+        "createdAt": "2026-02-22T10:00:00Z",
+        "updatedAt": "2026-02-22T10:05:00Z"
+      }
+    ]
+  }
+}
+```
+
+### Update Action
+
+**Endpoint:** `PATCH /actions/:actionId`
+
+**When to use:** Change action status (approve, reject, archive) or correct misclassified action type.
+
+**Input Schema:**
+
+```typescript
+interface UpdateActionParams {
+  status?: 'processing' | 'rejected' | 'archived';
+  type?: ActionType; // Only for pending/awaiting_approval actions
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface UpdateActionResponse {
+  action: Action;
+}
+```
+
+**Example:**
+
+```json
+// Request
+// PATCH /actions/abc-123
+{ "type": "todo" }
+
+// Response
+{
+  "success": true,
+  "data": {
+    "action": {
+      "id": "abc-123",
+      "type": "todo",
+      "status": "awaiting_approval"
+    }
+  }
+}
+```
+
+### Execute Action
+
+**Endpoint:** `POST /actions/:actionId/execute`
+
+**When to use:** Synchronously execute an action and wait for completion.
+
+**Input Schema:**
+
+```typescript
+// No body required
+interface ExecuteActionParams {
+  actionId: string; // URL parameter
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface ExecuteActionResponse {
+  actionId: string;
+  status: 'completed' | 'failed';
+  resourceUrl?: string;
+  message?: string;
+  errorCode?: string;
+  existingBookmarkId?: string;
+}
+```
+
+**Example:**
+
+```json
+// Request
+// POST /actions/abc-123/execute
+
+// Response
+{
+  "success": true,
+  "data": {
+    "actionId": "abc-123",
+    "status": "completed",
+    "resourceUrl": "/#/research/def-456",
+    "message": "Research created successfully"
+  }
+}
+```
+
+### Batch Get Actions
+
+**Endpoint:** `POST /actions/batch`
+
+**When to use:** Fetch multiple actions by ID in a single request (max 50).
+
+**Input Schema:**
+
+```typescript
+interface BatchGetActionsParams {
+  actionIds: string[]; // 1-50 IDs
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface BatchGetActionsResponse {
+  actions: Action[];
+}
+```
+
+### Get Calendar Preview
+
+**Endpoint:** `GET /actions/:actionId/preview`
+
+**When to use:** Retrieve a generated preview for a calendar action before approving it.
+
+**Input Schema:**
+
+```typescript
+interface GetPreviewParams {
+  actionId: string; // URL parameter, must be a calendar action
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface GetPreviewResponse {
+  preview: CalendarPreview | null;
+}
+```
+
+### Resolve Duplicate Bookmark
+
+**Endpoint:** `POST /actions/:actionId/resolve-duplicate`
+
+**When to use:** When a link action fails with `DUPLICATE_URL` error code, choose to skip or update.
+
+**Input Schema:**
+
+```typescript
+interface ResolveDuplicateParams {
+  action: 'skip' | 'update';
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface ResolveDuplicateResponse {
+  actionId: string;
+  status: 'rejected' | 'completed';
+  resourceUrl?: string;
+}
+```
+
+### Delete Action
+
+**Endpoint:** `DELETE /actions/:actionId`
+
+**When to use:** Permanently remove an action.
+
+---
+
+## Types
 
 ```typescript
 type ActionType =
@@ -112,7 +276,6 @@ type ResourceStatus =
   | 'cancelled'
   | 'interrupted';
 
-// Code action payload
 interface CodeActionPayload {
   prompt: string;
   workerType: 'opus' | 'auto' | 'glm';
@@ -122,30 +285,26 @@ interface CodeActionPayload {
   resource_url?: string;
 }
 
-// v2.0.0: Approval intent (v4.0.0: resolved by buttons only, not LLM)
 type ApprovalIntent = 'approve' | 'reject' | 'unclear';
 
-// v2.0.0: Approval reply event from whatsapp-service
-// v4.0.0: LLM removed; buttonId resolves intent deterministically
 interface ApprovalReplyEvent {
   type: 'action.approval.reply';
   replyToWamid: string;
   replyText: string;
   userId: string;
   timestamp: string;
-  actionId?: string; // Optional, extracted from correlationId
+  actionId?: string;
   // Button ID formats (v4.0.0):
-  //   approve:{actionId}       - approve the action
-  //   reject:{actionId}        - reject the action
-  //   cancel:{actionId}        - cancel (same as reject)
-  //   convert:{actionId}       - reject + convert to Linear issue
-  //   cancel-task:{taskId}:{nonce} - cancel running code task
-  //   view-task:{taskId}       - view task URL
+  //   approve:{actionId}            - approve the action
+  //   reject:{actionId}             - reject the action
+  //   cancel:{actionId}             - cancel (same as reject)
+  //   convert:{actionId}            - reject + convert to Linear issue
+  //   cancel-task:{taskId}:{nonce}  - cancel running code task
+  //   view-task:{taskId}            - view task URL
   buttonId?: string;
-  buttonTitle?: string; // User-visible text of the button clicked
+  buttonTitle?: string;
 }
 
-// v2.0.0: Atomic status update result
 type UpdateStatusIfResult =
   | { outcome: 'updated' }
   | { outcome: 'status_mismatch'; currentStatus: string }
@@ -173,14 +332,15 @@ interface CalendarPreview {
 
 ## Constraints
 
-| Rule                        | Description                                                                                |
-| --------------------------- | ------------------------------------------------------------------------------------------ |
-| **Status Transitions**      | Can only set status to 'processing', 'rejected', or 'archived'                             |
-| **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions                          |
-| **Batch Limit**             | Maximum 50 action IDs per batch request                                                    |
-| **Ownership**               | Users can only access their own actions                                                    |
-| **Supported Types**         | Execute only supports: research, todo, note, link, code (calendar/linear require approval) |
-| **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval                       |
+| Rule                        | Description                                                                            |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| **Status Transitions**      | Can only set status to 'processing', 'rejected', or 'archived'                         |
+| **Type Change Restriction** | Can only change type for 'pending', 'awaiting_approval', or 'failed' actions           |
+| **Batch Limit**             | Maximum 50 action IDs per batch request                                                |
+| **Ownership**               | Users can only access their own actions                                                |
+| **Supported Execute Types** | Execute supports: research, todo, note, link, calendar, linear (not code or reminder)  |
+| **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval                   |
+| **Auto-Execution**          | Actions with >= 90% confidence auto-execute (except linear and reminder)               |
 
 ---
 
@@ -235,13 +395,14 @@ if (preview?.status === 'ready') {
 
 ## Internal Endpoints
 
-| Method | Path                               | Purpose                                     |
-| ------ | ---------------------------------- | ------------------------------------------- |
-| POST   | `/internal/actions`                | Create action from commands-agent           |
-| POST   | `/internal/actions/process`        | Process action from Pub/Sub (unified)       |
-| POST   | `/internal/actions/:actionType`    | Process action from Pub/Sub (type-specific) |
-| POST   | `/internal/actions/retry-pending`  | Retry stuck actions (Cloud Scheduler)       |
-| POST   | `/internal/actions/approval-reply` | Handle WhatsApp button taps (v2.0.0)        |
+| Method | Path                                 | Purpose                                     |
+| ------ | ------------------------------------ | ------------------------------------------- |
+| POST   | `/internal/actions`                  | Create action from commands-agent           |
+| POST   | `/internal/actions/process`          | Process action from Pub/Sub (unified)       |
+| POST   | `/internal/actions/:actionType`      | Process action from Pub/Sub (type-specific) |
+| POST   | `/internal/actions/retry-pending`    | Retry stuck actions (Cloud Scheduler)       |
+| POST   | `/internal/actions/approval-reply`   | Handle WhatsApp button taps (v2.0.0)        |
+| PATCH  | `/internal/actions/:actionId/status` | Update resource status from code-agent      |
 
 ---
 
@@ -255,12 +416,13 @@ commands-agent -> action.created -> actions-agent
                                 action.pending (Pub/Sub)
                                         |
                                 Action Handler
-                                (sends WhatsApp with [Approve][Reject] buttons)
+                        (>= 90% confidence: auto-execute)
+                        (< 90% confidence: WhatsApp buttons)
                                         |
-                                action.awaiting_approval
+                        auto-execute OR action.awaiting_approval
 ```
 
-### Approval Reply Flow (v4.0.0 — buttons only)
+### Approval Reply Flow (v4.0.0 -- buttons only)
 
 ```
 User taps WhatsApp button
@@ -275,22 +437,6 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
                                 (atomic)           (atomic)          (atomic)
                                         |                |                |
                                 Execute action      Done           "Converting..."
-```
-
-### Race Condition Prevention (v2.0.0)
-
-```
-Two concurrent approval button taps arrive:
-
-Thread 1: updateStatusIf('pending', 'awaiting_approval')
-          -> Transaction: read status='awaiting_approval', matches, update to 'pending'
-          -> Returns { outcome: 'updated' }
-          -> Proceeds to execute action
-
-Thread 2: updateStatusIf('pending', 'awaiting_approval')
-          -> Transaction: read status='pending', does NOT match
-          -> Returns { outcome: 'status_mismatch', currentStatus: 'pending' }
-          -> Returns early, no duplicate processing
 ```
 
 ---
@@ -312,77 +458,46 @@ Thread 2: updateStatusIf('pending', 'awaiting_approval')
 
 ---
 
-## Integration with whatsapp-service
-
-### Approval Request Message (v4.0.0)
-
-All action handlers send interactive buttons using `buildApprovalButtons()`:
-
-```typescript
-// Standard (all types except code)
-buttons = buildApprovalButtons({ actionId });
-// → [{ id: 'approve:{actionId}', title: 'Approve' }, { id: 'reject:{actionId}', title: 'Reject' }]
-
-// Code actions (with Convert to Issue button)
-buttons = buildApprovalButtons({
-  actionId,
-  extraButtons: [
-    { type: 'reply', reply: { id: `convert:${actionId}`, title: 'Convert to Issue' } },
-  ],
-});
-```
-
-### Approval Reply Messages
-
-```typescript
-// Approval
-message: `✅ Approved! Processing your ${action.type}: "${action.title}"`;
-
-// Rejection/cancel
-message: `🛑 Got it. Cancelled the ${action.type}: "${action.title}"`;
-
-// Convert to issue
-message: `🔀 Converting ${action.type} to Linear issue: "${action.title}"`;
-
-// Text reply (no button) — re-send buttons
-message: `Please use the buttons to approve or reject. If buttons expired, here they are again:`;
-buttons: buildApprovalButtons({ actionId });
-
-// Action not found
-message: `This action is no longer available. It may have been deleted or already processed.`;
-```
-
----
-
 ## Error Handling
 
-### Status Mismatch (v2.0.0)
+| Error Code       | HTTP | Meaning                    | Recovery Action               |
+| ---------------- | ---- | -------------------------- | ----------------------------- |
+| `INVALID_REQUEST`| 400  | Invalid input or state     | Fix request payload           |
+| `UNAUTHORIZED`   | 401  | Invalid or missing auth    | Refresh token or check header |
+| `FORBIDDEN`      | 403  | User not owner             | Verify user ID matches        |
+| `NOT_FOUND`      | 404  | Action does not exist      | Verify action ID              |
+| `INTERNAL_ERROR` | 500  | Processing failure         | Retry with backoff            |
+| `DOWNSTREAM_ERROR`| 502 | Calendar/other service err | Wait and retry                |
 
-When `updateStatusIf` returns `status_mismatch`, the handler returns success without processing:
+### Cancel-task Error Codes (v4.0.0)
 
-```typescript
-if (updateResult.outcome === 'status_mismatch') {
-  logger.info(
-    { actionId: action.id, currentStatus: updateResult.currentStatus },
-    'Action already processed by another approval reply (race condition prevented)'
-  );
-  return ok({
-    matched: true,
-    actionId: action.id,
-  });
-}
-```
-
-### Cancel-task Error Codes (v4.0.0 — UPPER_CASE)
-
-| Error Code             | HTTP Status | User Message                                     |
-| ---------------------- | ----------- | ------------------------------------------------ |
-| `TASK_NOT_FOUND`       | 404         | Task not found.                                  |
-| `INVALID_NONCE`        | 400         | Invalid cancel code. May have been used already. |
-| `NONCE_EXPIRED`        | 400         | Cancel link has expired.                         |
-| `NOT_OWNER`            | 403         | You are not the owner of this task.              |
-| `TASK_NOT_CANCELLABLE` | 400         | Task cannot be cancelled (may have completed).   |
+| Error Code             | HTTP | User Message                                     |
+| ---------------------- | ---- | ------------------------------------------------ |
+| `TASK_NOT_FOUND`       | 404  | Task not found.                                  |
+| `INVALID_NONCE`        | 400  | Invalid cancel code. May have been used already. |
+| `NONCE_EXPIRED`        | 400  | Cancel link has expired.                         |
+| `NOT_OWNER`            | 403  | You are not the owner of this task.              |
+| `TASK_NOT_CANCELLABLE` | 400  | Task cannot be cancelled (may have completed).   |
 
 ---
 
-**Last updated:** 2026-02-19
+## Dependencies
+
+| Service              | Why Needed                            | Failure Behavior             |
+| -------------------- | ------------------------------------- | ---------------------------- |
+| commands-agent       | Fetch command text for type changes   | Type change fails            |
+| research-agent       | Execute research actions              | Action marked as failed      |
+| todos-agent          | Execute todo actions                  | Action marked as failed      |
+| notes-agent          | Execute note actions                  | Action marked as failed      |
+| bookmarks-agent      | Execute link actions                  | Action marked as failed      |
+| calendar-agent       | Execute calendar actions, previews    | Action marked as failed      |
+| linear-agent         | Execute linear issue creation         | Action marked as failed      |
+| code-agent           | Execute code tasks, cancel tasks      | Action marked as failed      |
+| user-service         | User API keys for LLM pricing         | Startup fails                |
+| app-settings-service | LLM pricing configuration             | Startup fails                |
+| Firestore            | Action persistence                    | All operations fail          |
+| Pub/Sub              | Event distribution, notifications     | Best-effort (non-fatal)      |
+
+---
+
+**Last updated:** 2026-02-22

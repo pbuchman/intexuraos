@@ -33,6 +33,7 @@ graph TB
             UC5[validateIssue]
             UC6[generateIssueTitle]
             UC7[syncCommentFromWebhook]
+            UC8[triggerCodeTaskFromAssignment]
             IM[issueMapper]
             M[Models + WebhookTypes]
         end
@@ -41,6 +42,7 @@ graph TB
             LAC[Linear API Client]
             LES[LLM Extraction Service]
             WV[Webhook Validation]
+            CAC[Code Agent HTTP Client]
             CR[Connection Repository]
             FIR[Failed Issue Repository]
             PAR[Processed Action Repository]
@@ -74,6 +76,9 @@ graph TB
     WHR --> WV
     WHR --> UC3
     WHR --> UC7
+    WHR --> UC8
+    UC8 --> CAC
+    CAC --> CA
     UC1 --> LAC
     UC1 --> LES
     UC1 --> CR
@@ -179,18 +184,42 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                            | Date       |
-| ---------- | ---------------------------------------------------------------------- | ---------- |
-| `75cc9eb7` | Fix validateIssue label serialization; map LinearLabel[] to string[]   | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting via createLogStream() for PM2 readability  | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration (distributed tracing + metrics)    | 2026-02-16 |
-| `3f58c89f` | Switch Linear dashboard to Firestore with parent-child support         | 2026-02-10 |
-| `08dbaf84` | Show subissues under parent issues on Linear board                     | 2026-02-10 |
-| `55dd047d` | Add labels support to Linear Issues view                               | 2026-02-10 |
-| `c1fe452d` | Remove regex fallback from title generation, always use LLM            | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback + longer timeout | 2026-02-15 |
-| `1c7d6455` | Fix sync-all 401 by accepting OIDC tokens from Cloud Scheduler         | 2026-02-14 |
-| `151e93d4` | Fix Linear webhook signature validation                                | 2026-02-10 |
+| Commit     | Description                                                             | Date       |
+| ---------- | ----------------------------------------------------------------------- | ---------- |
+| `d5810213` | Use unique actionId for webhook dedup and propagate all dedup errors    | 2026-02-21 |
+| `dc45d1ea` | Align auto-trigger prompt with Phase 1 design behavior                  | 2026-02-21 |
+| `a88db80f` | Auto-trigger code tasks on Linear issue assignment                      | 2026-02-20 |
+| `6f35c16a` | Pass raw errors to pino logger (improved error observability)           | 2026-02-20 |
+| `b846dcc5` | Include assignee in list issues response mapper                         | 2026-02-20 |
+| `99e05f19` | Preserve assignee data during full sync (INT-573)                       | 2026-02-20 |
+| `75cc9eb7` | Fix validateIssue label serialization; map LinearLabel[] to string[]    | 2026-02-19 |
+| `6063175b` | Add dev-mode log formatting via createLogStream() for PM2 readability   | 2026-02-16 |
+| `a52a6bbc` | Add Dash0 OpenTelemetry integration (distributed tracing + metrics)     | 2026-02-16 |
+| `3f58c89f` | Switch Linear dashboard to Firestore with parent-child support          | 2026-02-10 |
+| `c1fe452d` | Remove regex fallback from title generation, always use LLM             | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback + longer timeout  | 2026-02-15 |
+
+### Auto-Trigger Code Tasks on Assignment (a88db80f + dc45d1ea)
+
+When a Linear issue is assigned for the first time via a webhook event, `triggerCodeTaskFromAssignment` fires a code task through the code-agent internal API. The trigger criteria are strict:
+
+- `action` must be `update`
+- `updatedFrom.assigneeId` must be `null` (no previous assignee)
+- `data.assignee` must be non-null (new assignee set)
+- `data.state.type` must be `unstarted` (not already in progress)
+- Issue must NOT have a `Code Task` label (prevents re-triggering)
+
+The prompt instructs the code agent to analyze the linked Linear issue, enrich the description with requirements, acceptance criteria, and test plan, then mark it ready for execution or flag it as unclear. The action is fire-and-forget (`void` promise) -- webhook response is not blocked.
+
+Action IDs use the format `webhook-assign-{identifier}-{timestamp}` for idempotent dedup.
+
+### Assignee Data in Full Sync and Dashboard (99e05f19 + b846dcc5)
+
+The Linear API client now fetches assignee data (`id`, `name`) alongside each issue during `listIssues` and `getIssue` calls. The `mapApiIssueToSyncedIssue` mapper preserves `assigneeId` and `assigneeName` from the API response, and the `listIssues` use case includes assignee data in the dashboard response via `syncedToLinearIssue`. Previously, assignee was only available from webhook payloads -- now it persists through full sync.
+
+### Webhook Dedup Fix (d5810213)
+
+The `triggerCodeTaskFromAssignment` function previously generated action IDs that could collide across different webhook events for the same issue. The fix uses `webhook-assign-{identifier}-{timestamp}` format, ensuring each webhook event produces a unique action ID. Additionally, all dedup errors from the code-agent response are now propagated to the logger for observability.
 
 ### Firestore-First Dashboard (0fa80ae6 + 3f58c89f)
 
@@ -613,9 +642,13 @@ Processes a single webhook event. Maps the webhook payload to `SyncedLinearIssue
 
 Processes a comment webhook event. Saves new or updated comments to `linear_issue_comments` or deletes removed ones.
 
+### triggerCodeTaskFromAssignment
+
+Triggered by webhook events when an issue is assigned for the first time. Calls the code-agent internal API (`POST /internal/code/process`) with a prompt to analyze the issue, enrich its description, and mark it ready. Fire-and-forget execution -- does not block the webhook response. Uses `shouldTriggerCodeTask` to validate the trigger criteria (first assignment, unstarted state, no "Code Task" label).
+
 ### fullSync / fullSyncAllUsers
 
-`fullSync` performs a complete reconciliation for one user: fetches all Linear API issues, upserts to local storage, and deletes stale issues. Returns `SyncStats`. `fullSyncAllUsers` iterates all connected users, continuing on individual failures.
+`fullSync` performs a complete reconciliation for one user: fetches all Linear API issues (with assignee data), upserts to local storage, and deletes stale issues. Returns `SyncStats`. `fullSyncAllUsers` iterates all connected users, continuing on individual failures.
 
 ## Firestore Collections
 
@@ -722,6 +755,7 @@ The Linear API client includes performance optimizations (INT-95):
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys            |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth              |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source           |
+| `INTEXURAOS_CODE_AGENT_URL`           | Yes      | Code agent for auto-trigger on assign |
 | `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                  |
 | `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                         |
 | `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                       |
@@ -734,12 +768,13 @@ The Linear API client includes performance optimizations (INT-95):
 
 ### Internal Services
 
-| Service              | Endpoint                    | Purpose                 |
-| -------------------- | --------------------------- | ----------------------- |
-| user-service         | `/internal/user/llm-client` | LLM API key retrieval   |
-| app-settings-service | `/internal/pricing`         | LLM pricing data        |
-| actions-agent        | (caller)                    | Upstream orchestrator   |
-| code-agent           | (caller)                    | Programmatic issue mgmt |
+| Service              | Endpoint                    | Purpose                                     |
+| -------------------- | --------------------------- | ------------------------------------------- |
+| user-service         | `/internal/user/llm-client` | LLM API key retrieval                       |
+| app-settings-service | `/internal/pricing`         | LLM pricing data                            |
+| code-agent           | `/internal/code/process`    | Auto-trigger code tasks on issue assignment |
+| actions-agent        | (caller)                    | Upstream orchestrator                       |
+| code-agent           | (caller)                    | Programmatic issue mgmt                     |
 
 ### External Services
 
@@ -776,13 +811,15 @@ The Linear API client includes performance optimizations (INT-95):
 - Idempotency check uses `actionId`, not message content hash
 - Client cache cleanup runs on interval, may hold stale clients during low traffic
 - Webhook signature validation requires raw body capture via custom Fastify content type parser
-- `mapApiIssueToSyncedIssue` sets assignee and labels to null/empty since the standard API response does not include them
+- `mapApiIssueToSyncedIssue` preserves assignee data from the API response (id + name); labels default to the API response values
 - Unknown webhook state types default to `unstarted`; out-of-range priority values default to 0
 - `generateIssueTitle` returns `err()` on LLM failure — no silent degradation
 - Dashboard (`GET /linear/issues`) reads from Firestore; run a full sync if data seems stale
 - `/internal/linear/sync-all` accepts both OIDC Bearer tokens (Cloud Scheduler) and X-Internal-Auth
 - Labels are full objects `{ id, name, color }` internally; `validateIssue` HTTP response maps them to `string[]` (names only)
-- OpenTelemetry instrumentation is transparent — loaded via `--import otel-register.js` at process start
+- OpenTelemetry instrumentation is transparent -- loaded via `--import otel-register.js` at process start
+- Auto-trigger code task fires only on first assignment (null -> non-null assignee) while state is `unstarted` and issue has no `Code Task` label
+- Webhook-triggered action IDs use `webhook-assign-{identifier}-{timestamp}` to ensure uniqueness per event
 
 ## File Structure
 
@@ -802,8 +839,9 @@ apps/linear-agent/
 │   │       ├── generateIssueTitle.ts    # LLM title generation (no regex fallback)
 │   │       ├── validateIssue.ts         # Issue identifier validation
 │   │       ├── syncSingleIssueUseCase.ts # Webhook event processing
-│   │       ├── syncCommentFromWebhook.ts # Comment webhook processing
-│   │       └── fullSyncUseCase.ts       # Full issue reconciliation
+│   │       ├── syncCommentFromWebhook.ts         # Comment webhook processing
+│   │       ├── triggerCodeTaskFromAssignment.ts  # Auto-trigger on issue assignment
+│   │       └── fullSyncUseCase.ts                # Full issue reconciliation
 │   ├── infra/
 │   │   ├── firestore/
 │   │   │   ├── linearConnectionRepository.ts
@@ -813,6 +851,8 @@ apps/linear-agent/
 │   │   │   └── linearCommentRepository.ts  # NEW: comment storage
 │   │   ├── linear/
 │   │   │   └── linearApiClient.ts
+│   │   ├── http/
+│   │   │   └── codeAgentHttpClient.ts       # Code agent HTTP client
 │   │   ├── linearWebhookValidation.ts
 │   │   └── llm/
 │   │       └── linearActionExtractionService.ts
@@ -821,7 +861,7 @@ apps/linear-agent/
 │   │   ├── internalRoutes.ts        # Internal: process-action, validate, title, sync, sync-all
 │   │   ├── internalIssuesRoutes.ts  # Internal: issues CRUD + state
 │   │   └── linearWebhookRoutes.ts   # Webhook receiver
-│   ├── services.ts                  # DI container (8 services)
+│   ├── services.ts                  # DI container (9 services)
 │   ├── server.ts                    # Fastify setup with raw body parser
 │   └── index.ts                     # Entry point
 ├── __tests__/                       # Comprehensive test suite (25+ test files)
@@ -830,4 +870,4 @@ apps/linear-agent/
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22

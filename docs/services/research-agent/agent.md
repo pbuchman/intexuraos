@@ -1,4 +1,4 @@
-# research-agent — Agent Interface
+# research-agent -- Agent Interface
 
 > Machine-readable interface definition for AI agents interacting with research-agent.
 
@@ -287,8 +287,8 @@ When a user has no API key for a provider, `getLlmClient` tries platform-owned k
 ```typescript
 // Fallback resolution order:
 // 1. User's own API key
-// 2. Platform Gemini key → 'gemini-2.0-flash' (if INTEXURAOS_GEMINI_APP_API_KEY set)
-// 3. Platform Zai key → 'glm-4.7-flash' (if INTEXURAOS_ZAI_APP_API_KEY set)
+// 2. Platform Gemini key -> 'gemini-2.0-flash' (if INTEXURAOS_GEMINI_APP_API_KEY set)
+// 3. Platform Zai key -> 'glm-4.7-flash' (if INTEXURAOS_ZAI_APP_API_KEY set)
 // 4. Error: NO_API_KEY
 ```
 
@@ -434,20 +434,20 @@ if (research.status === 'awaiting_confirmation') {
 ## State Machine
 
 ```
-draft ──approve──> pending ──process──> processing ──all_complete──> synthesizing ──synth_done──> completed
-                      │                     │                            │
-                      │                     │ partial_failure            │ synth_error
-                      │                     v                            v
-                      │              awaiting_confirmation            failed
-                      │                     │
-                      │                     │ proceed/retry/cancel
-                      │                     v
-                      └─────────────> [varies by decision]
+draft --approve--> pending --process--> processing --all_complete--> synthesizing --synth_done--> completed
+                      |                     |                            |
+                      |                     | partial_failure            | synth_error
+                      |                     v                            v
+                      |              awaiting_confirmation            failed
+                      |                     |
+                      |                     | proceed/retry/cancel
+                      |                     v
+                      +--------------> [varies by decision]
 ```
 
 ---
 
-## Dependencies (v2.4.0)
+## Dependencies (v3.1.0)
 
 | Package                        | Purpose                                              |
 | ------------------------------ | ---------------------------------------------------- |
@@ -465,4 +465,4 @@ draft ──approve──> pending ──process──> processing ──all_com
 
 ---
 
-**Last updated:** 2026-02-19 (v2.4.0)
+**Last updated:** 2026-02-22 (v3.1.0)
