@@ -382,7 +382,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     {
       actionRepository,
       whatsappPublisher,
-      calendarPreviewPublisher,
+      calendarServiceClient,
       webAppUrl: config.webAppUrl,
       logger: createAppLogger({ name: 'handleCalendarAction' }),
       executeCalendarAction: executeCalendarActionUseCase,
