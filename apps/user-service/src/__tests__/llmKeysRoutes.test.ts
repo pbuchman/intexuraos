@@ -773,6 +773,40 @@ describe('LLM Keys Routes', () => {
       expect(body.success).toBe(true);
     });
 
+    it('still returns 200 when cascade clearLlmPreferences fails after deletion', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-cascade-clear-fail';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      // Make clearLlmPreferences fail — cascade should still not break the delete
+      fakeSettingsRepo.setFailNextClearLlmPreferences(true);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      // The delete still succeeds, cascade is best-effort
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+
     it('returns 500 when repository delete fails', { timeout: 20000 }, async () => {
       fakeSettingsRepo.setFailNextDeleteLlmKey(true);
 

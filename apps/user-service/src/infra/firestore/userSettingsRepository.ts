@@ -244,6 +244,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     }
   }
 
+  // Note: Deletes the entire `llmPreferences` field. This assumes `llmPreferences`
+  // only contains `defaultModel`. If additional preference fields are added in the
+  // future, switch to targeted deletion: `'llmPreferences.defaultModel': FieldValue.delete()`.
   async clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>> {
     try {
       const db = getFirestore();
