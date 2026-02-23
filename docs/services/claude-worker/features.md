@@ -1,88 +1,92 @@
 # Claude Worker
 
-The Docker-based isolation container that runs Claude Code sessions in sandboxed environments with enforced resource limits, read-only secrets, and network restrictions.
+A ready-to-go coding environment in a box — your credentials, your machine, your control.
 
 ## The Problem
 
-Running AI coding agents directly on host machines creates serious security and operational risks:
+Running an AI coding agent on your host machine is like handing a contractor the master key to every room in the building. The agent needs access to source code, credentials, and network resources to do meaningful work — but nothing stops it from wandering into production databases, reading secrets it does not need, or making network calls to internal services you never intended to expose.
 
-1. **Unrestricted filesystem access** - An agent process can read any file on the host, including other tasks' code and system credentials
-2. **No resource boundaries** - A runaway agent can consume all CPU and memory, starving other tasks
-3. **Secret exposure** - Host environment variables and credential files are accessible to every process
-4. **Cross-task contamination** - Multiple concurrent agent tasks share the same filesystem namespace
-5. **No network controls** - Agents can reach internal services, cloud metadata servers, and exfiltrate data to arbitrary endpoints
+Most managed platforms solve this by moving the problem off your machine entirely. They run the agent in their cloud, with their API keys, on their infrastructure. You gain convenience but surrender control. Your source code passes through third-party servers. Your API spend flows through someone else's account, with their rate limits and their audit trail. When something goes wrong — and with autonomous agents, things do go wrong — you have no way to inspect what the agent accessed, no way to replay its network calls, and no way to confirm that credentials were not logged somewhere you cannot reach.
+
+What teams actually need is neither of these. Not a process running loose on the host machine, and not a black box in someone else's cloud. They need an environment that is powerful enough for real engineering work, contained enough that a misbehaving process cannot reach beyond the task at hand, and owned entirely by the people who operate it.
+
+## Use Case: The Overnight Feature Build
+
+A team lead who wants a complex feature implemented by morning — without babysitting the process.
+
+1. The lead opens the IntexuraOS web dashboard — the browser-based interface for assigning tasks and monitoring progress — and assigns the task before leaving for the day. No one configures an environment, installs dependencies, or sets up credentials.
+2. The system provisions a fresh, isolated environment automatically. It arrives with version control, package management, fast code search, infrastructure tooling, a browser for automated testing, documentation lookup, and error tracking — all installed and connected from the first command.
+3. The agent begins working immediately. Project dependencies are installed at startup using a shared cache, so packages that any previous environment already downloaded are available in seconds rather than minutes.
+4. Logs stream back to the dashboard in real time. A teammate checking in over coffee can see exactly what the agent is doing, what tests it is running, and whether it has hit any problems.
+5. Midway through, a test fails. The agent adjusts its approach and continues. If it stalls or hits the two-hour attempt limit, the system retries automatically — but the environment stays warm. Session history, installed packages, and prior reasoning carry forward, so the next attempt picks up where the last one left off.
+6. By morning, the only evidence of the work is a clean pull request. The environment has been destroyed — no leftover processes, no credentials lingering on disk, no container sitting idle.
 
 ## How It Helps
 
-Claude Worker wraps each Claude Code session in a purpose-built Docker container with defense-in-depth isolation:
+### Keeps Your Credentials on Your Machine
 
-1. **Filesystem sandboxing** - Each worker sees only its assigned git worktree at `/repo` and a read-only `/secrets` mount
-2. **Resource enforcement** - Kernel-level CPU (4 cores) and memory (8 GB) limits prevent resource exhaustion
-3. **Least-privilege execution** - Runs as non-root user `claude` (UID 1001) with all Linux capabilities dropped
-4. **Secret partitioning** - Each task receives its own secrets directory; credentials are never shared between tasks
-5. **Network isolation** - Dedicated Docker network blocks access to cloud metadata servers and private IP ranges while allowing public internet
-6. **Ephemeral home directory** - `/home/claude` is a tmpfs mount that disappears when the container stops, leaving no persistent traces
+You can set spending caps, monitor usage in real time, and revoke access instantly if something looks wrong — because the agent runs under your team's own Anthropic subscription, managed by whoever administers your host machine. No usage appears on someone else's invoice. No audit trail lives in a vendor's log store.
 
-## Use Cases
+This matters because autonomous agents can be expensive. When you control the subscription directly, you see exactly how much each task consumed and you can cut off a runaway task without filing a support ticket with a vendor.
 
-### Automated Code Tasks via Orchestrator
+**Example:** Your team's Anthropic account shows exactly how many tokens each task consumed. If a runaway task burns through an unusual amount, you see it in the same dashboard you already use — and you can cut it off without filing a ticket.
 
-**User Goal:** Run an AI agent to implement a Linear ticket on a dedicated git branch
+### Delivers a Complete Workstation, Ready on Arrival
 
-**How it works:**
+Every environment arrives with tools for managing code history, installing dependencies, searching files across large codebases, processing structured data, creating pull requests, automating a browser, validating infrastructure configurations, and authenticating with cloud providers. Integrations for documentation lookup, error tracking, and browser-based testing are configured and connected before the agent writes its first line of code.
 
-1. The orchestrator receives a task assignment from the code-agent service
-2. It creates a git worktree for the task's branch and prepares a per-task secrets directory
-3. The orchestrator writes `system-prompt.txt` and `user-prompt.txt` into the secrets directory
-4. A claude-worker container starts in managed mode (`CLAUDE_MANAGED_MODE=1`) and performs setup: GCP auth, pnpm install, git identity, attribution config
-5. The container writes `/tmp/worker-ready` once setup is complete
-6. The orchestrator invokes `docker exec <container> /entrypoint.sh run-attempt` to run Claude in `--print` mode
-7. Claude executes the task, reading prompts from `/secrets/system-prompt.txt` and `/secrets/user-prompt.txt`
-8. For resume attempts, the orchestrator updates the prompt files and calls `run-attempt` again with `CLAUDE_CONTINUE=1`
-9. On completion or timeout, the orchestrator destroys the container and cleans up secrets
+Project dependencies are installed automatically at startup. A shared package cache means the first environment pays the installation cost once, and every subsequent environment benefits. A task that would take twenty minutes to set up by hand is ready in seconds.
 
-### Multi-Model Worker Types
+**Example:** The agent needs to validate infrastructure settings, run a browser-based integration test, and then create a pull request — all in the same task. It does not install anything or configure any credentials. Every tool is already there.
 
-**User Goal:** Use different AI providers depending on task requirements
+### Isolates Each Task by Design
 
-Claude Worker supports three worker types through the orchestrator:
+Each environment starts without administrator access and cannot escalate its privileges. The system that manages containers is not accessible from inside — the agent cannot provision new environments, inspect other running tasks, or interfere with the host machine's operations.
 
-- **opus** - Uses Claude Opus 4.5 via Anthropic API (for high-quality tasks)
-- **auto** - Uses Anthropic API with automatic model selection
-- **glm** - Uses GLM via ZAI API (alternative provider)
+Network access is scoped to the public internet: package registries, source control, and external APIs are reachable. Private IP ranges, the host machine's local services, and cloud infrastructure metadata endpoints are blocked. The agent can pull a dependency from npm or call a public API, but it cannot probe the internal network or discover other workloads running on the same machine.
 
-### E2E Testing with Stub Image
+Each task gets its own isolated copy of the repository, so concurrent tasks cannot step on each other's work. A two-hour maximum per attempt prevents any single task from running indefinitely.
 
-**User Goal:** Verify container isolation behavior without making real API calls
+**Example:** Two tasks run simultaneously on the same machine. One is refactoring authentication logic; the other is building a new API endpoint. Each operates in its own copy of the codebase with its own resource allocation. Neither can see the other's work, read the other's secrets, or compete for the other's memory.
 
-The `Dockerfile.test` builds a lightweight test image that replaces the real Claude CLI with a bash stub script. This stub supports commands like `file-test`, `network-test`, and `resource-test` for verifying filesystem permissions, network restrictions, and resource limits in CI.
+### Preserves Continuity Across Attempts
+
+An "attempt" is a single run of the agent against a task. If the first try does not succeed — a test fails, a timeout is hit, or the approach needs rethinking — the system retries with a fresh strategy. But the environment stays warm. Installed packages persist. The agent's previous session is resumed, so it starts the next attempt with context about what it tried and why it failed — though long sessions may be summarized to fit within the model's context window.
+
+This is the difference between a system that retries and a system that recovers. A naive retry discards everything and starts from scratch — reinstalling dependencies, re-reading the codebase, re-discovering the same dead ends. A recovery picks up where the last attempt left off, skips the work that already succeeded, and tries a different path through the parts that failed.
+
+**Example:** The agent spends forty minutes on a task before hitting a test failure that forces a different approach. On the retry, it does not repeat those forty minutes of setup. Dependencies are already installed. The codebase is already indexed. The agent's session history shows what it tried and why it failed, so it starts the next attempt with that context intact.
+
+### Cleans Up After Itself
+
+When a task completes, the environment is destroyed. Temporary files, session state, credentials mounted during execution — all of it disappears. Nothing persists on disk between tasks unless it was committed and pushed to the repository.
+
+This is not just tidiness. Ephemeral environments eliminate an entire category of security concerns. There are no stale credentials to rotate, no leftover files to audit, and no risk that one task's secrets leak into the next task's workspace. Any environment that has been running for more than twenty-four hours is automatically removed, even if the system that created it lost track of it.
+
+**Example:** A task that required access to a sensitive API key finishes at 3 AM. By 3:01 AM, the environment is gone. The API key is no longer mounted anywhere on the machine. No one needs to remember to clean it up.
+
+## Getting Started
+
+Claude Worker runs as part of the IntexuraOS platform. When you assign a coding task through the dashboard, the system provisions and manages the environment automatically. There is nothing to install, configure, or maintain — the environment arrives ready to work and disappears when the work is done.
 
 ## Key Benefits
 
-**Zero-trust execution** - Every container starts with all capabilities dropped and a non-root user. The security posture assumes the agent code is untrusted.
-
-**Automatic credential rotation** - GitHub tokens are refreshed every 30 minutes by the orchestrator's TokenRefresher and written to the container's `/secrets/github-token` file. The entrypoint watches for token changes in the background.
-
-**Pre-baked developer toolchain** - The image includes git, pnpm, ripgrep, fd, bat, jq, terraform, gcloud CLI, GitHub CLI, and Chromium, matching the tools used across 1,935 analyzed commands from real development sessions.
-
-**Pre-installed MCP servers** - `@upstash/context7-mcp`, `@sentry/mcp-server`, and `@playwright/mcp` are globally installed at build time. On Alpine, `npx` downloads to noexec-restricted temp directories at runtime, causing permission errors; global installation avoids this entirely.
-
-**Onboarding-free startup** - Claude configuration defaults are baked into the image at `/opt/claude-defaults/` and copied into the tmpfs home directory at startup, skipping the interactive onboarding flow.
-
-**Managed execution mode** - With `CLAUDE_MANAGED_MODE=1`, the container stays alive after setup and accepts multiple work invocations via `docker exec /entrypoint.sh run-attempt`. This amortizes the startup cost (pnpm install, GCP auth) across retry and resume attempts.
-
-**Automatic dependency installation** - The entrypoint runs `pnpm install --frozen-lockfile` at startup if `pnpm-lock.yaml` is present in `/repo`, ensuring the repo's dependencies are available for CI commands without a separate install step. A shared host-side pnpm store is bind-mounted at `/home/claude/pnpm-store`, so the content-addressable cache persists across container restarts and is reused by subsequent workers.
-
-**Persistent Claude session state** - The per-task Claude session directory (`~/.claude`) is mounted from the host and survives container restarts. Combined with `CLAUDE_CONTINUE=1`, this enables true resume of a previous Claude session across separate `run-attempt` invocations.
-
-**Randomized AI attribution** - Each container generates a unique commit/PR attribution line (e.g. "Crafted with love by 🤖 Intex") from a list of 25 verbs, written to `/repo/.claude/settings.local.json` so every task has a distinct identity.
+- **Zero-configuration startup** — the environment arrives fully provisioned with every tool, integration, and dependency pre-installed. No setup scripts, no interactive prompts.
+- **Credentials stay on your machine** — your team's Anthropic subscription, your audit trail, your rate limits. Nothing leaves the premises.
+- **Ephemeral by default** — when the task ends, the environment is destroyed. No persistent traces, no stale credentials, no cleanup checklists.
+- **Shared dependency cache** — package installations persist across environments, so repeated builds skip minutes of redundant downloads.
+- **Real-time visibility** — logs stream to the dashboard as the agent works, and a pull request appears when it finishes.
+- **Multiple tasks at once, no interference** — concurrent tasks each run in their own isolated copy of the repository with their own resource allocation. The concurrency ceiling is configurable by whoever operates the host.
 
 ## Limitations
 
-**No Docker-in-Docker** - The Docker socket is not mounted inside worker containers. Tasks requiring Docker commands (building images, running containers) cannot execute inside the worker.
+- **One task per environment** — each environment handles a single task. This is a deliberate isolation boundary, not a scaling constraint.
+- **No access to private networks** — the agent can reach public endpoints but cannot probe internal services or private IP ranges. By design.
+- **Credentials are accessible during execution** — secrets are mounted read-only and destroyed with the environment when the task ends, so there are no stale credentials to rotate. But while the task runs, the agent can read them.
+- **Two-hour maximum per attempt** — individual attempts are capped. The system retries automatically, but each run has a hard ceiling.
+- **No persistent storage** — anything not committed to version control or pushed to a remote is lost when the environment is destroyed.
+- **Configurable concurrency** — the number of simultaneous environments is set by whoever operates the host. Additional tasks wait in the queue.
 
-**Root filesystem is writable** - Due to Claude Code writing to `/home/claude/.claude/` and Alpine needing `/etc/passwd` writes, the root filesystem cannot be set to read-only. Mitigation comes from non-root user, dropped capabilities, and tmpfs mounts.
+---
 
-**Ephemeral `/tmp`** - The tmpfs on `/tmp` is wiped when the container stops, which is where the readiness marker and other scratch files live. Claude session history and the pnpm store are persisted via host-side bind mounts and survive container teardown.
-
-**Host iptables required for full network isolation** - On production GCE VMs, iptables rules must be applied at the host level to block metadata server and private IP access. On macOS with Docker Desktop, network isolation relies on the VM layer.
+_Part of [IntexuraOS](../overview.md) — AI-native software delivery, from task to pull request._
