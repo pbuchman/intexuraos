@@ -8,59 +8,88 @@ Running software that works through tasks on its own is only useful if you can s
 
 The deeper problem is control. Autonomous systems make decisions, and some of those decisions need human approval. If approvals are buried in notifications across different apps, things slip through. A code task finishes its planning phase and needs a green light before the system starts writing code. A research query returns results that need review. A message arrives that requires your judgment. Without a single place to act on these, you either slow the system down by missing prompts or speed it up by rubber-stamping things you did not read.
 
-This is not a passive dashboard. The web app closes a loop: you observe what the system did, and that observation directly unblocks what it does next. Your attention is not optional — it is the mechanism that keeps autonomous work moving safely. Trust is built through this transparency, and transparency requires a window you actually carry with you.
+This is not a passive dashboard. The web app closes a loop: you observe what the system did, and that observation directly unblocks what it does next. Your attention is not optional — it is the mechanism that keeps autonomous work moving safely.
 
-## Use Case: Watching Your Code Agent Work
+## Use Case: A Morning of Agent Oversight
 
-You wake up and open the app on your phone — it is installed as a standalone application, no browser tab needed. Your inbox shows three new items: a message that was auto-classified overnight, a research report that finished, and a code task waiting for approval.
+You wake up and open the web app on your phone — it is installed as a standalone app, no browser chrome, just your system. Overnight, the agents processed twelve commands from your inbox. Three turned into action items waiting for your approval. One kicked off a code task that finished its design phase — the plan is sitting there, ready for you to read and greenlight. A research report on competitor pricing came back with four sources. Your calendar shows two meetings today, and a Linear issue you filed yesterday already has sub-issues broken out by the planning agent.
 
-You tap into the code task. The system completed a design plan while you slept — a structured outline of what it intends to build and how. The plan looks good. You approve it, and the execution phase begins. A live activity feed lights up in real time — you can see each step as the system writes code, runs tools, and encounters decisions. Each type of activity has its own color, so you can scan quickly for errors or completions without reading every line. You scroll through the history, then toggle follow mode so the feed auto-scrolls as new entries appear. Midway through, you realize you forgot to mention an edge case, so you send a follow-up message without interrupting the running task.
+You approve two actions, reject one that misread your intent, read the code task plan and tap to start execution. While you eat breakfast, the log stream shows the code agent working — cyan lines for your original request, blue lines as it writes files, yellow flashes when it runs tools. You scroll up to check something, and the stream pauses so you do not lose your place. When you scroll back to the bottom, it catches up automatically.
 
-While the code task runs, you switch to your project board — a view of your Linear issues (your project tracker) organized into three columns: Planning, In Progress, and Recently Closed. Sub-issues nest underneath their parents, and labels appear as colored badges. You notice an issue has moved since you last checked. You open the code review page and see a new comment on a code change your system submitted yesterday. The comment renders cleanly with full formatting. Back on the home screen, your calendar shows today's meetings, and your research page has two new reports ready to read. Everything the system did overnight, visible in one place.
+By the time you sit down at your desk, half your morning work is already done. You did not write a single line of code or open a single email. You just watched, approved, and moved on.
 
 ## How It Helps
 
-### Your Attention Unblocks the Machine
+### Watch Code Being Written in Real Time
 
-This is the core differentiator. Unlike monitoring tools that show you what happened, the web app is where your approval actively advances the system's work. Approve a code task's transition from design to execution. Review and retry failed tasks. Resolve conflicts when two operations collide. The system keeps working, but only within boundaries you set — and it waits for you when it needs to.
+You send a coding request and switch to the code tasks view. The log stream starts immediately — every action the code agent takes appears as a color-coded line. Your original input shows in cyan. When the agent queues work, amber lines appear. Tool invocations flash yellow. Errors — if they happen — show in red, so you spot problems the moment they occur rather than discovering them after the task finishes.
 
-### Real-Time Visibility Into What the System Is Doing
+The stream follows the agent's output in real time. If you scroll up to re-read an earlier section, auto-scroll pauses and stays where you put it. Scroll back to the bottom, and follow mode re-engages. A live indicator pulses while the task runs, and a line count tells you how much output has accumulated. When you need to share the full log with someone, one button copies every line to your clipboard.
 
-Every autonomous action surfaces as it happens. When a message arrives, you see it immediately. When a code task produces output, the live activity feed updates with a line count and a pulsing indicator. When a research report completes, it appears in your list without a page refresh. You are not checking — you are watching.
+**Example:** Your code agent is halfway through implementing a new API endpoint. You notice in the log stream that it is creating a file in the wrong directory — a yellow tool line shows the path. You type a follow-up message directly into the task. The message queues without interrupting the agent's current work, and within seconds you see it pick up your correction and adjust course. No restart, no lost progress.
 
-### Live Code Task Monitoring
+### Approve a Plan Before the System Writes Code
 
-The code task detail page is a control room. The activity feed shows every step, color-coded by type — your input, the system's actions, errors, and completions are each visually distinct. Follow mode keeps you at the latest entry; scroll up to review history and follow mode pauses automatically. Copy all output with one tap. Send follow-up instructions while the task runs. Link tasks to your project tracker for traceability. Color-coded banners connect design plans to their execution counterparts, so you can always trace how a task evolved.
+Code tasks run in two phases, and you control the gate between them. The design phase produces a plan — what the agent intends to build, which files it will touch, what approach it will take. That plan lands in your web app as a reviewable document. Nothing happens until you approve it.
 
-### Built for Your Phone, Not Adapted for It
+Once you approve, the execution phase begins. The web app links the two phases together with color-coded banners — on the execution task, a violet banner links back to the design; on the design task, an emerald banner links forward to the implementation. You can navigate between them to compare what was planned against what was built. When the execution finishes, GitHub pull request events appear inline, with expandable details and clickable links straight to the code.
 
-The app installs on your home screen like a native application, on both Android and iOS. It saves what it needs to your phone for fast loading, supports dark, light, and system-following themes, and updates itself automatically. Share a link or text from any other app on your phone, and it routes directly into the system — but only when the app is installed to your home screen. Agent oversight should not require sitting at a desk.
+**Example:** You ask the system to refactor your authentication module. The design phase comes back with a plan that proposes changing three files and adding a new utility. You read it, notice it missed an edge case in token refresh, and type that feedback as a follow-up. The agent revises the plan. You approve the updated version, and execution begins. Twenty minutes later, the PR events show up — you expand them, read the review comments and activity, and click through to GitHub to merge.
 
-### A Front Door That Works Without an Account
+### Act on Everything From One Inbox
 
-A floating chat assistant appears on every page. For you, it searches platform knowledge and can even propose creating new automations based on your conversation. For visitors and prospective users, it works without any account at all — ask a question, get an answer. The assistant is both a help tool and a first impression of what the system can do.
+Commands and actions flow into a single inbox. Commands are things the system received — messages, requests, inputs from various channels. Actions are things the system wants to do about them. Some actions just need your awareness. Others need your explicit approval before the system proceeds.
+
+Each action item shows configurable buttons — approve, reject, or whatever responses the originating service defined. You do not need to context-switch to another app or remember which service generated the request. The inbox is the one place where human judgment enters the loop.
+
+**Example:** You sent a WhatsApp message last night saying "cancel my dentist appointment and reschedule for next week." The system classified it, created an action item, and is waiting. You open the inbox this morning, see the proposed calendar changes, tap approve, and the system handles the rest — cancellation message, new appointment request, calendar update. One tap, three operations.
+
+### Track Your Projects as They Move
+
+The Linear integration presents your issues in grouped columns — Planning, In Progress, and Recently Closed — with sub-statuses nested within each. Sub-issues nest under their parents, so you see the full breakdown of a project without opening Linear separately. Labels show in their assigned colors. The board refreshes periodically, so changes appear shortly after they happen.
+
+**Example:** You filed an issue for a new feature last week. The planning agent broke it into four sub-issues overnight. You open the Linear board in the web app and see all four nested under the parent, each with status labels. One is already In Progress — the code agent picked it up. You tap into it, see the linked code task, and jump to the log stream to watch the work happening.
+
+### Review Research and Visualize Data
+
+Research tasks return structured reports with sources, summaries, and findings. The web app shows them in a list view, and you can drill into any report to read the full analysis. Data insights sit alongside — combined views that pull together information from multiple sources into a single feed, saved visualizations you have configured, and static data sources you have uploaded for reference.
+
+**Example:** You asked the system to research pricing models for a competitor. The report comes back with four sources, a summary table, and a recommendation section. You read it in the web app, decide you want deeper analysis on one point, and send a follow-up research request. The new report lands in the same list, and you compare the two side by side.
+
+### Everything Else in One Place
+
+Calendar events show your schedule. Todos and notes capture your running lists and scratch thoughts. Bookmarks save things you want to return to, with real-time sync so additions from other parts of the system appear immediately. Mobile notification history shows what the system pushed to your phone, so you can trace back anything you dismissed. Settings pages let you configure every connected service — WhatsApp, Notion, Google Calendar, Linear webhooks, mobile notifications, worker processes, API keys, LLM pricing, usage costs, and share history.
+
+A floating chat assistant is available on every page. It connects to an AI assistant that can answer questions and create commands on your behalf — the same commands that flow through the inbox for processing. If someone visits without an account, the chat still works in guest mode — useful for sharing a link with a colleague who wants to ask a quick question.
+
+**Example:** You are on the calendar page reviewing tomorrow's meetings. You remember you need to add a note about preparation for one of them. You tap into notes, write it, and switch to bookmarks to check a link you saved last week. No app-switching, no separate logins — it is all one surface.
+
+### Install Once, Check From Anywhere
+
+The web app is a Progressive Web App. On Android and iOS, you install it to your home screen and it runs in standalone mode — no browser bar, no tabs, just the app. It auto-updates silently, and the shell loads even when your connection drops momentarily. The share target integration means you can share a link or text from any app on your phone directly into IntexuraOS, the same way you would share to Messages or Email.
+
+**Example:** You are reading an article on your phone and spot a competitor announcement worth tracking. You hit the share button, select IntexuraOS from the share sheet, and the link flows into the system. Later, when you open the web app, you see it in your bookmarks — already there, no manual copy-paste required.
+
+## Getting Started
+
+Install the web app from your browser — on mobile, use "Add to Home Screen." Sign in with your account, or start a guest chat session without one. The inbox shows what has accumulated since your last visit. Code tasks, research reports, calendar events, and Linear issues are each one tap away.
 
 ## Key Benefits
 
-- **Human-in-the-loop approval** -- your observation directly unblocks autonomous progress, not just monitors it
-- **Unified inbox** -- messages, research, code tasks, and approvals in a single stream
-- **Live activity feeds** -- watch code being written and research completing as it happens
-- **Two-phase code visibility** -- track tasks from design plan through execution, with linked banners connecting the phases
-- **Three-column project board** -- see planning, active work, and recently closed issues with nested sub-issues and labels
-- **Code review activity** -- review comments and code change events with full formatting
-- **Mobile-native agent oversight** -- installed on your phone, with offline caching and automatic updates
-- **Share from anywhere** -- send links and text from any app directly into the system
-- **Guest chat** -- ask questions without signing up, with platform knowledge search and automation suggestions built in
-- **Adapts to you** -- dark, light, or system-following theme, with connections to your calendar, project tracker, notes, and messaging
+- **One screen for autonomous operations** — every agent's work surfaces in a single interface, so you stop checking five different tools
+- **Approval without context-switching** — action items, code task gates, and research reviews all happen in the same app you are already looking at
+- **Real-time visibility into code generation** — color-coded log streams show exactly what the agent is doing, not a summary after the fact
+- **Phone-native experience** — install it to your home screen, share content from any app, and the shell loads even offline — the system is always one tap away
+- **Control without friction** — follow-up messages, approval buttons, and phase gates give you authority over the system's next move without slowing it down
 
 ## Limitations
 
-- **Offline loads the shell, not live data** -- the app opens without a connection, but everything meaningful requires network access
-- **Push notifications vary by platform** -- mobile notification support depends on your device and browser
-- **Real-time updates need an active connection** -- if your connection drops, you will not see changes until it reconnects
-- **Project board refreshes periodically** -- issue status updates on a regular cycle, not instantly
-- **Share only works when installed** -- sending content from other apps requires adding the web app to your home screen
+- **Offline loads the shell, not live data** — the app opens without a connection, but everything meaningful requires network access
+- **Real-time updates need an active connection** — if your connection drops, updates pause until it reconnects
+- **Guest access is limited to the chat assistant** — inbox, code tasks, and other views require a full account
+- **Share target requires installation** — sending content from other apps only works when the PWA is installed to your home screen
+- **Some settings assume familiarity** — pages like webhook configuration and worker setup have no guided wizard yet
 
 ---
 
-_Part of [IntexuraOS](../overview.md) -- your window into the machine._
+_Part of [IntexuraOS](../overview.md) — Your window into the machine._
