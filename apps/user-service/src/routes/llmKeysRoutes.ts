@@ -569,7 +569,10 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (currentDefault !== undefined) {
           const defaultProvider = getProviderForModel(currentDefault);
           if (defaultProvider === params.provider) {
-            await userSettingsRepository.clearLlmPreferences(params.uid);
+            const clearResult = await userSettingsRepository.clearLlmPreferences(params.uid);
+            if (!clearResult.ok) {
+              request.log.warn({ userId: params.uid }, 'Failed to cascade-clear LLM preferences after key deletion');
+            }
           }
         }
       }
