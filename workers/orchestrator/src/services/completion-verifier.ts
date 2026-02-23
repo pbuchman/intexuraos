@@ -353,7 +353,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       'Do not judge code quality.',
       'If evidence is missing, return FAIL.',
       'Return JSON only with the exact schema:',
-      '{"passed":boolean,"confidence":number,"reasons":string[],"missingCriteria":string[],"resumeInstruction":string,"extractedSummary":string}',
+      '{"passed":boolean,"confidence":number (0.0-1.0),"reasons":string[],"missingCriteria":string[],"resumeInstruction":string,"extractedSummary":string}',
       '',
       `TASK ${input.taskId} ATTEMPT ${String(input.attempt)}/${String(input.maxAttempts)} PHASE ${input.phase}`,
       '',

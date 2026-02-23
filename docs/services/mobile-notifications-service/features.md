@@ -1,59 +1,58 @@
 # Mobile Notifications Service
 
-Capture and store mobile device notifications through a secure webhook pipeline with signature-based authentication.
+Your phone's notifications, inside the platform -- captured, structured, and ready for analysis alongside everything else.
 
 ## The Problem
 
-Important notifications arrive on your phone throughout the day -- messages, app alerts, system events -- but they vanish from your notification shade and are impossible to search or analyze later. There is no centralized way to capture, persist, and query the stream of notifications flowing through a mobile device. Traditional approaches require installing heavyweight apps or giving up privacy to third-party services.
+Dozens of notifications arrive on your phone each day -- banking alerts, delivery updates, fitness milestones, app reminders. Each one is a data point about your life. But they scroll past in seconds, trapped in a notification shade with no search, no filtering, and no connection to anything else.
+
+The real loss is not individual alerts. It is the pattern. When notifications from different apps never meet in one place, the connections stay invisible. These patterns only emerge when the data is collected, structured, and available for analysis.
+
+## Use Case: Turning Alerts into Insight
+
+You run a small business. Payment confirmations, supplier alerts, delivery updates, and scheduling reminders arrive on your phone all day. You connect your phone to the platform once, and from that point every notification flows into IntexuraOS automatically -- filterable by app, searchable by title, browsable in full.
+
+The real value emerges when you combine notifications with the platform's analysis tools. The AI queries your history directly -- pulling banking alerts alongside a sales spreadsheet, surfacing a correlation between supplier timing and cash flow dips you never noticed from the alerts alone.
 
 ## How It Helps
 
-### Secure Device Pairing via Signature Tokens
+### One-Time Connection, Continuous Capture
 
-Connect any Android device with a single API call. The service generates a crypto-secure 256-bit token, returns it once, and stores only the SHA-256 hash. The device uses this token as a header on every webhook call, and the service validates it by hash comparison -- plaintext is never stored.
+Connect your phone once. The setup returns a secure credential shown exactly once -- store it, and every future notification arrives automatically. Creating a new connection replaces the previous one, keeping one active link per user.
 
-**Example:** A user pairs their Pixel phone by calling the connect endpoint. They receive a signature token, configure it in Tasker, and every notification from that phone is now securely routed to their account.
+### Automatic Deduplication
 
-### Automatic Notification Capture via Webhooks
+Every notification is stored with its source, device, app name, title, content, and timestamp. Duplicates are silently ignored, keeping your history clean.
 
-Mobile automation apps (Tasker, Automate) send notification data to a webhook endpoint. The service validates the signature, deduplicates by device-provided notification ID, and persists the notification in Firestore -- all in a single request.
+### Flexible Filtering and Search
 
-**Example:** WhatsApp messages, Slack notifications, and calendar reminders are all captured as they appear on the device, with full metadata (app name, title, body, timestamp, device name).
+Filter by source, app, or device, combine several at once, search by title with partial matching, and page through results at your own pace. Filter options populate automatically as notifications arrive -- no setup required.
 
-### Filtered Browsing with Saved Presets
+### Saved Filter Presets
 
-Users can list notifications with filters (by app, source, device, or title search) and save frequently-used filter combinations as named presets. Filter options auto-populate from received notifications, so the UI always reflects available data.
+Name and save filter combinations you use often -- "Banking Alerts" for your finance app, "Deliveries" for logistics notifications. Retrieve or delete them at any time.
 
-**Example:** A user creates a "Work Chats" saved filter for Slack and Teams notifications. When they open the notification view, they select this preset and see only work-related messages.
+### Platform-Wide Data Access
 
-### Internal Query API for Data Aggregation
-
-Other services (such as data-insights-agent) query notifications via an internal endpoint for composite feeds and analytics, without direct Firestore access.
-
-**Example:** The data-insights-agent pulls the latest 50 WhatsApp notifications to generate a daily communication summary.
-
-## Use Case
-
-A user installs Tasker on their Android phone and pairs it with IntexuraOS by calling `POST /mobile-notifications/connect`. They receive a signature token, which they configure in Tasker's HTTP Request task. From that point, every notification that appears on the phone is forwarded to the webhook endpoint with the signature header.
-
-When the user opens the IntexuraOS dashboard, they see a paginated feed of all captured notifications. They filter by app to see only WhatsApp messages, then save this filter as "WhatsApp" for quick access. Meanwhile, the data-insights-agent uses the internal query endpoint to build a daily activity summary from the same notification data.
+Notification data is not locked inside this service. The platform's analysis tools query your notifications directly, turning your alert stream into a data source for trend detection and visualization.
 
 ## Key Benefits
 
-- Zero-knowledge security: plaintext signature shown once, only SHA-256 hash stored
-- Automatic deduplication via device-provided notification IDs
-- Self-populating filter options require no manual configuration
-- Paginated browsing with cursor-based navigation for large notification volumes
-- Full audit trail with server-side timestamps for every captured notification
+- **Passive capture** -- Once connected, notifications flow in with no daily action required
+- **Clean history** -- Duplicates detected and ignored automatically
+- **Multi-app filtering** -- Filter by any combination of app, source, or title keyword
+- **Saved presets** -- Name and save filter configurations you use repeatedly
+- **AI-ready data** -- Structured for direct use by the platform's analysis and visualization tools
+- **Ownership controls** -- Delete individual notifications at any time; only owners access their own data
 
 ## Limitations
 
-- **Android only** -- requires Tasker or Automate app; no iOS support yet
-- **Signature shown once** -- lost tokens require creating a new connection (which replaces the previous one)
-- **No push-back** -- captures and stores notifications but does not push them back to devices
-- **No media attachments** -- stores text content only; images and rich media are not captured
-- **Single signature per user** -- creating a new connection deletes any previous signature
+- **Android only** -- Requires a compatible automation app on Android to forward notifications
+- **Credential shown once** -- Losing the connection credential requires reconnecting
+- **No push back to device** -- Captures notifications from your phone but does not send alerts to it
+- **Text-based only** -- Notification images, icons, and rich media are not captured
+- **Single active connection** -- Only one device credential is active per user at a time
 
 ---
 
-_Part of [IntexuraOS](../overview.md) -- Capture your mobile notifications, anywhere they happen._
+_Part of [IntexuraOS](../overview.md) -- Your phone's notifications, structured and ready for analysis._

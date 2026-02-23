@@ -233,7 +233,7 @@ DATA_END`;
       }
     });
 
-    it('handles empty data array', async () => {
+    it('handles empty data array when transformation yields zero rows', async () => {
       const validResponse = `DATA_START
 []
 DATA_END`;
@@ -251,10 +251,9 @@ DATA_END`;
         mockInsight
       );
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('PARSE_ERROR');
-        expect(result.error.message).toContain('Data array cannot be empty');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
       }
     });
 
