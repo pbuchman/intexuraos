@@ -18,7 +18,7 @@ function formatDateTime(start?: string, end?: string | null, isAllDay?: boolean)
 
   if (isAllDay === true) {
     try {
-      const date = new Date(start + 'T00:00:00');
+      const date = new Date(start + 'T12:00:00Z');
       return date.toLocaleDateString('en-US', {
         weekday: 'long',
         month: 'short',

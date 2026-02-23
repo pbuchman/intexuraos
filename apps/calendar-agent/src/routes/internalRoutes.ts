@@ -321,7 +321,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { messageId: message.messageId, actionId, error: result.error },
           'internal/generateCalendarPreview: preview generation failed'
         );
-        reply.status(500);
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
       /* v8 ignore stop @preserve */
@@ -396,8 +395,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               diagnostics: { $ref: 'Diagnostics#' },
             },
           },
-          500: {
-            description: 'Internal Server Error',
+          502: {
+            description: 'Bad Gateway',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
@@ -432,7 +431,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { actionId, error: result.error },
           'internal/getCalendarPreview: failed to fetch preview'
         );
-        reply.status(500);
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
@@ -515,8 +513,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               diagnostics: { $ref: 'Diagnostics#' },
             },
           },
-          500: {
-            description: 'Internal Server Error',
+          502: {
+            description: 'Bad Gateway',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
@@ -560,7 +558,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { actionId, error: result.error },
           'internal/generateCalendarPreviewDirect: preview generation failed'
         );
-        reply.status(500);
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
       /* v8 ignore stop @preserve */
