@@ -15,6 +15,7 @@ export interface TaskVerificationRecord {
   resumeInstruction: string;
   usedLlm: boolean;
   verifierFailure?: boolean;
+  extractedSummary?: string;
   createdAt: string;
 }
 
@@ -68,8 +69,8 @@ export interface Task {
 
 export interface TaskResult {
   prUrl?: string;
-  branch: string;
-  commits: number;
+  branch?: string;
+  commits?: number;
   summary?: string;
   ciFailed?: boolean;
   rebaseResult?: {

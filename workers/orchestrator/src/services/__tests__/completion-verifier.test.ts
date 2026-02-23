@@ -50,13 +50,13 @@ const validPhase1Final = `PHASE1_FINAL:
 - Linear label set: code-task
 - Phase 2 ready: yes
 - Linear issue: https://linear.app/intexuraos/issue/INT-1
-- Summary: Ready`;
+- Summary: Analyzed the feature request and identified three implementation approaches. Created detailed design with test requirements and acceptance criteria. Published design document. Task is ready for Phase 2 implementation.`;
 
 const validPhase2Final = `PHASE2_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/123
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-2
-- Summary: Done`;
+- Summary: Implemented the login redirect fix by updating the auth middleware to preserve return URLs. Added integration tests covering OAuth callback flows. CI passes with full coverage.`;
 
 describe('completion-verifier', () => {
   beforeEach(() => {
@@ -70,7 +70,7 @@ describe('completion-verifier', () => {
         ok: true,
         value: {
           content:
-            '{"passed":true,"confidence":0.95,"reasons":["ok"],"missingCriteria":[],"resumeInstruction":"done"}',
+            '{"passed":true,"confidence":0.95,"reasons":["ok"],"missingCriteria":[],"resumeInstruction":"done","extractedSummary":"Task completed successfully."}',
         },
       }),
     });
@@ -619,6 +619,102 @@ describe('completion-verifier', () => {
     expect(verdict.resumeInstruction).toBe('');
     expect(verdict.verifierFailure).toBe(false);
     expect(verdict.usedLlm).toBe(true);
+  });
+
+  it('propagates extractedSummary from Gemini verdict', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":true,"confidence":0.95,"reasons":["all good"],"missingCriteria":[],"resumeInstruction":"","extractedSummary":"Analyzed the issue and enriched the Linear description. Added test requirements and acceptance criteria. Set code-task label for Phase 2."}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-summary',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'phase1',
+      originalPrompt: 'Prepare issue',
+      rawLogs: assistantLog(validPhase1Final),
+      linearIssueLabels: [],
+    });
+
+    expect(verdict.extractedSummary).toBe(
+      'Analyzed the issue and enriched the Linear description. Added test requirements and acceptance criteria. Set code-task label for Phase 2.'
+    );
+  });
+
+  it('returns undefined extractedSummary when Gemini omits it', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":true,"confidence":0.91,"reasons":["ok"],"missingCriteria":[],"resumeInstruction":""}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-no-summary',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'phase1',
+      originalPrompt: 'Prepare issue',
+      rawLogs: assistantLog(validPhase1Final),
+      linearIssueLabels: [],
+    });
+
+    expect(verdict.extractedSummary).toBeUndefined();
+  });
+
+  it('returns undefined extractedSummary when Gemini returns empty string', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":true,"confidence":0.91,"reasons":["ok"],"missingCriteria":[],"resumeInstruction":"","extractedSummary":""}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-empty-summary',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'phase1',
+      originalPrompt: 'Prepare issue',
+      rawLogs: assistantLog(validPhase1Final),
+      linearIssueLabels: [],
+    });
+
+    expect(verdict.extractedSummary).toBeUndefined();
+  });
+
+  it('does not include extractedSummary when Gemini verifier fails', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: false,
+      error: { code: 'RATE_LIMITED', message: 'rate limited' },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-verifier-fail-summary',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'phase1',
+      originalPrompt: 'Prepare issue',
+      rawLogs: assistantLog(validPhase1Final),
+      linearIssueLabels: [],
+    });
+
+    expect(verdict.extractedSummary).toBeUndefined();
+    expect(verdict.verifierFailure).toBe(true);
   });
 
   it('throws when model is not gemini-2.5-flash', () => {

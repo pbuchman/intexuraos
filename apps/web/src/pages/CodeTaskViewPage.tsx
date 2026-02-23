@@ -558,7 +558,7 @@ function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
     <div className="mb-6">
       <PREventsGroup
         pullRequestNumber={prNumber}
-        title={result.summary}
+        title={result.summary ?? null}
         repository={task.repository}
       />
     </div>
