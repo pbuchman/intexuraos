@@ -8,7 +8,7 @@ import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sent
 import type { Config } from './config.js';
 
 const SERVICE_NAME = 'api-docs-hub';
-const SERVICE_VERSION = '0.0.4';
+const SERVICE_VERSION = '0.0.5';
 
 /**
  * Check service configuration (config.openApiSources must be non-empty).
