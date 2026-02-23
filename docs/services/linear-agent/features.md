@@ -1,99 +1,111 @@
 # Linear Agent
 
-Speak your ideas, ship your issues. Turn voice notes and quick thoughts into structured, prioritized issues in Linear — the project tracker your engineering team already uses.
+Speak your ideas, ship your issues. Turn voice notes and quick thoughts into structured, prioritized Linear issues — with AI that understands urgency and keeps your board loaded before you blink.
 
 ## The Problem
 
 You are in a meeting when a bug crosses your mind. You could open Linear, navigate to the right board, type a title, pick a priority, write a description. By the time you finish, you have missed three minutes of conversation and the issue says "fix login thing" with no detail.
 
-The real cost is not the typing. It is the tradeoff: capture the thought carefully, or stay present. Most people choose presence, and the thought disappears.
+The real cost is not the typing. It is the tradeoff: capture the thought carefully, or stay present. Most people choose presence, and the thought disappears. The ones who do capture it end up with a graveyard of one-line issues that need a follow-up conversation before anyone can act on them.
 
-Then there is the board itself. You open your project dashboard and wait. The round trip to Linear's servers adds friction you feel every single time. Over a day of checking in on your team's work, those seconds compound into minutes of staring at loading states. The same agent that structures your spoken thought also keeps a local replica of your board — so the friction is gone end to end, from capture to visibility.
+Then there is the board itself. Every time you check in on your team's work, you wait for Linear's servers to respond. Open the dashboard, stare at a loading spinner, scan for updates, close the tab. Do that ten times a day and you have donated minutes to waiting — minutes that feel like nothing individually but compound into a tax on your attention. Eventually you stop checking, and a board nobody checks is a board nobody trusts.
 
 ## Use Case: The Voice Note That Becomes a Specification
 
 A product lead driving home from a client demo. She noticed the onboarding flow broke for users who skipped the company name field.
 
-1. She holds the record button and says: "The onboarding wizard crashes when a user skips the company name on step two. This is high priority — we have a demo next Tuesday. The form should treat company name as optional and let users proceed. Probably need to update the validation schema and add a fallback in the display component."
+1. She holds the record button on WhatsApp and says: "The onboarding wizard crashes when a user skips the company name on step two. This is high priority — we have a demo next Tuesday. The form should just let people skip that field and keep going."
 
-2. She sends the voice note through WhatsApp. IntexuraOS transcribes it and routes it to the Linear Agent, which parses it into structured parts: a title ("Onboarding wizard crashes when company name is skipped"), a priority (High — she said "high priority"), a section describing what should happen ("Form should treat company name as optional and allow users to proceed past step two"), and a section describing how it might be built ("Update validation schema to make company name optional; add fallback in display component").
+2. She sends the voice note. IntexuraOS transcribes it and routes it — through its message routing layer — to the Linear Agent, which parses her stream of consciousness into structured parts: a title under 100 characters ("Onboarding wizard crashes when company name is skipped"), a priority (High — she said "high priority"), functional requirements describing what should happen ("Form should treat company name as optional and allow users to proceed past step two"), and technical details describing how an engineer might fix it ("Update validation to make company name optional; add fallback when the field is empty").
 
-3. A Linear issue appears on her board, properly prioritized, with a description her engineering team can act on without asking clarifying questions. She never left the road.
+3. A Linear issue appears on her board, properly prioritized, with a description split into sections her engineering team can act on without asking clarifying questions. She never left the road.
+
+4. Later that evening she opens the IntexuraOS dashboard — the web app where she manages everything. Her board loads instantly — no waiting for Linear's servers — and she sees the new issue sitting in the backlog alongside everything else her team is working on, sorted by most recently updated. She taps into the issue, reads the full description, scrolls through two comments her tech lead already left, and closes the tab. Total time from thought to follow-up: under a minute.
 
 ## How It Helps
 
-### Turn Natural Language into Structured Issues
+### Turn Spoken Thoughts into Structured Issues
 
-You describe what is wrong and what needs to happen. The agent extracts a concise title (kept under 100 characters so nothing gets truncated in your board view) and splits your description into two sections your team actually needs: what should happen and how it might be built. The separation matters because product managers and engineers read different parts of an issue — one group cares about the behavior, the other about the implementation.
+Say what is on your mind and let AI do the formatting. The Linear Agent takes natural language — a rambling voice note, a quick typed message, a half-formed idea — and extracts a structured Linear issue from it. The title stays under 100 characters. The description splits into two sections: Functional Requirements (what should happen) and Technical Details (how it might be built). You get an issue your team can pick up and work on, not a sticky note they need to decode.
 
-If you send the same message twice — because your phone glitched, because you were not sure it went through — the agent creates one issue, not two. Every input is tracked so duplicates are caught before they clutter your board.
+The AI works in any language you speak. The system selects the best model for the job — you never choose, and you never need to switch a setting.
 
-**Example:** You say "Users can't upload files larger than 10MB, we need to bump the limit to 50MB, probably need to update the nginx config and the client-side validation." The agent creates an issue titled "Increase file upload limit from 10MB to 50MB" — the "what should happen" section describes the new limit behavior, and the "how it might be built" section points to nginx config and client-side validation changes.
+**Example:** You send a WhatsApp message: "Users on the free plan can see the billing page but the upgrade button does nothing. Low priority, fix when you have time." The agent creates an issue titled "Upgrade button non-functional on free plan billing page," sets priority to Low (it caught "when you have time"), and writes a description separating the user-facing bug from the likely implementation fix.
 
 ### Read Urgency Between the Lines
 
-You do not need to remember your project tracker's priority levels. The agent listens for urgency cues in your language and maps them to a five-level priority scale. Say "this is urgent" or "we need this ASAP" and the issue lands as Urgent. Mention "high priority" or "important" and it gets marked High. Casual requests default to Normal. Say "when you have time" or "nice to have" and it drops to Low.
+Priority is not a dropdown you remember to set — it is a signal the agent picks up from your words. Say "production is down" and the issue arrives marked Urgent. Say "important" or "critical" and it lands as High. Mention "nice to have" or "someday" and it files as Low. Everything else defaults to Normal. Four tiers, zero manual triage.
 
-This means your issues arrive pre-triaged. Your team sees what matters most without someone manually sorting the backlog every morning.
+This matters most when you are capturing issues in the heat of a moment. The words you naturally reach for when something is on fire — "blocker," "ASAP," "production down" — are exactly the cues the agent listens for. Your urgency translates directly into your board's priority column.
 
-**Example:** You send "nice to have — add dark mode to the settings page." The agent creates the issue with Low priority. Later that day, you send "the payment webhook is dropping events, this is urgent." That issue arrives as Urgent. Both land on the board in the right order without anyone touching a priority dropdown.
+**Example:** A developer messages: "The deploy pipeline is stuck, this is a blocker for the release." The agent marks the issue Urgent. An hour later the same developer sends: "Also, we should probably rename that config variable someday." That one lands as Low. Neither required opening a dropdown.
 
 ### Load Your Board Before You Blink
 
-The dashboard does not call Linear's servers when you open it. Instead, it reads from a server-side replica of your board that updates automatically whenever anything changes in Linear. When someone on your team moves an issue from "In Progress" to "In Review," that change arrives within seconds — without anyone refreshing a page.
+The Linear Agent keeps a local copy of your entire board, updated in real time. When something changes in Linear — an issue moves to In Review, a new sub-task appears, a label gets added — the change is pushed to IntexuraOS automatically within seconds. When you open the IntexuraOS dashboard — the web app where you manage everything — it reads from that local copy. No call to Linear's servers. No loading spinner. Just your board, already there.
 
-Your issues appear organized into three column groups: Planning (backlog and todo items), Work (in progress, in review, and ready to test), and Closed (anything completed or cancelled in the last seven days). Within each column, the most recently updated issues appear first. Parent issues display their sub-issues nested underneath, so you can see an epic and the tasks inside it in one glance.
+The dashboard groups your issues into columns that mirror how work actually flows: Backlog, Todo, In Progress, In Review, To Test, and Done — with recently completed items visible for seven days before they archive. Within each column, issues sort by most recently updated, so the work getting attention right now floats to the top. Parent issues carry their children in a nested list, keeping related work grouped together.
 
-If the replica ever drifts — a missed update, a network hiccup — you can trigger a full refresh that pulls every issue from Linear, updates the local store, and removes anything that no longer exists. This also runs on a schedule automatically.
-
-**Example:** Your team has a planning session and moves twelve issues from Backlog to In Progress. You open the dashboard a moment later and all twelve appear in the Work column, sorted by the most recently touched. No loading spinner, no stale data from five minutes ago.
+**Example:** Your team moves five issues into "In Review" during a morning code review session. You open the dashboard ten minutes later and every one of those issues already sits in the Work column. You did not refresh. You did not wait. The board was current before you arrived.
 
 ### See Issue Details Without Leaving
 
-Click into any issue and you get the full picture: the complete description, every comment with author names and markdown formatting, and the timestamp of the last activity. Comments are paginated so even long-running issues with dozens of replies load quickly. You see the comment count at a glance before deciding whether to dive in.
+Tap into any issue on the dashboard and you get the full picture: description, labels with their colors, and comments from your team — paginated, with author names, timestamps, and markdown formatting preserved. The comment count shows on the card before you tap, so you know whether there is a conversation worth reading before you dive in.
 
-This means you can triage, review, and respond to issues from one place. You do not need to open Linear in a separate tab to read the discussion thread.
+This keeps context where you need it. You do not bounce between IntexuraOS and Linear to read a thread or check what labels are attached. The local copy holds all of it.
 
-**Example:** A developer comments on an issue asking whether the fix should be backward-compatible. You see the comment, the developer's name, and the full context of the issue description — all without switching applications. You reply from where you are.
+**Example:** An issue card shows "3 comments." You tap in and find a discussion between your designer and your backend engineer about an edge case. You read it, form your opinion, and move on — without ever opening Linear.
 
 ### Let Your Code Agent Update the Board
 
-When IntexuraOS's code agent — the part of the system that writes code on your behalf — finishes work, it updates your Linear board directly. It creates sub-issues when implementation breaks into smaller pieces, and it moves workflow states as work progresses. The board reflects what your automated tools have done, not just what humans have touched.
+The Code Agent — another IntexuraOS service that picks up Linear issues and autonomously writes the code to resolve them — updates your board as it works. It creates sub-issues when implementation breaks into pieces, and it moves workflow states forward as each piece progresses. Your board reflects what the Code Agent has done without any manual status updates from you.
 
-This closes a loop that most teams leave open: the code gets written, the pull request gets merged, but the issue still says "In Progress" because nobody remembered to drag it across the board.
+This is where the full loop closes. You describe a problem by voice. The Linear Agent structures it into an issue. The Code Agent picks it up and implements it. Your board tracks the progress in real time. You watch the whole thing happen without touching Linear.
 
-**Example:** The code agent picks up an issue to refactor the authentication module. It creates three sub-issues — one for token validation, one for session management, one for logout flow — and moves each to "In Progress" as it starts working. When it finishes, the parent issue's children show the full breakdown of what was done.
+**Example:** You created an issue from a voice note about a broken CSV export. The code agent picks it up, creates two sub-issues — one for the parsing fix, one for adding a test — and moves the parent to "In Progress." An hour later you glance at the dashboard and see both sub-issues marked "In Review," nested under the parent. You never touched Linear.
 
 ### Generate Titles from Descriptions
 
-Sometimes you have a detailed description but no concise title. The agent generates one for you — kept under 80 characters — from whatever description text you provide. If the title generation fails, you get an error back immediately rather than a silent guess.
+Sometimes you write the description first and the title is an afterthought. The Linear Agent can generate a title from a description — concise, under 80 characters, capturing the essence of what the issue is about. If the first attempt fails, it retries once. If it fails again, it tells you instead of silently producing garbage.
 
-**Example:** You paste a three-paragraph bug report. The agent returns "PDF export drops images when document contains mixed media types" — a title that fits in your board column and tells the team exactly what to expect.
+**Example:** You paste a three-paragraph description of a caching bug into a new issue but leave the title blank. The agent generates: "Stale cache served after user profile update." Eighty characters or fewer, specific enough to scan on a board.
+
+### Catch Duplicates and Handle Failures
+
+Send the same message twice — from a spotty connection, an accidental re-send, a double tap — and the agent creates one issue, not two. Each incoming message gets a fingerprint, and the agent checks it before creating anything.
+
+When something does go wrong — the AI cannot parse your message, the input is too ambiguous, the extraction fails — the system does not swallow the error. Failed extractions land in a review queue where you can inspect them, retry them, or dismiss them. Nothing disappears into a void.
+
+**Example:** Your WhatsApp connection drops mid-send and the message goes out twice. You check the board and find one issue, not a duplicate. Later, a garbled voice transcription fails to parse. You find it in the review queue, read the original text, clean it up, and retry. The issue appears on your board.
+
+### Recover When Things Drift
+
+Networks hiccup. Updates miss a beat. Over weeks, the local copy can drift from what Linear actually holds. When that happens, you trigger a full refresh — or let the automatic scheduled sync handle it — and the agent pulls every issue from Linear, updates the local store, and removes anything that no longer exists. Your board snaps back to reality.
+
+**Example:** After a server restart, you suspect the board might be stale. You trigger a full refresh. The agent reconciles every issue — creates three that were missing, updates twelve that had changed, and removes one that was deleted from Linear. Your dashboard matches your Linear board exactly.
 
 ## Getting Connected
 
-You connect your Linear account by providing an API key and selecting which team the agent should work with. A webhook secret is configured separately to keep your board's local copy in sync with changes made in Linear.
+Connect your Linear account through the settings page — you will need your API key and team selection (your IT admin can help if needed). Once connected, the agent receives board updates automatically. Each user connects independently — your board, your credentials, your sync.
 
 ## Key Benefits
 
-- **Voice capture** — Speak a thought and get a structured issue, not a half-formed reminder
-- **Intelligent prioritization** — Your words set the priority level automatically, no dropdown menus required
-- **Split descriptions** — What should happen and how it might be built, separated so product and engineering each find what they need
-- **Instant dashboard** — Board loads from a server-side replica kept current automatically, so you never wait for a round trip to Linear
-- **Parent-child visibility** — Epics and the tasks inside them nested together in one view with labeled columns
-- **Duplicate protection** — Send the same message twice and get one issue, not two
-- **Failed extraction recovery** — If parsing fails, the input is saved for manual review, retry, or dismissal rather than lost
-- **Automated board updates** — The code agent creates sub-issues and moves workflow states so your board stays current with actual work
+- **Capture without context-switching** — send a voice note or quick message and get a properly structured issue, without opening Linear or leaving your current task.
+- **Priority from your words** — the agent reads urgency cues from natural language, so issues arrive pre-triaged into four priority levels.
+- **Instant board access** — the dashboard reads from a local copy updated in real time, so you never wait for Linear's servers to respond
+- **Living board** — automatic sync, scheduled reconciliation, and manual refresh keep the local copy current across six workflow columns
+- **Code agent continuity** — issues move through your workflow as the code agent creates sub-tasks and updates states, visible on your board without manual status changes.
+- **No lost input** — duplicate detection prevents double-creation, and failed extractions queue for review instead of vanishing.
 
 ## Limitations
 
-- **Built for Linear** — Deep integration with Linear's data model, workflow states, and change events; no support for Jira, Asana, or other project trackers
-- **One issue per message** — Each input creates a single issue; bundling multiple bugs into one message produces one combined issue rather than separate entries
-- **Priority detection is keyword-based** — The agent recognizes phrases like "urgent" or "nice to have" but may not catch every way you express urgency; you can always adjust priority manually in Linear
-- **Input length cap** — Messages are limited to 4,000 characters; longer descriptions need to be split or trimmed before sending
-- **Voice note quality** — Transcription accuracy depends on your recording environment; unclear audio may produce garbled issues
-- **No automatic labels** — Issues created through the agent do not receive labels automatically; you add them after the fact in Linear
+- **Linear only** — this agent works with Linear. If your team uses Jira, Asana, or another tracker, the integration does not apply.
+- **Voice input through WhatsApp** — voice notes and messages reach the agent through WhatsApp via IntexuraOS's message routing layer. Other input channels are not currently supported.
+- **AI extraction is imperfect** — ambiguous or garbled input may fail to parse. The agent saves these failures for review rather than guessing, but you still need to handle them manually.
+- **Title generation may miss nuance** — auto-generated titles capture the gist but may not reflect the exact framing you would choose. The agent retries once on failure and reports errors rather than degrading silently.
+- **Seven-day closed window** — completed and cancelled issues appear in the Closed column for seven days, then drop off the dashboard. They still exist in Linear.
+- **One team per connection** — each connected account syncs with a single Linear team. Multi-team setups require separate connections.
 
 ---
 
-_Part of [IntexuraOS](../overview.md) — your project tracker, driven by your voice._
+_Part of [IntexuraOS](../overview.md) — your operating system for the work between the tools._
