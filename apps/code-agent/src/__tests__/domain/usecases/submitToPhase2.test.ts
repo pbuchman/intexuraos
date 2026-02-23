@@ -18,6 +18,7 @@ import type { CodeTask } from '../../../domain/models/codeTask.js';
 import { Timestamp } from '@google-cloud/firestore';
 import {
   submitToPhase2,
+  PHASE2_PROMPT,
   type SubmitToPhase2Deps,
 } from '../../../domain/usecases/submitToPhase2.js';
 
@@ -657,13 +658,16 @@ describe('submitToPhase2', () => {
       );
     });
 
-    it('creates phase2 task with sanitizedPrompt from original task, not raw prompt field', async () => {
-      setupHappyPathMocks({ prompt: 'raw prompt with PII', sanitizedPrompt: 'clean sanitized prompt' });
+    it('creates phase2 task with phase2-specific prompt, not original design prompt', async () => {
+      setupHappyPathMocks({ prompt: 'Analyze the linked Linear issue.', sanitizedPrompt: 'Analyze the linked Linear issue.' });
 
       await submitToPhase2(createDeps(), { originalTaskId, userId });
 
       expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ sanitizedPrompt: 'clean sanitized prompt' })
+        expect.objectContaining({
+          prompt: PHASE2_PROMPT,
+          sanitizedPrompt: PHASE2_PROMPT,
+        })
       );
     });
 

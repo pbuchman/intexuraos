@@ -726,6 +726,57 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.callbackReceived).toBe(true);
     });
 
+    it('accepts result with only summary (Phase 1 design tasks)', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Analyze auth flow',
+        sanitizedPrompt: 'Analyze auth flow',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Analyzed the feature request and identified three approaches. Created design with test requirements.',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('designed');
+      expect(getResult.value.result).toEqual({
+        summary: 'Analyzed the feature request and identified three approaches. Created design with test requirements.',
+      });
+      expect(getResult.value.callbackReceived).toBe(true);
+    });
+
     it('stores default error for failed tasks without error details', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',

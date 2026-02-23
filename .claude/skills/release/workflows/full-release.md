@@ -64,7 +64,7 @@ echo "All modified services: $MODIFIED_SERVICES"
 
 ### 1.5 Run Semver Analysis with Prioritization
 
-Execute the full semver-release analysis per `semver-release.md` Steps 3-7:
+Execute the full semver analysis per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Steps 3-7:
 
 1. Collect all data (3.1-3.5)
 2. Validate manifest is non-empty (3.6)
@@ -488,7 +488,7 @@ pnpm install
 
 ### 6.2 Update CHANGELOG.md and Release Notes
 
-Prepend the changelog entry built during Phase 1 semver analysis (see `semver-release.md` Step 7):
+Prepend the changelog entry built during Phase 1 semver analysis (see [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7):
 
 1. Read current CHANGELOG.md
 2. Insert new `## X.Y.Z` section at the top (below any file header)
@@ -496,7 +496,7 @@ Prepend the changelog entry built during Phase 1 semver analysis (see `semver-re
 
 Also verify the GitHub Release notes file:
 
-- This was generated in Phase 1 step 1.5 per `semver-release.md` Step 7.1
+- This was generated in Phase 1 step 1.5 per [`reference/semver-analysis.md`](../reference/semver-analysis.md) Step 7.1
 - Confirm `/tmp/release-notes-$NEW_VERSION.md` exists; if missing, rebuild per Step 7.1
 
 ### 6.3 CI Gate (MANDATORY)
@@ -630,7 +630,7 @@ gh release create "v$NEW_VERSION" \
   --target main
 ```
 
-The release notes file is built during step 6.2 (CHANGELOG and release notes generation). See the **Build GitHub Release Body** step in `semver-release.md` for the generation logic.
+The release notes file is built during step 6.2 (CHANGELOG and release notes generation). See the **Build GitHub Release Body** step in [`reference/semver-analysis.md`](../reference/semver-analysis.md) for the generation logic.
 
 ### 6.10 Post-Release Validation
 
@@ -717,12 +717,12 @@ If user skips all checkpoint phases (1.5 prioritization, 3, 4, 5):
 
 When resuming from `--phase N`, reconstruct state from:
 
-| Variable          | Source when resuming                                              |
-| ----------------- | ----------------------------------------------------------------- |
-| NEW_VERSION       | `jq -r '.version' package.json`                                  |
-| LAST_TAG          | `git tag -l "v*" --sort=-v:refname \| head -1`                   |
-| MODIFIED_SERVICES | Re-run step 1.4 detection                                        |
-| Change Manifest   | Re-run semver analysis (steps 3-7) if resuming before Phase 6    |
+| Variable          | Source when resuming                                          |
+| ----------------- | ------------------------------------------------------------- |
+| NEW_VERSION       | `jq -r '.version' package.json`                               |
+| LAST_TAG          | `git tag -l "v*" --sort=-v:refname \| head -1`                |
+| MODIFIED_SERVICES | Re-run step 1.4 detection                                     |
+| Change Manifest   | Re-run semver analysis (steps 3-7) if resuming before Phase 6 |
 
 For Phase 6 resume: version and changelog are already committed, so read from files.
 

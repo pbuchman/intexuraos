@@ -1,6 +1,6 @@
-# Release
+# Semver Analysis Reference
 
-Generate a new release by analyzing merged pull requests, commit messages, and their associated Linear issues (including subissues) since the last release.
+Analyze merged pull requests, commit messages, and their associated Linear issues (including subissues) since the last release to determine the version bump and build changelog entries.
 
 **Important:** Use commit messages, PR descriptions, AND Linear issues as combined sources of truth. Each captures different granularity — commits show atomic changes, PRs show intent and context, Linear shows business rationale and hierarchy.
 
@@ -384,7 +384,7 @@ If a parent Linear issue has subissues, decide:
 
 ### 7.1 Build GitHub Release Body
 
-After building the CHANGELOG entry, generate a richer GitHub Release body. This is written to `/tmp/release-notes-$NEW_VERSION.md` for use by `gh release create` in Phase 6.
+After building the CHANGELOG entry, generate a richer GitHub Release body. This is written to `/tmp/release-notes-$NEW_VERSION.md` for use in Phase 6.
 
 **Format:**
 
@@ -416,12 +416,12 @@ See [CHANGELOG.md](https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md
 
 **Rules:**
 
-| Rule                    | Details                                                              |
-| ----------------------- | -------------------------------------------------------------------- |
-| Highlights first        | Pick the top 3 High-priority items from Step 5.1                     |
-| Categorize changes      | Group by Features, Bug Fixes, Infrastructure & DevEx                 |
+| Rule                    | Details                                                             |
+| ----------------------- | ------------------------------------------------------------------- |
+| Highlights first        | Pick the top 3 High-priority items from Step 5.1                    |
+| Categorize changes      | Group by Features, Bug Fixes, Infrastructure & DevEx                |
 | Skip empty categories   | If no bug fixes, omit the Bug Fixes section                         |
-| Reuse CHANGELOG wording | Use the same verb-first entries from Step 7                          |
+| Reuse CHANGELOG wording | Use the same verb-first entries from Step 7                         |
 | Include comparison link | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view           |
 | Write to temp file      | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.9 |
 
@@ -432,53 +432,6 @@ See [CHANGELOG.md](https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md
 cat > /tmp/release-notes-$NEW_VERSION.md << 'RELEASE_EOF'
 [generated content]
 RELEASE_EOF
-```
-
----
-
-### 8. Update All Package Versions
-
-> **Note:** Steps 8-9 are for standalone `/semver-release` invocations only. When invoked from `full-release.md`, these steps are skipped — Phase 6 handles versioning and committing.
-
-**CRITICAL:** All package.json files must have the same version.
-
-```bash
-# Get new version
-NEW_VERSION="X.Y.Z"
-
-# Update root package.json
-jq ".version = \"$NEW_VERSION\"" package.json > tmp.json && mv tmp.json package.json
-
-# Update all apps (excluding dist directories)
-for app in apps/*/package.json; do
-  if [[ ! "$app" == *"/dist/"* ]]; then
-    jq ".version = \"$NEW_VERSION\"" "$app" > tmp.json && mv tmp.json "$app"
-  fi
-done
-
-# Update all packages (excluding dist directories)
-for pkg in packages/*/package.json; do
-  if [[ ! "$pkg" == *"/dist/"* ]]; then
-    jq ".version = \"$NEW_VERSION\"" "$pkg" > tmp.json && mv tmp.json "$pkg"
-  fi
-done
-
-# Update all workers (excluding dist directories)
-for worker in workers/*/package.json; do
-  if [[ ! "$worker" == *"/dist/"* ]]; then
-    jq ".version = \"$NEW_VERSION\"" "$worker" > tmp.json && mv tmp.json "$worker"
-  fi
-done
-
-# Regenerate lock file
-pnpm install
-```
-
-### 9. Commit Release
-
-```bash
-git add CHANGELOG.md package.json pnpm-lock.yaml apps/*/package.json packages/*/package.json workers/*/package.json
-git commit -m "Release vNEW_VERSION"
 ```
 
 ---

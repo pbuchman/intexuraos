@@ -1,3 +1,707 @@
+## 2026-02-22 -- code-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/code-agent/features.md` -- Added prompt sanitization capability, updated dedup to four layers, added turn-level metrics section, updated limitations (removed stale sanitization gap), added sender whitelist and bot review triage details
+- `docs/services/code-agent/technical.md` -- Updated to v3.1.0; added turn-metrics webhook endpoint; updated recent changes table with 13 commits; added submitToPhase2 use case; added domain utilities table (sanitizePrompt, labelUtils, metricsLogFormatter); added gotchas 8-11 (sanitization ordering, sender whitelist, bot review triage, turn metrics HMAC); updated file structure
+- `docs/services/code-agent/tutorial.md` -- Added prompt sanitization note in Part 3; added multi-status comma-separated filtering example; added Phase 2 implementation section; added WORKER_NOT_CONFIGURED troubleshooting entry; added Exercise 4 for PR event deduplication
+- `docs/services/code-agent/technical-debt.md` -- Updated date to 2026-02-22; added 6 new resolved issues (INT-612 prompt sanitization, webhook dedup, sender whitelist, bot review edit triage, Linear transition on completion, dynamic CPU cores); updated DRY violation to reference 4 files
+- `docs/services/code-agent/agent.md` -- Updated to v3.1.0; added log_lines subcollection to identity; added prompt sanitization capability with full pattern list; added Phase 2 implementation capability with constraints; added sender whitelist section; added turn-metrics webhook usage pattern; updated list tasks to show comma-separated multi-status filtering; added Worker message endpoint to outgoing HTTP calls
+- `docs/site-index.json` -- Updated code-agent summary to v3.1.0; added prompt sanitization, two-phase execution, sender whitelist, and turn metrics features; updated endpoint count to 28
+- `docs/overview.md` -- Updated code-agent references from v3.0.0 to v3.1.0 in capabilities table, action routing table, and quick links
+
+**Inferred Insights:**
+
+- Why: Software teams spend significant time on repetitive coding tasks that are well-specified but still require manual context-switching, environment setup, and execution. Code Agent automates the entire lifecycle from task description to PR creation.
+- Killer feature: processCodeAction use case with four-layer deduplication, prompt sanitization, HMAC-signed dispatch, and automatic worker fallback -- the most complex pipeline in the monorepo
+- Future plans: System prompt hash computation for audit compliance (replace static placeholders), route splitting for codeRoutes.ts (~3600 lines)
+- Limitations: Max 2 workers per user, max 3 concurrent tasks, static system prompt hash, Cloudflare Access required, sender whitelist limited to Claude/Codex bots and repo owner
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 4 (codeRoutes.ts SRP at ~3600 lines, duplicated secret generation in 4 files, ESLint disabled in 2 files, module-level Map for health probes)
+- Test gaps: 0 (45+ test files)
+- Type issues: 1 (Firestore Timestamp handling requires `as` casts)
+- TODOs: 2 (system prompt hash placeholder in 2 files)
+- Future plans: 2 (system prompt versioning, route splitting)
+
+**Changes Since Last Run (v2.1.0 -> v3.1.0):**
+
+- INT-612: Prompt sanitization stripping 9 secret pattern categories (878c08b9)
+- Sender whitelist replacing scattered webhook filters with ALLOWED_BOTS Set (483c476a)
+- Bot review edit triage with in-progress detection instructions (95161acb)
+- Unique actionId for webhook dedup with propagated error codes (d5810213)
+- Linear state transition to In Review on task-complete webhook (1db69f2a)
+- Multi-status filtering with comma-separated query parameter (bcbd5075)
+- Turn-end metrics collection with formatted log blocks (be0eaa8b, 9be25162)
+- Dynamic CPU cores from cgroup instead of hardcoded value (9be25162)
+- PR comment auto-response simplification via sendTaskMessage (2e7039c3)
+- PR body deduplication across synchronize events (e5637ce5)
+- Phase 2 implementation (submitToPhase2 use case, POST /code/tasks/:id/implement)
+- Mid-task messaging (sendTaskMessage use case, POST /code/tasks/:id/messages)
+
+---
+
+## 2026-02-22 -- research-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/research-agent/features.md` -- Updated to v3.1.0; added prompt audit section and version bump notes
+- `docs/services/research-agent/technical.md` -- Updated to v3.1.0; refreshed recent changes table with latest commits; updated configuration table to match actual REQUIRED_ENV from index.ts; updated overview version
+- `docs/services/research-agent/tutorial.md` -- Added v3.1.0 note about ContextInferenceAdapter simplification in Part 4
+- `docs/services/research-agent/technical-debt.md` -- Updated to v3.1.0; added prompt audit and version alignment to resolved issues; renamed architecture quality section to v3.1.0; added prompt versioning to strengths
+- `docs/services/research-agent/agent.md` -- Updated dependencies section header and last-updated to v3.1.0
+- `docs/site-index.json` -- Updated research-agent summary to v3.1.0; added distributed tracing and prompt audit features
+
+**Inferred Insights:**
+
+- Why: Parallel multi-LLM research orchestration with synthesis, attribution, and sharing
+- Killer feature: Zod-validated parser + repair pattern -- automatically fixes malformed LLM JSON and retries with targeted error messages
+- Future plans: Streaming responses, custom synthesis prompts, research collections/folders, model keyword maintenance
+- Limitations: Max 6 models, max 5 input contexts at 60k chars each, no streaming, single Notion export per research
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (researchRoutes.ts at 1662 lines -- acceptable domain cohesion)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 1 (NotionServiceClient port interface missing in domain layer)
+- Deprecations: 2 (getResearchPageId/saveResearchPageId -- low priority)
+
+**Changes Since Last Run (v2.4.0 -> v3.1.0):**
+
+- v3.0.0 and v3.1.0 release version bumps (no research-agent-specific code changes)
+- Adversarial prompt audit simplified ContextInferenceAdapter with safer fallbacks (f451d51a)
+
+---
+
+## 2026-02-22 -- actions-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/actions-agent/features.md` -- Updated auto-execution section to cover all action types (v4.1.0); added Google Calendar integration feature; added graceful deletion handling; restructured key benefits
+- `docs/services/actions-agent/technical.md` -- Added PATCH /internal/actions/:actionId/status endpoint; updated ActionType table (calendar now auto-executes); added v3.1.0 commits to Recent Changes; documented calendar absolute URL handling; added OpenAPI description mismatch gotcha
+- `docs/services/actions-agent/tutorial.md` -- Restructured into 7 parts with progressive complexity; added auto-execution explanation; added code action cancellation section; expanded troubleshooting table
+- `docs/services/actions-agent/technical-debt.md` -- Added v3.1.0 and v4.1.0 resolved issues (calendar auto-execute, Google Calendar linking, userId fix, generalized auto-execute); identified OpenAPI description mismatch code smell; added Linear auto-execute as future enhancement
+- `docs/services/actions-agent/agent.md` -- Updated constraints table (type change now includes 'failed' status); updated auto-execution note to exclude only linear/reminder; added PATCH status endpoint to internal endpoints; added cancel-task error codes
+- `docs/site-index.json` -- Updated actions-agent summary, features list, and endpoint count (8 -> 13)
+- `docs/services/index.md` -- Updated actions-agent entry in v2.1.0 Highlights table
+- `docs/overview.md` -- Updated actions-agent description in Infrastructure Services table
+
+**Inferred Insights:**
+
+- Why: Central coordinator bridging command classification and specialized execution agents, providing lifecycle management, approval workflows, and failure recovery for all user-initiated actions
+- Killer feature: WhatsApp interactive button approval with deterministic intent resolution (no LLM calls), combined with atomic Firestore transactions preventing race conditions across concurrent Pub/Sub messages
+- Future plans: Reminder handler implementation, Linear auto-execute support, bulk action execution, additional notification channels, configurable per-user auto-execution thresholds
+- Limitations: No reminder handler, WhatsApp-only notifications, no bulk execution, interactive buttons required for approval
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (OpenAPI description still references "Research Agent")
+- Test gaps: 0
+- Type issues: 4 (as any in test files -- intentional for edge case testing)
+- TODOs: 0
+- SRP violations: 2 (publicRoutes.ts ~806 lines, internalRoutes.ts ~897 lines)
+- Code duplicates: 1 (executeActionByType switch branches -- intentional for type narrowing)
+
+---
+
+## 2026-02-22 -- web (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/web/features.md` -- Updated with collapsible tool output, multi-status filtering, persistent user preferences, standardized delete confirmations, assignee badges on Linear board, worker autofill prevention
+- `docs/services/web/technical.md` -- Added 16 commits to Recent Changes (2026-02-19 to 2026-02-22); added collapsible tool output section; added multi-status filtering section; added standardized delete confirmations; added null assignee handling and worker autofill gotchas; updated 5MB max file size
+- `docs/services/web/tutorial.md` -- Added Task 4 (persist UI state with localStorage pattern); added direnv recommendation; added HMR disabled note; updated troubleshooting table; added CodeTasksPage to Next Steps; improved Exercise 3 with proper Firebase imports
+- `docs/services/web/technical-debt.md` -- Added ResearchDetailPage (1818 lines) as largest SRP violation; updated CodeTaskViewPage to 1021 lines; added Sidebar.tsx as SRP violation (690 lines); added 7 new resolved issues (2026-02-20 to 2026-02-22); added filter dropdown, delete confirmation, and status badge duplicate patterns
+- `docs/services/web/agent.md` -- Added collapsible tool output pattern; added multi-status filtering pattern; added persistent user preferences section with localStorage key table; added standardized delete constraint; added declarative error display; added Pattern 6 (multi-status filtering) and Pattern 7 (collapsible tool output); updated two-phase flow banners
+- `docs/services/index.md` -- Updated last-updated date to 2026-02-22
+
+**Inferred Insights:**
+
+- Why: Managing digital life across multiple services creates constant friction; the web app unifies all IntexuraOS capabilities into a single, fast interface
+- Killer feature: Real-time Firestore-backed inbox with configurable action buttons, two-phase code task management with collapsible tool output and live log streaming
+- Future plans: Refactoring for improved coverage, PWA enhancements, mobile optimization, code task UX refinement, component extraction for large page files
+- Limitations: Requires network for most operations, some features best on desktop, Auth0 required (chat available as guest with rate limits)
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 6 (medium/low -- large page files exceeding SRP)
+- Test gaps: 7 modules missing tests (medium/low priority)
+- Type issues: 1 (@ts-expect-error in test -- valid infrastructure need)
+- TODOs: 0
+- SRP violations: 8 (ResearchDetailPage 1818, TodosListPage 1149, BookmarksListPage 1134, CodeTaskViewPage 1021, InboxPage 871, LinearIssuesPage 810, Sidebar 690, WorkerSettingsPage 637)
+- Code duplicates: 7 patterns (API error handling, filter dropdowns, delete confirmations, modal close, loading spinner, dark mode classes, status badges)
+
+**Changes Since Last Run (v3.0.0 docs -> v3.1.0):**
+
+- Added collapsible tool output blocks in code task log viewer (27f15cfc, ef2724df, 1ee7e8c6)
+- Added multi-status filtering for code tasks with localStorage persistence (bcbd5075)
+- Added standardized delete confirmations across all pages (c9acdce3)
+- Added persistent filter/sidebar state via localStorage (2e3ae30c)
+- Fixed worker reorder buttons in settings UI (fbe7c944)
+- Added null assignee handling for Linear board (19442f43, d36c76dd)
+- Added assignee display with emerald badges on Linear board (6df58b52, c221efd5)
+- Added worker secret autofill prevention (3b081686)
+- Added PR synchronize compare URL (27ef6a7b)
+- Added two-phase flow banner on design tasks (0e07e938)
+- Added GitHub PR summaries with lazy event loading (e8bbacd7)
+
+---
+
+## 2026-02-22 -- user-service (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/user-service/features.md` -- Refreshed to v3.1.0; no functional changes, content verified against codebase
+- `docs/services/user-service/technical.md` -- Added v3.1.0 and v3.0.0 release entries to Recent Changes; added AuthTokens and LlmPreferences domain models; added pricing context startup gotcha; expanded file structure with all route files and infra subdirectories
+- `docs/services/user-service/tutorial.md` -- Fixed part numbering (was skipping Part 7); added pricing fetch failure to troubleshooting; added default model exercise; added collapsible solutions section
+- `docs/services/user-service/technical-debt.md` -- Updated Last Updated date; added SRP and code duplicates to summary (1 each, Low); added v3.1.0 and v3.0.0 entries; added comprehensive test file inventory table
+- `docs/services/user-service/agent.md` -- Added getCurrentUser capability; added UserProfile type; added Set Default Model usage pattern; added OAuth2 Raw Responses constraint; added Error Handling table with all error codes; added Dependencies table with failure behaviors
+
+**Inferred Insights:**
+
+- Why: Unified authentication and secure API key management for a multi-provider AI platform requiring zero-knowledge key distribution
+- Killer feature: AES-256-GCM encrypted key storage with real-time provider validation and intelligent multi-provider error formatting
+- Future plans: Microsoft/GitHub/Notion OAuth, usage analytics, budget alerts, key rotation, Perplexity/Zai-specific error parsing
+- Limitations: Auth0 dependency, Google-only OAuth, validation costs money, no per-key rate limits
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- SRP violations: 1 (llmKeysRoutes.ts at 569 lines -- acceptable resource cohesion)
+- Code duplicates: 1 (LlmValidatorImpl per-provider pattern -- intentional)
+
+---
+
+## 2026-02-22 -- commands-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/commands-agent/features.md`
+- `docs/services/commands-agent/technical.md`
+- `docs/services/commands-agent/tutorial.md`
+- `docs/services/commands-agent/technical-debt.md`
+- `docs/services/commands-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Translates ambiguous natural language from WhatsApp, voice, and PWA into structured action types -- resolving classification challenges across languages, URL keywords, and conflicting signals
+- Killer feature: 5-step structured classification pipeline with URL keyword isolation, explicit intent priority, and multi-language support (English + Polish)
+- Future plans: Reminder and code handler implementations, additional language support, structured output mode, circuit breaker for actions-agent, graceful startup degradation
+- Limitations: Requires Gemini 2.5 Flash/GLM API access; reminder and code handlers not yet implemented; English and Polish only; no reclassification
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes Since Last Run (v3.0.0 docs -> v3.1.0):**
+
+- Updated version references to v3.1.0
+- Added Gemini 2.5 Flash as default model (switched from GLM-4.7-Flash)
+- Added Dash0 OpenTelemetry integration to dependencies and gotchas
+- Added dev-mode log formatting via createLogStream()
+- Added API key naming standardization (INTEXURAOS_ZAI_APP_API_KEY)
+- Added platform Gemini API key as primary fallback
+- Added complete environment variable table to technical.md (including auth vars)
+- Added resolved issue: GLM-4.7-Flash latency
+- Updated Recent Changes tables with commit hashes from git history
+
+---
+
+## 2026-02-22 -- calendar-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/calendar-agent/features.md` -- Added "Direct Google Calendar Links" capability; updated Use Case flow with step 9 (resourceUrl)
+- `docs/services/calendar-agent/technical.md` -- Added INT-585 to Recent Changes; updated Data Flow diagram (htmlLink); added "Resource URL" gotcha
+- `docs/services/calendar-agent/tutorial.md` -- Updated process-action response example to show resourceUrl with Google Calendar link; added resourceUrl best practice
+- `docs/services/calendar-agent/technical-debt.md` -- Added v3.1.0 section (INT-585 htmlLink as resourceUrl); added resolved issue entry
+- `docs/services/calendar-agent/agent.md` -- Updated ServiceFeedback type; added htmlLink Priority constraint; corrected CalendarEvent optional fields
+
+**Inferred Insights:**
+
+- Why: Google Calendar integration enabling natural language scheduling with preview-before-commit and multi-calendar support
+- Killer feature: Preview-based event creation with LLM extraction, async preview, and approval workflow
+- Future plans: Recurring events, event colors, reminders, attachments, conference data, batch operations, preview TTL
+- Limitations: Google Calendar only, OAuth required, no recurring events, no reminders/colors/attachments
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-02-22 -- web-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/web-agent/features.md` -- Refreshed to v3.1.0; minor formatting consistency
+- `docs/services/web-agent/technical.md` -- Added v3.1.0 and v3.0.0 release entries to Recent Changes; added app-settings-service to dependencies; added system endpoints table; added No Firestore and Pricing at startup gotchas; noted port 8127 in overview
+- `docs/services/web-agent/tutorial.md` -- Updated curl URLs to use localhost:8127 for local/dev consistency
+- `docs/services/web-agent/technical-debt.md` -- Updated Last Updated to 2026-02-22; added v3.1.0 resolved issue entry
+- `docs/services/web-agent/agent.md` -- Added Version 3.1.0 and Port to Identity table; added app-settings-service to Dependencies; updated last-updated date
+
+**Inferred Insights:**
+
+- Why: Centralized web content extraction and AI summarization for the IntexuraOS ecosystem
+- Killer feature: Self-healing LLM response parser with automatic JSON-to-prose repair and language preservation
+- Future plans: Caching layer, batch summarization, rate limiting, retry logic, PDF support, token-based summary length control
+- Limitations: HTTP/HTTPS only, no caching, no auth-walled content, 2MB size cap, no built-in rate limits
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2 (both low: Uint8Array concatenation, ESLint disable for while-true)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-02-22 -- data-insights-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/data-insights-agent/features.md` -- Updated to reflect removal of scheduled snapshot refresh; clarified visualization refresh as on-demand; removed 15-minute cache window limitation
+- `docs/services/data-insights-agent/technical.md` -- Updated recent changes table with v3.1.0 release and scheduled refresh removal; added app-settings-service dependency; added LLM Models table; expanded gotchas with orphaned visualizations, feed deletion cascade, snapshot ?refresh=true, visualization refresh idempotency, and pricing at startup; updated file structure with line counts and details
+- `docs/services/data-insights-agent/tutorial.md` -- Replaced Cloud Run URLs with localhost:8119 for local dev; added Part 6.3 for manual refresh workflow; updated troubleshooting for snapshot refresh; updated exercises
+- `docs/services/data-insights-agent/technical-debt.md` -- Added stale scheduler code comments as low-priority debt; identified dead code (refreshFeedVisualizations use case, CompositeFeedRepository.listAll()); flagged compositeFeedRoutes.ts SRP violation (583 lines); added scheduled refresh removal to resolved issues
+- `docs/services/data-insights-agent/agent.md` -- Updated all patterns to reflect on-demand refresh; added snapshot ?refresh=true to workflow patterns; updated constraints with pre-conditions; updated dependencies with app-settings-service
+
+**Inferred Insights:**
+
+- Why: Data sits in silos across mobile notifications, custom datasets, and disconnected sources; manual analysis requires spreadsheet expertise and repetitive work
+- Killer feature: AI-powered composite feed analysis that combines static data with live notifications and generates Vega-Lite chart definitions with 6 chart types
+- Future plans: Clean up dead code from scheduler removal (listAll(), refreshFeedVisualizations); consider splitting compositeFeedRoutes.ts
+- Limitations: Text-based data only; requires LLM API key; max 5 insights, 5 sources, 3 filters, 10 visualizations per feed; no scheduled refresh (on-demand only since v3.1.0)
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (stale scheduler comments)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-02-22 -- image-service (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/image-service/features.md` -- Restructured with concrete examples per capability, expanded problem statement, added lifecycle management capability section
+- `docs/services/image-service/technical.md` -- Added separate prompt generation data flow diagram, documented pricing model mismatch gotcha, updated recent changes with v3.0.0 and v3.1.0 releases, expanded file structure annotations
+- `docs/services/image-service/tutorial.md` -- Restructured with proper time estimates and checkpoints, expanded error handling section with all error codes and HTTP statuses, added detailed exercises with solutions
+- `docs/services/image-service/technical-debt.md` -- Identified pricing model mismatch code smell (Medium), identified mapError/mapLlmError duplication pattern (Low), preserved all resolved issues
+- `docs/services/image-service/agent.md` -- Added "When to use" guidance per capability, added Pattern 3 (direct image generation), expanded error handling table with HTTP status codes, added constraints section with specific limits
+
+**Inferred Insights:**
+
+- Why: AI-generated content (research, notes) needs visual elements for sharing. Manual image creation is slow and requires design skills. Raw text produces poor results when fed directly to image generation models.
+- Killer feature: Two-step pipeline -- LLM-powered prompt enhancement followed by multi-provider image generation with automatic thumbnailing and GCS storage.
+- Future plans: Additional image providers (Midjourney, Stable Diffusion, Ideogram), image editing/inpainting, style presets, batch generation, per-user budgets, cost estimation.
+- Limitations: No image editing, no batch generation, internal-only access, fixed thumbnail size (256px), no deduplication.
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (pricing model mismatch between REQUIRED_MODELS and actual prompt models)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- Code duplicates: 1 (mapError/mapLlmError duplicated across adapters)
+
+---
+
+## 2026-02-22 -- bookmarks-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/bookmarks-agent/features.md`
+- `docs/services/bookmarks-agent/technical.md`
+- `docs/services/bookmarks-agent/tutorial.md`
+- `docs/services/bookmarks-agent/technical-debt.md`
+- `docs/services/bookmarks-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Web bookmarking lacks context, requires manual metadata entry, and has no mobile-first capture flow
+- Killer feature: Three-stage async pipeline (create -> enrich -> summarize) with Pub/Sub decoupling and WhatsApp delivery of AI summaries
+- Future plans: Full-text search, link validation, folder hierarchy, bookmark sharing, import/export, summary regeneration
+- Limitations: No full-text search, no link validation, flat tags only, private-only, metadata depends on site cooperation
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- SRP violations: 1 (bookmarkRoutes.ts at 662 lines includes image proxy)
+- Code duplicates: 1 (formatBookmark() duplicated across route files)
+
+**Changes Since Last Run (v3.0.0 -> v3.1.0):**
+
+- Release v3.0.0 and v3.1.0 version bumps
+- No functional code changes to bookmarks-agent since last documentation run
+
+---
+
+## 2026-02-22 -- chat-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/chat-agent/features.md` -- Updated guest access section to list all three supported models (Gemini 2.5 Flash, GLM-4.7, GLM-4.7-Flash) for authenticated users
+- `docs/services/chat-agent/technical.md` -- Added v3.1.0 and v3.0.0 releases to recent changes table, added "Supported Chat Models" subsection under Configuration, fixed domain model table formatting (pipe-escaped union types)
+- `docs/services/chat-agent/tutorial.md` -- Minor formatting consistency fixes in troubleshooting table
+- `docs/services/chat-agent/technical-debt.md` -- Updated last-updated date to 2026-02-22, updated total count in summary table
+- `docs/services/chat-agent/agent.md` -- No substantive changes; confirmed accuracy of all schemas, examples, and constraints
+
+**Inferred Insights:**
+
+- Why: Users need contextual help inside IntexuraOS without switching to external documentation; the chat agent provides instant answers with source citations through natural conversation
+- Killer feature: RAG-powered documentation Q&A that combines Firestore vector search with LLM generation, producing answers with traceable source citations and the ability to create commands through conversational confirmation flow
+- Future plans: Conversation persistence in Firestore, multi-action support (edit/delete), automated documentation indexing pipeline, streaming responses via SSE
+- Limitations: Create-only commands, no user data access, manual doc indexing required, in-memory rate limiter (per-instance), 100 msg/hr guest limit
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2 (duplicate Firestore data extraction, large v8 ignore blocks)
+- Test gaps: 1 (chatClient.ts integration coverage via v8 ignore)
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-02-22 -- notes-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/notes-agent/features.md` -- Expanded problem statement, added draft-to-active workflow capability, added pagination limitation
+- `docs/services/notes-agent/technical.md` -- Added architecture and data flow diagrams, expanded recent changes with v3.0.0 and v3.1.0 releases, added system endpoints table, added package dependencies table, documented double-read gotcha and no-pagination gotcha
+- `docs/services/notes-agent/tutorial.md` -- Restructured with proper time estimates, added Part 5 (internal endpoint) and Part 6 (tag organization), added exercises with solutions, expanded troubleshooting table
+- `docs/services/notes-agent/technical-debt.md` -- Added pagination feature gap, identified ownership check code duplication pattern, added double-read code smell, updated resolved issues table
+- `docs/services/notes-agent/agent.md` -- Complete restructure to template format: full input/output schemas per capability, request/response examples, constraints table, usage patterns, error handling table
+
+**Inferred Insights:**
+
+- Why: Unified note storage for capturing information from multiple IntexuraOS sources with provenance tracking
+- Killer feature: Source tracking with internal service endpoint -- enables any service to create notes on behalf of users with full provenance
+- Future plans: Tag filtering (server-side), full-text search, pagination
+- Limitations: No pagination, no tag filtering, status hidden from public API, no status transitions
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (double-read on mutation)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- Feature gaps: 3 (tag filtering, status visibility, pagination)
+- Code duplicates: 1 (ownership check pattern)
+
+---
+
+## 2026-02-22 -- linear-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/linear-agent/features.md`
+- `docs/services/linear-agent/technical.md`
+- `docs/services/linear-agent/tutorial.md`
+- `docs/services/linear-agent/technical-debt.md`
+- `docs/services/linear-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Bridge between natural language and Linear project management, with bidirectional sync and programmatic access for AI agents
+- Killer feature: Auto-trigger code tasks on Linear issue assignment -- assigning an issue triggers automatic enrichment
+- Future plans: Label passthrough in internal API, completedAt in SyncedLinearIssue, comment full sync
+- Limitations: Fire-and-forget auto-trigger means failures only logged; labels accepted but not forwarded to Linear
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes Since Last Run (v3.0.0 -> v3.1.0):**
+
+- Auto-trigger code tasks on Linear issue assignment (a88db80f)
+- Assignee data preserved during full sync (99e05f19, INT-573)
+- Assignee included in list issues response mapper (b846dcc5)
+- Unique actionId for webhook dedup (d5810213)
+- Auto-trigger prompt aligned with Phase 1 design behavior (dc45d1ea)
+- Raw errors passed to pino logger (6f35c16a)
+
+---
+
+## 2026-02-22 -- mobile-notifications-service (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/mobile-notifications-service/features.md` -- Rewritten with active voice, expanded problem statement, added data aggregation use case, concrete examples for each capability
+- `docs/services/mobile-notifications-service/technical.md` -- Added mermaid architecture and data flow diagrams, added v3.1.0 release to recent changes, added Firestore collections table, expanded gotchas with title filter implementation detail and cursor encoding
+- `docs/services/mobile-notifications-service/tutorial.md` -- Complete rewrite as progressive 6-part tutorial with exercises and solutions, added idempotency test step, added error handling section
+- `docs/services/mobile-notifications-service/technical-debt.md` -- Updated to 2026-02-22, confirmed zero debt items, preserved resolved issues history
+- `docs/services/mobile-notifications-service/agent.md` -- Restructured with per-capability "When to use" guidance, explicit input/output TypeScript schemas, request/response examples, usage patterns for composite feeds
+
+**Inferred Insights:**
+
+- Why: Centralized notification capture pipeline that pairs Android devices via cryptographic signature tokens and persists all mobile notifications in Firestore for browsing, filtering, and cross-service data aggregation
+- Killer feature: Signature-based device authentication with SHA-256 hash storage -- plaintext shown once, zero-knowledge security model
+- Future plans: FCM/APNs push-back integration, iOS support, rich notifications, scheduled delivery, batch operations
+- Limitations: Android only, single signature per user, no push-back, text-only capture
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-02-22 -- todos-agent (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/todos-agent/features.md` -- Updated LLM model references (Gemini 2.5 Flash / GLM-4.7), added automatic status tracking capability, added description limit to limitations
+- `docs/services/todos-agent/technical.md` -- Added v3.1.0 and v3.0.0 releases to recent changes, added app-settings-service dependency, added system endpoints table, added automatic status transitions section, added Pub/Sub auth gotcha, added max items cap and markdown stripping gotchas, updated model chain documentation
+- `docs/services/todos-agent/tutorial.md` -- Changed URLs from production to localhost:8123 for local dev, added archived filter step, corrected AI extraction to use internal endpoint, improved exercise solutions with cancel-then-archive flow
+- `docs/services/todos-agent/technical-debt.md` -- Updated to 2026-02-22, added v3.1.0 and v3.0.0 release entries, identified parseDate duplication as low-priority code duplicate, updated dependency versions
+- `docs/services/todos-agent/agent.md` -- Added auto-status constraint, added max items constraint, added default priority constraint, added internal API usage pattern, updated model chain, updated last updated date
+
+**Inferred Insights:**
+
+- Why: Centralized task management with AI-powered item extraction that turns natural language descriptions into structured, prioritized todo items with due dates
+- Killer feature: AI item extraction via Pub/Sub pipeline that parses free-form descriptions into structured TodoItems with Zod-validated schemas and graceful fallback behaviors
+- Future plans: Todo templates, recurring todos, task dependencies, bulk operations, full-text search, collaboration, reminders, subtask nesting
+- Limitations: No recurring tasks, no dependencies, no reminders, no collaboration, single-level sub-items, 10K char description limit, 50 item extraction cap
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- Code duplicates: 1 (parseDate function -- low severity)
+
+---
+
+## 2026-02-22 -- app-settings-service (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/app-settings-service/features.md` -- Rewrote with active voice, expanded capabilities with concrete examples, added startup integrity validation section
+- `docs/services/app-settings-service/technical.md` -- Updated Recent Changes table through v3.1.0, added system endpoints (health, openapi.json, docs), expanded configuration with INTEXURAOS_ENVIRONMENT/PORT/HOST/LOG_LEVEL, added package dependencies table, added boot order gotcha, updated model count to 16
+- `docs/services/app-settings-service/tutorial.md` -- Expanded to 4-part progressive tutorial with health check, pricing, usage costs, and cost estimation sections; added exercises with solutions
+- `docs/services/app-settings-service/technical-debt.md` -- Updated date, kept 3 active code smells, added SRP violation for server.ts (407 lines), confirmed 0 TODOs/type issues/test gaps
+- `docs/services/app-settings-service/agent.md` -- Updated provider coverage to full 16 models from llm-contract, restructured capabilities with explicit input/output schemas and examples, added 3 usage patterns
+
+**Inferred Insights:**
+
+- Why: IntexuraOS orchestrates 16 LLM models across 5 providers; without centralized pricing, cost data would drift out of sync across 20 microservices
+- Killer feature: Startup integrity validation -- service refuses to boot if any model lacks pricing, preventing all downstream services from running with incomplete data
+- Future plans: Budget management, cost alerts, forecasting, admin API, daily breakdown
+- Limitations: Read-only pricing, 90-day default window, no forecasting, no budgets, monthly granularity only
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 3 (duplicated provider fetch logic, hardcoded collection paths, client-side date filtering)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-02-22 -- whatsapp-service (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/whatsapp-service/technical.md` -- Added v3.0.0 and v3.1.0 release commits to Recent Changes table
+- `docs/services/whatsapp-service/technical-debt.md` -- Updated date, corrected webhookRoutes.ts line count from ~1300 to ~1160, removed stale "handleReactionMessage" from extraction suggestion
+- `docs/services/whatsapp-service/agent.md` -- Updated last updated date
+- `docs/site-index.json` -- Replaced outdated emoji reaction references with interactive button features (v4.0.0), added phone verification (v3.0.0), added link preview extraction
+- `docs/services/index.md` -- Updated whatsapp-service descriptions to reflect v4.0.0 capabilities (buttons and text replies, not reactions)
+
+**Inferred Insights:**
+
+- Why: WhatsApp Business API integration layer for frictionless mobile input and approval workflows
+- Killer feature: Async webhook processing with interactive button approval correlation and Speechmatics audio transcription pipeline
+- Future plans: Telegram/SMS channels, message threading, video support, multi-phone per user
+- Limitations: WhatsApp 24-hour messaging window, single phone per user, no video, no emoji reaction approvals
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- TODOs: 1 (refactor processWebhookEvent to accept raw payload, not FastifyRequest)
+- SRP violations: 1 (webhookRoutes.ts at 1160 lines)
+- Stale comments: 1 (line 763 references old nonce format)
+- Test gaps: 0
+- Type issues: 0
+
+**Changes Since Last Run (2026-02-19):** Only 2 release version bump commits (v3.0.0, v3.1.0). No source code changes. Primary update was correcting stale site-index.json and index.md entries that still referenced emoji reactions (removed in v4.0.0).
+
+---
+
+## 2026-02-22 -- notion-service (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/notion-service/features.md` -- Rewritten with active voice, concrete examples, expanded use case, clearer limitations
+- `docs/services/notion-service/technical.md` -- Added v3.1.0 release to recent changes, added mermaid architecture and data flow diagrams, expanded request/response schemas for all endpoints, added use case summaries, added Firestore collection table, added line counts to file structure
+- `docs/services/notion-service/tutorial.md` -- Complete rewrite with progressive 5-part tutorial, added page preview scenario, added exercises with solutions, expanded troubleshooting table
+- `docs/services/notion-service/technical-debt.md` -- Updated to 2026-02-22, added v3.1.0 release entry, added detailed v8 ignore annotation inventory, preserved resolved issues
+- `docs/services/notion-service/agent.md` -- Restructured to template format with "When to use" per capability, explicit input/output schemas, request/response examples, added "Used By" table, added usage patterns
+
+**Inferred Insights:**
+
+- Why: Centralized Notion integration gateway that validates tokens before storage, tracks connection lifecycle, and exposes internal APIs for downstream services to verify page access
+- Killer feature: Internal page preview endpoint that validates Notion page accessibility before research-agent export attempts, preventing silent export failures
+- Future plans: Multiple workspaces per user, webhook event processing, scoped page access, sync status tracking
+- Limitations: Single workspace per user, manual token generation, webhook stub (no processing), no auto-retry
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (webhook stub -- low severity)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-02-22 — api-docs-hub (targeted refresh)
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/api-docs-hub/features.md` -- Refreshed with active voice, added Recent Changes section, updated limitations
+- `docs/services/api-docs-hub/technical.md` -- Updated package version to 3.1.0, added architecture note about client-side fetching, added Terraform config section, added ecosystem.config.cjs gap to Gotchas, updated Recent Changes table with v3.1.0 and v3.0.0 releases
+- `docs/services/api-docs-hub/tutorial.md` -- Expanded to 4-part progressive tutorial with exercises, added troubleshooting table
+- `docs/services/api-docs-hub/technical-debt.md` -- Updated date, added ecosystem.config.cjs integration to Future Plans, added Resolved Issues for v3.0.0/v3.1.0 changes
+- `docs/services/api-docs-hub/agent.md` -- Updated version to 3.1.0, restructured to template format with explicit schemas and examples, added Pattern 2 for direct spec access
+
+**Inferred Insights:**
+
+- Why: API documentation scattered across 15 microservices; developers need a single entry point to discover and test all endpoints
+- Killer feature: Multi-spec Swagger UI aggregation with live client-side spec fetching -- documentation always reflects the currently deployed API
+- Future plans: Dynamic config reload, spec caching, auth helper, version selector, cross-spec search
+- Limitations: Read-only, no auth helper, static config, service availability dependency
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1 (health endpoint raw reply.send -- low, intentional)
+- Test gaps: 0 (no tests exist, but service is 229 lines with no domain logic)
+- Type issues: 0
+- TODOs: 0
+
+---
+
 ## 2026-02-19 — v3.0.0 Release Documentation Update
 
 **Action:** Updated

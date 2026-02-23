@@ -45,7 +45,7 @@ graph TB
 
 ## Data Flow
 
-### Preview Generation Flow (v2.0.0)
+### Preview Generation Flow
 
 ```mermaid
 sequenceDiagram
@@ -88,31 +88,32 @@ sequenceDiagram
     CA->>US: Get OAuth token
     CA->>GC: Get calendar timezone
     CA->>GC: Create event
-    GC-->>CA: Created event
+    GC-->>CA: Created event with htmlLink
     CA->>FS: Save to processed_actions
     CA->>FS: Delete preview (non-blocking)
-    CA-->>AA: ServiceFeedback response
+    CA-->>AA: ServiceFeedback with resourceUrl (htmlLink)
 ```
 
 ## Recent Changes
 
-| Commit  | Description                                                   | Date       |
-| ------- | ------------------------------------------------------------- | ---------- |
-|         | Add dev-mode log formatting for PM2 readability               | 2026-02-16 |
-|         | Add Dash0 OpenTelemetry integration                           | 2026-02-16 |
-|         | Switch default LLM to Gemini 2.5 Flash + add fallbacks        | 2026-02-15 |
-|         | Standardize API key env vars to APP naming convention         | 2026-02-15 |
-|         | Add default model selector with platform Zai fallback         | 2026-02-08 |
-| INT-427 | Enable strict 100% coverage enforcement (Phase 3)             | 2026-01-31 |
-| INT-311 | Add delete/retry for failed issues and events                 | 2026-01-31 |
-| INT-422 | Fix Polish date parsing in calendar actions                   | 2026-01-29 |
-|         | Improve calendar extraction with date-only support and repair | 2026-01-30 |
-|         | Add Sentry-enabled logger factory and migrate all apps        | 2026-01-30 |
-| INT-408 | Enforce mandatory env var registration for all services       | 2026-01-28 |
-| INT-301 | Consolidate user service client architecture                  | 2026-01-26 |
-| INT-269 | Migrate to @intexuraos/internal-clients package               | 2025-01-25 |
-| INT-222 | Migrate to Zod schema for event validation                    | 2025-01-25 |
-| INT-189 | Calendar preview generation before approval                   | 2025-01-21 |
+| Commit    | Description                                                   | Date       |
+| --------- | ------------------------------------------------------------- | ---------- |
+| INT-585   | Use Google Calendar htmlLink as resourceUrl for event links   | 2026-02-20 |
+|           | Release v3.1.0                                                | 2026-02-22 |
+|           | Release v3.0.0                                                | 2026-02-19 |
+|           | Add dev-mode log formatting for PM2 readability               | 2026-02-16 |
+|           | Add Dash0 OpenTelemetry integration                           | 2026-02-16 |
+|           | Switch default LLM to Gemini 2.5 Flash + add fallbacks        | 2026-02-15 |
+|           | Standardize API key env vars to APP naming convention         | 2026-02-15 |
+|           | Add default model selector with platform Zai fallback         | 2026-02-08 |
+| INT-427   | Enable strict 100% coverage enforcement (Phase 3)             | 2026-01-31 |
+| INT-311   | Add delete/retry for failed issues and events                 | 2026-01-31 |
+| INT-422   | Fix Polish date parsing in calendar actions                   | 2026-01-29 |
+|           | Improve calendar extraction with date-only support and repair | 2026-01-30 |
+|           | Add Sentry-enabled logger factory and migrate all apps        | 2026-01-30 |
+| INT-408   | Enforce mandatory env var registration for all services       | 2026-01-28 |
+| INT-301   | Consolidate user service client architecture                  | 2026-01-26 |
+| INT-269   | Migrate to @intexuraos/internal-clients package               | 2025-01-25 |
 
 ## API Endpoints
 
@@ -169,7 +170,7 @@ sequenceDiagram
 | `organizer`   | EventPerson?     | Event organizer                 |
 | `attendees`   | EventAttendee[]? | Event attendees                 |
 
-### CalendarPreview (v2.0.0)
+### CalendarPreview
 
 | Field         | Type          | Description                                       |
 | ------------- | ------------- | ------------------------------------------------- |
@@ -272,11 +273,11 @@ interface GeneratePreviewMessage {
 
 ### External APIs
 
-| Service                 | Purpose                                                          |
-| ----------------------- | ---------------------------------------------------------------- |
-| Google Calendar API v3  | Event CRUD and free/busy queries                                 |
-| Gemini 2.5 Flash        | Primary LLM for natural language event extraction                |
-| Gemini 2.5 Pro          | Secondary LLM (fallback)                                         |
+| Service                  | Purpose                                                          |
+| ------------------------ | ---------------------------------------------------------------- |
+| Google Calendar API v3   | Event CRUD and free/busy queries                                 |
+| Gemini 2.5 Flash         | Primary LLM for natural language event extraction                |
+| Gemini 2.5 Pro           | Secondary LLM (fallback)                                         |
 | GLM-4.7 / GLM-4.7 Flash | Tertiary LLM via platform Zai (fallback when Gemini unavailable) |
 
 ## Configuration
@@ -290,7 +291,7 @@ interface GeneratePreviewMessage {
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth         |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                   |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service URL for pricing    |
-| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry DSN for error reporting          |
+| `INTEXURAOS_SENTRY_DSN`              | Yes      | Sentry DSN for error reporting          |
 | `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai LLM API key (fallback)     |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini LLM API key (fallback)  |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (default: development) |
@@ -326,6 +327,8 @@ interface GeneratePreviewMessage {
 
 **Error mapping** - Google API errors mapped to IntexuraOS codes (403 PERMISSION_DENIED vs QUOTA_EXCEEDED). UserServiceError codes (CONNECTION_NOT_FOUND, TOKEN_REFRESH_FAILED) mapped to CalendarError codes.
 
+**Resource URL** - `processCalendarAction` returns the Google Calendar `htmlLink` as `resourceUrl` when available. Falls back to `/#/calendar` only when the created event has no `htmlLink`. This means approval actions (e.g., via WhatsApp) link directly to the Google Calendar event.
+
 **Failed event retry** - Retry requires both start and end times. Returns 422 if missing. On success, deletes the failed event record (non-blocking on delete failure).
 
 **Failed event ownership** - Delete and retry endpoints verify userId ownership, returning 404 if the event belongs to a different user.
@@ -348,14 +351,14 @@ apps/calendar-agent/src/
       deleteEvent.ts             # Delete operation
       getFreeBusy.ts             # Free/busy query
       processCalendarAction.ts   # Action processing with preview
-      generateCalendarPreview.ts # Preview generation (v2.0.0)
+      generateCalendarPreview.ts # Preview generation
   infra/
     google/
       googleCalendarClient.ts    # Google Calendar API v3 wrapper
     firestore/
       failedEventRepository.ts   # Failed events storage
       processedActionRepository.ts # Idempotency tracking
-      calendarPreviewRepository.ts # Preview storage (v2.0.0)
+      calendarPreviewRepository.ts # Preview storage
     gemini/
       calendarActionExtractionService.ts # LLM extraction with repair mechanism
   routes/
@@ -367,4 +370,4 @@ apps/calendar-agent/src/
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22

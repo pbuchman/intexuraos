@@ -55,9 +55,9 @@ export type TaskPhase =
  */
 export interface TaskResult {
   prUrl?: string;           // GitHub PR URL (may be absent if PR creation failed)
-  branch: string;           // Git branch name
-  commits: number;          // Number of commits made
-  summary: string;          // AI-generated summary of changes
+  branch?: string;          // Git branch name (absent for Phase 1 design tasks)
+  commits?: number;         // Number of commits made (absent for Phase 1 design tasks)
+  summary?: string;         // AI-generated summary of changes
   ciFailed?: boolean;       // True if CI checks failed
   partialWork?: boolean;    // True if task timed out with partial progress
   rebaseResult?: 'success' | 'conflict' | 'skipped';  // For long tasks (design lines 1356-1364)

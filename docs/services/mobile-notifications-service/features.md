@@ -1,101 +1,59 @@
 # Mobile Notifications Service
 
-Push notification gateway for mobile devices via signature-based authentication.
+Capture and store mobile device notifications through a secure webhook pipeline with signature-based authentication.
 
 ## The Problem
 
-Mobile apps need real-time notifications:
-
-1. **Authentication** - Devices need secure push token access
-2. **Filtering** - Users should control which notifications they receive
-3. **Multi-device** - Users have multiple devices (phone, tablet)
-4. **Webhook delivery** - Push providers send webhooks, not polling
+Important notifications arrive on your phone throughout the day -- messages, app alerts, system events -- but they vanish from your notification shade and are impossible to search or analyze later. There is no centralized way to capture, persist, and query the stream of notifications flowing through a mobile device. Traditional approaches require installing heavyweight apps or giving up privacy to third-party services.
 
 ## How It Helps
 
-Mobile-notifications-service manages the entire push flow:
+### Secure Device Pairing via Signature Tokens
 
-1. **Signature connections** - Cryptographic tokens for device auth
-2. **Notification storage** - Persistent notification history
-3. **Saved filters** - Per-user named filter presets (by app, device, source, title)
-4. **Webhooks** - Receive push from mobile devices via Tasker/Automate
-5. **Internal query** - Feed notifications to data-insights-agent
+Connect any Android device with a single API call. The service generates a crypto-secure 256-bit token, returns it once, and stores only the SHA-256 hash. The device uses this token as a header on every webhook call, and the service validates it by hash comparison -- plaintext is never stored.
 
-## Key Features
+**Example:** A user pairs their Pixel phone by calling the connect endpoint. They receive a signature token, configure it in Tasker, and every notification from that phone is now securely routed to their account.
 
-**Connection Types:**
+### Automatic Notification Capture via Webhooks
 
-- Signature-based (plaintext returned once, stored hashed)
-- Device labeling for identification
-- Single active signature per user — reconnecting replaces the previous signature
+Mobile automation apps (Tasker, Automate) send notification data to a webhook endpoint. The service validates the signature, deduplicates by device-provided notification ID, and persists the notification in Firestore -- all in a single request.
 
-**Notification Filters:**
+**Example:** WhatsApp messages, Slack notifications, and calendar reminders are all captured as they appear on the device, with full metadata (app name, title, body, timestamp, device name).
 
-- Create named saved filters by app, device, source, or title
-- Filter options auto-populate from received notifications
-- Delete saved filters when no longer needed
+### Filtered Browsing with Saved Presets
 
-**Webhook Support:**
+Users can list notifications with filters (by app, source, device, or title search) and save frequently-used filter combinations as named presets. Filter options auto-populate from received notifications, so the UI always reflects available data.
 
-- Receive push from mobile devices (Tasker, Automate)
-- Verify signatures via SHA-256 hash comparison
-- Idempotency via device-provided `notification_id`
-- Route to Firestore for persistent storage
+**Example:** A user creates a "Work Chats" saved filter for Slack and Teams notifications. When they open the notification view, they select this preset and see only work-related messages.
 
-## Use Cases
+### Internal Query API for Data Aggregation
 
-### Connect device
+Other services (such as data-insights-agent) query notifications via an internal endpoint for composite feeds and analytics, without direct Firestore access.
 
-1. App requests connection with device label
-2. Service deletes any previous signature for this user (single active signature per user)
-3. Service generates new signature token, returns `{ connectionId, signature }`
-4. App stores plaintext token (shown only once)
-5. Service stores SHA-256 hash for verification
-6. App uses token as `X-Mobile-Notifications-Signature` header on webhooks
+**Example:** The data-insights-agent pulls the latest 50 WhatsApp notifications to generate a daily communication summary.
 
-### Receive notification
+## Use Case
 
-1. Tasker/Automate POSTs to `/mobile-notifications/webhooks`
-2. SHA-256 signature verified against stored hash
-3. Duplicate check via `notification_id` idempotency key
-4. Notification stored in Firestore
-5. Available for listing and internal queries
+A user installs Tasker on their Android phone and pairs it with IntexuraOS by calling `POST /mobile-notifications/connect`. They receive a signature token, which they configure in Tasker's HTTP Request task. From that point, every notification that appears on the phone is forwarded to the webhook endpoint with the signature header.
 
-### Create saved filter
-
-1. User selects filter criteria (app, device, source, title)
-2. POST to `/notifications/filters/saved` with a name
-3. Filter stored in user's filters document
-4. Retrieve with GET `/notifications/filters`
+When the user opens the IntexuraOS dashboard, they see a paginated feed of all captured notifications. They filter by app to see only WhatsApp messages, then save this filter as "WhatsApp" for quick access. Meanwhile, the data-insights-agent uses the internal query endpoint to build a daily activity summary from the same notification data.
 
 ## Key Benefits
 
-**Secure** - SHA-256 hashed signatures, plaintext shown once
-
-**Multi-device** - Multiple connections per user
-
-**Idempotent** - Device-provided notification IDs prevent duplicates
-
-**Audit trail** - All notifications stored persistently in Firestore
-
-**Observable** - Full request/signature/result logging for webhook debugging; Dash0 OpenTelemetry tracing
+- Zero-knowledge security: plaintext signature shown once, only SHA-256 hash stored
+- Automatic deduplication via device-provided notification IDs
+- Self-populating filter options require no manual configuration
+- Paginated browsing with cursor-based navigation for large notification volumes
+- Full audit trail with server-side timestamps for every captured notification
 
 ## Limitations
 
-**Android-only** - Requires Tasker or Automate app on Android device
+- **Android only** -- requires Tasker or Automate app; no iOS support yet
+- **Signature shown once** -- lost tokens require creating a new connection (which replaces the previous one)
+- **No push-back** -- captures and stores notifications but does not push them back to devices
+- **No media attachments** -- stores text content only; images and rich media are not captured
+- **Single signature per user** -- creating a new connection deletes any previous signature
 
-**Signature only shown once** - Lost tokens require reconnect
+---
 
-**No sound/badge customization** - Basic notification forwarding only
-
-**No push fanout** - Does not push back to devices; stores for polling/internal queries
-
-## Recent Changes
-
-- **Dash0 OpenTelemetry integration** - Added distributed tracing via `@intexuraos/infra-sentry` Dash0 integration; all service calls now emit traces
-- **Dev-mode log formatting** - Structured log output reformatted for PM2 readability in local development
-- **PM2 ecosystem migration** - Service startup switched to `pnpm --filter` with `start:local` scripts
-- **Response contract standardization** - All endpoints now use `reply.ok(data)` / `reply.fail(code, message)` for consistent `{ success, data }` or `{ success, error: { code, message } }` responses
-- **DELETE endpoint updated** - `DELETE /mobile-notifications/:notification_id` returns 200 with `{ success: true, data: {} }` instead of 204 No Content
-- **Sentry-enabled logging** - Migrated from direct `pino()` to `createAppLogger()` for automatic Sentry error reporting
-- **100% branch coverage** - Added v8 ignore exemptions for TypeScript-only safety branches
+_Part of [IntexuraOS](../overview.md) -- Capture your mobile notifications, anywhere they happen._

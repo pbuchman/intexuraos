@@ -2,7 +2,7 @@
 
 > **The AI-Native Personal Operating System** — An autonomous agent platform that transforms fragmented information into structured intelligence.
 
-**Version 3.0.0** — Updated February 19, 2026
+**Version 3.1.0** — Updated February 22, 2026
 
 ---
 
@@ -11,6 +11,44 @@
 IntexuraOS reimagines personal productivity as an **AI-first system**. Instead of building another app that uses AI as a feature, IntexuraOS builds AI agents that use apps as tools.
 
 **The Core Insight**: Your brain excels at creative thinking and decision-making. It struggles with remembering, scheduling, aggregating, and cross-referencing. IntexuraOS handles the cognitive load while you remain the commander.
+
+---
+
+## What's New in v3.1.0
+
+### The Autonomous Tightening
+
+v3.1.0 makes the self-building system smarter and more autonomous. Linear issues now auto-trigger code tasks on assignment, PR comments dispatch directly to workers, and the execution pipeline gains planning stages, dual code review loops, and prompt sanitization.
+
+**Automation & Dispatch**
+
+- Auto-triggering of code tasks when Linear issues are assigned — Todo issues without "Code Task" label automatically dispatch to Phase 1 design
+- Sender whitelist for webhook dispatch — single `isAllowedSender()` check replacing scattered bot filters
+- Simplified PR comment auto-response — direct worker dispatch via `gh` CLI replaces Gemini classification and batching
+- PR body deduplication across `pull_request` events preventing repeated Summary sections
+
+**Orchestrator & Worker Enhancements**
+
+- Phase 2 enhancements with planning stage, dual code review loop, and turn summary
+- Dynamic CPU core detection via cgroup v2 `cpu.max` with formatted metrics in task logs
+- Activity heartbeat during Docker silence periods
+- Active goal injection into orchestrator system prompt on resume
+- Git identity configuration for Docker containers via `INTEXURAOS_GIT_USER_NAME`/`INTEXURAOS_GIT_USER_EMAIL`
+- Retry logic with exponential backoff for GitHub token minting
+
+**Web UI Improvements**
+
+- Collapsible tool output blocks in log viewer with per-block expand/collapse and `(+N lines)` badges
+- Multi-status filtering for code tasks with comma-separated status support
+- Expandable PR events timeline replacing static Summary card
+- Assignee name display on Linear board issue cards
+
+**Security & Quality**
+
+- Prompt sanitization utility stripping AWS keys, API tokens, PEM keys, and sensitive URL parameters from worker inputs
+- 27 LLM prompts improved across all domains — fixed unsafe casts, XML delimiters, date injection
+- CI pipeline optimized from 5m to 3m43s with 3-way test sharding and parallel type/lint matrix
+- `/tech-debt-triage` skill for scanning technical debt docs and creating consolidated Linear issues
 
 ---
 
@@ -283,7 +321,7 @@ IntexuraOS deploys **20 apps**, **4 workers**, and **22 packages** — a total o
 | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
 | **research-agent**      | Multi-model orchestration, parallel queries, synthesis, Notion export, platform API key fallbacks (v2.3.0) |
 | **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)                                   |
-| **code-agent**          | Autonomous code execution, worker dispatch, deduplication, rate limiting (v3.0.0)                          |
+| **code-agent**          | Autonomous code execution, worker dispatch, prompt sanitization, two-phase execution, turn metrics (v3.1.0) |
 | **chat-agent**          | Documentation RAG Q&A, command creation, guest access (v3.0.0)                                             |
 | **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                                                   |
 | **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)                                    |
@@ -297,7 +335,7 @@ IntexuraOS deploys **20 apps**, **4 workers**, and **22 packages** — a total o
 
 | Service                          | Purpose                                                                     |
 | -------------------------------- | --------------------------------------------------------------------------- |
-| **actions-agent**                | Atomic status transitions, race condition prevention via Firestore (v2.0.0) |
+| **actions-agent**                | Atomic status transitions, confidence-based auto-execution, Google Calendar linking (v4.1.0) |
 | **image-service**                | GPT Image 1 & Gemini Flash Image image generation                           |
 | **whatsapp-service**             | Approval via replies/reactions, OutboundMessage correlation (v2.0.0)        |
 | **user-service**                 | Rate limit detection precedence, API key validation (v2.0.0)                |
@@ -445,7 +483,7 @@ Each agent type executes domain-specific logic:
 | Link        | bookmarks-agent | Summarization, metadata extraction                      |
 | Calendar    | calendar-agent  | Date parsing, availability checking                     |
 | Linear      | linear-agent    | Issue creation, project mapping                         |
-| Code        | code-agent      | Worker dispatch, Docker execution, PR creation (v3.0.0) |
+| Code        | code-agent      | Worker dispatch, prompt sanitization, two-phase execution (v3.1.0) |
 
 ### Phase 4: Notification & Storage
 
@@ -663,7 +701,7 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 **Autonomous Code Execution**
 
-- [code-agent](services/code-agent/features.md) - Worker dispatch, Docker isolation, PR creation (v3.0.0)
+- [code-agent](services/code-agent/features.md) - Worker dispatch, prompt sanitization, two-phase execution (v3.1.0)
 - [orchestrator](services/orchestrator/features.md) - Local task orchestration with Claude Code (v3.0.0)
 - [claude-worker](services/claude-worker/features.md) - Sandboxed Docker execution environment (v3.0.0)
 
@@ -700,7 +738,7 @@ User API Keys → AES-256-GCM Encryption → Firestore
 - [calendar-agent](services/calendar-agent/features.md) - Google Calendar
 - [notion-service](services/notion-service/features.md) - Notion API
 - [linear-agent](services/linear-agent/features.md) - Linear API
-- [code-agent](services/code-agent/features.md) - GitHub API (v3.0.0)
+- [code-agent](services/code-agent/features.md) - GitHub API (v3.1.0)
 
 **Infrastructure**
 
@@ -731,4 +769,4 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ---
 
-**Last updated:** 2026-02-19 (v3.0.0 — autonomous code execution, self-building system)
+**Last updated:** 2026-02-22 (v3.1.0 — autonomous tightening, auto-triggering, prompt sanitization)

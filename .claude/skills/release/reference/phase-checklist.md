@@ -172,22 +172,22 @@ git branch --show-current                                           # Check 5: o
 
 ## Quick Commands Reference
 
-| Action                   | Command                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------- |
-| Get current version      | `cat package.json \| jq -r '.version'`                                          |
-| Get last tag             | `git tag -l "v*" --sort=-v:refname \| head -1`                                  |
-| List merged PRs          | `gh pr list --state merged --base development`                                  |
-| Detect modified services | `git diff --name-only $TAG..HEAD -- apps/`                                      |
-| Run CI                   | `pnpm run ci:tracked`                                                           |
-| Push development         | `git push origin development`                                                   |
-| Check existing PR        | `gh pr list --base main --head development --json number`                       |
-| Merge PR                 | `gh pr merge $PR_NUMBER --merge`                                                |
-| Tag on main              | `git tag -a "vX.Y.Z" "$(git rev-parse origin/main)" -m "Release vX.Y.Z"`       |
-| Push tag                 | `git push origin vX.Y.Z`                                                        |
+| Action                   | Command                                                                                              |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Get current version      | `cat package.json \| jq -r '.version'`                                                               |
+| Get last tag             | `git tag -l "v*" --sort=-v:refname \| head -1`                                                       |
+| List merged PRs          | `gh pr list --state merged --base development`                                                       |
+| Detect modified services | `git diff --name-only $TAG..HEAD -- apps/`                                                           |
+| Run CI                   | `pnpm run ci:tracked`                                                                                |
+| Push development         | `git push origin development`                                                                        |
+| Check existing PR        | `gh pr list --base main --head development --json number`                                            |
+| Merge PR                 | `gh pr merge $PR_NUMBER --merge`                                                                     |
+| Tag on main              | `git tag -a "vX.Y.Z" "$(git rev-parse origin/main)" -m "Release vX.Y.Z"`                             |
+| Push tag                 | `git push origin vX.Y.Z`                                                                             |
 | Create GitHub Release    | `gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/release-notes-X.Y.Z.md --target main` |
 | Validate tag on main     | `git branch -r --contains "$(git rev-parse vX.Y.Z^{})" \| grep origin/main`                          |
-| Validate GitHub Release  | `gh release view "vX.Y.Z" --json tagName`                                                             |
-| Validate CHANGELOG entry | `grep -q "## X.Y.Z" CHANGELOG.md`                                                                     |
+| Validate GitHub Release  | `gh release view "vX.Y.Z" --json tagName`                                                            |
+| Validate CHANGELOG entry | `grep -q "## X.Y.Z" CHANGELOG.md`                                                                    |
 
 ---
 
@@ -222,16 +222,16 @@ At each checkpoint (Phases 3, 4, 5):
 
 ## Error Recovery
 
-| Error                         | Recovery                                                  |
-| ----------------------------- | --------------------------------------------------------- |
-| CI fails in Phase 6           | Fix issues, re-run CI, then commit                        |
-| service-scribe agent fails    | Log error, continue with other services                   |
-| RAG embeddings fail           | Log error, continue release (re-run manually)             |
-| User declines all checkpoints | Proceed with version-only release                         |
-| Tool unavailable              | ABORT immediately with clear error                        |
-| Merge to main fails           | Check for conflicts, resolve manually, retry              |
-| GitHub Release creation fails | Log error, provide manual `gh release create` command     |
-| Existing dev→main PR blocked  | Fall back to direct merge or report blocker               |
+| Error                         | Recovery                                              |
+| ----------------------------- | ----------------------------------------------------- |
+| CI fails in Phase 6           | Fix issues, re-run CI, then commit                    |
+| service-scribe agent fails    | Log error, continue with other services               |
+| RAG embeddings fail           | Log error, continue release (re-run manually)         |
+| User declines all checkpoints | Proceed with version-only release                     |
+| Tool unavailable              | ABORT immediately with clear error                    |
+| Merge to main fails           | Check for conflicts, resolve manually, retry          |
+| GitHub Release creation fails | Log error, provide manual `gh release create` command |
+| Existing dev→main PR blocked  | Fall back to direct merge or report blocker           |
 
 ---
 

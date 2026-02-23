@@ -71,6 +71,18 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'INTEXURAOS_CHAT_AGENT_OPENAPI_URL',
     displayName: 'Chat Agent API',
   },
+  {
+    key: 'INTEXURAOS_CODE_AGENT_OPENAPI_URL',
+    displayName: 'Code Agent API',
+  },
+  {
+    key: 'INTEXURAOS_LINEAR_AGENT_OPENAPI_URL',
+    displayName: 'Linear Agent API',
+  },
+  {
+    key: 'INTEXURAOS_WEB_AGENT_OPENAPI_URL',
+    displayName: 'Web Agent API',
+  },
 ];
 
 /**

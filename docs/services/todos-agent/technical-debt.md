@@ -1,7 +1,7 @@
-# Todos Agent — Technical Debt
+# Todos Agent -- Technical Debt
 
-**Last Updated:** 2026-02-19
-**Analysis Run:** Autonomous documentation generation
+**Last Updated:** 2026-02-22
+**Analysis Run:** Autonomous documentation refresh (service-scribe)
 
 ---
 
@@ -13,9 +13,9 @@
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 0     | -        |
 | SRP Violations      | 0     | -        |
-| Code Duplicates     | 0     | -        |
+| Code Duplicates     | 1     | Low      |
 | Deprecations        | 0     | -        |
-| **Total**           | **0** | —        |
+| **Total**           | **1** | --       |
 
 ---
 
@@ -43,11 +43,7 @@ Features tracked from existing documentation and product roadmap:
 
 ### None Detected
 
-No active code smells found in current codebase. Recent improvements include:
-
-- **INT-155** (2026-01-20): Improved test coverage across use cases
-- **INT-218** (2026-01-24): Migrated LLM validation to Zod schemas for type safety
-- **INT-269** (2026-01-24): Standardized on `@intexuraos/internal-clients` package
+No active code smells found in current codebase. All logging uses `createAppLogger()` from `@intexuraos/infra-sentry`. All responses use the standardized `reply.ok()`/`reply.fail()` contract.
 
 ---
 
@@ -87,22 +83,20 @@ All files are within reasonable size limits:
 
 | File                           | Lines | Status                         |
 | ------------------------------ | ----- | ------------------------------ |
-| `todoRoutes.ts`                | ~920  | Acceptable (route definitions) |
-| `processTodoCreated.ts`        | 209   | Acceptable (single use case)   |
-| `todoItemExtractionService.ts` | 184   | Acceptable (single service)    |
-| `firestoreTodoRepository.ts`   | ~260  | Acceptable (CRUD operations)   |
+| `todoRoutes.ts`                | ~919  | Acceptable (route definitions) |
+| `processTodoCreated.ts`        | 208   | Acceptable (single use case)   |
+| `todoItemExtractionService.ts` | 183   | Acceptable (single service)    |
+| `firestoreTodoRepository.ts`   | 260   | Acceptable (CRUD operations)   |
 
 ---
 
 ## Code Duplicates
 
-### None Detected
+### Low Priority
 
-No significant code duplication patterns identified. Recent refactoring:
-
-- Extracted common validation schemas to `@intexuraos/http-contracts`
-- Standardized error handling via `@intexuraos/common-http`
-- Shared Result types via `@intexuraos/common-core`
+| Pattern                  | Locations                             | Suggestion                                |
+| ------------------------ | ------------------------------------- | ----------------------------------------- |
+| `parseDate` function     | `todoRoutes.ts`, `internalRoutes.ts`  | Extract to shared utility in domain layer |
 
 ---
 
@@ -114,11 +108,20 @@ No deprecated APIs or dependencies in use. All dependencies are current:
 
 - `fastify` v5.1.0
 - `zod` v3.24.1
-- `@intexuraos/internal-clients` (latest, from INT-269)
+- `vitest` v4.0.16
+- `@intexuraos/internal-clients` (latest)
 
 ---
 
 ## Recent Improvements
+
+### Release v3.1.0 (2026-02-22)
+
+Version bump to 3.1.0 as part of the monorepo release cycle.
+
+### Release v3.0.0 (2026-02-19)
+
+Major version bump to 3.0.0 as part of the monorepo release cycle. Full documentation refresh completed.
 
 ### Dash0 OpenTelemetry Integration (2026-02-16)
 
@@ -128,8 +131,8 @@ Added Dash0 as an OpenTelemetry observability backend (PR #803). Provides distri
 
 Standardized all LLM API key env vars to `APP` naming convention (PR #793):
 
-- `INTEXURAOS_ZAI_APP_API_KEY` — platform Zai key
-- `INTEXURAOS_GEMINI_APP_API_KEY` — platform Gemini key (new)
+- `INTEXURAOS_ZAI_APP_API_KEY` -- platform Zai key
+- `INTEXURAOS_GEMINI_APP_API_KEY` -- platform Gemini key (new)
 
 ### Default LLM Switch to Gemini 2.5 Flash (2026-02-15)
 
@@ -137,62 +140,19 @@ Switched the default extraction model to Gemini 2.5 Flash (PR #792). Added platf
 
 ### Dev-Mode Log Formatting (2026-02-16)
 
-Added PM2-friendly log formatting for local development. Structured JSON logs now pretty-print in `pm2 logs` output, significantly improving readability during local debugging.
+Added PM2-friendly log formatting for local development. Structured JSON logs now pretty-print in `pm2 logs` output.
 
 ### Sentry Logger Migration (2026-01-30)
 
-Migrated from direct `pino()` to `createAppLogger()` from `@intexuraos/infra-sentry`:
-
-**Before:**
-
-```typescript
-import pino from 'pino';
-const logger = pino({ name: 'userServiceClient' });
-```
-
-**After:**
-
-```typescript
-import { createAppLogger } from '@intexuraos/infra-sentry';
-const logger = createAppLogger({ name: 'userServiceClient' });
-```
-
-**Benefits:**
-
-- Errors automatically forwarded to Sentry
-- Consistent logging across all services
+Migrated from direct `pino()` to `createAppLogger()` from `@intexuraos/infra-sentry`.
 
 ### Response Contract Compliance (2026-01-30)
 
-Migrated all internal and Pub/Sub routes to use standardized `reply.ok()`/`reply.fail()` instead of raw `reply.send()`:
-
-- Internal routes: `reply.fail('UNAUTHORIZED', ...)` instead of `reply.status(401); return { error: 'Unauthorized' }`
-- Pub/Sub routes: `reply.ok({})` instead of `{ success: true }`
-
-### INT-301: User Service Client Consolidation (2026-01-26)
-
-Removed local `infra/user/index.ts` re-export barrel and imported `createUserServiceClient` directly from `@intexuraos/internal-clients`.
+Migrated all internal and Pub/Sub routes to use standardized `reply.ok()`/`reply.fail()` instead of raw `reply.send()`.
 
 ### 100% Branch Coverage Enforcement (2026-01-31)
 
-Achieved 100% branch coverage with proper v8 ignore annotations:
-
-- Added tests for cancelled/processing status preservation during item updates (INT-402)
-- Added tests for `processTodoCreated` update failure branches (INT-401)
-- Added tests for config.ts service URL fallback values (INT-400)
-- Added `getOAuthToken` mock to FakeUserServiceClient
-
-### INT-269: Internal Clients Migration (2026-01-24)
-
-Migrated from direct `userServiceClient` implementation to `@intexuraos/internal-clients` package.
-
-### INT-218: Zod Schema Migration (2026-01-24)
-
-Migrated `todoItemExtractionService` from manual validation to Zod schemas with `TodoExtractionResponseSchema` from `@intexuraos/llm-prompts`.
-
-### INT-155: Test Coverage Improvement (2026-01-20)
-
-Improved test coverage across all use cases and routes.
+Achieved 100% branch coverage with proper v8 ignore annotations (INT-427).
 
 ---
 
@@ -202,6 +162,7 @@ Improved test coverage across all use cases and routes.
 
 | Date       | Issue                              | Resolution                                   |
 | ---------- | ---------------------------------- | -------------------------------------------- |
+| 2026-02-22 | Version at 3.0.0                   | Bumped to v3.1.0                             |
 | 2026-02-16 | No distributed tracing             | Added Dash0 OpenTelemetry integration (#803) |
 | 2026-02-15 | Inconsistent API key naming        | Standardized to APP convention (#793)        |
 | 2026-02-15 | Gemini 2.5 Flash not default       | Switched default LLM + added fallback (#792) |
@@ -217,7 +178,7 @@ Improved test coverage across all use cases and routes.
 
 ## Related
 
-- [Features](features.md) — User-facing documentation
-- [Technical](technical.md) — Developer reference
-- [Agent](agent.md) — Machine-readable interface
+- [Features](features.md) -- User-facing documentation
+- [Technical](technical.md) -- Developer reference
+- [Agent](agent.md) -- Machine-readable interface
 - [Documentation Run Log](../../documentation-runs.md)

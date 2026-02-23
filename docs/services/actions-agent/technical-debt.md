@@ -1,5 +1,10 @@
 # Actions Agent - Technical Debt
 
+**Last Updated:** 2026-02-22
+**Analysis Run:** [2026-02-22 documentation-runs.md entry](../../documentation-runs.md)
+
+---
+
 ## Summary
 
 | Category            | Count | Severity |
@@ -9,10 +14,42 @@
 | TypeScript Issues   | 4     | Low      |
 | SRP Violations      | 2     | Medium   |
 | Code Duplicates     | 1     | Low      |
+| Code Smells         | 1     | Low      |
 | Deprecations        | 0     | -        |
 | Console Logging     | 0     | -        |
+| **Total**           | **8** | --       |
 
-Last updated: 2026-02-19
+---
+
+## Future Plans
+
+### Reminder Handler Implementation
+
+The `reminder` action type is defined but has no handler. Actions of this type remain in `pending` status indefinitely.
+
+**Proposed implementation:**
+
+1. Create `handleReminderAction.ts` use case
+2. Integrate with a scheduling service (Cloud Scheduler or Cloud Tasks)
+3. Send reminder notifications at scheduled time
+
+**Priority:** Low - No user impact since reminder actions are rare.
+
+### Linear Action Auto-Execute Support
+
+The `linear` action type is the only remaining type (besides `reminder`) that does not support auto-execution. Adding `executeLinearAction` as a dependency to the handler would enable this.
+
+**Priority:** Low - Linear actions are relatively infrequent and benefit from human review.
+
+### Proposed Enhancements
+
+1. **Bulk action execution** - Support batch execution of multiple actions
+2. **Additional notification channels** - Support email or in-app notifications alongside WhatsApp
+3. **Action templates** - Predefined action patterns for common tasks
+4. **Action dependencies** - Support actions that depend on other actions completing
+5. **Configurable auto-execution thresholds** - Allow users to set their own confidence thresholds per action type
+
+---
 
 ## TypeScript Issues
 
@@ -31,14 +68,16 @@ Four instances of `as any` in test files for testing unsupported action types:
 
 **Recommendation:** Acceptable pattern for testing error handling. No action needed.
 
+---
+
 ## SRP Violations
 
 ### Route Files (Medium Severity)
 
 | File                | Lines | Concern                                                |
 | ------------------- | ----- | ------------------------------------------------------ |
-| `publicRoutes.ts`   | 806   | Contains 8 endpoints with extensive schema definitions |
-| `internalRoutes.ts` | 897   | Contains 5 endpoints with complex Pub/Sub handling     |
+| `publicRoutes.ts`   | ~806  | Contains 7 endpoints with extensive schema definitions |
+| `internalRoutes.ts` | ~897  | Contains 6 endpoints with Pub/Sub handling             |
 
 **Severity:** Medium - Files are at the threshold but well-organized.
 
@@ -47,6 +86,8 @@ Four instances of `as any` in test files for testing unsupported action types:
 - `/routes/public/actions.ts` - CRUD operations
 - `/routes/public/execute.ts` - Execution endpoints
 - `/routes/internal/pubsub.ts` - Pub/Sub handlers
+
+---
 
 ## Code Duplicates
 
@@ -62,62 +103,24 @@ type narrowing.
 **Recommendation:** Could be replaced with a handler map if a new action type is added in the future. For now,
 the current pattern provides clarity.
 
-## Future Plans
-
-### Reminder Handler Implementation
-
-The `reminder` action type is defined but has no handler. Actions of this type remain in `pending` status indefinitely.
-
-**Proposed implementation:**
-
-1. Create `handleReminderAction.ts` use case
-2. Integrate with a scheduling service (Cloud Scheduler or Cloud Tasks)
-3. Send reminder notifications at scheduled time
-
-**Priority:** Low - No user impact since reminder actions are rare.
-
-### Proposed Enhancements
-
-1. **Bulk action execution** - Support batch execution of multiple actions
-2. **Additional notification channels** - Support email or in-app notifications alongside WhatsApp
-3. **Action templates** - Predefined action patterns for common tasks
-4. **Action dependencies** - Support actions that depend on other actions completing
-5. **Configurable auto-execution thresholds** - Allow users to set their own confidence thresholds per action type
-
-### v4.0.0 Technical Decisions
-
-The following design decisions were made in v4.0.0 and should be revisited if issues arise:
-
-1. **Button-only approval, no text fallback** - Text replies re-send buttons. This is simpler and cheaper
-   than LLM classification but requires WhatsApp clients that support interactive buttons.
-
-2. **All action types unified under `buildApprovalButtons()`** - Removes per-type approval complexity but
-   means all types share the same 2-button UI (Approve/Reject), with code actions getting an extra button.
-
-3. **Cancel-task nonce retained** - The `cancel-task:{taskId}:{nonce}` button format still uses nonces
-   because task cancellation is irreversible and warrants one-time-use security tokens.
-
-### v2.0.0 Technical Decisions
-
-The following design decisions were made in v2.0.0 and should be revisited if issues arise:
-
-1. **Atomic status transitions via Firestore transactions** - Prevents race conditions but adds latency.
-   Monitor for performance issues at scale.
-
-2. **Approval message correlation via wamid or actionId** - Two lookup paths exist for backwards
-   compatibility. Consider deprecating wamid lookup once all messages have correlation IDs.
+---
 
 ## Code Smells
 
-### None Detected
+### OpenAPI Description Mismatch (Low Severity)
 
-No active code smells found in current codebase:
+In `server.ts`, the OpenAPI info description still reads "IntexuraOS Research Agent - Processes research action events"
+instead of referencing the actions-agent. This is a leftover from the rename of research-agent to actions-agent.
 
-- No silent catch blocks
-- No inline error pattern usage
-- No module-level mutable state
-- No test fallbacks in production code
-- Clean separation between domain and infrastructure
+| File        | Issue                                              | Impact                                |
+| ----------- | -------------------------------------------------- | ------------------------------------- |
+| `server.ts` | OpenAPI description references "Research Agent"    | Incorrect API documentation for `/docs` |
+
+**Severity:** Low - Does not affect functionality.
+
+**Recommendation:** Update the description string to match the actual service name.
+
+---
 
 ## Test Coverage
 
@@ -140,9 +143,11 @@ All endpoints and use cases have test coverage. The `handleApprovalReply` use ca
 | ------------------ | -------- | ---------------------------------------------------- |
 | Public routes      | 100%     | All endpoints tested (100% branch enforcement)       |
 | Internal routes    | 100%     | Including approval-reply and code action handlers    |
-| Use cases          | 100%     | All use cases including code actions                 |
+| Use cases          | 100%     | All use cases including code and calendar actions    |
 | Infrastructure     | 100%     | Firestore repos, HTTP clients, and code-agent client |
 | Pub/Sub publishers | 100%     | Event publishing tested                              |
+
+---
 
 ## Deprecations
 
@@ -150,13 +155,33 @@ All endpoints and use cases have test coverage. The `handleApprovalReply` use ca
 
 No deprecated APIs or dependencies in use.
 
+---
+
 ## Resolved Issues
+
+### v3.1.0 Calendar Auto-Execute and Google Calendar Linking
+
+**Issue:** Calendar actions always required manual approval and returned only app-relative URLs, not Google Calendar links.
+
+**Resolution:** Added `executeCalendarAction` as a dependency to `handleCalendarAction`, enabling auto-execution for
+high-confidence calendar actions. Updated `executeCalendarAction` to detect absolute URLs (Google Calendar links)
+returned by calendar-agent and pass them through without prepending `webAppUrl`.
+
+**Date Resolved:** 2026-02-20
+
+### v3.1.0 Missing userId in Code-Agent Requests
+
+**Issue:** Code action execution did not pass `userId` to the code-agent `submitTask` call.
+
+**Resolution:** Added `userId` to the `submitTask` payload.
+
+**Date Resolved:** 2026-02-20
 
 ### v4.1.0 Auto-Execute Generalized to All Action Types
 
 **Issue:** `shouldAutoExecute()` only auto-executed link actions, requiring manual approval for high-confidence todo/research/note/code actions even when classification was near-certain.
 
-**Resolution:** Removed the `actionType === 'link'` guard from `shouldAutoExecute()`. The function now returns `true` for any action type when `confidence >= 0.9`. Calendar and linear still require approval because their handlers do not provide an `executeAction` dependency to the idempotency wrapper. Tests updated to reflect type-agnostic threshold behavior.
+**Resolution:** Removed the `actionType === 'link'` guard from `shouldAutoExecute()`. The function now returns `true` for any action type when `confidence >= 0.9`. Tests updated to reflect type-agnostic threshold behavior.
 
 **Date Resolved:** 2026-02-19
 
@@ -199,7 +224,7 @@ all callers and tests. Silent fallback operators replaced with explicit checks t
 **Issue:** `handleApprovalReply.ts` grew to 1450 lines with multiple large helper functions for LLM
 classification, nonce validation, button handling, and text fallback patterns.
 
-**Resolution:** Resolved organically via INT-524 — removing the LLM layer and nonces brought the file
+**Resolution:** Resolved organically via INT-524 -- removing the LLM layer and nonces brought the file
 back to 757 lines. Further splitting is not currently warranted.
 
 **Date Resolved:** 2026-02-09
@@ -268,3 +293,34 @@ back to 757 lines. Further splitting is not currently warranted.
 **Resolution:** Implemented `updateStatusIf` method using Firestore transactions.
 
 **Date Resolved:** 2026-01-24
+
+---
+
+## v4.0.0 Technical Decisions
+
+The following design decisions were made in v4.0.0 and should be revisited if issues arise:
+
+1. **Button-only approval, no text fallback** - Text replies re-send buttons. This is simpler and cheaper
+   than LLM classification but requires WhatsApp clients that support interactive buttons.
+
+2. **All action types unified under `buildApprovalButtons()`** - Removes per-type approval complexity but
+   means all types share the same 2-button UI (Approve/Reject), with code actions getting an extra button.
+
+3. **Cancel-task nonce retained** - The `cancel-task:{taskId}:{nonce}` button format still uses nonces
+   because task cancellation is irreversible and warrants one-time-use security tokens.
+
+## v2.0.0 Technical Decisions
+
+1. **Atomic status transitions via Firestore transactions** - Prevents race conditions but adds latency.
+   Monitor for performance issues at scale.
+
+2. **Approval message correlation via wamid or actionId** - Two lookup paths exist for backwards
+   compatibility. Consider deprecating wamid lookup once all messages have correlation IDs.
+
+---
+
+## Related
+
+- [Features](features.md) -- User-facing documentation
+- [Technical](technical.md) -- Developer reference
+- [Documentation Run Log](../../documentation-runs.md)

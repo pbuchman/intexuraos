@@ -45,6 +45,12 @@ Complete control over calendar events with standard REST operations.
 - `deleteEvent` - Remove event
 - `getFreeBusy` - Check availability across calendars
 
+### Direct Google Calendar Links
+
+When calendar events are created through natural language actions, the response includes the Google Calendar `htmlLink` pointing directly to the event in Google Calendar. This allows approvals (e.g., in WhatsApp) to link users straight to their newly created event rather than an internal calendar page.
+
+**Example:** After approving "Meeting tomorrow at 3pm", the WhatsApp confirmation message links directly to `https://calendar.google.com/calendar/event?eid=...` so the user can view or edit the event in Google Calendar immediately.
+
 ### Failed Event Recovery
 
 When extraction fails (ambiguous dates, missing info), events are saved for manual review rather than lost. Failed events can be retried directly if start/end times are present, or deleted to dismiss.
@@ -63,7 +69,7 @@ Date context now includes the day of week alongside the date, enabling accurate 
 
 ## Use Cases
 
-### Voice-to-Calendar Flow (v2.3.0)
+### Voice-to-Calendar Flow
 
 1. User sends "Schedule dentist Tuesday 3pm" via WhatsApp
 2. commands-agent classifies as `calendar` action
@@ -73,7 +79,8 @@ Date context now includes the day of week alongside the date, enabling accurate 
 6. UI polls preview status and displays when ready
 7. User approves preview
 8. calendar-agent creates Google Calendar event using preview data (skips LLM)
-9. Preview is cleaned up after successful creation
+9. Response includes direct Google Calendar link as resourceUrl
+10. Preview is cleaned up after successful creation
 
 ### Check Availability Flow
 
@@ -94,7 +101,9 @@ Date context now includes the day of week alongside the date, enabling accurate 
 
 **Natural language** - No need for structured input, AI extracts event details
 
-**Failed event recovery** - Vague requests aren't lost, saved for manual completion with retry and delete support
+**Direct event links** - Created events return Google Calendar URLs for immediate access
+
+**Failed event recovery** - Vague requests are saved for manual completion with retry and delete support
 
 **Self-healing extraction** - Automatic repair prompt when LLM returns invalid output
 
@@ -102,7 +111,7 @@ Date context now includes the day of week alongside the date, enabling accurate 
 
 **Multi-calendar** - Access to primary, secondary, and shared calendars
 
-**Non-blocking cleanup** - Preview deletion doesn't block event creation response
+**Non-blocking cleanup** - Preview deletion does not block event creation response
 
 ## Limitations
 

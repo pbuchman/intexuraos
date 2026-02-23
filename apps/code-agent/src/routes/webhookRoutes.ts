@@ -26,9 +26,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
       result?: {
         prUrl?: string;
-        branch: string;
-        commits: number;
-        summary: string;
+        branch?: string;
+        commits?: number;
+        summary?: string;
         ciFailed?: boolean;
         partialWork?: boolean;
         rebaseResult?: 'success' | 'conflict' | 'skipped';
@@ -63,7 +63,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 partialWork: { type: 'boolean' },
                 rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'] },
               },
-              required: ['branch', 'commits', 'summary'],
+              required: [],
             },
             error: {
               type: 'object',
@@ -105,7 +105,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch: string; commits: number; summary: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped' }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped' }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/webhooks/task-complete',
       });
@@ -716,9 +716,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 4: Append formatted metrics as log lines (non-fatal)
       const metricsLines = formatMetricsLogLines(metrics);
-      const METRICS_SEQUENCE_BASE = 9_000_000_000 + (metrics.attempt - 1) * 10_000;
+      const now = Date.now();
       const formattedLines = metricsLines.map((text, i) => ({
-        sequence: METRICS_SEQUENCE_BASE + i,
+        sequence: now * 1000 + i,
         text,
         timestamp: Timestamp.fromDate(new Date(metrics.timestamp)),
       }));
