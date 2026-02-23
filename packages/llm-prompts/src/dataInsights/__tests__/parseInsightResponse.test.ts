@@ -3,7 +3,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseInsightResponse } from '../parseInsightResponse.js';
+import {
+  parseInsightResponse,
+  DEFAULT_CHART_IDS,
+  extractValidChartIds,
+} from '../parseInsightResponse.js';
+import type { ChartTypeInfo } from '../dataAnalysisPrompt.js';
 
 describe('parseInsightResponse', () => {
   it('parses valid insight response', () => {
@@ -363,5 +368,84 @@ INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=C1
     const response = 'NO_INSIGHTS: Reason Test';
 
     expect(() => parseInsightResponse(response)).toThrow('Invalid NO_INSIGHTS format');
+  });
+
+  describe('chart ID contract unification', () => {
+    it('exports DEFAULT_CHART_IDS as canonical source', () => {
+      expect(DEFAULT_CHART_IDS).toEqual(['C1', 'C2', 'C3', 'C4', 'C5', 'C6']);
+    });
+
+    it('uses DEFAULT_CHART_IDS when no validChartIds provided', () => {
+      const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=C1';
+
+      const result = parseInsightResponse(response);
+
+      expect(result.insights[0]?.suggestedChartType).toBe('C1');
+    });
+
+    it('accepts custom chart IDs when provided', () => {
+      const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=C7';
+
+      const result = parseInsightResponse(response, ['C7', 'C8']);
+
+      expect(result.insights[0]?.suggestedChartType).toBe('C7');
+    });
+
+    it('rejects chart IDs not in custom set', () => {
+      const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=C1';
+
+      expect(() => parseInsightResponse(response, ['C7', 'C8'])).toThrow(
+        "Invalid ChartType 'C1', must be one of: C7, C8"
+      );
+    });
+
+    it('rejects default chart IDs when custom set excludes them', () => {
+      const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=C6';
+
+      expect(() => parseInsightResponse(response, ['X1', 'X2'])).toThrow(
+        "Invalid ChartType 'C6', must be one of: X1, X2"
+      );
+    });
+
+    it('accepts all IDs in a custom set', () => {
+      const customIds = ['BAR', 'LINE', 'PIE'];
+      for (const chartId of customIds) {
+        const response = `INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=${chartId}`;
+        const result = parseInsightResponse(response, customIds);
+        expect(result.insights[0]?.suggestedChartType).toBe(chartId);
+      }
+    });
+
+    it('works with single chart ID in custom set', () => {
+      const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=ONLY';
+
+      const result = parseInsightResponse(response, ['ONLY']);
+
+      expect(result.insights[0]?.suggestedChartType).toBe('ONLY');
+    });
+  });
+
+  describe('extractValidChartIds', () => {
+    it('extracts IDs from ChartTypeInfo array', () => {
+      const chartTypes: ChartTypeInfo[] = [
+        { id: 'C1', name: 'Bar', bestFor: 'comparisons', vegaLiteSchema: {} },
+        { id: 'C2', name: 'Line', bestFor: 'trends', vegaLiteSchema: {} },
+      ];
+
+      expect(extractValidChartIds(chartTypes)).toEqual(['C1', 'C2']);
+    });
+
+    it('returns empty array for empty input', () => {
+      expect(extractValidChartIds([])).toEqual([]);
+    });
+
+    it('preserves order of chart types', () => {
+      const chartTypes: ChartTypeInfo[] = [
+        { id: 'C3', name: 'Pie', bestFor: 'proportions', vegaLiteSchema: {} },
+        { id: 'C1', name: 'Bar', bestFor: 'comparisons', vegaLiteSchema: {} },
+      ];
+
+      expect(extractValidChartIds(chartTypes)).toEqual(['C3', 'C1']);
+    });
   });
 });
