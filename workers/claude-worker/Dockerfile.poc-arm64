@@ -1,0 +1,78 @@
+FROM --platform=linux/arm64 node:22-alpine
+
+# Same as production Dockerfile but explicitly ARM64 platform
+# This eliminates Rosetta 2 x86 emulation on Apple Silicon Macs
+
+RUN apk add --no-cache \
+    git \
+    openssh-client \
+    curl \
+    bash \
+    jq \
+    python3 \
+    py3-pip \
+    && rm -rf /var/cache/apk/*
+
+# Install ripgrep, fd, bat from edge/community
+# chromium: required for @playwright/mcp
+RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
+    ripgrep \
+    fd \
+    bat \
+    github-cli \
+    chromium
+
+# Install terraform (ARM64 binary)
+RUN curl -fsSL https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_arm64.zip -o /tmp/terraform.zip \
+    && unzip /tmp/terraform.zip -d /usr/local/bin/ \
+    && rm /tmp/terraform.zip \
+    && chmod +x /usr/local/bin/terraform
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Install gcloud CLI
+RUN curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir=/opt
+ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
+
+# Install Claude CLI (will get ARM64 binary)
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && cp /root/.local/bin/claude /usr/local/bin/claude \
+    && chmod +x /usr/local/bin/claude
+
+# Pre-install MCP server packages globally
+RUN npm install -g \
+    @upstash/context7-mcp \
+    @sentry/mcp-server \
+    @playwright/mcp
+
+# Create non-root user
+RUN addgroup -S claude && adduser -S claude -G claude -u 1001
+
+# Set up directories
+RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gcloud \
+    && chown -R claude:claude /repo /secrets /tmp /home/claude
+
+# Bake Claude default config
+COPY --chown=claude:claude workers/claude-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
+
+# Copy entrypoint (reuse same one)
+COPY --chown=claude:claude workers/claude-worker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Security: Remove unnecessary tools
+RUN rm -f /usr/bin/wget /usr/bin/nc 2>/dev/null || true
+
+# Set environment
+ENV HOME=/home/claude
+ENV NODE_ENV=production
+ENV GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# Switch to non-root user
+USER claude
+WORKDIR /repo
+
+ENTRYPOINT ["/entrypoint.sh"]
