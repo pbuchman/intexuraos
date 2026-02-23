@@ -1,105 +1,68 @@
 # Commands Agent
 
-Intelligent command classification that understands user intent across languages and contexts.
+One place where every message enters the system -- and gets understood.
 
 ## The Problem
 
-When users send messages through WhatsApp, voice notes, or web sharing, the system must determine what they want to do. This classification challenge has several dimensions:
+You send yourself a message at 11 p.m. -- a link, a half-formed idea, a task you need to handle tomorrow. By morning, it sits buried in a chat thread alongside grocery lists and group photos. You remember sending *something*. You cannot remember what.
 
-1. **Ambiguous phrasing** - "Remember this" could be a note, todo, or bookmark
-2. **URL-embedded keywords** - "https://research-tools.com" contains "research" but the user is sharing a link
-3. **Conflicting signals** - "Create todo to research competitors" contains both "todo" and "research"
-4. **Multiple languages** - Polish users say "zapisz link" (save link) not "save link"
-5. **Multiple channels** - WhatsApp text, voice transcriptions, and PWA share each need handling
+The deeper problem is not forgetfulness. It is that capturing a thought and organizing it are two separate acts, and most tools force you to do both at once. You have to open the right app, pick the right category, fill in the right fields. So you don't. You fire off a message and hope you will sort it out later.
+
+The commands agent eliminates that second step. Send a message -- from WhatsApp, a voice note, or your phone's built-in sharing menu -- and the system figures out what you meant. A research question gets queued for research. A link gets saved as a bookmark. A task gets added to your to-do list. No menus, no dropdowns, no switching apps. Just say what you need and move on.
+
+## Use Case: The Misleading Link
+
+You are reading an article about AI research tools and tap "Share" from your browser. The URL happens to be `https://research-tracker.io/getting-started`. Without understanding your intent, a naive system would see the word "research" and queue up a research task -- wasting time and producing results you never asked for.
+
+The commands agent treats the URL as a single unit. It ignores keywords buried inside web addresses and focuses on what you actually said around them. Since you shared the link without adding "research this" or "look into," the system recognizes you are saving a bookmark. The link lands in your bookmarks, summarized and ready to revisit -- not routed to a research workflow you never intended.
 
 ## How It Helps
 
-### Structured Classification Pipeline (v2.0.0+)
+### Intent Over Keywords
 
-Processes commands through a 5-step decision tree that eliminates ambiguity.
+The system resolves ambiguity the way a careful reader would: explicit instructions first, context second, best guess last.
 
-**Step 1:** Explicit prefix override - User says "linear: buy groceries" - respect the prefix
+If you write "save bookmark https://research-world.com," the phrase "save bookmark" settles the matter before the system even considers the URL. If you prefix a message with `linear:` or say "create an issue," that explicit intent takes priority over everything else. Engineering-flavored language -- fix, implement, refactor -- routes to code tasks. A bare URL, with no instruction around it, defaults to a saved link. And when none of these signals are present, the system falls back to matching against category patterns like calendar dates, reminder phrases, or research questions.
 
-**Step 2:** Explicit intent detection - "save bookmark https://research-world.com" - the phrase "save bookmark" overrides the "research" keyword in the URL. Step 2 also disambiguates `linear` vs `code`: only explicit tracking language ("create issue", "track this") routes to `linear`; all other engineering tasks route to `code`
+The result: "create a todo to research competitors" becomes a to-do item, not a research project, because your explicit instruction ("create a todo") outranks the keyword "research."
 
-**Step 3:** Code detection fallback - Engineering tasks that didn't match an explicit phrase in Step 2 still classify as `code` (action verbs: fix, implement, refactor, add, remove, build)
+### Language as Intent, Not Translation
 
-**Step 4:** URL presence check - Any URL strongly suggests link classification
+The system understands commands in both English and Polish -- not through a translation layer, but natively. Polish phrases like "zbadaj" (investigate), "zapisz zakladke" (save bookmark), or "dodaj do kalendarza" (add to calendar) carry the same weight and trigger the same logic as their English equivalents. This is how you know the system reads *intent*, not just English keywords. Adding a third or fourth language means teaching the system new intent phrases, not rebuilding it.
 
-**Step 5:** Category signals - Traditional keyword matching (calendar, reminder, research, note, todo, code)
+### From Classification to Action
 
-**Example:** "save bookmark https://research-world.com" correctly classifies as `link` because Step 2 (explicit "save bookmark") executes before Step 4 (URL presence), and both override the misleading "research" keyword.
+Understanding a message is only half the work. After the system determines what you want, it creates a corresponding action and notifies the rest of the platform to carry it out. A message classified as "research" creates a research action and signals the research agent to begin. A "calendar" classification triggers calendar event creation. The system recognizes eight distinct categories -- todo, research, note, link, calendar, reminder, linear (project tracking), and code (engineering tasks) -- and each one connects to a specialized part of the platform that knows how to handle it.
 
-### URL Keyword Isolation
+Voice notes follow the same path. The transcribed text arrives with a summary, and the classification treats it identically to a typed message. Whether you type, speak, or share, the result is the same.
 
-Keywords embedded in URLs no longer trigger incorrect classifications.
+### Built for Future Intelligence
 
-**Example:** "https://todo-app.io/notes" classifies as `link`, not `todo` or `note`. The URL is treated as an opaque token - only keywords outside URLs affect classification.
+Every classification is stored with the system's confidence in its decision, the reasoning behind it, and the exact version of the logic that produced it. Over time, this creates a detailed record of how the system performs -- which kinds of messages it handles confidently, which ones fall into grey areas, and how updates to the classification logic affect accuracy.
 
-### Multi-Language Support
+This record is what makes the system improvable. Because every decision is logged with its context, future versions can learn from real patterns in real usage rather than starting from scratch. And because understanding a message is separated from acting on it, adding new categories, new input sources, or new intelligence does not require rewriting what already works.
 
-Native Polish command phrases receive equal treatment to English.
+### Quiet Resilience
 
-| English            | Polish                | Category |
-| ------------------ | --------------------- | -------- |
-| "save bookmark"    | "zapisz zakladke"     | link     |
-| "create todo"      | "stwórz zadanie"      | todo     |
-| "perform research" | "zbadaj"              | research |
-| "create note"      | "stwórz notatke"      | note     |
-| "set reminder"     | "przypomnij mi"       | reminder |
-| "add to calendar"  | "dodaj do kalendarza" | calendar |
-
-### Idempotent Processing
-
-Commands identified by `{sourceType}:{externalId}` prevent duplicate processing. The same WhatsApp message processed twice returns the existing command.
-
-### Graceful Degradation
-
-When a user's LLM API key is unavailable, commands enter `pending_classification` status. Cloud Scheduler retries every 5 minutes.
-
-## Use Case
-
-You share a link via the PWA share sheet: "Check out this great tool https://research-tracker.io"
-
-**Without v2.0.0:** Might classify as `research` (keyword in URL)
-
-**With v2.0.0:**
-
-1. Step 1: No explicit prefix
-2. Step 2: No explicit command phrase like "save bookmark"
-3. Step 3: Not engineering/Linear context
-4. Step 4: URL present - classify as `link` (0.90+ confidence)
-
-Result: Link saved to bookmarks, not queued for research.
+If the system temporarily cannot classify a message -- for example, when a required language model is unavailable -- the message enters a holding state and is automatically retried every five minutes. You never need to resend it. Once classification succeeds, the message moves through the same path as any other, with no gap in your records.
 
 ## Key Benefits
 
-- Accurate classification even when URLs contain misleading keywords
-- Polish speakers use native phrases without translation
-- Explicit commands ("save bookmark", "create todo") always respected
-- Duplicate prevention across WhatsApp message retries
-- No manual action type selection required
+- Send from WhatsApp text, voice notes, or the share menu on your phone -- every channel is treated equally
+- Explicit instructions ("save bookmark," "create todo," "zbadaj") always override ambiguous signals
+- URLs inside messages never trigger false classifications from embedded keywords
+- Eight categories cover the full range from quick notes to engineering tasks to project tracking
+- Every decision is recorded with its reasoning, so the system can learn and improve over time
+- Messages that cannot be classified immediately are held and retried automatically
 
 ## Limitations
 
-**Classification models** - Requires Gemini 2.5 Flash, GLM-4.7, or GLM-4.7-Flash API access
-
-**Reminder handler** - Classification recognizes `reminder` but actions-agent handler not yet implemented
-
-**Code handler** - Classification recognizes `code` but actions-agent handler not yet implemented
-
-**Language coverage** - Currently English and Polish; other languages use English keyword matching
-
-**Confidence threshold** - Very ambiguous commands default to `note` with low confidence
-
-**No reclassification** - Failed commands must be deleted and re-sent, not reclassified
-
-## Recent Changes
-
-- **2026-02-19:** Persist prompt version with each classification. Every classified command now stores which prompt version produced its result, enabling auditability and regression tracking across prompt upgrades.
-
-- **2026-02-08:** Add `code` command type for programming-related commands. Adopt standardized response contract (`reply.ok()`/`reply.fail()`). Migrate to Sentry-enabled logging via `createAppLogger()`. Consolidate user service client into shared `@intexuraos/internal-clients` package. Register `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` as required env var.
+- **Language model required** -- Classification depends on access to a language model. Without a configured key, messages queue as pending until one becomes available.
+- **Reminder and code handlers** -- The system classifies reminders and code tasks, but the agents that execute those actions are still under development.
+- **Language coverage** -- English and Polish are natively supported. Other languages fall back to English-based pattern matching.
+- **Ambiguous messages** -- When the system is not sure enough what you meant, it saves the message as a note rather than guessing wrong.
+- **No user reclassification** -- Once classified, a command cannot be manually recategorized. Commands that have not yet been classified can be deleted and resent.
 
 ---
 
-_Part of [IntexuraOS](../overview.md) - Intelligent command routing for natural language input._
+_Part of [IntexuraOS](../overview.md) -- one front door for everything you need to say._

@@ -1,149 +1,67 @@
 # Actions Agent
 
-Turn natural language commands into structured actions that get executed across your IntexuraOS workspace.
+The dispatch center that turns every command into the right action -- and knows when to ask before acting.
 
 ## The Problem
 
-You send commands to your AI assistant through WhatsApp, web, or other interfaces. The system needs to:
+A smart assistant that understands what you said is only half the equation. The other half is doing something about it.
 
-1. **Understand what you want** - Classify your command into a specific action type (todo, research, note, link, calendar, linear, reminder, code)
-2. **Track the action lifecycle** - Move actions from pending to processing to completed
-3. **Route to the right service** - Send research actions to research-agent, todos to todos-agent, linear to linear-agent, etc.
-4. **Handle failures gracefully** - Retry stuck actions, allow manual correction
-5. **Get your approval via WhatsApp** - Approve or reject actions by tapping interactive buttons
+Once your message has been understood -- "research question," "to-do item" -- someone still has to send it to the right place, confirm it gets done, and tell you when it is finished. In most systems, that middle layer does not exist.
+
+The harder problem is confidence. When the system is ninety percent sure you want a research task, making you tap "approve" is busywork. When it is sixty percent sure, acting without asking is reckless. The actions agent sits between understanding and execution: routing each command to the right specialist, deciding whether to act or ask, and making sure nothing gets lost.
+
+## Use Case: The Confident Shortcut
+
+You send a WhatsApp message: "Research the latest developments in solid-state batteries." The system identifies this with high confidence as a research request. The actions agent skips approval. Within seconds, the research agent is working. You never tapped a button.
+
+Now imagine: "Schedule a deep dive with engineering next Thursday." The confidence is lower -- did you mean this Thursday or next? -- so the actions agent asks first. A WhatsApp message arrives with two buttons: Approve or Reject. One tap, and it is done.
 
 ## How It Helps
 
-Actions-agent is the **central coordinator** for all user-initiated actions in IntexuraOS. When you send a command like "research quantum computing" or "remind me to call Mom tomorrow":
+### Confidence-Calibrated Autonomy
 
-1. **commands-agent** classifies your command and publishes an event
-2. **actions-agent** receives the event, creates an Action record, and publishes `action.created`
-3. The appropriate handler (research, todo, note, link) picks up the event
-4. The handler sends you a WhatsApp notification with interactive **Approve** and **Reject** buttons
-5. You tap the button in WhatsApp
-6. Upon approval, the target service (research-agent, todos-agent, etc.) executes the action directly
-7. Actions-agent updates the action status and sends you a completion notification
+Every action arrives with a confidence score. At ninety percent or higher, the system acts immediately. Below that, it asks first via WhatsApp.
 
-## Key Features
+One category never auto-executes: project tracking issues. Creating an issue in your project tracker carries consequences that are difficult to reverse, so the system always asks first. The result is a system that feels fast when it should and cautious when it matters.
 
-### WhatsApp Interactive Button Approval (v2.0.0, unified in v4.0.0)
+### One-Tap Approval
 
-Approve or reject actions by tapping interactive buttons in WhatsApp — no typing required:
+When the system asks, a WhatsApp message arrives with interactive buttons -- Approve and Reject. One tap resolves it. No typing, no app-switching.
 
-- Tap **Approve** to approve any action
-- Tap **Reject** (or **Cancel**) to reject
-- Code actions get an extra **Convert to Issue** button
-- Text replies re-send fresh buttons (no LLM, no guessing)
-- Deterministic, instant intent resolution — no API calls needed
+Code tasks include a third button -- Convert to Issue -- for when the work belongs in your project tracker. The approval message shows estimated cost and time so you know what you are agreeing to. If you reply with text instead of tapping, the system resends the buttons. No language model involved, no ambiguity.
 
-### Atomic Status Transitions
+### Seven Specialists, One Dispatcher
 
-Firestore transactions prevent race conditions when multiple systems try to update the same action simultaneously. This ensures:
+The actions agent routes work to seven specialized services: research, to-dos, notes, bookmarks, calendar, project tracking, and engineering tasks. Each specialist knows its domain. The actions agent makes sure the right one gets the right work and tracks the result. An eighth category, reminders, is recognized but not yet connected to a service.
 
-- No duplicate WhatsApp notifications
-- No double-execution of actions
-- Consistent state even with concurrent Pub/Sub messages
+### Corrections That Teach
 
-### Event-Driven Architecture
+Sometimes the system gets it wrong. In the web dashboard, you change the action type with one click -- a misidentified link becomes a to-do -- and it is immediately sent to the correct specialist.
 
-After WhatsApp approval, actions-agent executes actions directly or publishes `action.created` events to trigger downstream processing:
+The correction does more than fix one mistake. The system records what it originally thought, what you corrected it to, the original message, and how confident it was -- building a record that future versions of the system can learn from. Every fix makes the next version smarter.
 
-- Research requests go to research-agent
-- Todo items go to todos-agent
-- Notes go to notes-agent
-- Links go to bookmarks-agent
-- Calendar events go to calendar-agent
-- Linear issues go to linear-agent
-- Code tasks go to code-agent
+### Quiet Reliability
 
-## Use Cases
-
-### Research Actions
-
-- "Research the latest developments in AI safety"
-- "Find information about climate change solutions"
-- Action flows: pending -> awaiting_approval -> (WhatsApp button tap) -> processing -> completed (with research URL)
-
-### Todo Actions
-
-- "Remind me to review the quarterly report"
-- "Add a todo to call the dentist"
-- Action flows: pending -> awaiting_approval -> (WhatsApp button tap) -> processing -> completed (todo created)
-
-### Note Actions
-
-- "Take a note: meeting recap with design team"
-- "Remember: the client prefers blue over green"
-- Action flows: pending -> awaiting_approval -> (WhatsApp button tap) -> processing -> completed (note created)
-
-### Link Actions
-
-- "Save this article: https://example.com/interesting-read"
-- "Bookmark this for later"
-- Action flows: pending -> processing -> completed (bookmark created, with OG metadata)
-
-### Calendar Actions
-
-- "Schedule a meeting with John tomorrow at 3pm"
-- "Add event: Team standup every Monday 9am"
-- Action flows: pending -> awaiting_approval -> (WhatsApp button tap) -> processing -> completed
-
-### Linear Actions
-
-- "Create a Linear issue for the login bug"
-- "Add task to Linear: implement dark mode"
-- Action flows: pending -> awaiting_approval -> (WhatsApp button tap) -> processing -> completed (Linear issue created)
-
-### Code Actions
-
-- "Fix the authentication bug in the login module"
-- "Implement dark mode for the settings page"
-- Action flows: pending -> awaiting_approval -> (WhatsApp button tap) -> processing -> completed (code task dispatched)
-- Approval message shows estimated cost ($1-2) and time (30-60 min)
-- Supports three WhatsApp buttons: **Approve**, **Reject**, **Convert to Issue**
-- Running code tasks can be cancelled via a **Cancel Task** button on status messages
-
-### User Correction Workflow
-
-When classification is wrong:
-
-1. User sees action in web UI with wrong type
-2. User changes type (e.g., "link" -> "todo")
-3. Action is re-routed to correct handler
-4. System learns from correction for future classifications
+Actions stuck for over an hour retry automatically. Deleted or expired actions do not loop endlessly -- the system notifies you and moves on. Duplicate bookmarks are caught before creating redundant entries, letting you skip or update what already exists.
 
 ## Key Benefits
 
-**WhatsApp-first approval** - Approve actions with one tap, no typing required
-
-**Deterministic intent** - Button taps resolve instantly, no AI API calls on the approval path
-
-**Race condition safety** - Atomic Firestore transactions prevent duplicate processing
-
-**Centralized visibility** - All your actions in one place, filterable by status
-
-**Reliable execution** - Automatic retry of stuck actions via Cloud Scheduler
-
-**User control** - Approve, reject, or correct actions before execution
-
-**Confidence-based auto-execution** - High-confidence actions (>= 90%) execute immediately across all types, skipping the approval step entirely
-
-**Duplicate handling** - Smart conflict resolution for existing bookmarks
-
-**Progressive enhancement** - New action types can be added without modifying core routing logic
-
-**Interactive approval buttons** - All action types use unified WhatsApp interactive buttons (v4.0.0)
-
-**Graceful deletion handling** - Deleted/expired actions return a clear WhatsApp notification instead of retrying forever
+- High-confidence actions execute immediately -- no approval step, no delay
+- Project tracking actions always require explicit approval
+- Approve or reject with one tap; code tasks show estimated cost and time upfront
+- Button taps resolve instantly -- no language model involved, no guessing
+- Every correction you make is recorded, helping the system improve over time
+- Actions stuck for over an hour retry automatically; deleted actions fail gracefully with a notification
+- All actions visible in the web dashboard, filterable by status, and deletable
 
 ## Limitations
 
-**No reminder handler** - The reminder action type is defined but has no handler (action stays in pending)
+- **No reminder execution** -- Reminder actions are recognized but no service is connected yet; they remain pending
+- **Auto-execution is absolute** -- Any action type (except project tracking) at ninety percent confidence or above executes without asking; no per-user toggle
+- **WhatsApp-only notifications** -- Approval requests and status updates are delivered exclusively through WhatsApp
+- **No bulk execution** -- Actions are processed individually; no way to approve or reject multiple at once
+- **Button-dependent approval** -- Text replies resend the buttons rather than interpreting the message
 
-**High-confidence auto-execution** - Any action type with >= 90% confidence auto-executes immediately without manual approval
+---
 
-**WhatsApp-only notifications** - Success/failure notifications currently only sent via WhatsApp
-
-**No bulk actions** - Actions are executed individually; batch execution is not supported
-
-**WhatsApp interactive buttons required** - Approval relies on interactive button support; if a client doesn't support buttons, text replies re-send fresh buttons
+_Part of [IntexuraOS](../overview.md) -- the dispatch center that knows when to act and when to ask._
