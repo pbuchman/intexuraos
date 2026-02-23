@@ -416,13 +416,13 @@ See [CHANGELOG.md](https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md
 
 **Rules:**
 
-| Rule                    | Details                                                              |
-| ----------------------- | -------------------------------------------------------------------- |
-| Highlights first        | Pick the top 3 High-priority items from Step 5.1                     |
-| Categorize changes      | Group by Features, Bug Fixes, Infrastructure & DevEx                 |
-| Skip empty categories   | If no bug fixes, omit the Bug Fixes section                          |
-| Reuse CHANGELOG wording | Use the same verb-first entries from Step 7                          |
-| Include comparison link | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view            |
+| Rule                    | Details                                                             |
+| ----------------------- | ------------------------------------------------------------------- |
+| Highlights first        | Pick the top 3 High-priority items from Step 5.1                    |
+| Categorize changes      | Group by Features, Bug Fixes, Infrastructure & DevEx                |
+| Skip empty categories   | If no bug fixes, omit the Bug Fixes section                         |
+| Reuse CHANGELOG wording | Use the same verb-first entries from Step 7                         |
+| Include comparison link | `compare/vPREVIOUS...vNEW_VERSION` for GitHub's diff view           |
 | Write to temp file      | `/tmp/release-notes-$NEW_VERSION.md` — consumed by Phase 6 step 6.9 |
 
 **Comparison link:** Use the previous version tag (from Step 2) as `vPREVIOUS`.

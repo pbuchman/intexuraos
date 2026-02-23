@@ -13,6 +13,7 @@
 ### Task 1: Terraform — Scope Lifecycle Rule to `research/` Prefix
 
 **Files:**
+
 - Modify: `terraform/modules/shared-content/main.tf:25-32`
 
 **Step 1: Edit the lifecycle rule to scope to `research/` prefix**
@@ -93,6 +94,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ### Task 2: Create the `/share` Skill
 
 **Files:**
+
 - Create: `.claude/skills/share/SKILL.md`
 
 **Step 1: Create the skill directory**
@@ -166,6 +168,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ### Task 3: Register Skill in CLAUDE.md
 
 **Files:**
+
 - Modify: `.claude/CLAUDE.md:626`
 
 **Step 1: Add `/share` to the skills list**
