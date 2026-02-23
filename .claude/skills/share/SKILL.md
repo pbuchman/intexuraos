@@ -39,9 +39,10 @@ Detect mode from user intent or explicit flags:
 ### Step 1: Generate Content
 
 **Rich HTML mode:**
-1. Invoke the `/frontend-design` skill to create a polished, self-contained HTML page
-2. The HTML must be fully self-contained — all CSS inline, no external dependencies
-3. After `/frontend-design` produces the HTML, proceed to Step 2
+1. If the user references an **existing HTML file** that is already self-contained (all CSS inline, no external dependencies), use it directly — skip `/frontend-design`
+2. Otherwise, invoke the `/frontend-design` skill to create a polished, self-contained HTML page
+3. The HTML must be fully self-contained — all CSS inline, no external dependencies
+4. Proceed to Step 2
 
 **Styled Markdown mode (default):**
 1. Take the markdown content the user wants to share
@@ -66,8 +67,15 @@ Rules:
 
 ### Step 3: Write to Temp File
 
+**If content comes from an existing file**, copy it directly (avoids heredoc quoting issues with large/complex files):
+
 ```bash
-# Write content to temp file
+cp <source-file> /tmp/claude-share-<slug>.<ext>
+```
+
+**If content was generated** (from `/frontend-design` or markdown template), write via heredoc:
+
+```bash
 # For .html:
 cat > /tmp/claude-share-<slug>.html << 'SHARE_EOF'
 <content here>
@@ -106,7 +114,27 @@ gsutil -h "Cache-Control:public, max-age=3600" \
   gs://intexuraos-shared-content-dev/claude/<slug>.md
 ```
 
-### Step 6: Clean Up and Report
+### Step 6: Verify, Clean Up, and Report
+
+**Verify the upload succeeded** before reporting:
+
+```bash
+gsutil stat gs://intexuraos-shared-content-dev/claude/<slug>.<ext> 2>&1
+```
+
+- If output shows metadata (Content-Type, size, etc.): **upload confirmed**
+- If output contains `No URLs matched`: **upload failed** — retry or report error to user
+
+**Verify URL accessibility:**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}' https://intexuraos.cloud/share/claude/<slug>.<ext>
+```
+
+- `200`: URL is live
+- `404` or other: warn the user that the upload succeeded but the URL may not be accessible yet (CDN propagation, bucket permissions)
+
+**Clean up:**
 
 ```bash
 rm /tmp/claude-share-<slug>.<ext>
