@@ -362,4 +362,77 @@ describe('Internal Routes', () => {
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
+
+  describe('POST /internal/calendar/preview (direct HTTP)', () => {
+    const validPayload = {
+      actionId: 'action-123',
+      userId: 'user-456',
+      text: 'Lunch with Monika tomorrow at 2pm',
+      currentDate: '2025-01-14',
+    };
+
+    it('generates preview successfully with valid input', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/preview',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { preview: { actionId: string; status: string; summary: string } } };
+      expect(body.success).toBe(true);
+      expect(body.data.preview.actionId).toBe('action-123');
+      expect(body.data.preview.status).toBe('ready');
+    });
+
+    it('returns 401 without internal auth token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/preview',
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 400 for invalid body (missing required fields)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/preview',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { actionId: 'action-123' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('handles extraction failure gracefully (returns failed preview)', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = err({
+        code: 'NO_API_KEY',
+        message: 'User has no API key configured',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/preview',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { preview: { status: string } } };
+      expect(body.success).toBe(true);
+      expect(body.data.preview.status).toBe('failed');
+    });
+  });
 });

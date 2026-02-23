@@ -4,6 +4,7 @@ import type {
   CalendarServiceClient,
   ProcessCalendarRequest,
   CalendarPreview,
+  GeneratePreviewRequest,
 } from '../../domain/ports/calendarServiceClient.js';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 
@@ -177,6 +178,82 @@ export function createCalendarServiceHttpClient(
       }
 
       logger.debug({ actionId, hasPreview: body.data.preview !== null }, 'Calendar preview fetched');
+      return ok(body.data.preview);
+    },
+
+    async generatePreview(request: GeneratePreviewRequest): Promise<Result<CalendarPreview | null>> {
+      const url = `${config.baseUrl}/internal/calendar/preview`;
+      const timeoutMs = 30_000; // 30 second timeout for synchronous preview generation
+
+      logger.info(
+        { url, actionId: request.actionId, userId: request.userId },
+        'Generating calendar preview via calendar-agent'
+      );
+
+      let response: Response;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, timeoutMs);
+
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Auth': config.internalAuthToken,
+          },
+          body: JSON.stringify(request),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+      } catch (error) {
+        logger.error(
+          { error: getErrorMessage(error), actionId: request.actionId },
+          'Failed to generate calendar preview'
+        );
+        return err(new Error(`Failed to generate calendar preview: ${getErrorMessage(error)}`));
+      }
+
+      let body: PreviewApiResponse;
+      try {
+        body = (await response.json()) as PreviewApiResponse;
+      } catch {
+        if (!response.ok) {
+          logger.error(
+            { httpStatus: response.status, statusText: response.statusText, actionId: request.actionId },
+            'calendar-agent returned error (non-JSON response)'
+          );
+          return err(new Error(`HTTP ${String(response.status)}: ${response.statusText}`));
+        }
+        logger.error(
+          { httpStatus: response.status, actionId: request.actionId },
+          'Invalid JSON response from calendar-agent'
+        );
+        return err(new Error('Invalid response from calendar-agent'));
+      }
+
+      if (!response.ok) {
+        /* v8 ignore start -- ts-type: API always returns error object with message @preserve */
+        const errorMessage = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
+        /* v8 ignore stop @preserve */
+        logger.error(
+          { httpStatus: response.status, statusText: response.statusText, errorMessage, actionId: request.actionId },
+          'calendar-agent returned error'
+        );
+        return err(new Error(errorMessage));
+      }
+
+      if (!body.success || body.data === undefined) {
+        logger.error({ body, actionId: request.actionId }, 'Invalid response from calendar-agent');
+        return err(new Error(body.error?.message ?? 'Invalid response from calendar-agent'));
+      }
+
+      logger.info(
+        { actionId: request.actionId, hasPreview: body.data.preview !== null },
+        'Calendar preview generated'
+      );
       return ok(body.data.preview);
     },
   };

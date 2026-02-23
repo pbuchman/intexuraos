@@ -6,6 +6,7 @@ import type {
   CalendarServiceClient,
   ProcessCalendarRequest,
   CalendarPreview,
+  GeneratePreviewRequest,
 } from '../domain/ports/calendarServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
@@ -634,6 +635,7 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
 export class FakeCalendarServiceClient implements CalendarServiceClient {
   private processedActions: ProcessCalendarRequest[] = [];
   private previews = new Map<string, CalendarPreview>();
+  private generatePreviewRequests: GeneratePreviewRequest[] = [];
   private nextResponse: ServiceFeedback = {
     status: 'completed',
     message: 'Calendar event created successfully',
@@ -641,9 +643,16 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   };
   private failNext = false;
   private failError: Error | null = null;
+  private failGeneratePreview = false;
+  private failGeneratePreviewError: Error | null = null;
+  private generatePreviewResult: CalendarPreview | null = null;
 
   getProcessedActions(): ProcessCalendarRequest[] {
     return this.processedActions;
+  }
+
+  getGeneratePreviewRequests(): GeneratePreviewRequest[] {
+    return this.generatePreviewRequests;
   }
 
   setNextResponse(response: ServiceFeedback): void {
@@ -657,6 +666,15 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
 
   setPreview(actionId: string, preview: CalendarPreview): void {
     this.previews.set(actionId, preview);
+  }
+
+  setFailGeneratePreview(fail: boolean, error?: Error): void {
+    this.failGeneratePreview = fail;
+    this.failGeneratePreviewError = error ?? null;
+  }
+
+  setGeneratePreviewResult(preview: CalendarPreview | null): void {
+    this.generatePreviewResult = preview;
   }
 
   async processAction(request: ProcessCalendarRequest): Promise<Result<ServiceFeedback>> {
@@ -674,6 +692,15 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
       return err(this.failError ?? new Error('Simulated failure'));
     }
     return ok(this.previews.get(actionId) ?? null);
+  }
+
+  async generatePreview(request: GeneratePreviewRequest): Promise<Result<CalendarPreview | null>> {
+    this.generatePreviewRequests.push(request);
+    if (this.failGeneratePreview) {
+      this.failGeneratePreview = false;
+      return err(this.failGeneratePreviewError ?? new Error('Preview generation failed'));
+    }
+    return ok(this.generatePreviewResult);
   }
 }
 
@@ -1342,7 +1369,7 @@ export function createFakeServices(deps: {
     {
       actionRepository,
       whatsappPublisher,
-      calendarPreviewPublisher,
+      calendarServiceClient,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
     }
