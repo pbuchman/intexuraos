@@ -255,6 +255,63 @@ If the PA applied factual corrections, append a row to the "Key PA Corrections A
 
 ---
 
+## Phase 7: Overview Drift Check
+
+**MANDATORY** — runs after every service rewrite, regardless of outcome.
+
+### 7.1 Read Overview
+
+Read `docs/overview.md` and find all mentions of `{{SERVICE_NAME}}`. Extract every sentence or bullet that references this service.
+
+### 7.2 Compare Against New Features
+
+Spawn 1 Haiku agent to compare the service's overview.md mentions against the new features.md:
+
+```
+Task tool:
+  subagent_type: general-purpose
+  model: haiku
+  name: "overview-drift-check"
+  prompt: |
+    Compare these two texts about {{SERVICE_NAME}}.
+
+    OVERVIEW.MD MENTIONS:
+    {{OVERVIEW_MENTIONS}}
+
+    NEW FEATURES.MD (Key Benefits + first paragraph of each "How It Helps" section):
+    {{FEATURES_SUMMARY}}
+
+    Report:
+    1. DRIFT DETECTED or NO DRIFT
+    2. If drift: list each discrepancy (what overview says vs what features says)
+    3. If drift: severity (STALE = overview describes old behavior, MINOR = emphasis shift, MISSING = overview doesn't mention this service at all)
+```
+
+### 7.3 Report to User
+
+Display the drift check result. If drift detected:
+
+> **Overview drift detected for {{SERVICE_NAME}}.**
+>
+> {{DISCREPANCIES}}
+>
+> Options:
+> 1. "Rewrite overview now" — triggers `workflows/rewrite-overview.md`
+> 2. "Defer" — noted in rewrite history, overview rewrite deferred
+> 3. "Ignore" — no action needed
+
+If no drift: print "Overview check: no drift detected for {{SERVICE_NAME}}." and proceed.
+
+### 7.4 Log Drift Status
+
+Append to the rewrite history entry for this service:
+
+```
+Overview drift: NONE | STALE | MINOR | MISSING (deferred/resolved/ignored)
+```
+
+---
+
 ## --list Mode
 
 When invoked with `--list`, skip the convergence loop entirely. Instead:
