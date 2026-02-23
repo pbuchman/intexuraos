@@ -32,13 +32,13 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 
 ## Phase Overview
 
-| Phase | Name            | Interaction    | Key Actions                                                       |
-| ----- | --------------- | -------------- | ----------------------------------------------------------------- |
-| 1     | Kickoff         | User Input     | Run semver analysis, detect modified services                     |
-| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel                           |
-| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait                            |
-| 4     | README          | **Checkpoint** | Propose "What's New" section, wait                                |
-| 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions                              |
+| Phase | Name            | Interaction    | Key Actions                                                                                          |
+| ----- | --------------- | -------------- | ---------------------------------------------------------------------------------------------------- |
+| 1     | Kickoff         | User Input     | Run semver analysis, detect modified services                                                        |
+| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel                                                              |
+| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait                                                               |
+| 4     | README          | **Checkpoint** | Propose "What's New" section, wait                                                                   |
+| 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions                                                                 |
 | 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, RAG embeddings, commit, merge dev→main, tag on main, GitHub Release |
 
 ## Tool Verification (Fail Fast)
@@ -72,7 +72,7 @@ Aborting.
 2. Find last release tag: `git tag -l "v*" --sort=-v:refname | head -1`
 3. List merged PRs since last release
 4. Detect modified services (apps changed since last tag)
-5. Run semver-release logic to determine version bump
+5. Run semver analysis to determine version bump (see `reference/semver-analysis.md`)
 6. Ask user for release focus/highlights guidance
 
 ### Phase 2: Service Documentation (Silent)

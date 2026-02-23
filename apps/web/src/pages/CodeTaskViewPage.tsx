@@ -558,7 +558,7 @@ function TaskResult({ task }: { task: CodeTask }): React.JSX.Element | null {
     <div className="mb-6">
       <PREventsGroup
         pullRequestNumber={prNumber}
-        title={result.summary}
+        title={result.summary ?? null}
         repository={task.repository}
       />
     </div>
@@ -599,7 +599,7 @@ interface ToolBlock {
   finalized: boolean;
 }
 
-const TIMESTAMP_PREFIX_RE = /^\d{2}:\d{2}:\d{2}\.\d{3}\s+/;
+const TIMESTAMP_PREFIX_RE = /^\d{2}:\d{2}:\d{2}\.\d{3} /;
 
 function isBodyLine(text: string): boolean {
   const stripped = text.replace(TIMESTAMP_PREFIX_RE, '');

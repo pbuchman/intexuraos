@@ -1,4 +1,4 @@
-# Web Agent - Tutorial
+# Web Agent -- Tutorial
 
 > **Time:** 20-30 minutes
 > **Prerequisites:** Internal auth token, user with configured LLM API key
@@ -12,7 +12,7 @@ A working integration that:
 
 - Fetches OpenGraph metadata for link previews
 - Generates AI summaries of web pages in the source language
-- Handles errors gracefully including 403 responses
+- Handles errors gracefully including 403 responses and rate limits
 
 ---
 
@@ -26,14 +26,14 @@ Before starting, ensure you have:
 
 ---
 
-## Part 1: Hello World - Link Preview (5 minutes)
+## Part 1: Hello World -- Link Preview (5 minutes)
 
 Fetch OpenGraph metadata for a single URL.
 
 ### Step 1.1: Make Your First Request
 
 ```bash
-curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
+curl -X POST http://localhost:8127/internal/link-previews \
   -H "Content-Type: application/json" \
   -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
@@ -89,7 +89,7 @@ Fetch multiple URLs in parallel with mixed success/failure.
 ### Step 2.1: Send Batch Request
 
 ```bash
-curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
+curl -X POST http://localhost:8127/internal/link-previews \
   -H "Content-Type: application/json" \
   -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
@@ -109,8 +109,8 @@ curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
   "success": true,
   "data": {
     "results": [
-      { "url": "https://www.anthropic.com", "status": "success", "preview": {...} },
-      { "url": "https://example.com", "status": "success", "preview": {...} },
+      { "url": "https://www.anthropic.com", "status": "success", "preview": {"..."} },
+      { "url": "https://example.com", "status": "success", "preview": {"..."} },
       {
         "url": "https://blocked-site-example.com",
         "status": "failed",
@@ -156,7 +156,7 @@ Generate an AI summary using the user's configured LLM.
 ### Step 3.1: Summarize a Web Page
 
 ```bash
-curl -X POST https://web-agent.intexuraos.com/internal/page-summaries \
+curl -X POST http://localhost:8127/internal/page-summaries \
   -H "Content-Type: application/json" \
   -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
@@ -200,16 +200,16 @@ When you call `/internal/page-summaries`:
 4. **parseSummaryResponse** validates the output is prose (not JSON)
 5. If invalid, **repair prompt** triggers one retry automatically
 
-The content focus instructions ensure the LLM summarizes the actual page content rather than describing the platform (e.g., it won't start with "LinkedIn is a professional network...").
+The content focus instructions ensure the LLM summarizes the actual page content rather than describing the platform (e.g., it will not start with "LinkedIn is a professional network...").
 
-**Note:** 401 responses now use the standard response contract format: `{ "success": false, "error": { "code": "UNAUTHORIZED", "message": "..." } }`.
+**Note:** 401 responses use the standard response contract format: `{ "success": false, "error": { "code": "UNAUTHORIZED", "message": "..." } }`.
 
 ### Step 3.3: Language Preservation
 
 Summarize a non-English article:
 
 ```bash
-curl -X POST https://web-agent.intexuraos.com/internal/page-summaries \
+curl -X POST http://localhost:8127/internal/page-summaries \
   -H "Content-Type: application/json" \
   -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
@@ -391,8 +391,8 @@ export async function summarizePage(
 | "401 Unauthorized"           | Missing auth header          | Add `X-Internal-Auth` header                 |
 | "ACCESS_DENIED"              | 403 from target site         | Site blocks scrapers; try different URL      |
 | "No API key configured"      | Platform fallback also unset | Configure platform keys or user adds API key |
-| "Summary is JSON"            | Repair mechanism kicked in   | Normal behavior - should auto-repair         |
-| "Summary in wrong language"  | Old version                  | Update to v2.0.0 with language preservation  |
+| "Summary is JSON"            | Repair mechanism kicked in   | Normal behavior -- should auto-repair        |
+| "Summary in wrong language"  | Old version                  | Update to v2.0.0+ with language preservation |
 | "Timeout"                    | Slow site or Crawl4AI        | Increase `timeoutMs` parameter               |
 | "RATE_LIMITED"               | HTTP 429 from Crawl4AI       | Wait and retry with exponential backoff      |
 | "Summary describes platform" | Content focus missing        | Update to latest with content focus prompt   |
@@ -401,12 +401,12 @@ export async function summarizePage(
 
 ## Best Practices
 
-1. **Validate URLs client-side** - Check for http/https before calling
-2. **Handle partial success** - Check `status` field per result
-3. **Log error codes** - Track `ACCESS_DENIED` vs `FETCH_FAILED` separately
-4. **Set appropriate timeouts** - 5s for link previews, 60s for summaries
-5. **Cache link previews** - Same URL rarely changes; caller should cache
-6. **Provide userId** - Required for summarization to get user's LLM keys
+1. **Validate URLs client-side** -- Check for http/https before calling
+2. **Handle partial success** -- Check `status` field per result
+3. **Log error codes** -- Track `ACCESS_DENIED` vs `FETCH_FAILED` separately
+4. **Set appropriate timeouts** -- 5s for link previews, 60s for summaries
+5. **Cache link previews** -- Same URL rarely changes; caller should cache
+6. **Provide userId** -- Required for summarization to get user's LLM keys
 
 ---
 

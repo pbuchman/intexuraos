@@ -2,7 +2,7 @@
 
 ## Overview
 
-Bookmarks-agent provides CRUD operations for user bookmarks with automatic OpenGraph metadata fetching via web-agent and AI summarization with WhatsApp delivery. The service uses a decoupled event-driven architecture where bookmark enrichment and summarization are processed asynchronously via Pub/Sub.
+Bookmarks-agent provides CRUD operations for user bookmarks with automatic OpenGraph metadata fetching via web-agent and AI summarization with WhatsApp delivery. Runs on Cloud Run with Fastify. Uses a decoupled event-driven architecture where bookmark enrichment and summarization are processed asynchronously via Pub/Sub. Current version: 3.1.0.
 
 ## Architecture
 
@@ -54,7 +54,7 @@ graph TB
 
 ## Data Flow
 
-### Bookmark Creation and Enrichment Flow (INT-210, INT-198)
+### Bookmark Creation and Enrichment Flow
 
 ```mermaid
 sequenceDiagram
@@ -104,20 +104,16 @@ sequenceDiagram
 
 | Commit     | Description                                            | Date       |
 | ---------- | ------------------------------------------------------ | ---------- |
+| `b3f34d85` | Release v3.1.0                                         | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                         | 2026-02-19 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability        | 2026-02-16 |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration                    | 2026-02-16 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local | 2026-02-14 |
-| (INT-198)  | Pub/Sub retry logic for transient Crawl4AI errors      | 2026-01-28 |
-| (INT-408)  | Enforce mandatory env var registration                 | 2026-01-28 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)      | 2026-01-31 |
+| `c3198407` | Fix response contract violations across codebase       | 2026-01-30 |
 | `d105688f` | Add RATE_LIMITED error code for Crawl4AI 429 responses | 2026-01-30 |
 | `dfd702f1` | Migrate to Sentry-enabled logger factory               | 2026-01-30 |
 | `186f7ad8` | Enforce standardized HTTP response contract            | 2026-01-30 |
-| `c3198407` | Fix response contract violations (reply.ok/reply.fail) | 2026-01-30 |
-| (INT-425)  | Implement inline v8 ignore coverage exemptions         | 2026-01-30 |
-| (INT-427)  | Enable strict 100% branch coverage enforcement         | 2026-01-31 |
-| `eb345c7`  | Release v2.0.0                                         | 2026-01-24 |
-| (INT-210)  | WhatsApp delivery for bookmark AI summaries            | 2026-01-24 |
-| (INT-172)  | Improved test coverage for enrichment pipeline         | 2026-01-20 |
 
 ## API Endpoints
 
@@ -140,10 +136,18 @@ sequenceDiagram
 | ------ | --------------------------------------- | ------------------------------------------------------------ | --------------- |
 | POST   | `/internal/bookmarks`                   | Create bookmark from other services                          | Internal header |
 | GET    | `/internal/bookmarks/:id`               | Get bookmark for internal services                           | Internal header |
-| PATCH  | `/internal/bookmarks/:id`               | Update bookmark (AI summary, OG)                             | Internal header |
+| PATCH  | `/internal/bookmarks/:id`               | Update bookmark (AI summary, OG data)                        | Internal header |
 | POST   | `/internal/bookmarks/:id/force-refresh` | Force refresh OG metadata                                    | Internal header |
 | POST   | `/internal/bookmarks/pubsub/enrich`     | Pub/Sub push handler for enrichment                          | Pub/Sub OIDC    |
 | POST   | `/internal/bookmarks/pubsub/summarize`  | Pub/Sub push handler for AI summary (503 on transient error) | Pub/Sub OIDC    |
+
+### System Endpoints
+
+| Method | Path            | Description            | Auth |
+| ------ | --------------- | ---------------------- | ---- |
+| GET    | `/health`       | Health check           | None |
+| GET    | `/docs`         | Swagger UI             | None |
+| GET    | `/openapi.json` | OpenAPI specification  | None |
 
 ## Domain Model
 
@@ -180,7 +184,7 @@ sequenceDiagram
 | `type`        | `string \| null` | OG type        |
 | `favicon`     | `string \| null` | Favicon URL    |
 
-### Status Values
+### OgFetchStatus Values
 
 | Status      | Meaning                              |
 | ----------- | ------------------------------------ |
@@ -188,15 +192,31 @@ sequenceDiagram
 | `processed` | OG metadata successfully fetched     |
 | `failed`    | OG fetch failed (site blocked, etc.) |
 
+### BookmarkStatus Values
+
+| Status   | Meaning                         |
+| -------- | ------------------------------- |
+| `draft`  | Created but not yet visible     |
+| `active` | Normal active bookmark (default)|
+
+### BookmarkErrorCode Values
+
+| Code                | Meaning                                  |
+| ------------------- | ---------------------------------------- |
+| `NOT_FOUND`         | Bookmark does not exist                  |
+| `STORAGE_ERROR`     | Firestore operation failed               |
+| `INVALID_OPERATION` | Invalid state transition                 |
+| `DUPLICATE_URL`     | URL already bookmarked by this user      |
+
 ## Pub/Sub Events
 
 ### Published Events
 
 | Topic                                  | Event Type              | Payload                              | Trigger                    |
 | -------------------------------------- | ----------------------- | ------------------------------------ | -------------------------- |
-| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`    | `bookmarks.enrich`      | `{ bookmarkId, userId, url }`        | After bookmark creation    |
-| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` | `bookmarks.summarize`   | `{ bookmarkId, userId }`             | After OG enrichment        |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND`      | `whatsapp.message.send` | `{ userId, message, correlationId }` | After AI summary (INT-210) |
+| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`    | `bookmarks.enrich`      | `{ bookmarkId, userId, url }`        | After internal bookmark creation |
+| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` | `bookmarks.summarize`   | `{ bookmarkId, userId }`             | After successful OG enrichment   |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND`      | `whatsapp.message.send` | `{ userId, message, correlationId }` | After successful AI summary      |
 
 ### Subscribed Events
 
@@ -205,7 +225,7 @@ sequenceDiagram
 | `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`    | `/internal/bookmarks/pubsub/enrich`    | Fetch OG metadata, trigger summarize                       |
 | `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` | `/internal/bookmarks/pubsub/summarize` | Generate AI summary, send WhatsApp; 503 on transient error |
 
-### Transient Error Handling (INT-198)
+### Transient Error Handling
 
 The summarization pipeline classifies errors as transient or permanent to enable Pub/Sub retry:
 
@@ -235,8 +255,10 @@ The summarization pipeline classifies errors as transient or permanent to enable
 | ---------------------------------- | ----------------------------- |
 | Firestore (`bookmarks` collection) | Bookmark persistence          |
 | Pub/Sub (3 topics)                 | Event-driven async processing |
+| Sentry                             | Error reporting               |
+| Dash0 OpenTelemetry                | Distributed tracing           |
 
-### Decoupled WhatsApp Delivery (INT-210)
+### Decoupled WhatsApp Delivery
 
 The service uses `WhatsAppSendPublisher` from `@intexuraos/infra-pubsub` to publish `SendMessageEvent` events. This decouples bookmarks-agent from whatsapp-service:
 
@@ -270,30 +292,36 @@ The Pub/Sub route checks for this error code and responds with HTTP 503 to trigg
 
 All required env vars are validated at startup via `validateRequiredEnv()` in `index.ts`. `INTEXURAOS_SENTRY_DSN` is validated separately before `validateRequiredEnv()`.
 
-| Environment Variable                    | Required | Description                                   |
-| --------------------------------------- | -------- | --------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project for Pub/Sub                       |
-| `INTEXURAOS_AUTH_JWKS_URL`              | Yes      | Auth0 JWKS endpoint                           |
-| `INTEXURAOS_AUTH_ISSUER`                | Yes      | Auth0 token issuer                            |
-| `INTEXURAOS_AUTH_AUDIENCE`              | Yes      | Auth0 token audience                          |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Internal auth header value                    |
+| Environment Variable                     | Required | Description                                   |
+| ---------------------------------------- | -------- | --------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`              | Yes      | GCP project for Pub/Sub                       |
+| `INTEXURAOS_AUTH_JWKS_URL`               | Yes      | Auth0 JWKS endpoint                           |
+| `INTEXURAOS_AUTH_ISSUER`                 | Yes      | Auth0 token issuer                            |
+| `INTEXURAOS_AUTH_AUDIENCE`               | Yes      | Auth0 token audience                          |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`         | Yes      | Internal auth header value                    |
 | `INTEXURAOS_WEB_AGENT_URL`              | Yes      | Web-agent base URL                            |
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Yes      | WhatsApp send topic name                      |
 | `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | Yes      | Enrichment topic name                         |
 | `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | Yes      | Summarization topic name                      |
 | `INTEXURAOS_SENTRY_DSN`                 | Yes      | Sentry DSN for error reporting                |
-| `INTEXURAOS_ENVIRONMENT`                | No       | Sentry environment tag (default: development) |
+| `INTEXURAOS_ENVIRONMENT`                 | No       | Sentry environment tag (default: development) |
+| `PORT`                                   | No       | Server port (default: 8080)                   |
+| `LOG_LEVEL`                              | No       | Pino log level (default: info)                |
 
 ## Gotchas
 
 - **Enrichment is async** - `POST /internal/bookmarks` returns immediately with `{ id, url, bookmark }` where `url` is the app deep link (`/#/bookmarks/{id}`); OG data and AI summary populate later via Pub/Sub
+- **Enrichment only triggers on internal create** - The public `POST /bookmarks` endpoint does NOT trigger the enrichment pipeline; only `POST /internal/bookmarks` publishes the `bookmarks.enrich` event
 - **Duplicate detection by userId+url** - Same URL can exist for different users
 - **OG fetch can fail** - Some sites block scrapers; status will be `failed`
-- **WhatsApp delivery is fire-and-forget** - If Pub/Sub publish fails, no retry for WhatsApp notification
-- **Force refresh always fetches** - Unlike enrichment, force-refresh ignores `processed` status
+- **WhatsApp delivery is fire-and-forget** - If Pub/Sub publish fails, no retry for WhatsApp notification (summary is still saved)
+- **Force refresh always fetches** - Unlike enrichment, force-refresh ignores `processed` status and always re-fetches
 - **Transient vs permanent errors** - Only transient errors (429, timeout, network) trigger Pub/Sub retry; permanent errors (NO_CONTENT, 400) result in graceful degradation with HTTP 200
 - **Legacy bookmarks have no status field** - Firestore repository defaults to `'active'` for documents missing the `status` field
 - **Logging requires Sentry integration** - All loggers use `createAppLogger()` from `@intexuraos/infra-sentry`; never use `pino()` directly
+- **Image proxy has 10-second timeout** - Requests to fetch external images abort after 10 seconds
+- **Image proxy validates content type** - Returns 400 if the proxied URL does not return an `image/*` content type
+- **Pub/Sub auth dual-mode** - Pub/Sub push handlers accept either Google OIDC (`From: noreply@google.com`) or `X-Internal-Auth` header for local development
 
 ## File Structure
 
@@ -301,40 +329,41 @@ All required env vars are validated at startup via `validateRequiredEnv()` in `i
 apps/bookmarks-agent/src/
   domain/
     models/
-      bookmark.ts                    # Bookmark entity and types
+      bookmark.ts                    # Bookmark entity and types (79 lines)
     ports/
-      bookmarkRepository.ts          # Repository interface
-      bookmarkSummaryService.ts      # Summary service interface
-      linkPreviewFetcher.ts          # Link preview interface
-      summarizePublisher.ts          # Summarize event publisher interface
+      bookmarkRepository.ts          # Repository interface (19 lines)
+      bookmarkSummaryService.ts      # Summary service interface (20 lines)
+      linkPreviewFetcher.ts          # Link preview interface (11 lines)
+      summarizePublisher.ts          # Summarize event publisher interface (14 lines)
     usecases/
-      createBookmark.ts              # Create with duplicate check
-      getBookmark.ts                 # Get by ID
-      listBookmarks.ts               # List with filters
-      updateBookmark.ts              # User-facing update
-      deleteBookmark.ts              # Hard delete
-      archiveBookmark.ts             # Soft delete
-      unarchiveBookmark.ts           # Restore
-      enrichBookmark.ts              # OG fetch + trigger summarize
-      summarizeBookmark.ts           # AI summary + WhatsApp delivery
-      updateBookmarkInternal.ts      # Internal updates (OG, AI)
-      forceRefreshBookmark.ts        # Force OG re-fetch
+      createBookmark.ts              # Create with duplicate check (51 lines)
+      getBookmark.ts                 # Get by ID with ownership check (41 lines)
+      listBookmarks.ts               # List with filters (22 lines)
+      updateBookmark.ts              # User-facing update (57 lines)
+      deleteBookmark.ts              # Hard delete with ownership check (47 lines)
+      archiveBookmark.ts             # Soft delete (59 lines)
+      unarchiveBookmark.ts           # Restore from archive (59 lines)
+      enrichBookmark.ts              # OG fetch + trigger summarize (105 lines)
+      summarizeBookmark.ts           # AI summary + WhatsApp delivery (141 lines)
+      updateBookmarkInternal.ts      # Internal updates (OG, AI) (53 lines)
+      forceRefreshBookmark.ts        # Force OG re-fetch (71 lines)
   infra/
     firestore/
-      firestoreBookmarkRepository.ts # Firestore implementation
+      firestoreBookmarkRepository.ts # Firestore implementation (273 lines)
     linkpreview/
-      webAgentClient.ts              # Web-agent OG client
+      webAgentClient.ts              # Web-agent OG client (139 lines)
     summary/
-      webAgentSummaryClient.ts       # Web-agent summary client
+      webAgentSummaryClient.ts       # Web-agent summary client (160 lines)
+      index.ts                       # Re-export barrel
     pubsub/
-      enrichPublisher.ts             # Enrich event publisher
-      summarizePublisher.ts          # Summarize event publisher
+      enrichPublisher.ts             # Enrich event publisher (42 lines)
+      summarizePublisher.ts          # Summarize event publisher (41 lines)
   routes/
-    bookmarkRoutes.ts                # Public CRUD routes
-    internalRoutes.ts                # Internal service routes
-    pubsubRoutes.ts                  # Pub/Sub push handlers
-  services.ts                        # DI container
-  server.ts                          # Fastify setup
-  config.ts                          # Configuration loading
-  index.ts                           # Entry point
+    bookmarkRoutes.ts                # Public CRUD routes + image proxy (662 lines)
+    internalRoutes.ts                # Internal service routes (444 lines)
+    pubsubRoutes.ts                  # Pub/Sub push handlers (266 lines)
+  services.ts                        # DI container (85 lines)
+  server.ts                          # Fastify setup with Swagger (239 lines)
+  config.ts                          # Configuration loading (29 lines)
+  index.ts                           # Entry point (66 lines)
 ```

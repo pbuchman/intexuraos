@@ -24,7 +24,8 @@ resource "google_storage_bucket" "shared_content" {
 
   lifecycle_rule {
     condition {
-      age = 365
+      age            = 365
+      matches_prefix = ["research/"]
     }
     action {
       type = "Delete"

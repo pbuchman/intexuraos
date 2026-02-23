@@ -1,8 +1,8 @@
 # Linear Agent Tutorial
 
-> **Time:** 30-40 minutes
+> **Time:** 35-45 minutes
 > **Prerequisites:** Node.js 20+, Linear account with API key, IntexuraOS running locally
-> **You'll learn:** How to connect Linear, create issues via AI, view issues with parent-child support, read comments, configure webhooks, sync issues, and use the internal API
+> **You'll learn:** How to connect Linear, create issues via AI, view issues with parent-child support, read comments, configure webhooks, sync issues, use the internal API, and observe auto-triggered code tasks
 
 ---
 
@@ -17,6 +17,7 @@ A working integration that:
 - Configures webhooks for real-time issue sync
 - Triggers full issue synchronization
 - Manages issues programmatically via the internal API
+- Observes auto-triggered code tasks on issue assignment
 - Handles errors and reviews failed extractions
 
 ---
@@ -541,7 +542,44 @@ Available states: `backlog`, `in_progress`, `in_review`, `qa`.
 
 ---
 
-## Part 7: Handle Errors (5 minutes)
+## Part 7: Auto-Trigger Code Tasks (3 minutes)
+
+When an issue is assigned in Linear for the first time, Linear Agent can automatically trigger a code task to enrich the issue with requirements and test plans.
+
+### Step 7.1: How It Works
+
+The auto-trigger fires when all of these conditions are met:
+
+1. A webhook `update` event arrives
+2. The issue had no previous assignee (`updatedFrom.assigneeId` is null)
+3. The issue now has an assignee
+4. The issue is in an `unstarted` state
+5. The issue does NOT have a `Code Task` label
+
+### Step 7.2: Test the Auto-Trigger
+
+1. Create a new issue in Linear (status: Todo, no assignee)
+2. Assign yourself to the issue
+3. Check the linear-agent logs for: `Code task triggered from assignment`
+4. The code-agent will analyze the issue and enrich its description
+
+**Checkpoint:** The issue description in Linear should be enriched with requirements, acceptance criteria, and a test plan after a short delay.
+
+### What Happens Behind the Scenes
+
+```
+1. Linear sends webhook: action=update, assignee changed from null to user
+2. linear-agent validates HMAC signature
+3. shouldTriggerCodeTask checks all guard conditions
+4. triggerCodeTaskFromAssignment calls code-agent POST /internal/code/process
+5. code-agent analyzes issue, enriches description, marks ready
+```
+
+The trigger is fire-and-forget -- the webhook response is returned immediately without waiting for the code task to complete.
+
+---
+
+## Part 8: Handle Errors (5 minutes)
 
 ### Error: Not Connected
 
@@ -660,7 +698,7 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
 
 ---
 
-## Part 8: Real-World Scenario (5 minutes)
+## Part 9: Real-World Scenario (5 minutes)
 
 ### Voice-to-Issue Pipeline
 
@@ -858,4 +896,4 @@ Now that you understand the basics:
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22

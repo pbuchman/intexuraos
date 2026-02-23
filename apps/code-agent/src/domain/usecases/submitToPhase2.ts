@@ -35,6 +35,9 @@ function generateCancelNonce(): string {
 
 const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
 
+export const PHASE2_PROMPT =
+  'Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.';
+
 /**
  * Request to start Phase 2 implementation from a completed Phase 1 design task.
  */
@@ -275,8 +278,8 @@ export async function submitToPhase2(
   const createInput = {
     id: phase2TaskId,
     userId,
-    prompt: originalTask.prompt,
-    sanitizedPrompt: originalTask.sanitizedPrompt,
+    prompt: PHASE2_PROMPT,
+    sanitizedPrompt: PHASE2_PROMPT,
     systemPromptHash: originalTask.systemPromptHash,
     workerType: originalTask.workerType,
     /* v8 ignore start -- ts-type: optional chaining with null fallback creates type narrowing branch @preserve */

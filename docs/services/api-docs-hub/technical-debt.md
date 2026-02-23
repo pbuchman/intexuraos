@@ -1,32 +1,98 @@
-# API Docs Hub - Technical Debt
+# API Docs Hub -- Technical Debt
+
+**Last Updated:** 2026-02-22
+**Analysis Run:** [2026-02-22 entry](../../documentation-runs.md)
+
+---
 
 ## Summary
 
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
-| TODO/FIXME  | 0     | -        |
 | Code Smells | 1     | Low      |
+| Test Gaps   | 0     | -        |
+| Type Issues | 0     | -        |
+| TODOs       | 0     | -        |
+| **Total**   | **1** | Low      |
 
-## Active Items
-
-### Health endpoint bypasses response contract
-
-**Location:** `apps/api-docs-hub/src/server.ts:81-88`
-**Severity:** Low (deliberate exception)
-
-The `/health` endpoint uses `reply.send()` directly rather than `reply.ok()` / `reply.fail()`. This is intentional — health check response format must be stable and predictable for infrastructure monitoring tools, independent of app-level response envelope changes. However, this creates an undocumented exception to the response contract rule. A `// @allow-raw-send: health check format must be stable` comment would make the intent explicit.
+---
 
 ## Future Plans
 
-1. **Dynamic config** - Reload sources without redeployment
-2. **Spec caching** - Cache specs to improve load time
-3. **Auth helper** - Built-in token management
-4. **Version selector** - Support multiple API versions
-5. **Search across specs** - Global endpoint search
+1. **Dynamic config reload** -- Reload OpenAPI sources without requiring a full redeployment
+2. **Spec caching** -- Cache fetched specs server-side to improve load times and reduce dependency on service availability
+3. **Authentication helper** -- Built-in token management in the Swagger UI to reduce friction during API testing
+4. **API version selector** -- Support displaying multiple versions of each service's API
+5. **Cross-spec search** -- Global endpoint search across all aggregated services
+6. **ecosystem.config.cjs integration** -- Add api-docs-hub to the PM2 ecosystem config for local development parity
+
+---
+
+## Code Smells
+
+### Low Priority
+
+| File                               | Issue                            | Impact                                                                                 |
+| ---------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------- |
+| `apps/api-docs-hub/src/server.ts`  | Health endpoint uses raw `reply.send()` | Bypasses the `reply.ok()` / `reply.fail()` response contract; intentional but undocumented in code |
+
+The `/health` endpoint uses `reply.send()` directly rather than `reply.ok()`. This is a deliberate exception: health check response format must be stable for infrastructure monitoring, independent of app-level response envelope changes. Adding a `// @allow-raw-send: health check format must be stable` comment would make the intent explicit and pass the `verify:reply-send` check.
+
+---
+
+## Test Coverage Gaps
+
+No test files exist for this service. Coverage is not enforced because the service is only 229 lines across 3 files with no domain logic, no business rules, and no complex branching. All behavior is configuration-driven.
+
+---
+
+## TypeScript Issues
+
+None. No `any` types, no `@ts-ignore` comments, no `@ts-expect-error` annotations.
+
+---
+
+## TODOs / FIXMEs
+
+None found in the codebase.
+
+---
+
+## SRP Violations
+
+None. All three files have clear, single responsibilities:
+- `config.ts` -- environment variable validation and source loading
+- `server.ts` -- Fastify setup with Swagger UI and health endpoint
+- `index.ts` -- entry point with Sentry initialization
+
+---
+
+## Code Duplicates
+
+None identified.
+
+---
+
+## Deprecations
+
+None.
+
+---
 
 ## Resolved Issues
 
-1. **PromptVault reference removed** - Removed `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` after PromptVault feature was removed from the platform (INT-319, resolved 2026-01-27)
-2. **Chat Agent added** - Added `INTEXURAOS_CHAT_AGENT_OPENAPI_URL` for new Intex Chat MVP feature (INT-431, resolved 2026-02-01)
-3. **Dash0 OTel integration** - `@intexuraos/infra-otel` dependency added; log pipeline now forwards to Dash0 via OTLP (resolved 2026-02-16)
-4. **Dev-mode log formatting** - `createLogStream()` now emits human-readable output under PM2, resolving the raw JSON noise in local development (resolved 2026-02-16)
+| Date       | Issue                                | Resolution                                                                |
+| ---------- | ------------------------------------ | ------------------------------------------------------------------------- |
+| 2026-02-16 | Dash0 OTel integration              | `@intexuraos/infra-otel` added; log pipeline forwards to Dash0 via OTLP  |
+| 2026-02-16 | Dev-mode log formatting              | `createLogStream()` now emits human-readable output under PM2             |
+| 2026-02-14 | Broken start:local script            | Fixed to use `tsx` instead of `node --experimental-strip-types`           |
+| 2026-02-01 | Chat Agent spec missing              | Added `INTEXURAOS_CHAT_AGENT_OPENAPI_URL` env var (INT-431)              |
+| 2026-01-26 | PromptVault reference after removal  | Removed `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` env var (INT-319)   |
+
+---
+
+## Related
+
+- [Features](features.md) -- User-facing documentation
+- [Technical](technical.md) -- Developer reference
+- [Documentation Run Log](../../documentation-runs.md)
