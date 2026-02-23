@@ -1,106 +1,64 @@
 # Web Agent
 
-Web content extraction and AI summarization -- fetch link previews and generate prose summaries in any language.
+The eyes of the system -- reads the internet so you don't have to.
 
 ## The Problem
 
-Web content is hard to work with:
+The modern web is vast, noisy, and multilingual. When you save a link or start a research session, you face the same friction every time:
 
-1. **Raw URLs lack context** -- Bare links don't reveal what content is about until you visit
-2. **Manual reading takes time** -- Long articles require significant time investment
-3. **Language barriers** -- AI summaries often lose the original language, creating jarring mixed-language content
-4. **Bot detection** -- Simple scrapers get blocked by 403 responses from modern websites
-5. **LLM format issues** -- AI models sometimes return JSON instead of prose, breaking user experience
-
-## How It Helps
-
-### Intelligent Page Summarization
-
-Crawl web pages and generate clean prose summaries using the user's preferred LLM. Summaries focus on the actual page content rather than describing the platform or site structure.
-
-**Example:** A Polish news article stays in Polish. You send a URL, get a 3-minute summary that reads naturally in the source language and focuses on what the article says, not what the platform is.
-
-**How it works:**
-
-1. PageContentFetcher crawls with Crawl4AI (headless browser)
-2. LlmSummarizer resolves which LLM to use: user's own API key, then platform Gemini 2.5 Flash, then platform ZAI
-3. Content focus instructions prevent platform descriptions (e.g., no "LinkedIn is a professional network" preambles)
-4. Parser validates output and triggers self-repair if LLM returns JSON
-
-### Rich Link Previews
-
-Extract OpenGraph metadata for social-card-style previews.
-
-**Example:** Share a GitHub link -- immediately see repository name, description, and preview image without visiting.
-
-**Extracted fields:**
-
-- `title` -- From og:title or HTML title
-- `description` -- From og:description or meta description
-- `image` -- Resolved absolute URL from og:image
-- `favicon` -- From link rel="icon" or /favicon.ico
-- `siteName` -- From og:site_name
-
-### Bot-Detection Bypass
-
-Browser-like request headers avoid 403 blocks from protective websites.
-
-**Example:** News sites that block scrapers accept requests that look like Chrome browsers.
+1. **Bare URLs say nothing** -- A raw link gives no hint of what is on the other side until you click through and read
+2. **Reading takes time** -- A ten-minute article demands ten minutes, even when you only need the gist
+3. **Summaries lose the language** -- Most AI tools default to English, so a Polish article comes back in English, stripping context and nuance
 
 ## Use Case
 
-### Research workflow
+Web-agent is a behind-the-scenes utility. It has no user-facing interface of its own. Instead, other agents call on it when they need to understand a web page:
 
-1. User sends article URLs to research-agent
-2. research-agent calls web-agent's `/internal/page-summaries`
-3. web-agent crawls each URL with Crawl4AI
-4. User's LLM API key (or platform Gemini fallback) generates prose summary
-5. If LLM returns JSON, repair prompt triggers automatic retry
-6. Summary returns in the article's original language
+### Research enrichment
 
-### Bookmark enrichment flow
+When the research agent digests source articles, it asks web-agent to fetch and summarize each URL. The researcher gets clean, readable summaries alongside AI-generated analysis -- all in the language the article was written in.
 
-1. User saves a link via WhatsApp: "Save this article"
-2. bookmarks-agent calls `/internal/link-previews`
-3. web-agent fetches OpenGraph metadata
-4. Bookmark displays with title, description, and image
+### Bookmark previews
+
+When you save a link through WhatsApp, the bookmarks agent asks web-agent to pull the page's metadata: title, description, cover image, favicon, and site name. The result is a rich visual card in your bookmarks dashboard -- no manual entry, no guessing what the link was about.
+
+## How It Helps
+
+### Page summarization in the original language
+
+Send a URL, get back a focused summary of what the page actually says. The summarization pipeline fetches the full page content through a headless browser, then passes it through an LLM with strict instructions: summarize the content, not the platform, and write in the same language as the source material.
+
+A Polish news article stays in Polish. A German blog post stays in German. The summary focuses on what was said -- not on explaining that "LinkedIn is a professional networking site" or "Medium is a publishing platform."
+
+You can control the length by setting a maximum number of sentences or a target reading time in minutes. The response includes a word count and estimated reading time so downstream agents can decide how to present it.
+
+### Rich link previews
+
+Given a batch of URLs, web-agent fetches OpenGraph metadata from each page and returns structured preview data: title, description, image, favicon, and site name. This is the same metadata that powers social media link cards, extracted and delivered as clean data.
+
+Batch requests support partial success -- if one URL in a set fails, the rest still return. Each result carries its own status, so the calling agent knows exactly which links succeeded and which did not.
+
+### Works without user API keys
+
+Summarization uses the user's own LLM credentials when available, keeping costs under the user's control. But if no API key is configured, the platform provides a fallback model automatically. New users get working summaries from day one, with no setup required.
 
 ## Key Benefits
 
-**Works without user API keys** -- Platform Gemini 2.5 Flash fallback means summaries work even before users configure their own LLM keys
-
-**User-controlled costs** -- When users add their own API keys, those are used instead of shared infrastructure
-
-**Language preservation** -- Polish stays Polish, German stays German
-
-**Content-focused summaries** -- Summarizes what the page says, not what the platform is
-
-**Self-healing AI** -- Parser detects JSON format and auto-triggers repair prompt
-
-**Bot-resistant** -- Browser-like headers for higher success rate
-
-**Rate limit awareness** -- Crawl4AI 429 responses return a specific RATE_LIMITED error code for proper backoff handling
-
-**Partial success** -- Batch requests return individual results; one failure does not block others
-
-**Memory safe** -- 2MB cap prevents out-of-memory errors from huge pages
-
-**Observable** -- Distributed tracing via Dash0 OpenTelemetry for latency and error tracking
+- **Language preservation** -- Polish stays Polish, German stays German, English stays English
+- **Content-focused** -- Summaries capture what the page says, not what the website is
+- **Zero-configuration start** -- Platform fallback means summaries work before users add their own API keys
+- **User-controlled costs** -- When users bring their own keys, their keys are used
+- **Batch-friendly** -- Link preview requests handle multiple URLs at once with per-URL success tracking
+- **Reads pages that block scrapers** -- Realistic browser headers mean sites that reject automated requests still return content
 
 ## Limitations
 
-**HTTP/HTTPS only** -- No support for ftp://, file://, or other protocols
-
-**JavaScript-rendered content** -- Crawl4AI handles SPAs, but some dynamic content may be missed
-
-**No caching** -- Every request fetches fresh content
-
-**No authentication** -- Cannot access paywalled or login-protected content
-
-**403 still possible** -- Browser-like headers help but do not guarantee access to all sites
-
-**Response size** -- Pages over 2MB return TOO_LARGE error
+- **Works behind the scenes** -- End users never interact with this service directly; it runs in the background, called by other agents in the platform
+- **Summarization quality varies** -- Pages with poor structure, heavy JavaScript rendering, or minimal text content may produce weaker summaries
+- **Some sites block automated access** -- Despite browser-like headers, certain websites still reject non-browser requests
+- **No result caching** -- Every request fetches fresh content from the source URL
+- **No authenticated content** -- Cannot access paywalled or login-protected pages
 
 ---
 
-_Part of [IntexuraOS](../overview.md) -- Extract meaning from any webpage._
+_Part of [IntexuraOS](../overview.md) -- reads the web so the rest of the system doesn't have to._
