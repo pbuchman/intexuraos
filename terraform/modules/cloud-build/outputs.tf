@@ -54,3 +54,13 @@ output "firestore_trigger" {
   value       = google_cloudbuild_trigger.firestore.name
 }
 
+output "claude_worker_trigger_id" {
+  description = "claude-worker trigger ID"
+  value       = google_cloudbuild_trigger.claude_worker.trigger_id
+}
+
+output "claude_worker_scheduler_job" {
+  description = "claude-worker daily rebuild scheduler job name"
+  value       = google_cloud_scheduler_job.claude_worker_daily_rebuild.name
+}
+
