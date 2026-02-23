@@ -148,12 +148,13 @@ Run an iterative review cycle until the code is clean. Track the iteration count
 
 Launch **two** `superpowers:code-reviewer` agents simultaneously using the Task tool:
 
-| Agent | Model    | Purpose                                          |
-| ----- | -------- | ------------------------------------------------ |
-| 1     | **opus** | Deep architectural and correctness analysis      |
+| Agent | Model      | Purpose                                           |
+| ----- | ---------- | ------------------------------------------------- |
+| 1     | **opus**   | Deep architectural and correctness analysis       |
 | 2     | **sonnet** | Fast pattern-matching for style and common issues |
 
 Both receive the same inputs:
+
 - **Iteration 1:** Full git diff (base branch..HEAD), description, requirements
 - **Iteration 2+:** Git diff of only the previous iteration's fix commit(s), plus context of what was fixed and why
 
@@ -233,7 +234,7 @@ PHASE2_FINAL:
 - Summary: Implemented requested changes
 ```
 
-**Turn summary format:** Exactly ~5 short statements separated by ` | `, summarizing what happened during this execution turn. This will be sent as a WhatsApp notification to the user, so write it as a concise human-readable status update. Examples:
+**Turn summary format:** Exactly ~5 short statements separated by `|`, summarizing what happened during this execution turn. This will be sent as a WhatsApp notification to the user, so write it as a concise human-readable status update. Examples:
 
 ```
 - Turn summary: Planned 3-file refactor for auth middleware | Wrote 12 tests covering edge cases | Implemented token refresh logic | Code review clean after 2 iterations | PR #487 ready for human review

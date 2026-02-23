@@ -703,6 +703,9 @@ export class TaskDispatcher {
         resumeInstruction: verification.resumeInstruction,
         usedLlm: verification.usedLlm,
         ...(verification.verifierFailure === true && { verifierFailure: true }),
+        ...(verification.extractedSummary !== undefined && {
+          extractedSummary: verification.extractedSummary,
+        }),
         createdAt: new Date().toISOString(),
       },
     ];
@@ -826,8 +829,9 @@ export class TaskDispatcher {
       this.appendOrchestratorTaskLog(task.taskId, 'Completion verification passed');
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
+      const finalResult = this.injectExtractedSummary(result, verification.extractedSummary);
       await this.finalizeTask(task, 'completed', {
-        ...(result !== undefined && { result }),
+        ...(finalResult !== undefined && { result: finalResult }),
       });
       return;
     }
@@ -849,8 +853,9 @@ export class TaskDispatcher {
     await this.flushTaskLogs(task.taskId);
     await this.collectTurnMetrics(task, attempt);
 
+    const failedResult = this.injectExtractedSummary(result, verification.extractedSummary);
     await this.finalizeTask(task, 'failed', {
-      ...(result !== undefined && { result }),
+      ...(failedResult !== undefined && { result: failedResult }),
       error,
     });
   }
@@ -1325,6 +1330,18 @@ export class TaskDispatcher {
       this.logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
       return undefined;
     }
+  }
+
+  private injectExtractedSummary(
+    result: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
+    extractedSummary: string | undefined // @allow-undefined-type -- function parameter, not optional property
+  ): TaskResult | undefined {
+    // @allow-undefined-type -- return type, not optional property
+    if (extractedSummary === undefined) return result;
+    if (result !== undefined) {
+      return { ...result, summary: extractedSummary };
+    }
+    return { summary: extractedSummary };
   }
 
   private hasCodeTaskLabel(labels: string[]): boolean {

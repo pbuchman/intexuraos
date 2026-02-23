@@ -1114,9 +1114,9 @@ export type CodeTaskStatus =
  */
 export interface CodeTaskResult {
   prUrl?: string;
-  branch: string;
-  commits: number;
-  summary: string;
+  branch?: string;
+  commits?: number;
+  summary?: string;
   ciFailed?: boolean;
   partialWork?: boolean;
   rebaseResult?: 'success' | 'conflict' | 'skipped';
