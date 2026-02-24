@@ -184,7 +184,7 @@ export interface CodeAgentClient {
     userId: string;
     linearIssueId: string;
     prompt: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
     actionId: string;
     approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>>;

@@ -149,6 +149,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     LINEAR_API_KEY: 'test-linear-key',
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     ZAI_API_KEY: 'test-zai-key',
+    MINIMAX_API_KEY: 'test-minimax-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
   githubAppKeyPath: '/test/github-key.pem',
@@ -953,6 +954,77 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
       expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-zai-key');
+    });
+
+    it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for sonnet worker', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBeUndefined();
+    });
+
+    it('sets ANTHROPIC_API_KEY env var for minimax worker even with sharedCredsPath configured', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-minimax-key');
+    });
+
+    it('sets ANTHROPIC_BASE_URL for minimax worker even with sharedCredsPath configured', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
+      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic');
+    });
+
+    it('sets ANTHROPIC_MODEL for sonnet worker', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=sonnet');
+    });
+
+    it('sets ANTHROPIC_MODEL for minimax worker', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.5');
+    });
+
+    it('mounts shared creds dir for sonnet workers instead of per-task session', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
+      expect(binds.join(',')).not.toContain('claude-session');
+    });
+
+    it('mounts per-task session for minimax workers even with sharedCredsPath', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
     });
 
     it('does not set ANTHROPIC_BASE_URL env var when sharedCredsPath is configured for auto worker', async () => {
