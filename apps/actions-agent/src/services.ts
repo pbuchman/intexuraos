@@ -98,8 +98,6 @@ import { createActionEventPublisher, type ActionEventPublisher } from './infra/p
 import {
   createWhatsAppSendPublisher,
   type WhatsAppSendPublisher,
-  createCalendarPreviewPublisher,
-  type CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
@@ -120,7 +118,6 @@ export interface Services {
   codeAgentClient: CodeAgentClient;
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
-  calendarPreviewPublisher: CalendarPreviewPublisher;
   approvalMessageRepository: ApprovalMessageRepository;
   userServiceClient: UserServiceClient;
   handleResearchActionUseCase: HandleResearchActionUseCase;
@@ -164,7 +161,6 @@ export interface ServiceConfig {
   internalAuthToken: string;
   gcpProjectId: string;
   whatsappSendTopic: string;
-  calendarPreviewTopic: string;
   webAppUrl: string;
 }
 
@@ -233,12 +229,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
     logger: createAppLogger({ name: 'whatsapp-publisher' }),
-  });
-
-  const calendarPreviewPublisher = createCalendarPreviewPublisher({
-    projectId: config.gcpProjectId,
-    topicName: config.calendarPreviewTopic,
-    logger: createAppLogger({ name: 'calendar-preview-publisher' }),
   });
 
   const todosServiceClient = createTodosServiceHttpClient({
@@ -382,7 +372,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     {
       actionRepository,
       whatsappPublisher,
-      calendarPreviewPublisher,
+      calendarServiceClient,
       webAppUrl: config.webAppUrl,
       logger: createAppLogger({ name: 'handleCalendarAction' }),
       executeCalendarAction: executeCalendarActionUseCase,
@@ -458,7 +448,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     codeAgentClient,
     actionEventPublisher,
     whatsappPublisher,
-    calendarPreviewPublisher,
     approvalMessageRepository,
     userServiceClient,
     handleResearchActionUseCase,
