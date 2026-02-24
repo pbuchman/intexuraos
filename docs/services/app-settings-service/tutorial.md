@@ -273,13 +273,13 @@ All endpoints return a standardized response contract:
 
 ## Troubleshooting
 
-| Problem                | Cause                          | Solution                                          |
-| ---------------------- | ------------------------------ | ------------------------------------------------- |
-| 401 UNAUTHORIZED       | Missing or invalid token       | Check Bearer token or X-Internal-Auth header      |
-| 400 INVALID_REQUEST    | Non-numeric or out-of-range days | Pass an integer string between 1 and 365          |
-| 500 INTERNAL_ERROR     | Missing pricing data           | Contact admin -- Firestore pricing needs migration |
-| Empty usage data       | No LLM calls made yet          | Make some research queries first                  |
-| Service not starting   | Missing model pricing          | Run Firestore pricing migration                   |
+| Problem                | Cause                            | Solution                                           |
+| ---------------------- | -------------------------------- | -------------------------------------------------- |
+| 401 UNAUTHORIZED       | Missing or invalid token         | Check Bearer token or X-Internal-Auth header       |
+| 400 INVALID_REQUEST    | Non-numeric or out-of-range days | Pass an integer string between 1 and 365           |
+| 500 INTERNAL_ERROR     | Missing pricing data             | Contact admin -- Firestore pricing needs migration |
+| Empty usage data       | No LLM calls made yet            | Make some research queries first                   |
+| Service not starting   | Missing model pricing            | Run Firestore pricing migration                    |
 
 ---
 

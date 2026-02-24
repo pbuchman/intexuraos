@@ -105,21 +105,21 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                     | Date         |
-| ---------- | --------------------------------------------------------------- | ------------ |
-| `c33321e4` | Use Date.now() for metrics log line sequences                   | 52 min ago   |
-| `9be25162` | Dynamic CPU cores from cgroup + metrics in task logs            | 5 hours ago  |
-| `878c08b9` | Implement prompt sanitization for worker inputs (INT-612)       | 6 hours ago  |
-| `483c476a` | Replace scattered webhook filters with sender whitelist         | 6 hours ago  |
-| `95161acb` | Dispatch and triage edited claude[bot] review comments          | 7 hours ago  |
+| Commit     | Description                                                       | Date         |
+| ---------- | ----------------------------------------------------------------- | ------------ |
+| `c33321e4` | Use Date.now() for metrics log line sequences                     | 52 min ago   |
+| `9be25162` | Dynamic CPU cores from cgroup + metrics in task logs              | 5 hours ago  |
+| `878c08b9` | Implement prompt sanitization for worker inputs (INT-612)         | 6 hours ago  |
+| `483c476a` | Replace scattered webhook filters with sender whitelist           | 6 hours ago  |
+| `95161acb` | Dispatch and triage edited claude[bot] review comments            | 7 hours ago  |
 | `d5810213` | Use unique actionId for webhook dedup, propagate all dedup errors | 22 hours ago |
-| `1db69f2a` | Transition Linear to In Review on task-complete webhook         | 28 hours ago |
-| `bcbd5075` | Add multi-status filtering and fix pagination for code tasks    | 28 hours ago |
-| `f6420f4b` | Populate prNumber and prBranch on task completion (INT-465)     | 2 days ago   |
-| `2e7039c3` | Simplify PR comment auto-response (INT-465)                     | 2 days ago   |
-| `e5637ce5` | Deduplicate PR body across pull_request events                  | 3 days ago   |
-| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)     | 3 days ago   |
-| `c1bc9883` | Truncate oversized tool results and unparseable log lines       | 3 days ago   |
+| `1db69f2a` | Transition Linear to In Review on task-complete webhook           | 28 hours ago |
+| `bcbd5075` | Add multi-status filtering and fix pagination for code tasks      | 28 hours ago |
+| `f6420f4b` | Populate prNumber and prBranch on task completion (INT-465)       | 2 days ago   |
+| `2e7039c3` | Simplify PR comment auto-response (INT-465)                       | 2 days ago   |
+| `e5637ce5` | Deduplicate PR body across pull_request events                    | 3 days ago   |
+| `be0eaa8b` | Automatic turn-end metrics collection (CPU, memory, tokens)       | 3 days ago   |
+| `c1bc9883` | Truncate oversized tool results and unparseable log lines         | 3 days ago   |
 
 ## API Endpoints
 
@@ -159,12 +159,12 @@ sequenceDiagram
 
 ### Webhook Routes (HMAC Signature)
 
-| Method | Path                               | Description                          | Auth          |
-| ------ | ---------------------------------- | ------------------------------------ | ------------- |
-| POST   | `/internal/webhooks/task-complete` | Task completion callback             | Internal+HMAC |
-| POST   | `/internal/logs`                   | Log chunk upload from orchestrator   | Internal+HMAC |
+| Method | Path                               | Description                           | Auth          |
+| ------ | ---------------------------------- | ------------------------------------- | ------------- |
+| POST   | `/internal/webhooks/task-complete` | Task completion callback              | Internal+HMAC |
+| POST   | `/internal/logs`                   | Log chunk upload from orchestrator    | Internal+HMAC |
 | POST   | `/internal/turn-metrics`           | Turn metrics upload from orchestrator | Internal+HMAC |
-| POST   | `/webhooks/github`                 | GitHub webhook events                | GitHub HMAC   |
+| POST   | `/webhooks/github`                 | GitHub webhook events                 | GitHub HMAC   |
 
 ### Utility Routes
 
@@ -341,15 +341,15 @@ Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 
 ## Firestore Collections Owned
 
-| Collection             | Description                                                        |
-| ---------------------- | ------------------------------------------------------------------ |
+| Collection             | Description                                                                |
+| ---------------------- | -------------------------------------------------------------------------- |
 | `code_tasks`           | Code execution tasks (subcollections: `logs`, `log_lines`, `turn_metrics`) |
-| `user_spend`           | User cost tracking for rate limiting                               |
-| `user_usage`           | Rate limiting counters (concurrent, hourly, cost)                  |
-| `code_worker_settings` | Per-user worker configs with encrypted credentials                 |
-| `github-pr-events`     | GitHub PR webhook events for timeline display                      |
-| `github-pr-summaries`  | Per-PR rollup documents for O(PRs) list view (30-day window)       |
-| `pr_task_locks`        | Per-PR task locks preventing concurrent modifications              |
+| `user_spend`           | User cost tracking for rate limiting                                       |
+| `user_usage`           | Rate limiting counters (concurrent, hourly, cost)                          |
+| `code_worker_settings` | Per-user worker configs with encrypted credentials                         |
+| `github-pr-events`     | GitHub PR webhook events for timeline display                              |
+| `github-pr-summaries`  | Per-PR rollup documents for O(PRs) list view (30-day window)               |
+| `pr_task_locks`        | Per-PR task locks preventing concurrent modifications                      |
 
 ## Use Cases
 
@@ -378,10 +378,10 @@ Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 
 ## Domain Utilities
 
-| Utility             | File                                     | Purpose                                                    |
-| ------------------- | ---------------------------------------- | ---------------------------------------------------------- |
-| sanitizePrompt      | `domain/utils/promptSanitization.ts`     | Strip secrets (AWS, API keys, PEM, env vars) from prompts  |
-| labelUtils          | `domain/utils/labelUtils.ts`             | Check Linear issue labels for code-task/unclear markers    |
+| Utility             | File                                       | Purpose                                                    |
+| ------------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| sanitizePrompt      | `domain/utils/promptSanitization.ts`       | Strip secrets (AWS, API keys, PEM, env vars) from prompts  |
+| labelUtils          | `domain/utils/labelUtils.ts`               | Check Linear issue labels for code-task/unclear markers    |
 | metricsLogFormatter | `domain/formatters/metricsLogFormatter.ts` | Format TurnMetrics as visual log blocks for the transcript |
 
 ## Dependencies (Service-to-Service)
@@ -411,7 +411,7 @@ Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 | Variable                                 | Description                                  |
 | ---------------------------------------- | -------------------------------------------- |
 | `INTEXURAOS_WHATSAPP_SERVICE_URL`        | WhatsApp service URL                         |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Pub/Sub topic for WhatsApp messages          |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`  | Pub/Sub topic for WhatsApp messages          |
 | `INTEXURAOS_LINEAR_AGENT_URL`            | linear-agent service URL                     |
 | `INTEXURAOS_ACTIONS_AGENT_URL`           | actions-agent service URL                    |
 | `INTEXURAOS_SERVICE_URL`                 | This service's public URL (for webhook URLs) |
