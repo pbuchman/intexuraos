@@ -82,11 +82,11 @@ _None identified._
 
 ## Resolved Issues
 
-| Date       | Issue                                  | Resolution                                                                           |
-| ---------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
-| 2026-02-01 | Response contract violations           | All routes migrated to standardized `reply.ok()` / `reply.fail()` contract           |
-| 2026-02-01 | Direct pino() usage                    | Replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                   |
-| 2026-02-01 | Inconsistent internal error format     | Internal routes now return `{ success, error: { code, message } }`                   |
+| Date       | Issue                                  | Resolution                                                                            |
+| ---------- | -------------------------------------- | ------------------------------------------------------------------------------------- |
+| 2026-02-01 | Response contract violations           | All routes migrated to standardized `reply.ok()` / `reply.fail()` contract            |
+| 2026-02-01 | Direct pino() usage                    | Replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                     |
+| 2026-02-01 | Inconsistent internal error format     | Internal routes now return `{ success, error: { code, message } }`                    |
 | 2026-02-02 | 100% branch coverage not enforced      | Added v8 ignore exemptions for TypeScript-only safety branches; strict enforcement on |
 
 ---

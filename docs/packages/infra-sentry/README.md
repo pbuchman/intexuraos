@@ -246,7 +246,7 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 | Commit     | Description                                                      | When    |
 | ---------- | ---------------------------------------------------------------- | ------- |
 | `0338e04f` | Route pino logs to Dash0 via pino-opentelemetry-transport        | Recent  |
-| `620afa4b` | Rework dev log format to time \| level \| name \| msg \| key=val | Recent  |
+| `620afa4b` | Rework dev log format to time \                                  | level \ | name \ | msg \ | key=val | Recent |
 | `6063175b` | Add dev-mode log formatting for PM2 readability                  | Recent  |
 | `f10ebdbf` | Fix empty error objects in log output                            | 3 weeks |
 | `44017d5c` | Fix ESLint OOM with batched parallel lint runner                 | 3 weeks |
