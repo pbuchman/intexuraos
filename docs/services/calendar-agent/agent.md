@@ -284,19 +284,19 @@ interface ServiceFeedback {
         +----------+
 |                               |
 |  |
-|                               |  |
-| +----+-----+                  |
+|                               |                |
+| ----------------------------- |
 |                               |
 |                               | LLM extraction |
 |                               |
 | +----v-----+     +----------+ |
-|                               |  |  |  |
-|                               | ready | ----> | deleted | (after event creation) |
-|                               |  |  |  |
+|                               |                |  |  |
+|                               | ready          | ----> | deleted | (after event creation) |
+|                               |                |  |  |
 | +----------+     +----------+ |
-|                               |  |
+|                               |                |
 | +----------+                  |
-|                               |  |
+|                               |                |
   +---->|  failed  | (extraction error)
 |  |
 |  |
