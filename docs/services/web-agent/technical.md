@@ -188,20 +188,20 @@ interface PageSummary {
 | Field         | Type                  | Description                 |
 | ------------- | --------------------- | --------------------------- |
 | `url`         | `string`              | Original URL                |
-| `title`       | `string \| undefined` | og:title or HTML title      |
-| `description` | `string \| undefined` | og:description or meta desc |
-| `image`       | `string \| undefined` | Resolved absolute og:image  |
-| `favicon`     | `string \| undefined` | Favicon URL                 |
-| `siteName`    | `string \| undefined` | og:site_name                |
+| `title`       | `string \             | undefined`                  | og:title or HTML title |
+| `description` | `string \             | undefined`                  | og:description or meta desc |
+| `image`       | `string \             | undefined`                  | Resolved absolute og:image |
+| `favicon`     | `string \             | undefined`                  | Favicon URL |
+| `siteName`    | `string \             | undefined`                  | og:site_name |
 
 ### LinkPreviewError
 
-| Code            | Meaning                                |
-| --------------- | -------------------------------------- |
-| `FETCH_FAILED`  | HTTP errors or network issues          |
-| `TIMEOUT`       | Request exceeded timeout               |
-| `TOO_LARGE`     | Response over 2MB                      |
-| `INVALID_URL`   | Malformed URL or unsupported protocol  |
+| Code            | Meaning                                 |
+| --------------- | --------------------------------------- |
+| `FETCH_FAILED`  | HTTP errors or network issues           |
+| `TIMEOUT`       | Request exceeded timeout                |
+| `TOO_LARGE`     | Response over 2MB                       |
+| `INVALID_URL`   | Malformed URL or unsupported protocol   |
 | `ACCESS_DENIED` | HTTP 403 -- website blocked the request |
 
 ### PageSummaryError
@@ -327,7 +327,7 @@ Fetches and parses OpenGraph metadata.
 | `INTEXURAOS_SENTRY_DSN`               | Error tracking                     | Yes      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback | Optional |
 | `INTEXURAOS_ZAI_APP_API_KEY`          | Platform ZAI secondary fallback    | Optional |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`     | Dash0 OpenTelemetry endpoint       | Optional |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | Dash0 OpenTelemetry endpoint       | Optional |
 
 All five required vars are validated at startup via `validateRequiredEnv()`. Note that `INTEXURAOS_SENTRY_DSN` is validated separately with a direct check. Optional fallback keys are passed to `createUserServiceClient()` and are no-ops when unset.
 

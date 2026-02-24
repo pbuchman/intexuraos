@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field    | Value                                                                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------- |
-| **Name** | linear-agent                                                                                            |
-| **Role** | Linear Issue Management with AI Extraction, Webhook Sync, Auto-Trigger, and Programmatic Issue Control          |
+| Field    | Value                                                                                                                            |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Name** | linear-agent                                                                                                                     |
+| **Role** | Linear Issue Management with AI Extraction, Webhook Sync, Auto-Trigger, and Programmatic Issue Control                           |
 | **Goal** | Create and manage Linear issues from natural language, sync via webhooks, auto-trigger code tasks, and serve code agent requests |
 
 ---

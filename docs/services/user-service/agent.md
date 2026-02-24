@@ -284,14 +284,14 @@ const oauth = await getGoogleOAuthToken(userId);
 
 ## Error Handling
 
-| Error Code   | HTTP | Meaning                                 | Recovery Action                     |
-| ------------ | ---- | --------------------------------------- | ----------------------------------- |
-| UNAUTHORIZED | 401  | Invalid or missing token                | Refresh access token                |
-| FORBIDDEN    | 403  | Cannot access other user's data         | Use the authenticated user's own ID |
-| NOT_FOUND    | 404  | Resource not found (key, connection)    | Verify resource exists              |
-| CONFLICT     | 409  | Auth pending (device flow)              | Continue polling                    |
-| MISCONFIGURED| 503  | Service dependency not configured       | Check env vars                      |
-| DOWNSTREAM   | 502  | External service (Auth0, Google) failed | Retry with backoff                  |
+| Error Code    | HTTP | Meaning                                 | Recovery Action                     |
+| ------------- | ---- | --------------------------------------- | ----------------------------------- |
+| UNAUTHORIZED  | 401  | Invalid or missing token                | Refresh access token                |
+| FORBIDDEN     | 403  | Cannot access other user's data         | Use the authenticated user's own ID |
+| NOT_FOUND     | 404  | Resource not found (key, connection)    | Verify resource exists              |
+| CONFLICT      | 409  | Auth pending (device flow)              | Continue polling                    |
+| MISCONFIGURED | 503  | Service dependency not configured       | Check env vars                      |
+| DOWNSTREAM    | 502  | External service (Auth0, Google) failed | Retry with backoff                  |
 
 ---
 
@@ -322,14 +322,14 @@ Keys are validated using cheap, fast models to minimize cost:
 
 ## Dependencies
 
-| Service              | Why Needed                 | Failure Behavior                       |
-| -------------------- | -------------------------- | -------------------------------------- |
-| Auth0                | User authentication        | Auth endpoints return 503              |
-| Google OAuth         | Calendar token management  | OAuth endpoints return 503             |
-| app-settings-service | LLM pricing at startup     | Service fails to start                 |
-| Firebase Admin SDK   | Custom token generation    | Firebase token endpoint returns 500    |
-| Firestore            | All persistent state       | Endpoints return 500                   |
-| LLM APIs (5)         | Key validation and testing | Validation/test returns formatted error|
+| Service              | Why Needed                 | Failure Behavior                        |
+| -------------------- | -------------------------- | --------------------------------------- |
+| Auth0                | User authentication        | Auth endpoints return 503               |
+| Google OAuth         | Calendar token management  | OAuth endpoints return 503              |
+| app-settings-service | LLM pricing at startup     | Service fails to start                  |
+| Firebase Admin SDK   | Custom token generation    | Firebase token endpoint returns 500     |
+| Firestore            | All persistent state       | Endpoints return 500                    |
+| LLM APIs (5)         | Key validation and testing | Validation/test returns formatted error |
 
 ---
 

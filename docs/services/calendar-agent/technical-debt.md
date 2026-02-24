@@ -208,21 +208,21 @@ No deprecated API usage detected.
 
 ## Resolved Issues
 
-| Date       | Issue                                             | Resolution                                      |
-| ---------- | ------------------------------------------------- | ----------------------------------------------- |
+| Date       | Issue                                             | Resolution                                       |
+| ---------- | ------------------------------------------------- | ------------------------------------------------ |
 | 2026-02-20 | processAction returned internal /#/calendar URL   | Now uses Google Calendar htmlLink as resourceUrl |
-| 2026-02-16 | No distributed tracing across service boundaries  | Added Dash0 OpenTelemetry integration           |
-| 2026-02-15 | API key env vars inconsistently named             | Standardized to APP naming convention           |
-| 2026-02-15 | Single LLM with no fallback on unavailability     | Added multi-model with Zai fallback             |
-| 2026-01-31 | Failed extractions could not be dismissed/retried | Added DELETE and POST retry endpoints           |
-| 2026-01-30 | LLM returning invalid JSON caused immediate fail  | Added repair prompt mechanism (1 retry attempt) |
-| 2026-01-30 | Date-only format rejected for all-day events      | Updated schema to accept YYYY-MM-DD format      |
-| 2026-01-29 | Polish relative dates parsed incorrectly          | Added day of week to currentDate context        |
-| 2026-01-28 | Missing INTEXURAOS_GCP_PROJECT_ID env var         | Added to REQUIRED_ENV array                     |
-| 2026-01-26 | Dual user service clients (local + shared)        | Consolidated to single shared UserServiceClient |
-| 2026-01-26 | singleEvents not set for time-filtered queries    | Auto-set singleEvents=true with time filters    |
-| 2026-01-24 | Preview cleanup blocking event response           | Changed to non-blocking deletion                |
-| 2026-01-24 | Missing duration/isAllDay in preview              | Added computed fields                           |
+| 2026-02-16 | No distributed tracing across service boundaries  | Added Dash0 OpenTelemetry integration            |
+| 2026-02-15 | API key env vars inconsistently named             | Standardized to APP naming convention            |
+| 2026-02-15 | Single LLM with no fallback on unavailability     | Added multi-model with Zai fallback              |
+| 2026-01-31 | Failed extractions could not be dismissed/retried | Added DELETE and POST retry endpoints            |
+| 2026-01-30 | LLM returning invalid JSON caused immediate fail  | Added repair prompt mechanism (1 retry attempt)  |
+| 2026-01-30 | Date-only format rejected for all-day events      | Updated schema to accept YYYY-MM-DD format       |
+| 2026-01-29 | Polish relative dates parsed incorrectly          | Added day of week to currentDate context         |
+| 2026-01-28 | Missing INTEXURAOS_GCP_PROJECT_ID env var         | Added to REQUIRED_ENV array                      |
+| 2026-01-26 | Dual user service clients (local + shared)        | Consolidated to single shared UserServiceClient  |
+| 2026-01-26 | singleEvents not set for time-filtered queries    | Auto-set singleEvents=true with time filters     |
+| 2026-01-24 | Preview cleanup blocking event response           | Changed to non-blocking deletion                 |
+| 2026-01-24 | Missing duration/isAllDay in preview              | Added computed fields                            |
 
 ---
 

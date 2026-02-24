@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Attribute | Value                                                    |
-| --------- | -------------------------------------------------------- |
-| Name      | notes-agent                                              |
-| Role      | User-scoped note storage with tagging and source tracking|
+| Attribute | Value                                                                            |
+| --------- | -------------------------------------------------------------------------------- |
+| Name      | notes-agent                                                                      |
+| Role      | User-scoped note storage with tagging and source tracking                        |
 | Goal      | Capture and organize text notes from any IntexuraOS service or direct user input |
 
 ---
@@ -276,7 +276,7 @@ interface Note {
 | **Ownership**        | Users can only access their own notes (enforced at use case layer)               |
 | **Title Required**   | Title must be non-empty string (min length 1)                                    |
 | **Content Required** | Content must be present (can be empty string)                                    |
-| **Source Required**   | Source and sourceId must be non-empty strings                                   |
+| **Source Required**  | Source and sourceId must be non-empty strings                                    |
 | **No Status Update** | Status cannot be changed after creation via any endpoint                         |
 | **No Tag Filtering** | List endpoint returns all user notes; no server-side filter support              |
 | **No Pagination**    | List endpoint returns all notes in a single response                             |
