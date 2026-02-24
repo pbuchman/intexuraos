@@ -5,9 +5,11 @@ import { Timestamp } from '@google-cloud/firestore';
  * Design reference: Lines 1207-1212
  * - opus: Force Opus model
  * - auto: Automatic model selection (default)
+ * - sonnet: Force Sonnet model
+ * - minimax: Use MiniMax M2.5 model
  * - glm: Use Z.ai GLM model
  */
-export type WorkerType = 'opus' | 'auto' | 'glm';
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
 
 /**
  * Worker location for routing.
