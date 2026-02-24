@@ -64,7 +64,7 @@ export interface ServiceContainer {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
-  userLookupService: UserLookupService;
+  userLookupService?: UserLookupService;
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   turnMetricsRepo: TurnMetricsRepository;

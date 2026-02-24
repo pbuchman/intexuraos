@@ -88,6 +88,15 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
 
     /* v8 ignore start -- test-infra: fire-and-forget dispatch path, null-task branch not reachable via route integration tests @preserve */
     if (task === null) {
+      // UserLookupService not configured - skip task creation
+      if (!services.userLookupService) {
+        logger.warn(
+          { repository: event.repository, prNumber: event.pullRequestNumber },
+          'UserLookupService not configured, skipping task creation'
+        );
+        return;
+      }
+
       // Create new task for PR comment
       const createResult = await createTaskForPR(
         {
