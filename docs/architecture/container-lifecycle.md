@@ -25,12 +25,15 @@ The orchestrator runs code tasks inside isolated Docker containers. Each task ge
 
 - A **git worktree** — isolated checkout of the repository
 - A **Docker container** — running Claude with mounted worktree and secrets
-- **Mounted volumes**:
+- **Bind mounts**:
   - `/repo` — the git worktree (read-write)
   - `/secrets` — task-specific secrets (read-only)
-  - `/home/claude/.claude` — Claude session state
-  - `/home/claude/pnpm-store` — shared pnpm cache
-  - `/tmp` — temporary files
+  - `/home/claude/.claude` — Claude session state (or shared credentials path)
+  - `/home/claude/pnpm-store` — shared pnpm cache (read-write)
+- **Tmpfs mounts** (ephemeral, container-local):
+  - `/tmp` — temporary files (2GB, noexec)
+  - `/home/claude` — Claude home directory (500MB, noexec)
+  - `/repo/node_modules` — Linux-native node_modules (4GB, exec) — shadows the macOS host's bind-mounted node_modules so `pnpm install` produces Linux-compatible binaries
 
 The container runs as the **host user** (UID/GID match) to avoid permission issues with bind-mounted files.
 
@@ -112,7 +115,7 @@ Task Dispatch Request
 //    - Image: claude-worker:latest
 //    - User: host UID:GID (for permission compatibility)
 //    - Network: claude-worker-net
-//    - Tmpfs mounts for /tmp, /home/claude, /repo/node_modules
+//    - Tmpfs mounts: /tmp (2GB), /home/claude (500MB), /repo/node_modules (4GB)
 // 5. Start container
 // 6. Wait for worker ready (managed mode)
 ```
@@ -143,16 +146,16 @@ The container receives these environment variables:
 
 ### Timeout Constants
 
-| Constant                          | Value            | Location                  | Description                            |
-| --------------------------------- | ---------------- | ------------------------- | -------------------------------------- |
-| `TASK_TIMEOUT_WARNING_MS`         | 115 min (1h 55m) | `task-dispatcher.ts:25`   | Warning log before hard kill           |
-| `TASK_TIMEOUT_KILL_MS`            | 120 min (2h)     | `task-dispatcher.ts:26`   | Hard kill timeout                      |
-| `COMPLETION_CHECK_INTERVAL_MS`    | 30s              | `task-dispatcher.ts:27`   | Poll interval for completion           |
-| `ACTIVITY_HEARTBEAT_THRESHOLD_MS` | 30s              | `task-dispatcher.ts:28`   | Heartbeat activity threshold           |
-| `workerReadyTimeoutMs`            | 600s (10 min)    | `docker-provider.ts:829`  | Container readiness timeout            |
-| `ZOMBIE_THRESHOLD_MINUTES`        | 30 min           | `detectZombieTasks.ts:10` | Inactivity before zombie detection     |
-| `MAX_AGE_MS` (cleanup)            | 24 hours         | `docker-provider.ts:82`   | Orphan container cleanup age threshold |
-| `pnpm install timeout`            | 5 min            | `worktree-manager.ts:196` | Dependency installation timeout        |
+| Constant                          | Value            | File                       | Description                            |
+| --------------------------------- | ---------------- | -------------------------- | -------------------------------------- |
+| `TASK_TIMEOUT_WARNING_MS`         | 115 min (1h 55m) | `task-dispatcher.ts`       | Warning log before hard kill           |
+| `TASK_TIMEOUT_KILL_MS`            | 120 min (2h)     | `task-dispatcher.ts`       | Hard kill timeout                      |
+| `COMPLETION_CHECK_INTERVAL_MS`    | 30s              | `task-dispatcher.ts`       | Poll interval for completion           |
+| `ACTIVITY_HEARTBEAT_THRESHOLD_MS` | 30s              | `task-dispatcher.ts`       | Heartbeat activity threshold           |
+| `workerReadyTimeoutMs`            | 600s (10 min)    | `docker-provider.ts`       | Container readiness timeout            |
+| `ZOMBIE_THRESHOLD_MINUTES`        | 30 min           | `detectZombieTasks.ts`     | Inactivity before zombie detection     |
+| `MAX_AGE_MS` (cleanup)            | 24 hours         | `docker-provider.ts`       | Orphan container cleanup age threshold |
+| `pnpm install timeout`            | 5 min            | `worktree-manager.ts`      | Dependency installation timeout        |
 
 ### Timeout Flow
 
@@ -206,10 +209,11 @@ Task Starts
 The orchestrator can preserve containers for debugging:
 
 ```typescript
-// docker-provider.ts:714
+// docker-provider.ts — preserveWorker()
 async preserveWorker(taskId: string): Promise<void> {
   // Moves worker from `workers` Map to `preservedWorkers` Map
-  // Clears sensitive files but keeps container alive
+  // Clears sensitive files (individually, not rm -rf — preserves bind mount inodes)
+  // Keeps container alive for debugging
 }
 ```
 
@@ -221,16 +225,21 @@ Preserved workers are tracked in memory and listed via `listPreservedWorkers()`.
 
 ### 1. Task Completion
 
-**Flow:** `teardownAttempt(taskId, keepSession)` → `destroyWorker(taskId)`
+Container cleanup happens during **finalization**, not during attempt teardown. The `teardownAttempt` method only destroys when `keepSession` is `false`:
 
 ```typescript
-// task-dispatcher.ts:1155
+// task-dispatcher.ts — teardownAttempt()
 private async teardownAttempt(taskId: string, keepSession: boolean): Promise<void> {
-  await this.isolation.provider.destroyWorker(taskId);
+  if (!keepSession) {
+    await this.isolation.provider.destroyWorker(taskId);
+    await this.isolation.provider.cleanupTaskSession?.(taskId);
+  }
 }
 ```
 
-By default, containers are destroyed on completion. If `preserveFailedContainers` is `true`, failed containers are preserved.
+Most internal call sites pass `keepSession=true` (between managed attempts). The actual container destruction happens in `finalizeTask()`, which calls `teardownAttempt(taskId, false)` — unless `preserveFailedContainers` is enabled, in which case it calls `preserveWorker()` instead.
+
+If `preserveFailedContainers` is `true`, containers are preserved on `failed`, `interrupted`, **and** `completed` statuses.
 
 ### 2. Cancellation
 
@@ -251,7 +260,7 @@ As described in [Timeout Flow](#timeout-flow):
 On orchestrator startup, old containers are cleaned up:
 
 ```typescript
-// docker-provider.ts:81
+// docker-provider.ts — cleanupOrphanedContainers()
 async cleanupOrphanedContainers(): Promise<void> {
   // Removes containers older than 24 hours
   // Prevents name collisions on restart
@@ -302,7 +311,7 @@ Resume Request (continueSession=true)
 ### Orphan Detection Code
 
 ```typescript
-// docker-provider.ts:203
+// docker-provider.ts — createWorker() orphan detection
 if (config.continueSession === true) {
   const orphanContainer = this.docker.getContainer(`claude-worker-${taskId}`);
   const orphanInfo = await orphanContainer.inspect();
@@ -366,6 +375,10 @@ When the orchestrator restarts:
 
 ### Recovery Flow
 
+On startup, the orchestrator runs `cleanupOrphanedContainers()` to remove containers older than 24 hours. However, there is **no bulk recovery scan** of running tasks from Firestore.
+
+Orphan detection is **reactive and per-task**: it happens inside `createWorker()` when a resume request arrives with `continueSession=true`. The orchestrator does not proactively scan for orphaned containers on startup.
+
 ```
 Orchestrator Starts
         │
@@ -373,18 +386,16 @@ Orchestrator Starts
 ┌───────────────────┐
 │ cleanupOrphaned  │
 │ Containers()      │ ◄── Removes containers > 24h old
-└─────────┬─────────┘
-          │
-          ▼
+└───────────────────┘
+
+(Later, when a resume request arrives for a specific task:)
+
+Resume Request (continueSession=true)
+        │
+        ▼
 ┌───────────────────┐
-│ For each running  │
-│ task in Firestore│
-└─────────┬─────────┘
-          │
-          ▼
-┌───────────────────┐
+│ createWorker()   │
 │ Orphan Detection │ ◄── Check if container still running
-│ (continueSession) │
 └─────────┬─────────┘
           │
     ┌─────┴─────┐
@@ -394,10 +405,12 @@ Orchestrator Starts
     Yes   │ No
    ┌──────┴──────┐
    ▼             ▼
-Reuse      Mark task
-container  as failed
-           (no recovery)
+Reuse      Remove stopped
+container  container &
+           create fresh
 ```
+
+Tasks where the container died and no resume is requested are eventually caught by **zombie detection** (30 min inactivity threshold in the code-agent).
 
 ---
 
@@ -452,28 +465,32 @@ container  as failed
 
 ## Configuration
 
-### Hardcoded Values (Not Configurable)
+### Hardcoded Constants
 
-| Value                     | Location                  | Default |
-| ------------------------- | ------------------------- | ------- |
-| Task timeout (kill)       | `task-dispatcher.ts:26`   | 120 min |
-| Task timeout (warning)    | `task-dispatcher.ts:25`   | 115 min |
-| Completion check interval | `task-dispatcher.ts:27`   | 30s     |
-| Zombie threshold          | `detectZombieTasks.ts:10` | 30 min  |
-| Cleanup max age           | `docker-provider.ts:82`   | 24h     |
-| Worker ready timeout      | `docker-provider.ts:829`  | 600s    |
+| Value                     | Location                                  | Default |
+| ------------------------- | ----------------------------------------- | ------- |
+| Task timeout (kill)       | `TASK_TIMEOUT_KILL_MS`                    | 120 min |
+| Task timeout (warning)    | `TASK_TIMEOUT_WARNING_MS`                 | 115 min |
+| Completion check interval | `COMPLETION_CHECK_INTERVAL_MS`            | 30s     |
+| Activity heartbeat        | `ACTIVITY_HEARTBEAT_THRESHOLD_MS`         | 30s     |
+| Zombie threshold          | `ZOMBIE_THRESHOLD_MINUTES`                | 30 min  |
+| Cleanup max age           | `MAX_AGE_MS` in cleanupOrphanedContainers | 24h     |
+| Worker ready timeout      | `workerReadyTimeoutMs` default            | 600s    |
 
-### Configurable Values
+### Config Defaults (overridable via `DockerProviderConfig`)
 
-| Value                      | Config Location         | Environment Variable |
-| -------------------------- | ----------------------- | -------------------- |
-| Docker image               | `docker-provider.ts:25` | N/A (hardcoded)      |
-| Max concurrent             | `docker-provider.ts:29` | N/A (hardcoded)      |
-| Image pull policy          | `docker-provider.ts:27` | N/A (hardcoded)      |
-| Network name               | `docker-provider.ts:28` | N/A (hardcoded)      |
-| Keep containers alive      | `docker-provider.ts:33` | N/A (hardcoded)      |
-| Secrets base path          | `docker-provider.ts:31` | N/A (hardcoded)      |
-| Preserve failed containers | `task-dispatcher.ts:59` | N/A (hardcoded)      |
+These are defaults in `DEFAULT_CONFIG` — overridable through the constructor's `Partial<DockerProviderConfig>` parameter, but not currently exposed as environment variables:
+
+| Value                      | Default                                 |
+| -------------------------- | --------------------------------------- |
+| Docker image (`imageName`) | `claude-worker:latest` (GAR)            |
+| Max concurrent             | 4                                       |
+| Image pull policy          | `always`                                |
+| Network name               | `claude-worker-net`                     |
+| Keep containers alive      | `false`                                 |
+| Secrets base path          | `/tmp/claude-secrets`                   |
+| Managed attempts mode      | `true`                                  |
+| Preserve failed containers | `false` (via `CompletionControlConfig`) |
 
 ### Future Considerations
 
