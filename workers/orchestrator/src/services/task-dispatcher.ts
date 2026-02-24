@@ -48,6 +48,7 @@ export interface IsolationConfig {
     LINEAR_API_KEY: string;
     SENTRY_AUTH_TOKEN: string;
     ZAI_API_KEY: string;
+    MINIMAX_API_KEY: string;
   };
   gcpSaKeyPath: string;
   githubAppKeyPath: string;

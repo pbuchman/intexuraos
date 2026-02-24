@@ -15,6 +15,8 @@ import { useAuth } from '@/context';
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = [
   { id: 'auto', name: 'Auto', description: 'Automatically select the best model' },
   { id: 'opus', name: 'Opus', description: 'Claude Opus - most capable for complex tasks' },
+  { id: 'sonnet', name: 'Sonnet', description: 'Claude Sonnet - fast and capable' },
+  { id: 'minimax', name: 'MiniMax', description: 'MiniMax M2.5 - alternative model' },
   { id: 'glm', name: 'GLM', description: 'GLM - alternative model' },
 ];
 

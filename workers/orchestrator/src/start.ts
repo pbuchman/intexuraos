@@ -155,6 +155,7 @@ function validatePortAvailable(port: number): void {
 async function validateWorkerApiKeys(
   credentialMonitor: CredentialMonitor,
   zaiKey: string,
+  minimaxKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
@@ -198,6 +199,30 @@ async function validateWorkerApiKeys(
       logger.warn(
         { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
         'ZAI_API_KEY validation request failed (network issue) — key may still be valid'
+      );
+    }
+  }
+
+  if (minimaxKey !== '') {
+    const keySuffix = suffix(minimaxKey);
+    try {
+      const resp = await fetch('https://api.minimax.io/anthropic/v1/models', {
+        method: 'GET',
+        headers: { 'x-api-key': minimaxKey, 'anthropic-version': '2023-06-01' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (resp.ok) {
+        logger.info({ apiKey: keySuffix }, 'MINIMAX_API_KEY validated successfully');
+      } else {
+        logger.error(
+          { status: resp.status, apiKey: keySuffix },
+          'MINIMAX_API_KEY validation failed — minimax tasks will fail'
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
+        'MINIMAX_API_KEY validation request failed (network issue) — key may still be valid'
       );
     }
   }
@@ -499,6 +524,7 @@ async function bootstrap(): Promise<void> {
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_APP_API_KEY'),
+    MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
@@ -518,7 +544,13 @@ async function bootstrap(): Promise<void> {
   };
 
   // Validate API keys asynchronously (non-blocking, warns on failure)
-  void validateWorkerApiKeys(credentialMonitor, isolationConfig.getSecrets().ZAI_API_KEY, logger);
+  const secrets = isolationConfig.getSecrets();
+  void validateWorkerApiKeys(
+    credentialMonitor,
+    secrets.ZAI_API_KEY,
+    secrets.MINIMAX_API_KEY,
+    logger
+  );
 
   const completionMaxAttemptsRaw = parseInt(
     getOptionalEnv('INTEXURAOS_COMPLETION_MAX_ATTEMPTS', String(DEFAULT_COMPLETION_MAX_ATTEMPTS)),
