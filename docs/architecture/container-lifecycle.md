@@ -121,21 +121,21 @@ Task Dispatch Request
 
 The container receives these environment variables:
 
-| Variable | Description |
-| -------- | ----------- |
-| `TASK_ID` | Unique task identifier |
-| `ANTHROPIC_API_KEY` | Claude API key (or use shared creds) |
-| `ANTHROPIC_BASE_URL` | API endpoint URL |
-| `ANTHROPIC_MODEL` | Model to use (if specified) |
-| `LINEAR_API_KEY` | Linear API key |
-| `SENTRY_AUTH_TOKEN` | Sentry auth token |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP SA key |
-| `CLAUDE_PROJECT_DIR` | Always `/repo` |
-| `CLAUDE_WORKER_MODE` | Always `1` |
-| `CLAUDE_MANAGED_MODE` | `1` if managed attempts enabled |
-| `CLAUDE_CONTINUE` | `1` if resuming (continueSession) |
-| `GIT_USER_NAME` | Git user name (if configured) |
-| `GIT_USER_EMAIL` | Git user email (if configured) |
+| Variable                         | Description                          |
+| -------------------------------- | ------------------------------------ |
+| `TASK_ID`                        | Unique task identifier               |
+| `ANTHROPIC_API_KEY`              | Claude API key (or use shared creds) |
+| `ANTHROPIC_BASE_URL`             | API endpoint URL                     |
+| `ANTHROPIC_MODEL`                | Model to use (if specified)          |
+| `LINEAR_API_KEY`                 | Linear API key                       |
+| `SENTRY_AUTH_TOKEN`              | Sentry auth token                    |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP SA key                   |
+| `CLAUDE_PROJECT_DIR`             | Always `/repo`                       |
+| `CLAUDE_WORKER_MODE`             | Always `1`                           |
+| `CLAUDE_MANAGED_MODE`            | `1` if managed attempts enabled      |
+| `CLAUDE_CONTINUE`                | `1` if resuming (continueSession)    |
+| `GIT_USER_NAME`                  | Git user name (if configured)        |
+| `GIT_USER_EMAIL`                 | Git user email (if configured)       |
 
 ---
 
@@ -143,16 +143,16 @@ The container receives these environment variables:
 
 ### Timeout Constants
 
-| Constant | Value | Location | Description |
-| -------- | ----- |----------| ----------- |
-| `TASK_TIMEOUT_WARNING_MS` | 115 min (1h 55m) | `task-dispatcher.ts:25` | Warning log before hard kill |
-| `TASK_TIMEOUT_KILL_MS` | 120 min (2h) | `task-dispatcher.ts:26` | Hard kill timeout |
-| `COMPLETION_CHECK_INTERVAL_MS` | 30s | `task-dispatcher.ts:27` | Poll interval for completion |
-| `ACTIVITY_HEARTBEAT_THRESHOLD_MS` | 30s | `task-dispatcher.ts:28` | Heartbeat activity threshold |
-| `workerReadyTimeoutMs` | 600s (10 min) | `docker-provider.ts:829` | Container readiness timeout |
-| `ZOMBIE_THRESHOLD_MINUTES` | 30 min | `detectZombieTasks.ts:10` | Inactivity before zombie detection |
-| `MAX_AGE_MS` (cleanup) | 24 hours | `docker-provider.ts:82` | Orphan container cleanup age threshold |
-| `pnpm install timeout` | 5 min | `worktree-manager.ts:196` | Dependency installation timeout |
+| Constant                          | Value            | Location                  | Description                            |
+| --------------------------------- | ---------------- | ------------------------- | -------------------------------------- |
+| `TASK_TIMEOUT_WARNING_MS`         | 115 min (1h 55m) | `task-dispatcher.ts:25`   | Warning log before hard kill           |
+| `TASK_TIMEOUT_KILL_MS`            | 120 min (2h)     | `task-dispatcher.ts:26`   | Hard kill timeout                      |
+| `COMPLETION_CHECK_INTERVAL_MS`    | 30s              | `task-dispatcher.ts:27`   | Poll interval for completion           |
+| `ACTIVITY_HEARTBEAT_THRESHOLD_MS` | 30s              | `task-dispatcher.ts:28`   | Heartbeat activity threshold           |
+| `workerReadyTimeoutMs`            | 600s (10 min)    | `docker-provider.ts:829`  | Container readiness timeout            |
+| `ZOMBIE_THRESHOLD_MINUTES`        | 30 min           | `detectZombieTasks.ts:10` | Inactivity before zombie detection     |
+| `MAX_AGE_MS` (cleanup)            | 24 hours         | `docker-provider.ts:82`   | Orphan container cleanup age threshold |
+| `pnpm install timeout`            | 5 min            | `worktree-manager.ts:196` | Dependency installation timeout        |
 
 ### Timeout Flow
 
@@ -186,20 +186,20 @@ Task Starts
 
 ### Docker Provider States
 
-| State | Description |
-| ----- | ----------- |
-| `running` | Container actively processing task |
-| `completed` | Container exited with code 0 |
-| `failed` | Container exited with non-zero code |
-| `timeout` | Container killed due to timeout |
+| State       | Description                         |
+| ----------- | ----------------------------------- |
+| `running`   | Container actively processing task  |
+| `completed` | Container exited with code 0        |
+| `failed`    | Container exited with non-zero code |
+| `timeout`   | Container killed due to timeout     |
 
 ### Orchestrator Internal States
 
-| State | Description |
-| ----- | ----------- |
-| `active` | Task in progress, container running |
+| State       | Description                                         |
+| ----------- | --------------------------------------------------- |
+| `active`    | Task in progress, container running                 |
 | `preserved` | Container kept for debugging (not in `workers` Map) |
-| `destroyed` | Container removed |
+| `destroyed` | Container removed                                   |
 
 ### Preserved Workers
 
@@ -351,18 +351,18 @@ When the orchestrator restarts:
 
 ### What Survives Restart
 
-| Component | Survives? | Notes |
-| --------- | --------- | ----- |
-| Docker containers | ✅ Yes | Containers run independently |
-| Git worktrees | ✅ Yes | Filesystem persists |
-| Firestore tasks | ✅ Yes | Database persists |
+| Component         | Survives? | Notes                        |
+| ----------------- | --------- | ---------------------------- |
+| Docker containers | ✅ Yes     | Containers run independently |
+| Git worktrees     | ✅ Yes     | Filesystem persists          |
+| Firestore tasks   | ✅ Yes     | Database persists            |
 
 ### What Is Lost
 
-| Component | Survives? | Notes |
-| --------- | --------- | ----- |
-| In-memory Maps (workers, preservedWorkers) | ❌ No | Recreated on startup |
-| Task state in orchestrator | ❌ No | Read from Firestore |
+| Component                                  | Survives? | Notes                |
+| ------------------------------------------ | --------- | -------------------- |
+| In-memory Maps (workers, preservedWorkers) | ❌ No      | Recreated on startup |
+| Task state in orchestrator                 | ❌ No      | Read from Firestore  |
 
 ### Recovery Flow
 
@@ -454,26 +454,26 @@ container  as failed
 
 ### Hardcoded Values (Not Configurable)
 
-| Value | Location | Default |
-| ---- | -------- | ------- |
-| Task timeout (kill) | `task-dispatcher.ts:26` | 120 min |
-| Task timeout (warning) | `task-dispatcher.ts:25` | 115 min |
-| Completion check interval | `task-dispatcher.ts:27` | 30s |
-| Zombie threshold | `detectZombieTasks.ts:10` | 30 min |
-| Cleanup max age | `docker-provider.ts:82` | 24h |
-| Worker ready timeout | `docker-provider.ts:829` | 600s |
+| Value                     | Location                  | Default |
+| ------------------------- | ------------------------- | ------- |
+| Task timeout (kill)       | `task-dispatcher.ts:26`   | 120 min |
+| Task timeout (warning)    | `task-dispatcher.ts:25`   | 115 min |
+| Completion check interval | `task-dispatcher.ts:27`   | 30s     |
+| Zombie threshold          | `detectZombieTasks.ts:10` | 30 min  |
+| Cleanup max age           | `docker-provider.ts:82`   | 24h     |
+| Worker ready timeout      | `docker-provider.ts:829`  | 600s    |
 
 ### Configurable Values
 
-| Value | Config Location | Environment Variable |
-| ----- | --------------- | -------------------- |
-| Docker image | `docker-provider.ts:25` | N/A (hardcoded) |
-| Max concurrent | `docker-provider.ts:29` | N/A (hardcoded) |
-| Image pull policy | `docker-provider.ts:27` | N/A (hardcoded) |
-| Network name | `docker-provider.ts:28` | N/A (hardcoded) |
-| Keep containers alive | `docker-provider.ts:33` | N/A (hardcoded) |
-| Secrets base path | `docker-provider.ts:31` | N/A (hardcoded) |
-| Preserve failed containers | `task-dispatcher.ts:59` | N/A (hardcoded) |
+| Value                      | Config Location         | Environment Variable |
+| -------------------------- | ----------------------- | -------------------- |
+| Docker image               | `docker-provider.ts:25` | N/A (hardcoded)      |
+| Max concurrent             | `docker-provider.ts:29` | N/A (hardcoded)      |
+| Image pull policy          | `docker-provider.ts:27` | N/A (hardcoded)      |
+| Network name               | `docker-provider.ts:28` | N/A (hardcoded)      |
+| Keep containers alive      | `docker-provider.ts:33` | N/A (hardcoded)      |
+| Secrets base path          | `docker-provider.ts:31` | N/A (hardcoded)      |
+| Preserve failed containers | `task-dispatcher.ts:59` | N/A (hardcoded)      |
 
 ### Future Considerations
 
@@ -491,12 +491,12 @@ The following could be made configurable in future iterations:
 
 ### Key Files
 
-| File | Purpose |
-| ---- | -------- |
-| `workers/orchestrator/src/services/task-dispatcher.ts` | Task orchestration, timeout management |
-| `workers/orchestrator/src/services/isolation/docker-provider.ts` | Docker container lifecycle |
-| `workers/orchestrator/src/services/worktree-manager.ts` | Git worktree management |
-| `apps/code-agent/src/domain/usecases/detectZombieTasks.ts` | Zombie task detection |
+| File                                                             | Purpose                                |
+| ---------------------------------------------------------------- | -------------------------------------- |
+| `workers/orchestrator/src/services/task-dispatcher.ts`           | Task orchestration, timeout management |
+| `workers/orchestrator/src/services/isolation/docker-provider.ts` | Docker container lifecycle             |
+| `workers/orchestrator/src/services/worktree-manager.ts`          | Git worktree management                |
+| `apps/code-agent/src/domain/usecases/detectZombieTasks.ts`       | Zombie task detection                  |
 
 ### Related Issues
 
