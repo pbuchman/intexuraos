@@ -16,6 +16,7 @@ import {
   shouldProcessRepository,
 } from '../../infra/github-event-parser.js';
 import { sendTaskMessage } from '../../domain/usecases/sendTaskMessage.js';
+import { createTaskForPR } from '../../domain/usecases/createTaskForPR.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
 import type { Logger } from 'pino';
@@ -87,9 +88,35 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
 
     /* v8 ignore start -- test-infra: fire-and-forget dispatch path, null-task branch not reachable via route integration tests @preserve */
     if (task === null) {
+      // Create new task for PR comment
+      const createResult = await createTaskForPR(
+        {
+          logger: services.logger,
+          codeTaskRepo: services.codeTaskRepo,
+          userLookupService: services.userLookupService,
+          linearIssueService: services.linearIssueService,
+          firestore: services.firestore,
+        },
+        {
+          repository: event.repository,
+          prNumber: event.pullRequestNumber,
+          senderLogin: event.senderLogin,
+          comment: event.body ?? '',
+          eventId: event.id,
+        }
+      );
+
+      if (!createResult.ok) {
+        logger.error(
+          { repository: event.repository, prNumber: event.pullRequestNumber, error: createResult.error },
+          'Failed to create task from PR comment'
+        );
+        return;
+      }
+
       logger.info(
-        { repository: event.repository, prNumber: event.pullRequestNumber },
-        'No task found for PR, ignoring comment'
+        { taskId: createResult.value.taskId, repository: event.repository, prNumber: event.pullRequestNumber },
+        'Created new task from PR comment'
       );
       return;
     }
