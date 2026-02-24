@@ -44,15 +44,9 @@ describe('calendarServiceHttpClient', () => {
           action: {
             id: 'action-123',
             userId: 'user-456',
-            commandId: 'cmd-789',
-            type: 'calendar',
-            confidence: 1,
             title: 'Meeting at 3pm',
-            status: 'pending',
-            payload: {},
-            createdAt: '2025-01-15T10:00:00Z',
-            updatedAt: '2025-01-15T10:00:00Z',
           },
+          text: 'Meeting at 3pm',
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
@@ -65,7 +59,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
@@ -91,7 +85,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
@@ -116,7 +110,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
@@ -136,7 +130,7 @@ describe('calendarServiceHttpClient', () => {
         .reply(401, 'Unauthorized');
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -156,7 +150,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
@@ -177,7 +171,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
@@ -196,7 +190,7 @@ describe('calendarServiceHttpClient', () => {
         .reply(403, 'Forbidden');
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -213,7 +207,7 @@ describe('calendarServiceHttpClient', () => {
         .reply(404, 'Not Found');
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -230,7 +224,7 @@ describe('calendarServiceHttpClient', () => {
         .reply(500, 'Internal Server Error');
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -247,7 +241,7 @@ describe('calendarServiceHttpClient', () => {
         .reply(502, 'Bad Gateway');
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -264,7 +258,7 @@ describe('calendarServiceHttpClient', () => {
         .reply(503, 'Service Unavailable');
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -285,7 +279,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -304,7 +298,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -323,7 +317,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -340,7 +334,7 @@ describe('calendarServiceHttpClient', () => {
         .reply(200, {});
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -357,7 +351,7 @@ describe('calendarServiceHttpClient', () => {
         .reply(200, []);
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
@@ -376,7 +370,7 @@ describe('calendarServiceHttpClient', () => {
         .replyWithError({ code: 'ECONNREFUSED', message: 'Connection refused' });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
@@ -393,7 +387,7 @@ describe('calendarServiceHttpClient', () => {
         .replyWithError({ code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND' });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
@@ -410,7 +404,7 @@ describe('calendarServiceHttpClient', () => {
         .replyWithError({ name: 'AbortError', message: 'The operation was aborted' });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
@@ -441,7 +435,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      await client.processAction({ action });
+      await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
     });
@@ -466,7 +460,7 @@ describe('calendarServiceHttpClient', () => {
         internalAuthToken: customToken,
         logger: createMockLogger(),
       });
-      await client.processAction({ action });
+      await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
     });
@@ -489,7 +483,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
@@ -511,7 +505,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
@@ -534,7 +528,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
@@ -560,7 +554,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createClient();
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
@@ -581,7 +575,7 @@ describe('calendarServiceHttpClient', () => {
         });
 
       const client = createCalendarServiceHttpClient({ baseUrl, internalAuthToken });
-      const result = await client.processAction({ action });
+      const result = await client.processAction({ action, text: action.title });
 
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
