@@ -396,7 +396,7 @@ Internal HTTP calls verified against both caller docs and callee code.
 | Path      | `/internal/actions/:actionId/status`                                                                                                                 |
 | Code file | `apps/actions-agent/src/routes/internalRoutes.ts`                                                                                                    |
 | Auth      | X-Internal-Auth                                                                                                                                      |
-| Body      | `{ resource_status: 'dispatched' \| 'running' \| 'completed' \| 'failed' \| 'cancelled', resource_result?: { prUrl?: string; error?: string } }`     |
+| Body      | `{ resource_status: 'dispatched' \                                                                                                                   | 'running' \ | 'completed' \ | 'failed' \ | 'cancelled', resource_result?: { prUrl?: string; error?: string } }` |
 | Purpose   | Updates action resource status — used as a callback by code-agent to report task lifecycle events                                                    |
 | Risk      | code-agent calls this endpoint in production; if actions-agent changes the path or body schema, there is no doc contract to signal a breaking change |
 | Fix       | Add to Internal Endpoints table in `docs/services/actions-agent/technical.md`                                                                        |

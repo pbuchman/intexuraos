@@ -314,15 +314,15 @@ Only works for status: `classified`.
 
 ## Troubleshooting
 
-| Symptom                            | Cause                      | Solution                                                |
-| ---------------------------------- | -------------------------- | ------------------------------------------------------- |
-| Status `pending_classification`    | No LLM API key            | Configure Google or Zai key in user-service             |
-| URL classified as `research`       | Old prompt version         | Check `promptVersion` in response; redeploy if outdated |
-| Polish phrases not recognized      | Old prompt version         | Check `promptVersion` in response; redeploy if outdated |
-| "Cannot delete classified command" | Wrong operation            | Use PATCH to archive instead                            |
-| Status `failed`                    | LLM error or actions-agent | Check logs, delete and retry                            |
-| Duplicate command (isNew: false)   | Same externalId reprocessed | Normal idempotency behavior                            |
-| 401 Unauthorized                   | Expired or invalid token   | Refresh Auth0 access token                              |
+| Symptom                            | Cause                       | Solution                                                |
+| ---------------------------------- | --------------------------- | ------------------------------------------------------- |
+| Status `pending_classification`    | No LLM API key              | Configure Google or Zai key in user-service             |
+| URL classified as `research`       | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
+| Polish phrases not recognized      | Old prompt version          | Check `promptVersion` in response; redeploy if outdated |
+| "Cannot delete classified command" | Wrong operation             | Use PATCH to archive instead                            |
+| Status `failed`                    | LLM error or actions-agent  | Check logs, delete and retry                            |
+| Duplicate command (isNew: false)   | Same externalId reprocessed | Normal idempotency behavior                             |
+| 401 Unauthorized                   | Expired or invalid token    | Refresh Auth0 access token                              |
 
 ---
 

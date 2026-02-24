@@ -149,8 +149,9 @@ export class WebhookClient {
     }
 
     // Update state
-    state.pendingWebhooks = updatedPending;
-    await this.statePersistence.save(state);
+    await this.statePersistence.modify((s) => {
+      s.pendingWebhooks = updatedPending;
+    });
   }
 
   async getPendingCount(): Promise<number> {
@@ -243,9 +244,8 @@ export class WebhookClient {
   }
 
   private async addToPendingQueue(webhook: PendingWebhook): Promise<void> {
-    const state = await this.statePersistence.load();
-
-    state.pendingWebhooks.push(webhook);
-    await this.statePersistence.save(state);
+    await this.statePersistence.modify((state) => {
+      state.pendingWebhooks.push(webhook);
+    });
   }
 }

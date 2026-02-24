@@ -223,6 +223,45 @@ describe('StatePersistence', () => {
     });
   });
 
+  describe('modify', () => {
+    it('should serialize concurrent writes via mutex', async () => {
+      const nestedDir = join(tempDir, 'modify-test');
+      const nestedPath = join(nestedDir, 'state.json');
+      const persistence = new StatePersistence(nestedPath, mockLogger);
+
+      // Seed with empty state
+      await persistence.save({ tasks: {}, githubToken: null, pendingWebhooks: [] });
+
+      // Run 10 concurrent modify calls, each adding a different task
+      await Promise.all(
+        Array.from({ length: 10 }, (_, i) =>
+          persistence.modify((state) => {
+            state.tasks[`task-${String(i)}`] = {
+              taskId: `task-${String(i)}`,
+              workerType: 'opus',
+              prompt: `Prompt ${String(i)}`,
+              repository: 'test/repo',
+              baseBranch: 'main',
+              webhookUrl: 'https://example.com',
+              webhookSecret: 'secret',
+              status: 'running',
+              containerId: `c-${String(i)}`,
+              worktreePath: `/tmp/wt-${String(i)}`,
+              startedAt: new Date().toISOString(),
+              linearIssueLabels: [],
+            };
+          })
+        )
+      );
+
+      const finalState = await persistence.load();
+      expect(Object.keys(finalState.tasks)).toHaveLength(10);
+      for (let i = 0; i < 10; i++) {
+        expect(finalState.tasks[`task-${String(i)}`]).toBeDefined();
+      }
+    });
+  });
+
   describe('detectOrphanWorktrees', () => {
     beforeEach(() => {
       mockExecPromisified.mockClear();

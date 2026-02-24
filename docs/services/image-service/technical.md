@@ -106,7 +106,7 @@ sequenceDiagram
 | `6063175b` | Add dev-mode log formatting for PM2 readability              | 2026-02-16 |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration across all services      | 2026-02-16 |
 | `e60eafc1` | Standardize API key secrets to APP naming convention         | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash, add Gemini fallback  | 2026-02-15 |
 | `d5fbb354` | Fix start:local to use tsx instead of node                   | 2026-02-14 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local       | 2026-02-14 |
 | `0f69a74b` | Add default model selector with platform Zai fallback        | 2026-02-09 |
@@ -143,7 +143,7 @@ sequenceDiagram
 | `prompt`       | `string`            | Prompt used for generation                        |
 | `thumbnailUrl` | `string`            | GCS public URL for thumbnail (256px, JPEG)        |
 | `fullSizeUrl`  | `string`            | GCS public URL for full-size image (PNG)          |
-| `model`        | `string`            | Model used (e.g., `gpt-image-1`)                 |
+| `model`        | `string`            | Model used (e.g., `gpt-image-1`)                  |
 | `createdAt`    | `string` (ISO 8601) | Creation timestamp                                |
 | `slug`         | `string?`           | URL-safe identifier derived from title (optional) |
 
@@ -174,23 +174,23 @@ sequenceDiagram
 
 | Model                    | Provider | Description                           |
 | ------------------------ | -------- | ------------------------------------- |
-| `gpt-image-1`           | OpenAI   | GPT Image 1 (image generation model)  |
+| `gpt-image-1`            | OpenAI   | GPT Image 1 (image generation model)  |
 | `gemini-2.5-flash-image` | Google   | Gemini Flash Image (image generation) |
 
 ### Prompt Generation Models
 
 | Model            | Provider | Purpose            |
 | ---------------- | -------- | ------------------ |
-| `gpt-4.1`       | OpenAI   | Prompt enhancement |
+| `gpt-4.1`        | OpenAI   | Prompt enhancement |
 | `gemini-2.5-pro` | Google   | Prompt enhancement |
 
 ### Pricing Models (from index.ts REQUIRED_MODELS)
 
 | Model                    | Purpose                       |
 | ------------------------ | ----------------------------- |
-| `gemini-2.5-flash`      | Pricing context for Gemini    |
-| `gpt-4o-mini`           | Pricing context for OpenAI    |
-| `gpt-image-1`           | Image generation pricing      |
+| `gemini-2.5-flash`       | Pricing context for Gemini    |
+| `gpt-4o-mini`            | Pricing context for OpenAI    |
+| `gpt-image-1`            | Image generation pricing      |
 | `gemini-2.5-flash-image` | Image generation pricing      |
 
 **Note:** The pricing models (`gemini-2.5-flash`, `gpt-4o-mini`) differ from the actual prompt generation models (`gemini-2.5-pro`, `gpt-4.1`). See Gotchas section.
@@ -209,9 +209,9 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 ### External Services
 
-| Service           | Purpose                            | Failure Mode    |
-| ----------------- | ---------------------------------- | --------------- |
-| OpenAI API        | GPT Image 1, GPT-4.1              | DOWNSTREAM_ERROR |
+| Service           | Purpose                            | Failure Mode     |
+| ----------------- | ---------------------------------- | ---------------- |
+| OpenAI API        | GPT Image 1, GPT-4.1               | DOWNSTREAM_ERROR |
 | Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro | DOWNSTREAM_ERROR |
 
 ### Infrastructure
@@ -234,10 +234,10 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket name for image storage              |
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects                |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service URL (pricing data)        |
-| `INTEXURAOS_SENTRY_DSN`              | No       | Sentry error tracking DSN                      |
-| `INTEXURAOS_ZAI_APP_API_KEY`         | No       | Platform Zai API key for user fallback         |
-| `INTEXURAOS_GEMINI_APP_API_KEY`      | No       | Platform Gemini API key for user fallback      |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`     | No       | Dash0 OTLP endpoint for OpenTelemetry tracing  |
+| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking DSN                      |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key for user fallback         |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback      |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for OpenTelemetry tracing  |
 
 ## Gotchas
 

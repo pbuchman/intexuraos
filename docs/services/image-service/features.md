@@ -1,59 +1,57 @@
 # Image Service
 
-Generate AI-powered cover images and optimized prompts for IntexuraOS research and content.
+Give it your text, get back a professional image -- no prompt engineering required.
 
 ## The Problem
 
-AI-generated content like research reports and notes needs compelling visual elements for sharing and browsing. Creating cover images manually is time-consuming and requires design skills. Raw text descriptions produce poor results when fed directly to image generation models. Teams need a centralized way to generate, store, and manage images with per-user cost tracking and automatic cleanup.
-
-## How It Helps
-
-### AI-Powered Prompt Generation
-
-Transforms raw text content into structured, optimized image generation prompts using LLMs. The service analyzes input text and produces a complete prompt specification including title, visual metaphor, detailed generation prompt, negative prompt, and rendering parameters like framing and realism style.
-
-**Example:** You submit a research title "Quantum Computing Advances" -- the service returns a structured prompt with visual metaphor, style parameters, and a detailed image generation prompt optimized for photorealistic or illustration styles.
-
-### Multi-Provider Image Generation
-
-Creates images using either OpenAI GPT Image 1 or Google Gemini 2.5 Flash Image, selecting the provider based on the user's configured API keys. Generated images are automatically uploaded to Google Cloud Storage with both full-size PNG and compressed JPEG thumbnails.
-
-**Example:** A research-agent calls the image generation endpoint with an enhanced prompt and model choice. The service generates the image, creates a 256px thumbnail, uploads both to GCS, and returns public URLs ready for embedding.
-
-### Automatic Thumbnail Creation
-
-Every generated image produces both a full-size PNG and a 256px JPEG thumbnail (80% quality) in a single operation. Thumbnails maintain the original aspect ratio with the longest edge capped at 256 pixels, optimized for fast loading in feed views and previews.
-
-**Example:** A 1024x768 image generates a 256x192 JPEG thumbnail alongside the full-size PNG, both served from GCS with one-year cache headers.
-
-### Clean Lifecycle Management
-
-Images follow the lifecycle of the content they belong to. When research is unshared, the cover image is deleted from both GCS storage and the Firestore metadata record in a single operation, preventing orphaned files from accumulating.
-
-**Example:** A user unshares their research report. The research-agent calls DELETE on the image ID, and both the GCS objects (full-size and thumbnail) and the Firestore record are removed.
+AI-generated content deserves a visual identity, but creating one is surprisingly hard. Writing an effective image generation prompt is a skill most people do not have and should not need. You know what your research is about -- you should not also have to know how to describe it to an image model in language that produces a clean, professional result. And once the image exists, you still need a thumbnail for cards, previews, and social sharing. That is two problems masquerading as one.
 
 ## Use Case
 
-A research-agent completes a report on "AI Safety and Alignment Strategies." It calls image-service with the research title. The service generates an optimized image prompt using Gemini 2.5 Pro, producing a structured specification with visual metaphor and style parameters. The research-agent then calls the image generation endpoint with that prompt and the user's preferred model. Image-service generates the cover image, creates a thumbnail, uploads both to GCS, saves metadata to Firestore, and returns the public URLs. The research-agent stores the image ID in the research document. When the user later unshares the research, the image is automatically deleted.
+You finish a research report on renewable energy policy in Southeast Asia. You hit "share" and a public link is generated. Behind the scenes, the image-service reads your research content, understands the subject and tone, writes its own optimized prompt, and generates a cover image that fits -- a clean visual of wind turbines against a tropical landscape, perhaps, or an abstract energy grid illustration. A thumbnail is produced automatically alongside the full-size version, sized for preview cards. The shareable page loads with a professional cover image you never had to think about.
+
+Later, you decide to unshare the research. The cover image is cleaned up automatically -- no orphaned files, no storage clutter.
+
+## How It Helps
+
+### Two-Step Generation Pipeline
+
+Image-service works in two stages. First, it reads your raw text and generates an optimized image prompt -- translating your content into the specific language that image models respond to best. Then, a separate image generation model creates the actual image from that prompt. You never write, see, or edit the prompt. The service handles the translation from "what you wrote" to "what looks good" entirely on its own.
+
+### Automatic Thumbnailing
+
+Every generated image is accompanied by a thumbnail -- a 256-pixel JPEG optimized for cards, previews, and sharing surfaces. No second request, no manual resizing. Full-size and thumbnail are created together, every time.
+
+### Cleanup on Unshare
+
+When you unshare a piece of research, the associated cover image is deleted from storage and from the database. No orphaned files accumulate. The system stays clean without manual intervention.
+
+### Works Without Your Own API Keys
+
+If you have configured your own provider API keys, the service uses them -- keeping costs under your control. If you have not, the platform provides fallback keys automatically, so image generation works from day one with no setup required.
+
+### Human-Readable File Paths
+
+When a title is provided, the generated image receives a readable file name derived from the content rather than a meaningless identifier. This keeps storage organized and debuggable.
 
 ## Key Benefits
 
-- Multi-provider flexibility -- choose between OpenAI and Google image generation models
-- Structured prompt enhancement turns raw text into optimized generation prompts
-- Automatic thumbnail creation reduces client-side processing
-- Platform key fallback enables image generation for users without personal API keys
-- Clean deletion prevents storage waste when content is removed
-- Per-user cost tracking through LLM pricing integration
+- **Context-aware generation** -- Understands your text and produces a matching image without manual prompt writing
+- **Invisible prompt engineering** -- The two-step pipeline handles the hard part so you do not have to
+- **Thumbnail included** -- Every image ships with a 256px preview, ready for cards and social sharing
+- **Automatic cleanup** -- Unsharing removes both storage and database records, preventing orphans
+- **Zero-configuration start** -- Platform fallback keys mean image generation works before users add their own API keys
+- **User-controlled costs** -- When users bring their own keys, their keys are used
 
 ## Limitations
 
-- Only generates new images; cannot edit, inpaint, or create variations of existing images
-- Prompt text input limited to 10-60000 characters; image prompts limited to 10-2000 characters
-- No batch generation -- each image requires a separate API call
-- No style presets or pre-defined artistic filters
-- Thumbnail size fixed at 256px maximum edge; not configurable per request
-- Internal-only access -- no public-facing API endpoints
+- **Works behind the scenes** -- End users never interact with this service directly; it runs in the background, called by other agents like research-agent
+- **Fallback model limits** -- Platform-provided keys work for all users, but may use different models or have lower rate limits than your own provider keys
+- **No image editing** -- Generates new images only; cannot crop, filter, or modify an existing image
+- **No style selection** -- You cannot choose artistic styles, color palettes, or visual themes; the service decides what fits the content
+- **Generation takes a few seconds** -- The two-step pipeline (prompt creation then image generation) adds processing time
+- **No variations** -- Cannot produce multiple options or alternative versions of an image
 
 ---
 
-_Part of [IntexuraOS](../overview.md) -- AI-powered visual content generation._
+_Part of [IntexuraOS](../overview.md) -- Your content, visualized._

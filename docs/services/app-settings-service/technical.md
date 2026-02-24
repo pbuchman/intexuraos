@@ -83,24 +83,24 @@ sequenceDiagram
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration                         | 2026-02-16 |
 | `d5fbb354` | Fix start:local to use tsx instead of experimental types    | 2026-02-14 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local      | 2026-02-14 |
-| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)          | 2026-01-31 |
-| `c3198407` | Fix all 132 response contract violations across codebase   | 2026-01-30 |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps     | 2026-01-30 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement (Phase 3)           | 2026-01-31 |
+| `c3198407` | Fix all 132 response contract violations across codebase    | 2026-01-30 |
+| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps      | 2026-01-30 |
 
 ## API Endpoints
 
 ### Public Endpoints
 
-| Method | Path                    | Purpose                                  | Auth         |
-| ------ | ----------------------- | ---------------------------------------- | ------------ |
-| GET    | `/settings/pricing`     | Get LLM pricing for all 5 providers     | Bearer token |
+| Method | Path                    | Purpose                                   | Auth         |
+| ------ | ----------------------- | ----------------------------------------- | ------------ |
+| GET    | `/settings/pricing`     | Get LLM pricing for all 5 providers       | Bearer token |
 | GET    | `/settings/usage-costs` | Get authenticated user's aggregated costs | Bearer token |
 
 ### Internal Endpoints
 
-| Method | Path                         | Purpose                                         | Caller                                         |
-| ------ | ---------------------------- | ----------------------------------------------- | ---------------------------------------------- |
-| GET    | `/internal/settings/pricing` | Get all LLM provider pricing (service startup) | user-service, commands-agent, actions-agent, etc. |
+| Method | Path                         | Purpose                                         | Caller                                            |
+| ------ | ---------------------------- | ----------------------------------------------- | ------------------------------------------------- |
+| GET    | `/internal/settings/pricing` | Get all LLM provider pricing (service startup)  | user-service, commands-agent, actions-agent, etc. |
 
 ### System Endpoints
 
@@ -146,24 +146,24 @@ sequenceDiagram
 
 ### ProviderPricing
 
-| Field       | Type                          | Description                   |
-| ----------- | ----------------------------- | ----------------------------- |
-| `provider`  | `LlmProvider`                 | Provider name                 |
+| Field       | Type                           | Description                   |
+| ----------- | ------------------------------ | ----------------------------- |
+| `provider`  | `LlmProvider`                  | Provider name                 |
 | `models`    | `Record<string, ModelPricing>` | Per-model pricing             |
-| `updatedAt` | `string`                      | ISO date of last price update |
+| `updatedAt` | `string`                       | ISO date of last price update |
 
 ### ModelPricing
 
-| Field                     | Type                             | Description                                         |
-| ------------------------- | -------------------------------- | --------------------------------------------------- |
-| `inputPricePerMillion`    | `number`                         | Cost per 1M input tokens (USD)                      |
-| `outputPricePerMillion`   | `number`                         | Cost per 1M output tokens (USD)                     |
-| `cacheReadMultiplier`     | `number` (optional)              | Multiplier on input cost for cache reads            |
-| `cacheWriteMultiplier`    | `number` (optional)              | Multiplier on input cost for cache writes           |
-| `webSearchCostPerCall`    | `number` (optional)              | Fixed cost per web search call (USD)                |
-| `groundingCostPerRequest` | `number` (optional)              | Fixed cost per grounding request (USD)              |
+| Field                     | Type                              | Description                                         |
+| ------------------------- | --------------------------------- | --------------------------------------------------- |
+| `inputPricePerMillion`    | `number`                          | Cost per 1M input tokens (USD)                      |
+| `outputPricePerMillion`   | `number`                          | Cost per 1M output tokens (USD)                     |
+| `cacheReadMultiplier`     | `number` (optional)               | Multiplier on input cost for cache reads            |
+| `cacheWriteMultiplier`    | `number` (optional)               | Multiplier on input cost for cache writes           |
+| `webSearchCostPerCall`    | `number` (optional)               | Fixed cost per web search call (USD)                |
+| `groundingCostPerRequest` | `number` (optional)               | Fixed cost per grounding request (USD)              |
 | `imagePricing`            | `Record<ImageSize, number>` (opt) | Cost per image generation by size                   |
-| `useProviderCost`         | `boolean` (optional)             | Use provider's reported cost instead of calculated  |
+| `useProviderCost`         | `boolean` (optional)              | Use provider's reported cost instead of calculated  |
 
 ### ImageSize
 

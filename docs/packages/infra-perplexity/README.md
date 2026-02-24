@@ -55,7 +55,7 @@ Converts raw Perplexity usage data into `NormalizedUsage`. Always sets `webSearc
 
 | Type               | Description                                             |
 | ------------------ | ------------------------------------------------------- |
-| `PerplexityClient` | `Pick<LLMClient, 'research' \| 'generate'>`             |
+| `PerplexityClient` | `Pick<LLMClient, 'research' \                           | 'generate'>` |
 | `PerplexityConfig` | Configuration interface                                 |
 | `PerplexityError`  | Re-export of `LLMError` from `@intexuraos/llm-contract` |
 | `ResearchResult`   | Re-export from `@intexuraos/llm-contract`               |
@@ -83,7 +83,7 @@ interface PerplexityConfig {
 | `PerplexityUsage`        | Usage including cost breakdown                 |
 | `PerplexityCost`         | Cost breakdown with input/output/request/total |
 | `PerplexitySearchResult` | Search result metadata with title/url/date     |
-| `SearchContextSize`      | `'low' \| 'medium' \| 'high'`                  |
+| `SearchContextSize`      | `'low' \                                       | 'medium' \ | 'high'` |
 
 ## Configuration
 

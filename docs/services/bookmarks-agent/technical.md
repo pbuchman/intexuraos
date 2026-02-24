@@ -157,16 +157,16 @@ sequenceDiagram
 | ---------------- | -------------------------------------- | -------------------------------- |
 | `id`             | `string`                               | Unique bookmark identifier       |
 | `userId`         | `string`                               | Owner user ID                    |
-| `status`         | `'draft' \| 'active'`                  | Draft or active status           |
+| `status`         | `'draft' \                             | 'active'`                        | Draft or active status |
 | `url`            | `string`                               | Bookmark URL                     |
-| `title`          | `string \| null`                       | Page title                       |
-| `description`    | `string \| null`                       | Page description                 |
+| `title`          | `string \                              | null`                            | Page title |
+| `description`    | `string \                              | null`                            | Page description |
 | `tags`           | `string[]`                             | User-defined tags                |
-| `ogPreview`      | `OpenGraphPreview \| null`             | Fetched metadata                 |
-| `ogFetchedAt`    | `Date \| null`                         | When metadata was fetched        |
-| `ogFetchStatus`  | `'pending' \| 'processed' \| 'failed'` | Metadata fetch status            |
-| `aiSummary`      | `string \| null`                       | AI-generated summary             |
-| `aiSummarizedAt` | `Date \| null`                         | When summary was generated       |
+| `ogPreview`      | `OpenGraphPreview \                    | null`                            | Fetched metadata |
+| `ogFetchedAt`    | `Date \                                | null`                            | When metadata was fetched |
+| `ogFetchStatus`  | `'pending' \                           | 'processed' \                    | 'failed'` | Metadata fetch status |
+| `aiSummary`      | `string \                              | null`                            | AI-generated summary |
+| `aiSummarizedAt` | `Date \                                | null`                            | When summary was generated |
 | `source`         | `string`                               | Source system (e.g., 'whatsapp') |
 | `sourceId`       | `string`                               | ID in source system              |
 | `archived`       | `boolean`                              | Soft delete flag                 |
@@ -177,12 +177,12 @@ sequenceDiagram
 
 | Field         | Type             | Description    |
 | ------------- | ---------------- | -------------- |
-| `title`       | `string \| null` | OG title       |
-| `description` | `string \| null` | OG description |
-| `image`       | `string \| null` | OG image URL   |
-| `siteName`    | `string \| null` | OG site name   |
-| `type`        | `string \| null` | OG type        |
-| `favicon`     | `string \| null` | Favicon URL    |
+| `title`       | `string \        | null`          | OG title |
+| `description` | `string \        | null`          | OG description |
+| `image`       | `string \        | null`          | OG image URL |
+| `siteName`    | `string \        | null`          | OG site name |
+| `type`        | `string \        | null`          | OG type |
+| `favicon`     | `string \        | null`          | Favicon URL |
 
 ### OgFetchStatus Values
 
@@ -194,10 +194,10 @@ sequenceDiagram
 
 ### BookmarkStatus Values
 
-| Status   | Meaning                         |
-| -------- | ------------------------------- |
-| `draft`  | Created but not yet visible     |
-| `active` | Normal active bookmark (default)|
+| Status   | Meaning                          |
+| -------- | -------------------------------- |
+| `draft`  | Created but not yet visible      |
+| `active` | Normal active bookmark (default) |
 
 ### BookmarkErrorCode Values
 
@@ -212,8 +212,8 @@ sequenceDiagram
 
 ### Published Events
 
-| Topic                                  | Event Type              | Payload                              | Trigger                    |
-| -------------------------------------- | ----------------------- | ------------------------------------ | -------------------------- |
+| Topic                                  | Event Type              | Payload                              | Trigger                          |
+| -------------------------------------- | ----------------------- | ------------------------------------ | -------------------------------- |
 | `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`    | `bookmarks.enrich`      | `{ bookmarkId, userId, url }`        | After internal bookmark creation |
 | `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` | `bookmarks.summarize`   | `{ bookmarkId, userId }`             | After successful OG enrichment   |
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND`      | `whatsapp.message.send` | `{ userId, message, correlationId }` | After successful AI summary      |
@@ -299,11 +299,11 @@ All required env vars are validated at startup via `validateRequiredEnv()` in `i
 | `INTEXURAOS_AUTH_ISSUER`                 | Yes      | Auth0 token issuer                            |
 | `INTEXURAOS_AUTH_AUDIENCE`               | Yes      | Auth0 token audience                          |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`         | Yes      | Internal auth header value                    |
-| `INTEXURAOS_WEB_AGENT_URL`              | Yes      | Web-agent base URL                            |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Yes      | WhatsApp send topic name                      |
-| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | Yes      | Enrichment topic name                         |
-| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | Yes      | Summarization topic name                      |
-| `INTEXURAOS_SENTRY_DSN`                 | Yes      | Sentry DSN for error reporting                |
+| `INTEXURAOS_WEB_AGENT_URL`               | Yes      | Web-agent base URL                            |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`  | Yes      | WhatsApp send topic name                      |
+| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`      | Yes      | Enrichment topic name                         |
+| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`   | Yes      | Summarization topic name                      |
+| `INTEXURAOS_SENTRY_DSN`                  | Yes      | Sentry DSN for error reporting                |
 | `INTEXURAOS_ENVIRONMENT`                 | No       | Sentry environment tag (default: development) |
 | `PORT`                                   | No       | Server port (default: 8080)                   |
 | `LOG_LEVEL`                              | No       | Pino log level (default: info)                |
