@@ -169,11 +169,15 @@ function verifyPhase2Final(message: string): { ok: true } | { ok: false; missing
   const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
   const ciMatch = /- CI evidence:\s*pnpm run ci:tracked successful\s*$/im.exec(message);
   const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
+  const reviewIterationsMatch = /- Review iterations:\s*(\d+)\s*$/im.exec(message);
+  const turnSummaryMatch = /- Turn summary:\s*(.+)\s*$/im.exec(message);
   const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
 
   if (prMatch?.[1] === undefined) missing.push('PR URL line');
   if (ciMatch?.[0] === undefined) missing.push('CI evidence line');
   if (linearMatch?.[1] === undefined) missing.push('Linear issue URL line');
+  if (reviewIterationsMatch?.[1] === undefined) missing.push('Review iterations line');
+  if ((turnSummaryMatch?.[1] ?? '').trim() === '') missing.push('Turn summary line');
   if ((summaryMatch?.[1] ?? '').trim() === '') missing.push('Summary line');
 
   if (missing.length > 0) {
@@ -343,6 +347,8 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
             '- PR: <full GitHub PR URL>',
             '- CI evidence: pnpm run ci:tracked successful',
             '- Linear issue: <full Linear URL>',
+            '- Review iterations: <number>',
+            '- Turn summary: <~5 short statements separated by |>',
             '- Summary: <3-5 sentences>',
           ].join('\n');
 
