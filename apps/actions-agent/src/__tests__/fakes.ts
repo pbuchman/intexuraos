@@ -6,6 +6,7 @@ import type {
   CalendarServiceClient,
   ProcessCalendarRequest,
   CalendarPreview,
+  GeneratePreviewRequest,
 } from '../domain/ports/calendarServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
@@ -64,7 +65,6 @@ import type {
   PublishError,
   WhatsAppInteractiveButton,
   WhatsAppSendPublisher,
-  CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
 import type { Logger } from 'pino';
@@ -416,48 +416,6 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
   }
 }
 
-export class FakeCalendarPreviewPublisher implements CalendarPreviewPublisher {
-  private publishedRequests: {
-    actionId: string;
-    userId: string;
-    text: string;
-    currentDate: string;
-    correlationId: string;
-  }[] = [];
-  private failNext = false;
-  private failError: PublishError | null = null;
-
-  getPublishedRequests(): typeof this.publishedRequests {
-    return this.publishedRequests;
-  }
-
-  setFailNext(fail: boolean, error?: PublishError): void {
-    this.failNext = fail;
-    this.failError = error ?? null;
-  }
-
-  async publishGeneratePreview(params: {
-    actionId: string;
-    userId: string;
-    text: string;
-    currentDate: string;
-    correlationId?: string;
-  }): Promise<Result<void, PublishError>> {
-    if (this.failNext) {
-      this.failNext = false;
-      return err(this.failError ?? { code: 'PUBLISH_FAILED', message: 'Simulated failure' });
-    }
-    this.publishedRequests.push({
-      actionId: params.actionId,
-      userId: params.userId,
-      text: params.text,
-      currentDate: params.currentDate,
-      correlationId: params.correlationId ?? '',
-    });
-    return ok(undefined);
-  }
-}
-
 export class FakeActionTransitionRepository implements ActionTransitionRepository {
   private transitions: ActionTransition[] = [];
   private failNext = false;
@@ -634,6 +592,7 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
 export class FakeCalendarServiceClient implements CalendarServiceClient {
   private processedActions: ProcessCalendarRequest[] = [];
   private previews = new Map<string, CalendarPreview>();
+  private generatePreviewRequests: GeneratePreviewRequest[] = [];
   private nextResponse: ServiceFeedback = {
     status: 'completed',
     message: 'Calendar event created successfully',
@@ -641,9 +600,16 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   };
   private failNext = false;
   private failError: Error | null = null;
+  private failGeneratePreview = false;
+  private failGeneratePreviewError: Error | null = null;
+  private generatePreviewResult: CalendarPreview | null = null;
 
   getProcessedActions(): ProcessCalendarRequest[] {
     return this.processedActions;
+  }
+
+  getGeneratePreviewRequests(): GeneratePreviewRequest[] {
+    return this.generatePreviewRequests;
   }
 
   setNextResponse(response: ServiceFeedback): void {
@@ -657,6 +623,15 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
 
   setPreview(actionId: string, preview: CalendarPreview): void {
     this.previews.set(actionId, preview);
+  }
+
+  setFailGeneratePreview(fail: boolean, error?: Error): void {
+    this.failGeneratePreview = fail;
+    this.failGeneratePreviewError = error ?? null;
+  }
+
+  setGeneratePreviewResult(preview: CalendarPreview | null): void {
+    this.generatePreviewResult = preview;
   }
 
   async processAction(request: ProcessCalendarRequest): Promise<Result<ServiceFeedback>> {
@@ -674,6 +649,15 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
       return err(this.failError ?? new Error('Simulated failure'));
     }
     return ok(this.previews.get(actionId) ?? null);
+  }
+
+  async generatePreview(request: GeneratePreviewRequest): Promise<Result<CalendarPreview | null>> {
+    this.generatePreviewRequests.push(request);
+    if (this.failGeneratePreview) {
+      this.failGeneratePreview = false;
+      return err(this.failGeneratePreviewError ?? new Error('Preview generation failed'));
+    }
+    return ok(this.generatePreviewResult);
   }
 }
 
@@ -1264,7 +1248,6 @@ export function createFakeServices(deps: {
   codeAgentClient?: FakeCodeAgentClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
-  calendarPreviewPublisher?: FakeCalendarPreviewPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
   executeTodoActionUseCase?: FakeExecuteTodoActionUseCase;
   executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
@@ -1279,8 +1262,6 @@ export function createFakeServices(deps: {
   handleApprovalReplyUseCase?: HandleApprovalReplyUseCase;
 }): Services {
   const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
-  const calendarPreviewPublisher =
-    deps.calendarPreviewPublisher ?? new FakeCalendarPreviewPublisher();
   const actionRepository = deps.actionRepository ?? new FakeActionRepository();
   const actionTransitionRepository =
     deps.actionTransitionRepository ?? new FakeActionTransitionRepository();
@@ -1342,7 +1323,7 @@ export function createFakeServices(deps: {
     {
       actionRepository,
       whatsappPublisher,
-      calendarPreviewPublisher,
+      calendarServiceClient,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
     }
@@ -1392,7 +1373,6 @@ export function createFakeServices(deps: {
     codeAgentClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
-    calendarPreviewPublisher,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,
