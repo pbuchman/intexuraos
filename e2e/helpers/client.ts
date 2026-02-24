@@ -70,7 +70,7 @@ export interface CodeTask {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   workerLocation: string;
   repository: string;
   baseBranch: string;

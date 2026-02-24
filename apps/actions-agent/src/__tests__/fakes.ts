@@ -716,7 +716,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     approvalEventId: string;
     payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'glm';
+      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
@@ -761,7 +761,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     approvalEventId: string;
     payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'glm';
+      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
