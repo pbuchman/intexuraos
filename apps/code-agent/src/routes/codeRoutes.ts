@@ -43,7 +43,7 @@ const codeTaskSchema = {
     prompt: { type: 'string' },
     sanitizedPrompt: { type: 'string' },
     systemPromptHash: { type: 'string' },
-    workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+    workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'] },
     workerLocation: { type: 'string' },
     repository: { type: 'string' },
     baseBranch: { type: 'string' },
@@ -144,7 +144,7 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   workerLocation: string;
   repository: string;
   baseBranch: string;
@@ -193,7 +193,7 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   workerLocation: string;
   repository: string;
   baseBranch: string;
@@ -304,7 +304,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       userId: string;
       payload: {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'glm';
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -328,7 +328,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               type: 'object',
               properties: {
                 prompt: { type: 'string' },
-                workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+                workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'] },
                 linearIssueId: { type: 'string' },
                 repository: { type: 'string' },
                 baseBranch: { type: 'string' },
@@ -423,7 +423,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/code/process',
       });
@@ -458,7 +458,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         approvalEventId: string;
         userId: string;
         prompt: string;
-        workerType: 'opus' | 'auto' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -1003,7 +1003,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
   fastify.post<{
     Body: {
       prompt: string;
-      workerType?: 'opus' | 'auto' | 'glm';
+      workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       workerLocation?: string;
       linearIssueId?: string;
       linearIssueTitle?: string;
@@ -1021,7 +1021,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           type: 'object',
           properties: {
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
-            workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+            workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'] },
             workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
             linearIssueTitle: { type: 'string' },
@@ -1148,7 +1148,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/submit',
         includeParams: true,
@@ -1157,7 +1157,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo } = getServices();
       const body = request.body as {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'glm';
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         workerLocation?: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
@@ -1207,7 +1207,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         prompt: string;
         sanitizedPrompt: string;
         systemPromptHash: string;
-        workerType: 'opus' | 'auto' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         workerLocation: string;
         repository: string;
         baseBranch: string;
@@ -1356,7 +1356,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         systemPromptHash: string;
         repository: string;
         baseBranch: string;
-        workerType: 'opus' | 'auto' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         webhookUrl: string;
         webhookSecret: string;
         linearIssueLabels: string[];
