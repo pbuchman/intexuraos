@@ -103,4 +103,13 @@ export interface WorkerSettingsRepository {
     workerName: string,
     status: WorkerHealthStatus
   ): Promise<Result<void, WorkerSettingsError>>;
+
+  /**
+   * Find worker settings by GitHub username.
+   * Returns userId and first enabled worker config for dispatch.
+   * Returns null if not found or no enabled workers.
+   */
+  findByGitHubUsername(
+    githubUsername: string
+  ): Promise<Result<{ userId: string; worker: WorkerConfig } | null, WorkerSettingsError>>;
 }

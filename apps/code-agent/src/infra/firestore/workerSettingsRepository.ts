@@ -48,6 +48,7 @@ interface WorkerSettingsDoc {
     checkedAt: string;
     stale: boolean;
   }>;
+  githubUsername?: string;
 }
 
 /**
@@ -517,6 +518,45 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, workerName }, 'Failed to update health status');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async findByGitHubUsername(
+      githubUsername: string
+    ): Promise<Result<{ userId: string; worker: WorkerConfig } | null, WorkerSettingsError>> {
+      try {
+        const snapshot = await collection
+          .where('githubUsername', '==', githubUsername)
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0]!;
+        const data = doc.data() as WorkerSettingsDoc;
+
+        // Find first enabled worker
+        const enabledWorkers = data.workers.filter((w) => w.enabled);
+        if (enabledWorkers.length === 0) {
+          return ok(null);
+        }
+
+        const firstEnabled = enabledWorkers[0]!;
+        const decryptedWorker = decryptWorkerConfig(firstEnabled, firstEnabled.name);
+
+        return ok({
+          userId: data.userId,
+          worker: decryptedWorker,
+        });
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, githubUsername }, 'Failed to find worker settings by GitHub username');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
