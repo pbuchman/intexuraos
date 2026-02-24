@@ -871,7 +871,7 @@ describe('POST /code/submit', () => {
     });
 
     it('accepts valid worker types', async () => {
-      const workerTypes = ['opus', 'auto', 'glm'] as const;
+      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm'] as const;
 
       // Mock successful dispatch for all iterations
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({

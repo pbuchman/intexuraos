@@ -39,7 +39,7 @@ interface WorkerTaskRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   webhookUrl: string;
   webhookSecret: string;
   /** Labels from the validated Linear issue */
