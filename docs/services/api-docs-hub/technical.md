@@ -165,7 +165,7 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 
 | Variable                         | Default         | Description                          |
 | -------------------------------- | --------------- | ------------------------------------ |
-| `INTEXURAOS_SENTRY_DSN`         | -               | Sentry DSN for error tracking        |
+| `INTEXURAOS_SENTRY_DSN`          | -               | Sentry DSN for error tracking        |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT` | -               | Dash0 OTLP endpoint for log export   |
 | `INTEXURAOS_ENVIRONMENT`         | `development`   | Environment name for Sentry          |
 | `PORT`                           | `8080`          | Server listen port                   |
