@@ -700,7 +700,9 @@ describe('workerSettingsRepository', () => {
 
       const result = await repo.findByGitHubUsername('unknown-user');
       expect(result.ok).toBe(true);
-      expect(result.value).toBe(null);
+      if (result.ok) {
+        expect(result.value).toBe(null);
+      }
     });
 
     it('should return null when user has no enabled workers', async () => {
@@ -728,7 +730,9 @@ describe('workerSettingsRepository', () => {
 
       const result = await repo.findByGitHubUsername('disabled-user');
       expect(result.ok).toBe(true);
-      expect(result.value).toBe(null);
+      if (result.ok) {
+        expect(result.value).toBe(null);
+      }
     });
 
     // Note: Query-based tests require Firestore indexing which is complex in fake Firestore.

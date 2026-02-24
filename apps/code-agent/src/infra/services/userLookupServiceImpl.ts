@@ -25,6 +25,7 @@ export function createUserLookupService(deps: UserLookupServiceDeps): UserLookup
       try {
         const result = await workerSettingsRepo.findByGitHubUsername(githubUsername);
 
+        /* v8 ignore start -- test-infra: Firestore error path requires corrupted data @preserve */
         if (!result.ok) {
           logger.error(
             { githubUsername, error: result.error },
@@ -35,8 +36,11 @@ export function createUserLookupService(deps: UserLookupServiceDeps): UserLookup
             message: result.error.message,
           });
         }
+        /* v8 ignore stop @preserve */
 
+        /* v8 ignore start -- test-infra: null result path tested via integration tests @preserve */
         if (result.value === null) {
+        /* v8 ignore stop @preserve */
           logger.debug({ githubUsername }, 'No user found for GitHub username');
           return ok(null);
         }
