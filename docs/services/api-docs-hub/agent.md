@@ -9,7 +9,7 @@
 | **Name**    | api-docs-hub                                                            |
 | **Role**    | Aggregates OpenAPI specs from 15 services into a single Swagger UI      |
 | **Goal**    | Provide a unified documentation portal for all IntexuraOS service APIs  |
-| **Version** | 3.1.0 (package) / 0.0.4 (OpenAPI spec)                                 |
+| **Version** | 3.1.0 (package) / 0.0.4 (OpenAPI spec)                                  |
 
 ---
 
@@ -136,11 +136,11 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 
 ## Error Handling
 
-| Status | Meaning                              | Recovery Action                                    |
-| ------ | ------------------------------------ | -------------------------------------------------- |
-| 200    | Success                              | None needed                                        |
-| 404    | Unknown path                         | Use `/docs` or `/health` only                      |
-| 500    | Server error                         | Check logs for startup misconfiguration             |
+| Status | Meaning                              | Recovery Action                                      |
+| ------ | ------------------------------------ | ---------------------------------------------------- |
+| 200    | Success                              | None needed                                          |
+| 404    | Unknown path                         | Use `/docs` or `/health` only                        |
+| 500    | Server error                         | Check logs for startup misconfiguration              |
 | N/A    | Service fails to start               | Verify all 15 env vars are set; check `direnv allow` |
 
 ---
@@ -149,9 +149,9 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 
 | Dependency                    | Why Needed                     | Failure Behavior          |
 | ----------------------------- | ------------------------------ | ------------------------- |
-| `@fastify/swagger-ui`        | Serves Swagger UI interface    | Service cannot start      |
-| `@intexuraos/infra-sentry`   | Error tracking and log streams | Degrades gracefully       |
-| `@intexuraos/infra-otel`     | Dash0 log forwarding           | Optional; no-op if absent |
+| `@fastify/swagger-ui`         | Serves Swagger UI interface    | Service cannot start      |
+| `@intexuraos/infra-sentry`    | Error tracking and log streams | Degrades gracefully       |
+| `@intexuraos/infra-otel`      | Dash0 log forwarding           | Optional; no-op if absent |
 
 ---
 

@@ -85,12 +85,12 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                      | Date       |
-| ---------- | ------------------------------------------------ | ---------- |
-| `b3f34d85` | Release v3.1.0                                   | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                   | 2026-02-19 |
-| `6063175b` | Dev-mode log formatting for PM2 readability      | 2026-02-16 |
-| `a52a6bbc` | Dash0 OpenTelemetry integration                  | 2026-02-16 |
+| Commit     | Description                                       | Date       |
+| ---------- | ------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0                                    | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                    | 2026-02-19 |
+| `6063175b` | Dev-mode log formatting for PM2 readability       | 2026-02-16 |
+| `a52a6bbc` | Dash0 OpenTelemetry integration                   | 2026-02-16 |
 | `d5fbb354` | Fix start:local to use tsx instead of node        | 2026-02-14 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter             | 2026-02-14 |
 | `65b90801` | Simplify local dev to Pub/Sub emulator only       | 2026-02-14 |
@@ -175,7 +175,7 @@ sequenceDiagram
 
 | Field      | Type                   | Description           |
 | ---------- | ---------------------- | --------------------- |
-| `status`   | 'success' \| 'failure' | Test outcome          |
+| `status`   | 'success' \            | 'failure'             | Test outcome |
 | `message`  | string                 | LLM response or error |
 | `testedAt` | string                 | ISO 8601 timestamp    |
 
@@ -324,11 +324,11 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_ENCRYPTION_KEY`             | Yes      | AES-256 key for API key encryption (64 hex chars)         |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Shared secret for internal endpoints                      |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL`   | Yes      | URL of app-settings-service (fetches LLM pricing)         |
-| `INTEXURAOS_WEB_APP_URL`               | Yes      | Web app URL for OAuth redirects                           |
+| `INTEXURAOS_WEB_APP_URL`                | Yes      | Web app URL for OAuth redirects                           |
 | `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes      | Google OAuth client ID                                    |
 | `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes      | Google OAuth client secret                                |
 | `INTEXURAOS_SENTRY_DSN`                 | No       | Sentry DSN for error tracking (optional)                  |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`        | No       | Dash0 OTLP endpoint for tracing/metrics (no-op if unset) |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`        | No       | Dash0 OTLP endpoint for tracing/metrics (no-op if unset)  |
 
 ## Gotchas
 

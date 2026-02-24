@@ -13,7 +13,7 @@ describe('WebhookClient', () => {
       pendingWebhooks: [] as PendingWebhook[],
     };
 
-    return {
+    const mock = {
       load: vi.fn(
         (): Promise<OrchestratorState> => Promise.resolve(JSON.parse(JSON.stringify(state)))
       ),
@@ -23,9 +23,15 @@ describe('WebhookClient', () => {
       saveAtomic: vi.fn(async (newState: OrchestratorState) => {
         Object.assign(state, newState);
       }),
+      modify: vi.fn(async (fn: (s: OrchestratorState) => void | Promise<void>) => {
+        const current: OrchestratorState = JSON.parse(JSON.stringify(state));
+        await fn(current);
+        Object.assign(state, current);
+      }),
       detectOrphanWorktrees: vi.fn(async () => []),
       emptyState: () => ({ tasks: {}, githubToken: null, pendingWebhooks: [] }),
     } as unknown as StatePersistence;
+    return mock;
   };
 
   // Mock Logger

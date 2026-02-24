@@ -115,7 +115,7 @@ describe('TaskDispatcher', () => {
       pendingWebhooks: [],
     };
 
-    return {
+    const mock = {
       load: vi.fn(
         (): Promise<OrchestratorState> => Promise.resolve(JSON.parse(JSON.stringify(state)))
       ),
@@ -125,9 +125,15 @@ describe('TaskDispatcher', () => {
       saveAtomic: vi.fn(async (newState: OrchestratorState) => {
         Object.assign(state, newState);
       }),
+      modify: vi.fn(async (fn: (s: OrchestratorState) => void | Promise<void>) => {
+        const current: OrchestratorState = JSON.parse(JSON.stringify(state));
+        await fn(current);
+        Object.assign(state, current);
+      }),
       detectOrphanWorktrees: vi.fn(async () => []),
       emptyState: () => ({ tasks: {}, githubToken: null, pendingWebhooks: [] }),
     } as unknown as StatePersistence;
+    return mock;
   };
 
   // Mock WorktreeManager
@@ -976,7 +982,7 @@ describe('TaskDispatcher', () => {
         singleAttemptCompletionControl
       );
 
-      vi.spyOn(statePersistence, 'save').mockRejectedValueOnce(new Error('DB error'));
+      vi.spyOn(statePersistence, 'modify').mockRejectedValueOnce(new Error('DB error'));
 
       const result = await errorDispatcher.submitTask(request);
       await flushAsync();

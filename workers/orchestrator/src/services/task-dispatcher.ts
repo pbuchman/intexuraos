@@ -477,9 +477,9 @@ export class TaskDispatcher {
   }
 
   private async saveTask(task: Task): Promise<void> {
-    const state = await this.statePersistence.load();
-    state.tasks[task.taskId] = task;
-    await this.statePersistence.save(state);
+    await this.statePersistence.modify((state) => {
+      state.tasks[task.taskId] = task;
+    });
   }
 
   private scheduleTimeoutWarning(taskId: string): void {

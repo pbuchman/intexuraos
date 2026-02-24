@@ -7,13 +7,13 @@
 
 ## Summary
 
-| Category               | Count | Severity |
-| ---------------------- | ----- | -------- |
-| v8 ignore exemptions   | 5     | Low      |
-| Architectural concerns | 3     | Medium   |
-| Missing features       | 4     | Medium   |
-| Test coverage gaps     | 1     | Low      |
-| **Total**              | **13** | --      |
+| Category               | Count  | Severity |
+| ---------------------- | ------ | -------- |
+| v8 ignore exemptions   | 5      | Low      |
+| Architectural concerns | 3      | Medium   |
+| Missing features       | 4      | Medium   |
+| Test coverage gaps     | 1      | Low      |
+| **Total**              | **13** | --       |
 
 ---
 

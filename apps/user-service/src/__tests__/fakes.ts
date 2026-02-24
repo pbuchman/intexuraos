@@ -231,6 +231,7 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
   private shouldFailUpdateLlmKey = false;
   private shouldFailDeleteLlmKey = false;
   private shouldFailUpdateLlmPreferences = false;
+  private shouldFailClearLlmPreferences = false;
 
   /**
    * Configure the fake to fail the next getSettings call.
@@ -272,6 +273,13 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
    */
   setFailNextUpdateLlmPreferences(fail: boolean): void {
     this.shouldFailUpdateLlmPreferences = fail;
+  }
+
+  /**
+   * Configure the fake to fail the next clearLlmPreferences call.
+   */
+  setFailNextClearLlmPreferences(fail: boolean): void {
+    this.shouldFailClearLlmPreferences = fail;
   }
 
   /**
@@ -409,6 +417,21 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
     }
 
     this.settings.set(userId, existing);
+    return Promise.resolve(ok(undefined));
+  }
+
+  clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>> {
+    if (this.shouldFailClearLlmPreferences) {
+      this.shouldFailClearLlmPreferences = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated clear LLM preferences failure' })
+      );
+    }
+    const existing = this.settings.get(userId);
+    if (existing !== undefined) {
+      const { llmPreferences: _removed, ...rest } = existing;
+      this.settings.set(userId, { ...rest, updatedAt: new Date().toISOString() });
+    }
     return Promise.resolve(ok(undefined));
   }
 

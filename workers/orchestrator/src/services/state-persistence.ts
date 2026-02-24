@@ -3,12 +3,15 @@ import { existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { Mutex } from 'async-mutex';
 import type { OrchestratorState } from '../types/index.js';
 import type { Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
 
 export class StatePersistence {
+  private readonly writeMutex = new Mutex();
+
   constructor(
     private readonly filePath: string,
     private readonly logger: Logger
@@ -43,6 +46,14 @@ export class StatePersistence {
 
   async save(state: OrchestratorState): Promise<void> {
     await this.saveAtomic(state);
+  }
+
+  async modify(fn: (state: OrchestratorState) => void | Promise<void>): Promise<void> {
+    await this.writeMutex.runExclusive(async () => {
+      const state = await this.load();
+      await fn(state);
+      await this.save(state);
+    });
   }
 
   async saveAtomic(state: OrchestratorState): Promise<void> {

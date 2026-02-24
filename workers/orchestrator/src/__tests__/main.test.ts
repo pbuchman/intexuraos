@@ -70,6 +70,7 @@ describe('main.ts', () => {
     load: vi.fn<() => Promise<OrchestratorState>>(),
     save: vi.fn<(state: OrchestratorState) => Promise<void>>(),
     saveAtomic: vi.fn<(state: OrchestratorState) => Promise<void>>(),
+    modify: vi.fn<(fn: (s: OrchestratorState) => void | Promise<void>) => Promise<void>>(),
     detectOrphanWorktrees: vi.fn<() => Promise<string[]>>(),
   } as unknown as StatePersistence;
 
