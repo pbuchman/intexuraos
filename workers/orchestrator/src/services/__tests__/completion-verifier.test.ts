@@ -56,6 +56,8 @@ const validPhase2Final = `PHASE2_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/123
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-2
+- Review iterations: 2
+- Turn summary: Implemented auth middleware fix | Wrote 8 tests covering edge cases | Code review found missing null check — fixed | CI green after review fixes | PR #123 ready for human review
 - Summary: Implemented the login redirect fix by updating the auth middleware to preserve return URLs. Added integration tests covering OAuth callback flows. CI passes with full coverage.`;
 
 describe('completion-verifier', () => {
@@ -112,6 +114,31 @@ describe('completion-verifier', () => {
     expect(phase2.ok).toBe(false);
     if (phase2.ok) throw new Error('Expected invalid phase2 result');
     expect(phase2.missing).toContain('PHASE2_FINAL block');
+  });
+
+  it('detects missing Review iterations in PHASE2_FINAL', () => {
+    const incomplete = `PHASE2_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/123
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-2
+- Summary: Done`;
+    const result = CompletionVerifierTestUtils.verifyPhase2Final(incomplete);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected invalid result');
+    expect(result.missing).toContain('Review iterations line');
+  });
+
+  it('detects missing Turn summary in PHASE2_FINAL', () => {
+    const incomplete = `PHASE2_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/123
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-2
+- Review iterations: 2
+- Summary: Done`;
+    const result = CompletionVerifierTestUtils.verifyPhase2Final(incomplete);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected invalid result');
+    expect(result.missing).toContain('Turn summary line');
   });
 
   it('detects inconsistent phase1 label and readiness combinations', () => {
