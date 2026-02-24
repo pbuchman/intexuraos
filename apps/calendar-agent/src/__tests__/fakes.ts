@@ -389,12 +389,14 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
 
 export class FakeCalendarActionExtractionService implements CalendarActionExtractionService {
   extractEventResult: Result<ExtractedCalendarEvent, ExtractionError> | null = null;
+  extractEventCalls: { userId: string; text: string; currentDate: string }[] = [];
 
   async extractEvent(
-    _userId: string,
-    _text: string,
-    _currentDate: string
+    userId: string,
+    text: string,
+    currentDate: string
   ): Promise<Result<ExtractedCalendarEvent, ExtractionError>> {
+    this.extractEventCalls.push({ userId, text, currentDate });
     if (this.extractEventResult !== null) {
       return this.extractEventResult;
     }
