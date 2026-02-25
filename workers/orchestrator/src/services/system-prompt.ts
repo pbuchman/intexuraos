@@ -26,6 +26,8 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   /** Whether the issue has child issues */
   hasChildren: boolean;
+  /** The base branch for PRs (defaults to 'main' if not provided) */
+  baseBranch?: string;
 }
 
 /**
@@ -35,16 +37,17 @@ export interface SystemPromptParams {
  * The agent should analyze and enrich the issue IN-PLACE, NOT execute code.
  */
 function buildPhase1Prompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId } = params;
+  const { taskId, linearIssueId, baseBranch } = params;
 
   const issueId = linearIssueId ?? 'INT-UNKNOWN';
+  const targetBranch = baseBranch ?? 'main';
 
   return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [PHASE:1]
 Task ID: ${taskId}
-Worktree: /repo
+Worktree: /repo (branch: ${targetBranch})
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
 [PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]
@@ -122,7 +125,10 @@ After this block, stop. Do not append any other checklist or schema payload.`;
  * The agent should execute autonomously without confirmation prompts.
  */
 function buildPhase2Prompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId, linearIssueTitle, taskUrl, hasChildren } = params;
+  const { taskId, linearIssueId, linearIssueTitle, taskUrl, hasChildren, baseBranch } = params;
+
+  // Default to 'main' if baseBranch is not provided
+  const targetBranch = baseBranch ?? 'main';
 
   const parentModeSection = hasChildren
     ? `
@@ -164,7 +170,7 @@ Follow all instructions from the Linear issue description and the user prompt.
     - Run \`pnpm run ci:tracked\`.
     - Commit if CI passes.
     - Push to remote.
-    - Create PR.
+    - Create PR targeting \`${targetBranch}\`.
 3.  **On CI Failure:** Fix the issue, re-run CI, continue. Stop only if unable to resolve after 3 attempts.
 
 ### Code Review Loop (MANDATORY)
@@ -261,7 +267,9 @@ After this block, stop. Do not append any other checklist or schema payload.`;
  * The agent should read the PR, understand the comment, and act autonomously.
  */
 function buildPRCommentPrompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId, linearIssueTitle, taskUrl } = params;
+  const { taskId, linearIssueId, linearIssueTitle, taskUrl, baseBranch } = params;
+
+  const targetBranch = baseBranch ?? 'main';
 
   /* v8 ignore start -- test-infra: conditional branches require integration test with/without Linear issue ID @preserve */
   return `[SYSTEM CONTEXT]
@@ -269,7 +277,7 @@ You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
 [PHASE:PR-COMMENT]
 Task ID: ${taskId}
-Worktree: /repo
+Worktree: /repo (branch: ${targetBranch})
 ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
 [PR COMMENT EXECUTION MODE]

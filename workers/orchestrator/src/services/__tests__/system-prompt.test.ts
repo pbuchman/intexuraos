@@ -340,5 +340,39 @@ describe('system-prompt', () => {
         expect(result).toContain('[PHASE 2: STRICT EXECUTION]');
       });
     });
+
+    describe('baseBranch parameter', () => {
+      it('should include baseBranch in prompt when provided', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+          baseBranch: 'development',
+        });
+
+        expect(result).toContain('development');
+        expect(result).not.toContain('targeting main');
+      });
+
+      it('should default to main when baseBranch is not provided', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        // When no baseBranch is provided, the prompt should reference the default branch
+        // This ensures the worker knows which branch to target for PRs
+        expect(result).toContain('main');
+      });
+
+      it('should include baseBranch in Phase 1 prompt when provided', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: [],
+          baseBranch: 'feature-branch',
+        });
+
+        expect(result).toContain('feature-branch');
+      });
+    });
   });
 });

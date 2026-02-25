@@ -398,6 +398,78 @@ describe('completion-verifier', () => {
     expect(generate).toHaveBeenCalledTimes(1);
   });
 
+  it('fails phase2 when PR targets wrong base branch', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.95,"reasons":["PR targets wrong base branch"],"missingCriteria":["PR targeting base branch \\"development\\""],"resumeInstruction":"Create PR targeting the correct base branch."}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+    const verifier = createVerifier();
+
+    // Task expects PR to target 'development' but PR targets 'main'
+    const verdict = await verifier.verify({
+      taskId: 'task-wrong-base-branch',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'phase2',
+      originalPrompt: 'Implement and open PR targeting development',
+      rawLogs: assistantLog(validPhase2Final),
+      linearIssueLabels: ['code-task'],
+      baseBranch: 'development',
+      taskResult: {
+        branch: 'feature/fix',
+        baseBranch: 'main', // Wrong - should be 'development'
+        prUrl: 'https://github.com/intexuraos/intexuraos/pull/125',
+        commits: 3,
+        ciFailed: false,
+      },
+    });
+
+    expect(verdict.passed).toBe(false);
+    expect(verdict.reasons.join(' ')).toContain('main');
+    expect(verdict.reasons.join(' ')).toContain('development');
+    expect(verdict.missingCriteria.join(' ')).toContain('development');
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes phase2 when PR targets correct base branch', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":true,"confidence":0.98,"reasons":["all criteria met"],"missingCriteria":[],"resumeInstruction":"done"}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+    const verifier = createVerifier();
+
+    // Task expects PR to target 'development' and PR targets 'development'
+    const verdict = await verifier.verify({
+      taskId: 'task-correct-base-branch',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'phase2',
+      originalPrompt: 'Implement and open PR targeting development',
+      rawLogs: assistantLog(validPhase2Final),
+      linearIssueLabels: ['code-task'],
+      baseBranch: 'development',
+      taskResult: {
+        branch: 'feature/fix',
+        baseBranch: 'development', // Correct
+        prUrl: 'https://github.com/intexuraos/intexuraos/pull/126',
+        commits: 3,
+        ciFailed: false,
+      },
+    });
+
+    expect(verdict.passed).toBe(true);
+    expect(verdict.usedLlm).toBe(true);
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
   it('still invokes Gemini when phase2 contract checks fail deterministically', async () => {
     const generate = vi.fn().mockResolvedValue({
       ok: true,

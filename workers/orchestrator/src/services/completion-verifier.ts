@@ -21,6 +21,7 @@ export interface CompletionVerifierInput {
   taskResult?: TaskResult;
   workerExitCode?: number;
   claudeError?: string;
+  baseBranch?: string;
 }
 
 export interface CompletionVerifierVerdict {
@@ -353,6 +354,18 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         if (input.taskResult?.prUrl === undefined || input.taskResult.prUrl === '') {
           reasons.push('No PR URL found in task result');
           missingCriteria.push('PR URL created from branch');
+        }
+
+        // Verify PR targets the correct base branch
+        const expectedBaseBranch = input.baseBranch ?? 'main';
+        if (
+          input.taskResult?.baseBranch !== undefined &&
+          input.taskResult.baseBranch !== expectedBaseBranch
+        ) {
+          reasons.push(
+            `PR targets "${input.taskResult.baseBranch}" instead of "${expectedBaseBranch}"`
+          );
+          missingCriteria.push(`PR targeting base branch "${expectedBaseBranch}"`);
         }
 
         if (input.taskResult?.ciFailed === true) {

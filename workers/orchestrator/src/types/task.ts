@@ -70,6 +70,7 @@ export interface Task {
 export interface TaskResult {
   prUrl?: string;
   branch?: string;
+  baseBranch?: string;
   commits?: number;
   summary?: string;
   ciFailed?: boolean;

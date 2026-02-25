@@ -684,6 +684,7 @@ export class TaskDispatcher {
       ...(result !== undefined && { taskResult: result }),
       ...(typeof exitCode === 'number' && { workerExitCode: exitCode }),
       ...(claudeError !== undefined && { claudeError }),
+      baseBranch: task.baseBranch,
     });
     this.appendOrchestratorTaskLog(task.taskId, `━━━ Verification Result ━━━`);
     this.appendOrchestratorTaskLog(
@@ -1118,6 +1119,7 @@ export class TaskDispatcher {
           taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
           linearIssueLabels: task.linearIssueLabels,
           hasChildren: params.hasChildren,
+          baseBranch: task.baseBranch,
         }) +
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
@@ -1263,13 +1265,14 @@ export class TaskDispatcher {
 
       // Check for pull requests on this branch
       const { stdout: prOutput } = await execAsync(
-        `gh pr list --head "${currentBranch}" --json url,number,headRefName,title,commits --jq .`,
+        `gh pr list --head "${currentBranch}" --json url,number,headRefName,baseRefName,title,commits --jq .`,
         execOptions
       );
       const prs = JSON.parse(prOutput) as {
         url: string;
         number: number;
         headRefName: string;
+        baseRefName: string;
         commits?: unknown[];
         title: string;
       }[];
@@ -1328,6 +1331,7 @@ export class TaskDispatcher {
         /* v8 ignore start -- ts-type: spread operator with optional rebaseResult creates type narrowing branch @preserve */
         const result: TaskResult = {
           branch,
+          baseBranch: pr.baseRefName,
           commits,
           prUrl: pr.url,
           summary: pr.title,
