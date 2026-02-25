@@ -331,7 +331,7 @@ describe('createTaskForPR', () => {
 
       await createTaskForPR(createDeps(), createRequest());
 
-      expect(capturedPrompt).toContain('[Resume from PR Comment]');
+      expect(capturedPrompt).toContain('[PR Comment Task]');
       expect(capturedPrompt).toContain(`PR #${String(prNumber)}`);
       expect(capturedPrompt).toContain('gh pr view');
       expect(capturedPrompt).toContain(comment);
@@ -383,12 +383,15 @@ describe('createTaskForPR', () => {
         data: () => undefined,
       });
 
-      let capturedTaskPrompt: string | undefined;
+      let capturedLinearIssueId: string | undefined;
       mockLinearIssueService.ensureIssueExists.mockImplementation(async (input) => {
-        capturedTaskPrompt = input.taskPrompt;
+        capturedLinearIssueId = input.linearIssueId;
         return {
+          linearIssueId: input.linearIssueId,
           linearIssueTitle: input.taskPrompt,
           linearFallback: false,
+          linearIssueLabels: ['code-task'],
+          hasChildren: false,
         };
       });
 
@@ -400,9 +403,111 @@ describe('createTaskForPR', () => {
         ok({ dispatched: true, workerLocation: 'home-dev' })
       );
 
+      await createTaskForPR(createDeps(), createRequest({ prTitle: '[INT-500] Fix auth bug' }));
+
+      expect(capturedLinearIssueId).toBe('INT-500');
+    });
+
+    it('extracts INT-XXX from PR title and validates existing issue', async () => {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockTransaction.get.mockResolvedValue({
+        exists: false,
+        data: () => undefined,
+      });
+
+      let capturedLinearIssueId: string | undefined;
+      mockLinearIssueService.ensureIssueExists.mockImplementation(async (input) => {
+        capturedLinearIssueId = input.linearIssueId;
+        return {
+          linearIssueId: 'INT-500',
+          linearIssueTitle: 'Fix auth bug',
+          linearFallback: false,
+          linearIssueLabels: ['code-task'],
+          hasChildren: false,
+        };
+      });
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({ ...mockExistingTask, id: 'task_new' })
+      );
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' })
+      );
+
+      await createTaskForPR(createDeps(), createRequest({ prTitle: 'Fix auth [INT-500]' }));
+
+      expect(capturedLinearIssueId).toBe('INT-500');
+    });
+
+    it('passes pr-comment label in dispatch when creating new issue', async () => {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockTransaction.get.mockResolvedValue({
+        exists: false,
+        data: () => undefined,
+      });
+
+      mockLinearIssueService.ensureIssueExists.mockImplementation(async () => ({
+        linearIssueTitle: 'Test issue',
+        linearFallback: false,
+        linearIssueLabels: [],
+        hasChildren: false,
+      }));
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({ ...mockExistingTask, id: 'task_new' })
+      );
+
+      let capturedLabels: string[] = [];
+      mockTaskDispatcher.dispatch.mockImplementation(async (input) => {
+        capturedLabels = input.linearIssueLabels;
+        return ok({ dispatched: true, workerLocation: 'home-dev' });
+      });
+
       await createTaskForPR(createDeps(), createRequest({ prTitle: 'My PR Title' }));
 
-      expect(capturedTaskPrompt).toBe('My PR Title');
+      expect(capturedLabels).toContain('pr-comment');
+      expect(capturedLabels).toContain('code-task');
+    });
+
+    it('uses real labels from existing issue when INT-XXX found', async () => {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockTransaction.get.mockResolvedValue({
+        exists: false,
+        data: () => undefined,
+      });
+
+      mockLinearIssueService.ensureIssueExists.mockImplementation(async () => ({
+        linearIssueId: 'INT-500',
+        linearIssueTitle: 'Existing issue',
+        linearFallback: false,
+        linearIssueLabels: ['code-task', 'backend'],
+        hasChildren: false,
+      }));
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({ ...mockExistingTask, id: 'task_new' })
+      );
+
+      let capturedLabels: string[] = [];
+      mockTaskDispatcher.dispatch.mockImplementation(async (input) => {
+        capturedLabels = input.linearIssueLabels;
+        return ok({ dispatched: true, workerLocation: 'home-dev' });
+      });
+
+      await createTaskForPR(createDeps(), createRequest({ prTitle: '[INT-500] Fix bug' }));
+
+      expect(capturedLabels).toEqual(['code-task', 'backend']);
+      expect(capturedLabels).not.toContain('pr-comment');
     });
   });
 });

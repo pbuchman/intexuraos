@@ -7,7 +7,7 @@ import type { TaskResult } from '../types/task.js';
 import { stripDockerHeaders } from './log-formatter.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
-export type CompletionPhase = 'phase1' | 'phase2';
+export type CompletionPhase = 'phase1' | 'phase2' | 'pr-comment';
 
 export interface CompletionVerifierInput {
   taskId: string;
@@ -85,6 +85,9 @@ function buildDefaultResumeInstruction(phase: CompletionPhase, missingCriteria: 
   /* v8 ignore start -- source-map: coverage branch mapping reports false-uncovered path on phase selector despite direct unit tests @preserve */
   if (phase === 'phase2') {
     return `Address: ${joined}. Re-run pnpm run ci:tracked, ensure it succeeds, and finish with PHASE2_FINAL.`;
+  }
+  if (phase === 'pr-comment') {
+    return `Address: ${joined}. Push changes to the PR branch, reply to the comment, and finish with PR_COMMENT_FINAL.`;
   }
   /* v8 ignore stop @preserve */
   return `Address: ${joined}. Set Linear label (code-task or unclear) and finish with PHASE1_FINAL.`;
@@ -166,6 +169,29 @@ function verifyPhase2Final(message: string): { ok: true } | { ok: false; missing
 
   if (!message.includes('PHASE2_FINAL:')) {
     missing.push('PHASE2_FINAL block');
+  }
+
+  const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
+  const ciMatch = /- CI evidence:\s*pnpm run ci:tracked successful\s*$/im.exec(message);
+  const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
+  const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
+
+  if (prMatch?.[1] === undefined) missing.push('PR URL line');
+  if (ciMatch?.[0] === undefined) missing.push('CI evidence line');
+  if (linearMatch?.[1] === undefined) missing.push('Linear issue URL line');
+  if ((summaryMatch?.[1] ?? '').trim() === '') missing.push('Summary line');
+
+  if (missing.length > 0) {
+    return { ok: false, missing };
+  }
+  return { ok: true };
+}
+
+function verifyPRCommentFinal(message: string): { ok: true } | { ok: false; missing: string[] } {
+  const missing: string[] = [];
+
+  if (!message.includes('PR_COMMENT_FINAL:')) {
+    missing.push('PR_COMMENT_FINAL block');
   }
 
   const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
@@ -287,6 +313,24 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         if (!phaseResult.ok) {
           reasons.push('Phase 1 completion contract was not met');
           missingCriteria.push(...phaseResult.missing);
+        }
+      } else if (input.phase === 'pr-comment') {
+        const phaseResult = verifyPRCommentFinal(lastAssistantMessage);
+        if (!phaseResult.ok) {
+          reasons.push('PR Comment completion contract was not met');
+          missingCriteria.push(...phaseResult.missing);
+        }
+
+        // For PR comment, we don't require a new PR (they push to existing PR)
+        // but we still check CI passed
+        if (input.taskResult?.ciFailed === true) {
+          reasons.push('GitHub checks reported failing statuses');
+          missingCriteria.push('Successful GitHub checks for PR branch');
+        }
+
+        if (input.taskResult?.ciFailed === undefined) {
+          reasons.push('Could not determine GitHub checks status');
+          missingCriteria.push('Confirmed GitHub checks status');
         }
       } else {
         const phaseResult = verifyPhase2Final(lastAssistantMessage);
