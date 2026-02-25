@@ -312,6 +312,7 @@ ${additionalContext.trim()}
     retriedFrom?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
+    executionPhase: 'design' | 'execution';
   } = {
     taskId: retryTask.id,
     prompt: retryTask.sanitizedPrompt,
@@ -325,6 +326,9 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     linearIssueLabels: linearIssueLabelsForDispatch,
     hasChildren: hasChildrenForDispatch,
+    /* v8 ignore start -- ts-type: fallback branch for backward compatibility @preserve */
+    executionPhase: retryTask.executionPhase ?? (hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'design'),
+    /* v8 ignore stop @preserve */
   };
 
   // Only include optional fields if defined

@@ -37,6 +37,7 @@ export const CreateTaskRequestSchema = z.object({
   webhookUrl: z.string().url(),
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
+  executionPhase: z.enum(['design', 'execution']).optional(),
 });
 
 // POST /tasks/:id/message request schema

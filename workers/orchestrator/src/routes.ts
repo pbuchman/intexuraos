@@ -163,6 +163,7 @@ export function registerRoutes(
       /* v8 ignore stop @preserve */
       ...(parsed.slug !== undefined && { slug: parsed.slug }),
       ...(parsed.actionId !== undefined && { actionId: parsed.actionId }),
+      ...(parsed.executionPhase !== undefined && { executionPhase: parsed.executionPhase }),
     };
     /* v8 ignore stop @preserve */
 

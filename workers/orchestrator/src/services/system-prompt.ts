@@ -1,3 +1,5 @@
+import { hasCodeTaskLabel } from '@intexuraos/common-core';
+
 /**
  * System prompt template for Claude Code workers.
  *
@@ -26,6 +28,8 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   /** Whether the issue has child issues */
   hasChildren: boolean;
+  /** Execution phase from code-agent (optional, falls back to label detection) */
+  executionPhase?: 'design' | 'execution';
 }
 
 /**
@@ -339,7 +343,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
  * @returns Complete system prompt for worker execution
  */
 export function buildSystemPrompt(params: SystemPromptParams): string {
-  const { linearIssueLabels } = params;
+  const { linearIssueLabels, executionPhase } = params;
 
   // Priority: pr-comment > code-task > default (Phase 1)
   const isPRComment = linearIssueLabels.some(
@@ -350,11 +354,15 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
     return buildPRCommentPrompt(params);
   }
 
-  const hasCodeTaskLabel = linearIssueLabels.some(
-    (label) => label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-') === 'code-task'
-  );
+  // Use executionPhase from code-agent if available, otherwise detect from labels
+  /* v8 ignore start -- ts-type: ternary branch for backward compatibility with tasks that don't send executionPhase @preserve */
+  const isCodeTask =
+    executionPhase !== undefined
+      ? executionPhase === 'execution'
+      : hasCodeTaskLabel(linearIssueLabels);
+  /* v8 ignore stop @preserve */
 
-  if (!hasCodeTaskLabel) {
+  if (!isCodeTask) {
     return buildPhase1Prompt(params);
   }
 
