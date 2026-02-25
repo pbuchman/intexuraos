@@ -506,8 +506,7 @@ describe('createTaskForPR', () => {
 
       await createTaskForPR(createDeps(), createRequest({ prTitle: '[INT-500] Fix bug' }));
 
-      expect(capturedLabels).toEqual(['code-task', 'backend']);
-      expect(capturedLabels).not.toContain('pr-comment');
+      expect(capturedLabels).toEqual(['code-task', 'backend', 'pr-comment']);
     });
   });
 });

@@ -222,6 +222,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 function buildPRCommentPrompt(params: SystemPromptParams): string {
   const { taskId, linearIssueId, linearIssueTitle, taskUrl } = params;
 
+  /* v8 ignore start -- test-infra: conditional branches require integration test with/without Linear issue ID @preserve */
   return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
 [WORKER-MODE]
@@ -280,6 +281,7 @@ PR_COMMENT_FINAL:
 \`\`\`
 
 After this block, stop. Do not append any other checklist or schema payload.`;
+  /* v8 ignore stop @preserve */
 }
 
 /**

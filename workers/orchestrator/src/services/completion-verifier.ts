@@ -58,9 +58,16 @@ const LLM_VERDICT_SCHEMA = z.object({
   reasons: z.array(z.string()),
   missingCriteria: z.array(z.string()),
   /* v8 ignore start -- ts-type: transform path for null input @preserve */
-  resumeInstruction: z.string().nullable().transform((v) => v ?? ''),
+  resumeInstruction: z
+    .string()
+    .nullable()
+    .transform((v) => v ?? ''),
   /* v8 ignore stop @preserve */
-  extractedSummary: z.string().nullable().optional().transform((v) => v ?? undefined),
+  extractedSummary: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((v) => v ?? undefined),
 });
 
 type LlmVerdict = z.infer<typeof LLM_VERDICT_SCHEMA>;
@@ -197,11 +204,13 @@ function verifyPRCommentFinal(message: string): { ok: true } | { ok: false; miss
   const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
   const ciMatch = /- CI evidence:\s*pnpm run ci:tracked successful\s*$/im.exec(message);
   const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
+  const commentMatch = /- Comment replied:\s*(yes|no)\s*$/im.exec(message);
   const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
 
   if (prMatch?.[1] === undefined) missing.push('PR URL line');
   if (ciMatch?.[0] === undefined) missing.push('CI evidence line');
   if (linearMatch?.[1] === undefined) missing.push('Linear issue URL line');
+  if (commentMatch?.[1] === undefined) missing.push('Comment replied line');
   if ((summaryMatch?.[1] ?? '').trim() === '') missing.push('Summary line');
 
   if (missing.length > 0) {
@@ -384,13 +393,22 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
             '- Linear issue: <full Linear URL>',
             '- Summary: <3-5 sentences>',
           ].join('\n')
-        : [
-            'PHASE2_FINAL:',
-            '- PR: <full GitHub PR URL>',
-            '- CI evidence: pnpm run ci:tracked successful',
-            '- Linear issue: <full Linear URL>',
-            '- Summary: <3-5 sentences>',
-          ].join('\n');
+        : input.phase === 'pr-comment'
+          ? [
+              'PR_COMMENT_FINAL:',
+              '- PR: <full GitHub PR URL>',
+              '- CI evidence: pnpm run ci:tracked successful',
+              '- Linear issue: <full Linear URL>',
+              '- Comment replied: <yes|no>',
+              '- Summary: <3-5 sentences>',
+            ].join('\n')
+          : [
+              'PHASE2_FINAL:',
+              '- PR: <full GitHub PR URL>',
+              '- CI evidence: pnpm run ci:tracked successful',
+              '- Linear issue: <full Linear URL>',
+              '- Summary: <3-5 sentences>',
+            ].join('\n');
 
     const verifierPrompt = [
       'You are a strict task-completion verifier.',
@@ -559,5 +577,6 @@ export const CompletionVerifierTestUtils = {
   extractLastAssistantMessage,
   verifyPhase1Final,
   verifyPhase2Final,
+  verifyPRCommentFinal,
   buildDefaultResumeInstruction,
 };

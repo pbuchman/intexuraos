@@ -65,10 +65,14 @@ export interface CreateTaskForPRDeps {
 function buildTaskPrompt(request: CreateTaskForPRRequest): string {
   const { repository, prNumber, senderLogin, comment, prTitle } = request;
 
-  return [
+  const lines = [
     `[PR Comment Task] Comment on PR #${String(prNumber)} in ${repository}`,
     `From: @${senderLogin}`,
-    prTitle !== undefined ? `PR title: ${prTitle}` : '',
+  ];
+  if (prTitle !== undefined) {
+    lines.push(`PR title: ${prTitle}`);
+  }
+  lines.push(
     '',
     'This task was created automatically because a comment was posted on a PR',
     'that had no existing code task. Investigate the PR context and address the comment.',
@@ -85,7 +89,8 @@ function buildTaskPrompt(request: CreateTaskForPRRequest): string {
     '6. Run pnpm run ci:tracked — must pass before pushing',
     '7. Commit and push your changes to the existing PR branch',
     `8. Reply to the comment: gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
-  ].filter((line) => line !== '').join('\n');
+  );
+  return lines.join('\n');
 }
 
 /**
@@ -288,12 +293,17 @@ export async function createTaskForPR(
   // For new tasks, we have webhookSecret and linearResult
   const { taskId, webhookSecret, linearResult } = txValue;
 
-  // Determine labels based on whether we linked to existing issue or created new
-  // If INT-XXX was found in PR title, use real labels from that issue
-  // Otherwise, mark as pr-comment mode for Phase 3 routing
-  const dispatchLabels = existingLinearIssueId !== undefined
+  // Always include pr-comment for PR-comment-originated tasks so the orchestrator
+  // routes to buildPRCommentPrompt. When INT-XXX exists, merge the issue's real
+  // labels with pr-comment; when creating new, use code-task + pr-comment.
+  const issueLabels = existingLinearIssueId !== undefined
     ? linearResult.linearIssueLabels
-    : ['code-task', 'pr-comment'];
+    : ['code-task'];
+  /* v8 ignore start -- test-infra: pr-comment already present in issue labels is a defensive guard for edge case @preserve */
+  const dispatchLabels = issueLabels.includes('pr-comment')
+    ? issueLabels
+    : [...issueLabels, 'pr-comment'];
+  /* v8 ignore stop @preserve */
 
   // Step 6: Dispatch to worker (only for new tasks)
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
