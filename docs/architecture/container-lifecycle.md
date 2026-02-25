@@ -146,16 +146,16 @@ The container receives these environment variables:
 
 ### Timeout Constants
 
-| Constant                          | Value            | File                       | Description                            |
-| --------------------------------- | ---------------- | -------------------------- | -------------------------------------- |
-| `TASK_TIMEOUT_WARNING_MS`         | 115 min (1h 55m) | `task-dispatcher.ts`       | Warning log before hard kill           |
-| `TASK_TIMEOUT_KILL_MS`            | 120 min (2h)     | `task-dispatcher.ts`       | Hard kill timeout                      |
-| `COMPLETION_CHECK_INTERVAL_MS`    | 30s              | `task-dispatcher.ts`       | Poll interval for completion           |
-| `ACTIVITY_HEARTBEAT_THRESHOLD_MS` | 30s              | `task-dispatcher.ts`       | Heartbeat activity threshold           |
-| `workerReadyTimeoutMs`            | 600s (10 min)    | `docker-provider.ts`       | Container readiness timeout            |
-| `ZOMBIE_THRESHOLD_MINUTES`        | 30 min           | `detectZombieTasks.ts`     | Inactivity before zombie detection     |
-| `MAX_AGE_MS` (cleanup)            | 24 hours         | `docker-provider.ts`       | Orphan container cleanup age threshold |
-| `pnpm install timeout`            | 5 min            | `worktree-manager.ts`      | Dependency installation timeout        |
+| Constant                          | Value            | File                   | Description                            |
+| --------------------------------- | ---------------- | ---------------------- | -------------------------------------- |
+| `TASK_TIMEOUT_WARNING_MS`         | 115 min (1h 55m) | `task-dispatcher.ts`   | Warning log before stop timeout        |
+| `TASK_TIMEOUT_KILL_MS`            | 120 min (2h)     | `task-dispatcher.ts`   | Graceful stop timeout                  |
+| `COMPLETION_CHECK_INTERVAL_MS`    | 30s              | `task-dispatcher.ts`   | Poll interval for completion           |
+| `ACTIVITY_HEARTBEAT_THRESHOLD_MS` | 30s              | `task-dispatcher.ts`   | Heartbeat activity threshold           |
+| `workerReadyTimeoutMs`            | 600s (10 min)    | `docker-provider.ts`   | Container readiness timeout            |
+| `ZOMBIE_THRESHOLD_MINUTES`        | 30 min           | `detectZombieTasks.ts` | Inactivity before zombie detection     |
+| `MAX_AGE_MS` (cleanup)            | 24 hours         | `docker-provider.ts`   | Orphan container cleanup age threshold |
+| `pnpm install timeout`            | 5 min            | `worktree-manager.ts`  | Dependency installation timeout        |
 
 ### Timeout Flow
 
@@ -174,27 +174,28 @@ Task Starts
          │
          ▼ (120 min)
 ┌─────────────────┐
-│ Force Kill     │ ◄── SIGKILL sent to container
-│ teardownAttempt│
+│ Graceful Stop  │ ◄── SIGTERM sent (10s grace), then container removed
+│ destroyWorker()│
 └────────┬────────┘
          │
          ▼
-    Container
-    Destroyed
+    Task marked
+    'interrupted'
 ```
 
 ---
 
 ## Container States
 
-### Docker Provider States
+### Docker Provider States (`WorkerStatus`)
 
-| State       | Description                         |
-| ----------- | ----------------------------------- |
-| `running`   | Container actively processing task  |
-| `completed` | Container exited with code 0        |
-| `failed`    | Container exited with non-zero code |
-| `timeout`   | Container killed due to timeout     |
+| State       | Description                              |
+| ----------- | ---------------------------------------- |
+| `starting`  | Container created, waiting for readiness |
+| `running`   | Container actively processing task       |
+| `completed` | Container exited with code 0             |
+| `failed`    | Container exited with non-zero code      |
+| `timeout`   | Container stopped due to timeout         |
 
 ### Orchestrator Internal States
 
@@ -223,6 +224,8 @@ Preserved workers are tracked in memory and listed via `listPreservedWorkers()`.
 
 ## Cleanup Triggers
 
+All cleanup paths call `destroyWorker(taskId, forceKill?)`. When `forceKill` is `false` (default), the container receives `SIGTERM` with a 10-second grace period (`container.stop({ t: 10 })`). When `forceKill` is `true`, `SIGKILL` is sent immediately (`container.kill({ signal: 'SIGKILL' })`). Currently, **no call site passes `forceKill=true`** — all shutdowns are graceful.
+
 ### 1. Task Completion
 
 Container cleanup happens during **finalization**, not during attempt teardown. The `teardownAttempt` method only destroys when `keepSession` is `false`:
@@ -244,16 +247,17 @@ If `preserveFailedContainers` is `true`, containers are preserved on `failed`, `
 ### 2. Cancellation
 
 ```typescript
-// User cancels task → dispatchCancel() → destroyWorker(taskId, forceKill=true)
+// User cancels task → cancelTask() → destroyWorker(taskId)
 ```
 
-Force kill (`SIGKILL`) is used for cancellation to ensure immediate termination.
+Graceful stop (`SIGTERM` with 10s timeout) is used for cancellation. The `forceKill` parameter defaults to `false`, so `container.stop({ t: 10 })` is called, not `container.kill({ signal: 'SIGKILL' })`.
 
 ### 3. Timeout
 
 As described in [Timeout Flow](#timeout-flow):
+
 - Warning at 115 minutes
-- Force kill at 120 minutes
+- Graceful stop at 120 minutes (task marked `interrupted`)
 
 ### 4. Startup Cleanup
 
@@ -280,32 +284,44 @@ Resume Request (continueSession=true)
             │
             ▼
 ┌───────────────────────┐
-│ Check preservedWorkers│
-│ Map for taskId        │
+│ 1. Check `workers`    │
+│    Map for taskId     │ ◄── In-memory: still tracked from current run
 └─────────┬─────────────┘
           │
     ┌─────┴─────┐
     │ Found?    │
     └─────┬─────┘
       Yes │ No
-     ┌────┴────┐      ┌────────────────────┐
-     ▼         │      │ Check Docker for   │
-  Restore      │      │ orphan container: │
-  preserved    │      │ claude-worker-{id} │
-  container    │      └─────────┬──────────┘
-     │        │            ┌────┴─────┐
-     │        │            │ Running? │
-     │        │            └─────┬─────┘
-     │        │           Yes    │ No
-     │        │           ┌──────┴──────┐
-     │        │           ▼             ▼
-     │        │       Reuse       Remove &
-     │        │       container    create fresh
-     │        │           │             │
-     └────────┴───────────┴─────────────┘
-                    │
-                    ▼
-             Continue Task
+     ┌────┘└──────────────────────┐
+     ▼                            ▼
+  Reuse existing         ┌───────────────────────┐
+  worker (update         │ 2. Check preserved-   │
+  prompts, start         │    Workers Map        │
+  new attempt)           └─────────┬─────────────┘
+     │                        ┌────┴─────┐
+     │                        │ Found?   │
+     │                        └─────┬────┘
+     │                     Yes │     │ No
+     │                    ┌────┘     └─────────────┐
+     │                    ▼                        ▼
+     │               Restore             ┌────────────────────┐
+     │               preserved           │ 3. Check Docker    │
+     │               container           │ for orphan:        │
+     │                    │              │ claude-worker-{id} │
+     │                    │              └─────────┬──────────┘
+     │                    │                   ┌────┴─────┐
+     │                    │                   │ Running? │
+     │                    │                   └─────┬────┘
+     │                    │              Yes │      │ No
+     │                    │              ┌───┘      └───┐
+     │                    │              ▼              ▼
+     │                    │          Reuse        Remove &
+     │                    │          container    create fresh
+     │                    │              │              │
+     └────────────────────┴──────────────┴──────────────┘
+                              │
+                              ▼
+                       Continue Task
 ```
 
 ### Orphan Detection Code
@@ -318,7 +334,10 @@ if (config.continueSession === true) {
 
   if (orphanInfo.State.Running) {
     // Reuse the orphaned container
-    this.logger.info({ taskId, containerId }, 'Reusing orphaned container for resume after restart');
+    this.logger.info(
+      { taskId, containerId },
+      'Reusing orphaned container for resume after restart'
+    );
   } else {
     // Remove stopped container, create fresh
     await orphanContainer.remove({ force: true });
@@ -362,16 +381,16 @@ When the orchestrator restarts:
 
 | Component         | Survives? | Notes                        |
 | ----------------- | --------- | ---------------------------- |
-| Docker containers | ✅ Yes     | Containers run independently |
-| Git worktrees     | ✅ Yes     | Filesystem persists          |
-| Firestore tasks   | ✅ Yes     | Database persists            |
+| Docker containers | ✅ Yes    | Containers run independently |
+| Git worktrees     | ✅ Yes    | Filesystem persists          |
+| Firestore tasks   | ✅ Yes    | Database persists            |
 
 ### What Is Lost
 
 | Component                                  | Survives? | Notes                |
 | ------------------------------------------ | --------- | -------------------- |
-| In-memory Maps (workers, preservedWorkers) | ❌ No      | Recreated on startup |
-| Task state in orchestrator                 | ❌ No      | Read from Firestore  |
+| In-memory Maps (workers, preservedWorkers) | ❌ No     | Recreated on startup |
+| Task state in orchestrator                 | ❌ No     | Read from Firestore  |
 
 ### Recovery Flow
 
@@ -420,12 +439,13 @@ Tasks where the container died and no resume is requested are eventually caught 
 
 **Scenario:** External force (manual `docker rm`, system cleanup) removes the container while task is running.
 
-**Detection:** On next heartbeat or resume, the orchestrator queries the container status.
+**Detection:** On next completion check interval (30s), the orchestrator queries the container status.
 
 **Recovery:**
+
 1. `isWorkerRunning(taskId)` returns `false`
-2. Orchestrator logs the failure
-3. Task status in Firestore set to `failed`
+2. `handleTaskCompletion()` runs the completion verifier
+3. Completion verifier determines final status (`completed` if PR/deliverable found, `failed` otherwise)
 4. No automatic restart (user must retry)
 
 ### Q2: Orchestrator Restart During Task
@@ -433,21 +453,24 @@ Tasks where the container died and no resume is requested are eventually caught 
 **Scenario:** Orchestrator crashes/restarts while task is running.
 
 **Recovery:**
-1. On startup, read running tasks from Firestore
-2. For each running task, check if container still exists
-3. If running → resume (reuse container)
-4. If stopped → mark as failed
+
+1. On startup, `cleanupOrphanedContainers()` removes containers older than 24 hours
+2. Running tasks in Firestore are **NOT** automatically recovered — there is no bulk Firestore scan
+3. If a resume request arrives later, orphan detection in `createWorker()` checks if the container still exists and reuses it if running
+4. Tasks with no resume request are eventually caught by **zombie detection** (30 min inactivity) and marked `interrupted`
 
 ### Q3: Network Partition
 
 **Scenario:** Container loses network connectivity, can't complete.
 
 **Detection:**
-- Timeout (2h hard limit)
+
+- Timeout (2h limit)
 - Zombie detection (30 min inactivity)
 
 **Recovery:**
-- Timeout triggers container kill
+
+- Timeout triggers graceful container stop (SIGTERM), task marked `interrupted`
 - Zombie detection marks task as `interrupted`
 - User notified via WhatsApp (if configured)
 
@@ -456,6 +479,7 @@ Tasks where the container died and no resume is requested are eventually caught 
 **Scenario:** Two resume requests for same task (race condition).
 
 **Handling:**
+
 - Each resume creates a new container check
 - If container already reused by first request, second finds stopped container
 - Second request creates fresh container
