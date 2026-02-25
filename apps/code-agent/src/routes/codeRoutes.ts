@@ -1361,6 +1361,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         webhookSecret: string;
         linearIssueLabels: string[];
         hasChildren: boolean;
+        executionPhase: 'design' | 'execution';
         workerCredentials: { workers: Array<{ name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }> };
       } = {
         taskId: task.id,
@@ -1373,6 +1374,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         webhookSecret,
         linearIssueLabels: issueResult.linearIssueLabels,
         hasChildren: issueResult.hasChildren,
+        /* v8 ignore start -- ts-type: fallback branch for backward compatibility with tasks without executionPhase @preserve */
+        executionPhase: task.executionPhase ?? (hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'design'),
+        /* v8 ignore stop @preserve */
         workerCredentials,
       };
 

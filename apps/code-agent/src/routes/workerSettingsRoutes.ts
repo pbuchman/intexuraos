@@ -138,6 +138,18 @@ const reorderSchema = {
   required: ['workerNames'],
 } as const;
 
+const githubUsernameSchema = {
+  type: 'object',
+  properties: {
+    githubUsername: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 100,
+    },
+  },
+  required: ['githubUsername'],
+} as const;
+
 const maskedWorkerConfigSchema = {
   type: 'object',
   properties: {
@@ -186,6 +198,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
                     type: 'array',
                     items: maskedWorkerConfigSchema,
                   },
+                  githubUsername: { type: 'string' },
                 },
                 required: ['workers'],
               },
@@ -251,6 +264,10 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       const response: UserWorkerSettingsResponse = {
         workers: settings?.workers.map(maskWorkerConfig) ?? [],
       };
+
+      if (settings?.githubUsername !== undefined) {
+        response.githubUsername = settings.githubUsername;
+      }
 
       return await reply.ok(response);
     }
@@ -923,6 +940,123 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       request.log.info({ userId, workerNames }, 'Workers reordered successfully');
 
       return await reply.ok({ reordered: true });
+    }
+  );
+
+  // PATCH /code/worker-settings/github-username - Save GitHub username
+  fastify.patch<{
+    Body: { githubUsername: string };
+  }>(
+    '/code/worker-settings/github-username',
+    {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'saveGitHubUsername',
+        summary: 'Save GitHub username',
+        description: 'Save GitHub username for PR comment → user mapping. Requires Auth0 JWT.',
+        tags: ['public', 'worker-settings'],
+        body: githubUsernameSchema,
+        response: {
+          200: {
+            description: 'GitHub username updated',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  updated: { type: 'boolean', enum: [true] },
+                },
+                required: ['updated'],
+              },
+            },
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
+    async (request: FastifyRequest<{ Body: { githubUsername: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /code/worker-settings/github-username',
+      });
+
+      const { workerSettingsRepo } = getServices();
+      /* v8 ignore stop @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      const { githubUsername } = request.body;
+
+      // Validate: trimmed, non-empty
+      const trimmed = githubUsername.trim();
+      if (trimmed === '') {
+        return await reply.fail('INVALID_REQUEST', 'GitHub username is required');
+      }
+
+      if (trimmed.length > 100) {
+        return await reply.fail('INVALID_REQUEST', 'GitHub username must be 100 characters or less');
+      }
+
+      request.log.info({ userId }, 'Saving GitHub username');
+
+      const result = await workerSettingsRepo.updateGitHubUsername(userId, trimmed);
+
+      if (!result.ok) {
+        request.log.error({ error: result.error }, 'Failed to save GitHub username');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      request.log.info({ userId, githubUsername: trimmed }, 'GitHub username saved successfully');
+
+      return await reply.ok({ updated: true });
     }
   );
 

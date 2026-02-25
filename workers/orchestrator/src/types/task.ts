@@ -43,6 +43,8 @@ export interface Task {
    * Used for tracking retry chains and debugging.
    */
   retriedFrom?: string;
+  /** Execution phase from code-agent. When set, used instead of recalculating from labels. */
+  executionPhase?: 'design' | 'execution';
   /**
    * Current execution attempt (starts at 1).
    */

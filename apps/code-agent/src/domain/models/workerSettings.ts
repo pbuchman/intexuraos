@@ -117,6 +117,7 @@ export interface MaskedWorkerConfig {
  */
 export interface UserWorkerSettingsResponse {
   workers: MaskedWorkerConfig[];
+  githubUsername?: string;
 }
 
 /**

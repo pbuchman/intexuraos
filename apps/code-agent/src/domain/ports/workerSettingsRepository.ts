@@ -112,4 +112,13 @@ export interface WorkerSettingsRepository {
   findByGitHubUsername(
     githubUsername: string
   ): Promise<Result<{ userId: string; worker: WorkerConfig } | null, WorkerSettingsError>>;
+
+  /**
+   * Update the GitHub username for a user.
+   * If no document exists, creates one with empty workers array + githubUsername.
+   */
+  updateGitHubUsername(
+    userId: string,
+    githubUsername: string
+  ): Promise<Result<void, WorkerSettingsError>>;
 }
