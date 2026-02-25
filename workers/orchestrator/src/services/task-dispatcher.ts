@@ -1,7 +1,7 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
-import type { Result, Logger } from '@intexuraos/common-core';
+import { type Result, type Logger, hasCodeTaskLabel } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
@@ -249,9 +249,13 @@ export class TaskDispatcher {
       /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all three phases @preserve */
       const phase = isPRComment
         ? 'PR Comment'
-        : this.hasCodeTaskLabel(task.linearIssueLabels)
+        : task.executionPhase === 'execution'
           ? 'Phase 2'
-          : 'Phase 1';
+          : task.executionPhase === 'design'
+            ? 'Phase 1'
+            : hasCodeTaskLabel(task.linearIssueLabels)
+              ? 'Phase 2'
+              : 'Phase 1';
       const phaseDesc =
         phase === 'PR Comment'
           ? 'PR Comment Execution \u2014 respond to PR comment, push to existing PR branch'
@@ -643,9 +647,13 @@ export class TaskDispatcher {
     const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
     const phase = isPRComment
       ? 'pr-comment'
-      : this.hasCodeTaskLabel(task.linearIssueLabels)
+      : task.executionPhase === 'execution'
         ? 'phase2'
-        : 'phase1';
+        : task.executionPhase === 'design'
+          ? 'phase1'
+          : hasCodeTaskLabel(task.linearIssueLabels)
+            ? 'phase2'
+            : 'phase1';
     this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(
@@ -772,7 +780,14 @@ export class TaskDispatcher {
         `Adaptive retry: ${retryDecision.outcome} (score=${String(retryDecision.progressScore)}, effective=${String(retryDecision.effectiveMaxAttempts)}) — ${retryDecision.reason}`
       );
       this.logger.info(
-        { taskId: task.taskId, attempt, maxAttempts, outcome: retryDecision.outcome, progressScore: retryDecision.progressScore, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts },
+        {
+          taskId: task.taskId,
+          attempt,
+          maxAttempts,
+          outcome: retryDecision.outcome,
+          progressScore: retryDecision.progressScore,
+          effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
+        },
         'Adaptive retry decision'
       );
 
@@ -802,7 +817,12 @@ export class TaskDispatcher {
           task.containerId = resumeStart.containerId;
           await this.saveTask(task);
           this.logger.info(
-            { taskId: task.taskId, attempt: nextAttempt, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts, progressScore: retryDecision.progressScore },
+            {
+              taskId: task.taskId,
+              attempt: nextAttempt,
+              effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
+              progressScore: retryDecision.progressScore,
+            },
             'Resumed task with follow-up attempt'
           );
           this.appendOrchestratorTaskLog(
@@ -1143,6 +1163,7 @@ export class TaskDispatcher {
           taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
           linearIssueLabels: task.linearIssueLabels,
           hasChildren: params.hasChildren,
+          ...(task.executionPhase !== undefined && { executionPhase: task.executionPhase }),
         }) +
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
@@ -1384,13 +1405,6 @@ export class TaskDispatcher {
       return { ...result, summary: extractedSummary };
     }
     return { summary: extractedSummary };
-  }
-
-  private hasCodeTaskLabel(labels: string[]): boolean {
-    return labels.some((label) => {
-      const normalized = label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
-      return normalized === 'code-task';
-    });
   }
 
   private detectClaudeError(taskId: string, chunk: string): void {

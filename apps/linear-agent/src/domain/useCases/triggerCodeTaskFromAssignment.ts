@@ -1,6 +1,7 @@
 import type { Logger } from 'pino';
 import type { CodeAgentClient } from '../ports.js';
 import type { LinearWebhookEvent } from '../webhookTypes.js';
+import { hasCodeTaskLabel } from '@intexuraos/common-core';
 
 export interface TriggerCodeTaskDeps {
   codeAgentClient: CodeAgentClient;
@@ -9,13 +10,6 @@ export interface TriggerCodeTaskDeps {
 
 const ASSIGNMENT_PROMPT =
   'Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.';
-
-function hasCodeTaskLabel(labels: string[]): boolean {
-  return labels.some((label) => {
-    const normalized = label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
-    return normalized === 'code-task';
-  });
-}
 
 export function shouldTriggerCodeTask(event: LinearWebhookEvent): boolean {
   if (event.action !== 'update') return false;
