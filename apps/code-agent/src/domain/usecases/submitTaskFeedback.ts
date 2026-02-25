@@ -404,7 +404,7 @@ ${feedback.trim()}
 
   return ok({
     codeTaskId: followUpTask.id,
-    resourceUrl: `/code/tasks/${followUpTask.id}`,
+    resourceUrl: `/#/code-tasks/${followUpTask.id}`,
     workerLocation: followUpTask.workerLocation,
     followUpFor: originalTask.id,
   });

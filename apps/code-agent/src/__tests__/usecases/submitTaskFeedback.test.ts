@@ -521,7 +521,7 @@ describe('submitTaskFeedback use case', () => {
       if (result.ok) {
         expect(result.value).toEqual({
           codeTaskId: 'feedback-task-123',
-          resourceUrl: '/code/tasks/feedback-task-123',
+          resourceUrl: '/#/code-tasks/feedback-task-123',
           workerLocation: 'home-mac',
           followUpFor: originalTaskId,
         });
