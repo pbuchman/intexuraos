@@ -10,6 +10,8 @@ import type {
   DeleteWorkerResponse,
   ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
+  SaveGitHubUsernameRequest,
+  SaveGitHubUsernameResponse,
 } from './workerSettingsApi.types.js';
 
 /**
@@ -108,6 +110,24 @@ export async function testWorkerConnectivity(
   );
 }
 
+/**
+ * Save GitHub username for PR comment → user mapping.
+ */
+export async function saveGitHubUsername(
+  accessToken: string,
+  request: SaveGitHubUsernameRequest
+): Promise<SaveGitHubUsernameResponse> {
+  return await apiRequest<SaveGitHubUsernameResponse>(
+    config.codeAgentUrl,
+    '/code/worker-settings/github-username',
+    accessToken,
+    {
+      method: 'PATCH',
+      body: request,
+    }
+  );
+}
+
 export type {
   MaskedWorkerConfig,
   WorkerSettingsResponse,
@@ -119,4 +139,6 @@ export type {
   DeleteWorkerResponse,
   ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
+  SaveGitHubUsernameRequest,
+  SaveGitHubUsernameResponse,
 } from './workerSettingsApi.types.js';

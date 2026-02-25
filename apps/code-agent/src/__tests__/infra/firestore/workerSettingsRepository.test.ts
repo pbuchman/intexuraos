@@ -738,4 +738,66 @@ describe('workerSettingsRepository', () => {
     // Note: Query-based tests require Firestore indexing which is complex in fake Firestore.
     // The method implementation is tested via integration tests in webhooks.test.ts
   });
+
+  describe('updateGitHubUsername', () => {
+    it('should update githubUsername for existing document', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // First add a worker to create the document
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+
+      // Now update the githubUsername
+      const result = await repo.updateGitHubUsername('user-1', 'octocat');
+
+      expect(result.ok).toBe(true);
+
+      // Verify the update
+      const settingsResult = await repo.getSettings('user-1');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.githubUsername).toBe('octocat');
+      }
+    });
+
+    it('should create document with githubUsername when no document exists', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Update githubUsername for user with no settings
+      const result = await repo.updateGitHubUsername('new-user', 'new-user');
+
+      expect(result.ok).toBe(true);
+
+      // Verify the document was created with empty workers and githubUsername
+      const settingsResult = await repo.getSettings('new-user');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.githubUsername).toBe('new-user');
+        expect(settingsResult.value.workers).toHaveLength(0);
+      }
+    });
+
+    it('should return githubUsername in getSettings after update', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create document with githubUsername
+      await repo.updateGitHubUsername('test-user', 'testuser');
+
+      // Verify getSettings returns the githubUsername
+      const result = await repo.getSettings('test-user');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.githubUsername).toBe('testuser');
+      }
+    });
+  });
 });
