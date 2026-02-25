@@ -104,11 +104,14 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           codeTaskRepo: services.codeTaskRepo,
           userLookupService: services.userLookupService,
           linearIssueService: services.linearIssueService,
+          taskDispatcher: services.taskDispatcher,
+          orchestratorSecret: loadConfig().orchestratorSecret,
           firestore: services.firestore,
         },
         {
           repository: event.repository,
           prNumber: event.pullRequestNumber,
+          ...(event.title !== null && { prTitle: event.title }),
           senderLogin: event.senderLogin,
           comment: event.body ?? '',
           eventId: event.id,
@@ -120,6 +123,7 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           { repository: event.repository, prNumber: event.pullRequestNumber, error: createResult.error },
           'Failed to create task from PR comment'
         );
+        // TODO: INT-618 Post failure comment to GitHub PR when GitHub write client is available
         return;
       }
 
