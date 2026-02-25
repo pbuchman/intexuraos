@@ -669,6 +669,22 @@ export class TaskDispatcher {
     const result = await this.checkForResult(task);
     const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
+    if (result !== undefined) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
+      );
+    }
+    if (phase === 'phase1' && result?.prUrl !== undefined && result.prUrl !== '') {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `[WARN] Phase mismatch: task ran as Phase 1 (design) but worker created PR: ${result.prUrl}`
+      );
+      this.logger.warn(
+        { taskId: task.taskId, phase, prUrl: result.prUrl },
+        'Phase mismatch: Phase 1 task created a PR'
+      );
+    }
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Running completion verification: exitCode=${String(exitCode ?? 'unknown')} claudeError=${claudeError ?? 'none'} detectedPr=${result?.prUrl ?? 'none'}`
@@ -759,6 +775,21 @@ export class TaskDispatcher {
     }
 
     if (!verification.passed) {
+      if (result !== undefined && task.previousResult !== undefined) {
+        const diffs: string[] = [];
+        const prev = task.previousResult;
+        if (prev.commits !== result.commits)
+          diffs.push(`commits ${String(prev.commits ?? 0)}→${String(result.commits ?? 0)}`);
+        if (prev.ciFailed !== result.ciFailed)
+          diffs.push(
+            `ciFailed ${String(prev.ciFailed ?? 'unknown')}→${String(result.ciFailed ?? 'unknown')}`
+          );
+        if (prev.prUrl === undefined && result.prUrl !== undefined) diffs.push('prUrl (new)');
+        if (diffs.length > 0) {
+          this.appendOrchestratorTaskLog(task.taskId, `Result diff: ${diffs.join(', ')}`);
+        }
+      }
+
       const retryDecision = analyzeRetryDecision({
         currentAttempt: attempt,
         baseMaxAttempts: maxAttempts,
@@ -769,10 +800,21 @@ export class TaskDispatcher {
 
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `Adaptive retry: ${retryDecision.outcome} (score=${String(retryDecision.progressScore)}, effective=${String(retryDecision.effectiveMaxAttempts)}) — ${retryDecision.reason}`
+        `Adaptive retry: ${retryDecision.outcome} (score=${String(retryDecision.progressScore)}, resultProgress=${String(retryDecision.signalBreakdown.resultProgress)}, verificationTrend=${String(retryDecision.signalBreakdown.verificationTrend)}, effective=${String(retryDecision.effectiveMaxAttempts)}) — ${retryDecision.reason}`
       );
       this.logger.info(
-        { taskId: task.taskId, attempt, maxAttempts, outcome: retryDecision.outcome, progressScore: retryDecision.progressScore, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts },
+        {
+          taskId: task.taskId,
+          attempt,
+          maxAttempts,
+          outcome: retryDecision.outcome,
+          progressScore: retryDecision.progressScore,
+          signalBreakdown: retryDecision.signalBreakdown,
+          effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
+          hasCurrentResult: result !== undefined,
+          hasPreviousResult: task.previousResult !== undefined,
+          verificationHistoryLength: (task.verificationHistory ?? []).length,
+        },
         'Adaptive retry decision'
       );
 
@@ -790,6 +832,9 @@ export class TaskDispatcher {
         }
 
         const resumePrompt = this.buildResumePrompt(task.prompt, verification);
+        const resumePreview =
+          resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '…' : resumePrompt;
+        this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
         const nextAttempt = attempt + 1;
         const resumeStart = await this.startWorkerAttempt(task, {
           prompt: resumePrompt,
@@ -802,7 +847,12 @@ export class TaskDispatcher {
           task.containerId = resumeStart.containerId;
           await this.saveTask(task);
           this.logger.info(
-            { taskId: task.taskId, attempt: nextAttempt, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts, progressScore: retryDecision.progressScore },
+            {
+              taskId: task.taskId,
+              attempt: nextAttempt,
+              effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
+              progressScore: retryDecision.progressScore,
+            },
             'Resumed task with follow-up attempt'
           );
           this.appendOrchestratorTaskLog(
