@@ -788,10 +788,10 @@ export class TaskDispatcher {
 
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `Adaptive retry: ${retryDecision.outcome} (score=${String(retryDecision.progressScore)}, effective=${String(retryDecision.effectiveMaxAttempts)}) — ${retryDecision.reason}`
+        `Adaptive retry: ${retryDecision.outcome} (score=${String(retryDecision.progressScore)}, resultProgress=${String(retryDecision.signalBreakdown.resultProgress)}, verificationTrend=${String(retryDecision.signalBreakdown.verificationTrend)}, effective=${String(retryDecision.effectiveMaxAttempts)}) — ${retryDecision.reason}`
       );
       this.logger.info(
-        { taskId: task.taskId, attempt, maxAttempts, outcome: retryDecision.outcome, progressScore: retryDecision.progressScore, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts },
+        { taskId: task.taskId, attempt, maxAttempts, outcome: retryDecision.outcome, progressScore: retryDecision.progressScore, signalBreakdown: retryDecision.signalBreakdown, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts, hasCurrentResult: result !== undefined, hasPreviousResult: task.previousResult !== undefined, verificationHistoryLength: (task.verificationHistory ?? []).length },
         'Adaptive retry decision'
       );
 
