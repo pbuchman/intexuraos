@@ -124,21 +124,27 @@ Task Dispatch Request
 
 The container receives these environment variables:
 
-| Variable                         | Description                          |
-| -------------------------------- | ------------------------------------ |
-| `TASK_ID`                        | Unique task identifier               |
-| `ANTHROPIC_API_KEY`              | Claude API key (or use shared creds) |
-| `ANTHROPIC_BASE_URL`             | API endpoint URL                     |
-| `ANTHROPIC_MODEL`                | Model to use (if specified)          |
-| `LINEAR_API_KEY`                 | Linear API key                       |
-| `SENTRY_AUTH_TOKEN`              | Sentry auth token                    |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP SA key                   |
-| `CLAUDE_PROJECT_DIR`             | Always `/repo`                       |
-| `CLAUDE_WORKER_MODE`             | Always `1`                           |
-| `CLAUDE_MANAGED_MODE`            | `1` if managed attempts enabled      |
-| `CLAUDE_CONTINUE`                | `1` if resuming (continueSession)    |
-| `GIT_USER_NAME`                  | Git user name (if configured)        |
-| `GIT_USER_EMAIL`                 | Git user email (if configured)       |
+| Variable                         | Description                                |
+| -------------------------------- | ------------------------------------------ |
+| `TASK_ID`                        | Unique task identifier                     |
+| `ANTHROPIC_API_KEY`              | Claude API key (`opus`/`auto` worker type) |
+| `ANTHROPIC_BASE_URL`             | API endpoint URL (`opus`/`auto`)           |
+| `ANTHROPIC_MODEL`                | Model to use (if specified by worker type) |
+| `LINEAR_API_KEY`                 | Linear API key                             |
+| `SENTRY_AUTH_TOKEN`              | Sentry auth token                          |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP SA key                         |
+| `CLAUDE_PROJECT_DIR`             | Always `/repo`                             |
+| `CLAUDE_WORKER_MODE`             | Always `1`                                 |
+| `CLAUDE_MANAGED_MODE`            | `1` if managed attempts enabled            |
+| `CLAUDE_CONTINUE`                | `1` if resuming (continueSession)          |
+| `GIT_USER_NAME`                  | Git user name (if configured)              |
+| `GIT_USER_EMAIL`                 | Git user email (if configured)             |
+
+**Note:** Environment variables are conditional on worker type and credentials mode:
+
+- **`opus`/`auto` workers:** Set `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` (from `https://api.anthropic.com`)
+- **`glm` workers:** Use `ZAI_API_KEY` instead of `ANTHROPIC_API_KEY`, with `ANTHROPIC_BASE_URL` set to `https://api.z.ai/api/anthropic`
+- **Shared credentials mode** (`sharedCredsPath` configured for `opus`/`auto`): Omits `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` entirely — Claude CLI reads from mounted `.credentials.json` instead
 
 ---
 
@@ -189,13 +195,15 @@ Task Starts
 
 ### Docker Provider States (`WorkerStatus`)
 
-| State       | Description                              |
-| ----------- | ---------------------------------------- |
-| `starting`  | Container created, waiting for readiness |
-| `running`   | Container actively processing task       |
-| `completed` | Container exited with code 0             |
-| `failed`    | Container exited with non-zero code      |
-| `timeout`   | Container stopped due to timeout         |
+| State       | Description                              | Notes                                              |
+| ----------- | ---------------------------------------- | -------------------------------------------------- |
+| `starting`  | Container created, waiting for readiness | Defined in type but never assigned in current code |
+| `running`   | Container actively processing task       | All `WorkerHandle` instances enter as `running`    |
+| `completed` | Container exited with code 0             |                                                    |
+| `failed`    | Container exited with non-zero code      |                                                    |
+| `timeout`   | Container stopped due to timeout         | Only set in legacy `waitForCompletion()` path      |
+
+**Note:** In the managed-mode flow (default), the timeout path in `task-dispatcher.ts` calls `destroyWorker()` and marks the Firestore task as `interrupted` — it does not set the `WorkerHandle` status to `timeout`. The `timeout` status is only used in the legacy `waitForCompletion()` code path in `docker-provider.ts`.
 
 ### Orchestrator Internal States
 
@@ -234,7 +242,11 @@ Container cleanup happens during **finalization**, not during attempt teardown. 
 // task-dispatcher.ts — teardownAttempt()
 private async teardownAttempt(taskId: string, keepSession: boolean): Promise<void> {
   if (!keepSession) {
-    await this.isolation.provider.destroyWorker(taskId);
+    try {
+      await this.isolation.provider.destroyWorker(taskId);
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to destroy worker after attempt completion');
+    }
     await this.isolation.provider.cleanupTaskSession?.(taskId);
   }
 }
@@ -329,18 +341,22 @@ Resume Request (continueSession=true)
 ```typescript
 // docker-provider.ts — createWorker() orphan detection
 if (config.continueSession === true) {
-  const orphanContainer = this.docker.getContainer(`claude-worker-${taskId}`);
-  const orphanInfo = await orphanContainer.inspect();
+  try {
+    const orphanContainer = this.docker.getContainer(`claude-worker-${taskId}`);
+    const orphanInfo = await orphanContainer.inspect();
 
-  if (orphanInfo.State.Running) {
-    // Reuse the orphaned container
-    this.logger.info(
-      { taskId, containerId },
-      'Reusing orphaned container for resume after restart'
-    );
-  } else {
-    // Remove stopped container, create fresh
-    await orphanContainer.remove({ force: true });
+    if (orphanInfo.State.Running) {
+      // Reuse the orphaned container
+      this.logger.info(
+        { taskId, containerId },
+        'Reusing orphaned container for resume after restart'
+      );
+    } else {
+      // Remove stopped container, create fresh
+      await orphanContainer.remove({ force: true });
+    }
+  } catch {
+    // Container doesn't exist — proceed with normal creation
   }
 }
 ```
@@ -505,16 +521,16 @@ Tasks where the container died and no resume is requested are eventually caught 
 
 These are defaults in `DEFAULT_CONFIG` — overridable through the constructor's `Partial<DockerProviderConfig>` parameter, but not currently exposed as environment variables:
 
-| Value                      | Default                                 |
-| -------------------------- | --------------------------------------- |
-| Docker image (`imageName`) | `claude-worker:latest` (GAR)            |
-| Max concurrent             | 4                                       |
-| Image pull policy          | `always`                                |
-| Network name               | `claude-worker-net`                     |
-| Keep containers alive      | `false`                                 |
-| Secrets base path          | `/tmp/claude-secrets`                   |
-| Managed attempts mode      | `true`                                  |
-| Preserve failed containers | `false` (via `CompletionControlConfig`) |
+| Value                      | Default                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| Docker image (`imageName`) | `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker:latest` |
+| Max concurrent             | 4                                                                                            |
+| Image pull policy          | `always`                                                                                     |
+| Network name               | `claude-worker-net`                                                                          |
+| Keep containers alive      | `false`                                                                                      |
+| Secrets base path          | `/tmp/claude-secrets`                                                                        |
+| Managed attempts mode      | `true`                                                                                       |
+| Preserve failed containers | `false` (via `CompletionControlConfig`)                                                      |
 
 ### Future Considerations
 
