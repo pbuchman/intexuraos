@@ -176,6 +176,7 @@ export class TaskDispatcher {
         ...(request.slug !== undefined && { slug: request.slug }),
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
+        ...(request.executionPhase !== undefined && { executionPhase: request.executionPhase }),
         startedAt: new Date().toISOString(),
         attemptCount: 1,
         maxAttempts: this.completionMaxAttempts,
