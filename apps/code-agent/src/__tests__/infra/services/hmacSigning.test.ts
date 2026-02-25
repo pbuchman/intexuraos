@@ -3,7 +3,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import { generateNonce, generateWebhookSecret, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
+import { generateNonce, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
+import { generateWebhookSecret } from '../../../domain/utils/secrets.js';
 
 describe('hmacSigning', () => {
   const logger: Logger = {

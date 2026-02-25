@@ -35,6 +35,7 @@ This is the existing features.md you are rewriting:
 Follow these rules strictly:
 
 ### Voice
+
 - New York Times feature article style
 - Second person ("you") for the reader
 - Present tense for capabilities, past tense for problems
