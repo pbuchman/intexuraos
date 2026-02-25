@@ -142,10 +142,16 @@ export class WorktreeManager {
       const sentryToken = process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
 
       if (linearKey === undefined || linearKey === '') {
-        this.logger.warn({}, 'INTEXURAOS_LINEAR_API_KEY not set - MCP Linear integration will fail');
+        this.logger.warn(
+          {},
+          'INTEXURAOS_LINEAR_API_KEY not set - MCP Linear integration will fail'
+        );
       }
       if (sentryToken === undefined || sentryToken === '') {
-        this.logger.warn({}, 'INTEXURAOS_SENTRY_AUTH_TOKEN not set - MCP Sentry integration will fail');
+        this.logger.warn(
+          {},
+          'INTEXURAOS_SENTRY_AUTH_TOKEN not set - MCP Sentry integration will fail'
+        );
       }
 
       // Substitute environment variables
@@ -188,5 +194,4 @@ export class WorktreeManager {
       throw new Error(`Failed to copy settings.local.json: ${message}`);
     }
   }
-
 }
