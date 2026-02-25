@@ -13,7 +13,7 @@ code-agent (Cloud Run)
 orchestrator (local)
     |
     +- TaskDispatcher: manages Claude Code sessions via Docker
-    +- WorktreeManager: creates isolated git worktrees
+    +- WorktreeManager: creates isolated git worktrees (source only, no deps)
     +- GitHubTokenService: manages GitHub App installation tokens
     +- WebhookClient: reports status to code-agent
     +- StatePersistence: survives restarts
@@ -72,7 +72,7 @@ All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.
 
 ### Prerequisites
 
-Node.js 22+, pnpm, Docker, gcloud CLI, cloudflared
+Node.js 22+, Docker, gcloud CLI, cloudflared. pnpm is needed for building, not at runtime.
 
 ### Steps
 
@@ -105,7 +105,7 @@ direnv allow
 # 5. Create directories
 mkdir -p ~/.claude-orchestrator/logs ~/claude-workers/worktrees
 
-# 6. Start orchestrator
+# 6. Start orchestrator (dev mode with hot-reload)
 pnpm --filter orchestrator dev
 
 # 7. Verify
@@ -130,7 +130,7 @@ The orchestrator runs as a systemd template service. The service file lives at `
 
 **Key details:**
 
-- Runs `node dist/index.js` from a worktree (e.g., `~/personal/intexuraos-1/workers/orchestrator/`)
+- Runs `node dist/index.js` from `~/deploy/intexuraos/workers/orchestrator/`
 - Env vars loaded from `~/.claude-orchestrator/env` (43 vars, extracted from Secret Manager)
 - Auto-restarts on failure (`Restart=on-failure`, `RestartSec=10`)
 - Rate-limited to 5 restarts per 5 minutes (`StartLimitBurst=5`, `StartLimitIntervalSec=300`)
@@ -167,7 +167,7 @@ The systemd service runs from a built artifact — it does NOT auto-rebuild on c
 
 ```bash
 # 1. Build new artifact
-cd ~/personal/intexuraos-1
+cd ~/deploy/intexuraos
 pnpm build   # builds shared packages
 pnpm --filter orchestrator build
 
@@ -176,6 +176,8 @@ sudo systemctl restart intexuraos-orchestrator@pbuchman
 
 # 3. Verify
 curl -s http://localhost:8199/health | jq .
+
+# Note: This is automated by the webhook handler on pushes to development.
 ```
 
 #### Switching to Dev Mode (Local Development)
@@ -187,7 +189,7 @@ To run the orchestrator with hot-reload for development:
 sudo systemctl stop intexuraos-orchestrator@pbuchman
 
 # 2. Load env vars
-cd ~/personal/intexuraos-1
+cd ~/deploy/intexuraos   # or any workspace
 set -a && source ~/.claude-orchestrator/env && set +a
 
 # 3. Run with tsx watch (hot-reload on source changes)
@@ -203,8 +205,8 @@ sudo systemctl start intexuraos-orchestrator@pbuchman
 The orchestrator's env file is NOT auto-synced. To update after secrets change in GCP:
 
 ```bash
-# 1. Sync secrets to .envrc in any worktree
-cd ~/personal/intexuraos-1
+# 1. Sync secrets to .envrc in deploy dir
+cd ~/deploy/intexuraos
 ./scripts/sync-secrets.sh
 
 # 2. Re-extract orchestrator vars
@@ -229,13 +231,13 @@ If the orchestrator needs to be set up from zero on a new machine:
 ```bash
 # 1. Create directories
 mkdir -p ~/.claude-orchestrator/secrets ~/.claude-orchestrator/logs
-mkdir -p ~/claude-workers/worktrees ~/claude-workers/pnpm-store
+mkdir -p ~/claude-workers/worktrees
 
 # 2. Clone orchestrator repo
 git clone git@github.com:pbuchman/intexuraos.git ~/.claude-orchestrator/repo
 
 # 3. Build
-cd ~/personal/intexuraos-1
+cd ~/deploy/intexuraos
 pnpm install && pnpm build && pnpm --filter orchestrator build
 
 # 4. Set up Docker worker network

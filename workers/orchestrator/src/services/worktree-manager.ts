@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, access, constants } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { exec } from 'node:child_process';
@@ -61,9 +61,6 @@ export class WorktreeManager {
       ) {
         await this.copySettingsLocal(worktreePath);
       }
-
-      // Install dependencies with timeout
-      await this.installDependencies(worktreePath);
 
       return worktreePath;
     } catch (error: unknown) {
@@ -141,14 +138,14 @@ export class WorktreeManager {
       const template = await readFile(this.config.mcpConfigTemplatePath, 'utf-8');
 
       // Validate environment variables
-      const linearKey = process.env['LINEAR_API_KEY'];
-      const sentryToken = process.env['SENTRY_AUTH_TOKEN'];
+      const linearKey = process.env['INTEXURAOS_LINEAR_API_KEY'];
+      const sentryToken = process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
 
       if (linearKey === undefined || linearKey === '') {
-        this.logger.warn({}, 'LINEAR_API_KEY not set - MCP Linear integration will fail');
+        this.logger.warn({}, 'INTEXURAOS_LINEAR_API_KEY not set - MCP Linear integration will fail');
       }
       if (sentryToken === undefined || sentryToken === '') {
-        this.logger.warn({}, 'SENTRY_AUTH_TOKEN not set - MCP Sentry integration will fail');
+        this.logger.warn({}, 'INTEXURAOS_SENTRY_AUTH_TOKEN not set - MCP Sentry integration will fail');
       }
 
       // Substitute environment variables
@@ -192,31 +189,4 @@ export class WorktreeManager {
     }
   }
 
-  private async installDependencies(worktreePath: string): Promise<void> {
-    const timeoutMs = 5 * 60 * 1000; // 5 minutes
-
-    try {
-      // Check if pnpm-lock.yaml exists
-      const lockPath = join(worktreePath, 'pnpm-lock.yaml');
-      try {
-        await access(lockPath, constants.F_OK);
-      } catch {
-        /* v8 ignore start -- test-infra: requires worktree without pnpm-lock.yaml to test @preserve */
-        // No lock file, skip install
-        return;
-        /* v8 ignore stop @preserve */
-      }
-
-      // Run pnpm install with timeout
-      await execAsync(`pnpm install --frozen-lockfile`, {
-        cwd: worktreePath,
-        timeout: timeoutMs,
-      });
-    } catch (error: unknown) {
-      /* v8 ignore start -- test-infra: pnpm install failure requires corrupted worktree state @preserve */
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      /* v8 ignore stop @preserve */
-      throw new Error(`Failed to install dependencies: ${message}`);
-    }
-  }
 }
