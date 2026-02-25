@@ -206,9 +206,18 @@ async function validateWorkerApiKeys(
   if (minimaxKey !== '') {
     const keySuffix = suffix(minimaxKey);
     try {
-      const resp = await fetch('https://api.minimax.io/anthropic/v1/models', {
-        method: 'GET',
-        headers: { 'x-api-key': minimaxKey, 'anthropic-version': '2023-06-01' },
+      const resp = await fetch('https://api.minimax.io/anthropic/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': minimaxKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'MiniMax-M2.5',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'ping' }],
+        }),
         signal: AbortSignal.timeout(10_000),
       });
       if (resp.ok) {
