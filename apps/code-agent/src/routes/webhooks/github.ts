@@ -106,6 +106,7 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           linearIssueService: services.linearIssueService,
           taskDispatcher: services.taskDispatcher,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
           firestore: services.firestore,
         },
         {
