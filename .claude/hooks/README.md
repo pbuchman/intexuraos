@@ -90,6 +90,7 @@ Use `query-hooks.sh` to search and filter hook logs:
 | **TypeScript** | `\| undefined` in types | `*.ts/*.tsx`                         | `@allow-undefined-type` |
 | **TypeScript** | `.value` without `.ok`  | `*.ts/*.tsx`                         | `@allow-result-access`  |
 | **Migrations** | Edit/overwrite existing | `migrations/*.mjs`                   | None (absolute rule)    |
+| **Coverage**   | `v8 ignore` added       | `*.ts/*.tsx` (not tests)             | None (always reminds)   |
 
 ## Adding a New Hook
 
@@ -128,6 +129,7 @@ Common patterns logged by hooks:
 | `bad-undefined-type`         | WARNED  | detect-common-patterns     | `\| undefined` instead of `?:`           |
 | `result-value-without-ok`    | WARNED  | detect-common-patterns     | `.value` without `.ok` check             |
 | `migration-immutable`        | WARNED  | detect-common-patterns     | Modifying existing migration file        |
+| `v8-ignore-added`            | WARNED  | detect-common-patterns     | v8 ignore added (write test first)       |
 | `coverage-with-grep`         | BLOCKED | validate-coverage-commands | Parsing coverage with grep instead of jq |
 | `output-truncation`          | BLOCKED | validate-ci-output-capture | Piping CI output to tail/head            |
 | `gh-pr-checks-polling`       | BLOCKED | validate-polling           | Using sleep + gh pr checks               |
