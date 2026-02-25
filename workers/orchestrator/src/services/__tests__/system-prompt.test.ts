@@ -238,6 +238,71 @@ describe('system-prompt', () => {
       });
     });
 
+    describe('PR Comment Execution Mode', () => {
+      it('should return PR comment prompt when pr-comment label is present', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task', 'pr-comment'],
+        });
+
+        expect(result).toContain('[PR COMMENT EXECUTION MODE]');
+        expect(result).toContain('[PHASE:PR-COMMENT]');
+        expect(result).not.toContain('[PHASE 1: DESIGN & VALIDATION');
+        expect(result).not.toContain('[PHASE 2: STRICT EXECUTION]');
+      });
+
+      it('should prioritize pr-comment over code-task', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task', 'pr-comment'],
+        });
+
+        expect(result).toContain('[PR COMMENT EXECUTION MODE]');
+        expect(result).not.toContain('[PHASE 2: STRICT EXECUTION]');
+      });
+
+      it('should include PR_COMMENT_FINAL completion block', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['pr-comment'],
+        });
+
+        expect(result).toContain('PR_COMMENT_FINAL:');
+        expect(result).toContain('- Comment replied: <yes|no>');
+      });
+
+      it('should include mandatory first actions for PR investigation', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['pr-comment'],
+        });
+
+        expect(result).toContain('gh pr view');
+        expect(result).toContain('gh pr diff');
+        expect(result).toContain('Push to the existing PR branch');
+      });
+
+      it('should include Linear issue reference when provided', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueId: 'INT-500',
+          linearIssueLabels: ['pr-comment'],
+        });
+
+        expect(result).toContain('Linear Issue: INT-500');
+      });
+
+      it('should include NON-INTERACTIVE MODE instruction', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['pr-comment'],
+        });
+
+        expect(result).toContain('NON-INTERACTIVE MODE');
+        expect(result).toContain('No Confirmation Prompts');
+      });
+    });
+
     describe('Label Detection', () => {
       it('should detect Phase 1 when labels array is empty', () => {
         const result = buildSystemPrompt({
