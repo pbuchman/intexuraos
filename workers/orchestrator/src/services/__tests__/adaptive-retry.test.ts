@@ -330,5 +330,23 @@ describe('analyzeRetryDecision', () => {
 
       expect(typeof decision.progressScore).toBe('number');
     });
+
+    it('includes signal breakdown in decision', () => {
+      const input: RetryDecisionInput = {
+        currentAttempt: 1,
+        baseMaxAttempts: 3,
+        verificationHistory: [
+          makeRecord({ attempt: 1, confidence: 0.3, missingCriteria: ['PR URL line', 'CI evidence line'] }),
+        ],
+        currentResult: makeResult({ prUrl: 'https://github.com/org/repo/pull/1', commits: 3, ciFailed: false }),
+        previousResult: makeResult({ commits: 1, ciFailed: true }),
+      };
+
+      const decision = analyzeRetryDecision(input);
+
+      expect(decision.signalBreakdown).toBeDefined();
+      expect(decision.signalBreakdown.resultProgress).toBeGreaterThan(0);
+      expect(typeof decision.signalBreakdown.verificationTrend).toBe('number');
+    });
   });
 });

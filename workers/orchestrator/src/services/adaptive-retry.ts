@@ -36,6 +36,11 @@ export interface RetryDecision {
   reason: string;
   /** Numeric progress score for diagnostics. */
   progressScore: number;
+  /** Per-signal score breakdown for diagnostics. */
+  signalBreakdown: {
+    resultProgress: number;
+    verificationTrend: number;
+  };
 }
 
 /**
@@ -67,7 +72,11 @@ export function analyzeRetryDecision(input: RetryDecisionInput): RetryDecision {
   const { currentAttempt, baseMaxAttempts, verificationHistory, currentResult, previousResult } =
     input;
 
-  const progressScore = calculateProgressScore(verificationHistory, currentResult, previousResult);
+  const { total: progressScore, resultProgress, verificationTrend } = calculateProgressScore(
+    verificationHistory,
+    currentResult,
+    previousResult
+  );
 
   if (progressScore <= EARLY_STOP_THRESHOLD) {
     return {
@@ -75,6 +84,7 @@ export function analyzeRetryDecision(input: RetryDecisionInput): RetryDecision {
       effectiveMaxAttempts: currentAttempt,
       reason: `Early stop: negative progress trend (score=${String(progressScore)})`,
       progressScore,
+      signalBreakdown: { resultProgress, verificationTrend },
     };
   }
 
@@ -86,6 +96,7 @@ export function analyzeRetryDecision(input: RetryDecisionInput): RetryDecision {
       effectiveMaxAttempts: baseMaxAttempts,
       reason: `Within base limit: attempt ${String(currentAttempt)}/${String(baseMaxAttempts)} (score=${String(progressScore)})`,
       progressScore,
+      signalBreakdown: { resultProgress, verificationTrend },
     };
   }
 
@@ -102,6 +113,7 @@ export function analyzeRetryDecision(input: RetryDecisionInput): RetryDecision {
         effectiveMaxAttempts: effectiveMax,
         reason: `Bonus granted: progress score ${String(progressScore)} earned ${String(bonusAttempts)} extra attempt(s)`,
         progressScore,
+        signalBreakdown: { resultProgress, verificationTrend },
       };
     }
   }
@@ -111,6 +123,7 @@ export function analyzeRetryDecision(input: RetryDecisionInput): RetryDecision {
     effectiveMaxAttempts: baseMaxAttempts,
     reason: `Max attempts reached: ${String(currentAttempt)}/${String(baseMaxAttempts)} (score=${String(progressScore)})`,
     progressScore,
+    signalBreakdown: { resultProgress, verificationTrend },
   };
 }
 
@@ -134,13 +147,10 @@ function calculateProgressScore(
   history: TaskVerificationRecord[],
   currentResult?: TaskResult,
   previousResult?: TaskResult
-): number {
-  let score = 0;
-
-  score += scoreResultProgress(currentResult, previousResult);
-  score += scoreVerificationTrend(history);
-
-  return score;
+): { total: number; resultProgress: number; verificationTrend: number } {
+  const resultProgress = scoreResultProgress(currentResult, previousResult);
+  const verificationTrend = scoreVerificationTrend(history);
+  return { total: resultProgress + verificationTrend, resultProgress, verificationTrend };
 }
 
 function scoreResultProgress(
