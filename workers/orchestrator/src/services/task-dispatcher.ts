@@ -241,11 +241,20 @@ export class TaskDispatcher {
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
       /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'Phase 2' : 'Phase 1';
+      const isPRComment = task.linearIssueLabels.some(
+        (l) => l.trim().toLowerCase() === 'pr-comment'
+      );
+      const phase = isPRComment
+        ? 'PR Comment'
+        : this.hasCodeTaskLabel(task.linearIssueLabels)
+          ? 'Phase 2'
+          : 'Phase 1';
       const phaseDesc =
-        phase === 'Phase 2'
-          ? 'Strict Execution \u2014 implement autonomously, run CI, create PR'
-          : 'Design & Validation \u2014 analyze and enrich the Linear issue, do not execute code';
+        phase === 'PR Comment'
+          ? 'PR Comment Execution \u2014 respond to PR comment, push to existing PR branch'
+          : phase === 'Phase 2'
+            ? 'Strict Execution \u2014 implement autonomously, run CI, create PR'
+            : 'Design & Validation \u2014 analyze and enrich the Linear issue, do not execute code';
       this.appendTaggedTaskLog(taskId, 'instructions', `${phase}: ${phaseDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
@@ -626,7 +635,14 @@ export class TaskDispatcher {
 
     const attempt = task.attemptCount ?? 1;
     const maxAttempts = task.maxAttempts ?? this.completionMaxAttempts;
-    const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'phase2' : 'phase1';
+    const isPRComment = task.linearIssueLabels.some(
+      (l) => l.trim().toLowerCase() === 'pr-comment'
+    );
+    const phase = isPRComment
+      ? 'pr-comment'
+      : this.hasCodeTaskLabel(task.linearIssueLabels)
+        ? 'phase2'
+        : 'phase1';
     this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(

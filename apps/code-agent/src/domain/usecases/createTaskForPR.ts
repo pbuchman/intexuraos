@@ -63,24 +63,29 @@ export interface CreateTaskForPRDeps {
  * Build the task prompt from PR comment context.
  */
 function buildTaskPrompt(request: CreateTaskForPRRequest): string {
-  const { repository, prNumber, senderLogin, comment } = request;
+  const { repository, prNumber, senderLogin, comment, prTitle } = request;
 
   return [
-    `[Resume from PR Comment] New comment on PR #${String(prNumber)} in ${repository}`,
+    `[PR Comment Task] Comment on PR #${String(prNumber)} in ${repository}`,
     `From: @${senderLogin}`,
+    prTitle !== undefined ? `PR title: ${prTitle}` : '',
+    '',
+    'This task was created automatically because a comment was posted on a PR',
+    'that had no existing code task. Investigate the PR context and address the comment.',
     '',
     'The commenter said:',
     comment,
     '',
     'Instructions:',
-    `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged,base`,
+    `1. Check PR state: gh pr view ${String(prNumber)} --json state,merged,base,title,body`,
     `2. Read the full PR diff: gh pr diff ${String(prNumber)}`,
     `3. Read all PR comments: gh pr view ${String(prNumber)} --json comments`,
-    '4. Understand the full context of the comment',
-    '5. If actionable: investigate and implement the requested changes',
-    '6. Commit and push your changes',
-    '7. Reply to the comment explaining your changes',
-  ].join('\n');
+    '4. Understand the full context of the PR and the comment',
+    '5. If actionable: investigate the codebase, implement the requested changes',
+    '6. Run pnpm run ci:tracked — must pass before pushing',
+    '7. Commit and push your changes to the existing PR branch',
+    `8. Reply to the comment: gh api /repos/${repository}/issues/${String(prNumber)}/comments -f body="..."`,
+  ].filter((line) => line !== '').join('\n');
 }
 
 /**
@@ -148,6 +153,12 @@ export async function createTaskForPR(
   type TransactionResult = { taskId: string; isNew: false } | { taskId: string; isNew: true; webhookSecret: string; linearResult: Awaited<ReturnType<LinearIssueService['ensureIssueExists']>> };
   let transactionResult: Result<TransactionResult, CreateTaskForPRError>;
 
+  // Extract Linear issue ID from PR title BEFORE transaction
+  const linearIssueMatch = request.prTitle?.match(/\bINT-(\d+)\b/i);
+  const existingLinearIssueId = linearIssueMatch !== null && linearIssueMatch !== undefined
+    ? `INT-${String(linearIssueMatch[1])}`
+    : undefined;
+
   try {
     transactionResult = await firestore.runTransaction(async (transaction) => {
       // Read the lock document — this provides transactional isolation
@@ -170,10 +181,22 @@ export async function createTaskForPR(
         return ok({ taskId: existingTaskId, isNew: false });
       }
 
-      // Step 3: Create Linear issue (before task creation)
+      // Build instruction-style context for Linear issue creation
+      const taskContext = [
+        `Investigate and address a comment on PR #${String(prNumber)} in ${repository}.`,
+        '',
+        request.prTitle !== undefined ? `PR title: "${request.prTitle}"` : '',
+        `Comment by @${senderLogin}:`,
+        request.comment.slice(0, 500),
+      ].filter((line) => line !== '').join('\n');
+
+      // Create or validate Linear issue
       const linearResult = await linearIssueService.ensureIssueExists({
         userId,
-        taskPrompt: request.prTitle ?? `PR #${String(request.prNumber)} comment: ${request.comment.slice(0, 200)}`,
+        ...(existingLinearIssueId !== undefined
+          ? { linearIssueId: existingLinearIssueId }
+          : {}),
+        taskPrompt: taskContext,
       });
 
       /* v8 ignore start -- test-infra: Linear fallback mode tested via integration tests @preserve */
@@ -265,6 +288,13 @@ export async function createTaskForPR(
   // For new tasks, we have webhookSecret and linearResult
   const { taskId, webhookSecret, linearResult } = txValue;
 
+  // Determine labels based on whether we linked to existing issue or created new
+  // If INT-XXX was found in PR title, use real labels from that issue
+  // Otherwise, mark as pr-comment mode for Phase 3 routing
+  const dispatchLabels = existingLinearIssueId !== undefined
+    ? linearResult.linearIssueLabels
+    : ['code-task', 'pr-comment'];
+
   // Step 6: Dispatch to worker (only for new tasks)
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
   const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
@@ -290,8 +320,8 @@ export async function createTaskForPR(
     webhookSecret,
     traceId: eventId,
     workerCredentials,
-    linearIssueLabels: [],
-    hasChildren: false,
+    linearIssueLabels: dispatchLabels,
+    hasChildren: linearResult.hasChildren,
     ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
   });
 
