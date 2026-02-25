@@ -987,6 +987,8 @@ export interface LinearIssue {
   dueDate: string | null;
   url: string;
   labels: LinearLabel[];
+  /** ID of parent issue (null if top-level, set if subtask) */
+  parentId: string | null;
   /** Number of child issues (subtasks) */
   childCount: number;
   /** Child issues (populated when parent issue has children) */
