@@ -152,6 +152,23 @@ function validatePortAvailable(port: number): void {
  * Warns (does not exit) so tasks of one type can still run if the other fails.
  */
 /* v8 ignore start -- test-infra: startup validation with network call @preserve */
+async function fetchWithRetry(
+  input: string,
+  init: RequestInit & { signal?: AbortSignal },
+  retries = 3,
+  delayMs = 2000
+): Promise<Response> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(10_000) });
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+    }
+  }
+  throw new Error('fetchWithRetry: unreachable');
+}
+
 async function validateWorkerApiKeys(
   credentialMonitor: CredentialMonitor,
   zaiKey: string,
@@ -182,10 +199,9 @@ async function validateWorkerApiKeys(
   if (zaiKey !== '') {
     const keySuffix = suffix(zaiKey);
     try {
-      const resp = await fetch('https://api.z.ai/api/anthropic/v1/models', {
+      const resp = await fetchWithRetry('https://api.z.ai/api/anthropic/v1/models', {
         method: 'GET',
         headers: { 'x-api-key': zaiKey, 'anthropic-version': '2023-06-01' },
-        signal: AbortSignal.timeout(10_000),
       });
       if (resp.ok) {
         logger.info({ apiKey: keySuffix }, 'ZAI_API_KEY validated successfully');
@@ -206,7 +222,7 @@ async function validateWorkerApiKeys(
   if (minimaxKey !== '') {
     const keySuffix = suffix(minimaxKey);
     try {
-      const resp = await fetch('https://api.minimax.io/anthropic/v1/messages', {
+      const resp = await fetchWithRetry('https://api.minimax.io/anthropic/v1/messages', {
         method: 'POST',
         headers: {
           'x-api-key': minimaxKey,
@@ -218,7 +234,6 @@ async function validateWorkerApiKeys(
           max_tokens: 1,
           messages: [{ role: 'user', content: 'ping' }],
         }),
-        signal: AbortSignal.timeout(10_000),
       });
       if (resp.ok) {
         logger.info({ apiKey: keySuffix }, 'MINIMAX_API_KEY validated successfully');
