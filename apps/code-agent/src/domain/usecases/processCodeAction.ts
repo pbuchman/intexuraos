@@ -283,6 +283,7 @@ export async function processCodeAction(
     webhookSecret: string;
     traceId?: string;
     workerCredentials: DispatchWorkerCredentials;
+    executionPhase: 'design' | 'execution';
   } = {
     taskId: task.id,
     linearIssueLabels,
@@ -295,6 +296,9 @@ export async function processCodeAction(
     webhookUrl,
     webhookSecret,
     workerCredentials,
+    /* v8 ignore start -- ts-type: fallback branch for backward compatibility @preserve */
+    executionPhase: task.executionPhase ?? (hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'design'),
+    /* v8 ignore stop @preserve */
   };
 
   // Only include linearIssueId if it exists

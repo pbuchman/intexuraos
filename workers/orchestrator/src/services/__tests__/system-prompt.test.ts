@@ -340,5 +340,55 @@ describe('system-prompt', () => {
         expect(result).toContain('[PHASE 2: STRICT EXECUTION]');
       });
     });
+
+    describe('executionPhase priority', () => {
+      it('uses executionPhase=execution over missing code-task label', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['bug'],
+          executionPhase: 'execution',
+        });
+
+        expect(result).toContain('[PHASE 2: STRICT EXECUTION]');
+        expect(result).not.toContain('[PHASE 1: DESIGN & VALIDATION');
+      });
+
+      it('uses executionPhase=design over present code-task label', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+          executionPhase: 'design',
+        });
+
+        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
+        expect(result).not.toContain('[PHASE 2: STRICT EXECUTION]');
+      });
+
+      it('falls back to label detection when executionPhase is undefined', () => {
+        const withCodeTask = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+        expect(withCodeTask).toContain('[PHASE 2: STRICT EXECUTION]');
+
+        const withoutCodeTask = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['bug'],
+        });
+        expect(withoutCodeTask).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
+      });
+
+      it('pr-comment label still takes priority over executionPhase', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['pr-comment'],
+          executionPhase: 'design',
+        });
+
+        expect(result).toContain('PR_COMMENT_FINAL');
+        expect(result).not.toContain('[PHASE 1: DESIGN & VALIDATION');
+        expect(result).not.toContain('[PHASE 2: STRICT EXECUTION]');
+      });
+    });
   });
 });
