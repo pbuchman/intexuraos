@@ -277,6 +277,48 @@ describe('analyzeRetryDecision', () => {
       expect(decision.outcome).toBe('stop');
     });
 
+    it('stops when bonus earned but attempt already at effective max', () => {
+      const input: RetryDecisionInput = {
+        currentAttempt: 5,
+        baseMaxAttempts: 3,
+        verificationHistory: [
+          makeRecord({ attempt: 3, confidence: 0.3, missingCriteria: ['a', 'b'] }),
+          makeRecord({ attempt: 4, confidence: 0.5, missingCriteria: ['a', 'b'] }),
+          makeRecord({ attempt: 5, confidence: 0.7, missingCriteria: ['a'] }),
+        ],
+        previousResult: makeResult({ commits: 1 }),
+        currentResult: makeResult({
+          prUrl: 'https://github.com/org/repo/pull/1',
+          commits: 5,
+        }),
+      };
+
+      const decision = analyzeRetryDecision(input);
+
+      expect(decision.outcome).toBe('stop');
+      expect(decision.progressScore).toBeGreaterThanOrEqual(2);
+    });
+
+    it('treats empty string prUrl same as undefined', () => {
+      const input: RetryDecisionInput = {
+        currentAttempt: 3,
+        baseMaxAttempts: 3,
+        verificationHistory: [
+          makeRecord({ attempt: 2, confidence: 0.3, missingCriteria: ['a', 'b'] }),
+          makeRecord({ attempt: 3, confidence: 0.5, missingCriteria: ['a'] }),
+        ],
+        previousResult: makeResult({ prUrl: '' }),
+        currentResult: makeResult({
+          prUrl: 'https://github.com/org/repo/pull/1',
+          commits: 3,
+        }),
+      };
+
+      const decision = analyzeRetryDecision(input);
+
+      expect(decision.progressScore).toBeGreaterThanOrEqual(3);
+    });
+
     it('includes progress score in decision', () => {
       const input: RetryDecisionInput = {
         currentAttempt: 1,
