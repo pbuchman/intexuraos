@@ -15,25 +15,8 @@ import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { hasCodeTaskLabel, hasUnclearLabel } from '../../domain/utils/labelUtils.js';
-import { randomBytes, randomUUID, createHmac } from 'node:crypto';
-
-/**
- * Generate a deterministic webhook secret for a task.
- * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
- */
-function generateWebhookSecret(sharedSecret: string, taskId: string): string {
-  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
-}
-
-/**
- * Generate a cancel nonce for task cancellation.
- */
-function generateCancelNonce(): string {
-  const buffer = randomBytes(4);
-  return buffer.toString('hex');
-}
-
-const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
+import { randomUUID } from 'node:crypto';
+import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 
 export const PHASE2_PROMPT =
   'Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.';
