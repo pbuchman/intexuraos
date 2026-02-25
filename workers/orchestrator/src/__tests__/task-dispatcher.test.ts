@@ -2956,6 +2956,39 @@ describe('TaskDispatcher', () => {
       expect(formatted).toContain('mode=unknown');
       expect(formatted).toContain('v?');
     });
+
+    it('should strip tool_use_result from user messages', async () => {
+      const onLog = await submitAndGetOnLog();
+      const userJson = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              tool_use_id: 'call_123',
+              type: 'tool_result',
+              content: 'The file /repo/src/index.ts has been updated successfully.',
+            },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: 'test-session',
+        tool_use_result: {
+          filePath: '/repo/src/index.ts',
+          oldString: 'a'.repeat(30000),
+          newString: 'b'.repeat(30000),
+        },
+      });
+
+      onLog(userJson + '\n');
+
+      const formatted = findFormattedChunk('tool_result');
+      expect(formatted).toContain(
+        '"content":"The file /repo/src/index.ts has been updated successfully."'
+      );
+      expect(formatted).not.toContain('tool_use_result');
+      expect(formatted).not.toContain('aaa');
+    });
   });
 
   describe('turn metrics collection', () => {

@@ -514,7 +514,9 @@ If changed: run `terraform fmt -check -recursive` and `terraform validate` (with
 
 **Before EVERY commit:** [Commit Gate](#-commit-gate) must pass.
 
-**Before creating a PR:** merge latest base branch and resolve conflicts.
+**Before creating a PR:** merge latest base branch and resolve conflicts. PRs target `development`.
+
+**Git worktrees are NOT allowed.** Work directly on feature branches or `development`.
 
 ```bash
 pnpm run ci:tracked              # MUST pass first

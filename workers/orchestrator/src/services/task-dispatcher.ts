@@ -1500,6 +1500,7 @@ export class TaskDispatcher {
   /**
    * Convert Claude Code JSON system messages into readable log lines.
    * Replaces hook_started/hook_response JSON blobs with concise summaries.
+   * Strips redundant tool_use_result from user messages (bulk diffs).
    * Non-JSON lines pass through unchanged.
    */
   private formatClaudeSystemMessages(text: string): string {
@@ -1522,6 +1523,11 @@ export class TaskDispatcher {
             return this.formatInitMessage(obj);
           }
           return jsonLine;
+        }
+
+        if (type === 'user' && 'tool_use_result' in obj) {
+          delete obj['tool_use_result'];
+          return JSON.stringify(obj);
         }
 
         return jsonLine;
