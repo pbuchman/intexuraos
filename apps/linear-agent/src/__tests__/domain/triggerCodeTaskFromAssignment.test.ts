@@ -70,6 +70,24 @@ describe('shouldTriggerCodeTask', () => {
     expect(shouldTriggerCodeTask(event)).toBe(false);
   });
 
+  it('returns false when issue has code-task label (lowercase)', () => {
+    const event = createEvent();
+    event.data.labels = [{ id: 'label-code', name: 'code-task' }];
+    expect(shouldTriggerCodeTask(event)).toBe(false);
+  });
+
+  it('returns false when issue has code_task label (underscore)', () => {
+    const event = createEvent();
+    event.data.labels = [{ id: 'label-code', name: 'code_task' }];
+    expect(shouldTriggerCodeTask(event)).toBe(false);
+  });
+
+  it('returns false when issue has Code_Task label (mixed)', () => {
+    const event = createEvent();
+    event.data.labels = [{ id: 'label-code', name: 'Code_Task' }];
+    expect(shouldTriggerCodeTask(event)).toBe(false);
+  });
+
   it('returns true with multiple non-Code-Task labels', () => {
     const event = createEvent();
     event.data.labels = [
