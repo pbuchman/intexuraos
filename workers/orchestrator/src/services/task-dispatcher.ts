@@ -675,7 +675,7 @@ export class TaskDispatcher {
         `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
       );
     }
-    if (phase === 'phase1' && result !== undefined && result.prUrl !== undefined) {
+    if (phase === 'phase1' && result?.prUrl !== undefined && result.prUrl !== '') {
       this.appendOrchestratorTaskLog(
         task.taskId,
         `⚠ Phase mismatch: task ran as Phase 1 (design) but worker created PR: ${result.prUrl}`
@@ -781,7 +781,9 @@ export class TaskDispatcher {
         if (prev.commits !== result.commits)
           diffs.push(`commits ${String(prev.commits ?? 0)}→${String(result.commits ?? 0)}`);
         if (prev.ciFailed !== result.ciFailed)
-          diffs.push(`ciFailed ${String(prev.ciFailed ?? 'unknown')}→${String(result.ciFailed ?? 'unknown')}`);
+          diffs.push(
+            `ciFailed ${String(prev.ciFailed ?? 'unknown')}→${String(result.ciFailed ?? 'unknown')}`
+          );
         if (prev.prUrl === undefined && result.prUrl !== undefined) diffs.push('prUrl (new)');
         if (diffs.length > 0) {
           this.appendOrchestratorTaskLog(task.taskId, `Result diff: ${diffs.join(', ')}`);
@@ -801,7 +803,18 @@ export class TaskDispatcher {
         `Adaptive retry: ${retryDecision.outcome} (score=${String(retryDecision.progressScore)}, resultProgress=${String(retryDecision.signalBreakdown.resultProgress)}, verificationTrend=${String(retryDecision.signalBreakdown.verificationTrend)}, effective=${String(retryDecision.effectiveMaxAttempts)}) — ${retryDecision.reason}`
       );
       this.logger.info(
-        { taskId: task.taskId, attempt, maxAttempts, outcome: retryDecision.outcome, progressScore: retryDecision.progressScore, signalBreakdown: retryDecision.signalBreakdown, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts, hasCurrentResult: result !== undefined, hasPreviousResult: task.previousResult !== undefined, verificationHistoryLength: (task.verificationHistory ?? []).length },
+        {
+          taskId: task.taskId,
+          attempt,
+          maxAttempts,
+          outcome: retryDecision.outcome,
+          progressScore: retryDecision.progressScore,
+          signalBreakdown: retryDecision.signalBreakdown,
+          effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
+          hasCurrentResult: result !== undefined,
+          hasPreviousResult: task.previousResult !== undefined,
+          verificationHistoryLength: (task.verificationHistory ?? []).length,
+        },
         'Adaptive retry decision'
       );
 
@@ -834,7 +847,12 @@ export class TaskDispatcher {
           task.containerId = resumeStart.containerId;
           await this.saveTask(task);
           this.logger.info(
-            { taskId: task.taskId, attempt: nextAttempt, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts, progressScore: retryDecision.progressScore },
+            {
+              taskId: task.taskId,
+              attempt: nextAttempt,
+              effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
+              progressScore: retryDecision.progressScore,
+            },
             'Resumed task with follow-up attempt'
           );
           this.appendOrchestratorTaskLog(
