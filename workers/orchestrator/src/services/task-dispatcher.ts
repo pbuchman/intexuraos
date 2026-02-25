@@ -819,6 +819,9 @@ export class TaskDispatcher {
         }
 
         const resumePrompt = this.buildResumePrompt(task.prompt, verification);
+        const resumePreview =
+          resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '…' : resumePrompt;
+        this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
         const nextAttempt = attempt + 1;
         const resumeStart = await this.startWorkerAttempt(task, {
           prompt: resumePrompt,
