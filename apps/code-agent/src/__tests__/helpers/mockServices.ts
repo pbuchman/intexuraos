@@ -23,6 +23,7 @@ import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskL
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import { createUserLookupService } from '../../infra/services/userLookupServiceImpl.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestore/gitHubPRSummariesRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
@@ -143,6 +144,13 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     workerSettingsRepo: createWorkerSettingsRepository({
       firestore: fakeFirestore,
+      logger,
+    }),
+    userLookupService: createUserLookupService({
+      workerSettingsRepo: createWorkerSettingsRepository({
+        firestore: fakeFirestore,
+        logger,
+      }),
       logger,
     }),
     workerHealthProbe: mockWorkerHealthProbe,

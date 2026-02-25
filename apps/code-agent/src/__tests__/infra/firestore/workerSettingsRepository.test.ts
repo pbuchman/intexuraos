@@ -687,4 +687,55 @@ describe('workerSettingsRepository', () => {
       }
     });
   });
+
+  describe('findByGitHubUsername', () => {
+    it('should return null when no user has the GitHub username', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Add worker without githubUsername
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+
+      const result = await repo.findByGitHubUsername('unknown-user');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe(null);
+      }
+    });
+
+    it('should return null when user has no enabled workers', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Directly set githubUsername with disabled worker via Firestore
+      const collection = fakeFirestore.collection('code_worker_settings');
+      await collection.doc('user-456').set({
+        userId: 'user-456',
+        workers: [{
+          name: 'home-mac',
+          url: 'https://worker.example.com',
+          cfAccessClientId: 'encrypted-id',
+          cfAccessClientSecret: 'encrypted-secret',
+          dispatchSigningSecret: 'encrypted-signing',
+          enabled: false,
+        }],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        githubUsername: 'disabled-user',
+      });
+
+      const result = await repo.findByGitHubUsername('disabled-user');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe(null);
+      }
+    });
+
+    // Note: Query-based tests require Firestore indexing which is complex in fake Firestore.
+    // The method implementation is tested via integration tests in webhooks.test.ts
+  });
 });

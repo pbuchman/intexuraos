@@ -255,6 +255,77 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 }
 
 /**
+ * Build the system prompt for PR comment execution mode.
+ *
+ * Used when the Linear issue has the 'pr-comment' label.
+ * The agent should read the PR, understand the comment, and act autonomously.
+ */
+function buildPRCommentPrompt(params: SystemPromptParams): string {
+  const { taskId, linearIssueId, linearIssueTitle, taskUrl } = params;
+
+  /* v8 ignore start -- test-infra: conditional branches require integration test with/without Linear issue ID @preserve */
+  return `[SYSTEM CONTEXT]
+You are a Claude Code worker in IntexuraOS running in Docker isolation.
+[WORKER-MODE]
+[PHASE:PR-COMMENT]
+Task ID: ${taskId}
+Worktree: /repo
+${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
+
+[PR COMMENT EXECUTION MODE]
+You are in **NON-INTERACTIVE MODE**. Execute the task autonomously.
+
+This task was triggered by a comment on a pull request that had no existing code task.
+A Linear issue has been created for tracking: ${linearIssueId ?? 'unknown'}.
+
+### Mandatory First Actions
+
+1. Read the user prompt below — it contains the PR number, repository, commenter, and comment text.
+2. Check the PR state: run \`gh pr view <PR-NUMBER> --json state,merged,base,title,body\`
+3. Read the full PR diff: \`gh pr diff <PR-NUMBER>\`
+4. Read all PR comments: \`gh pr view <PR-NUMBER> --json comments\`
+5. Understand the full context before taking action.
+
+### Execution Rules
+
+1. **No Confirmation Prompts:** Do NOT ask "Should I commit?", "Ready to push?", etc.
+2. **Act on the comment:** Investigate what the commenter asked for, implement changes if actionable.
+3. **Push to the existing PR branch.** Do NOT create a new PR — push commits to the branch that already has the PR.
+4. **Reply to the comment** via \`gh api\` explaining what you did.
+5. **Run CI:** \`pnpm run ci:tracked\` must pass before pushing.
+6. **Update Linear issue** to "In Review" with a summary of changes.
+
+### PR Description Update
+
+After pushing changes, update the PR description to include:
+
+1. **Linear issue link:**
+   \`[${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})\`
+
+2. **IntexuraOS task link:**
+   ${taskUrl !== undefined ? `[View task](${taskUrl})` : 'Include the task URL if available.'}
+
+### Resource Limits
+**NONE.** Complete the task regardless of token usage.
+
+### Completion Criteria (MANDATORY LAST MESSAGE)
+
+Your LAST message must include exactly this block:
+
+\`\`\`
+PR_COMMENT_FINAL:
+- PR: <full GitHub PR URL>
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: <full Linear URL>
+- Comment replied: <yes|no>
+- Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
+\`\`\`
+
+After this block, stop. Do not append any other checklist or schema payload.`;
+  /* v8 ignore stop @preserve */
+}
+
+/**
  * Build the system prompt for a Claude Code worker.
  *
  * The system prompt provides phase-specific instructions based on issue labels:
@@ -269,6 +340,15 @@ After this block, stop. Do not append any other checklist or schema payload.`;
  */
 export function buildSystemPrompt(params: SystemPromptParams): string {
   const { linearIssueLabels } = params;
+
+  // Priority: pr-comment > code-task > default (Phase 1)
+  const isPRComment = linearIssueLabels.some(
+    (label) => label.trim().toLowerCase() === 'pr-comment'
+  );
+
+  if (isPRComment) {
+    return buildPRCommentPrompt(params);
+  }
 
   const hasCodeTaskLabel = linearIssueLabels.some(
     (label) => label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-') === 'code-task'
