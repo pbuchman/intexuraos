@@ -14,7 +14,7 @@ import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { randomBytes, randomUUID, createHmac } from 'node:crypto';
-import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { hasCodeTaskLabel, getWorkerTypeFromLabels } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 
 /**
@@ -184,12 +184,18 @@ export async function processCodeAction(
     linearIssueUrl,
   } = issueResult;
 
+  // Derive worker type from labels (single match only, otherwise fall back to request's workerType)
+  const labelWorkerType = getWorkerTypeFromLabels(linearIssueLabels);
+  const effectiveWorkerType = labelWorkerType ?? workerType;
+
   logger.info(
     {
       linearIssueId: finalLinearIssueId,
       linearIssueTitle,
       linearIssueLabels,
       hasChildren,
+      labelWorkerType,
+      effectiveWorkerType,
     },
     'Linear issue processed'
   );
@@ -224,7 +230,7 @@ export async function processCodeAction(
     prompt,
     sanitizedPrompt: sanitizedPromptText,
     systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system prompt
-    workerType,
+    workerType: effectiveWorkerType,
     /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown', // Use first worker as default
     /* v8 ignore stop @preserve */
@@ -344,9 +350,9 @@ export async function processCodeAction(
   // Step 8: Record metrics for task submission
   const source = request.source ?? 'web';
   try {
-    await deps.metricsClient.incrementTasksSubmitted(workerType, source);
+    await deps.metricsClient.incrementTasksSubmitted(effectiveWorkerType, source);
   } catch (error: unknown) {
-    logger.error({ error, taskId: task.id, workerType, source }, 'Failed to record task submission metric');
+    logger.error({ error, taskId: task.id, workerType: effectiveWorkerType, source }, 'Failed to record task submission metric');
   }
 
   // Step 9: Generate cancel nonce and send task started notification (INT-379)
