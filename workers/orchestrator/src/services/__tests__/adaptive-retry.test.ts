@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  analyzeRetryDecision,
-  type RetryDecisionInput,
-} from '../adaptive-retry.js';
+import { analyzeRetryDecision, type RetryDecisionInput } from '../adaptive-retry.js';
 import type { TaskVerificationRecord, TaskResult } from '../../types/task.js';
 
 function makeRecord(overrides: Partial<TaskVerificationRecord> = {}): TaskVerificationRecord {
@@ -45,7 +42,11 @@ describe('analyzeRetryDecision', () => {
         currentAttempt: 2,
         baseMaxAttempts: 3,
         verificationHistory: [
-          makeRecord({ attempt: 1, confidence: 0.2, missingCriteria: ['PR URL line', 'CI evidence line'] }),
+          makeRecord({
+            attempt: 1,
+            confidence: 0.2,
+            missingCriteria: ['PR URL line', 'CI evidence line'],
+          }),
           makeRecord({ attempt: 2, confidence: 0.4, missingCriteria: ['CI evidence line'] }),
         ],
       };
@@ -336,9 +337,17 @@ describe('analyzeRetryDecision', () => {
         currentAttempt: 1,
         baseMaxAttempts: 3,
         verificationHistory: [
-          makeRecord({ attempt: 1, confidence: 0.3, missingCriteria: ['PR URL line', 'CI evidence line'] }),
+          makeRecord({
+            attempt: 1,
+            confidence: 0.3,
+            missingCriteria: ['PR URL line', 'CI evidence line'],
+          }),
         ],
-        currentResult: makeResult({ prUrl: 'https://github.com/org/repo/pull/1', commits: 3, ciFailed: false }),
+        currentResult: makeResult({
+          prUrl: 'https://github.com/org/repo/pull/1',
+          commits: 3,
+          ciFailed: false,
+        }),
         previousResult: makeResult({ commits: 1, ciFailed: true }),
       };
 

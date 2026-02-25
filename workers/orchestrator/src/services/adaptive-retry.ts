@@ -72,11 +72,11 @@ export function analyzeRetryDecision(input: RetryDecisionInput): RetryDecision {
   const { currentAttempt, baseMaxAttempts, verificationHistory, currentResult, previousResult } =
     input;
 
-  const { total: progressScore, resultProgress, verificationTrend } = calculateProgressScore(
-    verificationHistory,
-    currentResult,
-    previousResult
-  );
+  const {
+    total: progressScore,
+    resultProgress,
+    verificationTrend,
+  } = calculateProgressScore(verificationHistory, currentResult, previousResult);
 
   if (progressScore <= EARLY_STOP_THRESHOLD) {
     return {
@@ -101,10 +101,7 @@ export function analyzeRetryDecision(input: RetryDecisionInput): RetryDecision {
   }
 
   if (progressScore >= BONUS_THRESHOLD) {
-    const bonusAttempts = Math.min(
-      Math.floor(progressScore / BONUS_THRESHOLD),
-      MAX_BONUS_ATTEMPTS
-    );
+    const bonusAttempts = Math.min(Math.floor(progressScore / BONUS_THRESHOLD), MAX_BONUS_ATTEMPTS);
     const effectiveMax = baseMaxAttempts + bonusAttempts;
 
     if (currentAttempt < effectiveMax) {
@@ -153,10 +150,7 @@ function calculateProgressScore(
   return { total: resultProgress + verificationTrend, resultProgress, verificationTrend };
 }
 
-function scoreResultProgress(
-  currentResult?: TaskResult,
-  previousResult?: TaskResult
-): number {
+function scoreResultProgress(currentResult?: TaskResult, previousResult?: TaskResult): number {
   if (currentResult === undefined) {
     return -1;
   }
