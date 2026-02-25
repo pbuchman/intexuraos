@@ -603,11 +603,11 @@ STEP 4: Check service status with the right tool (see below).
 
 **On home-dev — all services run on the SAME machine:**
 
-| Component                    | Manager        | Commands                                              |
-| ---------------------------- | -------------- | ----------------------------------------------------- |
-| Apps (18 services + web)     | PM2            | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>`         |
-| Orchestrator                 | systemd        | `sudo systemctl status/restart intexuraos-orchestrator@pbuchman` |
-| Workers (cloud functions)    | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`                 |
+| Component                 | Manager        | Commands                                                         |
+| ------------------------- | -------------- | ---------------------------------------------------------------- |
+| Apps (18 services + web)  | PM2            | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>`            |
+| Orchestrator              | systemd        | `sudo systemctl status/restart intexuraos-orchestrator@pbuchman` |
+| Workers (cloud functions) | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`                   |
 
 **Orchestrator is NOT in PM2.** It runs under systemd as `intexuraos-orchestrator@pbuchman`, executing compiled `dist/index.js`. Check with `systemctl status`, not `pm2 status`.
 
