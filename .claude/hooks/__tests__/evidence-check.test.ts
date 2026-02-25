@@ -80,9 +80,7 @@ describe.sequential('Claude Hooks - Evidence Check', () => {
           {
             type: 'assistant',
             message: {
-              content: [
-                { type: 'text', text: 'I updated the config. This should work now.' },
-              ],
+              content: [{ type: 'text', text: 'I updated the config. This should work now.' }],
             },
           },
         ]);
