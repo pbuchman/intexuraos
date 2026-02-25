@@ -605,12 +605,13 @@ STEP 4: Check service status with the right tool (see below).
 
 | Component                    | Manager        | Commands                                              |
 | ---------------------------- | -------------- | ----------------------------------------------------- |
-| Apps (18 services + web)     | PM2 (watch)    | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>` |
-| Workers (orchestrator, etc.) | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`        |
+| Apps (18 services + web)     | PM2            | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>`         |
+| Orchestrator                 | systemd        | `sudo systemctl status/restart intexuraos-orchestrator@pbuchman` |
+| Workers (cloud functions)    | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`                 |
 
-**Workers are NOT in PM2.** The orchestrator, claude-worker, log-cleanup, and vm-lifecycle run as separate processes outside PM2. Check with `ps aux | grep orchestrator`, not `pm2 status`.
+**Orchestrator is NOT in PM2.** It runs under systemd as `intexuraos-orchestrator@pbuchman`, executing compiled `dist/index.js`. Check with `systemctl status`, not `pm2 status`.
 
-**Auto-reload: No manual restart or deploy needed.** PM2 runs with `watch: true` and the orchestrator runs with `tsx watch` — code changes are picked up automatically. On home-dev, `~/deploy/intexuraos` has a git hook that pulls and triggers reload on push.
+**Auto-deploy via webhook handler.** A GitHub webhook at `~/tools/webhook-handler/` receives push events to `development`, detects changed files, and restarts affected services. PM2 services restart via `pm2 restart`; the orchestrator rebuilds (`pnpm --filter orchestrator build`) then restarts via `systemctl restart`. PM2 file watching is disabled (`watch: false`).
 
 **Key port map** (full list in `ecosystem.config.cjs`):
 
@@ -627,7 +628,7 @@ STEP 4: Check service status with the right tool (see below).
 - "This is a prod issue" — verify first by checking where the logs came from.
 - "I can't access that service" — on home-dev, you CAN. It's localhost.
 - "Not related to my changes" — if it's on the same machine, investigate it.
-- "We need to restart/deploy" — watch mode auto-reloads on home-dev. Just push.
+- "We need to restart/deploy" — webhook auto-deploys on push to development. Just push.
 
 ---
 
