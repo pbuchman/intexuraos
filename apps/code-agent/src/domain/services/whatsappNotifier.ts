@@ -73,4 +73,17 @@ export interface WhatsAppNotifier {
     userId: string,
     task: CodeTask
   ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when Phase 1 (design) completes, with button to proceed to Phase 2.
+   * INT-628
+   *
+   * @param userId - User ID to send notification to
+   * @param task - Completed design task
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyDesignComplete(
+    userId: string,
+    task: CodeTask
+  ): Promise<Result<void, NotificationError>>;
 }

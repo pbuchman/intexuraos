@@ -7,7 +7,7 @@
  */
 
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type { CodeAgentClient, CodeAgentError, CancelTaskError, CancelTaskWithNonceInput, CancelTaskWithNonceOutput } from '../../domain/ports/codeAgentClient.js';
+import type { CodeAgentClient, CodeAgentError, CancelTaskError, CancelTaskWithNonceInput, CancelTaskWithNonceOutput, SubmitToPhase2Input, SubmitToPhase2Output, SubmitToPhase2Error } from '../../domain/ports/codeAgentClient.js';
 import type { CodeActionPayload } from '../../domain/models/action.js';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 
@@ -287,6 +287,134 @@ export function createCodeAgentHttpClient(
       logger.error(
         { httpStatus: response.status, statusText: response.statusText, taskId: input.taskId },
         'Unexpected response from code-agent cancel-with-nonce'
+      );
+      return err({
+        code: 'UNKNOWN',
+        message: `Unexpected response: ${String(response.status)}`,
+      });
+    },
+
+    async submitToPhase2(input: SubmitToPhase2Input): Promise<Result<SubmitToPhase2Output, SubmitToPhase2Error>> {
+      const url = `${config.baseUrl}/internal/code/submit-phase2`;
+      const timeoutMs = 30_000; // 30 second timeout
+
+      logger.info(
+        { url, taskId: input.taskId, userId: input.userId },
+        'Calling code-agent submit-to-phase2'
+      );
+
+      let response: Response;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Auth': config.internalAuthToken,
+          },
+          body: JSON.stringify({
+            taskId: input.taskId,
+            userId: input.userId,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        logger.error({ error: getErrorMessage(error), taskId: input.taskId }, 'Failed to call code-agent submit-to-phase2');
+        return err({
+          code: 'NETWORK_ERROR',
+          message: `Failed to call code-agent: ${getErrorMessage(error)}`,
+        });
+      }
+
+      // Success response (200)
+      if (response.status === 200) {
+        try {
+          const body = await response.json() as { success: boolean; data: SubmitToPhase2Output };
+          if (!body.success || !body.data) {
+            logger.error({ body }, 'Invalid response from code-agent submit-to-phase2');
+            return err({
+              code: 'UNKNOWN',
+              message: 'Invalid response from code-agent',
+            });
+          }
+          logger.info({ codeTaskId: body.data.codeTaskId }, 'Phase 2 submitted successfully');
+          return ok(body.data);
+        } catch (error) {
+          logger.error({ error: getErrorMessage(error) }, 'Invalid JSON response from code-agent submit-to-phase2');
+          return err({
+            code: 'UNKNOWN',
+            message: 'Invalid response from code-agent',
+          });
+        }
+      }
+
+      // Parse error response
+      let errorBody: { error?: { code?: string; message?: string; details?: { existingTaskId?: string } } } = {};
+      try {
+        errorBody = await response.json() as typeof errorBody;
+      } catch {
+        // Ignore JSON parsing errors
+      }
+
+      const errorCode = errorBody.error?.code ?? '';
+      const errorMessage = errorBody.error?.message ?? 'Unknown error';
+
+      // Map HTTP status to error codes
+      if (response.status === 404) {
+        logger.info({ taskId: input.taskId }, 'Task not found for submit-to-phase2');
+        return err({ code: 'TASK_NOT_FOUND', message: errorMessage });
+      }
+
+      if (response.status === 400) {
+        const codeMap: Record<string, SubmitToPhase2Error['code']> = {
+          'INVALID_REQUEST': 'INVALID_STATUS',
+          'task_not_found': 'TASK_NOT_FOUND',
+          'invalid_status': 'INVALID_STATUS',
+          'no_linear_issue': 'NO_LINEAR_ISSUE',
+          'label_not_ready': 'LABEL_NOT_READY',
+          'already_implemented': 'ALREADY_IMPLEMENTED',
+          'active_task_exists': 'ACTIVE_TASK_EXISTS',
+        };
+        const mappedCode = codeMap[errorCode];
+        if (mappedCode !== undefined) {
+          if (mappedCode === 'ALREADY_IMPLEMENTED') {
+            return err({
+              code: mappedCode,
+              message: errorMessage,
+              existingTaskId: errorBody.error?.details?.existingTaskId,
+            });
+          }
+          return err({ code: mappedCode, message: errorMessage });
+        }
+        logger.warn({ taskId: input.taskId, errorCode, errorMessage }, 'Unknown error from submit-to-phase2');
+        return err({ code: 'UNKNOWN', message: errorMessage });
+      }
+
+      if (response.status === 409) {
+        logger.info({ taskId: input.taskId }, 'Conflict - implementation already exists or active task exists');
+        return err({
+          code: 'ALREADY_IMPLEMENTED',
+          message: errorMessage,
+          existingTaskId: errorBody.error?.details?.existingTaskId,
+        });
+      }
+
+      if (response.status === 503) {
+        logger.warn({ taskId: input.taskId }, 'Worker not configured for submit-to-phase2');
+        return err({ code: 'WORKER_NOT_CONFIGURED', message: errorMessage });
+      }
+
+      // Unknown error
+      logger.error(
+        { httpStatus: response.status, statusText: response.statusText, taskId: input.taskId },
+        'Unexpected response from code-agent submit-to-phase2'
       );
       return err({
         code: 'UNKNOWN',

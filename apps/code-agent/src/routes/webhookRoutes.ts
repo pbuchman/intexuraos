@@ -230,7 +230,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         /* v8 ignore start -- ts-type: spread with boolean shorthand creates complex type that requires assertion @preserve */
         const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
         /* v8 ignore stop @preserve */
-        await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
+
+        // INT-628: If Phase 1 (design) completed, send notification with button to proceed to Phase 2
+        if (task.executionPhase === 'design') {
+          await whatsappNotifier.notifyDesignComplete(task.userId, completedTask);
+        } else {
+          await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
+        }
 
         // Record task completion for rate limiting (fire and forget)
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
