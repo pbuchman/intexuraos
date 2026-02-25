@@ -53,6 +53,7 @@ export interface CreateTaskForPRDeps {
   linearIssueService: LinearIssueService;
   taskDispatcher: TaskDispatcherService;
   orchestratorSecret: string;
+  serviceUrl: string;
   firestore: {
     runTransaction: <T>(fn: (transaction: FirebaseFirestore.Transaction) => Promise<T>) => Promise<T>;
     doc: (path: string) => FirebaseFirestore.DocumentReference;
@@ -114,7 +115,7 @@ export async function createTaskForPR(
   deps: CreateTaskForPRDeps,
   request: CreateTaskForPRRequest
 ): Promise<Result<{ taskId: string }, CreateTaskForPRError>> {
-  const { logger, codeTaskRepo, userLookupService, linearIssueService, taskDispatcher, orchestratorSecret, firestore } = deps;
+  const { logger, codeTaskRepo, userLookupService, linearIssueService, taskDispatcher, orchestratorSecret, serviceUrl, firestore } = deps;
   const { repository, prNumber, senderLogin, eventId } = request;
 
   logger.info(
@@ -290,7 +291,6 @@ export async function createTaskForPR(
     : [...issueLabels, 'pr-comment'];
 
   // Step 6: Dispatch to worker (only for new tasks)
-  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
   const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
 
   const workerCredentials: DispatchWorkerCredentials = {

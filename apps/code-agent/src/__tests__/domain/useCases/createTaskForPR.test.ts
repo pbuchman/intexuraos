@@ -90,6 +90,7 @@ describe('createTaskForPR', () => {
       linearIssueService: mockLinearIssueService as unknown as CreateTaskForPRDeps['linearIssueService'],
       taskDispatcher: mockTaskDispatcher as unknown as CreateTaskForPRDeps['taskDispatcher'],
       orchestratorSecret: 'test-orchestrator-secret',
+      serviceUrl: 'https://code-agent.test.local',
       firestore: mockFirestore as unknown as CreateTaskForPRDeps['firestore'],
     };
   }
