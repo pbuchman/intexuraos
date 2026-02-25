@@ -11,7 +11,8 @@ import type {
   DispatchWorkerCredentials,
 } from '../../../domain/services/taskDispatcher.js';
 import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
-import { generateNonce, generateWebhookSecret, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
+import { generateNonce, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
+import { generateWebhookSecret } from '../../../domain/utils/secrets.js';
 
 describe('taskDispatcherImpl', () => {
   let logger: Logger;
