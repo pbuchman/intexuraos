@@ -413,6 +413,49 @@ describe('TaskDispatcher', () => {
         'main'
       );
     });
+
+    it('should use default baseBranch when not provided', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-task-default-branch',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      expect(dispatcher.getRunningCount()).toBe(1);
+      expect(mockWorktreeManager.createWorktree).toHaveBeenCalledWith(
+        'test-task-default-branch',
+        'development'
+      );
+    });
+
+    it('should store baseBranch on Task object', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-task-branch-stored',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        baseBranch: 'custom-branch',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      const task = await dispatcher.getTask('test-task-branch-stored');
+      expect(task).not.toBeNull();
+      expect(task?.baseBranch).toBe('custom-branch');
+    });
   });
 
   describe('cancelTask', () => {
