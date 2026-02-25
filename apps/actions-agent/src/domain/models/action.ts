@@ -28,7 +28,7 @@ export interface CodeActionPayload {
   /** The user's request (what they want Claude to do) */
   prompt: string;
   /** Which model to use (see design lines 1203-1230) */
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   /** Optional: existing Linear issue to work on */
   linearIssueId?: string;
   /** Optional: title if issue exists */

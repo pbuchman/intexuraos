@@ -3,5 +3,6 @@ packages:
   - 'packages/*'
   - 'workers/*'
   - 'tools/log-server'
+  - 'tools/sample-data'
   - 'e2e'
   - 'e2e/mock-claude'

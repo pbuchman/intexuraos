@@ -1833,6 +1833,12 @@ importers:
         specifier: ^4.18.2
         version: 4.22.1
 
+  tools/sample-data:
+    dependencies:
+      '@google-cloud/pubsub':
+        specifier: ^4.9.0
+        version: 4.11.0(encoding@0.1.13)
+
   workers/log-cleanup:
     dependencies:
       '@google-cloud/functions-framework':

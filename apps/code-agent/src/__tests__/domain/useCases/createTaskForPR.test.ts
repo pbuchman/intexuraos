@@ -476,6 +476,39 @@ describe('createTaskForPR', () => {
       expect(capturedLabels).toContain('code-task');
     });
 
+    it('preserves pr-comment label when already present in existing issue labels', async () => {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockTransaction.get.mockResolvedValue({
+        exists: false,
+        data: () => undefined,
+      });
+
+      mockLinearIssueService.ensureIssueExists.mockImplementation(async () => ({
+        linearIssueId: 'INT-500',
+        linearIssueTitle: 'Existing issue',
+        linearFallback: false,
+        linearIssueLabels: ['code-task', 'pr-comment'],
+        hasChildren: false,
+      }));
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({ ...mockExistingTask, id: 'task_new' })
+      );
+
+      let capturedLabels: string[] = [];
+      mockTaskDispatcher.dispatch.mockImplementation(async (input) => {
+        capturedLabels = input.linearIssueLabels;
+        return ok({ dispatched: true, workerLocation: 'home-dev' });
+      });
+
+      await createTaskForPR(createDeps(), createRequest({ prTitle: '[INT-500] Fix bug' }));
+
+      expect(capturedLabels).toEqual(['code-task', 'pr-comment']);
+    });
+
     it('uses real labels from existing issue when INT-XXX found', async () => {
       mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
         ok({ userId, worker: mockWorker })
@@ -507,6 +540,120 @@ describe('createTaskForPR', () => {
       await createTaskForPR(createDeps(), createRequest({ prTitle: '[INT-500] Fix bug' }));
 
       expect(capturedLabels).toEqual(['code-task', 'backend', 'pr-comment']);
+    });
+  });
+
+  describe('error handling', () => {
+    function setupHappyPathMocks(): void {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockTransaction.get.mockResolvedValue({
+        exists: false,
+        data: () => undefined,
+      });
+
+      mockLinearIssueService.ensureIssueExists.mockResolvedValue({
+        linearIssueId: 'INT-100',
+        linearIssueTitle: 'Test Issue',
+        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-100',
+        linearFallback: false,
+      });
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok({ ...mockExistingTask, id: 'task_new' })
+      );
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' })
+      );
+    }
+
+    it('returns task_creation_failed when lock document has missing taskId', async () => {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockTransaction.get.mockResolvedValue({
+        exists: true,
+        data: () => ({}),
+      });
+
+      const result = await createTaskForPR(createDeps(), createRequest());
+
+      if (result.ok) {
+        throw new Error('Expected error result');
+      }
+      expect(result.error.code).toBe('task_creation_failed');
+      expect(result.error.message).toContain('taskId is missing');
+    });
+
+    it('returns task_creation_failed when lock document has empty taskId', async () => {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockTransaction.get.mockResolvedValue({
+        exists: true,
+        data: () => ({ taskId: '' }),
+      });
+
+      const result = await createTaskForPR(createDeps(), createRequest());
+
+      if (result.ok) {
+        throw new Error('Expected error result');
+      }
+      expect(result.error.code).toBe('task_creation_failed');
+    });
+
+    it('returns task_creation_failed when codeTaskRepo.create fails', async () => {
+      setupHappyPathMocks();
+
+      mockCodeTaskRepo.create.mockResolvedValue(
+        err({ code: 'WRITE_FAILED', message: 'Firestore write failed' })
+      );
+
+      const result = await createTaskForPR(createDeps(), createRequest());
+
+      if (result.ok) {
+        throw new Error('Expected error result');
+      }
+      expect(result.error.code).toBe('task_creation_failed');
+      expect(result.error.message).toContain('Firestore write failed');
+    });
+
+    it('returns internal_error when transaction throws', async () => {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockFirestore.runTransaction.mockRejectedValue(new Error('Firestore unavailable'));
+
+      const result = await createTaskForPR(createDeps(), createRequest());
+
+      if (result.ok) {
+        throw new Error('Expected error result');
+      }
+      expect(result.error.code).toBe('internal_error');
+      expect(result.error.message).toContain('Firestore unavailable');
+    });
+
+    it('propagates error when transaction callback returns err result', async () => {
+      mockUserLookupService.resolveUserFromGitHubUsername.mockResolvedValue(
+        ok({ userId, worker: mockWorker })
+      );
+
+      mockFirestore.runTransaction.mockResolvedValue(
+        err({ code: 'task_creation_failed', message: 'Lock document exists but taskId is missing' })
+      );
+
+      const result = await createTaskForPR(createDeps(), createRequest());
+
+      if (result.ok) {
+        throw new Error('Expected error result');
+      }
+      expect(result.error.code).toBe('task_creation_failed');
     });
   });
 });

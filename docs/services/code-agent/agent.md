@@ -563,9 +563,9 @@ All errors follow the IntexuraOS contract:
 | Target        | Endpoint                                      | When                 |
 | ------------- | --------------------------------------------- | -------------------- |
 | Worker        | `POST {workerUrl}/tasks`                      | Task dispatch        |
-| Worker        | `DELETE {workerUrl}/tasks/{taskId}`            | Task cancellation    |
-| Worker        | `POST {workerUrl}/tasks/{taskId}/messages`     | Send message         |
-| Worker        | `GET {workerUrl}/health`                       | Connectivity test    |
+| Worker        | `DELETE {workerUrl}/tasks/{taskId}`           | Task cancellation    |
+| Worker        | `POST {workerUrl}/tasks/{taskId}/messages`    | Send message         |
+| Worker        | `GET {workerUrl}/health`                      | Connectivity test    |
 | linear-agent  | `POST /internal/linear/issues`                | Issue creation       |
 | linear-agent  | `PATCH /internal/linear/issues/{id}/state`    | State transition     |
 | linear-agent  | `POST /internal/linear/issues/validate`       | Issue validation     |
@@ -581,12 +581,12 @@ All errors follow the IntexuraOS contract:
 
 ### Incoming Webhooks
 
-| Source       | Path                              | Trigger                            |
-| ------------ | --------------------------------- | ---------------------------------- |
-| Orchestrator | `/internal/webhooks/task-complete` | Task finished (completed/failed)  |
-| Orchestrator | `/internal/logs`                  | Log chunks during execution        |
-| Orchestrator | `/internal/turn-metrics`          | Per-turn resource metrics          |
-| GitHub       | `/webhooks/github`                | PR events (push, review, comment)  |
+| Source       | Path                               | Trigger                            |
+| ------------ | ---------------------------------- | ---------------------------------- |
+| Orchestrator | `/internal/webhooks/task-complete` | Task finished (completed/failed)   |
+| Orchestrator | `/internal/logs`                   | Log chunks during execution        |
+| Orchestrator | `/internal/turn-metrics`           | Per-turn resource metrics          |
+| GitHub       | `/webhooks/github`                 | PR events (push, review, comment)  |
 
 ### Metrics (Cloud Monitoring)
 

@@ -19,11 +19,11 @@ export type OAuthState =
   | { status: 'expired'; message: string }
   | { status: 'not_configured'; message: string };
 
-export type WorkerType = 'opus' | 'auto' | 'glm';
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
 
 export interface WorkerTypeConfig {
   apiBaseUrl: string;
-  apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'ZAI_API_KEY';
+  apiKeyEnvVar: 'ANTHROPIC_API_KEY' | 'ZAI_API_KEY' | 'MINIMAX_API_KEY';
   model?: string;
 }
 
@@ -37,6 +37,16 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
   },
+  sonnet: {
+    apiBaseUrl: 'https://api.anthropic.com',
+    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+    model: 'sonnet',
+  },
+  minimax: {
+    apiBaseUrl: 'https://api.minimax.io/anthropic',
+    apiKeyEnvVar: 'MINIMAX_API_KEY',
+    model: 'MiniMax-M2.5',
+  },
   glm: {
     apiBaseUrl: 'https://api.z.ai/api/anthropic',
     apiKeyEnvVar: 'ZAI_API_KEY',
@@ -48,6 +58,7 @@ export interface WorkerSecrets {
   LINEAR_API_KEY: string;
   SENTRY_AUTH_TOKEN: string;
   ZAI_API_KEY: string;
+  MINIMAX_API_KEY: string;
 }
 
 export interface WorkerConfig {

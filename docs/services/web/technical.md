@@ -436,20 +436,20 @@ The `actionConfigLoader` reads this at runtime and `ActionItem` renders buttons 
 
 ## Technology Stack
 
-| Layer      | Technology                                                             |
-| ---------- | ---------------------------------------------------------------------- |
-| Framework  | React 19.1 with TypeScript                                            |
-| Build      | Vite 7.3                                                               |
-| Styling    | TailwindCSS 4.1 (dark mode support)                                   |
-| Auth       | Auth0 SPA SDK                                                          |
-| Real-time  | Firebase SDK (Firestore)                                               |
-| PWA        | vite-plugin-pwa, workbox                                               |
-| Icons      | lucide-react                                                           |
-| Charts     | Vega, Vega-Lite, Vega-Embed                                           |
+| Layer      | Technology                                                              |
+| ---------- | ----------------------------------------------------------------------- |
+| Framework  | React 19.1 with TypeScript                                              |
+| Build      | Vite 7.3                                                                |
+| Styling    | TailwindCSS 4.1 (dark mode support)                                     |
+| Auth       | Auth0 SPA SDK                                                           |
+| Real-time  | Firebase SDK (Firestore)                                                |
+| PWA        | vite-plugin-pwa, workbox                                                |
+| Icons      | lucide-react                                                            |
+| Charts     | Vega, Vega-Lite, Vega-Embed                                             |
 | Log stream | Custom `LogStream` component (CSS color-coded, collapsible tool blocks) |
-| Markdown   | @uiw/react-md-editor                                                   |
-| HTML parse | rehype-raw (PR event comment bodies)                                   |
-| Deployment | GCS + Cloud Load Balancer                                              |
+| Markdown   | @uiw/react-md-editor                                                    |
+| HTML parse | rehype-raw (PR event comment bodies)                                    |
+| Deployment | GCS + Cloud Load Balancer                                               |
 
 ## Deployment
 

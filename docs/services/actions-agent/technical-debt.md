@@ -112,8 +112,8 @@ the current pattern provides clarity.
 In `server.ts`, the OpenAPI info description still reads "IntexuraOS Research Agent - Processes research action events"
 instead of referencing the actions-agent. This is a leftover from the rename of research-agent to actions-agent.
 
-| File        | Issue                                              | Impact                                |
-| ----------- | -------------------------------------------------- | ------------------------------------- |
+| File        | Issue                                              | Impact                                  |
+| ----------- | -------------------------------------------------- | --------------------------------------- |
 | `server.ts` | OpenAPI description references "Research Agent"    | Incorrect API documentation for `/docs` |
 
 **Severity:** Low - Does not affect functionality.

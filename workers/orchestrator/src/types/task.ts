@@ -21,7 +21,7 @@ export interface TaskVerificationRecord {
 
 export interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   prompt: string;
   repository: string;
   baseBranch: string;

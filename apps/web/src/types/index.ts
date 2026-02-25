@@ -1090,7 +1090,7 @@ export interface CalendarPreview {
 /**
  * Worker type determines which model Claude uses.
  */
-export type CodeTaskWorkerType = 'opus' | 'auto' | 'glm';
+export type CodeTaskWorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
 
 /**
  * Worker location for routing.

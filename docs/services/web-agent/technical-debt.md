@@ -34,8 +34,8 @@ Based on code analysis and git history:
 
 ### Low Priority
 
-| File                                       | Issue                             | Impact                                         |
-| ------------------------------------------ | --------------------------------- | ---------------------------------------------- |
+| File                                        | Issue                             | Impact                                         |
+| ------------------------------------------- | --------------------------------- | ---------------------------------------------- |
 | `src/infra/linkpreview/openGraphFetcher.ts` | Manual Uint8Array concatenation   | Minor performance impact on large responses    |
 | `src/infra/linkpreview/openGraphFetcher.ts` | ESLint disable for `while (true)` | Necessary pattern for streaming; could extract |
 
@@ -119,7 +119,7 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 | Date       | Issue                                               | Resolution                                               |
 | ---------- | --------------------------------------------------- | -------------------------------------------------------- |
 | 2026-02-22 | Release v3.1.0 (version bump only)                  | Package version updated to 3.1.0                         |
-| 2026-02-19 | PromptBuilder lacked version enforcement            | Added `version: '1.0.0'` to both prompts; CI-enforced   |
+| 2026-02-19 | PromptBuilder lacked version enforcement            | Added `version: '1.0.0'` to both prompts; CI-enforced    |
 | 2026-02-16 | No distributed tracing                              | Added Dash0 OpenTelemetry via transparent preload module |
 | 2026-02-15 | `CRAWL4AI_API_KEY` nonstandard naming               | Renamed to `CRAWL4AI_APP_API_KEY` per APP convention     |
 | 2026-02-15 | Platform ZAI model too slow (29s) for summarization | Switched default platform fallback to Gemini 2.5 Flash   |
