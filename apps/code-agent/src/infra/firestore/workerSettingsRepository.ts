@@ -132,6 +132,10 @@ export function createWorkerSettingsRepository(
           updatedAt: data.updatedAt,
         };
 
+        if (data.githubUsername !== undefined) {
+          settings.githubUsername = data.githubUsername;
+        }
+
         return ok(settings);
       } catch (error) {
         const message = getErrorMessage(error);
@@ -561,6 +565,43 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, githubUsername }, 'Failed to find worker settings by GitHub username');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async updateGitHubUsername(
+      userId: string,
+      githubUsername: string
+    ): Promise<Result<void, WorkerSettingsError>> {
+      try {
+        const docRef = collection.doc(userId);
+        const doc = await docRef.get();
+        const now = new Date().toISOString();
+
+        if (doc.exists) {
+          // Update existing document
+          await docRef.update({
+            githubUsername,
+            updatedAt: now,
+          });
+        } else {
+          // Create new document with githubUsername and empty workers
+          await docRef.set({
+            userId,
+            workers: [],
+            githubUsername,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        return ok(undefined);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId, githubUsername }, 'Failed to update GitHub username');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
