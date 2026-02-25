@@ -18,6 +18,7 @@ import type { ApiKeyValidator } from './api-key-validator.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
 import { type CompletionVerifier, type CompletionVerifierVerdict } from './completion-verifier.js';
+import { analyzeRetryDecision } from './adaptive-retry.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 
 const execAsync = promisify(exec);
@@ -436,6 +437,7 @@ export class TaskDispatcher {
       task.startedAt = new Date().toISOString();
       task.attemptCount = 1;
       task.verificationHistory = [];
+      delete task.previousResult;
       delete task.completedAt;
       if (wasCompleted) {
         task.resumedAfterSuccess = true;
@@ -637,7 +639,7 @@ export class TaskDispatcher {
     }
 
     const attempt = task.attemptCount ?? 1;
-    const maxAttempts = task.maxAttempts ?? this.completionMaxAttempts;
+    const maxAttempts = this.completionMaxAttempts;
     const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
     const phase = isPRComment
       ? 'pr-comment'
@@ -756,56 +758,79 @@ export class TaskDispatcher {
       return;
     }
 
-    if (!verification.passed && attempt < maxAttempts) {
-      this.logForwarder.appendChunk(task.taskId, '\n\n');
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Verification failed; continuing with next attempt (${String(attempt + 1)}/${String(maxAttempts)})`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.teardownAttempt(task.taskId, true);
-
-      const resumePrompt = this.buildResumePrompt(task.prompt, verification);
-      const nextAttempt = attempt + 1;
-      const resumeStart = await this.startWorkerAttempt(task, {
-        prompt: resumePrompt,
-        hasChildren: task.hasChildren ?? false,
-        continueSession: true,
+    if (!verification.passed) {
+      const retryDecision = analyzeRetryDecision({
+        currentAttempt: attempt,
+        baseMaxAttempts: maxAttempts,
+        verificationHistory: task.verificationHistory ?? [],
+        ...(result !== undefined && { currentResult: result }),
+        ...(task.previousResult !== undefined && { previousResult: task.previousResult }),
       });
 
-      if (resumeStart.ok) {
-        task.attemptCount = nextAttempt;
-        task.containerId = resumeStart.containerId;
-        await this.saveTask(task);
-        this.logger.info(
-          { taskId: task.taskId, attempt: nextAttempt, maxAttempts },
-          'Resumed task with follow-up attempt'
-        );
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Adaptive retry: ${retryDecision.outcome} (score=${String(retryDecision.progressScore)}, effective=${String(retryDecision.effectiveMaxAttempts)}) — ${retryDecision.reason}`
+      );
+      this.logger.info(
+        { taskId: task.taskId, attempt, maxAttempts, outcome: retryDecision.outcome, progressScore: retryDecision.progressScore, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts },
+        'Adaptive retry decision'
+      );
+
+      if (retryDecision.outcome === 'continue') {
+        this.logForwarder.appendChunk(task.taskId, '\n\n');
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Resume attempt started successfully: attempt=${String(nextAttempt)}/${String(maxAttempts)}`
+          `Verification failed; continuing with next attempt (${String(attempt + 1)}/${String(retryDecision.effectiveMaxAttempts)})`
         );
-        this.claudeErrors.delete(task.taskId);
-        this.taskExitCodes.delete(task.taskId);
+        await this.flushTaskLogs(task.taskId);
+        await this.teardownAttempt(task.taskId, true);
+
+        if (result !== undefined) {
+          task.previousResult = result;
+        }
+
+        const resumePrompt = this.buildResumePrompt(task.prompt, verification);
+        const nextAttempt = attempt + 1;
+        const resumeStart = await this.startWorkerAttempt(task, {
+          prompt: resumePrompt,
+          hasChildren: task.hasChildren ?? false,
+          continueSession: true,
+        });
+
+        if (resumeStart.ok) {
+          task.attemptCount = nextAttempt;
+          task.containerId = resumeStart.containerId;
+          await this.saveTask(task);
+          this.logger.info(
+            { taskId: task.taskId, attempt: nextAttempt, effectiveMaxAttempts: retryDecision.effectiveMaxAttempts, progressScore: retryDecision.progressScore },
+            'Resumed task with follow-up attempt'
+          );
+          this.appendOrchestratorTaskLog(
+            task.taskId,
+            `Resume attempt started successfully: attempt=${String(nextAttempt)}/${String(retryDecision.effectiveMaxAttempts)}`
+          );
+          this.claudeErrors.delete(task.taskId);
+          this.taskExitCodes.delete(task.taskId);
+          return;
+        }
+
+        const resumeError: TaskError = {
+          code: 'RESUME_ATTEMPT_FAILED',
+          message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
+          remediation: { action: 'retry' },
+        };
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
+        );
+        await this.flushTaskLogs(task.taskId);
+        await this.collectTurnMetrics(task, attempt);
+        await this.finalizeTask(task, 'failed', {
+          ...(result !== undefined && { result }),
+          error: resumeError,
+        });
         return;
       }
-
-      const resumeError: TaskError = {
-        code: 'RESUME_ATTEMPT_FAILED',
-        message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
-        remediation: { action: 'retry' },
-      };
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error: resumeError,
-      });
-      return;
     }
 
     if (verification.passed) {

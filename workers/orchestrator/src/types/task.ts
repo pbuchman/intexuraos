@@ -60,6 +60,10 @@ export interface Task {
    */
   verificationHistory?: TaskVerificationRecord[];
   /**
+   * Task result from the previous attempt (used by adaptive retry analyzer).
+   */
+  previousResult?: TaskResult;
+  /**
    * Set when a completed task is resumed via sendMessage().
    * Gates loosened completion verification (exit code + Claude error only).
    * Cleared before persisting in finalizeTask().
