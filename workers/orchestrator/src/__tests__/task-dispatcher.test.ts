@@ -1486,6 +1486,97 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('executionPhase priority', () => {
+    const getInstructionsLog = (): string | undefined =>
+      vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.find(
+          (call) => typeof call[1] === 'string' && call[1].includes('[instructions]')
+        )?.[1] as string | undefined;
+
+    it('uses executionPhase=execution over missing code-task label', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'exec-phase-override-task',
+        workerType: 'auto',
+        prompt: 'Test execution phase override',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['bug'],
+        hasChildren: false,
+        executionPhase: 'execution',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Phase 2: Strict Execution');
+    });
+
+    it('uses executionPhase=design over present code-task label', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
+      const request: CreateTaskRequest = {
+        taskId: 'design-phase-override-task',
+        workerType: 'auto',
+        prompt: 'Test design phase override',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        executionPhase: 'design',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Phase 1: Design');
+    });
+
+    it('falls back to label detection when executionPhase is absent', async () => {
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
+      const request: CreateTaskRequest = {
+        taskId: 'label-fallback-task',
+        workerType: 'auto',
+        prompt: 'Test label fallback',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const log = getInstructionsLog();
+      expect(log).toBeDefined();
+      expect(log).toContain('Phase 2: Strict Execution');
+    });
+
+    it('stores executionPhase on the task', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'exec-phase-stored-task',
+        workerType: 'auto',
+        prompt: 'Test phase storage',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        executionPhase: 'execution',
+      };
+
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const task = await dispatcher.getTask('exec-phase-stored-task');
+      expect(task?.executionPhase).toBe('execution');
+    });
+  });
+
   describe('getRunningTaskIds', () => {
     it('should return empty array when no tasks are running', () => {
       const ids = dispatcher.getRunningTaskIds();
