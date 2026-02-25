@@ -412,6 +412,14 @@ async function bootstrap(): Promise<void> {
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
 
+  let codeVersion = 'unknown';
+  try {
+    codeVersion = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    // git may not be available in all environments
+  }
+  logger.info({ codeVersion, nodeVersion: process.version }, 'Orchestrator code version');
+
   // Ensure repository is cloned and up-to-date
   await ensureRepository(repoUrl, repoPath, logger);
 
