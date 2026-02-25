@@ -16,27 +16,10 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
-import { randomBytes, randomUUID, createHmac } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
-
-/**
- * Generate a deterministic webhook secret for a task.
- * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
- */
-function generateWebhookSecret(sharedSecret: string, taskId: string): string {
-  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
-}
-
-/**
- * Generate a cancel nonce for task cancellation.
- */
-function generateCancelNonce(): string {
-  const buffer = randomBytes(2);
-  return buffer.toString('hex');
-}
-
-const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
+import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 
 /**
  * Request to submit feedback on a task.
@@ -421,7 +404,7 @@ ${feedback.trim()}
 
   return ok({
     codeTaskId: followUpTask.id,
-    resourceUrl: `/code/tasks/${followUpTask.id}`,
+    resourceUrl: `/#/code-tasks/${followUpTask.id}`,
     workerLocation: followUpTask.workerLocation,
     followUpFor: originalTask.id,
   });

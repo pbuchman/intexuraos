@@ -183,15 +183,15 @@ CI fails on any unaccounted branch. No exceptions.
 
 **NEVER valid for v8 ignore** — these are ALWAYS testable:
 
-| Pattern              | How to Test It                               |
-| -------------------- | -------------------------------------------- |
-| Catch blocks         | Throw in the test (mock the dependency)      |
-| Error paths          | Mock the dependency to return an error       |
-| Validation branches  | Pass invalid input                           |
-| Conditional returns  | Test both branches with different input      |
-| If/else branches     | Test both conditions                         |
-| Default switch cases | Pass an unmatched value                      |
-| Null guards          | Pass null/undefined input                    |
+| Pattern              | How to Test It                          |
+| -------------------- | --------------------------------------- |
+| Catch blocks         | Throw in the test (mock the dependency) |
+| Error paths          | Mock the dependency to return an error  |
+| Validation branches  | Pass invalid input                      |
+| Conditional returns  | Test both branches with different input |
+| If/else branches     | Test both conditions                    |
+| Default switch cases | Pass an unmatched value                 |
+| Null guards          | Pass null/undefined input               |
 
 **Valid categories:** `ts-type`, `regex`, `module-init`, `async-timing`, `test-infra`, `upstream`, `module-mock`, `schema`, `source-map`, `auth-guard`
 

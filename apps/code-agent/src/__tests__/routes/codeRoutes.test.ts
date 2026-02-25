@@ -2806,7 +2806,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toMatch(/^task_/);
       expect(body.data.implementationOf).toBe(created.value.id);
-      expect(body.data.resourceUrl).toContain('/code/tasks/');
+      expect(body.data.resourceUrl).toContain('/#/code-tasks/');
       expect(body.data.workerLocation).toBe('mac');
     });
   });
