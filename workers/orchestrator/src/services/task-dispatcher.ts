@@ -669,6 +669,12 @@ export class TaskDispatcher {
     const result = await this.checkForResult(task);
     const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
+    if (result !== undefined) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
+      );
+    }
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Running completion verification: exitCode=${String(exitCode ?? 'unknown')} claudeError=${claudeError ?? 'none'} detectedPr=${result?.prUrl ?? 'none'}`
@@ -759,6 +765,19 @@ export class TaskDispatcher {
     }
 
     if (!verification.passed) {
+      if (result !== undefined && task.previousResult !== undefined) {
+        const diffs: string[] = [];
+        const prev = task.previousResult;
+        if (prev.commits !== result.commits)
+          diffs.push(`commits ${String(prev.commits ?? 0)}→${String(result.commits ?? 0)}`);
+        if (prev.ciFailed !== result.ciFailed)
+          diffs.push(`ciFailed ${String(prev.ciFailed ?? 'unknown')}→${String(result.ciFailed ?? 'unknown')}`);
+        if (prev.prUrl === undefined && result.prUrl !== undefined) diffs.push('prUrl (new)');
+        if (diffs.length > 0) {
+          this.appendOrchestratorTaskLog(task.taskId, `Result diff: ${diffs.join(', ')}`);
+        }
+      }
+
       const retryDecision = analyzeRetryDecision({
         currentAttempt: attempt,
         baseMaxAttempts: maxAttempts,
