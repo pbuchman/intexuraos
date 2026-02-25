@@ -45,6 +45,8 @@ export interface DispatchRequest {
   workerHealthStatuses?: Record<string, { healthy: boolean }>;
   /** For retried tasks: points to the original task ID that this task is retrying. */
   retriedFrom?: string;
+  /** Execution phase determined from label analysis. Falls back to label detection if not provided. */
+  executionPhase?: 'design' | 'execution';
 }
 
 /**
