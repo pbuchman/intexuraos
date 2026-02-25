@@ -23,12 +23,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const args = process.argv.slice(2);
 const flags = Object.fromEntries(
-  args.filter(a => a.startsWith('--')).map(a => {
-    const [k, v] = a.slice(2).split('=');
-    return [k, v];
-  })
+  args
+    .filter((a) => a.startsWith('--'))
+    .map((a) => {
+      const [k, v] = a.slice(2).split('=');
+      return [k, v];
+    })
 );
-const positional = args.filter(a => !a.startsWith('--'));
+const positional = args.filter((a) => !a.startsWith('--'));
 
 const PROJECT_ID = flags['project-id'] ?? 'intexuraos-dev-pbuchman';
 const TOPIC = flags['topic'] ?? 'intexuraos-commands-ingest-dev';
@@ -58,7 +60,9 @@ for (const item of items) {
   const dataBuffer = Buffer.from(JSON.stringify(event));
   const messageId = await topic.publishMessage({ data: dataBuffer });
   published++;
-  console.log(`  [${published}/${items.length}] ${item.id} (${item.domain ?? 'unknown'}, ${item.readingTime ?? '?'}) -> ${messageId}`);
+  console.log(
+    `  [${published}/${items.length}] ${item.id} (${item.domain ?? 'unknown'}, ${item.readingTime ?? '?'}) -> ${messageId}`
+  );
 }
 
 console.log(`\nDone. Published ${published} items.`);
