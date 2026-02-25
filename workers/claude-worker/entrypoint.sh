@@ -134,6 +134,23 @@ if [ -d "/opt/claude-defaults" ]; then
 fi
 
 # ------------------------------------------------------------------------------
+# Restore pre-installed plugin cache into the bind-mounted .claude/ directory
+# Plugins were installed at build time into /opt/claude-plugins/.claude/plugins/
+# The bind mount at /home/claude/.claude is initially empty per-task.
+# ------------------------------------------------------------------------------
+if [ -d "/opt/claude-plugins/.claude/plugins" ]; then
+    cp -r /opt/claude-plugins/.claude/plugins /home/claude/.claude/
+    # Rewrite staging paths to match runtime HOME
+    if [ -f "/home/claude/.claude/plugins/installed_plugins.json" ]; then
+        sed -i 's|/opt/claude-plugins/.claude|/home/claude/.claude|g' /home/claude/.claude/plugins/installed_plugins.json
+    fi
+    if [ -f "/home/claude/.claude/plugins/known_marketplaces.json" ]; then
+        sed -i 's|/opt/claude-plugins/.claude|/home/claude/.claude|g' /home/claude/.claude/plugins/known_marketplaces.json
+    fi
+    echo "[entrypoint] Plugin cache restored ($(ls /home/claude/.claude/plugins/cache/ 2>/dev/null | wc -l) marketplaces)"
+fi
+
+# ------------------------------------------------------------------------------
 # Verify mounts
 # ------------------------------------------------------------------------------
 if [ ! -d "/repo" ]; then
