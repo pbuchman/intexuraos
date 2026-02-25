@@ -15,6 +15,9 @@ import { err, ok, getErrorMessage, type Result, type Logger } from '@intexuraos/
 import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTaskRepository.js';
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
+import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
+import { createHmac } from 'node:crypto';
+import type FirebaseFirestore from '@google-cloud/firestore';
 
 export interface CreateTaskForPRRequest {
   /** Repository full name, e.g., "intexuraos/intexuraos" */
@@ -48,8 +51,11 @@ export interface CreateTaskForPRDeps {
   codeTaskRepo: CodeTaskRepository;
   userLookupService: UserLookupService;
   linearIssueService: LinearIssueService;
+  taskDispatcher: TaskDispatcherService;
+  orchestratorSecret: string;
   firestore: {
-    runTransaction: <T>(fn: (transaction: unknown) => Promise<T>) => Promise<T>;
+    runTransaction: <T>(fn: (transaction: FirebaseFirestore.Transaction) => Promise<T>) => Promise<T>;
+    doc: (path: string) => FirebaseFirestore.DocumentReference;
   };
 }
 
@@ -78,6 +84,13 @@ function buildTaskPrompt(request: CreateTaskForPRRequest): string {
 }
 
 /**
+ * Generate HMAC-SHA256 webhook secret for task.
+ */
+function generateWebhookSecret(sharedSecret: string, taskId: string): string {
+  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
+}
+
+/**
  * Create a code task from a PR comment.
  *
  * This use case:
@@ -91,7 +104,7 @@ export async function createTaskForPR(
   deps: CreateTaskForPRDeps,
   request: CreateTaskForPRRequest
 ): Promise<Result<{ taskId: string }, CreateTaskForPRError>> {
-  const { logger, codeTaskRepo, userLookupService, linearIssueService, firestore } = deps;
+  const { logger, codeTaskRepo, userLookupService, linearIssueService, taskDispatcher, orchestratorSecret, firestore } = deps;
   const { repository, prNumber, senderLogin, eventId } = request;
 
   logger.info(
@@ -128,36 +141,39 @@ export async function createTaskForPR(
   const { userId, worker } = userResult.value;
   logger.debug({ userId, senderLogin }, 'Resolved GitHub username to user');
 
-  // Step 2: Use transaction to prevent race conditions
+  // Step 2: Use transaction with document-level lock to prevent race conditions
+  const lockDocPath = `pr_task_locks/${repository.replace(/\//g, '_')}_${String(prNumber)}`;
+  const lockRef = firestore.doc(lockDocPath);
+
+  type TransactionResult = { taskId: string; isNew: false } | { taskId: string; isNew: true; webhookSecret: string; linearResult: Awaited<ReturnType<LinearIssueService['ensureIssueExists']>> };
+  let transactionResult: Result<TransactionResult, CreateTaskForPRError>;
+
   try {
-    const result = await firestore.runTransaction(async (_transaction) => {
-      // Re-check if task exists (another request might have created it)
-      const existingTask = await codeTaskRepo.findByPR(repository, prNumber);
+    transactionResult = await firestore.runTransaction(async (transaction) => {
+      // Read the lock document — this provides transactional isolation
+      const lockDoc = await transaction.get(lockRef);
 
-      /* v8 ignore start -- test-infra: findByPR error requires Firestore failure @preserve */
-      if (!existingTask.ok) {
-        return err({
-          code: 'task_creation_failed' as CreateTaskForPRErrorCode,
-          message: `Failed to check existing task: ${existingTask.error.message}`,
-        });
-      }
-      /* v8 ignore stop @preserve */
-
-      /* v8 ignore start -- test-infra: concurrent task creation tested via integration tests @preserve */
-      if (existingTask.value !== null) {
-      /* v8 ignore stop @preserve */
-        // Task already exists, return its ID
-        logger.info(
-          { repository, prNumber, existingTaskId: existingTask.value.id },
-          'Task already exists for PR'
-        );
-        return ok({ taskId: existingTask.value.id });
+      if (lockDoc.exists) {
+        // Lock exists — task was already created
+        const lockData = lockDoc.data();
+        const existingTaskId = lockData?.['taskId'] as string | undefined;
+        const isValidTaskId = existingTaskId !== undefined && existingTaskId.length > 0;
+        /* v8 ignore start -- test-infra: invalid lock document requires data corruption @preserve */
+        if (!isValidTaskId) {
+          return err({
+            code: 'task_creation_failed' as CreateTaskForPRErrorCode,
+            message: 'Lock document exists but taskId is missing',
+          });
+        }
+        /* v8 ignore stop @preserve */
+        logger.info({ repository, prNumber, existingTaskId }, 'Task already exists for PR (lock document found)');
+        return ok({ taskId: existingTaskId, isNew: false });
       }
 
-      // Step 3: Create Linear issue
+      // Step 3: Create Linear issue (before task creation)
       const linearResult = await linearIssueService.ensureIssueExists({
         userId,
-        taskPrompt: request.comment,
+        taskPrompt: request.prTitle ?? `PR #${String(request.prNumber)} comment: ${request.comment.slice(0, 200)}`,
       });
 
       /* v8 ignore start -- test-infra: Linear fallback mode tested via integration tests @preserve */
@@ -171,6 +187,7 @@ export async function createTaskForPR(
 
       // Step 4: Create the task
       const taskId = `task_${crypto.randomUUID()}`;
+      const webhookSecret = generateWebhookSecret(orchestratorSecret, taskId);
 
       const createInput: CreateTaskInput = {
         id: taskId,
@@ -188,6 +205,7 @@ export async function createTaskForPR(
         prNumber,
         executionPhase: 'execution',
         linearIssueTitle: linearResult.linearIssueTitle,
+        webhookSecret,
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes compliance @preserve */
         ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
         ...(linearResult.linearIssueUrl !== undefined && { linearIssueUrl: linearResult.linearIssueUrl }),
@@ -198,7 +216,6 @@ export async function createTaskForPR(
 
       /* v8 ignore start -- test-infra: task creation failure tested via integration tests @preserve */
       if (!createResult.ok) {
-      /* v8 ignore stop @preserve */
         logger.error(
           { taskId, error: createResult.error },
           'Failed to create task'
@@ -208,22 +225,98 @@ export async function createTaskForPR(
           message: createResult.error.message,
         });
       }
+      /* v8 ignore stop @preserve */
+
+      // Write lock document within the transaction
+      transaction.set(lockRef, { taskId, repository, prNumber, createdAt: new Date().toISOString() });
 
       logger.info(
         { taskId, userId, repository, prNumber },
         'Created new task from PR comment'
       );
 
-      return ok({ taskId });
+      return ok({ taskId, isNew: true, webhookSecret, linearResult });
     });
-
-    return result;
   } catch (error) {
+    /* v8 ignore start -- test-infra: transaction exception requires Firestore outage @preserve */
     const message = getErrorMessage(error, 'Unknown error');
     logger.error({ error, repository, prNumber }, 'Transaction failed');
     return err({
       code: 'internal_error',
       message,
     });
+    /* v8 ignore stop @preserve */
   }
+
+  // Step 5: Handle transaction result
+  /* v8 ignore start -- test-infra: transaction error requires Firestore failure @preserve */
+  if (!transactionResult.ok) {
+    return err(transactionResult.error);
+  }
+  /* v8 ignore stop @preserve */
+
+  const txValue = transactionResult.value;
+
+  // If task already existed, just return the ID
+  if (!txValue.isNew) {
+    return ok({ taskId: txValue.taskId });
+  }
+
+  // For new tasks, we have webhookSecret and linearResult
+  const { taskId, webhookSecret, linearResult } = txValue;
+
+  // Step 6: Dispatch to worker (only for new tasks)
+  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
+  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
+
+  const workerCredentials: DispatchWorkerCredentials = {
+    workers: [{
+      name: worker.name,
+      url: worker.url,
+      cfAccessClientId: worker.cfAccessClientId,
+      cfAccessClientSecret: worker.cfAccessClientSecret,
+      dispatchSigningSecret: worker.dispatchSigningSecret,
+    }],
+  };
+
+  const dispatchResult = await taskDispatcher.dispatch({
+    taskId,
+    prompt: buildTaskPrompt(request),
+    systemPromptHash: 'pr-comment-auto',
+    repository,
+    baseBranch: 'main',
+    workerType: 'auto',
+    webhookUrl,
+    webhookSecret,
+    traceId: eventId,
+    workerCredentials,
+    linearIssueLabels: [],
+    hasChildren: false,
+    ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
+  });
+
+  if (!dispatchResult.ok) {
+    logger.error({ taskId, error: dispatchResult.error }, 'Failed to dispatch PR comment task');
+    // Mark task as failed
+    await codeTaskRepo.update(taskId, {
+      status: 'failed',
+      error: { code: dispatchResult.error.code, message: dispatchResult.error.message },
+    });
+    return err({
+      code: 'task_creation_failed' as CreateTaskForPRErrorCode,
+      message: `Task created but dispatch failed: ${dispatchResult.error.message}`,
+    });
+  }
+
+  // Update task with worker location
+  await codeTaskRepo.update(taskId, {
+    workerLocation: dispatchResult.value.workerLocation,
+  });
+
+  logger.info(
+    { taskId, userId, repository, prNumber, workerLocation: dispatchResult.value.workerLocation },
+    'Created and dispatched new task from PR comment'
+  );
+
+  return ok({ taskId });
 }
