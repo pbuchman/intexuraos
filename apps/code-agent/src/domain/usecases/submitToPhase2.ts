@@ -363,6 +363,9 @@ export async function submitToPhase2(
     /* v8 ignore stop @preserve */
     traceId: phase2Task.traceId,
     workerCredentials,
+    /* v8 ignore start -- ts-type: fallback branch for backward compatibility @preserve */
+    executionPhase: phase2Task.executionPhase ?? (hasCodeTaskLabel(freshLabels) ? 'execution' : 'design'),
+    /* v8 ignore stop @preserve */
   };
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);

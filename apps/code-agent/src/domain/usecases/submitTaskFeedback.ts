@@ -326,6 +326,7 @@ ${feedback.trim()}
     parentTaskId?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
+    executionPhase: 'design' | 'execution';
   } = {
     taskId: followUpTask.id,
     prompt: followUpTask.sanitizedPrompt,
@@ -339,6 +340,7 @@ ${feedback.trim()}
     parentTaskId: originalTask.id,
     linearIssueLabels: linearIssueLabelsForDispatch,
     hasChildren: hasChildrenForDispatch,
+    executionPhase: followUpTask.executionPhase ?? (hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'design'),
   };
 
   // Add optional fields if defined

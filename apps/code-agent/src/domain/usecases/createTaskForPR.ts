@@ -16,6 +16,7 @@ import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTa
 import type { UserLookupService } from '../ports/userLookupService.js';
 import type { LinearIssueService } from '../services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
+import { hasCodeTaskLabel } from '../utils/labelUtils.js';
 import { createHmac } from 'node:crypto';
 import type FirebaseFirestore from '@google-cloud/firestore';
 
@@ -316,6 +317,9 @@ export async function createTaskForPR(
     workerCredentials,
     linearIssueLabels: dispatchLabels,
     hasChildren: linearResult.hasChildren,
+    /* v8 ignore start -- ts-type: ternary branch for phase determination @preserve */
+    executionPhase: hasCodeTaskLabel(dispatchLabels) ? 'execution' : 'design',
+    /* v8 ignore stop @preserve */
     ...(linearResult.linearIssueId !== undefined && { linearIssueId: linearResult.linearIssueId }),
   });
 

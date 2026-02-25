@@ -22,6 +22,7 @@ export interface MaskedWorkerConfig {
  */
 export interface WorkerSettingsResponse {
   workers: MaskedWorkerConfig[];
+  githubUsername?: string;
 }
 
 /**
@@ -88,4 +89,18 @@ export interface TestWorkerConnectivityResponse {
   testStatus: 'success' | 'failure';
   testMessage: string;
   lastTestedAt: string;
+}
+
+/**
+ * Request body for PATCH /code/worker-settings/github-username
+ */
+export interface SaveGitHubUsernameRequest {
+  githubUsername: string;
+}
+
+/**
+ * Response from PATCH /code/worker-settings/github-username
+ */
+export interface SaveGitHubUsernameResponse {
+  updated: boolean;
 }
