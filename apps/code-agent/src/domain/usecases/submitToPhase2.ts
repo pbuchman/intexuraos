@@ -441,7 +441,7 @@ export async function submitToPhase2(
   // Step 15: Return success
   return ok({
     codeTaskId: phase2TaskId,
-    resourceUrl: `/code/tasks/${phase2TaskId}`,
+    resourceUrl: `/#/code-tasks/${phase2TaskId}`,
     workerLocation: dispatchResult.value.workerLocation,
     implementationOf: originalTask.id,
   });
