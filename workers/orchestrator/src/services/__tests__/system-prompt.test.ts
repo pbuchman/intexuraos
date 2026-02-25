@@ -202,6 +202,40 @@ describe('system-prompt', () => {
 
         expect(result).toContain('[PHASE:2]');
       });
+
+      it('should include code review loop in Phase 2', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        expect(result).toContain('Code Review Loop (MANDATORY)');
+        expect(result).toContain('superpowers:code-reviewer');
+        expect(result).toContain('opus');
+        expect(result).toContain('sonnet');
+      });
+
+      it('should include review loop iteration rules in Phase 2', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        expect(result).toContain('Iteration 1');
+        expect(result).toContain('Iteration 2+');
+        expect(result).toContain('Safety valve');
+        expect(result).toContain('5 review iterations');
+      });
+
+      it('should include review iterations and turn summary in PHASE2_FINAL', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        expect(result).toContain('- Review iterations: <number>');
+        expect(result).toContain('- Turn summary:');
+      });
     });
 
     describe('PR Comment Execution Mode', () => {

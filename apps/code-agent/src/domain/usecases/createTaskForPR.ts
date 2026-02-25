@@ -125,7 +125,6 @@ export async function createTaskForPR(
   // Step 1: Resolve GitHub username to userId
   const userResult = await userLookupService.resolveUserFromGitHubUsername(senderLogin);
 
-  /* v8 ignore start -- test-infra: userLookupService error requires mock to return error @preserve */
   if (!userResult.ok) {
     logger.error(
       { senderLogin, error: userResult.error },
@@ -136,11 +135,8 @@ export async function createTaskForPR(
       message: userResult.error.message,
     });
   }
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- test-infra: null user requires no matching githubUsername in worker settings @preserve */
   if (userResult.value === null) {
-  /* v8 ignore stop @preserve */
     logger.warn({ senderLogin }, 'No user found for GitHub username');
     return err({
       code: 'user_not_found',
@@ -174,14 +170,12 @@ export async function createTaskForPR(
         const lockData = lockDoc.data();
         const existingTaskId = lockData?.['taskId'] as string | undefined;
         const isValidTaskId = existingTaskId !== undefined && existingTaskId.length > 0;
-        /* v8 ignore start -- test-infra: invalid lock document requires data corruption @preserve */
         if (!isValidTaskId) {
           return err({
             code: 'task_creation_failed' as CreateTaskForPRErrorCode,
             message: 'Lock document exists but taskId is missing',
           });
         }
-        /* v8 ignore stop @preserve */
         logger.info({ repository, prNumber, existingTaskId }, 'Task already exists for PR (lock document found)');
         return ok({ taskId: existingTaskId, isNew: false });
       }
@@ -204,9 +198,7 @@ export async function createTaskForPR(
         taskPrompt: taskContext,
       });
 
-      /* v8 ignore start -- test-infra: Linear fallback mode tested via integration tests @preserve */
       if (linearResult.linearFallback) {
-      /* v8 ignore stop @preserve */
         logger.warn(
           { userId },
           'Linear issue creation failed, using fallback mode'
@@ -242,7 +234,6 @@ export async function createTaskForPR(
 
       const createResult = await codeTaskRepo.create(createInput);
 
-      /* v8 ignore start -- test-infra: task creation failure tested via integration tests @preserve */
       if (!createResult.ok) {
         logger.error(
           { taskId, error: createResult.error },
@@ -253,7 +244,6 @@ export async function createTaskForPR(
           message: createResult.error.message,
         });
       }
-      /* v8 ignore stop @preserve */
 
       // Write lock document within the transaction
       transaction.set(lockRef, { taskId, repository, prNumber, createdAt: new Date().toISOString() });
@@ -266,22 +256,18 @@ export async function createTaskForPR(
       return ok({ taskId, isNew: true, webhookSecret, linearResult });
     });
   } catch (error) {
-    /* v8 ignore start -- test-infra: transaction exception requires Firestore outage @preserve */
     const message = getErrorMessage(error, 'Unknown error');
     logger.error({ error, repository, prNumber }, 'Transaction failed');
     return err({
       code: 'internal_error',
       message,
     });
-    /* v8 ignore stop @preserve */
   }
 
   // Step 5: Handle transaction result
-  /* v8 ignore start -- test-infra: transaction error requires Firestore failure @preserve */
   if (!transactionResult.ok) {
     return err(transactionResult.error);
   }
-  /* v8 ignore stop @preserve */
 
   const txValue = transactionResult.value;
 
@@ -299,11 +285,9 @@ export async function createTaskForPR(
   const issueLabels = existingLinearIssueId !== undefined
     ? linearResult.linearIssueLabels
     : ['code-task'];
-  /* v8 ignore start -- test-infra: pr-comment already present in issue labels is a defensive guard for edge case @preserve */
   const dispatchLabels = issueLabels.includes('pr-comment')
     ? issueLabels
     : [...issueLabels, 'pr-comment'];
-  /* v8 ignore stop @preserve */
 
   // Step 6: Dispatch to worker (only for new tasks)
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';

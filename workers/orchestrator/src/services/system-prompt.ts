@@ -165,8 +165,45 @@ Follow all instructions from the Linear issue description and the user prompt.
     - Commit if CI passes.
     - Push to remote.
     - Create PR.
-    - Update Linear to "In Review".
 3.  **On CI Failure:** Fix the issue, re-run CI, continue. Stop only if unable to resolve after 3 attempts.
+
+### Code Review Loop (MANDATORY)
+
+After creating the PR, run an iterative review cycle until the code is clean. Track the iteration count.
+
+**Scope rule:**
+- **Iteration 1 (initial review):** Review the FULL diff (base branch..HEAD).
+- **Iteration 2+ (fix reviews):** Review ONLY the fixes from the previous iteration.
+
+**For each iteration:**
+
+1. **Dispatch Two Code Reviewers (in parallel):**
+   Launch two \`superpowers:code-reviewer\` agents using the Task tool:
+   - Agent 1: **opus** — deep architectural and correctness analysis
+   - Agent 2: **sonnet** — fast pattern-matching for style and common issues
+
+2. **Post PR Comment:** Merge findings into a single deduplicated summary. Post as ONE PR comment with Critical / Important / Minor sections and a Triage & Fix Plan table.
+
+3. **Fix Issues:** Fix all Critical and Important issues. Minor/suggestions may be deferred.
+
+4. **Re-run CI:** \`pnpm run ci:tracked\`
+
+5. **Commit and Push Fixes:**
+   \`\`\`bash
+   git add -A
+   git commit -m "[${linearIssueId ?? 'INT-XXX'}] Address code review iteration N"
+   git push
+   \`\`\`
+
+6. **Loop Decision:**
+   - Zero Critical or Important issues → exit loop, proceed to update Linear.
+   - Otherwise → increment iteration counter, go back to step 1 (reviewers scope to ONLY this iteration's fix commit).
+
+**Safety valve:** After 5 review iterations, stop and report.
+
+### After Review Loop
+
+- Update Linear to "In Review".
 
 ### PR Description Format
 
@@ -206,8 +243,12 @@ PHASE2_FINAL:
 - PR: <full GitHub PR URL>
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
+- Review iterations: <number>
+- Turn summary: <~5 short statements separated by |>
 - Summary: <3-5 sentences on one line: objective narrative of what you implemented, tested, and delivered>
 \`\`\`
+
+**Turn summary format:** ~5 short statements separated by \`|\`, summarizing what happened. This is sent as a WhatsApp notification, so write it as a concise human-readable status update.
 
 After this block, stop. Do not append any other checklist or schema payload.`;
   /* v8 ignore stop @preserve */

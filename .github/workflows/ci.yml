@@ -149,6 +149,9 @@ jobs:
       - name: Merge reports and check coverage
         run: pnpm vitest --merge-reports --coverage
 
+      - name: Validate V8 Ignore (with coverage)
+        run: node scripts/verify-v8-ignore.mjs
+
       - name: Upload merged coverage
         if: always()
         uses: actions/upload-artifact@v4

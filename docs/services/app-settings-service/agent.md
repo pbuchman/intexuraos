@@ -4,10 +4,10 @@
 
 ## Identity
 
-| Attribute | Value                                                                    |
-| --------- | ------------------------------------------------------------------------ |
-| Name      | app-settings-service                                                     |
-| Role      | Centralized LLM pricing configuration and per-user usage cost analytics |
+| Attribute | Value                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------- |
+| Name      | app-settings-service                                                                     |
+| Role      | Centralized LLM pricing configuration and per-user usage cost analytics                  |
 | Goal      | Provide accurate, up-to-date pricing for all LLM models and track individual usage costs |
 
 ## Capabilities
@@ -259,13 +259,13 @@ interface CallTypeCost {
 
 ## Provider Coverage
 
-| Provider   | Models (16 total)                                                          |
-| ---------- | -------------------------------------------------------------------------- |
-| Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image |
-| OpenAI     | gpt-5.2, gpt-4o-mini, o4-mini-deep-research, gpt-image-1                  |
+| Provider   | Models (16 total)                                                               |
+| ---------- | ------------------------------------------------------------------------------- |
+| Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image      |
+| OpenAI     | gpt-5.2, gpt-4o-mini, o4-mini-deep-research, gpt-image-1                        |
 | Anthropic  | claude-opus-4-5-20251101, claude-sonnet-4-5-20250929, claude-3-5-haiku-20241022 |
-| Perplexity | sonar, sonar-pro, sonar-deep-research                                      |
-| Zai        | glm-4.7, glm-4.7-flash                                                    |
+| Perplexity | sonar, sonar-pro, sonar-deep-research                                           |
+| Zai        | glm-4.7, glm-4.7-flash                                                          |
 
 ---
 

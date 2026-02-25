@@ -206,7 +206,7 @@ sequenceDiagram
 | `type`          | CommandType | todo, research, note, link, calendar, linear, reminder, code |
 | `confidence`    | number      | 0-1 confidence score                                         |
 | `reasoning`     | string      | LLM explanation for classification                           |
-| `promptVersion` | string      | Semver version of the prompt that produced this result        |
+| `promptVersion` | string      | Semver version of the prompt that produced this result       |
 | `classifiedAt`  | string      | ISO 8601 classification timestamp                            |
 
 ### Confidence Semantics
@@ -246,11 +246,11 @@ sequenceDiagram
 
 ### Internal Services
 
-| Service              | Purpose                                          |
-| -------------------- | ------------------------------------------------ |
-| `user-service`       | Fetch LLM client for classification              |
-| `actions-agent`      | Create actions from classified commands           |
-| `app-settings-service` | Fetch LLM pricing data at startup              |
+| Service                | Purpose                                          |
+| ---------------------- | ------------------------------------------------ |
+| `user-service`         | Fetch LLM client for classification              |
+| `actions-agent`        | Create actions from classified commands          |
+| `app-settings-service` | Fetch LLM pricing data at startup                |
 
 ### Packages
 
@@ -272,13 +272,13 @@ sequenceDiagram
 | Pub/Sub (`command-ingest` topic)  | Command ingestion events              |
 | Pub/Sub (`actions` topic)         | Action creation events                |
 | Cloud Scheduler                   | Retry pending every 5 min             |
-| Dash0 (via OTLP/HTTP)            | Distributed tracing and metrics       |
+| Dash0 (via OTLP/HTTP)             | Distributed tracing and metrics       |
 
 ### External APIs
 
 | Service                                     | Purpose                |
 | ------------------------------------------- | ---------------------- |
-| Gemini 2.5 Flash / GLM-4.7 / GLM-4.7-Flash | Command classification |
+| Gemini 2.5 Flash / GLM-4.7 / GLM-4.7-Flash  | Command classification |
 
 ## Configuration
 
@@ -293,10 +293,10 @@ sequenceDiagram
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL (pricing data fetched at startup)   |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                                   |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                          |
-| `INTEXURAOS_ZAI_APP_API_KEY`         | No       | Platform-level Zai fallback API key for classification            |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform-level Zai fallback API key for classification            |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key (primary fallback)         |
-| `INTEXURAOS_SENTRY_DSN`              | No       | Sentry DSN for error tracking                                     |
-| `INTEXURAOS_ENVIRONMENT`             | No       | Environment name for Sentry (defaults to "development")           |
+| `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                     |
+| `INTEXURAOS_ENVIRONMENT`              | No       | Environment name for Sentry (defaults to "development")           |
 
 ## Gotchas
 
@@ -375,7 +375,7 @@ packages/llm-prompts/src/
 | `6063175b` | Dev-mode log formatting via createLogStream()                   | 2026-02-16 |
 | `a52a6bbc` | Dash0 OpenTelemetry integration                                 | 2026-02-16 |
 | `e60eafc1` | Standardize API key secrets to APP naming convention            | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback   | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add Gemini fallback    | 2026-02-15 |
 | `d5fbb354` | Fix start:local to use tsx instead of node experimental types   | 2026-02-14 |
 | `0f69a74b` | Add default model selector with platform Zai fallback           | 2026-02-08 |
 | `5aa3e1bd` | Enable strict 100% coverage enforcement                         | 2026-02-01 |
