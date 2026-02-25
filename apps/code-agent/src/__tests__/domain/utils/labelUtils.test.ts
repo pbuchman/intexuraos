@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasCodeTaskLabel, hasUnclearLabel } from '../../../domain/utils/labelUtils.js';
+import { hasCodeTaskLabel, hasUnclearLabel, getWorkerTypeFromLabels } from '../../../domain/utils/labelUtils.js';
 
 describe('labelUtils', () => {
   describe('hasCodeTaskLabel', () => {
@@ -63,6 +63,52 @@ describe('labelUtils', () => {
 
     it('returns false for unclear-requirement (not exact match)', () => {
       expect(hasUnclearLabel(['unclear-requirement'])).toBe(false);
+    });
+  });
+
+  describe('getWorkerTypeFromLabels', () => {
+    it('returns opus for single opus label', () => {
+      expect(getWorkerTypeFromLabels(['opus'])).toBe('opus');
+    });
+
+    it('returns sonnet for single sonnet label', () => {
+      expect(getWorkerTypeFromLabels(['sonnet'])).toBe('sonnet');
+    });
+
+    it('returns minimax for single minimax label', () => {
+      expect(getWorkerTypeFromLabels(['minimax'])).toBe('minimax');
+    });
+
+    it('returns glm for single glm label', () => {
+      expect(getWorkerTypeFromLabels(['glm'])).toBe('glm');
+    });
+
+    it('returns worker type when mixed with non-worker labels', () => {
+      expect(getWorkerTypeFromLabels(['bug', 'opus', 'feature'])).toBe('opus');
+    });
+
+    it('normalizes uppercase labels', () => {
+      expect(getWorkerTypeFromLabels(['Opus'])).toBe('opus');
+    });
+
+    it('normalizes fully uppercase labels', () => {
+      expect(getWorkerTypeFromLabels(['SONNET'])).toBe('sonnet');
+    });
+
+    it('returns undefined for no matching labels', () => {
+      expect(getWorkerTypeFromLabels(['bug', 'feature'])).toBeUndefined();
+    });
+
+    it('returns undefined for empty array', () => {
+      expect(getWorkerTypeFromLabels([])).toBeUndefined();
+    });
+
+    it('returns undefined for conflicting worker labels', () => {
+      expect(getWorkerTypeFromLabels(['opus', 'glm'])).toBeUndefined();
+    });
+
+    it('returns undefined for multiple worker labels among others', () => {
+      expect(getWorkerTypeFromLabels(['bug', 'sonnet', 'minimax', 'feature'])).toBeUndefined();
     });
   });
 });
