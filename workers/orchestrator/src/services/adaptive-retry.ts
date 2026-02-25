@@ -180,18 +180,14 @@ function scoreResultProgress(
 }
 
 function scoreVerificationTrend(history: TaskVerificationRecord[]): number {
-  if (history.length < 2) {
-    return 0;
-  }
-
-  let score = 0;
-
-  const latest = history[history.length - 1];
-  const previous = history[history.length - 2];
+  const latest = history.length >= 2 ? history[history.length - 1] : undefined;
+  const previous = history.length >= 2 ? history[history.length - 2] : undefined;
 
   if (latest === undefined || previous === undefined) {
     return 0;
   }
+
+  let score = 0;
 
   if (latest.confidence > previous.confidence) {
     score += 1;
