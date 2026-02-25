@@ -675,6 +675,16 @@ export class TaskDispatcher {
         `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
       );
     }
+    if (phase === 'phase1' && result !== undefined && result.prUrl !== undefined) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `⚠ Phase mismatch: task ran as Phase 1 (design) but worker created PR: ${result.prUrl}`
+      );
+      this.logger.warn(
+        { taskId: task.taskId, phase, prUrl: result.prUrl },
+        'Phase mismatch: Phase 1 task created a PR'
+      );
+    }
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Running completion verification: exitCode=${String(exitCode ?? 'unknown')} claudeError=${claudeError ?? 'none'} detectedPr=${result?.prUrl ?? 'none'}`
