@@ -717,6 +717,229 @@ describe('completion-verifier', () => {
     expect(verdict.verifierFailure).toBe(true);
   });
 
+  it('detects malformed pr-comment contract', () => {
+    const result = CompletionVerifierTestUtils.verifyPRCommentFinal('No completion block');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected invalid pr-comment result');
+    expect(result.missing).toContain('PR_COMMENT_FINAL block');
+  });
+
+  it('validates valid PR_COMMENT_FINAL block', () => {
+    const validPRCommentFinal = `PR_COMMENT_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/42
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-100
+- Comment replied: yes
+- Summary: Investigated PR comment requesting auth fix. Implemented changes to middleware. CI passes. Pushed to existing branch and replied to commenter.`;
+
+    const result = CompletionVerifierTestUtils.verifyPRCommentFinal(validPRCommentFinal);
+    expect(result.ok).toBe(true);
+  });
+
+  it('detects missing Comment replied line in PR_COMMENT_FINAL', () => {
+    const missingCommentReply = `PR_COMMENT_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/42
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-100
+- Summary: Did some work.`;
+
+    const result = CompletionVerifierTestUtils.verifyPRCommentFinal(missingCommentReply);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected invalid result');
+    expect(result.missing).toContain('Comment replied line');
+  });
+
+  it('builds pr-comment-specific default resume instruction', () => {
+    const instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction('pr-comment', [
+      'missing-criteria',
+    ]);
+
+    expect(instruction).toContain('PR_COMMENT_FINAL');
+    expect(instruction).toContain('Push changes');
+    expect(instruction).toContain('reply to the comment');
+  });
+
+  it('fails pr-comment when PR_COMMENT_FINAL block is missing from assistant message', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.85,"reasons":["missing PR_COMMENT_FINAL"],"missingCriteria":["PR_COMMENT_FINAL block"],"resumeInstruction":"Add PR_COMMENT_FINAL block."}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-pr-comment-missing-block',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'pr-comment',
+      originalPrompt: 'Address PR comment',
+      rawLogs: assistantLog('I fixed the bug. Done!'),
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      taskResult: {
+        branch: 'fix/auth',
+        commits: 1,
+        ciFailed: false,
+      },
+    });
+
+    expect(verdict.passed).toBe(false);
+    expect(verdict.missingCriteria).toContain('PR_COMMENT_FINAL block');
+    expect(verdict.reasons.join(' ')).toContain('PR Comment completion contract was not met');
+  });
+
+  it('passes valid pr-comment contract through full verify flow', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":true,"confidence":0.93,"reasons":["all criteria met"],"missingCriteria":[],"resumeInstruction":"","extractedSummary":"Addressed PR comment."}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const validPRCommentFinal = `PR_COMMENT_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/42
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-100
+- Comment replied: yes
+- Summary: Addressed the PR comment by implementing the requested fix. CI passes.`;
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-pr-comment',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'pr-comment',
+      originalPrompt: 'Address PR comment',
+      rawLogs: assistantLog(validPRCommentFinal),
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      taskResult: {
+        branch: 'fix/auth',
+        commits: 1,
+        prUrl: 'https://github.com/intexuraos/intexuraos/pull/42',
+        ciFailed: false,
+      },
+    });
+
+    expect(verdict.passed).toBe(true);
+    expect(verdict.usedLlm).toBe(true);
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate.mock.calls[0]?.[0]).toContain('PR_COMMENT_FINAL');
+    expect(generate.mock.calls[0]?.[0]).not.toContain('PHASE2_FINAL');
+  });
+
+  it('fails pr-comment when CI checks are failing', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.9,"reasons":["ci failing"],"missingCriteria":["Successful GitHub checks"],"resumeInstruction":"Fix CI."}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const validPRCommentFinal = `PR_COMMENT_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/42
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-100
+- Comment replied: yes
+- Summary: Attempted fix but CI fails.`;
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-pr-comment-ci-fail',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'pr-comment',
+      originalPrompt: 'Address PR comment',
+      rawLogs: assistantLog(validPRCommentFinal),
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      taskResult: {
+        branch: 'fix/auth',
+        commits: 1,
+        ciFailed: true,
+      },
+    });
+
+    expect(verdict.passed).toBe(false);
+    expect(verdict.missingCriteria.join(' ')).toContain('GitHub checks');
+  });
+
+  it('builds pr-comment retry instruction when Gemini call fails', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: false,
+      error: { code: 'UNAVAILABLE', message: 'provider unavailable' },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const validPRCommentFinal = `PR_COMMENT_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/42
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-100
+- Comment replied: yes
+- Summary: Done.`;
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-pr-comment-llm-fail',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'pr-comment',
+      originalPrompt: 'Address PR comment',
+      rawLogs: assistantLog(validPRCommentFinal),
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      taskResult: {
+        branch: 'fix/auth',
+        commits: 1,
+        prUrl: 'https://github.com/intexuraos/intexuraos/pull/42',
+        ciFailed: false,
+      },
+    });
+
+    expect(verdict.passed).toBe(false);
+    expect(verdict.verifierFailure).toBe(true);
+    expect(verdict.resumeInstruction).toContain('PR_COMMENT_FINAL');
+  });
+
+  it('fails pr-comment when CI status is unknown', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content:
+          '{"passed":false,"confidence":0.82,"reasons":["ci state unknown"],"missingCriteria":["Confirmed GitHub checks status"],"resumeInstruction":"Determine CI status."}',
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const validPRCommentFinal = `PR_COMMENT_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/42
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-100
+- Comment replied: yes
+- Summary: Done.`;
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-pr-comment-ci-unknown',
+      attempt: 1,
+      maxAttempts: 3,
+      phase: 'pr-comment',
+      originalPrompt: 'Address PR comment',
+      rawLogs: assistantLog(validPRCommentFinal),
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      taskResult: {
+        branch: 'fix/auth',
+        commits: 1,
+      },
+    });
+
+    expect(verdict.passed).toBe(false);
+    expect(verdict.missingCriteria.join(' ')).toContain('GitHub checks status');
+  });
+
   it('throws when model is not gemini-2.5-flash', () => {
     expect(() => createVerifier({ model: 'unsupported-model' })).toThrow(
       'Completion verifier must use model gemini-2.5-flash'
