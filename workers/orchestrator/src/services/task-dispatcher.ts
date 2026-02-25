@@ -678,7 +678,7 @@ export class TaskDispatcher {
     if (phase === 'phase1' && result?.prUrl !== undefined && result.prUrl !== '') {
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `⚠ Phase mismatch: task ran as Phase 1 (design) but worker created PR: ${result.prUrl}`
+        `[WARN] Phase mismatch: task ran as Phase 1 (design) but worker created PR: ${result.prUrl}`
       );
       this.logger.warn(
         { taskId: task.taskId, phase, prUrl: result.prUrl },
