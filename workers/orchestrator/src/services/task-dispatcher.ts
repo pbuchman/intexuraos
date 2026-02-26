@@ -1202,6 +1202,7 @@ export class TaskDispatcher {
           taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
           linearIssueLabels: task.linearIssueLabels,
           hasChildren: params.hasChildren,
+          workerType: task.workerType,
           ...(task.executionPhase !== undefined && { executionPhase: task.executionPhase }),
         }) +
         /* v8 ignore stop @preserve */
