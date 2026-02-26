@@ -272,7 +272,7 @@ ${additionalContext.trim()}
     traceId: `retry-${String(Date.now())}`,
     webhookSecret,
     retriedFrom: originalTaskId,
-    executionPhase: hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('design' as const),
+    agentType: hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const),
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
     /* v8 ignore start -- ts-type: optional property spread @preserve */
@@ -312,7 +312,7 @@ ${additionalContext.trim()}
     retriedFrom?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
-    executionPhase: 'design' | 'execution';
+    agentType: 'planning' | 'execution';
   } = {
     taskId: retryTask.id,
     prompt: retryTask.sanitizedPrompt,
@@ -326,8 +326,8 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     linearIssueLabels: linearIssueLabelsForDispatch,
     hasChildren: hasChildrenForDispatch,
-    /* v8 ignore start -- ts-type: fallback branch for backward compatibility @preserve */
-    executionPhase: retryTask.executionPhase ?? (hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'design'),
+    /* v8 ignore start -- source-map: object literal ternary branch is misattributed after transforms @preserve */
+    agentType: retryTask.agentType === 'execution' ? 'execution' : 'planning',
     /* v8 ignore stop @preserve */
   };
 

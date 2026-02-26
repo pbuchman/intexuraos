@@ -106,7 +106,7 @@ export async function submitTaskFeedback(
   const originalTask = originalTaskResult.value;
 
   // Step 2: Validate status is completed
-  if (originalTask.status !== 'designed' && originalTask.status !== 'implemented') {
+  if (originalTask.status !== 'planned' && originalTask.status !== 'implemented') {
     logger.warn({ taskId: originalTask.id, status: originalTask.status }, 'Attempted to provide feedback on non-completed task');
     return err({
       code: 'invalid_status',
@@ -191,7 +191,7 @@ ${feedback.trim()}
   const followUpTaskId = `task_${randomUUID()}`;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, followUpTaskId);
 
-  // Step 7: Fetch fresh labels from Linear to determine executionPhase before create
+  // Step 7: Fetch fresh labels from Linear to determine agentType before create
   let linearIssueLabelsForDispatch: string[] = [];
   let hasChildrenForDispatch = false;
 
@@ -212,7 +212,7 @@ ${feedback.trim()}
     }
   }
 
-  const executionPhase: 'design' | 'execution' = hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'design';
+  const agentType: 'planning' | 'execution' = hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'planning';
 
   // Step 8: Create follow-up task with parentTaskId
   const createInput = {
@@ -239,7 +239,7 @@ ${feedback.trim()}
     ...(originalTask.approvalEventId !== undefined && { approvalEventId: originalTask.approvalEventId }),
     ...(originalTask.prNumber !== undefined && { prNumber: originalTask.prNumber }),
     /* v8 ignore stop @preserve */
-    executionPhase,
+    agentType,
   };
 
   const createResult = await codeTaskRepo.create(createInput);
@@ -326,7 +326,7 @@ ${feedback.trim()}
     parentTaskId?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
-    executionPhase: 'design' | 'execution';
+    agentType: 'planning' | 'execution';
   } = {
     taskId: followUpTask.id,
     prompt: followUpTask.sanitizedPrompt,
@@ -340,7 +340,9 @@ ${feedback.trim()}
     parentTaskId: originalTask.id,
     linearIssueLabels: linearIssueLabelsForDispatch,
     hasChildren: hasChildrenForDispatch,
-    executionPhase: followUpTask.executionPhase ?? (hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'design'),
+    /* v8 ignore start -- source-map: object literal ternary branch is misattributed after transforms @preserve */
+    agentType: followUpTask.agentType === 'execution' ? 'execution' : 'planning',
+    /* v8 ignore stop @preserve */
   };
 
   // Add optional fields if defined

@@ -17,6 +17,8 @@ describe('linearIssueService', () => {
   let mockValidateIssue = vi.fn();
   let mockGenerateTitle = vi.fn();
   let mockAddComment = vi.fn();
+  let mockFetchIssueTree = vi.fn();
+  let mockUpdateIssueMetadata = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -25,6 +27,8 @@ describe('linearIssueService', () => {
     mockValidateIssue = vi.fn();
     mockGenerateTitle = vi.fn();
     mockAddComment = vi.fn();
+    mockFetchIssueTree = vi.fn();
+    mockUpdateIssueMetadata = vi.fn();
   });
 
   const mockClient: LinearAgentClient = {
@@ -33,6 +37,8 @@ describe('linearIssueService', () => {
     validateIssue: (...args: Parameters<LinearAgentClient['validateIssue']>) => mockValidateIssue(...args),
     generateTitle: (...args: Parameters<LinearAgentClient['generateTitle']>) => mockGenerateTitle(...args),
     addComment: (...args: Parameters<LinearAgentClient['addComment']>) => mockAddComment(...args),
+    fetchIssueTree: (...args: Parameters<LinearAgentClient['fetchIssueTree']>) => mockFetchIssueTree(...args),
+    updateIssueMetadata: (...args: Parameters<LinearAgentClient['updateIssueMetadata']>) => mockUpdateIssueMetadata(...args),
     fetchIssueForDisplay: vi.fn(),
   };
 

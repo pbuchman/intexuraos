@@ -72,7 +72,7 @@ describe('createTaskForPR', () => {
     repository,
     baseBranch: 'main',
     status: 'dispatched',
-    executionPhase: 'execution',
+    agentType: 'execution',
     actionId: `pr-comment/${repository}/${String(prNumber)}/old-event`,
     approvalEventId: 'old-event',
     prNumber,

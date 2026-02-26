@@ -46,13 +46,19 @@ function assistantLog(text: string): string {
   });
 }
 
-const validPhase1Final = `PHASE1_FINAL:
-- Linear label set: code-task
-- Phase 2 ready: yes
-- Linear issue: https://linear.app/intexuraos/issue/INT-1
-- Summary: Analyzed the feature request and identified three implementation approaches. Created detailed design with test requirements and acceptance criteria. Published design document. Task is ready for Phase 2 implementation.`;
+const validPhase1Final = `PLANNING_AGENT_FINAL:
+- Outcome: planned
+- superpowers_writing_plans_used: 1
+- Original issue: https://linear.app/intexuraos/issue/INT-1
+- Planning issue: https://linear.app/intexuraos/issue/INT-10
+- Trivial task: 0
+- Parallel breakdown proof: Split work across orchestrator and code-agent streams
+- Plan doc: docs/plans/test-plan.md
+- Planning PR: https://github.com/intexuraos/intexuraos/pull/321
+- Clarification message:
+- Summary: Analyzed the feature request and identified three implementation approaches. Created detailed design with test requirements and acceptance criteria. Published design document. Task is ready for execution.`;
 
-const validPhase2Final = `PHASE2_FINAL:
+const validPhase2Final = `EXECUTION_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/123
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-2
@@ -105,72 +111,77 @@ describe('completion-verifier', () => {
   });
 
   it('detects malformed phase1 and phase2 contracts', () => {
-    const phase1 = CompletionVerifierTestUtils.verifyPhase1Final('No completion block');
+    const phase1 = CompletionVerifierTestUtils.verifyPlanningAgentFinal('No completion block');
     expect(phase1.ok).toBe(false);
     if (phase1.ok) throw new Error('Expected invalid phase1 result');
-    expect(phase1.missing).toContain('PHASE1_FINAL block');
+    expect(phase1.missing).toContain('PLANNING_AGENT_FINAL block');
 
-    const phase2 = CompletionVerifierTestUtils.verifyPhase2Final('No phase two block');
+    const phase2 = CompletionVerifierTestUtils.verifyExecutionAgentFinal('No phase two block');
     expect(phase2.ok).toBe(false);
     if (phase2.ok) throw new Error('Expected invalid phase2 result');
-    expect(phase2.missing).toContain('PHASE2_FINAL block');
+    expect(phase2.missing).toContain('EXECUTION_AGENT_FINAL block');
   });
 
-  it('detects missing Review iterations in PHASE2_FINAL', () => {
-    const incomplete = `PHASE2_FINAL:
+  it('detects missing Review iterations in EXECUTION_AGENT_FINAL', () => {
+    const incomplete = `EXECUTION_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/123
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-2
 - Summary: Done`;
-    const result = CompletionVerifierTestUtils.verifyPhase2Final(incomplete);
+    const result = CompletionVerifierTestUtils.verifyExecutionAgentFinal(incomplete);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected invalid result');
     expect(result.missing).toContain('Review iterations line');
   });
 
-  it('detects missing Turn summary in PHASE2_FINAL', () => {
-    const incomplete = `PHASE2_FINAL:
+  it('detects missing Turn summary in EXECUTION_AGENT_FINAL', () => {
+    const incomplete = `EXECUTION_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/123
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-2
 - Review iterations: 2
 - Summary: Done`;
-    const result = CompletionVerifierTestUtils.verifyPhase2Final(incomplete);
+    const result = CompletionVerifierTestUtils.verifyExecutionAgentFinal(incomplete);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected invalid result');
     expect(result.missing).toContain('Turn summary line');
   });
 
-  it('detects inconsistent phase1 label and readiness combinations', () => {
-    const codeTaskMismatch = CompletionVerifierTestUtils.verifyPhase1Final(`PHASE1_FINAL:
-- Linear label set: code-task
-- Phase 2 ready: no
-- Linear issue: https://linear.app/intexuraos/issue/INT-1
+  it('detects invalid planning-agent final fields', () => {
+    const invalidSuperpowers =
+      CompletionVerifierTestUtils.verifyPlanningAgentFinal(`PLANNING_AGENT_FINAL:
+- Outcome: planned
+- superpowers_writing_plans_used: 0
+- Original issue: https://linear.app/intexuraos/issue/INT-1
+- Planning issue: https://linear.app/intexuraos/issue/INT-2
 - Summary: mismatch`);
-    expect(codeTaskMismatch.ok).toBe(false);
-    if (codeTaskMismatch.ok) throw new Error('Expected invalid code-task mismatch');
-    expect(codeTaskMismatch.missing).toContain('code-task requires Phase 2 ready: yes');
+    expect(invalidSuperpowers.ok).toBe(false);
+    if (invalidSuperpowers.ok) throw new Error('Expected invalid planning final');
+    expect(invalidSuperpowers.missing).toContain('superpowers_writing_plans_used must be 1');
 
-    const unclearMismatch = CompletionVerifierTestUtils.verifyPhase1Final(`PHASE1_FINAL:
-- Linear label set: unclear
-- Phase 2 ready: yes
-- Linear issue: https://linear.app/intexuraos/issue/INT-1
-- Summary: mismatch`);
-    expect(unclearMismatch.ok).toBe(false);
-    if (unclearMismatch.ok) throw new Error('Expected invalid unclear mismatch');
-    expect(unclearMismatch.missing).toContain('unclear requires Phase 2 ready: no');
+    const unclearMissingMessage =
+      CompletionVerifierTestUtils.verifyPlanningAgentFinal(`PLANNING_AGENT_FINAL:
+- Outcome: unclear
+- superpowers_writing_plans_used: 1
+- Original issue: https://linear.app/intexuraos/issue/INT-1
+- Summary: need more info`);
+    expect(unclearMissingMessage.ok).toBe(false);
+    if (unclearMissingMessage.ok) throw new Error('Expected invalid unclear final');
+    expect(unclearMissingMessage.missing).toContain('Clarification message line');
   });
 
   it('builds phase-specific default resume instructions', () => {
-    const phase1Instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction('phase1', [
-      'missing-criteria',
-    ]);
-    const phase2Instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction('phase2', [
-      'missing-criteria',
-    ]);
+    const phase1Instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction(
+      'planning',
+      ['missing-criteria']
+    );
+    const phase2Instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction(
+      'execution',
+      ['missing-criteria']
+    );
 
-    expect(phase1Instruction).toContain('PHASE1_FINAL');
-    expect(phase2Instruction).toContain('PHASE2_FINAL');
+    expect(phase1Instruction).toContain('PLANNING_AGENT_FINAL');
+    expect(phase2Instruction).toContain('EXECUTION_AGENT_FINAL');
   });
 
   it('always reports enabled gemini verifier', () => {
@@ -197,7 +208,7 @@ describe('completion-verifier', () => {
       taskId: 'task-1',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Prepare issue',
       rawLogs: assistantLog(validPhase1Final),
       linearIssueLabels: [],
@@ -206,12 +217,12 @@ describe('completion-verifier', () => {
     expect(verdict.passed).toBe(true);
     expect(verdict.usedLlm).toBe(true);
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(generate.mock.calls[0]?.[0]).toContain('PHASE1_FINAL');
+    expect(generate.mock.calls[0]?.[0]).toContain('PLANNING_AGENT_FINAL');
     expect(loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: 'task-1',
         attempt: 1,
-        phase: 'phase1',
+        agentType: 'planning',
         promptChars: expect.any(Number),
       }),
       'Gemini completion verifier request'
@@ -241,7 +252,7 @@ describe('completion-verifier', () => {
       taskId: 'task-error',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Analyze issue',
       rawLogs: `<tool_use_error>File does not exist</tool_use_error>\n${assistantLog(validPhase1Final)}`,
       linearIssueLabels: [],
@@ -271,7 +282,7 @@ describe('completion-verifier', () => {
       taskId: 'task-tool-use-error-only',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Analyze issue',
       rawLogs: `<tool_use_error>Sibling tool call errored</tool_use_error>\n${assistantLog(validPhase1Final)}`,
       linearIssueLabels: [],
@@ -297,7 +308,7 @@ describe('completion-verifier', () => {
       taskId: 'task-tool-error-no-signal',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Analyze issue',
       rawLogs: `<tool_use_error>Sibling tool call errored</tool_use_error>\n${assistantLog(validPhase1Final)}`,
       linearIssueLabels: [],
@@ -324,7 +335,7 @@ describe('completion-verifier', () => {
       taskId: 'task-no-assistant',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Analyze issue',
       rawLogs: '{"type":"result","is_error":false}',
       linearIssueLabels: [],
@@ -341,7 +352,7 @@ describe('completion-verifier', () => {
       ok: true,
       value: {
         content:
-          '{"passed":false,"confidence":0.88,"reasons":["phase contract mismatch"],"missingCriteria":["code-task requires Phase 2 ready: yes"],"resumeInstruction":"Fix PHASE1_FINAL consistency."}',
+          '{"passed":false,"confidence":0.88,"reasons":["phase contract mismatch"],"missingCriteria":["code-task requires Phase 2 ready: yes"],"resumeInstruction":"Fix PLANNING_AGENT_FINAL consistency."}',
       },
     });
     createLlmClientMock.mockReturnValue({ generate });
@@ -351,9 +362,9 @@ describe('completion-verifier', () => {
       taskId: 'task-phase1-mismatch',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Analyze issue',
-      rawLogs: assistantLog(`PHASE1_FINAL:
+      rawLogs: assistantLog(`PLANNING_AGENT_FINAL:
 - Linear label set: code-task
 - Phase 2 ready: no
 - Linear issue: https://linear.app/intexuraos/issue/INT-1
@@ -372,7 +383,7 @@ describe('completion-verifier', () => {
       ok: true,
       value: {
         content:
-          '{"passed":false,"confidence":0.93,"reasons":["missing PR evidence"],"missingCriteria":["PR URL created from branch"],"resumeInstruction":"Create PR and provide PHASE2_FINAL evidence."}',
+          '{"passed":false,"confidence":0.93,"reasons":["missing PR evidence"],"missingCriteria":["PR URL created from branch"],"resumeInstruction":"Create PR and provide EXECUTION_AGENT_FINAL evidence."}',
       },
     });
     createLlmClientMock.mockReturnValue({ generate });
@@ -382,7 +393,7 @@ describe('completion-verifier', () => {
       taskId: 'task-missing-pr',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase2',
+      agentType: 'execution',
       originalPrompt: 'Implement and open PR',
       rawLogs: assistantLog(validPhase2Final),
       linearIssueLabels: ['code-task'],
@@ -413,9 +424,9 @@ describe('completion-verifier', () => {
       taskId: 'task-phase2-missing-ci-line',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase2',
+      agentType: 'execution',
       originalPrompt: 'Implement and open PR',
-      rawLogs: assistantLog(`PHASE2_FINAL:
+      rawLogs: assistantLog(`EXECUTION_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/123
 - Linear issue: https://linear.app/intexuraos/issue/INT-2
 - Summary: Done`),
@@ -449,7 +460,7 @@ describe('completion-verifier', () => {
       taskId: 'task-phase2-ci-failed',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase2',
+      agentType: 'execution',
       originalPrompt: 'Implement and open PR',
       rawLogs: assistantLog(validPhase2Final),
       linearIssueLabels: ['code-task'],
@@ -482,7 +493,7 @@ describe('completion-verifier', () => {
       taskId: 'task-ci-unknown',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase2',
+      agentType: 'execution',
       originalPrompt: 'Implement and open PR',
       rawLogs: assistantLog(validPhase2Final),
       linearIssueLabels: ['code-task'],
@@ -513,7 +524,7 @@ describe('completion-verifier', () => {
       taskId: 'task-llm-wrap',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase2',
+      agentType: 'execution',
       originalPrompt: 'Implement and open PR',
       rawLogs: assistantLog(validPhase2Final),
       linearIssueLabels: ['code-task'],
@@ -541,7 +552,7 @@ describe('completion-verifier', () => {
       taskId: 'task-llm-error',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Prepare issue',
       rawLogs: assistantLog(validPhase1Final),
       linearIssueLabels: [],
@@ -550,7 +561,7 @@ describe('completion-verifier', () => {
     expect(verdict.passed).toBe(false);
     expect(verdict.reasons.join(' ')).toContain('Gemini verifier unavailable');
     expect(verdict.verifierFailure).toBe(true);
-    expect(verdict.resumeInstruction).toContain('PHASE1_FINAL');
+    expect(verdict.resumeInstruction).toContain('PLANNING_AGENT_FINAL');
     expect(loggerError).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: 'task-llm-error',
@@ -573,7 +584,7 @@ describe('completion-verifier', () => {
       taskId: 'task-llm-error-phase2',
       attempt: 2,
       maxAttempts: 3,
-      phase: 'phase2',
+      agentType: 'execution',
       originalPrompt: 'Implement and open PR',
       rawLogs: assistantLog(validPhase2Final),
       linearIssueLabels: ['code-task'],
@@ -587,7 +598,7 @@ describe('completion-verifier', () => {
 
     expect(verdict.passed).toBe(false);
     expect(verdict.verifierFailure).toBe(true);
-    expect(verdict.resumeInstruction).toContain('PHASE2_FINAL');
+    expect(verdict.resumeInstruction).toContain('EXECUTION_AGENT_FINAL');
   });
 
   it('marks verifier failure when Gemini returns invalid JSON', async () => {
@@ -602,7 +613,7 @@ describe('completion-verifier', () => {
       taskId: 'task-llm-invalid-json',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Prepare issue',
       rawLogs: assistantLog(validPhase1Final),
       linearIssueLabels: [],
@@ -636,7 +647,7 @@ describe('completion-verifier', () => {
       taskId: 'task-empty-resume',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Prepare issue',
       rawLogs: assistantLog(validPhase1Final),
       linearIssueLabels: [],
@@ -663,7 +674,7 @@ describe('completion-verifier', () => {
       taskId: 'task-summary',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Prepare issue',
       rawLogs: assistantLog(validPhase1Final),
       linearIssueLabels: [],
@@ -689,7 +700,7 @@ describe('completion-verifier', () => {
       taskId: 'task-no-summary',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Prepare issue',
       rawLogs: assistantLog(validPhase1Final),
       linearIssueLabels: [],
@@ -713,7 +724,7 @@ describe('completion-verifier', () => {
       taskId: 'task-empty-summary',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Prepare issue',
       rawLogs: assistantLog(validPhase1Final),
       linearIssueLabels: [],
@@ -734,7 +745,7 @@ describe('completion-verifier', () => {
       taskId: 'task-verifier-fail-summary',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Prepare issue',
       rawLogs: assistantLog(validPhase1Final),
       linearIssueLabels: [],
@@ -748,11 +759,11 @@ describe('completion-verifier', () => {
     const result = CompletionVerifierTestUtils.verifyPRCommentFinal('No completion block');
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected invalid pr-comment result');
-    expect(result.missing).toContain('PR_COMMENT_FINAL block');
+    expect(result.missing).toContain('PULL_REQUEST_AGENT_FINAL block');
   });
 
-  it('validates valid PR_COMMENT_FINAL block', () => {
-    const validPRCommentFinal = `PR_COMMENT_FINAL:
+  it('validates valid PULL_REQUEST_AGENT_FINAL block', () => {
+    const validPRCommentFinal = `PULL_REQUEST_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/42
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
@@ -763,8 +774,8 @@ describe('completion-verifier', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('detects missing Comment replied line in PR_COMMENT_FINAL', () => {
-    const missingCommentReply = `PR_COMMENT_FINAL:
+  it('detects missing Comment replied line in PULL_REQUEST_AGENT_FINAL', () => {
+    const missingCommentReply = `PULL_REQUEST_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/42
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
@@ -777,21 +788,21 @@ describe('completion-verifier', () => {
   });
 
   it('builds pr-comment-specific default resume instruction', () => {
-    const instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction('pr-comment', [
+    const instruction = CompletionVerifierTestUtils.buildDefaultResumeInstruction('pull_request', [
       'missing-criteria',
     ]);
 
-    expect(instruction).toContain('PR_COMMENT_FINAL');
+    expect(instruction).toContain('PULL_REQUEST_AGENT_FINAL');
     expect(instruction).toContain('Push changes');
     expect(instruction).toContain('reply to the comment');
   });
 
-  it('fails pr-comment when PR_COMMENT_FINAL block is missing from assistant message', async () => {
+  it('fails pr-comment when PULL_REQUEST_AGENT_FINAL block is missing from assistant message', async () => {
     const generate = vi.fn().mockResolvedValue({
       ok: true,
       value: {
         content:
-          '{"passed":false,"confidence":0.85,"reasons":["missing PR_COMMENT_FINAL"],"missingCriteria":["PR_COMMENT_FINAL block"],"resumeInstruction":"Add PR_COMMENT_FINAL block."}',
+          '{"passed":false,"confidence":0.85,"reasons":["missing PULL_REQUEST_AGENT_FINAL"],"missingCriteria":["PULL_REQUEST_AGENT_FINAL block"],"resumeInstruction":"Add PULL_REQUEST_AGENT_FINAL block."}',
       },
     });
     createLlmClientMock.mockReturnValue({ generate });
@@ -801,7 +812,7 @@ describe('completion-verifier', () => {
       taskId: 'task-pr-comment-missing-block',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'pr-comment',
+      agentType: 'pull_request',
       originalPrompt: 'Address PR comment',
       rawLogs: assistantLog('I fixed the bug. Done!'),
       linearIssueLabels: ['code-task', 'pr-comment'],
@@ -813,8 +824,10 @@ describe('completion-verifier', () => {
     });
 
     expect(verdict.passed).toBe(false);
-    expect(verdict.missingCriteria).toContain('PR_COMMENT_FINAL block');
-    expect(verdict.reasons.join(' ')).toContain('PR Comment completion contract was not met');
+    expect(verdict.missingCriteria).toContain('PULL_REQUEST_AGENT_FINAL block');
+    expect(verdict.reasons.join(' ')).toContain(
+      'Pull Request Agent completion contract was not met'
+    );
   });
 
   it('passes valid pr-comment contract through full verify flow', async () => {
@@ -827,7 +840,7 @@ describe('completion-verifier', () => {
     });
     createLlmClientMock.mockReturnValue({ generate });
 
-    const validPRCommentFinal = `PR_COMMENT_FINAL:
+    const validPRCommentFinal = `PULL_REQUEST_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/42
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
@@ -839,7 +852,7 @@ describe('completion-verifier', () => {
       taskId: 'task-pr-comment',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'pr-comment',
+      agentType: 'pull_request',
       originalPrompt: 'Address PR comment',
       rawLogs: assistantLog(validPRCommentFinal),
       linearIssueLabels: ['code-task', 'pr-comment'],
@@ -854,8 +867,8 @@ describe('completion-verifier', () => {
     expect(verdict.passed).toBe(true);
     expect(verdict.usedLlm).toBe(true);
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(generate.mock.calls[0]?.[0]).toContain('PR_COMMENT_FINAL');
-    expect(generate.mock.calls[0]?.[0]).not.toContain('PHASE2_FINAL');
+    expect(generate.mock.calls[0]?.[0]).toContain('PULL_REQUEST_AGENT_FINAL');
+    expect(generate.mock.calls[0]?.[0]).not.toContain('EXECUTION_AGENT_FINAL');
   });
 
   it('fails pr-comment when CI checks are failing', async () => {
@@ -868,7 +881,7 @@ describe('completion-verifier', () => {
     });
     createLlmClientMock.mockReturnValue({ generate });
 
-    const validPRCommentFinal = `PR_COMMENT_FINAL:
+    const validPRCommentFinal = `PULL_REQUEST_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/42
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
@@ -880,7 +893,7 @@ describe('completion-verifier', () => {
       taskId: 'task-pr-comment-ci-fail',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'pr-comment',
+      agentType: 'pull_request',
       originalPrompt: 'Address PR comment',
       rawLogs: assistantLog(validPRCommentFinal),
       linearIssueLabels: ['code-task', 'pr-comment'],
@@ -902,7 +915,7 @@ describe('completion-verifier', () => {
     });
     createLlmClientMock.mockReturnValue({ generate });
 
-    const validPRCommentFinal = `PR_COMMENT_FINAL:
+    const validPRCommentFinal = `PULL_REQUEST_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/42
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
@@ -914,7 +927,7 @@ describe('completion-verifier', () => {
       taskId: 'task-pr-comment-llm-fail',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'pr-comment',
+      agentType: 'pull_request',
       originalPrompt: 'Address PR comment',
       rawLogs: assistantLog(validPRCommentFinal),
       linearIssueLabels: ['code-task', 'pr-comment'],
@@ -928,7 +941,7 @@ describe('completion-verifier', () => {
 
     expect(verdict.passed).toBe(false);
     expect(verdict.verifierFailure).toBe(true);
-    expect(verdict.resumeInstruction).toContain('PR_COMMENT_FINAL');
+    expect(verdict.resumeInstruction).toContain('PULL_REQUEST_AGENT_FINAL');
   });
 
   it('fails pr-comment when CI status is unknown', async () => {
@@ -941,7 +954,7 @@ describe('completion-verifier', () => {
     });
     createLlmClientMock.mockReturnValue({ generate });
 
-    const validPRCommentFinal = `PR_COMMENT_FINAL:
+    const validPRCommentFinal = `PULL_REQUEST_AGENT_FINAL:
 - PR: https://github.com/intexuraos/intexuraos/pull/42
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
@@ -953,7 +966,7 @@ describe('completion-verifier', () => {
       taskId: 'task-pr-comment-ci-unknown',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'pr-comment',
+      agentType: 'pull_request',
       originalPrompt: 'Address PR comment',
       rawLogs: assistantLog(validPRCommentFinal),
       linearIssueLabels: ['code-task', 'pr-comment'],
@@ -982,7 +995,7 @@ describe('completion-verifier', () => {
       taskId: 'task-null-fields',
       attempt: 1,
       maxAttempts: 3,
-      phase: 'phase1',
+      agentType: 'planning',
       originalPrompt: 'Prepare issue',
       rawLogs: assistantLog(validPhase1Final),
       linearIssueLabels: [],

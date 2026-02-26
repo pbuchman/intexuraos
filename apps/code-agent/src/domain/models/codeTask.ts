@@ -18,22 +18,22 @@ export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
  */
 export type WorkerLocation = string;
 
-export type ExecutionPhase = 'design' | 'execution';
+export type AgentType = 'planning' | 'execution' | 'pull_request';
 
 /**
  * Task status lifecycle.
  * Design reference: Lines 316, 1422
  *
- * Flow: dispatched → running → designed|implemented|failed|cancelled
+ * Flow: dispatched → running → planned|implemented|failed|cancelled
  *       dispatched → interrupted (if worker dies)
  *
- * 'designed'     = Phase 1 design task completed successfully
+ * 'planned'      = Planning/Phase 1 task completed successfully
  * 'implemented'  = Phase 2 execution task completed successfully
  */
 export type TaskStatus =
   | 'dispatched'   // Sent to worker, awaiting start
   | 'running'      // Worker actively processing
-  | 'designed'     // Phase 1 design task finished
+  | 'planned'      // Planning Agent task finished
   | 'implemented'  // Phase 2 execution task finished
   | 'failed'       // Error occurred
   | 'interrupted'  // Worker died unexpectedly
@@ -63,6 +63,13 @@ export interface TaskResult {
   ciFailed?: boolean;       // True if CI checks failed
   partialWork?: boolean;    // True if task timed out with partial progress
   rebaseResult?: 'success' | 'conflict' | 'skipped';  // For long tasks (design lines 1356-1364)
+  planning_outcome_label?: 'planned' | 'unclear';
+  planning_superpowers_writing_plans_used?: '0' | '1';
+  planning_issue_url?: string;
+  planning_trivial_task?: '0' | '1' | '';
+  planning_doc_path?: string;
+  planning_pr_url?: string;
+  planning_clarification_message?: string;
 }
 
 /**
@@ -137,7 +144,7 @@ export interface CodeTask {
   // Resume/Follow-up tracking (for PR comment auto-response - INT-465)
   parentTaskId?: string;       // If this task is a follow-up to another
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
-  executionPhase?: ExecutionPhase;
+  agentType?: AgentType;
   implementationTaskId?: string;
 
   // Results

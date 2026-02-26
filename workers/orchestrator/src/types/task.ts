@@ -43,8 +43,8 @@ export interface Task {
    * Used for tracking retry chains and debugging.
    */
   retriedFrom?: string;
-  /** Execution phase from code-agent. When set, used instead of recalculating from labels. */
-  executionPhase?: 'design' | 'execution';
+  /** Agent type from code-agent. When set, used instead of recalculating from labels. */
+  agentType?: 'planning' | 'execution' | 'pull_request';
   /**
    * Current execution attempt (starts at 1).
    */
@@ -79,6 +79,13 @@ export interface TaskResult {
   commits?: number;
   summary?: string;
   ciFailed?: boolean;
+  planning_outcome_label?: 'planned' | 'unclear';
+  planning_superpowers_writing_plans_used?: '0' | '1';
+  planning_issue_url?: string;
+  planning_trivial_task?: '0' | '1' | '';
+  planning_doc_path?: string;
+  planning_pr_url?: string;
+  planning_clarification_message?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;
