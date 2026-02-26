@@ -17,7 +17,11 @@ import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
-import { type CompletionVerifier, type CompletionVerifierVerdict } from './completion-verifier.js';
+import {
+  type CompletionPhase,
+  type CompletionVerifier,
+  type CompletionVerifierVerdict,
+} from './completion-verifier.js';
 import { analyzeRetryDecision } from './adaptive-retry.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 
@@ -840,7 +844,13 @@ export class TaskDispatcher {
           task.previousResult = result;
         }
 
-        const resumePrompt = this.buildResumePrompt(task.prompt, verification);
+        const resumePromptBody = this.buildResumePrompt(task.prompt, verification, {
+          phase,
+          ...(result !== undefined && { taskResult: result }),
+          ...(typeof exitCode === 'number' && { workerExitCode: exitCode }),
+          ...(claudeError !== undefined && { claudeError }),
+        });
+        const resumePrompt = this.buildResumePreamble() + resumePromptBody;
         const resumePreview =
           resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '…' : resumePrompt;
         this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
@@ -963,30 +973,136 @@ export class TaskDispatcher {
 
   private buildResumePrompt(
     originalPrompt: string,
-    verification: CompletionVerifierVerdict
+    verification: CompletionVerifierVerdict,
+    context: {
+      phase: CompletionPhase;
+      taskResult?: TaskResult;
+      workerExitCode?: number;
+      claudeError?: string;
+    }
   ): string {
+    const verifierReasons =
+      verification.reasons.length > 0
+        ? verification.reasons.map((reason) => `- ${reason}`).join('\n')
+        : '- No verifier reasons provided';
     const missingCriteria =
       verification.missingCriteria.length > 0
         ? verification.missingCriteria.map((criteria) => `- ${criteria}`).join('\n')
         : '- Completion criteria not met';
+    const detectedState = [
+      `- phase: ${context.phase}`,
+      `- workerExitCode: ${String(context.workerExitCode ?? 'unknown')}`,
+      `- claudeError: ${context.claudeError ?? 'none'}`,
+      `- detectedPrUrl: ${context.taskResult?.prUrl ?? 'none'}`,
+      `- detectedCiTrackedSuccess: ${String(context.taskResult?.ciFailed === false)}`,
+      `- detectedCiFailed: ${String(context.taskResult?.ciFailed ?? 'unknown')}`,
+      `- detectedBranch: ${context.taskResult?.branch ?? 'none'}`,
+      `- detectedCommitsOnPr: ${String(context.taskResult?.commits ?? 'unknown')}`,
+    ].join('\n');
+    const strictFieldGuidance = this.buildPhaseContractGuidance(context.phase);
+    const contractTemplate = this.buildPhaseFinalTemplate(context.phase);
+    const extractedSummarySection =
+      verification.extractedSummary !== undefined && verification.extractedSummary !== ''
+        ? ['Verifier summary of previous attempt:', verification.extractedSummary, ''].join('\n')
+        : '';
 
     return [
       originalPrompt,
       '',
       '[AUTO-CONTINUE ATTEMPT]',
       'Previous attempt did not meet completion criteria.',
+      'This is a machine-verification failure. Optimize for machine-detectable evidence and exact contract formatting, not narrative justification.',
       'Address the exact gaps below, then finish.',
+      '',
+      'Verifier reasons (why the previous answer failed):',
+      verifierReasons,
       '',
       'Missing criteria:',
       missingCriteria,
       '',
+      'Machine-detected state from the previous attempt:',
+      detectedState,
+      '',
+      extractedSummarySection,
       'Required action:',
       verification.resumeInstruction,
+      '',
+      'Strict final-block formatting rules (do not add annotations to strict fields):',
+      strictFieldGuidance,
+      '',
+      'Use this exact final block shape and move extra explanation into Summary:',
+      contractTemplate,
+      '',
+      'If the task appears pre-completed / already merged:',
+      '- Do not assume the verifier will accept an old merged PR as task completion evidence.',
+      '- First run the PR/branch pre-flight checks above (in the resume pre-flight section).',
+      '- If the branch is clean and no PR exists for this branch, create a fresh follow-up branch/PR when the task contract requires a PR.',
+      '- If a new PR is impossible or inappropriate, show command output evidence and ask for guidance instead of claiming success.',
       '',
       'Constraints:',
       '- Do not restart from scratch.',
       '- Continue from current repository/worktree state.',
       '- Your last message must satisfy the required phase final block contract.',
+    ].join('\n');
+  }
+
+  private buildPhaseContractGuidance(phase: CompletionPhase): string {
+    if (phase === 'phase2') {
+      return [
+        '- `PR` line must be only a GitHub PR URL (no trailing notes like "(already merged)").',
+        '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
+        '- `Review iterations` line must contain digits only (example: `0`).',
+        '- Put explanations, caveats, and merged-history context in `Turn summary` or `Summary` only.',
+      ].join('\n');
+    }
+
+    if (phase === 'pr-comment') {
+      return [
+        '- `PR` line must be only a GitHub PR URL.',
+        '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
+        '- `Comment replied` line must be exactly `yes` or `no`.',
+        '- Put extra explanation in `Summary`, not on strict fields.',
+      ].join('\n');
+    }
+
+    return [
+      '- `Linear label set` line must be exactly `code-task` or `unclear`.',
+      '- `Phase 2 ready` line must be exactly `yes` or `no`.',
+      '- `Linear issue` line must be a full Linear URL.',
+      '- Put explanations in `Summary`, not on strict fields.',
+    ].join('\n');
+  }
+
+  private buildPhaseFinalTemplate(phase: CompletionPhase): string {
+    if (phase === 'phase2') {
+      return [
+        'PHASE2_FINAL:',
+        '- PR: https://github.com/<owner>/<repo>/pull/<number>',
+        '- CI evidence: pnpm run ci:tracked successful',
+        '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
+        '- Review iterations: 0',
+        '- Turn summary: <short statement> | <short statement> | <short statement>',
+        '- Summary: <3-5 factual sentences>',
+      ].join('\n');
+    }
+
+    if (phase === 'pr-comment') {
+      return [
+        'PR_COMMENT_FINAL:',
+        '- PR: https://github.com/<owner>/<repo>/pull/<number>',
+        '- CI evidence: pnpm run ci:tracked successful',
+        '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
+        '- Comment replied: yes',
+        '- Summary: <3-5 factual sentences>',
+      ].join('\n');
+    }
+
+    return [
+      'PHASE1_FINAL:',
+      '- Linear label set: code-task',
+      '- Phase 2 ready: yes',
+      '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
+      '- Summary: <3-5 factual sentences>',
     ].join('\n');
   }
 
