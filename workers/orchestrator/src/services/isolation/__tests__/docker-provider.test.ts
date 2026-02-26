@@ -116,7 +116,15 @@ vi.mock('node:fs', async (importOriginal) => {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
     statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
-    readFileSync: vi.fn().mockReturnValue(''),
+    readFileSync: vi.fn().mockImplementation((filePath: unknown) => {
+      if (
+        typeof filePath === 'string' &&
+        filePath.includes('claude-worker-forensics-seccomp.json')
+      ) {
+        return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
+      }
+      return '';
+    }),
     appendFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     promises: {

@@ -124,6 +124,29 @@ export class DockerProvider implements IsolationProvider {
     return null;
   }
 
+  private resolveForensicsSeccompSecurityOpt(): string | null {
+    const profilePath = this.resolveForensicsSeccompProfilePath();
+    /* v8 ignore start -- test-infra: profile may be absent in runtime packaging variants, fallback intentionally uses default seccomp @preserve */
+    if (profilePath === null) {
+      return null;
+    }
+    /* v8 ignore stop @preserve */
+
+    try {
+      const profileRaw = fs.readFileSync(profilePath, 'utf-8');
+      const profileJson: unknown = JSON.parse(profileRaw);
+      return `seccomp=${JSON.stringify(profileJson)}`;
+      /* v8 ignore start -- test-infra: invalid/missing seccomp profile requires filesystem fault injection @preserve */
+    } catch (error) {
+      this.logger.warn(
+        { profilePath, error },
+        'Forensics seccomp profile is invalid; using Docker default seccomp'
+      );
+      return null;
+    }
+    /* v8 ignore stop @preserve */
+  }
+
   private async writeJsonArtifact(filePath: string, value: unknown): Promise<void> {
     await fs.promises.writeFile(filePath, JSON.stringify(value, null, 2), 'utf-8');
   }
@@ -579,15 +602,13 @@ export class DockerProvider implements IsolationProvider {
       );
       fs.mkdirSync(pnpmStorePath, { recursive: true });
       const capAdd = this.config.forensicsMode ? ['NET_RAW', 'SYS_PTRACE'] : ['NET_RAW'];
-      const forensicsSeccompProfilePath = this.config.forensicsMode
-        ? this.resolveForensicsSeccompProfilePath()
+      const forensicsSeccompSecurityOpt = this.config.forensicsMode
+        ? this.resolveForensicsSeccompSecurityOpt()
         : null;
       const securityOpt = this.config.forensicsMode
         ? [
             'no-new-privileges',
-            ...(forensicsSeccompProfilePath !== null
-              ? [`seccomp=${forensicsSeccompProfilePath}`]
-              : []),
+            ...(forensicsSeccompSecurityOpt !== null ? [forensicsSeccompSecurityOpt] : []),
           ]
         : ['no-new-privileges'];
       const ulimits = this.config.forensicsMode
