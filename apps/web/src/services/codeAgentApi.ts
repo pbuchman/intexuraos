@@ -131,13 +131,17 @@ export async function sendTaskMessage(
  */
 export async function startImplementation(
   accessToken: string,
-  taskId: string
+  taskId: string,
+  workerType?: string
 ): Promise<StartImplementationResponse> {
   return await apiRequest<StartImplementationResponse>(
     config.codeAgentUrl,
     `/code/tasks/${taskId}/implement`,
     accessToken,
-    { method: 'POST' }
+    {
+      method: 'POST',
+      body: workerType !== undefined ? { workerType } : undefined,
+    }
   );
 }
 

@@ -2948,6 +2948,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               description: 'Optional additional context to help with the retry',
               maxLength: 5000,
             },
+            workerType: {
+              type: 'string',
+              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'],
+              description: 'Optional worker type to use for the retry',
+            },
           },
         },
         response: {
@@ -3055,15 +3060,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       /* v8 ignore stop @preserve */
 
-      const { taskId, additionalContext } = request.body as { taskId: string; additionalContext?: string };
+      const { taskId, additionalContext, workerType } = request.body as { taskId: string; additionalContext?: string; workerType?: string };
 
-      request.log.info({ taskId, userId, hasAdditionalContext: additionalContext !== undefined }, 'Processing task retry');
+      request.log.info({ taskId, userId, hasAdditionalContext: additionalContext !== undefined, workerType }, 'Processing task retry');
 
       // Build retry request - only include additionalContext if defined
       const retryRequest: {
         originalTaskId: string;
         userId: string;
         additionalContext?: string;
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       } = {
         originalTaskId: taskId,
         userId,
@@ -3071,6 +3077,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Only add additionalContext if provided
       if (additionalContext !== undefined) {
         retryRequest.additionalContext = additionalContext;
+      }
+      // Only add workerType if provided and valid
+      if (workerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm'].includes(workerType)) {
+        retryRequest.workerType = workerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       }
 
       const result = await retryTask(
@@ -3339,6 +3349,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             },
           },
         },
+        body: {
+          type: 'object',
+          properties: {
+            workerType: {
+              type: 'string',
+              enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'],
+              description: 'Optional worker type to use for the implementation',
+            },
+          },
+        },
         response: {
           200: {
             description: 'Phase 2 task dispatched successfully',
@@ -3448,6 +3468,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
 
       const { taskId } = request.params as { taskId: string };
+      const body = request.body as { workerType?: string } | undefined;
+      const requestedWorkerType = body?.workerType;
 
       // Check rate limits before dispatching (prompt length 0 — reuses existing task prompt)
       const limitCheck = await rateLimitService.checkLimits(userId, 0);
@@ -3462,7 +3484,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       /* v8 ignore stop @preserve */
 
-      request.log.info({ taskId, userId }, 'Processing Phase 2 implementation request');
+      request.log.info({ taskId, userId, workerType: requestedWorkerType }, 'Processing Phase 2 implementation request');
+
+      // Only add workerType if provided and valid
+      const phase2Request: { originalTaskId: string; userId: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' } = { originalTaskId: taskId, userId };
+      if (requestedWorkerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm'].includes(requestedWorkerType)) {
+        phase2Request.workerType = requestedWorkerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+      }
 
       const result = await submitToPhase2(
         {
@@ -3475,7 +3503,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
         },
-        { originalTaskId: taskId, userId }
+        phase2Request
       );
 
       /* v8 ignore start -- test-infra: error handling paths covered by use case tests @preserve */

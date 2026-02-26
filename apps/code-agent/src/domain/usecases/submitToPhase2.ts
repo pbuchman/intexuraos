@@ -29,6 +29,8 @@ export interface SubmitToPhase2Request {
   originalTaskId: string;
   /** User ID submitting the request */
   userId: string;
+  /** Optional worker type to use for the implementation */
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
 }
 
 /**
@@ -98,7 +100,7 @@ export async function submitToPhase2(
   request: SubmitToPhase2Request
 ): Promise<Result<SubmitToPhase2Result, SubmitToPhase2Error>> {
   const { logger, codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, workerSettingsRepo } = deps;
-  const { originalTaskId, userId } = request;
+  const { originalTaskId, userId, workerType } = request;
 
   // Step 1: Fetch original task
   const originalTaskResult = await codeTaskRepo.findByIdForUser(originalTaskId, userId);
@@ -257,6 +259,8 @@ export async function submitToPhase2(
   }
 
   // Step 10: Create the Phase 2 task
+  // Use provided workerType if specified, otherwise use original task's workerType
+  const effectiveWorkerType = workerType ?? originalTask.workerType;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, phase2TaskId);
   const createInput = {
     id: phase2TaskId,
@@ -264,7 +268,7 @@ export async function submitToPhase2(
     prompt: PHASE2_PROMPT,
     sanitizedPrompt: PHASE2_PROMPT,
     systemPromptHash: originalTask.systemPromptHash,
-    workerType: originalTask.workerType,
+    workerType: effectiveWorkerType,
     /* v8 ignore start -- ts-type: optional chaining with null fallback creates type narrowing branch @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown',
     /* v8 ignore stop @preserve */

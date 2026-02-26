@@ -2392,6 +2392,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         },
         payload: {
           taskId,
+          workerType: 'opus',
         },
       });
 
@@ -2723,6 +2724,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'POST',
         url: '/code/tasks/non-existent-task/implement',
         headers: { authorization: 'Bearer test-token' },
+        body: {},
       });
 
       expect(response.statusCode).toBe(404);
@@ -2799,6 +2801,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'POST',
         url: `/code/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
+        body: { workerType: 'sonnet' },
       });
 
       const body = JSON.parse(response.body);

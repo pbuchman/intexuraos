@@ -36,6 +36,8 @@ export interface RetryTaskRequest {
   userId: string;
   /** Optional additional context to help with the retry */
   additionalContext?: string;
+  /** Optional worker type to use for the retry */
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
 }
 
 /**
@@ -98,7 +100,7 @@ export async function retryTask(
   request: RetryTaskRequest
 ): Promise<Result<RetryTaskResult, RetryTaskError>> {
   const { logger, codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, workerSettingsRepo } = deps;
-  const { originalTaskId, userId, additionalContext } = request;
+  const { originalTaskId, userId, additionalContext, workerType } = request;
 
   // Step 1: Fetch original task
   const originalTaskResult = await codeTaskRepo.findByIdForUser(originalTaskId, userId);
@@ -256,13 +258,15 @@ ${additionalContext.trim()}
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, retryTaskId);
 
   // Step 8: Create retry task with retriedFrom
+  // Use provided workerType if specified, otherwise use original task's workerType
+  const effectiveWorkerType = workerType ?? originalTask.workerType;
   const createInput = {
     id: retryTaskId,
     userId,
     prompt: retryPrompt,
     sanitizedPrompt: sanitizePrompt(retryPrompt),
     systemPromptHash: originalTask.systemPromptHash,
-    workerType: originalTask.workerType,
+    workerType: effectiveWorkerType,
     // Safe to access [0] because we return early if enabledWorkers.length === 0
     /* v8 ignore start -- ts-type: optional chaining with nullish coalescing creates type narrowing branch @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown',
