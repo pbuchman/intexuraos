@@ -16,6 +16,9 @@ RUN apk add --no-cache \
     curl \
     bash \
     jq \
+    file \
+    strace \
+    gdb \
     python3 \
     py3-pip \
     && rm -rf /var/cache/apk/*
