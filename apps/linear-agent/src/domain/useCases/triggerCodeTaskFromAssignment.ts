@@ -1,7 +1,6 @@
 import type { Logger } from 'pino';
 import type { CodeAgentClient } from '../ports.js';
 import type { LinearWebhookEvent } from '../webhookTypes.js';
-import { hasCodeTaskLabel } from '@intexuraos/common-core';
 
 export interface TriggerCodeTaskDeps {
   codeAgentClient: CodeAgentClient;
@@ -16,8 +15,7 @@ export function shouldTriggerCodeTask(event: LinearWebhookEvent): boolean {
   if (event.updatedFrom === undefined) return false;
   if (event.updatedFrom.assigneeId !== null) return false;
   if (event.data.assignee === null) return false;
-  if (event.data.state.type !== 'unstarted') return false;
-  if (hasCodeTaskLabel(event.data.labels.map(l => l.name))) return false;
+  if (event.data.state.type !== 'backlog' && event.data.state.type !== 'unstarted') return false;
 
   return true;
 }
