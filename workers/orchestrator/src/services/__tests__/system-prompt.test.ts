@@ -147,10 +147,30 @@ describe('system-prompt', () => {
           linearIssueLabels: ['code-task'],
         });
 
-        expect(result).toContain('No Confirmation Prompts');
-        expect(result).toContain('Complete Checkpoints Autonomously');
+        expect(result).toContain('MANDATORY First Action');
+        expect(result).toContain('Execution Checkpoints');
         expect(result).toContain('ci:tracked');
         expect(result).toContain('On CI Failure');
+      });
+
+      it('should include mandatory planning skill in Phase 2', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        expect(result).toContain('MANDATORY Planning');
+        expect(result).toContain('superpowers:writing-plans');
+      });
+
+      it('should include mandatory implementation skill in Phase 2', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        expect(result).toContain('MANDATORY Implementation');
+        expect(result).toContain('superpowers:executing-plans');
       });
 
       it('should include parent execution mode when hasChildren is true', () => {
@@ -210,10 +230,8 @@ describe('system-prompt', () => {
           linearIssueLabels: ['code-task'],
         });
 
-        expect(result).toContain('Code Review Loop (MANDATORY)');
-        expect(result).toContain('superpowers:code-reviewer');
-        expect(result).toContain('opus');
-        expect(result).toContain('sonnet');
+        expect(result).toContain('MANDATORY Code Review');
+        expect(result).toContain('superpowers:requesting-code-review');
       });
 
       it('should include review loop iteration rules in Phase 2', () => {
@@ -222,10 +240,9 @@ describe('system-prompt', () => {
           linearIssueLabels: ['code-task'],
         });
 
-        expect(result).toContain('Iteration 1');
-        expect(result).toContain('Iteration 2+');
-        expect(result).toContain('Safety valve');
-        expect(result).toContain('5 review iterations');
+        // Iteration rules are now delegated to superpowers:requesting-code-review skill
+        expect(result).toContain('superpowers:requesting-code-review');
+        expect(result).toContain("Follow that skill's process");
       });
 
       it('should include review iterations and turn summary in PHASE2_FINAL', () => {
