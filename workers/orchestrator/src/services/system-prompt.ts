@@ -28,6 +28,8 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   /** Whether the issue has child issues */
   hasChildren: boolean;
+  /** Task-assigned worker type (for PR description metadata) */
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   /** Execution phase from code-agent (optional, falls back to label detection) */
   executionPhase?: 'design' | 'execution';
 }
@@ -126,7 +128,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
  * The agent should execute autonomously without confirmation prompts.
  */
 function buildPhase2Prompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId, linearIssueTitle, taskUrl, hasChildren } = params;
+  const { taskId, linearIssueId, linearIssueTitle, taskUrl, hasChildren, workerType } = params;
 
   const parentModeSection = hasChildren
     ? `
@@ -219,6 +221,9 @@ When creating a PR, the body MUST include these links:
 2. **IntexuraOS task link**:
    ${taskUrl !== undefined ? `[View task](${taskUrl})` : `Include the task URL if available.`}
 
+3. **Worker type**:
+   \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
+
 Example PR body format:
 \`\`\`
 ## Summary
@@ -227,6 +232,7 @@ Example PR body format:
 ## References
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
 
 ## Changes
 <bullet list of key changes>
@@ -265,7 +271,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
  * The agent should read the PR, understand the comment, and act autonomously.
  */
 function buildPRCommentPrompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId, linearIssueTitle, taskUrl } = params;
+  const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
 
   /* v8 ignore start -- test-infra: conditional branches require integration test with/without Linear issue ID @preserve */
   return `[SYSTEM CONTEXT]
@@ -308,6 +314,9 @@ After pushing changes, update the PR description to include:
 
 2. **IntexuraOS task link:**
    ${taskUrl !== undefined ? `[View task](${taskUrl})` : 'Include the task URL if available.'}
+
+3. **Worker type:**
+   \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
 
 ### Resource Limits
 **NONE.** Complete the task regardless of token usage.

@@ -8,6 +8,7 @@ describe('system-prompt', () => {
       linearIssueId: 'INT-123',
       linearIssueLabels: [] as string[],
       hasChildren: false,
+      workerType: 'auto' as const,
     };
 
     describe('Phase 1: Design & Validation', () => {
@@ -236,6 +237,16 @@ describe('system-prompt', () => {
         expect(result).toContain('- Review iterations: <number>');
         expect(result).toContain('- Turn summary:');
       });
+
+      it('should require worker type in Phase 2 PR description format', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['code-task'],
+        });
+
+        expect(result).toContain('3. **Worker type**');
+        expect(result).toContain('- Worker Type: `auto`');
+      });
     });
 
     describe('PR Comment Execution Mode', () => {
@@ -300,6 +311,16 @@ describe('system-prompt', () => {
 
         expect(result).toContain('NON-INTERACTIVE MODE');
         expect(result).toContain('No Confirmation Prompts');
+      });
+
+      it('should require worker type in PR description updates', () => {
+        const result = buildSystemPrompt({
+          ...baseParams,
+          linearIssueLabels: ['pr-comment'],
+        });
+
+        expect(result).toContain('3. **Worker type:**');
+        expect(result).toContain('`auto`');
       });
     });
 
