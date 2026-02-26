@@ -202,7 +202,7 @@ export async function processCodeAction(
     linearIssueTitle?: string;
     linearIssueUrl?: string;
     linearFallback?: boolean;
-    executionPhase: 'design' | 'execution';
+    agentType: 'planning' | 'execution';
   } = {
     id: taskId,
     userId,
@@ -219,7 +219,7 @@ export async function processCodeAction(
     actionId,
     approvalEventId,
     webhookSecret,
-    executionPhase: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'design',
+    agentType: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning',
   };
 
   // Only include linear issue fields if we have them
@@ -283,7 +283,7 @@ export async function processCodeAction(
     webhookSecret: string;
     traceId?: string;
     workerCredentials: DispatchWorkerCredentials;
-    executionPhase: 'design' | 'execution';
+    agentType: 'planning' | 'execution';
   } = {
     taskId: task.id,
     linearIssueLabels,
@@ -296,9 +296,7 @@ export async function processCodeAction(
     webhookUrl,
     webhookSecret,
     workerCredentials,
-    /* v8 ignore start -- ts-type: fallback branch for backward compatibility @preserve */
-    executionPhase: task.executionPhase ?? (hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'design'),
-    /* v8 ignore stop @preserve */
+    agentType: task.agentType === 'execution' ? 'execution' : 'planning',
   };
 
   // Only include linearIssueId if it exists

@@ -3,7 +3,11 @@ import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
-import { initServices } from './services.js';
+import { getServices, initServices } from './services.js';
+import {
+  runAgentRoutingContractMigration,
+  assertNoLegacyAgentRoutingContractValues,
+} from './infra/migrations/agentRoutingContractMigration.js';
 
 // Fail-fast startup validation - crashes immediately if required vars are missing
 const REQUIRED_ENV = [
@@ -65,6 +69,10 @@ async function main(): Promise<void> {
     actionsAgentUrl: config.actionsAgentUrl,
     webhookVerifySecret: config.webhookVerifySecret,
   });
+
+  const { firestore, logger } = getServices();
+  await runAgentRoutingContractMigration({ firestore, logger });
+  await assertNoLegacyAgentRoutingContractValues({ firestore, logger });
 
   const app = await buildServer();
 

@@ -80,7 +80,7 @@ export interface SubmitToPhase2Deps {
  *
  * Workflow:
  * 1. Fetch original task and validate it belongs to user
- * 2. Validate status is 'completed' and executionPhase is 'design'
+ * 2. Validate status is 'planned' and agentType is 'planning'
  * 3. Validate task has a linked Linear issue
  * 4. Guard against duplicate implementation
  * 5. Check for active tasks on same Linear issue
@@ -113,15 +113,15 @@ export async function submitToPhase2(
 
   const originalTask = originalTaskResult.value;
 
-  // Step 2: Validate status is 'designed' and executionPhase is 'design'
-  if (originalTask.status !== 'designed' || originalTask.executionPhase !== 'design') {
+  // Step 2: Validate status is 'planned' and agentType is 'planning'
+  if (originalTask.status !== 'planned' || originalTask.agentType !== 'planning') {
     logger.warn(
-      { taskId: originalTask.id, status: originalTask.status, executionPhase: originalTask.executionPhase },
-      'Attempted to start Phase 2 on non-designed task'
+      { taskId: originalTask.id, status: originalTask.status, agentType: originalTask.agentType },
+      'Attempted to start Phase 2 on non-planning task'
     );
     return err({
       code: 'invalid_status',
-      message: 'Task must be a completed design task to start implementation',
+      message: 'Task must be a completed planning task to start implementation',
     });
   }
 
@@ -274,7 +274,7 @@ export async function submitToPhase2(
     webhookSecret,
     parentTaskId: originalTask.id,
     followUpReason: 'phase2_implement' as const,
-    executionPhase: 'execution' as const,
+    agentType: 'execution' as const,
     linearIssueId,
     /* v8 ignore start -- ts-type: optional field spread operators create type narrowing branches @preserve */
     ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
@@ -363,8 +363,8 @@ export async function submitToPhase2(
     /* v8 ignore stop @preserve */
     traceId: phase2Task.traceId,
     workerCredentials,
-    /* v8 ignore start -- ts-type: fallback branch for backward compatibility @preserve */
-    executionPhase: phase2Task.executionPhase ?? (hasCodeTaskLabel(freshLabels) ? 'execution' : 'design'),
+    /* v8 ignore start -- ts-type: nullish coalescing on narrowed union field @preserve */
+    agentType: phase2Task.agentType ?? 'execution',
     /* v8 ignore stop @preserve */
   };
 

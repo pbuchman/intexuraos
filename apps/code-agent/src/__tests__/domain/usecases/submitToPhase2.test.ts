@@ -74,8 +74,8 @@ describe('submitToPhase2', () => {
       workerLocation: 'home-dev',
       repository: 'pbuchman/intexuraos',
       baseBranch: 'development',
-      status: 'designed',
-      executionPhase: 'design',
+      status: 'planned',
+      agentType: 'planning',
       dedupKey: 'dedup-abc',
       callbackReceived: true,
       createdAt: now,
@@ -141,7 +141,7 @@ describe('submitToPhase2', () => {
       ok({
         ...mockTask,
         id: 'task_phase2',
-        executionPhase: 'execution' as const,
+        agentType: 'execution' as const,
         followUpReason: 'phase2_implement' as const,
         parentTaskId: originalTaskId,
         traceId: 'phase2-trace-abc',
@@ -236,8 +236,8 @@ describe('submitToPhase2', () => {
       }
     });
 
-    it('returns invalid_status when executionPhase is not design', async () => {
-      const mockTask = createMockTask({ executionPhase: 'execution' });
+    it('returns invalid_status when agentType is not planning', async () => {
+      const mockTask = createMockTask({ agentType: 'execution' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
 
       const result = await submitToPhase2(createDeps(), {
@@ -248,7 +248,7 @@ describe('submitToPhase2', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('invalid_status');
-        expect(result.error.message).toContain('completed design task');
+        expect(result.error.message).toContain('completed planning task');
       }
     });
 
@@ -598,7 +598,7 @@ describe('submitToPhase2', () => {
 
       expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          executionPhase: 'execution',
+          agentType: 'execution',
           followUpReason: 'phase2_implement',
           parentTaskId: originalTaskId,
           traceId: 'phase2-trace-abc',
@@ -753,7 +753,7 @@ describe('submitToPhase2', () => {
         ok({
           ...mockTask,
           id: 'task_phase2',
-          executionPhase: 'execution' as const,
+          agentType: 'execution' as const,
           followUpReason: 'phase2_implement' as const,
           parentTaskId: originalTaskId,
           traceId: 'phase2-trace-abc',

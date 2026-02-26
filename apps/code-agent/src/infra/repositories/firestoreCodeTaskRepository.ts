@@ -212,8 +212,8 @@ export const createFirestoreCodeTaskRepository = (deps: {
           if (input.followUpReason !== undefined) {
             taskData.followUpReason = input.followUpReason;
           }
-          if (input.executionPhase !== undefined) {
-            taskData.executionPhase = input.executionPhase;
+          if (input.agentType !== undefined) {
+            taskData.agentType = input.agentType;
           }
           /* v8 ignore stop @preserve */
 

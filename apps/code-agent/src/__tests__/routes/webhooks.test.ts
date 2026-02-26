@@ -123,6 +123,33 @@ describe('POST /internal/webhooks/task-complete', () => {
       internalAuthToken: 'test-token',
       timeoutMs: 10000,
     }, logger);
+    vi.spyOn(linearAgentClient, 'validateIssue').mockResolvedValue(
+      ok({
+        id: 'linear-issue-uuid',
+        identifier: 'INT-123',
+        title: 'Test issue',
+        url: 'https://linear.app/intexuraos/issue/INT-123',
+        labels: [],
+        childCount: 0,
+      })
+    );
+    vi.spyOn(linearAgentClient, 'fetchIssueTree').mockResolvedValue(
+      ok({
+        root: {
+          id: 'linear-issue-uuid',
+          identifier: 'INT-999',
+          url: 'https://linear.app/intexuraos/issue/INT-999',
+          parentId: 'linear-issue-uuid',
+          labels: [],
+          assigneeId: null,
+          state: 'Backlog',
+        },
+        descendants: [],
+      })
+    );
+    vi.spyOn(linearAgentClient, 'updateIssueMetadata').mockResolvedValue(ok(undefined));
+    vi.spyOn(linearAgentClient, 'addComment').mockResolvedValue(ok({ commentId: 'comment-1' }));
+    vi.spyOn(linearAgentClient, 'updateIssueState').mockResolvedValue(ok(undefined));
 
     const linearIssueService = createLinearIssueService({
       linearAgentClient,
@@ -525,9 +552,173 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('designed');
+      expect(getResult.value.status).toBe('planned');
       expect(getResult.value.result?.branch).toBe('test-branch');
       expect(getResult.value.callbackReceived).toBe(true);
+    });
+
+    it('maps planning-agent planned completion to planned status and stores flattened planning result', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan the refactor',
+        sanitizedPrompt: 'Plan the refactor',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Created planning issue and plan PR',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '1' as const,
+          planning_issue_url: 'https://linear.app/intexuraos/issue/INT-999',
+          planning_trivial_task: '0' as const,
+          planning_doc_path: 'docs/plans/test-plan.md',
+          planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+          planning_clarification_message: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('planned');
+      expect(getResult.value.result?.planning_outcome_label).toBe('planned');
+      expect(getResult.value.result?.planning_issue_url).toContain('/INT-999');
+    });
+
+    it('fails planned deterministic enforcement on relationship mismatch before any Linear mutations', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan with broken graph',
+        sanitizedPrompt: 'Plan with broken graph',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+      const addCommentSpy = vi.mocked(linearAgentClient.addComment);
+      const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
+      const updateIssueMetadataSpy = vi.mocked(linearAgentClient.updateIssueMetadata);
+
+      validateIssueSpy.mockReset();
+      validateIssueSpy
+        .mockResolvedValueOnce(
+          ok({
+            id: 'original-uuid',
+            identifier: 'INT-123',
+            title: 'Original issue',
+            url: 'https://linear.app/intexuraos/issue/INT-123',
+            labels: [],
+            childCount: 1,
+          })
+        )
+        .mockResolvedValueOnce(
+          ok({
+            id: 'planning-uuid',
+            identifier: 'INT-999',
+            title: 'Planning issue',
+            url: 'https://linear.app/intexuraos/issue/INT-999',
+            labels: [],
+            childCount: 0,
+          })
+        );
+      fetchIssueTreeSpy.mockResolvedValue(
+        ok({
+          root: {
+            id: 'planning-uuid',
+            identifier: 'INT-999',
+            url: 'https://linear.app/intexuraos/issue/INT-999',
+            parentId: 'some-other-parent',
+            labels: [],
+            assigneeId: null,
+            state: 'Backlog',
+          },
+          descendants: [],
+        })
+      );
+      addCommentSpy.mockClear();
+      updateIssueStateSpy.mockClear();
+      updateIssueMetadataSpy.mockClear();
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Planned, but bad graph',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '1' as const,
+          planning_issue_url: 'https://linear.app/intexuraos/issue/INT-999',
+          planning_trivial_task: '1' as const,
+          planning_doc_path: '',
+          planning_pr_url: '',
+          planning_clarification_message: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(addCommentSpy).not.toHaveBeenCalled();
+      expect(updateIssueStateSpy).not.toHaveBeenCalled();
+      expect(updateIssueMetadataSpy).not.toHaveBeenCalled();
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('dispatched');
+      expect(getResult.value.callbackReceived).toBe(false);
     });
 
     it('populates prNumber and prBranch from result.prUrl on completion (INT-465)', async () => {
@@ -721,7 +912,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('designed');
+      expect(getResult.value.status).toBe('planned');
       expect(getResult.value.result).toBeUndefined();
       expect(getResult.value.callbackReceived).toBe(true);
     });
@@ -770,7 +961,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('designed');
+      expect(getResult.value.status).toBe('planned');
       expect(getResult.value.result).toEqual({
         summary: 'Analyzed the feature request and identified three approaches. Created design with test requirements.',
       });
@@ -919,6 +1110,71 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('interrupted');
       expect(getResult.value.error?.code).toBe('worker_interrupted');
       expect(getResult.value.callbackReceived).toBe(true);
+    });
+  });
+
+  describe('planning-agent unclear failure mapping', () => {
+    it('stores failed planning unclear webhook error and preserves flattened planning result', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Need clarification',
+        sanitizedPrompt: 'Need clarification',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        result: {
+          summary: 'Clarification needed',
+          planning_outcome_label: 'unclear' as const,
+          planning_superpowers_writing_plans_used: '1' as const,
+          planning_issue_url: '',
+          planning_trivial_task: '',
+          planning_doc_path: '',
+          planning_pr_url: '',
+          planning_clarification_message: 'Missing acceptance criteria and target service',
+        },
+        error: {
+          code: 'PLANNING_AGENT_UNCLEAR',
+          message: 'Missing acceptance criteria and target service',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.code).toBe('PLANNING_AGENT_UNCLEAR');
+      expect(getResult.value.result?.planning_outcome_label).toBe('unclear');
+      expect(getResult.value.result?.planning_clarification_message).toContain('Missing acceptance');
     });
   });
 
@@ -1333,7 +1589,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const getResult = await codeTaskRepo.findById(task.id);
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
-      expect(getResult.value.status).toBe('designed');
+      expect(getResult.value.status).toBe('planned');
     });
 
     it('returns 500 when update fails for failed status', async () => {
@@ -1939,7 +2195,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'designed');
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'planned');
     expect(mockMetricsClient.recordTaskDuration).toHaveBeenCalledWith('opus', 45.5);
   });
 
@@ -2073,7 +2329,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'designed');
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'planned');
     expect(mockMetricsClient.recordTaskDuration).not.toHaveBeenCalled();
   });
 });
@@ -2844,7 +3100,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const getResult = await codeTaskRepo.findById(task.id);
     expect(getResult.ok).toBe(true);
     if (!getResult.ok) throw new Error('Failed to get task');
-    expect(getResult.value.status).toBe('designed');
+    expect(getResult.value.status).toBe('planned');
     expect(getResult.value.callbackReceived).toBe(true);
 
     // Verify WhatsApp notification was sent

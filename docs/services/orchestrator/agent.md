@@ -31,6 +31,7 @@ interface OrchestratorTools {
     linearIssueTitle?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
+    agentType?: 'planning' | 'execution' | 'pull_request';
     slug?: string;
     webhookUrl: string;
     webhookSecret: string;
@@ -172,6 +173,13 @@ interface TaskResult {
   commits: number;
   summary?: string;
   ciFailed?: boolean;
+  planning_outcome_label?: 'planned' | 'unclear';
+  planning_superpowers_writing_plans_used?: '0' | '1';
+  planning_issue_url?: string;
+  planning_trivial_task?: '0' | '1' | '';
+  planning_doc_path?: string;
+  planning_pr_url?: string;
+  planning_clarification_message?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;
@@ -206,6 +214,12 @@ interface WebhookPayload {
   duration: number; // milliseconds
 }
 ```
+
+Planning Agent note:
+
+- `planned` outcome is sent as `status='completed'`
+- `unclear` outcome is sent as `status='failed'` with `error.code='PLANNING_AGENT_UNCLEAR'`
+- Deterministic Linear label/state/comment normalization is performed by `code-agent`, not orchestrator
 
 ### TurnMetrics (sent to code-agent after task completion)
 
@@ -320,7 +334,7 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 
 1. Create git worktree from `origin/{baseBranch}`
 2. Validate Anthropic API key (for `opus`/`auto` workers)
-3. Build system prompt (Phase 1 or Phase 2 based on labels)
+3. Build system prompt (agent-specific: planning/execution/pull_request via labels + `agentType`)
 4. Spawn Docker container with Claude Code in interactive mode
 5. Write system prompt to container stdin
 6. Stream logs to code-agent via LogForwarder

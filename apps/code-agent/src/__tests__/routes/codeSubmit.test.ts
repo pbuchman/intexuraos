@@ -302,7 +302,7 @@ describe('POST /code/submit', () => {
       );
     });
 
-    it('sets executionPhase to execution when issue has code-task label', async () => {
+    it('sets agentType to execution when issue has code-task label', async () => {
       const linearService = getServices().linearIssueService;
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-999',
@@ -327,7 +327,7 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(200);
       expect(createSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ executionPhase: 'execution' })
+        expect.objectContaining({ agentType: 'execution' })
       );
     });
 

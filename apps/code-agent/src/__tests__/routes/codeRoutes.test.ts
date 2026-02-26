@@ -813,7 +813,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'designed',
+          status: 'planned',
           result: {
             branch: 'fix-branch',
             commits: 3,
@@ -825,7 +825,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data.task.status).toBe('designed');
+      expect(body.data.task.status).toBe('planned');
     });
 
     it('returns 404 when task not found', async () => {
@@ -836,7 +836,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'designed',
+          status: 'planned',
         },
       });
 
@@ -850,7 +850,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         method: 'PATCH',
         url: '/internal/code-tasks/task-123',
         payload: {
-          status: 'designed',
+          status: 'planned',
         },
       });
 
@@ -878,7 +878,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           'x-internal-auth': 'test-internal-token',
         },
         payload: {
-          status: 'designed',
+          status: 'planned',
         },
       });
 
@@ -916,7 +916,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         url: `/internal/code-tasks/${task.id}`,
         headers: { 'x-internal-auth': 'test-internal-token' },
         payload: {
-          status: 'designed',
+          status: 'planned',
           result: { branch: 'test', commits: 1, summary: 'Done' },
         },
       });
@@ -2748,15 +2748,15 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         repository: 'test/repo',
         baseBranch: 'main',
         traceId: 'trace-phase1',
-        executionPhase: 'design',
+        agentType: 'planning',
         linearIssueId: 'INT-100',
         linearIssueTitle: 'Feature X',
       });
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 
-      // Mark task as designed (Phase 1 complete)
-      await repo.update(created.value.id, { status: 'designed' });
+      // Mark task as planned (Phase 1 complete)
+      await repo.update(created.value.id, { status: 'planned' });
 
       // Override linearAgentClient and workerSettingsRepo for this test
       const mockLinearClient: LinearAgentClient = {

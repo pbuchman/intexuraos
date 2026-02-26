@@ -15,7 +15,7 @@ import type { IsolationProvider, WorkerHandle } from '../services/isolation/type
 import type { TokenRefresher } from '../services/isolation/token-refresher.js';
 import type { ApiKeyValidator } from '../services/api-key-validator.js';
 import type { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
-import type { CompletionPhase } from '../services/completion-verifier.js';
+import type { CompletionAgentType } from '../services/completion-verifier.js';
 
 const flushAsync = async (): Promise<void> => {
   await new Promise((resolve) => {
@@ -59,17 +59,23 @@ const createMockChildProcess = (): ChildProcess =>
     [Symbol.dispose]: vi.fn(),
   }) as unknown as ChildProcess;
 
-const phase1FinalAssistantLog = (label: 'code-task' | 'unclear', ready: 'yes' | 'no'): string =>
+const phase1FinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
   JSON.stringify({
     type: 'assistant',
     message: {
       content: [
         {
           type: 'text',
-          text: `PHASE1_FINAL:
-- Linear label set: ${label}
-- Phase 2 ready: ${ready}
-- Linear issue: https://linear.app/intexuraos/issue/INT-123
+          text: `PLANNING_AGENT_FINAL:
+- Outcome: ${outcome}
+- superpowers_writing_plans_used: 1
+- Original issue: https://linear.app/intexuraos/issue/INT-123
+- Planning issue: ${outcome === 'planned' ? 'https://linear.app/intexuraos/issue/INT-456' : ''}
+- Trivial task: ${outcome === 'planned' ? '1' : ''}
+- Parallel breakdown proof: 
+- Plan doc: 
+- Planning PR: 
+- Clarification message: ${outcome === 'unclear' ? 'Need API contract details from user' : ''}
 - Summary: Phase 1 completed`,
         },
       ],
@@ -83,7 +89,7 @@ const phase2FinalAssistantLog = (): string =>
       content: [
         {
           type: 'text',
-          text: `PHASE2_FINAL:
+          text: `EXECUTION_AGENT_FINAL:
 - PR: https://github.com/pbuchman/intexuraos/pull/123
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-123
@@ -1230,7 +1236,7 @@ describe('TaskDispatcher', () => {
     it('should handle gh command JSON parse failure gracefully', async () => {
       vi.useFakeTimers();
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
-        phase1FinalAssistantLog('unclear', 'no')
+        phase1FinalAssistantLog('unclear')
       );
 
       const resultDispatcher = new TaskDispatcher(
@@ -1369,7 +1375,7 @@ describe('TaskDispatcher', () => {
 
     it('should mark Phase 1 task as completed without PR', async () => {
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
-        phase1FinalAssistantLog('unclear', 'no')
+        phase1FinalAssistantLog('unclear')
       );
       const request: CreateTaskRequest = {
         taskId: 'phase1-no-pr',
@@ -1531,7 +1537,7 @@ describe('TaskDispatcher', () => {
     });
   });
 
-  describe('executionPhase priority', () => {
+  describe('agentType priority', () => {
     const getInstructionsLog = (): string | undefined =>
       vi
         .mocked(mockLogForwarder.appendChunk)
@@ -1539,7 +1545,7 @@ describe('TaskDispatcher', () => {
           (call) => typeof call[1] === 'string' && call[1].includes('[instructions]')
         )?.[1] as string | undefined;
 
-    it('uses executionPhase=execution over missing code-task label', async () => {
+    it('uses agentType=execution over missing code-task label', async () => {
       const request: CreateTaskRequest = {
         taskId: 'exec-phase-override-task',
         workerType: 'auto',
@@ -1548,7 +1554,7 @@ describe('TaskDispatcher', () => {
         webhookSecret: 'secret',
         linearIssueLabels: ['bug'],
         hasChildren: false,
-        executionPhase: 'execution',
+        agentType: 'execution',
       };
 
       await dispatcher.submitTask(request);
@@ -1556,10 +1562,10 @@ describe('TaskDispatcher', () => {
 
       const log = getInstructionsLog();
       expect(log).toBeDefined();
-      expect(log).toContain('Phase 2: Strict Execution');
+      expect(log).toContain('Execution Agent');
     });
 
-    it('uses executionPhase=design over present code-task label', async () => {
+    it('uses agentType=planning over present code-task label', async () => {
       vi.mocked(mockLogForwarder.appendChunk).mockClear();
 
       const request: CreateTaskRequest = {
@@ -1570,7 +1576,7 @@ describe('TaskDispatcher', () => {
         webhookSecret: 'secret',
         linearIssueLabels: ['code-task'],
         hasChildren: false,
-        executionPhase: 'design',
+        agentType: 'planning',
       };
 
       await dispatcher.submitTask(request);
@@ -1578,10 +1584,10 @@ describe('TaskDispatcher', () => {
 
       const log = getInstructionsLog();
       expect(log).toBeDefined();
-      expect(log).toContain('Phase 1: Design');
+      expect(log).toContain('Planning Agent');
     });
 
-    it('falls back to label detection when executionPhase is absent', async () => {
+    it('falls back to label detection when agentType is absent', async () => {
       vi.mocked(mockLogForwarder.appendChunk).mockClear();
 
       const request: CreateTaskRequest = {
@@ -1599,10 +1605,10 @@ describe('TaskDispatcher', () => {
 
       const log = getInstructionsLog();
       expect(log).toBeDefined();
-      expect(log).toContain('Phase 2: Strict Execution');
+      expect(log).toContain('Execution Agent');
     });
 
-    it('stores executionPhase on the task', async () => {
+    it('stores agentType on the task', async () => {
       const request: CreateTaskRequest = {
         taskId: 'exec-phase-stored-task',
         workerType: 'auto',
@@ -1611,14 +1617,14 @@ describe('TaskDispatcher', () => {
         webhookSecret: 'secret',
         linearIssueLabels: [],
         hasChildren: false,
-        executionPhase: 'execution',
+        agentType: 'execution',
       };
 
       await dispatcher.submitTask(request);
       await flushAsync();
 
       const task = await dispatcher.getTask('exec-phase-stored-task');
-      expect(task?.executionPhase).toBe('execution');
+      expect(task?.agentType).toBe('execution');
     });
   });
 
@@ -3844,18 +3850,18 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
       const logs = getOrchestratorLogs();
-      const mismatchLog = logs.find((l) => l.includes('[WARN] Phase mismatch'));
+      const mismatchLog = logs.find((l) => l.includes('[WARN] Agent mismatch'));
       expect(mismatchLog).toBeDefined();
-      expect(mismatchLog).toContain('task ran as Phase 1 (design) but worker created PR');
+      expect(mismatchLog).toContain('task ran as Planning Agent but worker created PR');
       expect(mismatchLog).toContain('https://github.com/pbuchman/intexuraos/pull/800');
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: 'obs-phase-mismatch-task',
-          phase: 'phase1',
+          agentType: 'planning',
           prUrl: 'https://github.com/pbuchman/intexuraos/pull/800',
         }),
-        'Phase mismatch: Phase 1 task created a PR'
+        'Agent mismatch: Planning Agent task created a PR'
       );
       vi.useRealTimers();
     });
@@ -3984,26 +3990,25 @@ describe('TaskDispatcher', () => {
     });
   });
 
-  describe('buildPhaseContractGuidance', () => {
+  describe('buildAgentContractGuidance', () => {
     it('returns phase1 guidance for phase1', () => {
       const internal = dispatcher as unknown as {
-        buildPhaseContractGuidance: (phase: CompletionPhase) => string;
+        buildAgentContractGuidance: (phase: CompletionAgentType) => string;
       };
-      const guidance = internal.buildPhaseContractGuidance('phase1');
+      const guidance = internal.buildAgentContractGuidance('planning');
 
-      expect(guidance).toContain('Linear label set');
-      expect(guidance).toContain('code-task');
-      expect(guidance).toContain('Phase 2 ready');
-      expect(guidance).toContain('yes');
+      expect(guidance).toContain('`Outcome` line');
+      expect(guidance).toContain('planned');
+      expect(guidance).toContain('unclear');
       expect(guidance).toContain('Linear issue');
       expect(guidance).toContain('Linear URL');
     });
 
     it('returns phase2 guidance for phase2', () => {
       const internal = dispatcher as unknown as {
-        buildPhaseContractGuidance: (phase: CompletionPhase) => string;
+        buildAgentContractGuidance: (phase: CompletionAgentType) => string;
       };
-      const guidance = internal.buildPhaseContractGuidance('phase2');
+      const guidance = internal.buildAgentContractGuidance('execution');
 
       expect(guidance).toContain('`PR` line');
       expect(guidance).toContain('CI evidence');
@@ -4014,9 +4019,9 @@ describe('TaskDispatcher', () => {
 
     it('returns pr-comment guidance for pr-comment', () => {
       const internal = dispatcher as unknown as {
-        buildPhaseContractGuidance: (phase: CompletionPhase) => string;
+        buildAgentContractGuidance: (phase: CompletionAgentType) => string;
       };
-      const guidance = internal.buildPhaseContractGuidance('pr-comment');
+      const guidance = internal.buildAgentContractGuidance('pull_request');
 
       expect(guidance).toContain('`PR` line');
       expect(guidance).toContain('CI evidence');
@@ -4026,26 +4031,26 @@ describe('TaskDispatcher', () => {
     });
   });
 
-  describe('buildPhaseFinalTemplate', () => {
+  describe('buildAgentFinalTemplate', () => {
     it('returns phase1 template for phase1', () => {
       const internal = dispatcher as unknown as {
-        buildPhaseFinalTemplate: (phase: CompletionPhase) => string;
+        buildAgentFinalTemplate: (phase: CompletionAgentType) => string;
       };
-      const template = internal.buildPhaseFinalTemplate('phase1');
+      const template = internal.buildAgentFinalTemplate('planning');
 
-      expect(template).toContain('PHASE1_FINAL:');
-      expect(template).toContain('Linear label set: code-task');
-      expect(template).toContain('Phase 2 ready:');
-      expect(template).toContain('Linear issue:');
+      expect(template).toContain('PLANNING_AGENT_FINAL:');
+      expect(template).toContain('Outcome: planned');
+      expect(template).toContain('superpowers_writing_plans_used: 1');
+      expect(template).toContain('Original issue:');
     });
 
     it('returns phase2 template for phase2', () => {
       const internal = dispatcher as unknown as {
-        buildPhaseFinalTemplate: (phase: CompletionPhase) => string;
+        buildAgentFinalTemplate: (phase: CompletionAgentType) => string;
       };
-      const template = internal.buildPhaseFinalTemplate('phase2');
+      const template = internal.buildAgentFinalTemplate('execution');
 
-      expect(template).toContain('PHASE2_FINAL:');
+      expect(template).toContain('EXECUTION_AGENT_FINAL:');
       expect(template).toContain('PR: https://github.com/');
       expect(template).toContain('CI evidence: pnpm run ci:tracked successful');
       expect(template).toContain('Review iterations:');
@@ -4055,11 +4060,11 @@ describe('TaskDispatcher', () => {
 
     it('returns pr-comment template for pr-comment', () => {
       const internal = dispatcher as unknown as {
-        buildPhaseFinalTemplate: (phase: CompletionPhase) => string;
+        buildAgentFinalTemplate: (phase: CompletionAgentType) => string;
       };
-      const template = internal.buildPhaseFinalTemplate('pr-comment');
+      const template = internal.buildAgentFinalTemplate('pull_request');
 
-      expect(template).toContain('PR_COMMENT_FINAL:');
+      expect(template).toContain('PULL_REQUEST_AGENT_FINAL:');
       expect(template).toContain('PR: https://github.com/');
       expect(template).toContain('CI evidence: pnpm run ci:tracked successful');
       expect(template).toContain('Comment replied:');

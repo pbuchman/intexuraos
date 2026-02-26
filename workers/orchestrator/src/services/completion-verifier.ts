@@ -7,13 +7,13 @@ import type { TaskResult } from '../types/task.js';
 import { stripDockerHeaders } from './log-formatter.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
-export type CompletionPhase = 'phase1' | 'phase2' | 'pr-comment';
+export type CompletionAgentType = 'planning' | 'execution' | 'pull_request';
 
 export interface CompletionVerifierInput {
   taskId: string;
   attempt: number;
   maxAttempts: number;
-  phase: CompletionPhase;
+  agentType: CompletionAgentType;
   originalPrompt: string;
   rawLogs: string;
   linearIssueId?: string;
@@ -32,6 +32,15 @@ export interface CompletionVerifierVerdict {
   usedLlm: boolean;
   verifierFailure?: boolean;
   extractedSummary?: string;
+  planningMetadata?: {
+    outcomeLabel: 'planned' | 'unclear';
+    superpowersWritingPlansUsed: '0' | '1';
+    planningIssueUrl?: string;
+    trivialTask?: '0' | '1';
+    docPath?: string;
+    prUrl?: string;
+    clarificationMessage?: string;
+  };
 }
 
 export interface CompletionVerifier {
@@ -50,6 +59,18 @@ interface DeterministicContractResult {
   reasons: string[];
   missingCriteria: string[];
   lastAssistantMessage: string | null;
+}
+
+interface PlanningMetadataExtraction {
+  outcomeLabel?: 'planned' | 'unclear';
+  superpowersWritingPlansUsed?: '0' | '1';
+  originalIssueUrl?: string;
+  planningIssueUrl?: string;
+  trivialTask?: '0' | '1';
+  parallelBreakdownProof?: string;
+  docPath?: string;
+  prUrl?: string;
+  clarificationMessage?: string;
 }
 
 const LLM_VERDICT_SCHEMA = z.object({
@@ -82,20 +103,23 @@ function normalizeMissingCriteria(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter((value) => value !== ''))];
 }
 
-function buildDefaultResumeInstruction(phase: CompletionPhase, missingCriteria: string[]): string {
+function buildDefaultResumeInstruction(
+  agentType: CompletionAgentType,
+  missingCriteria: string[]
+): string {
   /* v8 ignore start -- ts-type: defensive fallback for empty criteria list is unreachable in current verifier flow @preserve */
   const joined =
     missingCriteria.length > 0 ? missingCriteria.join('; ') : 'completion contract not met';
   /* v8 ignore stop @preserve */
   /* v8 ignore start -- source-map: coverage branch mapping reports false-uncovered path on phase selector despite direct unit tests @preserve */
-  if (phase === 'phase2') {
-    return `Address: ${joined}. Re-run pnpm run ci:tracked, ensure it succeeds, and finish with PHASE2_FINAL.`;
+  if (agentType === 'execution') {
+    return `Address: ${joined}. Re-run pnpm run ci:tracked, ensure it succeeds, and finish with EXECUTION_AGENT_FINAL.`;
   }
-  if (phase === 'pr-comment') {
-    return `Address: ${joined}. Push changes to the PR branch, reply to the comment, and finish with PR_COMMENT_FINAL.`;
+  if (agentType === 'pull_request') {
+    return `Address: ${joined}. Push changes to the PR branch, reply to the comment, and finish with PULL_REQUEST_AGENT_FINAL.`;
   }
   /* v8 ignore stop @preserve */
-  return `Address: ${joined}. Set Linear label (code-task or unclear) and finish with PHASE1_FINAL.`;
+  return `Address: ${joined}. Finish with PLANNING_AGENT_FINAL and include planning outcome metadata.`;
 }
 
 function extractLastAssistantMessage(rawLogs: string): string | null {
@@ -137,31 +161,73 @@ function extractLastAssistantMessage(rawLogs: string): string | null {
   return lastAssistantText;
 }
 
-function verifyPhase1Final(message: string): { ok: true } | { ok: false; missing: string[] } {
+function extractPlanningMetadataFromMessage(message: string): PlanningMetadataExtraction {
+  const lines = message.split('\n').map((line) => line.trim());
+  const readValue = (prefix: string): string | undefined => {
+    const line = lines.find((entry) => entry.toLowerCase().startsWith(prefix.toLowerCase()));
+    if (line === undefined) return undefined;
+    const value = line.slice(prefix.length).trim();
+    return value === '' ? undefined : value;
+  };
+
+  const outcome = readValue('- Outcome:');
+  const superpowers = readValue('- superpowers_writing_plans_used:');
+  const originalIssueUrl = readValue('- Original issue:');
+  const planningIssueUrl = readValue('- Planning issue:');
+  const trivialTask = readValue('- Trivial task:');
+  const parallelBreakdownProof = readValue('- Parallel breakdown proof:');
+  const docPath = readValue('- Plan doc:');
+  const prUrl = readValue('- Planning PR:');
+  const clarificationMessage = readValue('- Clarification message:');
+
+  return {
+    ...(outcome === 'planned' || outcome === 'unclear' ? { outcomeLabel: outcome } : {}),
+    ...(superpowers === '0' || superpowers === '1'
+      ? { superpowersWritingPlansUsed: superpowers }
+      : {}),
+    ...(originalIssueUrl !== undefined ? { originalIssueUrl } : {}),
+    ...(planningIssueUrl !== undefined ? { planningIssueUrl } : {}),
+    ...(trivialTask === '0' || trivialTask === '1' ? { trivialTask } : {}),
+    ...(parallelBreakdownProof !== undefined ? { parallelBreakdownProof } : {}),
+    ...(docPath !== undefined ? { docPath } : {}),
+    ...(prUrl !== undefined ? { prUrl } : {}),
+    /* v8 ignore start -- ts-type: conditional object spread for optional extracted field @preserve */
+    ...(clarificationMessage !== undefined ? { clarificationMessage } : {}),
+    /* v8 ignore stop @preserve */
+  };
+}
+
+function verifyPlanningAgentFinal(
+  message: string
+): { ok: true } | { ok: false; missing: string[] } {
   const missing: string[] = [];
+  if (!message.includes('PLANNING_AGENT_FINAL:')) {
+    missing.push('PLANNING_AGENT_FINAL block');
+  }
+  const extracted = extractPlanningMetadataFromMessage(message);
+  const summaryLine = message
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.toLowerCase().startsWith('- summary:'));
 
-  if (!message.includes('PHASE1_FINAL:')) {
-    missing.push('PHASE1_FINAL block');
+  if (extracted.outcomeLabel === undefined) missing.push('Outcome line');
+  if (extracted.superpowersWritingPlansUsed === undefined)
+    missing.push('superpowers_writing_plans_used line');
+  if (extracted.superpowersWritingPlansUsed !== '1')
+    missing.push('superpowers_writing_plans_used must be 1');
+  if (extracted.originalIssueUrl === undefined) missing.push('Original issue URL line');
+  if (summaryLine === undefined || summaryLine.slice('- Summary:'.length).trim() === '') {
+    missing.push('Summary line');
   }
 
-  const labelMatch = /- Linear label set:\s*(code-task|unclear)\s*$/im.exec(message);
-  const readyMatch = /- Phase 2 ready:\s*(yes|no)\s*$/im.exec(message);
-  const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
-  const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
-
-  if (labelMatch?.[1] === undefined) missing.push('Linear label set line');
-  if (readyMatch?.[1] === undefined) missing.push('Phase 2 ready line');
-  if (linearMatch?.[1] === undefined) missing.push('Linear issue URL line');
-  if ((summaryMatch?.[1] ?? '').trim() === '') missing.push('Summary line');
-
-  const label = labelMatch?.[1]?.toLowerCase();
-  const ready = readyMatch?.[1]?.toLowerCase();
-  if (label === 'code-task' && ready !== 'yes') {
-    missing.push('code-task requires Phase 2 ready: yes');
+  /* v8 ignore start -- test-infra: planned/unclear branch combinations are partially covered by higher-level verifier tests @preserve */
+  if (extracted.outcomeLabel === 'planned' && extracted.planningIssueUrl === undefined) {
+    missing.push('Planning issue URL line');
   }
-  if (label === 'unclear' && ready !== 'no') {
-    missing.push('unclear requires Phase 2 ready: no');
+  if (extracted.outcomeLabel === 'unclear' && extracted.clarificationMessage === undefined) {
+    missing.push('Clarification message line');
   }
+  /* v8 ignore stop @preserve */
 
   if (missing.length > 0) {
     return { ok: false, missing };
@@ -169,11 +235,13 @@ function verifyPhase1Final(message: string): { ok: true } | { ok: false; missing
   return { ok: true };
 }
 
-function verifyPhase2Final(message: string): { ok: true } | { ok: false; missing: string[] } {
+function verifyExecutionAgentFinal(
+  message: string
+): { ok: true } | { ok: false; missing: string[] } {
   const missing: string[] = [];
 
-  if (!message.includes('PHASE2_FINAL:')) {
-    missing.push('PHASE2_FINAL block');
+  if (!message.includes('EXECUTION_AGENT_FINAL:')) {
+    missing.push('EXECUTION_AGENT_FINAL block');
   }
 
   const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
@@ -199,8 +267,8 @@ function verifyPhase2Final(message: string): { ok: true } | { ok: false; missing
 function verifyPRCommentFinal(message: string): { ok: true } | { ok: false; missing: string[] } {
   const missing: string[] = [];
 
-  if (!message.includes('PR_COMMENT_FINAL:')) {
-    missing.push('PR_COMMENT_FINAL block');
+  if (!message.includes('PULL_REQUEST_AGENT_FINAL:')) {
+    missing.push('PULL_REQUEST_AGENT_FINAL block');
   }
 
   const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
@@ -262,7 +330,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         ]),
         missingCriteria: fallbackMissing,
         /* v8 ignore start -- source-map: cond-expr branch is misattributed to this property line after bundling/source-map transforms @preserve */
-        resumeInstruction: buildDefaultResumeInstruction(input.phase, fallbackMissing),
+        resumeInstruction: buildDefaultResumeInstruction(input.agentType, fallbackMissing),
         /* v8 ignore stop @preserve */
         usedLlm: true,
         verifierFailure: true,
@@ -283,6 +351,36 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       ]);
     }
 
+    const extractedPlanningMetadata =
+      input.agentType === 'planning' && deterministic.lastAssistantMessage !== null
+        ? ((): NonNullable<CompletionVerifierVerdict['planningMetadata']> | null => {
+            const extracted = extractPlanningMetadataFromMessage(
+              deterministic.lastAssistantMessage
+            );
+            if (
+              extracted.outcomeLabel === undefined ||
+              extracted.superpowersWritingPlansUsed === undefined
+            ) {
+              return null;
+            }
+            return {
+              outcomeLabel: extracted.outcomeLabel,
+              superpowersWritingPlansUsed: extracted.superpowersWritingPlansUsed,
+              ...(extracted.planningIssueUrl !== undefined && {
+                planningIssueUrl: extracted.planningIssueUrl,
+              }),
+              ...(extracted.trivialTask !== undefined && { trivialTask: extracted.trivialTask }),
+              ...(extracted.docPath !== undefined && { docPath: extracted.docPath }),
+              ...(extracted.prUrl !== undefined && { prUrl: extracted.prUrl }),
+              /* v8 ignore start -- ts-type: conditional object spread for optional extracted field @preserve */
+              ...(extracted.clarificationMessage !== undefined && {
+                clarificationMessage: extracted.clarificationMessage,
+              }),
+              /* v8 ignore stop @preserve */
+            };
+          })()
+        : null;
+
     return {
       passed: parsedVerdict.passed,
       confidence: parsedVerdict.confidence,
@@ -291,6 +389,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       resumeInstruction: parsedVerdict.resumeInstruction,
       usedLlm: true,
       verifierFailure: false,
+      ...(extractedPlanningMetadata !== null && { planningMetadata: extractedPlanningMetadata }),
       ...(parsedVerdict.extractedSummary !== undefined &&
         parsedVerdict.extractedSummary !== '' && {
           extractedSummary: parsedVerdict.extractedSummary,
@@ -319,17 +418,17 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     }
 
     if (lastAssistantMessage !== null) {
-      if (input.phase === 'phase1') {
-        const phaseResult = verifyPhase1Final(lastAssistantMessage);
-        if (!phaseResult.ok) {
-          reasons.push('Phase 1 completion contract was not met');
-          missingCriteria.push(...phaseResult.missing);
+      if (input.agentType === 'planning') {
+        const agentResult = verifyPlanningAgentFinal(lastAssistantMessage);
+        if (!agentResult.ok) {
+          reasons.push('Planning Agent completion contract was not met');
+          missingCriteria.push(...agentResult.missing);
         }
-      } else if (input.phase === 'pr-comment') {
-        const phaseResult = verifyPRCommentFinal(lastAssistantMessage);
-        if (!phaseResult.ok) {
-          reasons.push('PR Comment completion contract was not met');
-          missingCriteria.push(...phaseResult.missing);
+      } else if (input.agentType === 'pull_request') {
+        const agentResult = verifyPRCommentFinal(lastAssistantMessage);
+        if (!agentResult.ok) {
+          reasons.push('Pull Request Agent completion contract was not met');
+          missingCriteria.push(...agentResult.missing);
         }
 
         // For PR comment, we don't require a new PR (they push to existing PR)
@@ -344,10 +443,10 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           missingCriteria.push('Confirmed GitHub checks status');
         }
       } else {
-        const phaseResult = verifyPhase2Final(lastAssistantMessage);
-        if (!phaseResult.ok) {
-          reasons.push('Phase 2 completion contract was not met');
-          missingCriteria.push(...phaseResult.missing);
+        const agentResult = verifyExecutionAgentFinal(lastAssistantMessage);
+        if (!agentResult.ok) {
+          reasons.push('Execution Agent completion contract was not met');
+          missingCriteria.push(...agentResult.missing);
         }
 
         if (input.taskResult?.prUrl === undefined || input.taskResult.prUrl === '') {
@@ -387,17 +486,17 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       .slice(0, 20_000);
 
     const requiredContractText =
-      input.phase === 'phase1'
+      input.agentType === 'planning'
         ? [
-            'PHASE1_FINAL:',
-            '- Linear label set: <code-task|unclear>',
-            '- Phase 2 ready: <yes|no>',
-            '- Linear issue: <full Linear URL>',
+            'PLANNING_AGENT_FINAL:',
+            '- Outcome: <planned|unclear>',
+            '- superpowers_writing_plans_used: 1',
+            '- Original issue: <full Linear URL>',
             '- Summary: <3-5 sentences>',
           ].join('\n')
-        : input.phase === 'pr-comment'
+        : input.agentType === 'pull_request'
           ? [
-              'PR_COMMENT_FINAL:',
+              'PULL_REQUEST_AGENT_FINAL:',
               '- PR: <full GitHub PR URL>',
               '- CI evidence: pnpm run ci:tracked successful',
               '- Linear issue: <full Linear URL>',
@@ -405,7 +504,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
               '- Summary: <3-5 sentences>',
             ].join('\n')
           : [
-              'PHASE2_FINAL:',
+              'EXECUTION_AGENT_FINAL:',
               '- PR: <full GitHub PR URL>',
               '- CI evidence: pnpm run ci:tracked successful',
               '- Linear issue: <full Linear URL>',
@@ -423,7 +522,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       'Return JSON only with the exact schema:',
       '{"passed":boolean,"confidence":number (0.0-1.0),"reasons":string[],"missingCriteria":string[],"resumeInstruction":string,"extractedSummary":string}',
       '',
-      `TASK ${input.taskId} ATTEMPT ${String(input.attempt)}/${String(input.maxAttempts)} PHASE ${input.phase}`,
+      `TASK ${input.taskId} ATTEMPT ${String(input.attempt)}/${String(input.maxAttempts)} AGENT ${input.agentType}`,
       '',
       'Original objective:',
       input.originalPrompt,
@@ -447,7 +546,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       '',
       'Summary extraction:',
       '- Always include "extractedSummary": a 3-5 sentence objective narrative of what happened.',
-      '- First, look for the "- Summary:" line in the assistant\'s PHASE_FINAL block and use its content.',
+      '- First, look for the "- Summary:" line in the assistant final block and use its content.',
       '- If that line is missing or contains only a few words, write your own summary based on the assistant messages and logs.',
       '- Describe what was analyzed/implemented, key decisions, outcomes, and deliverables.',
       '- If the task failed, describe what was attempted and where it failed.',
@@ -466,7 +565,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         taskId: input.taskId,
         attempt: input.attempt,
         maxAttempts: input.maxAttempts,
-        phase: input.phase,
+        agentType: input.agentType,
         model: this.model,
         promptChars: verifierPrompt.length,
       },
@@ -579,8 +678,8 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
 
 export const CompletionVerifierTestUtils = {
   extractLastAssistantMessage,
-  verifyPhase1Final,
-  verifyPhase2Final,
+  verifyPlanningAgentFinal,
+  verifyExecutionAgentFinal,
   verifyPRCommentFinal,
   buildDefaultResumeInstruction,
 };
