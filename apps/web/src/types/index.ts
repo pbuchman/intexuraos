@@ -1210,6 +1210,7 @@ export interface SubmitCodeTaskResponse {
 export interface RetryCodeTaskRequest {
   taskId: string;
   additionalContext?: string;
+  workerType?: CodeTaskWorkerType;
 }
 
 /**
