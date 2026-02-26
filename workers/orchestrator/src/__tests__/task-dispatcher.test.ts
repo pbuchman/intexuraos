@@ -15,6 +15,7 @@ import type { IsolationProvider, WorkerHandle } from '../services/isolation/type
 import type { TokenRefresher } from '../services/isolation/token-refresher.js';
 import type { ApiKeyValidator } from '../services/api-key-validator.js';
 import type { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
+import type { CompletionPhase } from '../services/completion-verifier.js';
 
 const flushAsync = async (): Promise<void> => {
   await new Promise((resolve) => {
@@ -3980,6 +3981,89 @@ describe('TaskDispatcher', () => {
       expect(resumeLog).toContain('[prompt]');
       expect(resumeLog).toContain('Resume prompt:');
       vi.useRealTimers();
+    });
+  });
+
+  describe('buildPhaseContractGuidance', () => {
+    it('returns phase1 guidance for phase1', () => {
+      const internal = dispatcher as unknown as {
+        buildPhaseContractGuidance: (phase: CompletionPhase) => string;
+      };
+      const guidance = internal.buildPhaseContractGuidance('phase1');
+
+      expect(guidance).toContain('Linear label set');
+      expect(guidance).toContain('code-task');
+      expect(guidance).toContain('Phase 2 ready');
+      expect(guidance).toContain('yes');
+      expect(guidance).toContain('Linear issue');
+      expect(guidance).toContain('Linear URL');
+    });
+
+    it('returns phase2 guidance for phase2', () => {
+      const internal = dispatcher as unknown as {
+        buildPhaseContractGuidance: (phase: CompletionPhase) => string;
+      };
+      const guidance = internal.buildPhaseContractGuidance('phase2');
+
+      expect(guidance).toContain('`PR` line');
+      expect(guidance).toContain('CI evidence');
+      expect(guidance).toContain('pnpm run ci:tracked successful');
+      expect(guidance).toContain('Review iterations');
+      expect(guidance).toContain('digits only');
+    });
+
+    it('returns pr-comment guidance for pr-comment', () => {
+      const internal = dispatcher as unknown as {
+        buildPhaseContractGuidance: (phase: CompletionPhase) => string;
+      };
+      const guidance = internal.buildPhaseContractGuidance('pr-comment');
+
+      expect(guidance).toContain('`PR` line');
+      expect(guidance).toContain('CI evidence');
+      expect(guidance).toContain('pnpm run ci:tracked successful');
+      expect(guidance).toContain('Comment replied');
+      expect(guidance).toContain('`yes` or `no`');
+    });
+  });
+
+  describe('buildPhaseFinalTemplate', () => {
+    it('returns phase1 template for phase1', () => {
+      const internal = dispatcher as unknown as {
+        buildPhaseFinalTemplate: (phase: CompletionPhase) => string;
+      };
+      const template = internal.buildPhaseFinalTemplate('phase1');
+
+      expect(template).toContain('PHASE1_FINAL:');
+      expect(template).toContain('Linear label set: code-task');
+      expect(template).toContain('Phase 2 ready:');
+      expect(template).toContain('Linear issue:');
+    });
+
+    it('returns phase2 template for phase2', () => {
+      const internal = dispatcher as unknown as {
+        buildPhaseFinalTemplate: (phase: CompletionPhase) => string;
+      };
+      const template = internal.buildPhaseFinalTemplate('phase2');
+
+      expect(template).toContain('PHASE2_FINAL:');
+      expect(template).toContain('PR: https://github.com/');
+      expect(template).toContain('CI evidence: pnpm run ci:tracked successful');
+      expect(template).toContain('Review iterations:');
+      expect(template).toContain('Linear issue:');
+      expect(template).toContain('linear.app');
+    });
+
+    it('returns pr-comment template for pr-comment', () => {
+      const internal = dispatcher as unknown as {
+        buildPhaseFinalTemplate: (phase: CompletionPhase) => string;
+      };
+      const template = internal.buildPhaseFinalTemplate('pr-comment');
+
+      expect(template).toContain('PR_COMMENT_FINAL:');
+      expect(template).toContain('PR: https://github.com/');
+      expect(template).toContain('CI evidence: pnpm run ci:tracked successful');
+      expect(template).toContain('Comment replied:');
+      expect(template).toContain('Linear issue:');
     });
   });
 });
