@@ -36,7 +36,7 @@ import type {
   ForceRefreshBookmarkResponse,
 } from '../domain/ports/bookmarksServiceClient.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
-import type { CodeAgentClient, CancelTaskWithNonceInput, CancelTaskWithNonceOutput, CancelTaskError } from '../domain/ports/codeAgentClient.js';
+import type { CodeAgentClient, CancelTaskWithNonceInput, CancelTaskWithNonceOutput, CancelTaskError, SubmitToPhase2Input, SubmitToPhase2Output, SubmitToPhase2Error } from '../domain/ports/codeAgentClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -733,6 +733,14 @@ export class FakeCodeAgentClient implements CodeAgentClient {
   private failNext = false;
   private cancelledTasks: CancelTaskWithNonceInput[] = [];
   private nextCancelError: CancelTaskError | null = null;
+  private submittedPhase2Tasks: SubmitToPhase2Input[] = [];
+  private nextPhase2Response = {
+    codeTaskId: 'phase2-task-123',
+    resourceUrl: 'https://app.intexuraos.com/code-tasks/phase2-123',
+    workerLocation: 'us-central1',
+    implementationOf: 'task-123',
+  };
+  private nextPhase2Error: SubmitToPhase2Error | null = null;
 
   getSubmittedTasks(): typeof this.submittedTasks {
     return this.submittedTasks;
@@ -831,6 +839,43 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     return {
       ok: true,
       value: { cancelled: true },
+    };
+  }
+
+  getSubmittedPhase2Tasks(): SubmitToPhase2Input[] {
+    return this.submittedPhase2Tasks;
+  }
+
+  setNextPhase2Response(response: SubmitToPhase2Output): void {
+    this.nextPhase2Response = response;
+    this.nextPhase2Error = null;
+  }
+
+  setNextPhase2Error(error: SubmitToPhase2Error): void {
+    this.nextPhase2Error = error;
+  }
+
+  async submitToPhase2(input: SubmitToPhase2Input): Promise<{
+    ok: true;
+    value: SubmitToPhase2Output;
+  } | {
+    ok: false;
+    error: SubmitToPhase2Error;
+  }> {
+    this.submittedPhase2Tasks.push(input);
+
+    if (this.nextPhase2Error !== null) {
+      const error = this.nextPhase2Error;
+      this.nextPhase2Error = null;
+      return {
+        ok: false,
+        error,
+      };
+    }
+
+    return {
+      ok: true,
+      value: this.nextPhase2Response,
     };
   }
 }
