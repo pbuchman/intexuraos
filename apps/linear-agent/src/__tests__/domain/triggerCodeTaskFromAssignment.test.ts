@@ -58,42 +58,15 @@ describe('shouldTriggerCodeTask', () => {
     expect(shouldTriggerCodeTask(event)).toBe(false);
   });
 
-  it('returns false when state is not unstarted', () => {
+  it('returns false when state is not backlog or unstarted', () => {
     const event = createEvent();
     event.data.state = { id: 'state-2', name: 'In Progress', type: 'started' };
     expect(shouldTriggerCodeTask(event)).toBe(false);
   });
 
-  it('returns false when issue has Code Task label', () => {
+  it('returns true for backlog state', () => {
     const event = createEvent();
-    event.data.labels = [{ id: 'label-code', name: 'Code Task' }];
-    expect(shouldTriggerCodeTask(event)).toBe(false);
-  });
-
-  it('returns false when issue has code-task label (lowercase)', () => {
-    const event = createEvent();
-    event.data.labels = [{ id: 'label-code', name: 'code-task' }];
-    expect(shouldTriggerCodeTask(event)).toBe(false);
-  });
-
-  it('returns false when issue has code_task label (underscore)', () => {
-    const event = createEvent();
-    event.data.labels = [{ id: 'label-code', name: 'code_task' }];
-    expect(shouldTriggerCodeTask(event)).toBe(false);
-  });
-
-  it('returns false when issue has Code_Task label (mixed)', () => {
-    const event = createEvent();
-    event.data.labels = [{ id: 'label-code', name: 'Code_Task' }];
-    expect(shouldTriggerCodeTask(event)).toBe(false);
-  });
-
-  it('returns true with multiple non-Code-Task labels', () => {
-    const event = createEvent();
-    event.data.labels = [
-      { id: 'l1', name: 'bug' },
-      { id: 'l2', name: 'feature' },
-    ];
+    event.data.state = { id: 'state-backlog', name: 'Backlog', type: 'backlog' };
     expect(shouldTriggerCodeTask(event)).toBe(true);
   });
 });

@@ -710,7 +710,7 @@ describe('Linear Webhook Routes', () => {
         expect(codeAgentClient.getLastRequest()).toBeNull();
       });
 
-      it('does not trigger when issue has Code Task label', async () => {
+      it('triggers even when issue has Code Task label', async () => {
         const payload = createAssignmentPayload({
           data: {
             id: 'issue-uuid-1',
@@ -741,7 +741,7 @@ describe('Linear Webhook Routes', () => {
 
         await new Promise(resolve => { setTimeout(resolve, 50); });
 
-        expect(codeAgentClient.getLastRequest()).toBeNull();
+        expect(codeAgentClient.getLastRequest()).not.toBeNull();
       });
 
       it('does not trigger on create action', async () => {
