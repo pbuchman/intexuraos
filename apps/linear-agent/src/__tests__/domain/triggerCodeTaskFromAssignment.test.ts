@@ -72,7 +72,7 @@ describe('shouldTriggerCodeTask', () => {
 });
 
 describe('triggerCodeTaskFromAssignment', () => {
-  it('sends correct request to code-agent client', async () => {
+  it('sends correct request to code-agent client without code-task label', async () => {
     const client = new FakeCodeAgentClient();
     const logger = createFakeLogger();
 
@@ -87,6 +87,27 @@ describe('triggerCodeTaskFromAssignment', () => {
     expect(req?.linearIssueId).toBe('INT-123');
     expect(req?.prompt).toBe('Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.');
     expect(req?.workerType).toBe('auto');
+  });
+
+  it('uses PHASE2_PROMPT when issue has code-task label', async () => {
+    const client = new FakeCodeAgentClient();
+    const logger = createFakeLogger();
+
+    const event = createEvent({
+      data: {
+        ...createEvent().data,
+        labels: [{ id: 'label-code', name: 'code-task' }],
+      },
+    });
+
+    await triggerCodeTaskFromAssignment(event, 'user-123', {
+      codeAgentClient: client,
+      logger,
+    });
+
+    const req = client.getLastRequest();
+    expect(req).not.toBeNull();
+    expect(req?.prompt).toBe('Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.');
   });
 
   it('uses identifier and timestamp for actionId and approvalEventId deduplication', async () => {
