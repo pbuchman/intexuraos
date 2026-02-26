@@ -117,6 +117,7 @@ vi.mock('node:fs', async (importOriginal) => {
     existsSync: vi.fn().mockReturnValue(true),
     statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
     readFileSync: vi.fn().mockReturnValue(''),
+    appendFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     promises: {
       ...actual.promises,
@@ -323,6 +324,38 @@ describe('DockerProvider', () => {
       );
       const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
       expect(tmpfs['/repo/node_modules']).toContain(`uid=${String(process.getuid?.() ?? 1000)}`);
+    });
+
+    it('enables crash forensics settings when forensicsMode is configured', async () => {
+      const forensicsProvider = new TestableDockerProvider(
+        {
+          forensicsMode: true,
+          forensicsBasePath: '/tmp/worker-forensics',
+        },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await forensicsProvider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      const capAdd = createCall?.HostConfig?.CapAdd as string[];
+      const securityOpt = createCall?.HostConfig?.SecurityOpt as string[];
+      const ulimits = createCall?.HostConfig?.Ulimits as {
+        Name: string;
+        Soft: number;
+        Hard: number;
+      }[];
+
+      expect(envArr).toContain('CLAUDE_FORENSICS=1');
+      expect(envArr).toContain('CLAUDE_FORENSICS_DIR=/var/crash');
+      expect(binds).toContain('/tmp/worker-forensics/test-task-123:/var/crash:rw');
+      expect(capAdd).toContain('SYS_PTRACE');
+      expect(securityOpt.some((opt: string) => opt.startsWith('seccomp='))).toBe(true);
+      expect(securityOpt).not.toContain('seccomp=unconfined');
+      expect(ulimits).toContainEqual({ Name: 'core', Soft: -1, Hard: -1 });
     });
 
     it('sets CLAUDE_WORKER_MODE env var', async () => {

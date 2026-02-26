@@ -2,6 +2,7 @@ import Docker from 'dockerode';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Logger } from '@intexuraos/common-core';
 import type { IsolationProvider, WorkerConfig, WorkerHandle, ResourceUsage } from './types.js';
 
@@ -19,6 +20,8 @@ export interface DockerProviderConfig {
   sharedCredsPath?: string;
   gitUserName?: string;
   gitUserEmail?: string;
+  forensicsMode: boolean;
+  forensicsBasePath: string;
 }
 
 const DEFAULT_CONFIG: DockerProviderConfig = {
@@ -32,6 +35,8 @@ const DEFAULT_CONFIG: DockerProviderConfig = {
   gcpSaKeyPath: '',
   keepContainersAlive: false,
   managedAttemptsMode: true,
+  forensicsMode: false,
+  forensicsBasePath: '/tmp/claude-worker-forensics',
 };
 
 interface WorkerEntry {
@@ -41,6 +46,7 @@ interface WorkerEntry {
   taskSessionPath: string;
   attemptRunning: boolean;
   attemptLogBuffer: string;
+  taskForensicsPath?: string;
   logStream?: NodeJS.ReadableStream;
 }
 
@@ -58,6 +64,8 @@ const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
 const HOST_UID = os.userInfo().uid;
 const HOST_GID = os.userInfo().gid;
 const HOST_USER_STRING = `${String(HOST_UID)}:${String(HOST_GID)}`;
+const DOCKER_PROVIDER_DIR = path.dirname(fileURLToPath(import.meta.url));
+const FORENSICS_SECCOMP_PROFILE_FILENAME = 'claude-worker-forensics-seccomp.json';
 
 export class DockerProvider implements IsolationProvider {
   private readonly docker: Docker;
@@ -72,6 +80,193 @@ export class DockerProvider implements IsolationProvider {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.logger = logger;
     this.workers = new Map();
+  }
+
+  private getTaskForensicsPath(taskId: string): string | null {
+    if (!this.config.forensicsMode) {
+      return null;
+    }
+    return path.join(this.config.forensicsBasePath, taskId);
+  }
+
+  private ensureTaskForensicsPath(taskId: string): string | null {
+    const taskForensicsPath = this.getTaskForensicsPath(taskId);
+    if (taskForensicsPath === null) {
+      return null;
+    }
+    fs.mkdirSync(taskForensicsPath, { recursive: true });
+    return taskForensicsPath;
+  }
+
+  private resolveForensicsSeccompProfilePath(): string | null {
+    const candidates = [
+      path.resolve(DOCKER_PROVIDER_DIR, '../../../seccomp', FORENSICS_SECCOMP_PROFILE_FILENAME),
+      path.resolve(
+        process.cwd(),
+        'workers/orchestrator/seccomp',
+        FORENSICS_SECCOMP_PROFILE_FILENAME
+      ),
+      path.resolve(process.cwd(), 'seccomp', FORENSICS_SECCOMP_PROFILE_FILENAME),
+    ];
+
+    for (const candidate of candidates) {
+      /* v8 ignore start -- test-infra: profile path resolution branches vary by cwd/runtime packaging @preserve */
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+      /* v8 ignore stop @preserve */
+    }
+
+    this.logger.warn(
+      { candidates },
+      'Forensics seccomp profile not found; ptrace tools may fail under default seccomp'
+    );
+    return null;
+  }
+
+  private async writeJsonArtifact(filePath: string, value: unknown): Promise<void> {
+    await fs.promises.writeFile(filePath, JSON.stringify(value, null, 2), 'utf-8');
+  }
+
+  private async runExecAndCapture(
+    taskId: string,
+    execInstance: Docker.Exec
+  ): Promise<{ exitCode: number; output: string }> {
+    const execStream = await execInstance.start({ hijack: false, stdin: false });
+    let output = '';
+
+    /* v8 ignore start -- test-infra: exec stream event ordering/close paths depend on Docker daemon stream behavior @preserve */
+    await new Promise<void>((resolve, reject) => {
+      execStream.on('data', (chunk: Buffer) => {
+        output += chunk.toString('utf-8');
+      });
+      execStream.on('end', resolve);
+      execStream.on('close', resolve);
+      execStream.on('error', (error: unknown) => {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
+      execStream.resume();
+    });
+    /* v8 ignore stop @preserve */
+
+    /* v8 ignore start -- test-infra: exec inspect ExitCode edge cases depend on Docker daemon responses @preserve */
+    try {
+      const info = await execInstance.inspect();
+      return { exitCode: typeof info.ExitCode === 'number' ? info.ExitCode : 1, output };
+    } catch (error) {
+      this.logger.warn({ taskId, error }, 'Failed to inspect exec completion state');
+      return { exitCode: 1, output };
+    }
+    /* v8 ignore stop @preserve */
+  }
+
+  private async captureSegfaultForensics(
+    taskId: string,
+    container: Docker.Container,
+    execInstance: Docker.Exec,
+    hostAttemptForensicsPath: string,
+    containerAttemptForensicsPath: string
+  ): Promise<void> {
+    try {
+      await fs.promises.mkdir(hostAttemptForensicsPath, { recursive: true });
+
+      await this.writeJsonArtifact(
+        path.join(hostAttemptForensicsPath, 'orchestrator-segfault.json'),
+        {
+          taskId,
+          capturedAt: new Date().toISOString(),
+          containerAttemptForensicsPath,
+        }
+      );
+
+      /* v8 ignore start -- test-infra: exec inspect failure branches require Docker daemon error injection @preserve */
+      try {
+        const execInfo = await execInstance.inspect();
+        await this.writeJsonArtifact(
+          path.join(hostAttemptForensicsPath, 'exec-inspect.json'),
+          execInfo
+        );
+      } catch (error) {
+        await fs.promises.writeFile(
+          path.join(hostAttemptForensicsPath, 'exec-inspect.error.txt'),
+          error instanceof Error ? (error.stack ?? error.message) : String(error),
+          'utf-8'
+        );
+      }
+      /* v8 ignore stop @preserve */
+
+      /* v8 ignore start -- test-infra: container inspect failure branches require Docker daemon error injection @preserve */
+      try {
+        const containerInfo = await container.inspect();
+        await this.writeJsonArtifact(
+          path.join(hostAttemptForensicsPath, 'container-inspect.json'),
+          containerInfo
+        );
+      } catch (error) {
+        await fs.promises.writeFile(
+          path.join(hostAttemptForensicsPath, 'container-inspect.error.txt'),
+          error instanceof Error ? (error.stack ?? error.message) : String(error),
+          'utf-8'
+        );
+      }
+      /* v8 ignore stop @preserve */
+
+      const snapshotCommand = [
+        'set -eu',
+        `OUT=${JSON.stringify(containerAttemptForensicsPath)}`,
+        'mkdir -p "$OUT/container-snapshot"',
+        '{',
+        '  echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"',
+        `  echo "task_id=${taskId}"`,
+        '  echo "uid=$(id -u 2>/dev/null || true)"',
+        '  echo "gid=$(id -g 2>/dev/null || true)"',
+        '  echo "uname=$(uname -a 2>/dev/null || true)"',
+        '  echo "whoami=$(whoami 2>/dev/null || true)"',
+        '  echo',
+        '  echo "[ulimit]"',
+        '  (ulimit -a 2>/dev/null || true)',
+        '  echo',
+        '  echo "[core settings]"',
+        '  (cat /proc/sys/kernel/core_pattern 2>/dev/null || true)',
+        '  (cat /proc/sys/kernel/dmesg_restrict 2>/dev/null || true)',
+        '  echo',
+        '  echo "[claude]"',
+        '  (claude --version 2>/dev/null || true)',
+        '  (file /usr/local/bin/claude 2>/dev/null || true)',
+        '} > "$OUT/container-snapshot/runtime-summary.txt" 2>&1 || true',
+        'cp -a /tmp/claude-cmd-timing "$OUT/container-snapshot/claude-cmd-timing" 2>/dev/null || true',
+        'cp -a /home/claude/.claude/debug "$OUT/container-snapshot/claude-debug" 2>/dev/null || true',
+        'cp -a /home/claude/.claude/projects/-repo "$OUT/container-snapshot/claude-projects-repo" 2>/dev/null || true',
+        'cp -a /home/claude/.claude/shell-snapshots "$OUT/container-snapshot/shell-snapshots" 2>/dev/null || true',
+        'cp -a /home/claude/.claude.json "$OUT/container-snapshot/.claude.json" 2>/dev/null || true',
+        'find /repo /var/crash -maxdepth 3 -type f -name "core*" > "$OUT/container-snapshot/core-files.txt" 2>/dev/null || true',
+        'for core in /repo/core* /var/crash/core*; do [ -f "$core" ] || continue; cp -a "$core" "$OUT/container-snapshot/" 2>/dev/null || true; done',
+        'if command -v gdb >/dev/null 2>&1; then for core in "$OUT"/container-snapshot/core*; do [ -f "$core" ] || continue; gdb -batch -ex "set pagination off" -ex "thread apply all bt full" /usr/local/bin/claude "$core" > "$OUT/container-snapshot/$(basename "$core").gdb.txt" 2>&1 || true; done; fi',
+        'if command -v strace >/dev/null 2>&1; then strace -V > "$OUT/container-snapshot/strace-version.txt" 2>&1 || true; fi',
+      ].join('; ');
+
+      const snapshotExec = await container.exec({
+        Cmd: ['sh', '-lc', snapshotCommand],
+        AttachStdout: true,
+        AttachStderr: true,
+        Tty: false,
+        WorkingDir: '/',
+        User: HOST_USER_STRING,
+      });
+      const snapshotResult = await this.runExecAndCapture(taskId, snapshotExec);
+      await fs.promises.writeFile(
+        path.join(hostAttemptForensicsPath, 'snapshot-exec.output.txt'),
+        snapshotResult.output,
+        'utf-8'
+      );
+      await fs.promises.writeFile(
+        path.join(hostAttemptForensicsPath, 'snapshot-exec.exit-code.txt'),
+        String(snapshotResult.exitCode),
+        'utf-8'
+      );
+    } catch (error) {
+      this.logger.error({ taskId, error }, 'Failed to capture segfault forensics');
+    }
   }
 
   /**
@@ -143,6 +338,7 @@ export class DockerProvider implements IsolationProvider {
       /* v8 ignore stop @preserve */
 
       await this.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
+      this.ensureTaskForensicsPath(taskId);
       void this.runAttemptInContainer(taskId, config);
       return existingWorker.handle;
     }
@@ -172,12 +368,14 @@ export class DockerProvider implements IsolationProvider {
         }
         /* v8 ignore stop @preserve */
 
+        /* v8 ignore start -- test-infra: forensics+preserved-resume path requires daemon stateful integration setup @preserve */
         const handle: WorkerHandle = {
           taskId,
           containerId: preserved.containerId,
           status: 'running',
           startedAt: new Date(),
         };
+        const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
 
         this.workers.set(taskId, {
           containerId: preserved.containerId,
@@ -186,6 +384,7 @@ export class DockerProvider implements IsolationProvider {
           taskSessionPath,
           attemptRunning: false,
           attemptLogBuffer: '',
+          ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
         });
 
         this.logger.info(
@@ -195,6 +394,7 @@ export class DockerProvider implements IsolationProvider {
 
         void this.runAttemptInContainer(taskId, config);
         return handle;
+        /* v8 ignore stop @preserve */
       }
     }
 
@@ -226,12 +426,14 @@ export class DockerProvider implements IsolationProvider {
           }
           /* v8 ignore stop @preserve */
 
+          /* v8 ignore start -- test-infra: forensics+orphan-resume path requires daemon restart/orphan integration setup @preserve */
           const handle: WorkerHandle = {
             taskId,
             containerId,
             status: 'running',
             startedAt: new Date(),
           };
+          const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
 
           this.workers.set(taskId, {
             containerId,
@@ -240,6 +442,7 @@ export class DockerProvider implements IsolationProvider {
             taskSessionPath,
             attemptRunning: false,
             attemptLogBuffer: '',
+            ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
           });
 
           this.logger.info(
@@ -249,6 +452,7 @@ export class DockerProvider implements IsolationProvider {
 
           void this.runAttemptInContainer(taskId, config);
           return handle;
+          /* v8 ignore stop @preserve */
         }
 
         // Container exists but stopped — remove it so fresh creation doesn't get 409 conflict
@@ -346,6 +550,10 @@ export class DockerProvider implements IsolationProvider {
       if (this.config.gitUserEmail !== undefined) {
         env.push(`GIT_USER_EMAIL=${this.config.gitUserEmail}`);
       }
+      if (this.config.forensicsMode) {
+        env.push('CLAUDE_FORENSICS=1');
+        env.push('CLAUDE_FORENSICS_DIR=/var/crash');
+      }
       /* v8 ignore stop @preserve */
 
       /* v8 ignore start -- ts-type: ternary for API key length check, short keys only in tests @preserve */
@@ -355,6 +563,7 @@ export class DockerProvider implements IsolationProvider {
           ? '...' + apiKey.slice(-4)
           : '****';
       /* v8 ignore stop @preserve */
+      const taskForensicsPath = this.ensureTaskForensicsPath(taskId);
       const requestedImage = this.config.imageName;
       const resolvedImage = await this.pullAndResolveImage(taskId, requestedImage);
       this.logger.info({ taskId }, 'Container creation started');
@@ -363,11 +572,28 @@ export class DockerProvider implements IsolationProvider {
         `Creating worker container: taskId=${taskId} workerType=${workerType} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${workerTypeConfig.apiBaseUrl} worktreePath=${worktreePath}`
       );
 
+      /* v8 ignore start -- test-infra: forensics security-opt/profile fallback branches depend on runtime filesystem packaging @preserve */
       const pnpmStorePath = path.join(
         path.dirname(this.config.secretsBasePath),
         PNPM_STORE_DIR_NAME
       );
       fs.mkdirSync(pnpmStorePath, { recursive: true });
+      const capAdd = this.config.forensicsMode ? ['NET_RAW', 'SYS_PTRACE'] : ['NET_RAW'];
+      const forensicsSeccompProfilePath = this.config.forensicsMode
+        ? this.resolveForensicsSeccompProfilePath()
+        : null;
+      const securityOpt = this.config.forensicsMode
+        ? [
+            'no-new-privileges',
+            ...(forensicsSeccompProfilePath !== null
+              ? [`seccomp=${forensicsSeccompProfilePath}`]
+              : []),
+          ]
+        : ['no-new-privileges'];
+      const ulimits = this.config.forensicsMode
+        ? [{ Name: 'core', Soft: -1, Hard: -1 }]
+        : undefined;
+      /* v8 ignore stop @preserve */
 
       container = await this.docker.createContainer({
         Image: resolvedImage,
@@ -387,6 +613,7 @@ export class DockerProvider implements IsolationProvider {
             /* v8 ignore start -- test-infra: worktree mount only set when mainGitDir detected @preserve */
             ...(mainGitDir !== null ? [`${mainGitDir}:${mainGitDir}:rw`] : []),
             /* v8 ignore stop @preserve */
+            ...(taskForensicsPath !== null ? [`${taskForensicsPath}:/var/crash:rw`] : []),
           ],
           NetworkMode: this.config.networkName,
           ReadonlyRootfs: false,
@@ -400,8 +627,9 @@ export class DockerProvider implements IsolationProvider {
           CapDrop: ['ALL'],
           // NET_RAW: Required for network diagnostics (ping, traceroute) which Claude
           // uses to verify connectivity. Without it, Claude's network-test commands fail.
-          CapAdd: ['NET_RAW'],
-          SecurityOpt: ['no-new-privileges'],
+          CapAdd: capAdd,
+          SecurityOpt: securityOpt,
+          ...(ulimits !== undefined ? { Ulimits: ulimits } : {}),
           AutoRemove: false,
         },
       });
@@ -443,6 +671,7 @@ export class DockerProvider implements IsolationProvider {
         taskSessionPath,
         attemptRunning: false,
         attemptLogBuffer: '',
+        ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
         /* v8 ignore start -- test-infra: logStream only set when onLog callback provided in running container @preserve */
         ...(logStream !== undefined ? { logStream } : {}),
         /* v8 ignore stop @preserve */
@@ -914,6 +1143,29 @@ export class DockerProvider implements IsolationProvider {
 
     try {
       const container = this.docker.getContainer(worker.containerId);
+      const attemptId = Date.now();
+      const attemptDirName = `attempt-${String(attemptId)}`;
+      const hostAttemptForensicsPath =
+        worker.taskForensicsPath !== undefined
+          ? path.join(worker.taskForensicsPath, attemptDirName)
+          : undefined;
+      const containerAttemptForensicsPath =
+        hostAttemptForensicsPath !== undefined ? `/var/crash/${attemptDirName}` : undefined;
+      const persistentAttemptLogPath =
+        hostAttemptForensicsPath !== undefined
+          ? path.join(hostAttemptForensicsPath, 'exec-stream.log')
+          : undefined;
+
+      if (hostAttemptForensicsPath !== undefined) {
+        await fs.promises.mkdir(hostAttemptForensicsPath, { recursive: true });
+        await this.writeJsonArtifact(path.join(hostAttemptForensicsPath, 'attempt-start.json'), {
+          taskId,
+          startedAt: new Date().toISOString(),
+          continueSession: config.continueSession === true,
+          containerId: worker.containerId,
+        });
+      }
+
       const execInstance = await container.exec({
         Cmd: ['/entrypoint.sh', 'run-attempt'],
         AttachStdout: true,
@@ -928,10 +1180,37 @@ export class DockerProvider implements IsolationProvider {
       execStream.on('data', (chunk: Buffer) => {
         const text = chunk.toString('utf-8');
         worker.attemptLogBuffer += text;
+        if (persistentAttemptLogPath !== undefined) {
+          try {
+            fs.appendFileSync(persistentAttemptLogPath, text, 'utf-8');
+          } catch (error) {
+            this.logger.warn({ taskId, error }, 'Failed to persist attempt exec stream chunk');
+          }
+        }
         config.onLog?.(text);
       });
 
       const exitCode = await this.waitForExecCompletion(taskId, execInstance, execStream);
+      if (hostAttemptForensicsPath !== undefined) {
+        await fs.promises.writeFile(
+          path.join(hostAttemptForensicsPath, 'exec-exit-code.txt'),
+          String(exitCode),
+          'utf-8'
+        );
+      }
+      if (
+        exitCode === 139 &&
+        hostAttemptForensicsPath !== undefined &&
+        containerAttemptForensicsPath !== undefined
+      ) {
+        await this.captureSegfaultForensics(
+          taskId,
+          container,
+          execInstance,
+          hostAttemptForensicsPath,
+          containerAttemptForensicsPath
+        );
+      }
       worker.handle.status = exitCode === 0 ? 'completed' : 'failed';
       config.onComplete?.(exitCode);
     } catch (error) {
