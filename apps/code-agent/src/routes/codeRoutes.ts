@@ -493,6 +493,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         processRequest
       );
@@ -3083,6 +3084,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         retryRequest
       );
@@ -3274,6 +3276,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         {
           originalTaskId: taskId,
@@ -3474,6 +3477,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         { originalTaskId: taskId, userId }
       );
