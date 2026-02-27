@@ -48,6 +48,10 @@ You MUST use \`superpowers:writing-plans\` (mandatory, non-negotiable).
 - Split work by service/package boundaries. Each subtask owns one service or package scope.
 - If a subtask cannot be parallelized without depending on another subtask's output, merge them into one.
 
+### PR Title Format
+The PR title MUST follow this format: \`[INT-XXX] [plan] title\`
+Example: \`[INT-665] [plan] Update orchestrator PR title format\`
+
 ### PR Description Format
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
 - Execution plan: <link to the planning issue you created above>
@@ -135,10 +139,17 @@ Required PR flow pattern:
 - Create or update the PR for this exact routed issue.
 - Complete the review loop using \`superpowers:requesting-code-review\`.
 
-### MANDATORY Code Review
+### MANDATORY Code Review (zero-tolerance loop)
 After creating the PR:
 - You MUST use the \`superpowers:requesting-code-review\` skill
-- Follow that skill's process for iterative reviews and fixes
+- Follow that skill's iterative review/fix process until the reviewer finds ZERO issues
+- Even minor issues (naming, style, edge cases, documentation) MUST be fixed — no issue is too small to skip
+- Do NOT finalize until the reviewer explicitly confirms no remaining issues
+- Every review iteration that surfaces issues requires another fix + re-review cycle
+
+### PR Title Format
+The PR title MUST follow this format: \`[INT-XXX] title\`
+Example: \`[INT-665] Update orchestrator PR title format\`
 
 ### PR Description Format
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})

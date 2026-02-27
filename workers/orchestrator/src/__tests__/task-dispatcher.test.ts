@@ -3048,6 +3048,43 @@ describe('TaskDispatcher', () => {
       expect(formatted).toBe('Plain text log line\n');
     });
 
+    it('should format rate_limit_event as compact line', async () => {
+      const onLog = await submitAndGetOnLog();
+      const rateLimitJson = JSON.stringify({
+        type: 'rate_limit_event',
+        rate_limit_info: {
+          status: 'allowed',
+          resetsAt: 1772240400,
+          rateLimitType: 'five_hour',
+          overageStatus: 'rejected',
+          overageDisabledReason: 'org_level_disabled',
+          isUsingOverage: false,
+        },
+        uuid: '717e3be4-79f5-4c35-ba20-d781d36b8103',
+        session_id: 'e0a48ae3-4f90-422e-ae42-5accb61ee3fc',
+      });
+
+      onLog(rateLimitJson + '\n');
+
+      const formatted = findFormattedChunk('[rate-limit]');
+      expect(formatted).toContain('[rate-limit] allowed five_hour resets=');
+      expect(formatted).not.toContain('uuid');
+      expect(formatted).not.toContain('session_id');
+    });
+
+    it('should format rate_limit_event with missing fields gracefully', async () => {
+      const onLog = await submitAndGetOnLog();
+      const rateLimitJson = JSON.stringify({
+        type: 'rate_limit_event',
+        rate_limit_info: { status: 'allowed' },
+      });
+
+      onLog(rateLimitJson + '\n');
+
+      const formatted = findFormattedChunk('[rate-limit]');
+      expect(formatted).toContain('[rate-limit] allowed');
+    });
+
     it('should pass through unknown JSON types unchanged', async () => {
       const onLog = await submitAndGetOnLog();
       const unknownJson = JSON.stringify({ type: 'unknown', data: 'something' });
