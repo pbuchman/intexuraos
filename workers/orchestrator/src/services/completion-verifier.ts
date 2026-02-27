@@ -215,12 +215,15 @@ function extractPlanningMetadataFromMessage(message: string): PlanningMetadataEx
 
   const outcome = readValue('- Outcome:');
   const superpowers = readValue('- superpowers_writing_plans_used:');
-  const originalIssueUrl = readValue('- Original issue:');
-  const planningIssueUrl = readValue('- Planning issue:');
+  const rawOriginalIssueUrl = readValue('- Original issue:');
+  const originalIssueUrl = rawOriginalIssueUrl !== undefined ? stripMarkdownLink(rawOriginalIssueUrl) : rawOriginalIssueUrl;
+  const rawPlanningIssueUrl = readValue('- Planning issue:');
+  const planningIssueUrl = rawPlanningIssueUrl !== undefined ? stripMarkdownLink(rawPlanningIssueUrl) : rawPlanningIssueUrl;
   const trivialTask = readValue('- Trivial task:');
   const parallelBreakdownProof = readValue('- Parallel breakdown proof:');
   const docPath = readValue('- Plan doc:');
-  const prUrl = readValue('- Planning PR:');
+  const rawPrUrl = readValue('- Planning PR:');
+  const prUrl = rawPrUrl !== undefined ? stripMarkdownLink(rawPrUrl) : rawPrUrl;
   const clarificationMessage = readValue('- Clarification message:');
 
   return {
@@ -238,6 +241,11 @@ function extractPlanningMetadataFromMessage(message: string): PlanningMetadataEx
     ...(clarificationMessage !== undefined ? { clarificationMessage } : {}),
     /* v8 ignore stop @preserve */
   };
+}
+
+function stripMarkdownLink(value: string): string {
+  const match = /^\[.*?\]\((.*?)\)$/.exec(value);
+  return match?.[1] ?? value;
 }
 
 function isHttpUrl(value: string): boolean {
@@ -298,9 +306,11 @@ function parseExecutionMetadataFromMessage(message: string): ExecutionMetadataEx
   };
 
   const outcome = readValue('- Outcome:');
-  const prUrl = readValue('- PR:');
+  const rawPrUrl = readValue('- PR:');
+  const prUrl = rawPrUrl !== undefined ? stripMarkdownLink(rawPrUrl) : rawPrUrl;
   const ciEvidence = readValue('- CI evidence:');
-  const linearIssueUrl = readValue('- Linear issue:');
+  const rawLinearIssueUrl = readValue('- Linear issue:');
+  const linearIssueUrl = rawLinearIssueUrl !== undefined ? stripMarkdownLink(rawLinearIssueUrl) : rawLinearIssueUrl;
   const reviewIterationsRaw = readValue('- Review iterations:');
   const execPlansUsed = readValue('- superpowers_executing_plans_used:');
   const codeReviewUsed = readValue('- superpowers_requesting_code_review_used:');
@@ -961,4 +971,5 @@ export const CompletionVerifierTestUtils = {
   verifyExecutionAgentFinal,
   verifyPRCommentFinal,
   buildDefaultResumeInstruction,
+  stripMarkdownLink,
 };
