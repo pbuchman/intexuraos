@@ -48,6 +48,7 @@ interface WorkerTaskRequest {
   hasChildren: boolean;
   linearIssueId?: string;
   traceId?: string;
+  agentType?: 'planning' | 'execution' | 'pull_request';
 }
 
 /**
@@ -107,6 +108,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     // Only add traceId if provided
     if (request.traceId !== undefined) {
       taskRequest.traceId = request.traceId;
+    }
+    if (request.agentType !== undefined) {
+      taskRequest.agentType = request.agentType;
     }
 
     const body = JSON.stringify(taskRequest);

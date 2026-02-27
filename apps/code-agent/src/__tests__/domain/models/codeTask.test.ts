@@ -6,7 +6,7 @@ describe('CodeTask model', () => {
     const validStatuses: TaskStatus[] = [
       'dispatched',
       'running',
-      'designed',
+      'planned',
       'implemented',
       'failed',
       'interrupted',

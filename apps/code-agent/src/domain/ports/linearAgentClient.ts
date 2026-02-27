@@ -24,7 +24,7 @@ export interface CreateIssueResponse {
 export interface UpdateIssueStateRequest {
   userId: string;
   issueId: string;
-  state: 'backlog' | 'in_progress' | 'in_review' | 'qa';
+  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa';
 }
 
 export interface ValidateIssueRequest {
@@ -61,6 +61,21 @@ export interface AddCommentRequest {
 
 export interface AddCommentResponse {
   commentId: string;
+}
+
+export interface IssueTreeNode {
+  id: string;
+  identifier: string;
+  url: string;
+  parentId: string | null;
+  labels: string[];
+  assigneeId: string | null;
+  state: string;
+}
+
+export interface IssueTreeResponse {
+  root: IssueTreeNode;
+  descendants: IssueTreeNode[];
 }
 
 export interface LinearIssueForDisplay {
@@ -110,6 +125,19 @@ export interface LinearAgentClient {
    * Used for adding retry context when retrying failed tasks.
    */
   addComment(request: AddCommentRequest): Promise<Result<AddCommentResponse, LinearAgentError>>;
+
+  fetchIssueTree(request: {
+    userId: string;
+    issueId: string;
+  }): Promise<Result<IssueTreeResponse, LinearAgentError>>;
+
+  updateIssueMetadata(request: {
+    userId: string;
+    issueId: string;
+    assigneeId?: string | null;
+    addLabels?: string[];
+    removeLabels?: string[];
+  }): Promise<Result<void, LinearAgentError>>;
 
   /**
    * Fetch Linear issue data for display in task detail view.

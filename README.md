@@ -77,9 +77,9 @@ The same path works for every domain. A voice note about a bug becomes a code ta
 
 ### The Code Pipeline
 
-**Phase 1 — Design.** A design agent analyzes the task, enriches the project issue with technical context, creates subissues for complex work, and labels the issue when the plan is sound.
+**Step 1 — Planning.** A planning agent analyzes the task, enriches the project issue with technical context, creates subissues for complex work, and labels the issue when the plan is sound.
 
-**Phase 2 — Execution.** A strict execution agent picks up the labeled issue, writes code in an isolated container with separate repository copies for each task, runs the full automated test suite, creates a code change for review, and moves the project issue to "In Review."
+**Step 2 — Execution.** A strict execution agent picks up the labeled issue, writes code in an isolated container with separate repository copies for each task, runs the full automated test suite, creates a code change for review, and moves the project issue to "In Review."
 
 **Verification.** After each attempt, a completion verifier checks the work against a checklist: Are the right files modified? Do tests pass? Is the code change created? If not, the system resumes with preserved context and tries again. Per-user limits on concurrency, hourly rate, and daily spend keep costs predictable — the estimated cost per task is about $1.17.
 

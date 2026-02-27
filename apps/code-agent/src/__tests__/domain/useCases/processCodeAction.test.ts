@@ -295,11 +295,11 @@ describe('processCodeAction', () => {
       expect(result.value.workerLocation).toBe('mac');
     }
 
-    // Verify executionPhase is 'design' when linear issue has no 'code-task' label
+    // Verify agentType is 'design' when linear issue has no 'code-task' label
     // (linearIssueService mock returns linearIssueLabels: [] — no code-task label)
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        executionPhase: 'design',
+        agentType: 'planning',
       })
     );
 
@@ -579,7 +579,7 @@ describe('processCodeAction', () => {
     expect(whatsappNotifier.notifyTaskStarted).not.toHaveBeenCalled();
   });
 
-  it('sets executionPhase to execution when linear issue has code-task label', async () => {
+  it('sets agentType to execution when linear issue has code-task label', async () => {
     // Override linearIssueService to return code-task label
     vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
       linearIssueId: 'INT-123',
@@ -608,7 +608,7 @@ describe('processCodeAction', () => {
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
-        executionPhase: 'execution',
+        agentType: 'execution',
       })
     );
 
@@ -638,7 +638,7 @@ describe('processCodeAction', () => {
         dedupKey: 'dedup-key-123',
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
-        executionPhase: 'execution',
+        agentType: 'execution',
         cancelNonce: 'abcd',
         cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       })
@@ -657,10 +657,10 @@ describe('processCodeAction', () => {
 
     expect(result.ok).toBe(true);
 
-    // Verify executionPhase is 'execution' when linear issue has 'code-task' label
+    // Verify agentType is 'execution' when linear issue has 'code-task' label
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        executionPhase: 'execution',
+        agentType: 'execution',
       })
     );
   });

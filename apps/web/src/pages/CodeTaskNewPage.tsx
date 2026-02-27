@@ -22,10 +22,10 @@ const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string 
 
 type LinearMode = 'create' | 'link';
 
-const PHASE1_PLACEHOLDER =
+const PLANNING_PLACEHOLDER =
   'Describe what you want to build. Claude will analyse the instructions, create a Linear issue with acceptance criteria, and prepare a design — no code will be written prior to your approval.';
 
-const PHASE2_DEFAULT_PROMPT =
+const EXECUTION_DEFAULT_PROMPT =
   'Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.';
 
 const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: React.ReactNode }[] = [
@@ -109,14 +109,14 @@ export function CodeTaskNewPage(): React.JSX.Element {
   useEffect(() => {
     if (promptManuallyEdited.current) return;
     if (linearMode === 'link') {
-      setPrompt(PHASE2_DEFAULT_PROMPT);
+      setPrompt(EXECUTION_DEFAULT_PROMPT);
     } else {
       setPrompt('');
     }
   }, [linearMode]);
 
   const placeholderText = linearMode === 'create'
-    ? PHASE1_PLACEHOLDER
+    ? PLANNING_PLACEHOLDER
     : 'Describe what you want Claude to build or fix...';
 
   // Form is valid when: has prompt AND has a healthy worker selected (or only 1 healthy worker auto-selected)
