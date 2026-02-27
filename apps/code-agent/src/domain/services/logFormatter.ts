@@ -62,6 +62,7 @@ export function formatLogChunk(
   const lines = raw.split('\n');
   const result: FormattedLogLine[] = [];
   let seq = startSequence * 1000;
+  const hasExternalState = state !== undefined;
   const s = state ?? createFormatterState();
 
   // Prepend buffered partial line from previous chunk
@@ -97,8 +98,9 @@ export function formatLogChunk(
       const formatted = formatJsonMessage(obj, s);
       text = formatted !== '' && prefix !== '' ? `${prefix}${formatted}` : formatted;
     } catch {
-      // If this is the last line and looks like incomplete JSON, buffer it
-      if (i === lines.length - 1 && body.startsWith('{"') && !body.endsWith('}')) {
+      // If this is the last line and looks like incomplete JSON, buffer it for reassembly
+      // Only buffer when external state is provided — stateless calls cannot reassemble
+      if (hasExternalState && i === lines.length - 1 && body.startsWith('{"') && !body.endsWith('}')) {
         s.partialLine = trimmed;
         continue; // Skip — will be completed by next chunk
       }
@@ -262,8 +264,9 @@ function summarizeJsonContent(content: string): string | undefined {
     const state = typeof obj['state'] === 'string' ? obj['state'] : '';
     const adds = typeof obj['additions'] === 'number' ? `+${String(obj['additions'])}` : '';
     const dels = typeof obj['deletions'] === 'number' ? `-${String(obj['deletions'])}` : '';
+    const addsDels = adds !== '' || dels !== '' ? `${adds}/${dels}` : '';
     const files = typeof obj['changedFiles'] === 'number' ? `${String(obj['changedFiles'])} files` : '';
-    return [number + title, state, `${adds}/${dels}`, files].filter(Boolean).join(' | ');
+    return [number + title, state, addsDels, files].filter(Boolean).join(' | ');
   }
 
   // GitHub comment/issue data (gh api .../comments)

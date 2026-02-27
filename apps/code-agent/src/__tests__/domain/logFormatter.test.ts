@@ -955,6 +955,14 @@ describe('formatLogChunk', () => {
       expect(state.partialLine).toBeUndefined();
     });
 
+    it('does not buffer incomplete JSON without external state', () => {
+      // Stateless call — incomplete JSON should pass through, not be silently lost
+      const incomplete = '{"type":"result","duration_ms":50';
+      const result = formatLogChunk(incomplete, 0, ts());
+      expect(result).toHaveLength(1);
+      expect(result[0]?.text).toBe(incomplete);
+    });
+
     it('does not buffer non-JSON last line', () => {
       const state = createFormatterState();
 
@@ -1167,8 +1175,8 @@ describe('formatLogChunk', () => {
       });
       const json = JSON.stringify({ type: 'tool_result', content: prData });
       const result = formatLogChunk(json, 0, ts());
-      // No number prefix, no file count — title, state, and bare '/' from empty adds/dels
-      expect(result[0]?.text).toBe('  \u2192 Simple PR | MERGED | /');
+      // No number prefix, no stats — just title and state
+      expect(result[0]?.text).toBe('  \u2192 Simple PR | MERGED');
     });
 
     it('gh pr view with non-string title and state', () => {
@@ -1184,8 +1192,8 @@ describe('formatLogChunk', () => {
       });
       const json = JSON.stringify({ type: 'tool_result', content: prData });
       const result = formatLogChunk(json, 0, ts());
-      // All type guards fail — only '/' remains from empty adds/dels template
-      expect(result[0]?.text).toBe('  \u2192 /');
+      // All type guards fail — everything filtered out, empty summary
+      expect(result[0]?.text).toBe('  \u2192 ');
     });
 
     it('gh api comment with non-string url and non-number id', () => {
