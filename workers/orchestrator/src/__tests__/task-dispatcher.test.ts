@@ -1305,7 +1305,7 @@ describe('TaskDispatcher', () => {
 
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
-      // Verify task completed (no code-task label = Phase 1, PR not required)
+      // Verify task completed (no code-task label = planning agent, PR not required)
       const finalTask = await resultDispatcher.getTask('json-error-test');
       expect(finalTask?.status).toBe('completed');
 

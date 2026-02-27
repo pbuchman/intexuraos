@@ -449,7 +449,7 @@ describe('linearIssueService', () => {
       expect(mockCreateIssue).toHaveBeenCalled();
     });
 
-    it('should return empty labels for auto-created issues to ensure Phase 1 is entered', async () => {
+    it('should return empty labels for auto-created issues to ensure planning agent is entered', async () => {
       mockGenerateTitle = vi.fn().mockResolvedValue(
         ok({ title: 'Some Feature', issueType: 'feature' as const })
       );
@@ -470,7 +470,7 @@ describe('linearIssueService', () => {
         taskPrompt: 'Do something',
       });
 
-      // Auto-created issues MUST have no labels so processCodeAction routes to Phase 1
+      // Auto-created issues MUST have no labels so processCodeAction routes to planning agent
       expect(result.linearIssueLabels).toEqual([]);
       // Verify the code-task label was not passed to the Linear API
       expect(mockCreateIssue).not.toHaveBeenCalledWith(

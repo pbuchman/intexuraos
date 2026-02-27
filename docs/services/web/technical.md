@@ -61,24 +61,24 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                         | Date       |
-| ---------- | ------------------------------------------------------------------- | ---------- |
-| `1ee7e8c6` | Fix single-space timestamp strip in isBodyLine for log viewer       | 2026-02-22 |
-| `ef2724df` | Fix collapsible tool output in code task logs                       | 2026-02-22 |
-| `fbe7c944` | Fix worker reorder buttons in settings UI                           | 2026-02-22 |
-| `27f15cfc` | Collapsible tool output blocks in log viewer                        | 2026-02-22 |
-| `c9acdce3` | Standardize delete confirmations across all pages                   | 2026-02-21 |
-| `2e3ae30c` | Persist filter and sidebar collapse state across page refresh       | 2026-02-21 |
-| `bcbd5075` | Multi-status filtering and fix pagination for code tasks            | 2026-02-21 |
-| `3b081686` | INT-501: Prevent browser autofill on worker secret fields           | 2026-02-21 |
-| `19442f43` | Handle null assignee in LinearIssuesPage guards                     | 2026-02-20 |
-| `d36c76dd` | Add null to LinearIssue assignee type to match API response         | 2026-02-20 |
-| `c221efd5` | Use emerald green for Linear board assignee badges                  | 2026-02-20 |
-| `20a106c0` | Replace code task Summary with expandable PR events timeline        | 2026-02-20 |
-| `6df58b52` | Display assignee name on Linear board issue cards                   | 2026-02-20 |
-| `27ef6a7b` | INT-505: Show compare URL for PR synchronize events                 | 2026-02-19 |
-| `0e07e938` | Show two-phase flow banner on design tasks with implementation link | 2026-02-19 |
-| `e8bbacd7` | GitHub PR summaries with lazy event loading                         | 2026-02-19 |
+| Commit     | Description                                                            | Date       |
+| ---------- | ---------------------------------------------------------------------- | ---------- |
+| `1ee7e8c6` | Fix single-space timestamp strip in isBodyLine for log viewer          | 2026-02-22 |
+| `ef2724df` | Fix collapsible tool output in code task logs                          | 2026-02-22 |
+| `fbe7c944` | Fix worker reorder buttons in settings UI                              | 2026-02-22 |
+| `27f15cfc` | Collapsible tool output blocks in log viewer                           | 2026-02-22 |
+| `c9acdce3` | Standardize delete confirmations across all pages                      | 2026-02-21 |
+| `2e3ae30c` | Persist filter and sidebar collapse state across page refresh          | 2026-02-21 |
+| `bcbd5075` | Multi-status filtering and fix pagination for code tasks               | 2026-02-21 |
+| `3b081686` | INT-501: Prevent browser autofill on worker secret fields              | 2026-02-21 |
+| `19442f43` | Handle null assignee in LinearIssuesPage guards                        | 2026-02-20 |
+| `d36c76dd` | Add null to LinearIssue assignee type to match API response            | 2026-02-20 |
+| `c221efd5` | Use emerald green for Linear board assignee badges                     | 2026-02-20 |
+| `20a106c0` | Replace code task Summary with expandable PR events timeline           | 2026-02-20 |
+| `6df58b52` | Display assignee name on Linear board issue cards                      | 2026-02-20 |
+| `27ef6a7b` | INT-505: Show compare URL for PR synchronize events                    | 2026-02-19 |
+| `0e07e938` | Show agent-type flow banner on planning tasks with implementation link | 2026-02-19 |
+| `e8bbacd7` | GitHub PR summaries with lazy event loading                            | 2026-02-19 |
 
 ## Application Structure
 

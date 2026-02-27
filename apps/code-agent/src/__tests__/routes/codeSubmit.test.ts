@@ -306,7 +306,7 @@ describe('POST /code/submit', () => {
       const linearService = getServices().linearIssueService;
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-999',
-        linearIssueTitle: 'Phase 2 ready feature',
+        linearIssueTitle: 'Execution ready feature',
         linearIssueLabels: ['code-task'],
         hasChildren: false,
         linearFallback: false,
@@ -322,7 +322,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Build phase 2 feature' },
+        payload: { prompt: 'Build execution feature' },
       });
 
       expect(response.statusCode).toBe(200);
