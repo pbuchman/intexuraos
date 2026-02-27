@@ -122,6 +122,55 @@ describe('Internal Routes', () => {
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
       expect(body.error.message).toBe('Something unexpected happened');
     });
+
+    it('uses text field for extraction when provided', async () => {
+      const fullPrompt = 'Set up a weekly standup every Monday at 9:15am starting next week';
+      const payloadWithText = {
+        action: {
+          id: 'action-123',
+          userId: 'user-456',
+          title: 'Weekly standup',
+        },
+        text: fullPrompt,
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: payloadWithText,
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Verify the extraction service received the full text, not the short title
+      expect(fakeCalendarActionExtractionService.extractEventCalls).toHaveLength(1);
+      expect(fakeCalendarActionExtractionService.extractEventCalls[0]?.text).toBe(fullPrompt);
+    });
+
+    it('falls back to action.title when text field is not provided', async () => {
+      const payloadWithoutText = {
+        action: {
+          id: 'action-123',
+          userId: 'user-456',
+          title: 'Schedule a meeting tomorrow at 3pm',
+        },
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: payloadWithoutText,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeCalendarActionExtractionService.extractEventCalls).toHaveLength(1);
+      expect(fakeCalendarActionExtractionService.extractEventCalls[0]?.text).toBe('Schedule a meeting tomorrow at 3pm');
+    });
   });
 
   describe('POST /internal/calendar/generate-preview', () => {
