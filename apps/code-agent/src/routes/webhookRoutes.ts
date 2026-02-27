@@ -1,4 +1,5 @@
-/* eslint-disable */
+/* eslint-disable no-restricted-imports, @typescript-eslint/no-unnecessary-condition, @typescript-eslint/use-unknown-in-catch-callback-variable, @typescript-eslint/strict-boolean-expressions */
+/* TODO: INT-613 - Address remaining lint errors with targeted comments instead of blanket disable */
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { Timestamp } from '@google-cloud/firestore';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
@@ -114,7 +115,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for task-complete webhook');
-        return reply.fail('UNAUTHORIZED', 'Internal authentication failed');
+        return await reply.fail('UNAUTHORIZED', 'Internal authentication failed');
       }
 
       // Step 2: Validate HMAC signature
@@ -136,7 +137,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed');
         /* v8 ignore stop @preserve */
         // @allow-raw-send: preserve domain-specific signature error codes for webhook validation
-        return reply.status(401).send({
+        return await reply.status(401).send({
           success: false,
           error: {
             code: signatureResult.error.code.toUpperCase(),
@@ -171,7 +172,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       /* v8 ignore stop @preserve */
       if (!taskResult.ok) {
         request.log.error({ taskId, error: taskResult.error }, 'Task not found');
-        return reply.fail('NOT_FOUND', 'Task not found');
+        return await reply.fail('NOT_FOUND', 'Task not found');
       }
 
       const task = taskResult.value;
@@ -200,7 +201,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as completed');
-          return reply.fail('INTERNAL_ERROR', updateResult.error.message);
+          return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
         // Transition Linear issue to In Review when PR is created (best-effort)
@@ -285,7 +286,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as failed');
-          return reply.fail('INTERNAL_ERROR', updateResult.error.message);
+          return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
         // Notify actions-agent if task has actionId
@@ -346,7 +347,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as interrupted');
-          return reply.fail('INTERNAL_ERROR', updateResult.error.message);
+          return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
         // Notify actions-agent if task has actionId
@@ -414,7 +415,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         if (!updateResult.ok) {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as cancelled');
-          return reply.fail('INTERNAL_ERROR', updateResult.error.message);
+          return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
         /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
@@ -458,7 +459,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Should not reach here, but TypeScript needs it
-      return reply.fail('INVALID_REQUEST', 'Unknown task status');
+      return await reply.fail('INVALID_REQUEST', 'Unknown task status');
     }
   );
 
@@ -466,11 +467,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{
     Body: {
       taskId: string;
-      chunks: Array<{
+      chunks: {
         sequence: number;
         content: string;
         timestamp: string;
-      }>;
+      }[];
     };
   }>(
     '/internal/logs',
@@ -529,7 +530,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; chunks: Array<{ sequence: number; content: string; timestamp: string }> } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { taskId: string; chunks: { sequence: number; content: string; timestamp: string }[] } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/logs',
       });
@@ -538,7 +539,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for log chunk upload');
-        return reply.fail('UNAUTHORIZED', 'Internal authentication failed');
+        return await reply.fail('UNAUTHORIZED', 'Internal authentication failed');
       }
 
       // Step 2: Validate HMAC signature
@@ -560,7 +561,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!signatureResult.ok) {
         request.log.warn({ error: signatureResult.error }, 'Webhook signature validation failed for logs');
         // @allow-raw-send: preserve domain-specific signature error codes for webhook validation
-        return reply.status(401).send({
+        return await reply.status(401).send({
           success: false,
           error: {
             code: signatureResult.error.code.toUpperCase(),
@@ -606,7 +607,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!storeResult.ok) {
         request.log.error({ taskId, error: storeResult.error }, 'Failed to store log chunks');
-        return reply.fail('INTERNAL_ERROR', storeResult.error.message);
+        return await reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
       const state = taskFormatterStates.get(taskId) ?? createFormatterState();
@@ -686,7 +687,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for turn-metrics');
-        return reply.fail('UNAUTHORIZED', 'Internal authentication failed');
+        return await reply.fail('UNAUTHORIZED', 'Internal authentication failed');
       }
 
       // Step 2: Validate orchestrator HMAC signature
@@ -696,7 +697,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!signatureResult.ok) {
         request.log.warn({ error: signatureResult.error }, 'Orchestrator signature validation failed for turn-metrics');
-        return reply.fail('UNAUTHORIZED', 'Unauthorized');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
       // Step 3: Store metrics
@@ -711,7 +712,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!storeResult.ok) {
         request.log.error({ taskId: metrics.taskId, error: storeResult.error }, 'Failed to store turn metrics');
-        return reply.fail('INTERNAL_ERROR', storeResult.error.message);
+        return await reply.fail('INTERNAL_ERROR', storeResult.error.message);
       }
 
       // Step 4: Append formatted metrics as log lines (non-fatal)

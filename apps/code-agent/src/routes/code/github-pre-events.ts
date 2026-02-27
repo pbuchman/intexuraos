@@ -9,14 +9,12 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import type { Result } from '@intexuraos/common-core';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
-import type { JwtValidator } from '../codeRoutes.js';
+import type { CodeRoutesOptions } from '../shared.js';
+// Re-export for backwards compatibility - other files import from this module
+export type { CodeRoutesOptions } from '../shared.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { RepositoryError } from '../../domain/repositories/gitHubPREventRepository.js';
 import { extractEventUrl } from './extractEventUrl.js';
-
-export interface CodeRoutesOptions {
-  jwtValidator: JwtValidator;
-}
 
 type PayloadObject = Record<string, unknown>;
 
