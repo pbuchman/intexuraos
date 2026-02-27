@@ -231,13 +231,13 @@ export async function submitToExecutionAgent(
     logger.warn({ linearIssueId, labels: freshLabels }, 'Linear issue has unclear label, cannot proceed to Execution Agent');
     return err({
       code: 'label_not_ready',
-      message: 'The design phase flagged questions that need resolution. Review the Linear issue, address open questions, then retry the design phase.',
+      message: 'The planning agent flagged questions that need resolution. Review the Linear issue, address open questions, then retry the planning agent.',
     });
   } else if (!hasCodeTaskLabel(freshLabels)) {
     logger.warn({ linearIssueId, labels: freshLabels }, 'Linear issue missing code-task label, planning may not have completed successfully');
     return err({
       code: 'label_not_ready',
-      message: "The code-task label hasn't been added yet. The design phase may not have completed successfully.",
+      message: "The code-task label hasn't been added yet. The planning agent may not have completed successfully.",
     });
   }
 

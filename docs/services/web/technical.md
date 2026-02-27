@@ -2,7 +2,7 @@
 
 ## Overview
 
-Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to 15+ backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, an AI chat assistant (Intex Chat), a two-phase code task management system with collapsible tool output, multi-status filtering, saved data visualizations, assignee display on Linear boards, and a developer toolbar (DevBar) for local and dev machine environments.
+Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to 15+ backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, an AI chat assistant (Intex Chat), an agent-based code task management system with collapsible tool output, multi-status filtering, saved data visualizations, assignee display on Linear boards, and a developer toolbar (DevBar) for local and dev machine environments.
 
 ## Architecture
 
@@ -269,14 +269,14 @@ The app uses Firestore listeners for real-time updates:
 
 ### Multi-Status Filtering
 
-Code tasks support simultaneous filtering by multiple statuses. The filter state persists in localStorage across page refreshes. All seven statuses are filterable: dispatched, running, designed, implemented, failed, interrupted, cancelled.
+Code tasks support simultaneous filtering by multiple statuses. The filter state persists in localStorage across page refreshes. All seven statuses are filterable: dispatched, running, planned, implemented, failed, interrupted, cancelled.
 
-### Two-Phase Flow
+### Agent-Based Flow
 
-Code tasks support an `executionPhase` field: `design` or `execution`.
+Code tasks support an `agentType` field: `planning` or `execution`.
 
-- **Design phase:** Task produces a design artifact. When an implementation task is linked (`implementationTaskId`), an `ImplementationLinkBanner` appears (emerald color) linking to the implementation task.
-- **Execution phase:** Runs the code changes. A `DesignTaskBanner` (violet color) links back to the parent design task with the label "DESIGN".
+- **Planning agent:** Task produces a planning artifact. When an implementation task is linked (`implementationTaskId`), an `ImplementationLinkBanner` appears (emerald color) linking to the implementation task.
+- **Execution agent:** Runs the code changes. A `DesignTaskBanner` (violet color) links back to the parent planning task with the label "DESIGN".
 - **Single-phase tasks:** No banner shown.
 
 ### Collapsible Tool Output
