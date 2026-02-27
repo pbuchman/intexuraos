@@ -84,6 +84,28 @@ Branch: ${task.baseBranch}`;
 }
 
 /**
+ * Format design complete notification message (Phase 1 completion).
+ * INT-628
+ */
+function formatDesignCompleteMessage(task: CodeTask, includeButtonPrompt: boolean): string {
+  /* v8 ignore start -- ts-type: defensive null check for optional Linear title @preserve */
+  const title = task.linearIssueTitle ?? task.prompt.slice(0, 50);
+  /* v8 ignore stop @preserve */
+  const result = task.result;
+  /* v8 ignore start -- ts-type: defensive null check for optional result summary @preserve */
+  const summary = result?.summary ?? 'Design completed and ready for implementation.';
+  /* v8 ignore stop @preserve */
+
+  const buttonPrompt = includeButtonPrompt
+    ? '\n\nReady to implement? Click the button below to start Phase 2.'
+    : '\n\nReady to implement? Open the web app to start Phase 2.';
+
+  return `🎨 Design ready: ${title}
+
+${summary}${buttonPrompt}`;
+}
+
+/**
  * Factory function to create WhatsAppNotifier.
  */
 export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsAppNotifier {
@@ -214,6 +236,56 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       });
 
       if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
+
+    async notifyDesignComplete(
+      userId: string,
+      task: CodeTask
+    ): Promise<Result<void, NotificationError>> {
+      const message = formatDesignCompleteMessage(task, true);
+
+      // Build interactive button to proceed to Phase 2 (INT-628)
+      const buttons: { type: 'reply'; reply: { id: string; title: string } }[] = [
+        {
+          type: 'reply',
+          reply: {
+            id: `proceed-implementation:${task.id}`,
+            title: '▶️ Implement',
+          },
+        },
+      ];
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        buttons,
+        correlationId: task.traceId,
+      });
+
+      if (!result.ok) {
+        // Graceful degradation: if buttons can't be sent, try without buttons (with corrected message)
+        if (result.error.code === 'PUBLISH_FAILED') {
+          const fallbackMessage = formatDesignCompleteMessage(task, false);
+          const fallbackResult = await whatsappPublisher.publishSendMessage({
+            userId,
+            message: fallbackMessage,
+            correlationId: task.traceId,
+          });
+          if (!fallbackResult.ok) {
+            return err({
+              code: 'notification_failed',
+              message: fallbackResult.error.message,
+            });
+          }
+          return ok(undefined);
+        }
         return err({
           code: 'notification_failed',
           message: result.error.message,
