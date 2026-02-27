@@ -1587,6 +1587,54 @@ describe('completion-verifier', () => {
     expect(verdict.extractedSummary).toBeUndefined();
   });
 
+  it('warns when Gemini returns executionMetadata for a planning task', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          passed: true,
+          confidence: 1.0,
+          reasons: ['all criteria met'],
+          missingCriteria: [],
+          resumeInstruction: '',
+          extractedSummary: 'Created implementation plan.',
+          executionMetadata: {
+            outcomeLabel: 'implemented',
+            superpowersExecutingPlansUsed: '0',
+            superpowersRequestingCodeReviewUsed: '0',
+            trivialTask: '0',
+            subagents: '',
+            reviewIterations: 0,
+            linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-5',
+          },
+        }),
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-planning-with-exec-metadata',
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'planning',
+      originalPrompt: 'Prepare issue',
+      rawLogs: assistantLog(validPhase1Final),
+      linearIssueLabels: [],
+    });
+
+    expect(verdict.passed).toBe(true);
+    expect(verdict.verifierFailure).toBe(false);
+    expect(verdict.executionMetadata).toBeUndefined();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-planning-with-exec-metadata',
+        agentType: 'planning',
+      }),
+      'Gemini returned executionMetadata for non-execution task; discarding'
+    );
+  });
+
   it('throws when model is not gemini-2.5-flash', () => {
     expect(() => createVerifier({ model: 'unsupported-model' })).toThrow(
       'Completion verifier must use model gemini-2.5-flash'

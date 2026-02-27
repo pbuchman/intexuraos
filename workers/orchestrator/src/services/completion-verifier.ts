@@ -490,6 +490,15 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     }
 
     const parsedVerdict = llmVerdict.value;
+    if (input.agentType !== 'execution' && parsedVerdict.executionMetadata !== undefined) {
+      this.logger.warn(
+        {
+          taskId: input.taskId,
+          agentType: input.agentType,
+        },
+        'Gemini returned executionMetadata for non-execution task; discarding'
+      );
+    }
     let mergedReasons = parsedVerdict.reasons;
     let mergedMissingCriteria = normalizeMissingCriteria(parsedVerdict.missingCriteria);
     if (!parsedVerdict.passed) {
