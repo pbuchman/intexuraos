@@ -188,6 +188,25 @@ This task was triggered by a PR comment/review event. Read PR context, implement
 ${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
 - Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
 
+### Tracking Comment (MANDATORY)
+
+Your FIRST action must be to post a tracking comment on the PR:
+
+gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="..."
+
+The comment must contain:
+- What you plan to do (1-3 bullet points summarizing the task)
+${taskUrl !== undefined ? `- A link to the live task console: [View progress](${taskUrl})` : ''}
+
+Save the comment ID from the response — you will need it to update this comment later.
+
+Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE this same comment with:
+- What you actually did (1-3 bullet points)
+- Outcome: commits pushed / no changes needed / etc.
+${taskUrl !== undefined ? `- Link to the task console: [View task](${taskUrl})` : ''}
+
+Use: gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="..."
+
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
 Your LAST message must include exactly this block:
@@ -198,6 +217,7 @@ PULL_REQUEST_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Comment replied: <yes|no>
+- Tracking comment: <updated|not_applicable>
 - Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
 \`\`\`
 

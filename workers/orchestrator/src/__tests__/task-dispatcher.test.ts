@@ -4111,6 +4111,8 @@ describe('TaskDispatcher', () => {
       expect(guidance).toContain('pnpm run ci:tracked successful');
       expect(guidance).toContain('Comment replied');
       expect(guidance).toContain('`yes` or `no`');
+      expect(guidance).toContain('Tracking comment');
+      expect(guidance).toContain('`updated` or `not_applicable`');
     });
   });
 
@@ -4151,6 +4153,7 @@ describe('TaskDispatcher', () => {
       expect(template).toContain('PR: https://github.com/');
       expect(template).toContain('CI evidence: pnpm run ci:tracked successful');
       expect(template).toContain('Comment replied:');
+      expect(template).toContain('Tracking comment: updated');
       expect(template).toContain('Linear issue:');
     });
   });
