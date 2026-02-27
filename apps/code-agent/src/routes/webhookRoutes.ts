@@ -211,8 +211,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const completedAt = new Date();
 
       const parseLinearIdentifierFromUrl = (url: string): string | null => {
-        const match = /\/issue\/([^/?#]+)/.exec(url);
-        return match?.[1] ?? null;
+        // Strip markdown link wrapper: [text](url) -> url
+        const mdMatch = /\[.*?\]\((.*?)\)/.exec(url);
+        const cleanUrl = mdMatch?.[1] ?? url;
+
+        try {
+          const parsed = new URL(cleanUrl);
+          if (parsed.hostname !== 'linear.app') return null;
+          const segments = parsed.pathname.split('/').filter(Boolean);
+          if (segments.length < 3 || segments[1] !== 'issue') return null;
+          return segments[2] ?? null;
+        } catch {
+          return null;
+        }
       };
 
       const enforcePlanningOutcome = async (
