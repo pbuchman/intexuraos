@@ -545,6 +545,30 @@ describe('firestoreCodeTaskRepository', () => {
       if (result.ok) return;
       expect(result.error.code).toBe('NOT_FOUND');
     });
+
+    it('updates task with queuedAt field', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const queuedAt = new Date();
+      const result = await repo.update(created.value.id, {
+        status: 'queued',
+        queuedAt,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.status).toBe('queued');
+      if (result.value.queuedAt !== undefined) {
+        expect(result.value.queuedAt.toDate()).toEqual(queuedAt);
+      }
+    });
   });
 
   describe('list', () => {
@@ -1319,6 +1343,46 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe('NOT_FOUND');
+    });
+  });
+
+  describe('findOldestQueued', () => {
+    it('returns null when no queued tasks exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.findOldestQueued();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBeNull();
+    });
+
+    it('returns the oldest queued task when one exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task and set it to queued
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'queued',
+        queuedAt: new Date(),
+      });
+
+      const result = await repo.findOldestQueued();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe(created.value.id);
+      expect(result.value?.status).toBe('queued');
     });
   });
 });

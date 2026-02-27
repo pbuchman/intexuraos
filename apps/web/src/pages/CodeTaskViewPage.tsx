@@ -46,6 +46,7 @@ interface StatusConfig {
 }
 
 const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
+  queued: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Queued', icon: Clock },
   dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched', icon: Clock },
   running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running', icon: Loader2 },
   planned: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Planned', icon: CheckCircle2 },
@@ -381,7 +382,7 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
 const MemoTaskHeader = memo(TaskHeader);
 
 function isActiveStatus(status: CodeTaskStatus): boolean {
-  return status === 'dispatched' || status === 'running';
+  return status === 'queued' || status === 'dispatched' || status === 'running';
 }
 
 function TaskActions({
@@ -489,7 +490,7 @@ const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTa
         <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
         <div className="flex-1">
           <p className="font-medium text-blue-900 dark:text-blue-200">
-            {task.status === 'dispatched' ? 'Task queued...' : 'Working on your task...'}
+            {task.status === 'queued' ? 'Waiting for available worker...' : task.status === 'dispatched' ? 'Task dispatched...' : 'Working on your task...'}
           </p>
           <ElapsedTimer createdAt={task.createdAt} />
         </div>

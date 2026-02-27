@@ -2,6 +2,13 @@
  * Configuration loader for code-agent service.
  */
 
+export interface QueueConfig {
+  /** Maximum number of tasks in queue (default 10) */
+  maxSize: number;
+  /** TTL for queued tasks in minutes (default 30) */
+  ttlMinutes: number;
+}
+
 export interface Config {
   port: number;
   gcpProjectId: string;
@@ -20,6 +27,8 @@ export interface Config {
   auth0Audience: string;
   auth0Issuer: string;
   auth0JwksUri: string;
+  // Task queue configuration (INT-619)
+  queue: QueueConfig;
 }
 
 export function loadConfig(): Config {
@@ -57,5 +66,9 @@ export function loadConfig(): Config {
     auth0Audience,
     auth0Issuer,
     auth0JwksUri,
+    queue: {
+      maxSize: parseInt(process.env['INTEXURAOS_QUEUE_MAX_SIZE'] ?? '10', 10),
+      ttlMinutes: parseInt(process.env['INTEXURAOS_QUEUE_TTL_MINUTES'] ?? '30', 10),
+    },
   };
 }

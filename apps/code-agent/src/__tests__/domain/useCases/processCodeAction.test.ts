@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp } from '@google-cloud/firestore';
 import { err, ok } from '@intexuraos/common-core';
+import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../../domain/services/taskDispatcher.js';
 import type { LinearIssueService } from '../../../domain/services/linearIssueService.js';
@@ -35,6 +36,7 @@ describe('processCodeAction', () => {
       findById: vi.fn(),
       findByIdForUser: vi.fn(),
       update: vi.fn(),
+      countQueued: vi.fn(),
     } as unknown as CodeTaskRepository;
 
     taskDispatcher = {
@@ -55,6 +57,7 @@ describe('processCodeAction', () => {
       notifyTaskComplete: vi.fn().mockResolvedValue(ok(undefined)),
       notifyTaskFailed: vi.fn().mockResolvedValue(ok(undefined)),
       notifyTaskStarted: vi.fn().mockResolvedValue(ok(undefined)),
+      notifyTaskQueued: vi.fn().mockResolvedValue(ok(undefined)),
     } as unknown as WhatsAppNotifier;
 
     metricsClient = {
@@ -1062,6 +1065,157 @@ describe('processCodeAction', () => {
       expect.objectContaining({
         workerType: 'auto',
       })
+    );
+  });
+
+  it('queues task when dispatch returns at_capacity and queue is not full', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-queued',
+        userId: 'user-789',
+        prompt: 'Queue test prompt',
+        sanitizedPrompt: 'Queue test prompt',
+        systemPromptHash: 'hash-123',
+        workerType: 'opus',
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-1',
+        approvalEventId: 'approval-new-queue',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      })
+    );
+
+    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+      err({ code: 'at_capacity', message: 'All workers busy' })
+    );
+    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(5));
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok({} as unknown as CodeTask));
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      {
+        actionId: 'action-1',
+        approvalEventId: 'approval-new-queue',
+        userId: 'user-789',
+        prompt: 'Queue test prompt',
+        workerType: 'opus',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.codeTaskId).toBe('new-task-queued');
+    }
+    expect(codeTaskRepo.update).toHaveBeenCalledWith(
+      'new-task-queued',
+      expect.objectContaining({ status: 'queued', queuedAt: expect.any(Date) })
+    );
+    expect(whatsappNotifier.notifyTaskQueued).toHaveBeenCalled();
+  });
+
+  it('returns queue_full when dispatch returns at_capacity and queue is full', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-full',
+        userId: 'user-789',
+        prompt: 'Queue full test prompt',
+        sanitizedPrompt: 'Queue full test prompt',
+        systemPromptHash: 'hash-123',
+        workerType: 'opus',
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-2',
+        approvalEventId: 'approval-new-full',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      })
+    );
+
+    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+      err({ code: 'at_capacity', message: 'All workers busy' })
+    );
+    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(ok(10));
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok({} as unknown as CodeTask));
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      {
+        actionId: 'action-2',
+        approvalEventId: 'approval-new-full',
+        userId: 'user-789',
+        prompt: 'Queue full test prompt',
+        workerType: 'opus',
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('queue_full');
+    }
+  });
+
+  it('queues task when countQueued fails (falls back to 0, under maxSize)', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-count-err',
+        userId: 'user-789',
+        prompt: 'Count error test prompt',
+        sanitizedPrompt: 'Count error test prompt',
+        systemPromptHash: 'hash-123',
+        workerType: 'opus',
+        workerLocation: 'home-mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-count-err',
+        approvalEventId: 'approval-count-err',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      })
+    );
+
+    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+      err({ code: 'at_capacity', message: 'All workers busy' })
+    );
+    // countQueued fails — should fall back to 0, which is under maxSize
+    vi.mocked(codeTaskRepo.countQueued).mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'DB error' })
+    );
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(ok({} as unknown as CodeTask));
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
+      {
+        actionId: 'action-count-err',
+        approvalEventId: 'approval-count-err',
+        userId: 'user-789',
+        prompt: 'Count error test prompt',
+        workerType: 'opus',
+      }
+    );
+
+    // Task should be queued (fallback to 0 < maxSize 10)
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.codeTaskId).toBe('new-task-count-err');
+    }
+    expect(codeTaskRepo.update).toHaveBeenCalledWith(
+      'new-task-count-err',
+      expect.objectContaining({ status: 'queued', queuedAt: expect.any(Date) })
     );
   });
 });

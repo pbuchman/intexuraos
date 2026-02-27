@@ -192,6 +192,23 @@ describe('sendTaskMessage', () => {
       );
     });
 
+    it('should return invalid_status for queued task', async () => {
+      const queuedTask = createMockTask({ status: 'queued' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(queuedTask));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+        expect(result.error.message).toContain('queued');
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId, status: 'queued' }),
+        expect.any(String)
+      );
+    });
+
     it('should return invalid_status for dispatched task', async () => {
       const dispatchedTask = createMockTask({ status: 'dispatched' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(dispatchedTask));

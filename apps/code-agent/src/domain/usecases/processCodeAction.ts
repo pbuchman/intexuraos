@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel, getWorkerTypeFromLabels } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { loadConfig } from '../../config.js';
 
 /**
  * Request to process a code action.
@@ -54,6 +55,8 @@ export type ProcessCodeActionErrorCode =
   | 'active_task_exists'
   | 'worker_unavailable'
   | 'worker_not_configured'
+  | 'queue_full'          // Queue at max capacity (INT-619)
+  | 'queue_timeout'       // Task expired in queue (INT-619)
   | 'internal_error';
 
 /**
@@ -309,9 +312,52 @@ export async function processCodeAction(
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
 
+  const config = loadConfig();
+
   if (!dispatchResult.ok) {
-    // Update task with error and mark as failed
     const dispatchError = dispatchResult.error;
+
+    // INT-619: Queue task when all workers are at capacity
+    if (dispatchError.code === 'at_capacity') {
+      const queueCountResult = await codeTaskRepo.countQueued();
+      const queueCount = queueCountResult.ok ? queueCountResult.value : 0;
+
+      if (queueCount >= config.queue.maxSize) {
+        await codeTaskRepo.update(task.id, {
+          status: 'failed',
+          error: {
+            code: 'queue_full',
+            message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
+          },
+        });
+        return err({
+          code: 'queue_full',
+          message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
+        });
+      }
+
+      const queuedAt = new Date();
+      await codeTaskRepo.update(task.id, {
+        status: 'queued',
+        queuedAt,
+      });
+
+      const queuePosition = queueCount + 1;
+      const estimatedWaitMinutes = queuePosition * 5;
+      await whatsappNotifier.notifyTaskQueued(userId, task, queuePosition, estimatedWaitMinutes);
+
+      logger.info({ taskId: task.id, queuePosition }, 'Task queued due to worker capacity');
+
+      return ok({
+        codeTaskId: task.id,
+        resourceUrl: `/#/code-tasks/${task.id}`,
+        /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check above) @preserve */
+        workerLocation: enabledWorkers[0]?.name ?? 'unknown',
+        /* v8 ignore stop @preserve */
+      });
+    }
+
+    // Other dispatch errors - fail as before
     await codeTaskRepo.update(task.id, {
       status: 'failed',
       error: {

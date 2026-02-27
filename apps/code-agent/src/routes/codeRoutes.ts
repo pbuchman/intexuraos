@@ -12,6 +12,7 @@ import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
 import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
+import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
@@ -50,7 +51,7 @@ const codeTaskSchema = {
     traceId: { type: 'string' },
     status: {
       type: 'string',
-      enum: ['dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled'],
+      enum: ['dispatched', 'running', 'queued', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled'],
     },
     dedupKey: { type: 'string' },
     callbackReceived: { type: 'boolean' },
@@ -149,7 +150,7 @@ function taskToApiResponse(task: {
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
+  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: unknown;
@@ -198,7 +199,7 @@ function taskToApiResponse(task: {
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
+  status: 'dispatched' | 'running' | 'queued' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;
@@ -1524,7 +1525,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
 
       // Parse comma-separated status filter (matching actions-agent pattern)
-      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled'];
+      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'queued', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled'];
       let statusFilter: TaskStatus[] | undefined;
       if (request.query.status !== undefined) {
         statusFilter = request.query.status
@@ -3768,6 +3769,98 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
 
       return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
+    }
+  );
+
+  // POST /internal/drain-queue - triggered by Cloud Scheduler (INT-619)
+  fastify.post(
+    '/internal/drain-queue',
+    {
+      schema: {
+        operationId: 'drainTaskQueue',
+        summary: 'Drain task queue by dispatching oldest queued task',
+        description: 'Called by Cloud Scheduler every minute to drain the task queue.',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Drain completed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  action: { type: 'string', enum: ['dispatched', 'expired', 'still_busy', 'empty', 'skipped'] },
+                  taskId: { type: 'string' },
+                },
+                required: ['action'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/drain-queue',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for drain-queue');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const services = getServices();
+
+      const result = await drainTaskQueue({
+        logger: services.logger,
+        codeTaskRepo: services.codeTaskRepo,
+        taskDispatcher: services.taskDispatcher,
+        linearAgentClient: services.linearAgentClient,
+        whatsappNotifier: services.whatsappNotifier,
+        workerSettingsRepo: services.workerSettingsRepo,
+      });
+
+      if (!result.ok) {
+        request.log.error({ error: result.error }, 'Drain queue failed');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }
   );
 

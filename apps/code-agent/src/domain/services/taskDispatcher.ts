@@ -64,6 +64,7 @@ export interface DispatchError {
   code:
     | 'worker_unavailable'
     | 'worker_busy'
+    | 'at_capacity'       // All workers returned 503 (INT-619)
     | 'dispatch_failed'
     | 'network_error'
     | 'invalid_response';

@@ -28,6 +28,7 @@ describe('retryTask use case', () => {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     hasActiveTaskForLinearIssue: ReturnType<typeof vi.fn>;
+    countQueued: ReturnType<typeof vi.fn>;
   };
   let mockLinearAgentClient: {
     updateIssueState: ReturnType<typeof vi.fn>;
@@ -41,6 +42,7 @@ describe('retryTask use case', () => {
   };
   let mockWhatsAppNotifier: {
     notifyTaskStarted: ReturnType<typeof vi.fn>;
+    notifyTaskQueued: ReturnType<typeof vi.fn>;
   };
   let mockWorkerSettingsRepo: {
     getSettings: ReturnType<typeof vi.fn>;
@@ -112,6 +114,7 @@ describe('retryTask use case', () => {
       create: vi.fn(),
       update: vi.fn().mockResolvedValue(ok(createMockTask())),
       hasActiveTaskForLinearIssue: vi.fn(),
+      countQueued: vi.fn().mockResolvedValue(ok(0)),
     };
 
     // Mock Linear agent client
@@ -141,6 +144,7 @@ describe('retryTask use case', () => {
     // Mock WhatsApp notifier
     mockWhatsAppNotifier = {
       notifyTaskStarted: vi.fn().mockResolvedValue(ok(undefined)),
+      notifyTaskQueued: vi.fn().mockResolvedValue(ok(undefined)),
     };
 
     // Mock worker settings repo
@@ -1367,6 +1371,185 @@ describe('retryTask use case', () => {
           error: expect.anything(),
         }),
         'Failed to record task submission metric for retry'
+      );
+    });
+  });
+
+  describe('task queueing on at_capacity (INT-619)', () => {
+    it('queues task when dispatch returns at_capacity and queue is not full', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
+      const retryTaskId = 'retry-task-queued';
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'http://localhost:3000',
+              enabled: true,
+              cfAccessClientId: undefined,
+              cfAccessClientSecret: undefined,
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+        })
+      );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({ labels: [], childCount: 0 })
+      );
+      const createdTask = createMockTask({ id: retryTaskId });
+      mockCodeTaskRepo.create.mockResolvedValue(ok(createdTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: 'All workers at capacity' })
+      );
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(2));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createdTask));
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe(retryTaskId);
+        expect(result.value.workerLocation).toBe('home-mac');
+        expect(result.value.retriedFrom).toBe(originalTaskId);
+      }
+
+      // Verify task was updated to queued status
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        retryTaskId,
+        expect.objectContaining({
+          status: 'queued',
+          queuedAt: expect.any(Date),
+        })
+      );
+
+      // Verify WhatsApp notification was sent with queue position
+      expect(mockWhatsAppNotifier.notifyTaskQueued).toHaveBeenCalledWith(
+        userId,
+        createdTask,
+        3, // queueCount (2) + 1
+        15 // queuePosition (3) * 5
+      );
+
+      // Verify info log
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: retryTaskId, queuePosition: 3 }),
+        'Retry task queued due to worker capacity'
+      );
+    });
+
+    it('returns error when dispatch returns at_capacity and queue is full', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
+      const retryTaskId = 'retry-task-queue-full';
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'http://localhost:3000',
+              enabled: true,
+              cfAccessClientId: undefined,
+              cfAccessClientSecret: undefined,
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+        })
+      );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({ labels: [], childCount: 0 })
+      );
+      mockCodeTaskRepo.create.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }))
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: 'All workers at capacity' })
+      );
+      mockCodeTaskRepo.countQueued.mockResolvedValue(ok(10)); // At max (default maxSize=10)
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: retryTaskId }))
+      );
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('queue_full');
+        expect(result.error.message).toContain('queue is full');
+      }
+
+      // Verify task was marked as failed with queue_full error
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        retryTaskId,
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({
+            code: 'queue_full',
+          }),
+        })
+      );
+
+      // Verify no queued notification was sent
+      expect(mockWhatsAppNotifier.notifyTaskQueued).not.toHaveBeenCalled();
+    });
+
+    it('queues task when countQueued fails (falls back to 0, under maxSize)', async () => {
+      const sixMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000));
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo });
+      const retryTaskId = 'retry-task-count-err';
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+      mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
+        ok({ hasActive: false })
+      );
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+        ok({
+          workers: [
+            {
+              name: 'home-mac',
+              url: 'http://localhost:3000',
+              enabled: true,
+              cfAccessClientId: undefined,
+              cfAccessClientSecret: undefined,
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+        })
+      );
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({ labels: [], childCount: 0 })
+      );
+      const createdTask = createMockTask({ id: retryTaskId });
+      mockCodeTaskRepo.create.mockResolvedValue(ok(createdTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        err({ code: 'at_capacity', message: 'All workers at capacity' })
+      );
+      // countQueued fails — should fall back to 0, which is under maxSize
+      mockCodeTaskRepo.countQueued.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'DB error' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createdTask));
+
+      const deps = createDeps();
+      const result = await retryTask(deps, { originalTaskId, userId });
+
+      // Task should be queued (fallback to 0 < maxSize)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe(retryTaskId);
+      }
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        retryTaskId,
+        expect.objectContaining({ status: 'queued', queuedAt: expect.any(Date) })
       );
     });
   });

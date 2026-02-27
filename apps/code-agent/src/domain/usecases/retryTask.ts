@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
+import { loadConfig } from '../../config.js';
 
 /**
  * Cool-off period before retry is allowed (1 minute).
@@ -58,6 +59,7 @@ export type RetryTaskErrorCode =
   | 'invalid_status'
   | 'too_soon'
   | 'worker_not_configured'
+  | 'queue_full'
   | 'internal_error';
 
 /**
@@ -349,9 +351,56 @@ ${additionalContext.trim()}
   /* v8 ignore stop @preserve */
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
+  const config = loadConfig();
 
   if (!dispatchResult.ok) {
     const dispatchError = dispatchResult.error;
+
+    // INT-619: Queue task when all workers are at capacity
+    if (dispatchError.code === 'at_capacity') {
+      const queueCountResult = await codeTaskRepo.countQueued();
+      const queueCount = queueCountResult.ok ? queueCountResult.value : 0;
+
+      if (queueCount >= config.queue.maxSize) {
+        await codeTaskRepo.update(retryTask.id, {
+          status: 'failed',
+          error: {
+            code: 'queue_full',
+            message: `All workers are busy and the queue is full (${String(queueCount)}/${String(config.queue.maxSize)}). Please try again in a few minutes.`,
+          },
+        });
+        return err({
+          code: 'queue_full',
+          message: 'All workers are busy and the queue is full. Please try again in a few minutes.',
+        });
+      }
+
+      const queuedAt = new Date();
+      await codeTaskRepo.update(retryTask.id, {
+        status: 'queued',
+        queuedAt,
+      });
+
+      const queuePosition = queueCount + 1;
+      const estimatedWaitMinutes = queuePosition * 5;
+      await whatsappNotifier.notifyTaskQueued(userId, retryTask, queuePosition, estimatedWaitMinutes);
+
+      logger.info({ taskId: retryTask.id, queuePosition }, 'Retry task queued due to worker capacity');
+
+      // Safe to access [0] because we return early if enabledWorkers.length === 0
+      /* v8 ignore start -- ts-type: optional chaining with nullish coalescing creates type narrowing branch @preserve */
+      const fallbackLocation = enabledWorkers[0]?.name ?? 'unknown';
+      /* v8 ignore stop @preserve */
+
+      return ok({
+        codeTaskId: retryTask.id,
+        resourceUrl: `/#/code-tasks/${retryTask.id}`,
+        workerLocation: fallbackLocation,
+        retriedFrom: originalTaskId,
+      });
+    }
+
+    // Non-at_capacity dispatch errors — fail as before
     logger.warn(
       { taskId: retryTask.id, error: dispatchError },
       'Dispatch failed for retry task, but task was created'
