@@ -37,7 +37,7 @@ export interface CreateTaskInput {
 
   // Follow-up tracking (INT-465)
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
   agentType?: 'planning' | 'execution' | 'pull_request';
 }
 

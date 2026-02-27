@@ -27,14 +27,14 @@ export type AgentType = 'planning' | 'execution' | 'pull_request';
  * Flow: dispatched → running → planned|implemented|failed|cancelled
  *       dispatched → interrupted (if worker dies)
  *
- * 'planned'      = Planning/Phase 1 task completed successfully
- * 'implemented'  = Phase 2 execution task completed successfully
+ * 'planned'      = Planning Agent task completed successfully
+ * 'implemented'  = Execution Agent task completed successfully
  */
 export type TaskStatus =
   | 'dispatched'   // Sent to worker, awaiting start
   | 'running'      // Worker actively processing
   | 'planned'      // Planning Agent task finished
-  | 'implemented'  // Phase 2 execution task finished
+  | 'implemented'  // Execution Agent task finished
   | 'failed'       // Error occurred
   | 'interrupted'  // Worker died unexpectedly
   | 'cancelled';   // User cancelled
@@ -70,6 +70,13 @@ export interface TaskResult {
   planning_doc_path?: string;
   planning_pr_url?: string;
   planning_clarification_message?: string;
+  execution_outcome_label?: 'implemented';
+  execution_superpowers_executing_plans_used?: '0' | '1';
+  execution_superpowers_requesting_code_review_used?: '0' | '1';
+  execution_trivial_task?: '0' | '1';
+  execution_subagents?: string;
+  execution_review_iterations?: number;
+  execution_linear_issue_url?: string;
 }
 
 /**
@@ -143,7 +150,7 @@ export interface CodeTask {
 
   // Resume/Follow-up tracking (for PR comment auto-response - INT-465)
   parentTaskId?: string;       // If this task is a follow-up to another
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
   agentType?: AgentType;
   implementationTaskId?: string;
 

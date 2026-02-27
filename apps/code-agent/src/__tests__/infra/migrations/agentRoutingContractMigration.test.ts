@@ -24,7 +24,7 @@ describe('agentRoutingContractMigration', () => {
     resetFirestore();
   });
 
-  it('migrates legacy executionPhase and designed status without Linear calls', async () => {
+  it('migrates legacy executionPhase, designed status, and follow-up reason without Linear calls', async () => {
     const tasks = firestore.collection('code_tasks');
 
     await tasks.doc('legacy-design').set({
@@ -36,6 +36,7 @@ describe('agentRoutingContractMigration', () => {
     await tasks.doc('legacy-execution').set({
       status: 'implemented',
       executionPhase: 'execution',
+      followUpReason: 'phase2_implement',
       callbackReceived: true,
     });
 
@@ -57,6 +58,7 @@ describe('agentRoutingContractMigration', () => {
     expect(executionDoc.data()?.['status']).toBe('implemented');
     expect(executionDoc.data()?.['agentType']).toBe('execution');
     expect(executionDoc.data()?.['executionPhase']).toBeUndefined();
+    expect(executionDoc.data()?.['followUpReason']).toBe('execution_implement');
 
     const newDoc = await tasks.doc('already-new').get();
     expect(newDoc.data()?.['status']).toBe('planned');
@@ -66,8 +68,8 @@ describe('agentRoutingContractMigration', () => {
   it('fails fast when legacy values remain after migration validation', async () => {
     const tasks = firestore.collection('code_tasks');
     await tasks.doc('legacy-still-there').set({
-      status: 'designed',
-      executionPhase: 'design',
+      status: 'planned',
+      followUpReason: 'phase2_implement',
     });
 
     await expect(assertNoLegacyAgentRoutingContractValues({ firestore, logger })).rejects.toThrow(

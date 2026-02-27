@@ -33,6 +33,22 @@ Planning Agent outcomes:
 
 For all Planning Agent runs, orchestrator flattens verifier metadata into webhook `result` using `planning_*` fields. `code-agent` owns deterministic Linear mutations after receiving the webhook.
 
+Execution Agent notes:
+
+- `implemented` is sent as webhook `status=completed`
+- Execution verification is Gemini semantic validation of Claude responses (latest response first, prior responses fallback)
+- Orchestrator flattens execution verifier metadata into webhook `result` using `execution_*` fields:
+  - `execution_outcome_label`
+  - `execution_superpowers_executing_plans_used`
+  - `execution_superpowers_requesting_code_review_used`
+  - `execution_trivial_task`
+  - `execution_subagents`
+  - `execution_review_iterations`
+  - `execution_linear_issue_url`
+- Ownership split:
+  - Worker owns GitHub execution (code/tests/CI/PR/review loop)
+  - `code-agent` owns deterministic Linear enforcement on successful execution callbacks (executed issue only)
+
 ```
 code-agent (Cloud Run)
     |

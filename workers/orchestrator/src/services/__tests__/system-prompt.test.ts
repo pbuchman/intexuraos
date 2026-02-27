@@ -31,10 +31,16 @@ describe('system-prompt', () => {
     expect(result).toContain('[WORKER-MODE]');
     expect(result).toContain('[AGENT:EXECUTION]');
     expect(result).toContain('[EXECUTION AGENT MODE]');
+    expect(result).toContain('source of truth');
+    expect(result).toContain('DO NOT use the `/linear` skill/command');
     expect(result).toContain('superpowers:executing-plans');
+    expect(result).toContain('superpowers:requesting-code-review');
+    expect(result).toContain('gh pr create');
     expect(result).toContain('EXECUTION_AGENT_FINAL:');
+    expect(result).toContain('- Outcome: implemented');
     expect(result).toContain('- Review iterations: <number>');
-    expect(result).toContain('- Turn summary:');
+    expect(result).toContain('- Skill sequence proof:');
+    expect(result).not.toContain('- Turn summary:');
   });
 
   it('builds pull request agent prompt when pr-comment label is present', () => {

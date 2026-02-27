@@ -2731,13 +2731,13 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.error.code).toBe('NOT_FOUND');
     });
 
-    it('returns 200 with correct response shape on successful Phase 2 dispatch', async () => {
+    it('returns 200 with correct response shape on successful execution-agent dispatch', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      // Create a completed Phase 1 design task owned by the test JWT user
+      // Create a completed planning-agent task owned by the test JWT user
       const created = await repo.create({
         userId: 'test-user-id',
         prompt: 'Design feature X',
@@ -2747,7 +2747,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         workerLocation: 'home-dev',
         repository: 'test/repo',
         baseBranch: 'main',
-        traceId: 'trace-phase1',
+        traceId: 'trace-planning',
         agentType: 'planning',
         linearIssueId: 'INT-100',
         linearIssueTitle: 'Feature X',
@@ -2755,7 +2755,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(created.ok).toBe(true);
       if (!created.ok) return;
 
-      // Mark task as planned (Phase 1 complete)
+      // Mark task as planned (planning-agent complete)
       await repo.update(created.value.id, { status: 'planned' });
 
       // Override linearAgentClient and workerSettingsRepo for this test
