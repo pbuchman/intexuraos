@@ -1019,7 +1019,7 @@ export class DockerProvider implements IsolationProvider {
       return imageName;
     }
 
-    const pullOpts: Record<string, unknown> = { platform: 'linux/amd64' };
+    const pullOpts: Record<string, unknown> = {};
     if (this.config.gcpSaKeyPath !== '' && fs.existsSync(this.config.gcpSaKeyPath)) {
       const saKey = fs.readFileSync(this.config.gcpSaKeyPath, 'utf-8');
       const registry = imageName.split('/')[0] ?? '';
