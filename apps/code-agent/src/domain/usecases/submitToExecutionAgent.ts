@@ -29,6 +29,8 @@ export interface SubmitToExecutionAgentRequest {
   originalTaskId: string;
   /** User ID submitting the request */
   userId: string;
+  /** Optional worker type to use for the implementation */
+  workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
 }
 
 /**
@@ -99,7 +101,7 @@ export async function submitToExecutionAgent(
   request: SubmitToExecutionAgentRequest
 ): Promise<Result<SubmitToExecutionAgentResult, SubmitToExecutionAgentError>> {
   const { logger, codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, workerSettingsRepo } = deps;
-  const { originalTaskId, userId } = request;
+  const { originalTaskId, userId, workerType } = request;
 
   // Step 1: Fetch original task
   const originalTaskResult = await codeTaskRepo.findByIdForUser(originalTaskId, userId);
@@ -258,6 +260,8 @@ export async function submitToExecutionAgent(
   }
 
   // Step 10: Create the Execution Agent task
+  // Use provided workerType if specified, otherwise use original task's workerType
+  const effectiveWorkerType = workerType ?? originalTask.workerType;
   const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, executionTaskId);
   const createInput = {
     id: executionTaskId,
@@ -265,7 +269,7 @@ export async function submitToExecutionAgent(
     prompt: EXECUTION_AGENT_PROMPT,
     sanitizedPrompt: EXECUTION_AGENT_PROMPT,
     systemPromptHash: originalTask.systemPromptHash,
-    workerType: originalTask.workerType,
+    workerType: effectiveWorkerType,
     /* v8 ignore start -- ts-type: optional chaining with null fallback creates type narrowing branch @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown',
     /* v8 ignore stop @preserve */
