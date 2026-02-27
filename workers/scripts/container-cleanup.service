@@ -16,6 +16,11 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
+# Run as root — required for Docker socket access on the VM.
+# The Docker group alone is insufficient on some VM configurations
+# where /var/run/docker.sock is owned by root:root.
+User=root
+Group=root
 ExecStart=/opt/intexuraos/workers/scripts/cleanup-containers.sh
 Environment=CONTAINER_PREFIX=claude-worker-
 Environment=RETENTION_DAYS=1

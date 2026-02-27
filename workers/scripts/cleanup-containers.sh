@@ -3,8 +3,14 @@
 #
 # Designed for cron/launchd/systemd execution on both macOS and Linux.
 # Containers older than RETENTION_DAYS that are not running are deleted.
-# Optionally queries the orchestrator for running task IDs so that
-# containers associated with active tasks are never removed.
+# Queries the orchestrator health endpoint to verify reachability.
+# Running containers are protected by Docker state checks (never deleted).
+#
+# Known limitation: The script does not yet query individual task IDs from
+# the orchestrator. Protection relies on Docker's container state — any
+# container in "running" state is unconditionally skipped. A future
+# /tasks?status=running endpoint would provide additional safety for
+# containers being used for forensics/log extraction after task completion.
 #
 # Environment variables (all optional):
 #   CONTAINER_PREFIX   — Docker name prefix to match   (default: claude-worker-)
@@ -88,11 +94,13 @@ timestamp_to_epoch() {
     # GNU date
     date -d "${ts}" '+%s' 2>/dev/null || echo ""
   else
-    # BSD date — try ISO-8601 first, then strip timezone suffix
+    # BSD date — strip trailing timezone abbreviations (UTC, PST, EST, etc.)
+    # and numeric offsets so the format string matches cleanly.
     local cleaned
-    cleaned=$(echo "${ts}" | sed 's/ UTC$//' | sed 's/ +0000$//')
+    cleaned=$(echo "${ts}" | sed 's/ [A-Z]\{2,5\}$//' | sed 's/ [+-][0-9]\{4\}$//')
     date -jf '%Y-%m-%dT%H:%M:%S' "${cleaned}" '+%s' 2>/dev/null \
       || date -jf '%Y-%m-%d %H:%M:%S %z' "${ts}" '+%s' 2>/dev/null \
+      || date -jf '%Y-%m-%d %H:%M:%S' "${cleaned}" '+%s' 2>/dev/null \
       || echo ""
   fi
 }
@@ -109,13 +117,11 @@ get_running_task_ids() {
     return
   }
 
-  # Extract running task IDs from the /tasks endpoint would require listing,
-  # but health only gives counts. We list containers that are still running
-  # and skip those — the orchestrator check is a secondary safety net.
-  #
-  # For a more robust integration, we would hit a /tasks?status=running
-  # endpoint; for now we rely on Docker state (running containers are
-  # always skipped) and log that the orchestrator is reachable.
+  # NOTE: Task-level filtering is not yet implemented. The orchestrator
+  # does not currently expose a /tasks?status=running endpoint. This
+  # health check only confirms the orchestrator is alive. Protection
+  # against deleting active containers relies on Docker state checks
+  # (running containers are unconditionally skipped in the main loop).
   log_info "Orchestrator reachable (status: $(echo "${response}" | grep -o '"status":"[^"]*"' | head -1 || echo 'unknown'))"
   echo ""
 }
@@ -198,7 +204,17 @@ main() {
       log_info "DELETE (dry-run): ${cname} [${cid:0:12}] created=${ccreated}"
       deleted=$((deleted + 1))
     else
-      if docker rm -f "${cid}" >/dev/null 2>&1; then
+      # Re-check state to avoid TOCTOU race (container may have started
+      # between the initial listing and now). Use plain `docker rm` without
+      # -f so a running container will fail safely rather than being killed.
+      local current_state
+      current_state=$(docker inspect --format '{{.State.Status}}' "${cid}" 2>/dev/null || echo "unknown")
+      if [[ "${current_state}" == "running" ]]; then
+        log_info "SKIP (now running): ${cname} [${cid:0:12}]"
+        skipped=$((skipped + 1))
+        continue
+      fi
+      if docker rm "${cid}" >/dev/null 2>&1; then
         log_info "DELETE: ${cname} [${cid:0:12}] created=${ccreated}"
         deleted=$((deleted + 1))
       else
@@ -210,7 +226,11 @@ main() {
 
   # --- Summary ---
   log_info "=== Container cleanup finished ==="
-  log_info "Total=${total}  Deleted=${deleted}  Skipped=${skipped}  Errors=${errors}"
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    log_info "Total=${total}  WouldDelete=${deleted}  Skipped=${skipped}  Errors=${errors}  (dry-run)"
+  else
+    log_info "Total=${total}  Deleted=${deleted}  Skipped=${skipped}  Errors=${errors}"
+  fi
 }
 
 main "$@"

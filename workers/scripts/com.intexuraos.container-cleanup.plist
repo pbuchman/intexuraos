@@ -2,15 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  macOS LaunchDaemon for IntexuraOS container cleanup.
+  macOS LaunchAgent for IntexuraOS container cleanup.
+  Runs as the current user (required for Docker Desktop access on macOS).
 
   Installation:
     1. Copy this file to ~/Library/LaunchAgents/
-    2. Edit ProgramArguments[0] to the absolute path of cleanup-containers.sh
+    2. Edit ProgramArguments[1] to the absolute path of cleanup-containers.sh
     3. Load:  launchctl load ~/Library/LaunchAgents/com.intexuraos.container-cleanup.plist
     4. Verify: launchctl list | grep intexuraos
 
   The job runs every 6 hours (21600 seconds).
+  Logs are written to ~/Library/Logs/intexuraos/ for persistence (/tmp is
+  periodically cleaned by macOS).
 -->
 <plist version="1.0">
 <dict>
@@ -44,5 +47,9 @@
 
   <key>StandardErrorPath</key>
   <string>/tmp/intexuraos-container-cleanup-stderr.log</string>
+
+  <!-- NOTE: For persistent logging, change LOG_FILE above to
+       ~/Library/Logs/intexuraos/container-cleanup.log and create
+       the directory: mkdir -p ~/Library/Logs/intexuraos -->
 </dict>
 </plist>
