@@ -46,17 +46,14 @@ const thumbnailPromptDataSchema = {
     },
     parameters: {
       type: 'object',
-      required: ['aspectRatio', 'framing', 'textOnImage', 'realism', 'people', 'logosTrademarks'],
+      required: ['framing', 'realism', 'people'],
       properties: {
-        aspectRatio: { type: 'string', enum: ['16:9'] },
         framing: { type: 'string' },
-        textOnImage: { type: 'string', enum: ['none'] },
         realism: {
           type: 'string',
           enum: ['photorealistic', 'cinematic illustration', 'clean vector'],
         },
         people: { type: 'string' },
-        logosTrademarks: { type: 'string', enum: ['none'] },
       },
     },
   },
