@@ -30,12 +30,9 @@ const validResponse = JSON.stringify({
   prompt: 'A detailed prompt for image generation',
   negativePrompt: 'Things to avoid in the image',
   parameters: {
-    aspectRatio: '16:9',
     framing: 'centered composition',
-    textOnImage: 'none',
     realism: 'photorealistic',
     people: 'generic silhouettes',
-    logosTrademarks: 'none',
   },
 });
 
@@ -448,34 +445,49 @@ describe('generateThumbnailPrompt', () => {
     });
   });
 
-  describe('fixed parameters', () => {
-    it('always sets aspectRatio to 16:9', async () => {
+  describe('F-011 contract alignment', () => {
+    it('output contract only contains consumed fields (no aspectRatio, textOnImage, logosTrademarks)', async () => {
       const client = createMockClient(validResponse);
       const result = await generateThumbnailPrompt(client, 'Test');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.thumbnailPrompt.parameters.aspectRatio).toBe('16:9');
+        const paramKeys = Object.keys(result.value.thumbnailPrompt.parameters);
+        expect(paramKeys).toEqual(['framing', 'realism', 'people']);
+        expect(paramKeys).not.toContain('aspectRatio');
+        expect(paramKeys).not.toContain('textOnImage');
+        expect(paramKeys).not.toContain('logosTrademarks');
       }
     });
 
-    it('always sets textOnImage to none', async () => {
-      const client = createMockClient(validResponse);
+    it('parser gracefully handles model responses that include removed fields (regression)', async () => {
+      const responseWithExtraFields = JSON.stringify({
+        title: 'Title With Extras',
+        visualSummary: 'Summary with extra fields',
+        prompt: 'A prompt from a model that includes extra fields',
+        negativePrompt: 'Negative prompt',
+        parameters: {
+          aspectRatio: '16:9',
+          framing: 'wide shot',
+          textOnImage: 'none',
+          realism: 'cinematic illustration',
+          people: 'silhouettes',
+          logosTrademarks: 'none',
+        },
+      });
+      const client = createMockClient(responseWithExtraFields);
       const result = await generateThumbnailPrompt(client, 'Test');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.thumbnailPrompt.parameters.textOnImage).toBe('none');
-      }
-    });
-
-    it('always sets logosTrademarks to none', async () => {
-      const client = createMockClient(validResponse);
-      const result = await generateThumbnailPrompt(client, 'Test');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.thumbnailPrompt.parameters.logosTrademarks).toBe('none');
+        const params = result.value.thumbnailPrompt.parameters;
+        expect(params.framing).toBe('wide shot');
+        expect(params.realism).toBe('cinematic illustration');
+        expect(params.people).toBe('silhouettes');
+        const paramKeys = Object.keys(params);
+        expect(paramKeys).not.toContain('aspectRatio');
+        expect(paramKeys).not.toContain('textOnImage');
+        expect(paramKeys).not.toContain('logosTrademarks');
       }
     });
   });

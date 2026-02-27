@@ -26,12 +26,9 @@ describe('createImageServiceClient', () => {
       prompt: 'Generate an image',
       negativePrompt: 'no blur',
       parameters: {
-        aspectRatio: '16:9',
         framing: 'medium shot',
-        textOnImage: 'none',
         realism: 'photorealistic',
         people: 'none',
-        logosTrademarks: 'none',
       },
     };
 
