@@ -116,7 +116,16 @@ vi.mock('node:fs', async (importOriginal) => {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
     statSync: vi.fn().mockReturnValue({ isFile: () => false, isDirectory: () => true }),
-    readFileSync: vi.fn().mockReturnValue(''),
+    readFileSync: vi.fn().mockImplementation((filePath: unknown) => {
+      if (
+        typeof filePath === 'string' &&
+        filePath.includes('claude-worker-forensics-seccomp.json')
+      ) {
+        return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
+      }
+      return '';
+    }),
+    appendFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     promises: {
       ...actual.promises,
@@ -149,6 +158,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     LINEAR_API_KEY: 'test-linear-key',
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     ZAI_API_KEY: 'test-zai-key',
+    MINIMAX_API_KEY: 'test-minimax-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
   githubAppKeyPath: '/test/github-key.pem',
@@ -322,6 +332,38 @@ describe('DockerProvider', () => {
       );
       const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
       expect(tmpfs['/repo/node_modules']).toContain(`uid=${String(process.getuid?.() ?? 1000)}`);
+    });
+
+    it('enables crash forensics settings when forensicsMode is configured', async () => {
+      const forensicsProvider = new TestableDockerProvider(
+        {
+          forensicsMode: true,
+          forensicsBasePath: '/tmp/worker-forensics',
+        },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await forensicsProvider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      const capAdd = createCall?.HostConfig?.CapAdd as string[];
+      const securityOpt = createCall?.HostConfig?.SecurityOpt as string[];
+      const ulimits = createCall?.HostConfig?.Ulimits as {
+        Name: string;
+        Soft: number;
+        Hard: number;
+      }[];
+
+      expect(envArr).toContain('CLAUDE_FORENSICS=1');
+      expect(envArr).toContain('CLAUDE_FORENSICS_DIR=/var/crash');
+      expect(binds).toContain('/tmp/worker-forensics/test-task-123:/var/crash:rw');
+      expect(capAdd).toContain('SYS_PTRACE');
+      expect(securityOpt.some((opt: string) => opt.startsWith('seccomp='))).toBe(true);
+      expect(securityOpt).not.toContain('seccomp=unconfined');
+      expect(ulimits).toContainEqual({ Name: 'core', Soft: -1, Hard: -1 });
     });
 
     it('sets CLAUDE_WORKER_MODE env var', async () => {
@@ -953,6 +995,77 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
       expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-zai-key');
+    });
+
+    it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for sonnet worker', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBeUndefined();
+    });
+
+    it('sets ANTHROPIC_API_KEY env var for minimax worker even with sharedCredsPath configured', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-minimax-key');
+    });
+
+    it('sets ANTHROPIC_BASE_URL for minimax worker even with sharedCredsPath configured', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
+      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic');
+    });
+
+    it('sets ANTHROPIC_MODEL for sonnet worker', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=sonnet');
+    });
+
+    it('sets ANTHROPIC_MODEL for minimax worker', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.5');
+    });
+
+    it('mounts shared creds dir for sonnet workers instead of per-task session', async () => {
+      const config = createTestConfig({ workerType: 'sonnet' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
+      expect(binds.join(',')).not.toContain('claude-session');
+    });
+
+    it('mounts per-task session for minimax workers even with sharedCredsPath', async () => {
+      const config = createTestConfig({ workerType: 'minimax' });
+      await sharedCredsProvider.createWorker(config);
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const binds = createCall?.HostConfig?.Binds as string[];
+      expect(binds).toContainEqual(
+        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
+      );
     });
 
     it('does not set ANTHROPIC_BASE_URL env var when sharedCredsPath is configured for auto worker', async () => {

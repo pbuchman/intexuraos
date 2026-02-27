@@ -67,7 +67,7 @@ const runningTasks = new Map<string, NodeJS.Timeout>();
 
 interface MockClaudeRequest {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   prompt: string;
   repository?: string;
   baseBranch?: string;

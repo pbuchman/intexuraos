@@ -519,14 +519,14 @@ function SelfBuildingSection(): React.JSX.Element {
 
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
           <PipelineStep
-            number="Phase 1"
-            title="Design"
-            description="A design agent analyzes the task, enriches the project issue with technical context, creates subissues for complex work, and labels it code-task when the plan is sound."
+            number="Step 1"
+            title="Plan"
+            description="A planning agent analyzes the task, enriches the project issue with technical context, creates subissues for complex work, and labels it code-task when the plan is sound."
             icon={Brain}
             accent="bg-purple-100 text-purple-700"
           />
           <PipelineStep
-            number="Phase 2"
+            number="Step 2"
             title="Execute"
             description="A strict execution agent picks up the labeled issue, writes code in an isolated container on your machine, runs the full test suite, and creates a code change for review."
             icon={Code2}

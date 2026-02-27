@@ -68,6 +68,8 @@ export interface UserWorkerSettings {
   updatedAt: string;
   /** Cached health statuses for workers (name -> status) */
   workerHealthStatuses?: Record<string, WorkerHealthStatus>;
+  /** GitHub username for mapping PR comments to user */
+  githubUsername?: string;
 }
 
 /**
@@ -115,6 +117,7 @@ export interface MaskedWorkerConfig {
  */
 export interface UserWorkerSettingsResponse {
   workers: MaskedWorkerConfig[];
+  githubUsername?: string;
 }
 
 /**

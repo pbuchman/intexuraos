@@ -13,31 +13,10 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
-import { randomBytes, randomUUID, createHmac } from 'node:crypto';
-import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { randomUUID } from 'node:crypto';
+import { hasCodeTaskLabel, getWorkerTypeFromLabels } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
-
-/**
- * Generate a deterministic webhook secret for a task.
- * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
- */
-function generateWebhookSecret(sharedSecret: string, taskId: string): string {
-  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
-}
-
-/**
- * Generate a cancel nonce for task cancellation (INT-379).
- * Format: 4 hex characters (2 bytes)
- */
-function generateCancelNonce(): string {
-  const buffer = randomBytes(2);
-  return buffer.toString('hex');
-}
-
-/**
- * Cancel nonce TTL in milliseconds (15 minutes).
- */
-const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
+import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 
 /**
  * Request to process a code action.
@@ -47,7 +26,7 @@ export interface ProcessCodeActionRequest {
   approvalEventId: string;
   userId: string;
   prompt: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
@@ -95,6 +74,7 @@ export interface ProcessCodeActionDeps {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
+  serviceUrl: string;
 }
 
 /**
@@ -184,12 +164,18 @@ export async function processCodeAction(
     linearIssueUrl,
   } = issueResult;
 
+  // Derive worker type from labels (single match only, otherwise fall back to request's workerType)
+  const labelWorkerType = getWorkerTypeFromLabels(linearIssueLabels);
+  const effectiveWorkerType = labelWorkerType ?? workerType;
+
   logger.info(
     {
       linearIssueId: finalLinearIssueId,
       linearIssueTitle,
       linearIssueLabels,
       hasChildren,
+      labelWorkerType,
+      effectiveWorkerType,
     },
     'Linear issue processed'
   );
@@ -205,7 +191,7 @@ export async function processCodeAction(
     prompt: string;
     sanitizedPrompt: string;
     systemPromptHash: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
     workerLocation: string;
     repository: string;
     baseBranch: string;
@@ -217,14 +203,14 @@ export async function processCodeAction(
     linearIssueTitle?: string;
     linearIssueUrl?: string;
     linearFallback?: boolean;
-    executionPhase: 'design' | 'execution';
+    agentType: 'planning' | 'execution';
   } = {
     id: taskId,
     userId,
     prompt,
     sanitizedPrompt: sanitizedPromptText,
     systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system prompt
-    workerType,
+    workerType: effectiveWorkerType,
     /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
     workerLocation: enabledWorkers[0]?.name ?? 'unknown', // Use first worker as default
     /* v8 ignore stop @preserve */
@@ -234,7 +220,7 @@ export async function processCodeAction(
     actionId,
     approvalEventId,
     webhookSecret,
-    executionPhase: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'design',
+    agentType: hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning',
   };
 
   // Only include linear issue fields if we have them
@@ -279,9 +265,8 @@ export async function processCodeAction(
 
   const task = createResult.value;
 
-  // Step 6: Build webhook URL for callback (use SERVICE_URL for local/E2E environments)
-  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
-  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
+  // Step 6: Build webhook URL for callback
+  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
 
   // Step 7: Dispatch to worker with per-user credentials
   const dispatchRequest: {
@@ -293,11 +278,12 @@ export async function processCodeAction(
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;
     workerCredentials: DispatchWorkerCredentials;
+    agentType: 'planning' | 'execution';
   } = {
     taskId: task.id,
     linearIssueLabels,
@@ -310,6 +296,7 @@ export async function processCodeAction(
     webhookUrl,
     webhookSecret,
     workerCredentials,
+    agentType: task.agentType === 'execution' ? 'execution' : 'planning',
   };
 
   // Only include linearIssueId if it exists
@@ -344,9 +331,9 @@ export async function processCodeAction(
   // Step 8: Record metrics for task submission
   const source = request.source ?? 'web';
   try {
-    await deps.metricsClient.incrementTasksSubmitted(workerType, source);
+    await deps.metricsClient.incrementTasksSubmitted(effectiveWorkerType, source);
   } catch (error: unknown) {
-    logger.error({ error, taskId: task.id, workerType, source }, 'Failed to record task submission metric');
+    logger.error({ error, taskId: task.id, workerType: effectiveWorkerType, source }, 'Failed to record task submission metric');
   }
 
   // Step 9: Generate cancel nonce and send task started notification (INT-379)

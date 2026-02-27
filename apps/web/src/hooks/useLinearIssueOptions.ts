@@ -15,6 +15,8 @@ export interface LinearIssueOption {
   url: string;
   state?: LinearIssue['state'];
   priority: LinearIssue['priority'];
+  /** ID of parent issue (null if top-level, set if subtask) */
+  parentId: string | null;
 }
 
 export type GroupedLinearIssueOptions = Record<string, LinearIssueOption[]>;
@@ -59,6 +61,7 @@ export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
         url: issue.url,
         state: issue.state,
         priority: issue.priority,
+        parentId: issue.parentId,
       });
 
       const grouped: GroupedLinearIssueOptions = {};
@@ -92,6 +95,7 @@ export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
           title: validated.title,
           url: validated.url,
           priority: 0,
+          parentId: null,
         };
       } catch {
         return null;

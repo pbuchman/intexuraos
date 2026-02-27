@@ -134,7 +134,7 @@ sequenceDiagram
 | POST   | `/code/tasks/:taskId/retry`                | Retry a failed/cancelled task      | Auth0 |
 | POST   | `/code/tasks/:taskId/feedback`             | Submit feedback on completed task  | Auth0 |
 | POST   | `/code/tasks/:taskId/messages`             | Send message to running/ended task | Auth0 |
-| POST   | `/code/tasks/:taskId/implement`            | Start Phase 2 from design task     | Auth0 |
+| POST   | `/code/tasks/:taskId/implement`            | Start execution from planning task | Auth0 |
 | GET    | `/code/github-pr-events`                   | Query GitHub PR events             | Auth0 |
 | GET    | `/code/github-pr-summaries`                | List PRs active in last 30 days    | Auth0 |
 | GET    | `/code/worker-settings`                    | Get worker settings (masked)       | Auth0 |
@@ -193,8 +193,8 @@ interface CodeTask {
   status:
     | 'dispatched'
     | 'running'
-    | 'designed'     // Phase 1 design completed
-    | 'implemented'  // Phase 2 execution completed
+    | 'planned'      // planning agent completed
+    | 'implemented'  // execution agent completed
     | 'failed'
     | 'interrupted'
     | 'cancelled';
@@ -212,7 +212,7 @@ interface CodeTask {
   prBranch?: string;
   parentTaskId?: string;
   followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
-  executionPhase?: 'design' | 'execution';
+  agentType?: 'planning' | 'execution';
   implementationTaskId?: string;
   result?: TaskResult;
   error?: TaskError;
@@ -353,17 +353,17 @@ Document ID format: `${repository.replace('/', '__')}#${pullRequestNumber}`
 
 ## Use Cases
 
-| Use Case            | File                                     | Description                                              |
-| ------------------- | ---------------------------------------- | -------------------------------------------------------- |
-| processCodeAction   | `domain/usecases/processCodeAction.ts`   | Create task with dedup, sanitize prompt, dispatch        |
-| cancelTaskWithNonce | `domain/usecases/cancelTaskWithNonce.ts` | Cancel via WhatsApp nonce validation                     |
-| processHeartbeat    | `domain/usecases/processHeartbeat.ts`    | Update heartbeat timestamps for zombie detection         |
-| detectZombieTasks   | `domain/usecases/detectZombieTasks.ts`   | Find and interrupt stale tasks (30 min)                  |
-| cleanupTaskLogs     | `domain/usecases/cleanupTaskLogs.ts`     | Archive logs older than 90 days                          |
-| retryTask           | `domain/usecases/retryTask.ts`           | Retry failed/cancelled with cool-off and context         |
-| submitTaskFeedback  | `domain/usecases/submitTaskFeedback.ts`  | Follow-up on completed tasks with feedback               |
-| sendTaskMessage     | `domain/usecases/sendTaskMessage.ts`     | Send message to running task (queued) or resume ended    |
-| submitToPhase2      | `domain/usecases/submitToPhase2.ts`      | Start Phase 2 implementation from completed design task  |
+| Use Case               | File                                        | Description                                              |
+| ---------------------- | ------------------------------------------- | -------------------------------------------------------- |
+| processCodeAction      | `domain/usecases/processCodeAction.ts`      | Create task with dedup, sanitize prompt, dispatch        |
+| cancelTaskWithNonce    | `domain/usecases/cancelTaskWithNonce.ts`    | Cancel via WhatsApp nonce validation                     |
+| processHeartbeat       | `domain/usecases/processHeartbeat.ts`       | Update heartbeat timestamps for zombie detection         |
+| detectZombieTasks      | `domain/usecases/detectZombieTasks.ts`      | Find and interrupt stale tasks (30 min)                  |
+| cleanupTaskLogs        | `domain/usecases/cleanupTaskLogs.ts`        | Archive logs older than 90 days                          |
+| retryTask              | `domain/usecases/retryTask.ts`              | Retry failed/cancelled with cool-off and context         |
+| submitTaskFeedback     | `domain/usecases/submitTaskFeedback.ts`     | Follow-up on completed tasks with feedback               |
+| sendTaskMessage        | `domain/usecases/sendTaskMessage.ts`        | Send message to running task (queued) or resume ended    |
+| submitToExecutionAgent | `domain/usecases/submitToExecutionAgent.ts` | Start execution agent from completed planning task       |
 
 ## Domain Services
 
@@ -498,7 +498,7 @@ apps/code-agent/src/
       retryTask.ts                  # Task retry with cool-off
       sendTaskMessage.ts            # Send message to running/ended task
       submitTaskFeedback.ts         # Feedback follow-up
-      submitToPhase2.ts             # Phase 2 execution from design
+      submitToExecutionAgent.ts     # Execution agent from planning
     utils/
       labelUtils.ts                 # Linear label checks (code-task, unclear)
       promptSanitization.ts         # Secret stripping and whitespace normalization

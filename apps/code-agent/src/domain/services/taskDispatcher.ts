@@ -36,7 +36,7 @@ export interface DispatchRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   webhookUrl: string;
   webhookSecret: string;
   traceId?: string;
@@ -45,6 +45,8 @@ export interface DispatchRequest {
   workerHealthStatuses?: Record<string, { healthy: boolean }>;
   /** For retried tasks: points to the original task ID that this task is retrying. */
   retriedFrom?: string;
+  /** Agent type for orchestrator agent-based routing. */
+  agentType?: 'planning' | 'execution' | 'pull_request';
 }
 
 /**

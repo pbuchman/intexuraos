@@ -4,7 +4,7 @@ import type { OAuthState } from '../services/isolation/types.js';
 // POST /tasks request
 export interface CreateTaskRequest {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   prompt: string;
   repository?: string;
   baseBranch?: string;
@@ -21,6 +21,8 @@ export interface CreateTaskRequest {
    * Used for tracking retry chains and debugging.
    */
   retriedFrom?: string;
+  /** Agent type determined by code-agent routing analysis. */
+  agentType?: 'planning' | 'execution' | 'pull_request';
 }
 
 // GET /health response

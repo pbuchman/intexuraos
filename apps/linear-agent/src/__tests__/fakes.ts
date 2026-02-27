@@ -344,6 +344,37 @@ export class FakeLinearApiClient implements LinearApiClient {
     return ok(issue);
   }
 
+  async updateIssue(
+    _apiKey: string,
+    issueId: string,
+    _input: { assigneeId?: string | null; labelIds?: string[]; parentId?: string | null }
+  ): Promise<Result<LinearIssue, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    const issue = this.issues.find((i) => i.id === issueId);
+    if (!issue) {
+      return err({ code: 'API_ERROR', message: 'Issue not found' });
+    }
+    issue.updatedAt = new Date().toISOString();
+    return ok(issue);
+  }
+
+  async createComment(
+    _apiKey: string,
+    _issueId: string,
+    _body: string
+  ): Promise<Result<{ id: string }, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok({ id: `comment-${Date.now()}` });
+  }
+
+  async listIssueLabels(
+    _apiKey: string,
+    _teamId: string
+  ): Promise<Result<{ id: string; name: string; color: string }[], LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok([]);
+  }
+
   async getWorkflowStates(
     _apiKey: string,
     _teamId: string
@@ -809,7 +840,7 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     userId: string;
     linearIssueId: string;
     prompt: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
     actionId: string;
     approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>> {

@@ -513,6 +513,83 @@ export function createLinearApiClient(): LinearApiClient {
       }
     },
 
+    async updateIssue(
+      apiKey: string,
+      issueId: string,
+      input: { assigneeId?: string | null; labelIds?: string[]; parentId?: string | null }
+    ): Promise<Result<LinearIssue, LinearError>> {
+      try {
+        logger.info({ issueId, input }, 'Updating Linear issue metadata');
+        const client = getOrCreateClient(apiKey);
+        const payload = await client.updateIssue(issueId, {
+          ...(input.assigneeId !== undefined && { assigneeId: input.assigneeId }),
+          ...(input.labelIds !== undefined && { labelIds: input.labelIds }),
+          ...(input.parentId !== undefined && { parentId: input.parentId }),
+        });
+
+        if (!payload.success) {
+          return err({ code: 'API_ERROR', message: 'Failed to update issue metadata' });
+        }
+
+        const issue = await payload.issue;
+        if (issue === undefined) {
+          return err({ code: 'API_ERROR', message: 'Issue updated but could not fetch details' });
+        }
+
+        return ok(await mapSingleIssue(issue));
+      } catch (error) {
+        logger.error({ error, issueId, input }, 'Failed to update Linear issue metadata');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async createComment(
+      apiKey: string,
+      issueId: string,
+      body: string
+    ): Promise<Result<{ id: string }, LinearError>> {
+      try {
+        logger.info({ issueId }, 'Creating Linear comment');
+        const client = getOrCreateClient(apiKey);
+        const payload = await client.createComment({ issueId, body });
+        if (!payload.success) {
+          return err({ code: 'API_ERROR', message: 'Failed to create comment' });
+        }
+        const comment = await payload.comment;
+        if (comment === undefined) {
+          return err({ code: 'API_ERROR', message: 'Comment created but could not fetch details' });
+        }
+        return ok({ id: comment.id });
+      } catch (error) {
+        logger.error({ error, issueId }, 'Failed to create Linear comment');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async listIssueLabels(
+      apiKey: string,
+      teamId: string
+    ): Promise<Result<{ id: string; name: string; color: string }[], LinearError>> {
+      try {
+        logger.info({ teamId }, 'Listing Linear issue labels');
+        const client = getOrCreateClient(apiKey);
+        const labelsConnection = await client.issueLabels({
+          filter: { team: { id: { eq: teamId } } },
+          first: 250,
+        });
+        return ok(
+          labelsConnection.nodes.map((label) => ({
+            id: label.id,
+            name: label.name,
+            color: label.color,
+          }))
+        );
+      } catch (error) {
+        logger.error({ error, teamId }, 'Failed to list Linear issue labels');
+        return err(mapLinearError(error));
+      }
+    },
+
     async getWorkflowStates(
       apiKey: string,
       teamId: string

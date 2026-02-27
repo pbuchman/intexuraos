@@ -133,9 +133,10 @@ export async function listIssues(
     /* v8 ignore stop @preserve */
   }
 
-  // Use top-level issues for grouping
-  const issues = topLevelIssues;
-  logger?.info({ userId, topLevelIssues: issues.length }, 'Built parent-child relationships');
+  // Use all issues (including subtasks) for grouping
+  // Subtasks will appear in their respective state groups alongside parent issues
+  const issues = [...topLevelIssues, ...childIssues];
+  logger?.info({ userId, totalIssues: issues.length, topLevel: topLevelIssues.length, subtasks: childIssues.length }, 'Built parent-child relationships');
 
   // Group issues by dashboard column
   const grouped: GroupedIssues = {

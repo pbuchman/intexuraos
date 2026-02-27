@@ -25,9 +25,6 @@ const defaultExecAsync = async (
   if (command.includes('git worktree list')) {
     return { stdout: '', stderr: '' };
   }
-  if (command.includes('pnpm install')) {
-    return { stdout: '', stderr: '' };
-  }
   return { stdout: '', stderr: '' };
 };
 
@@ -121,8 +118,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should copy MCP config template with env var substitution', async () => {
-      process.env['LINEAR_API_KEY'] = 'test-linear-key';
-      process.env['SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
+      process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-linear-key';
+      process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
 
       const WM = await loadWorktreeManager();
       const manager = new WM(mockConfig, mockLogger);
@@ -136,8 +133,8 @@ describe('WorktreeManager', () => {
       expect(config.linear.apiKey).toBe('test-linear-key');
       expect(config.sentry.authToken).toBe('test-sentry-token');
 
-      delete process.env['LINEAR_API_KEY'];
-      delete process.env['SENTRY_AUTH_TOKEN'];
+      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
+      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
     });
 
     it('should handle missing env vars gracefully', async () => {
@@ -230,8 +227,8 @@ describe('WorktreeManager', () => {
 
     it('should handle missing env vars with warning', async () => {
       // Clear env vars
-      delete process.env['LINEAR_API_KEY'];
-      delete process.env['SENTRY_AUTH_TOKEN'];
+      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
+      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
 
       const warnSpy = vi.spyOn(mockLogger, 'warn');
 
@@ -319,8 +316,8 @@ describe('WorktreeManager', () => {
 
   describe('copyMcpConfig error handling', () => {
     it('should handle non-Error objects thrown during MCP config copy', async () => {
-      process.env['LINEAR_API_KEY'] = 'test-key';
-      process.env['SENTRY_AUTH_TOKEN'] = 'test-token';
+      process.env['INTEXURAOS_LINEAR_API_KEY'] = 'test-key';
+      process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'] = 'test-token';
 
       const WM = await loadWorktreeManager();
       // Create a worktree without MCP config template to test error path
@@ -337,8 +334,8 @@ describe('WorktreeManager', () => {
         managerWithoutTemplate.createWorktree('task-no-template', 'feature-branch')
       ).resolves.toBe(join(worktreeBasePath, 'task-no-template'));
 
-      delete process.env['LINEAR_API_KEY'];
-      delete process.env['SENTRY_AUTH_TOKEN'];
+      delete process.env['INTEXURAOS_LINEAR_API_KEY'];
+      delete process.env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
     });
   });
 
@@ -351,20 +348,6 @@ describe('WorktreeManager', () => {
       // that the function doesn't throw when it receives empty output
       const worktrees = await manager.listWorktrees();
       expect(Array.isArray(worktrees)).toBe(true);
-    });
-  });
-
-  describe('installDependencies edge cases', () => {
-    it('should handle worktree without pnpm-lock.yaml', async () => {
-      const WM = await loadWorktreeManager();
-      const manager = new WM(mockConfig, mockLogger);
-
-      // Create a worktree - the mock exec succeeds regardless of lock file
-      // The installDependencies function checks for pnpm-lock.yaml with access()
-      // and returns early if not found (no error thrown)
-      const result = await manager.createWorktree('task-no-lock-file', 'feature-branch');
-
-      expect(result).toBe(join(worktreeBasePath, 'task-no-lock-file'));
     });
   });
 

@@ -249,7 +249,7 @@ describe('sendTaskMessage', () => {
     });
 
     it('should resume completed task with message', async () => {
-      setupSuccessPath({ status: 'designed' }, 'resumed');
+      setupSuccessPath({ status: 'planned' }, 'resumed');
 
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
@@ -502,7 +502,7 @@ describe('sendTaskMessage', () => {
     });
 
     it('should append [resumed] marker when action is resumed without duplicating [user] line', async () => {
-      setupSuccessPath({ status: 'designed' }, 'resumed');
+      setupSuccessPath({ status: 'planned' }, 'resumed');
 
       await sendTaskMessage(createDeps(), { taskId, userId, message });
 
@@ -566,7 +566,7 @@ describe('sendTaskMessage', () => {
     });
 
     it('should succeed even if resumed status log write fails (best-effort)', async () => {
-      const task = createMockTask({ status: 'designed' });
+      const task = createMockTask({ status: 'planned' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update.mockResolvedValue(ok(undefined));
       // First storeBatch (user line) succeeds, second ([resumed] marker) fails
@@ -588,7 +588,7 @@ describe('sendTaskMessage', () => {
 
   describe('resume side-effects', () => {
     it('should update Firestore status to running on resume', async () => {
-      const task = createMockTask({ status: 'designed', actionId: 'action-1' });
+      const task = createMockTask({ status: 'planned', actionId: 'action-1' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
       mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
@@ -602,7 +602,7 @@ describe('sendTaskMessage', () => {
     });
 
     it('should mirror status to running on resume', async () => {
-      const task = createMockTask({ status: 'designed', actionId: 'action-1', traceId: 'trace-abc' });
+      const task = createMockTask({ status: 'planned', actionId: 'action-1', traceId: 'trace-abc' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
       mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
@@ -619,7 +619,7 @@ describe('sendTaskMessage', () => {
     });
 
     it('should send WhatsApp notification on resume', async () => {
-      const task = createMockTask({ status: 'designed' });
+      const task = createMockTask({ status: 'planned' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
       mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
@@ -644,7 +644,7 @@ describe('sendTaskMessage', () => {
     });
 
     it('should succeed even if Firestore status update fails (best-effort)', async () => {
-      const task = createMockTask({ status: 'designed' });
+      const task = createMockTask({ status: 'planned' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'Write failed' }));
       mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
@@ -664,7 +664,7 @@ describe('sendTaskMessage', () => {
     });
 
     it('should succeed even if status mirror fails (best-effort)', async () => {
-      const task = createMockTask({ status: 'designed', actionId: 'action-1' });
+      const task = createMockTask({ status: 'planned', actionId: 'action-1' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
       mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
@@ -685,7 +685,7 @@ describe('sendTaskMessage', () => {
     });
 
     it('should succeed even if WhatsApp notification fails (best-effort)', async () => {
-      const task = createMockTask({ status: 'designed' });
+      const task = createMockTask({ status: 'planned' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockCodeTaskRepo.update = vi.fn().mockResolvedValue(ok(undefined));
       mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));

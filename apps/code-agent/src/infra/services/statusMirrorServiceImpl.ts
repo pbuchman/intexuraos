@@ -45,11 +45,11 @@ export function createStatusMirrorService(deps: StatusMirrorServiceDeps): Status
   const { actionsAgentClient, logger } = deps;
 
   // Map TaskStatus → ResourceStatus (actions-agent vocabulary)
-  // Both 'designed' and 'implemented' map to 'completed' for the Inbox UI
+  // 'planned'/'implemented' both map to 'completed' for the Inbox UI
   const statusMapping: Record<TaskStatus, ResourceStatus> = {
     dispatched: 'dispatched',
     running: 'running',
-    designed: 'completed',
+    planned: 'completed',
     implemented: 'completed',
     failed: 'failed',
     cancelled: 'cancelled',
