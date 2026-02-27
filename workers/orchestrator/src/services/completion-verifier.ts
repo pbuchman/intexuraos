@@ -102,7 +102,10 @@ const LLM_EXECUTION_METADATA_SCHEMA = z.object({
   superpowersExecutingPlansUsed: z.enum(['0', '1']),
   superpowersRequestingCodeReviewUsed: z.enum(['0', '1']),
   trivialTask: z.enum(['0', '1']),
-  subagents: z.string(),
+  subagents: z
+    .string()
+    .nullable()
+    .transform((v) => v ?? ''),
   reviewIterations: z
     .number()
     .int()
