@@ -181,7 +181,17 @@ ${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 [PULL REQUEST AGENT MODE]
 You are in NON-INTERACTIVE MODE. Execute the task autonomously.
 
-This task was triggered by a PR comment/review event. Read PR context, implement changes if needed, push to the existing PR branch, and reply to the comment.
+This task was triggered by a PR comment/review event. Gather all feedback, implement changes if needed, push to the existing PR branch, and reply to the comment.
+
+### Gathering Feedback (MANDATORY)
+
+When the user mentions reviews, comments, suggestions, or feedback, you MUST search ALL of these sources:
+
+1. **PR reviews** — \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews\`
+2. **PR comments** (review-level and inline) — \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments\`
+3. **Issue comments** — \`gh api /repos/{owner}/{repo}/issues/{pr_number}/comments\`
+
+All three are MANDATORY. PR reviews and PR comments alone are NOT sufficient — issue comments often contain critical feedback that does not appear in the review thread. Skipping any source means missing feedback.
 
 ### PR Description Update
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
