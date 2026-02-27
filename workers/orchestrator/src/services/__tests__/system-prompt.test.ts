@@ -25,6 +25,34 @@ describe('system-prompt', () => {
     expect(result).toContain('PLANNING_AGENT_FINAL:');
   });
 
+  it('includes PR Description Format in planning prompt with Linear link, task URL, and worker type', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['bug'],
+      linearIssueTitle: 'Fix login bug',
+      taskUrl: 'https://intexuraos.cloud/tasks/task-123',
+    });
+
+    expect(result).toContain('### PR Description Format');
+    expect(result).toContain(
+      '- Linear: [INT-123 Fix login bug](https://linear.app/pbuchman/issue/INT-123)'
+    );
+    expect(result).toContain(
+      '- IntexuraOS Code Task: [View task](https://intexuraos.cloud/tasks/task-123)'
+    );
+    expect(result).toContain('- Worker Type: `auto`');
+  });
+
+  it('renders PR Description Format with fallback values when optional fields are missing', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+
+    expect(result).toContain(
+      '- Linear: [INT-123](https://linear.app/pbuchman/issue/INT-123)'
+    );
+    expect(result).not.toContain('IntexuraOS Code Task');
+    expect(result).toContain('- Worker Type: `auto`');
+  });
+
   it('builds execution agent prompt with execution marker and final block', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
 
