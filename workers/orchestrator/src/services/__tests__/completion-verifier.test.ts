@@ -669,6 +669,52 @@ describe('completion-verifier', () => {
     );
   });
 
+  it('accepts subagents: null from Gemini and transforms to empty string', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          passed: true,
+          confidence: 0.93,
+          reasons: ['all execution criteria met'],
+          missingCriteria: [],
+          resumeInstruction: '',
+          executionMetadata: {
+            outcomeLabel: 'implemented',
+            superpowersExecutingPlansUsed: '1',
+            superpowersRequestingCodeReviewUsed: '1',
+            trivialTask: '0',
+            subagents: null,
+            reviewIterations: 2,
+            linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-3',
+          },
+        }),
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-null-subagents',
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'execution',
+      originalPrompt: 'Implement task',
+      rawLogs: assistantLog(validPhase2Final),
+      linearIssueId: 'INT-3',
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(verdict.passed).toBe(true);
+    expect(verdict.verifierFailure).toBe(false);
+    expect(verdict.executionMetadata).toEqual(
+      expect.objectContaining({
+        subagents: '',
+        reviewIterations: 2,
+      })
+    );
+  });
+
   it('hard-fails execution verification when execution final block issue URL mismatches routed issue', async () => {
     const generate = vi.fn().mockResolvedValue({
       ok: true,
