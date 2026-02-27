@@ -1,7 +1,6 @@
 import type { Logger } from 'pino';
 import type { CodeAgentClient } from '../ports.js';
 import type { LinearWebhookEvent } from '../webhookTypes.js';
-import { hasCodeTaskLabel } from '@intexuraos/common-core';
 
 export interface TriggerCodeTaskDeps {
   codeAgentClient: CodeAgentClient;
@@ -11,13 +10,17 @@ export interface TriggerCodeTaskDeps {
 const ASSIGNMENT_PROMPT =
   'Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.';
 
+const EXECUTION_PROMPT =
+  'Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.';
+
+const CODE_TASK_LABEL = 'code-task';
+
 export function shouldTriggerCodeTask(event: LinearWebhookEvent): boolean {
   if (event.action !== 'update') return false;
   if (event.updatedFrom === undefined) return false;
   if (event.updatedFrom.assigneeId !== null) return false;
   if (event.data.assignee === null) return false;
-  if (event.data.state.type !== 'unstarted') return false;
-  if (hasCodeTaskLabel(event.data.labels.map(l => l.name))) return false;
+  if (event.data.state.type !== 'backlog' && event.data.state.type !== 'unstarted') return false;
 
   return true;
 }
@@ -29,10 +32,14 @@ export async function triggerCodeTaskFromAssignment(
 ): Promise<void> {
   const { codeAgentClient, logger } = deps;
 
+  // Check if issue has code-task label to determine prompt
+  const hasCodeTaskLabel = event.data.labels.some((label) => label.name === CODE_TASK_LABEL);
+  const prompt = hasCodeTaskLabel ? EXECUTION_PROMPT : ASSIGNMENT_PROMPT;
+
   const result = await codeAgentClient.triggerCodeTask({
     userId,
     linearIssueId: event.data.identifier,
-    prompt: ASSIGNMENT_PROMPT,
+    prompt,
     workerType: 'auto',
     actionId: `webhook-assign-${event.data.identifier}-${String(event.webhookTimestamp)}`,
     approvalEventId: `webhook-assign-${event.data.identifier}-${String(event.webhookTimestamp)}`,

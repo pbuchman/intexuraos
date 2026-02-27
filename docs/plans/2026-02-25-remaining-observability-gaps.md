@@ -16,55 +16,55 @@ Every gap from the original audit, its resolution status, and which plan task ad
 
 ### A. Orchestrator Task Log (web UI visible)
 
-| # | Gap                                          | Status                                                                                  | Plan Coverage                       |
+| #   | Gap                                          | Status                                                                                  | Plan Coverage                       |
 | --- | -------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------- |
-| 1 | Adaptive retry score breakdown missing       | Covered by observability plan Task 1+3                                                  | See `orchestrator-observability.md` |
-| 2 | TaskResult details per attempt incomplete    | Covered by observability plan Task 2                                                    | See `orchestrator-observability.md` |
-| 3 | previousResult vs currentResult diff         | Covered by observability plan Task 2                                                    | See `orchestrator-observability.md` |
-| 4 | Phase mismatch warning absent                | Covered by observability plan Task 5                                                    | See `orchestrator-observability.md` |
-| 5 | Resume prompt content not logged             | Covered by observability plan Task 6                                                    | See `orchestrator-observability.md` |
-| 6 | No orchestrator code version at startup      | Covered by observability plan Task 4                                                    | See `orchestrator-observability.md` |
-| 7 | Verification history state before retry      | Covered by observability plan Task 3 (logger.info includes `verificationHistoryLength`) | See `orchestrator-observability.md` |
+| 1   | Adaptive retry score breakdown missing       | Covered by observability plan Task 1+3                                                  | See `orchestrator-observability.md` |
+| 2   | TaskResult details per attempt incomplete    | Covered by observability plan Task 2                                                    | See `orchestrator-observability.md` |
+| 3   | previousResult vs currentResult diff         | Covered by observability plan Task 2                                                    | See `orchestrator-observability.md` |
+| 4   | Phase mismatch warning absent                | Covered by observability plan Task 5                                                    | See `orchestrator-observability.md` |
+| 5   | Resume prompt content not logged             | Covered by observability plan Task 6                                                    | See `orchestrator-observability.md` |
+| 6   | No orchestrator code version at startup      | Covered by observability plan Task 4                                                    | See `orchestrator-observability.md` |
+| 7   | Verification history state before retry      | Covered by observability plan Task 3 (logger.info includes `verificationHistoryLength`) | See `orchestrator-observability.md` |
 
 ### B. Orchestrator Structured Logs (pino)
 
-| # | Gap                                          | Status                                                                        | Plan Coverage                       |
+| #   | Gap                                          | Status                                                                        | Plan Coverage                       |
 | --- | -------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------- |
-| 1 | `analyzeRetryDecision` input data not logged | Covered by observability plan Task 3                                          | See `orchestrator-observability.md` |
-| 2 | `checkForResult` output not logged to pino   | Covered by observability plan Task 2                                          | See `orchestrator-observability.md` |
-| 3 | No tsx watch reload confirmation             | RESOLVED — orchestrator now uses systemd + webhook auto-deploy, not tsx watch | N/A — infrastructure fix            |
-| 4 | No deploy hook confirmation                  | RESOLVED — webhook handler logs restarts via stdout                           | N/A — infrastructure fix            |
+| 1   | `analyzeRetryDecision` input data not logged | Covered by observability plan Task 3                                          | See `orchestrator-observability.md` |
+| 2   | `checkForResult` output not logged to pino   | Covered by observability plan Task 2                                          | See `orchestrator-observability.md` |
+| 3   | No tsx watch reload confirmation             | RESOLVED — orchestrator now uses systemd + webhook auto-deploy, not tsx watch | N/A — infrastructure fix            |
+| 4   | No deploy hook confirmation                  | RESOLVED — webhook handler logs restarts via stdout                           | N/A — infrastructure fix            |
 
 ### C. Web UI
 
-| # | Gap                                           | Status       | Plan Coverage                                                                                                                                                                 |
+| #   | Gap                                           | Status       | Plan Coverage                                                                                                                                                                 |
 | --- | --------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 | Linear issue labels not shown                 | **NEW**      | **This plan — Task 1**                                                                                                                                                        |
-| 2 | Adaptive retry decision not shown per attempt | DEFERRED     | Blocked: requires cross-service API change (orchestrator webhook must send `verificationHistory` back to code-agent, which requires Firestore schema extension in code-agent) |
-| 3 | Phase mismatch alert missing                  | **NEW**      | **This plan — Task 2**                                                                                                                                                        |
-| 4 | Cost per attempt not shown                    | DEFERRED     | Blocked: depends on turn metrics feature (not yet built)                                                                                                                      |
+| 1   | Linear issue labels not shown                 | **NEW**      | **This plan — Task 1**                                                                                                                                                        |
+| 2   | Adaptive retry decision not shown per attempt | DEFERRED     | Blocked: requires cross-service API change (orchestrator webhook must send `verificationHistory` back to code-agent, which requires Firestore schema extension in code-agent) |
+| 3   | Phase mismatch alert missing                  | **NEW**      | **This plan — Task 2**                                                                                                                                                        |
+| 4   | Cost per attempt not shown                    | DEFERRED     | Blocked: depends on turn metrics feature (not yet built)                                                                                                                      |
 
 ### D. Code-Agent Dispatch
 
-| # | Gap                                          | Status       | Plan Coverage                      |
+| #   | Gap                                          | Status       | Plan Coverage                      |
 | --- | -------------------------------------------- | ------------ | ---------------------------------- |
-| 1 | `executionPhase` not sent to orchestrator    | **NEW**      | **This plan — Task 4**             |
+| 1   | `executionPhase` not sent to orchestrator    | **NEW**      | **This plan — Task 4**             |
 
 ### E. Code Duplication
 
-| # | Gap                                          | Status       | Plan Coverage                      |
+| #   | Gap                                          | Status       | Plan Coverage                      |
 | --- | -------------------------------------------- | ------------ | ---------------------------------- |
-| 1 | `hasCodeTaskLabel` duplicated in 4 places    | **NEW**      | **This plan — Task 3**             |
+| 1   | `hasCodeTaskLabel` duplicated in 4 places    | **NEW**      | **This plan — Task 3**             |
 
 ### F. Infrastructure / Deploy
 
-| # | Gap                                          | Status                                                                   | Plan Coverage                  |
+| #   | Gap                                          | Status                                                                   | Plan Coverage                  |
 | --- | -------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------ |
-| 1 | tsx watch silently stale after git reset     | RESOLVED — switched to systemd + compiled dist/index.js                  | N/A — completed Feb 25         |
-| 2 | Orchestrator absent from webhook handler     | RESOLVED — webhook handler updated with orchestrator detection + restart | N/A — completed Feb 25         |
-| 3 | Missing env vars in systemd EnvironmentFile  | RESOLVED — added ZAI_APP_API_KEY + MINIMAX_APP_API_KEY                   | N/A — completed Feb 25         |
-| 4 | No sudoers rule for webhook restart          | RESOLVED — `/etc/sudoers.d/intexuraos-orchestrator` created              | N/A — completed Feb 25         |
-| 5 | CLAUDE.md incorrect about auto-reload        | RESOLVED — committed fix to development branch                           | N/A — completed Feb 25         |
+| 1   | tsx watch silently stale after git reset     | RESOLVED — switched to systemd + compiled dist/index.js                  | N/A — completed Feb 25         |
+| 2   | Orchestrator absent from webhook handler     | RESOLVED — webhook handler updated with orchestrator detection + restart | N/A — completed Feb 25         |
+| 3   | Missing env vars in systemd EnvironmentFile  | RESOLVED — added ZAI_APP_API_KEY + MINIMAX_APP_API_KEY                   | N/A — completed Feb 25         |
+| 4   | No sudoers rule for webhook restart          | RESOLVED — `/etc/sudoers.d/intexuraos-orchestrator` created              | N/A — completed Feb 25         |
+| 5   | CLAUDE.md incorrect about auto-reload        | RESOLVED — committed fix to development branch                           | N/A — completed Feb 25         |
 
 ### Summary
 
@@ -191,12 +191,12 @@ git commit -m "Show phase mismatch warning when design task creates PR"
 
 **Current locations (all four):**
 
-| # | File                                                                           | Type                     |
+| #   | File                                                                           | Type                     |
 | --- | ------------------------------------------------------------------------------ | ------------------------ |
-| 1 | `apps/code-agent/src/domain/utils/labelUtils.ts:15-17`                         | Exported function        |
-| 2 | `workers/orchestrator/src/services/task-dispatcher.ts:1389-1394`               | Private class method     |
-| 3 | `workers/orchestrator/src/services/system-prompt.ts:353-355`                   | Inline expression        |
-| 4 | `apps/linear-agent/src/domain/useCases/triggerCodeTaskFromAssignment.ts:13-17` | Local function           |
+| 1   | `apps/code-agent/src/domain/utils/labelUtils.ts:15-17`                         | Exported function        |
+| 2   | `workers/orchestrator/src/services/task-dispatcher.ts:1389-1394`               | Private class method     |
+| 3   | `workers/orchestrator/src/services/system-prompt.ts:353-355`                   | Inline expression        |
+| 4   | `apps/linear-agent/src/domain/useCases/triggerCodeTaskFromAssignment.ts:13-17` | Local function           |
 
 **Files:**
 - Create: `packages/common-core/src/labels.ts`

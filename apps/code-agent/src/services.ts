@@ -140,6 +140,28 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
         commentId: `comment-${String(Date.now())}`,
       }));
     },
+    fetchIssueTree(request): ReturnType<LinearAgentClient['fetchIssueTree']> {
+      logger.info({ issueId: request.issueId }, '[E2E] Mock Linear issue tree fetch');
+      return Promise.resolve(ok({
+        root: {
+          id: request.issueId,
+          identifier: `INT-${request.issueId}`,
+          url: `https://linear.app/intexuraos/issue/${request.issueId}`,
+          parentId: null,
+          labels: [],
+          assigneeId: null,
+          state: 'Backlog',
+        },
+        descendants: [],
+      }));
+    },
+    updateIssueMetadata(request): ReturnType<LinearAgentClient['updateIssueMetadata']> {
+      logger.info(
+        { issueId: request.issueId, addLabels: request.addLabels, removeLabels: request.removeLabels, assigneeId: request.assigneeId },
+        '[E2E] Mock Linear metadata update'
+      );
+      return Promise.resolve(ok(undefined));
+    },
     fetchIssueForDisplay(request): ReturnType<LinearAgentClient['fetchIssueForDisplay']> {
       logger.info({ identifier: request.identifier }, '[E2E] Mock Linear issue fetch for display');
       return Promise.resolve(ok({

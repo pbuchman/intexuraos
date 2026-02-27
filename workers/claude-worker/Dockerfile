@@ -16,6 +16,9 @@ RUN apk add --no-cache \
     curl \
     bash \
     jq \
+    file \
+    strace \
+    gdb \
     python3 \
     py3-pip \
     && rm -rf /var/cache/apk/*
@@ -29,8 +32,9 @@ RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/c
     github-cli \
     chromium
 
-# Install terraform from hashicorp
-RUN curl -fsSL https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_amd64.zip -o /tmp/terraform.zip \
+# Install terraform from hashicorp (TARGETARCH is set automatically by BuildKit)
+ARG TARGETARCH
+RUN curl -fsSL "https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_${TARGETARCH}.zip" -o /tmp/terraform.zip \
     && unzip /tmp/terraform.zip -d /usr/local/bin/ \
     && rm /tmp/terraform.zip \
     && chmod +x /usr/local/bin/terraform

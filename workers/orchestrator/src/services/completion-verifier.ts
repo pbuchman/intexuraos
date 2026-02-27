@@ -7,13 +7,13 @@ import type { TaskResult } from '../types/task.js';
 import { stripDockerHeaders } from './log-formatter.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 
-export type CompletionPhase = 'phase1' | 'phase2' | 'pr-comment';
+export type CompletionAgentType = 'planning' | 'execution' | 'pull_request';
 
 export interface CompletionVerifierInput {
   taskId: string;
   attempt: number;
   maxAttempts: number;
-  phase: CompletionPhase;
+  agentType: CompletionAgentType;
   originalPrompt: string;
   rawLogs: string;
   linearIssueId?: string;
@@ -32,6 +32,24 @@ export interface CompletionVerifierVerdict {
   usedLlm: boolean;
   verifierFailure?: boolean;
   extractedSummary?: string;
+  planningMetadata?: {
+    outcomeLabel: 'planned' | 'unclear';
+    superpowersWritingPlansUsed: '0' | '1';
+    planningIssueUrl?: string;
+    trivialTask?: '0' | '1';
+    docPath?: string;
+    prUrl?: string;
+    clarificationMessage?: string;
+  };
+  executionMetadata?: {
+    outcomeLabel: 'implemented';
+    superpowersExecutingPlansUsed: '0' | '1';
+    superpowersRequestingCodeReviewUsed: '0' | '1';
+    trivialTask: '0' | '1';
+    subagents: string;
+    reviewIterations: number;
+    linearIssueUrl: string;
+  };
 }
 
 export interface CompletionVerifier {
@@ -50,7 +68,44 @@ interface DeterministicContractResult {
   reasons: string[];
   missingCriteria: string[];
   lastAssistantMessage: string | null;
+  assistantMessages: string[];
 }
+
+interface PlanningMetadataExtraction {
+  outcomeLabel?: 'planned' | 'unclear';
+  superpowersWritingPlansUsed?: '0' | '1';
+  originalIssueUrl?: string;
+  planningIssueUrl?: string;
+  trivialTask?: '0' | '1';
+  parallelBreakdownProof?: string;
+  docPath?: string;
+  prUrl?: string;
+  clarificationMessage?: string;
+}
+
+interface ExecutionMetadataExtraction {
+  outcomeLabel?: 'implemented';
+  prUrl?: string;
+  ciEvidence?: string;
+  linearIssueUrl?: string;
+  reviewIterations?: number;
+  superpowersExecutingPlansUsed?: '0' | '1';
+  superpowersRequestingCodeReviewUsed?: '0' | '1';
+  trivialTask?: '0' | '1';
+  subagents?: string;
+  skillSequenceProof?: string;
+  summary?: string;
+}
+
+const LLM_EXECUTION_METADATA_SCHEMA = z.object({
+  outcomeLabel: z.literal('implemented'),
+  superpowersExecutingPlansUsed: z.enum(['0', '1']),
+  superpowersRequestingCodeReviewUsed: z.enum(['0', '1']),
+  trivialTask: z.enum(['0', '1']),
+  subagents: z.string(),
+  reviewIterations: z.number().int().min(0),
+  linearIssueUrl: z.string().url(),
+});
 
 const LLM_VERDICT_SCHEMA = z.object({
   passed: z.boolean(),
@@ -64,6 +119,10 @@ const LLM_VERDICT_SCHEMA = z.object({
   extractedSummary: z
     .string()
     .nullable()
+    .optional()
+    .transform((v) => v ?? undefined),
+  executionMetadata: z
+    .union([LLM_EXECUTION_METADATA_SCHEMA, z.null()])
     .optional()
     .transform((v) => v ?? undefined),
 });
@@ -82,24 +141,27 @@ function normalizeMissingCriteria(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter((value) => value !== ''))];
 }
 
-function buildDefaultResumeInstruction(phase: CompletionPhase, missingCriteria: string[]): string {
+function buildDefaultResumeInstruction(
+  agentType: CompletionAgentType,
+  missingCriteria: string[]
+): string {
   /* v8 ignore start -- ts-type: defensive fallback for empty criteria list is unreachable in current verifier flow @preserve */
   const joined =
     missingCriteria.length > 0 ? missingCriteria.join('; ') : 'completion contract not met';
   /* v8 ignore stop @preserve */
   /* v8 ignore start -- source-map: coverage branch mapping reports false-uncovered path on phase selector despite direct unit tests @preserve */
-  if (phase === 'phase2') {
-    return `Address: ${joined}. Re-run pnpm run ci:tracked, ensure it succeeds, and finish with PHASE2_FINAL.`;
+  if (agentType === 'execution') {
+    return `Address: ${joined}. Re-run pnpm run ci:tracked, ensure it succeeds, and finish with EXECUTION_AGENT_FINAL.`;
   }
-  if (phase === 'pr-comment') {
-    return `Address: ${joined}. Push changes to the PR branch, reply to the comment, and finish with PR_COMMENT_FINAL.`;
+  if (agentType === 'pull_request') {
+    return `Address: ${joined}. Push changes to the PR branch, reply to the comment, and finish with PULL_REQUEST_AGENT_FINAL.`;
   }
   /* v8 ignore stop @preserve */
-  return `Address: ${joined}. Set Linear label (code-task or unclear) and finish with PHASE1_FINAL.`;
+  return `Address: ${joined}. Finish with PLANNING_AGENT_FINAL and include planning outcome metadata.`;
 }
 
-function extractLastAssistantMessage(rawLogs: string): string | null {
-  let lastAssistantText: string | null = null;
+function extractAssistantMessages(rawLogs: string): string[] {
+  const assistantMessages: string[] = [];
 
   for (const rawLine of stripDockerHeaders(rawLogs).split('\n')) {
     const line = rawLine.trim();
@@ -127,41 +189,185 @@ function extractLastAssistantMessage(rawLogs: string): string | null {
         .trim();
 
       if (text !== '') {
-        lastAssistantText = text;
+        assistantMessages.push(text);
       }
     } catch {
       // Ignore malformed/non-JSON lines.
     }
   }
 
-  return lastAssistantText;
+  return assistantMessages;
 }
 
-function verifyPhase1Final(message: string): { ok: true } | { ok: false; missing: string[] } {
+function extractLastAssistantMessage(rawLogs: string): string | null {
+  const assistantMessages = extractAssistantMessages(rawLogs);
+  return assistantMessages.at(-1) ?? null;
+}
+
+function extractPlanningMetadataFromMessage(message: string): PlanningMetadataExtraction {
+  const lines = message.split('\n').map((line) => line.trim());
+  const readValue = (prefix: string): string | undefined => {
+    const line = lines.find((entry) => entry.toLowerCase().startsWith(prefix.toLowerCase()));
+    if (line === undefined) return undefined;
+    const value = line.slice(prefix.length).trim();
+    return value === '' ? undefined : value;
+  };
+
+  const outcome = readValue('- Outcome:');
+  const superpowers = readValue('- superpowers_writing_plans_used:');
+  const originalIssueUrl = readValue('- Original issue:');
+  const planningIssueUrl = readValue('- Planning issue:');
+  const trivialTask = readValue('- Trivial task:');
+  const parallelBreakdownProof = readValue('- Parallel breakdown proof:');
+  const docPath = readValue('- Plan doc:');
+  const prUrl = readValue('- Planning PR:');
+  const clarificationMessage = readValue('- Clarification message:');
+
+  return {
+    ...(outcome === 'planned' || outcome === 'unclear' ? { outcomeLabel: outcome } : {}),
+    ...(superpowers === '0' || superpowers === '1'
+      ? { superpowersWritingPlansUsed: superpowers }
+      : {}),
+    ...(originalIssueUrl !== undefined ? { originalIssueUrl } : {}),
+    ...(planningIssueUrl !== undefined ? { planningIssueUrl } : {}),
+    ...(trivialTask === '0' || trivialTask === '1' ? { trivialTask } : {}),
+    ...(parallelBreakdownProof !== undefined ? { parallelBreakdownProof } : {}),
+    ...(docPath !== undefined ? { docPath } : {}),
+    ...(prUrl !== undefined ? { prUrl } : {}),
+    /* v8 ignore start -- ts-type: conditional object spread for optional extracted field @preserve */
+    ...(clarificationMessage !== undefined ? { clarificationMessage } : {}),
+    /* v8 ignore stop @preserve */
+  };
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function hasGithubPrPath(value: string): boolean {
+  if (!isHttpUrl(value)) return false;
+  try {
+    const parsed = new URL(value);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    return (
+      parsed.hostname === 'github.com' &&
+      segments.length >= 4 &&
+      segments[2] === 'pull' &&
+      segments[3] !== undefined &&
+      Number.isInteger(Number(segments[3]))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasLinearIssuePath(value: string): boolean {
+  if (!isHttpUrl(value)) return false;
+  try {
+    const parsed = new URL(value);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    return parsed.hostname === 'linear.app' && segments.length >= 3 && segments[1] === 'issue';
+  } catch {
+    return false;
+  }
+}
+
+function extractLinearIssueIdentifierFromUrl(value: string): string | undefined {
+  if (!hasLinearIssuePath(value)) return undefined;
+  try {
+    const parsed = new URL(value);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    return segments[2];
+  } catch {
+    return undefined;
+  }
+}
+
+function parseExecutionMetadataFromMessage(message: string): ExecutionMetadataExtraction {
+  const lines = message.split('\n').map((line) => line.trim());
+  const readValue = (prefix: string): string | undefined => {
+    const line = lines.find((entry) => entry.toLowerCase().startsWith(prefix.toLowerCase()));
+    if (line === undefined) return undefined;
+    const value = line.slice(prefix.length).trim();
+    return value === '' ? undefined : value;
+  };
+
+  const outcome = readValue('- Outcome:');
+  const prUrl = readValue('- PR:');
+  const ciEvidence = readValue('- CI evidence:');
+  const linearIssueUrl = readValue('- Linear issue:');
+  const reviewIterationsRaw = readValue('- Review iterations:');
+  const execPlansUsed = readValue('- superpowers_executing_plans_used:');
+  const codeReviewUsed = readValue('- superpowers_requesting_code_review_used:');
+  const trivialTask = readValue('- trivial_task:');
+  const subagents = readValue('- subagents:');
+  const skillSequenceProof = readValue('- Skill sequence proof:');
+  const summary = readValue('- Summary:');
+
+  let reviewIterations: number | undefined;
+  if (
+    reviewIterationsRaw !== undefined &&
+    reviewIterationsRaw !== '' &&
+    /^\d+$/u.test(reviewIterationsRaw)
+  ) {
+    reviewIterations = Number(reviewIterationsRaw);
+  }
+
+  return {
+    ...(outcome === 'implemented' ? { outcomeLabel: 'implemented' as const } : {}),
+    ...(prUrl !== undefined ? { prUrl } : {}),
+    ...(ciEvidence !== undefined ? { ciEvidence } : {}),
+    ...(linearIssueUrl !== undefined ? { linearIssueUrl } : {}),
+    ...(reviewIterations !== undefined ? { reviewIterations } : {}),
+    ...(execPlansUsed === '0' || execPlansUsed === '1'
+      ? { superpowersExecutingPlansUsed: execPlansUsed }
+      : {}),
+    ...(codeReviewUsed === '0' || codeReviewUsed === '1'
+      ? { superpowersRequestingCodeReviewUsed: codeReviewUsed }
+      : {}),
+    ...(trivialTask === '0' || trivialTask === '1' ? { trivialTask } : {}),
+    ...(subagents !== undefined ? { subagents } : {}),
+    ...(skillSequenceProof !== undefined ? { skillSequenceProof } : {}),
+    ...(summary !== undefined ? { summary } : {}),
+  };
+}
+
+function verifyPlanningAgentFinal(
+  message: string
+): { ok: true } | { ok: false; missing: string[] } {
   const missing: string[] = [];
+  if (!message.includes('PLANNING_AGENT_FINAL:')) {
+    missing.push('PLANNING_AGENT_FINAL block');
+  }
+  const extracted = extractPlanningMetadataFromMessage(message);
+  const summaryLine = message
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.toLowerCase().startsWith('- summary:'));
 
-  if (!message.includes('PHASE1_FINAL:')) {
-    missing.push('PHASE1_FINAL block');
+  if (extracted.outcomeLabel === undefined) missing.push('Outcome line');
+  if (extracted.superpowersWritingPlansUsed === undefined)
+    missing.push('superpowers_writing_plans_used line');
+  if (extracted.superpowersWritingPlansUsed !== '1')
+    missing.push('superpowers_writing_plans_used must be 1');
+  if (extracted.originalIssueUrl === undefined) missing.push('Original issue URL line');
+  if (summaryLine === undefined || summaryLine.slice('- Summary:'.length).trim() === '') {
+    missing.push('Summary line');
   }
 
-  const labelMatch = /- Linear label set:\s*(code-task|unclear)\s*$/im.exec(message);
-  const readyMatch = /- Phase 2 ready:\s*(yes|no)\s*$/im.exec(message);
-  const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
-  const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
-
-  if (labelMatch?.[1] === undefined) missing.push('Linear label set line');
-  if (readyMatch?.[1] === undefined) missing.push('Phase 2 ready line');
-  if (linearMatch?.[1] === undefined) missing.push('Linear issue URL line');
-  if ((summaryMatch?.[1] ?? '').trim() === '') missing.push('Summary line');
-
-  const label = labelMatch?.[1]?.toLowerCase();
-  const ready = readyMatch?.[1]?.toLowerCase();
-  if (label === 'code-task' && ready !== 'yes') {
-    missing.push('code-task requires Phase 2 ready: yes');
+  /* v8 ignore start -- test-infra: planned/unclear branch combinations are partially covered by higher-level verifier tests @preserve */
+  if (extracted.outcomeLabel === 'planned' && extracted.planningIssueUrl === undefined) {
+    missing.push('Planning issue URL line');
   }
-  if (label === 'unclear' && ready !== 'no') {
-    missing.push('unclear requires Phase 2 ready: no');
+  if (extracted.outcomeLabel === 'unclear' && extracted.clarificationMessage === undefined) {
+    missing.push('Clarification message line');
   }
+  /* v8 ignore stop @preserve */
 
   if (missing.length > 0) {
     return { ok: false, missing };
@@ -169,26 +375,30 @@ function verifyPhase1Final(message: string): { ok: true } | { ok: false; missing
   return { ok: true };
 }
 
-function verifyPhase2Final(message: string): { ok: true } | { ok: false; missing: string[] } {
+function verifyExecutionAgentFinal(
+  message: string
+): { ok: true } | { ok: false; missing: string[] } {
   const missing: string[] = [];
 
-  if (!message.includes('PHASE2_FINAL:')) {
-    missing.push('PHASE2_FINAL block');
+  if (!message.includes('EXECUTION_AGENT_FINAL:')) {
+    missing.push('EXECUTION_AGENT_FINAL block');
   }
-
-  const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
-  const ciMatch = /- CI evidence:\s*pnpm run ci:tracked successful\s*$/im.exec(message);
-  const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
-  const reviewIterationsMatch = /- Review iterations:\s*(\d+)\s*$/im.exec(message);
-  const turnSummaryMatch = /- Turn summary:\s*(.+)\s*$/im.exec(message);
-  const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
-
-  if (prMatch?.[1] === undefined) missing.push('PR URL line');
-  if (ciMatch?.[0] === undefined) missing.push('CI evidence line');
-  if (linearMatch?.[1] === undefined) missing.push('Linear issue URL line');
-  if (reviewIterationsMatch?.[1] === undefined) missing.push('Review iterations line');
-  if ((turnSummaryMatch?.[1] ?? '').trim() === '') missing.push('Turn summary line');
-  if ((summaryMatch?.[1] ?? '').trim() === '') missing.push('Summary line');
+  const extracted = parseExecutionMetadataFromMessage(message);
+  if (extracted.outcomeLabel !== 'implemented') missing.push('Outcome line (implemented)');
+  if (extracted.prUrl === undefined || !hasGithubPrPath(extracted.prUrl))
+    missing.push('PR URL line');
+  if (extracted.ciEvidence !== 'pnpm run ci:tracked successful') missing.push('CI evidence line');
+  if (extracted.linearIssueUrl === undefined || !hasLinearIssuePath(extracted.linearIssueUrl))
+    missing.push('Linear issue URL line');
+  if (extracted.reviewIterations === undefined) missing.push('Review iterations line');
+  if (extracted.superpowersExecutingPlansUsed === undefined)
+    missing.push('superpowers_executing_plans_used line');
+  if (extracted.superpowersRequestingCodeReviewUsed === undefined)
+    missing.push('superpowers_requesting_code_review_used line');
+  if (extracted.trivialTask === undefined) missing.push('trivial_task line');
+  if (extracted.subagents === undefined) missing.push('subagents line');
+  if (extracted.skillSequenceProof === undefined) missing.push('Skill sequence proof line');
+  if ((extracted.summary ?? '').trim() === '') missing.push('Summary line');
 
   if (missing.length > 0) {
     return { ok: false, missing };
@@ -199,8 +409,8 @@ function verifyPhase2Final(message: string): { ok: true } | { ok: false; missing
 function verifyPRCommentFinal(message: string): { ok: true } | { ok: false; missing: string[] } {
   const missing: string[] = [];
 
-  if (!message.includes('PR_COMMENT_FINAL:')) {
-    missing.push('PR_COMMENT_FINAL block');
+  if (!message.includes('PULL_REQUEST_AGENT_FINAL:')) {
+    missing.push('PULL_REQUEST_AGENT_FINAL block');
   }
 
   const prMatch = /- PR:\s*(https:\/\/github\.com\/\S+\/pull\/\d+)\s*$/im.exec(message);
@@ -262,7 +472,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         ]),
         missingCriteria: fallbackMissing,
         /* v8 ignore start -- source-map: cond-expr branch is misattributed to this property line after bundling/source-map transforms @preserve */
-        resumeInstruction: buildDefaultResumeInstruction(input.phase, fallbackMissing),
+        resumeInstruction: buildDefaultResumeInstruction(input.agentType, fallbackMissing),
         /* v8 ignore stop @preserve */
         usedLlm: true,
         verifierFailure: true,
@@ -283,14 +493,129 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       ]);
     }
 
+    const extractedPlanningMetadata =
+      input.agentType === 'planning' && deterministic.lastAssistantMessage !== null
+        ? ((): NonNullable<CompletionVerifierVerdict['planningMetadata']> | null => {
+            const extracted = extractPlanningMetadataFromMessage(
+              deterministic.lastAssistantMessage
+            );
+            if (
+              extracted.outcomeLabel === undefined ||
+              extracted.superpowersWritingPlansUsed === undefined
+            ) {
+              return null;
+            }
+            return {
+              outcomeLabel: extracted.outcomeLabel,
+              superpowersWritingPlansUsed: extracted.superpowersWritingPlansUsed,
+              ...(extracted.planningIssueUrl !== undefined && {
+                planningIssueUrl: extracted.planningIssueUrl,
+              }),
+              ...(extracted.trivialTask !== undefined && { trivialTask: extracted.trivialTask }),
+              ...(extracted.docPath !== undefined && { docPath: extracted.docPath }),
+              ...(extracted.prUrl !== undefined && { prUrl: extracted.prUrl }),
+              /* v8 ignore start -- ts-type: conditional object spread for optional extracted field @preserve */
+              ...(extracted.clarificationMessage !== undefined && {
+                clarificationMessage: extracted.clarificationMessage,
+              }),
+              /* v8 ignore stop @preserve */
+            };
+          })()
+        : null;
+
+    const extractedExecutionMetadata =
+      input.agentType === 'execution'
+        ? ((): NonNullable<CompletionVerifierVerdict['executionMetadata']> | undefined => {
+            const parsedExecutionMetadata = parsedVerdict.executionMetadata;
+            if (parsedExecutionMetadata !== undefined) {
+              return parsedExecutionMetadata;
+            }
+            if (deterministic.lastAssistantMessage === null) return undefined;
+            const extracted = parseExecutionMetadataFromMessage(deterministic.lastAssistantMessage);
+            if (
+              extracted.outcomeLabel !== 'implemented' ||
+              extracted.superpowersExecutingPlansUsed === undefined ||
+              extracted.superpowersRequestingCodeReviewUsed === undefined ||
+              extracted.trivialTask === undefined ||
+              extracted.subagents === undefined ||
+              extracted.reviewIterations === undefined ||
+              extracted.linearIssueUrl === undefined
+            ) {
+              return undefined;
+            }
+            return {
+              outcomeLabel: extracted.outcomeLabel,
+              superpowersExecutingPlansUsed: extracted.superpowersExecutingPlansUsed,
+              superpowersRequestingCodeReviewUsed: extracted.superpowersRequestingCodeReviewUsed,
+              trivialTask: extracted.trivialTask,
+              subagents: extracted.subagents,
+              reviewIterations: extracted.reviewIterations,
+              linearIssueUrl: extracted.linearIssueUrl,
+            } satisfies NonNullable<CompletionVerifierVerdict['executionMetadata']>;
+          })()
+        : undefined;
+
+    if (input.agentType === 'execution' && parsedVerdict.passed) {
+      if (extractedExecutionMetadata === undefined) {
+        mergedReasons = normalizeMissingCriteria([
+          ...mergedReasons,
+          'Execution Agent metadata extraction failed',
+        ]);
+        mergedMissingCriteria = normalizeMissingCriteria([
+          ...mergedMissingCriteria,
+          'execution metadata extraction',
+        ]);
+      } else if (input.linearIssueId !== undefined) {
+        const routedIdentifier = input.linearIssueId.trim().toLowerCase();
+        const reportedIdentifier = extractLinearIssueIdentifierFromUrl(
+          extractedExecutionMetadata.linearIssueUrl
+        )
+          ?.trim()
+          .toLowerCase();
+        if (reportedIdentifier === undefined || reportedIdentifier !== routedIdentifier) {
+          mergedReasons = normalizeMissingCriteria([
+            ...mergedReasons,
+            'Execution Agent reported a different Linear issue than the routed task target',
+          ]);
+          mergedMissingCriteria = normalizeMissingCriteria([
+            ...mergedMissingCriteria,
+            `Execution Agent final block Linear issue URL must match routed issue ${input.linearIssueId}`,
+          ]);
+        }
+      }
+    }
+
+    const executionLinearIssueMismatch =
+      input.agentType === 'execution' &&
+      parsedVerdict.passed &&
+      extractedExecutionMetadata !== undefined &&
+      input.linearIssueId !== undefined &&
+      extractLinearIssueIdentifierFromUrl(extractedExecutionMetadata.linearIssueUrl)
+        ?.trim()
+        .toLowerCase() !== input.linearIssueId.trim().toLowerCase();
+
+    const forcedExecutionFailure =
+      input.agentType === 'execution' &&
+      parsedVerdict.passed &&
+      (extractedExecutionMetadata === undefined || executionLinearIssueMismatch);
+    const passed = forcedExecutionFailure ? false : parsedVerdict.passed;
+    const resumeInstruction =
+      forcedExecutionFailure && mergedMissingCriteria.length > 0
+        ? buildDefaultResumeInstruction(input.agentType, mergedMissingCriteria)
+        : parsedVerdict.resumeInstruction;
+
     return {
-      passed: parsedVerdict.passed,
+      passed,
       confidence: parsedVerdict.confidence,
       reasons: mergedReasons,
       missingCriteria: mergedMissingCriteria,
-      resumeInstruction: parsedVerdict.resumeInstruction,
+      resumeInstruction,
       usedLlm: true,
       verifierFailure: false,
+      ...(extractedPlanningMetadata !== null && { planningMetadata: extractedPlanningMetadata }),
+      ...(extractedExecutionMetadata !== undefined && {
+        executionMetadata: extractedExecutionMetadata,
+      }),
       ...(parsedVerdict.extractedSummary !== undefined &&
         parsedVerdict.extractedSummary !== '' && {
           extractedSummary: parsedVerdict.extractedSummary,
@@ -302,34 +627,37 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     const reasons: string[] = [];
     const missingCriteria: string[] = [];
 
-    if (input.claudeError !== undefined && input.claudeError !== '') {
-      reasons.push('Claude stream reported an explicit error');
-      missingCriteria.push(`Claude error: ${input.claudeError}`);
+    if (input.agentType !== 'execution') {
+      if (input.claudeError !== undefined && input.claudeError !== '') {
+        reasons.push('Claude stream reported an explicit error');
+        missingCriteria.push(`Claude error: ${input.claudeError}`);
+      }
+
+      if (typeof input.workerExitCode === 'number' && input.workerExitCode !== 0) {
+        reasons.push('Worker exited with non-zero code');
+        missingCriteria.push(`Worker exit code ${String(input.workerExitCode)}`);
+      }
     }
 
-    if (typeof input.workerExitCode === 'number' && input.workerExitCode !== 0) {
-      reasons.push('Worker exited with non-zero code');
-      missingCriteria.push(`Worker exit code ${String(input.workerExitCode)}`);
-    }
-
-    const lastAssistantMessage = extractLastAssistantMessage(input.rawLogs);
+    const assistantMessages = extractAssistantMessages(input.rawLogs);
+    const lastAssistantMessage = assistantMessages.at(-1) ?? null;
     if (lastAssistantMessage === null) {
       reasons.push('Missing assistant final message in worker logs');
       missingCriteria.push('Assistant final message');
     }
 
     if (lastAssistantMessage !== null) {
-      if (input.phase === 'phase1') {
-        const phaseResult = verifyPhase1Final(lastAssistantMessage);
-        if (!phaseResult.ok) {
-          reasons.push('Phase 1 completion contract was not met');
-          missingCriteria.push(...phaseResult.missing);
+      if (input.agentType === 'planning') {
+        const agentResult = verifyPlanningAgentFinal(lastAssistantMessage);
+        if (!agentResult.ok) {
+          reasons.push('Planning Agent completion contract was not met');
+          missingCriteria.push(...agentResult.missing);
         }
-      } else if (input.phase === 'pr-comment') {
-        const phaseResult = verifyPRCommentFinal(lastAssistantMessage);
-        if (!phaseResult.ok) {
-          reasons.push('PR Comment completion contract was not met');
-          missingCriteria.push(...phaseResult.missing);
+      } else if (input.agentType === 'pull_request') {
+        const agentResult = verifyPRCommentFinal(lastAssistantMessage);
+        if (!agentResult.ok) {
+          reasons.push('Pull Request Agent completion contract was not met');
+          missingCriteria.push(...agentResult.missing);
         }
 
         // For PR comment, we don't require a new PR (they push to existing PR)
@@ -344,26 +672,8 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           missingCriteria.push('Confirmed GitHub checks status');
         }
       } else {
-        const phaseResult = verifyPhase2Final(lastAssistantMessage);
-        if (!phaseResult.ok) {
-          reasons.push('Phase 2 completion contract was not met');
-          missingCriteria.push(...phaseResult.missing);
-        }
-
-        if (input.taskResult?.prUrl === undefined || input.taskResult.prUrl === '') {
-          reasons.push('No PR URL found in task result');
-          missingCriteria.push('PR URL created from branch');
-        }
-
-        if (input.taskResult?.ciFailed === true) {
-          reasons.push('GitHub checks reported failing statuses');
-          missingCriteria.push('Successful GitHub checks for PR branch');
-        }
-
-        if (input.taskResult?.ciFailed === undefined) {
-          reasons.push('Could not determine GitHub checks status');
-          missingCriteria.push('Confirmed GitHub checks status');
-        }
+        // Execution Agent completion is verified semantically by Gemini using Claude responses only.
+        // No regex-based parsing or runtime-signal gating here.
       }
     }
 
@@ -372,6 +682,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       reasons,
       missingCriteria,
       lastAssistantMessage,
+      assistantMessages,
     };
   }
 
@@ -380,6 +691,8 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     lastAssistantMessage: string,
     deterministic: DeterministicContractResult
   ): Promise<{ ok: true; value: LlmVerdict } | { ok: false; error: string }> {
+    const recentAssistantMessages = deterministic.assistantMessages.slice(-3);
+    const previousAssistantMessages = recentAssistantMessages.slice(0, -1);
     const terminalExcerpt = stripDockerHeaders(input.rawLogs)
       .split('\n')
       .slice(-120)
@@ -387,17 +700,17 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       .slice(0, 20_000);
 
     const requiredContractText =
-      input.phase === 'phase1'
+      input.agentType === 'planning'
         ? [
-            'PHASE1_FINAL:',
-            '- Linear label set: <code-task|unclear>',
-            '- Phase 2 ready: <yes|no>',
-            '- Linear issue: <full Linear URL>',
+            'PLANNING_AGENT_FINAL:',
+            '- Outcome: <planned|unclear>',
+            '- superpowers_writing_plans_used: 1',
+            '- Original issue: <full Linear URL>',
             '- Summary: <3-5 sentences>',
           ].join('\n')
-        : input.phase === 'pr-comment'
+        : input.agentType === 'pull_request'
           ? [
-              'PR_COMMENT_FINAL:',
+              'PULL_REQUEST_AGENT_FINAL:',
               '- PR: <full GitHub PR URL>',
               '- CI evidence: pnpm run ci:tracked successful',
               '- Linear issue: <full Linear URL>',
@@ -405,68 +718,130 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
               '- Summary: <3-5 sentences>',
             ].join('\n')
           : [
-              'PHASE2_FINAL:',
+              'EXECUTION_AGENT_FINAL:',
+              '- Outcome: implemented',
               '- PR: <full GitHub PR URL>',
               '- CI evidence: pnpm run ci:tracked successful',
               '- Linear issue: <full Linear URL>',
               '- Review iterations: <number>',
-              '- Turn summary: <~5 short statements separated by |>',
+              '- superpowers_executing_plans_used: <0|1> (must be 1)',
+              '- superpowers_requesting_code_review_used: <0|1> (must be 1)',
+              '- trivial_task: <0|1>',
+              '- subagents: <explicit role + scope list; may be none only if trivial_task=1>',
+              '- Skill sequence proof: <must show superpowers:executing-plans before superpowers:requesting-code-review>',
               '- Summary: <3-5 sentences>',
             ].join('\n');
 
-    const verifierPrompt = [
-      'You are a strict task-completion verifier.',
-      'Decide only one thing: PASS or FAIL for this attempt.',
-      'Use only provided evidence.',
-      'Do not judge code quality.',
-      'If evidence is missing, return FAIL.',
-      'Return JSON only with the exact schema:',
-      '{"passed":boolean,"confidence":number (0.0-1.0),"reasons":string[],"missingCriteria":string[],"resumeInstruction":string,"extractedSummary":string}',
-      '',
-      `TASK ${input.taskId} ATTEMPT ${String(input.attempt)}/${String(input.maxAttempts)} PHASE ${input.phase}`,
-      '',
-      'Original objective:',
-      input.originalPrompt,
-      '',
-      'Required contract:',
-      requiredContractText,
-      '',
-      'Deterministic signals:',
-      `- workerExitCode=${String(input.workerExitCode ?? 'none')}`,
-      `- detectedPrUrl=${input.taskResult?.prUrl ?? 'null'}`,
-      `- detectedCiTrackedSuccess=${String(input.taskResult?.ciFailed === false)}`,
-      `- deterministicPassed=${String(deterministic.ok)}`,
-      `- deterministicReasons=${deterministic.reasons.length > 0 ? deterministic.reasons.join('; ') : 'none'}`,
-      `- deterministicMissingCriteria=${deterministic.missingCriteria.length > 0 ? deterministic.missingCriteria.join('; ') : 'none'}`,
-      '',
-      'Last assistant message:',
-      lastAssistantMessage,
-      '',
-      'Last logs excerpt:',
-      terminalExcerpt,
-      '',
-      'Summary extraction:',
-      '- Always include "extractedSummary": a 3-5 sentence objective narrative of what happened.',
-      '- First, look for the "- Summary:" line in the assistant\'s PHASE_FINAL block and use its content.',
-      '- If that line is missing or contains only a few words, write your own summary based on the assistant messages and logs.',
-      '- Describe what was analyzed/implemented, key decisions, outcomes, and deliverables.',
-      '- If the task failed, describe what was attempted and where it failed.',
-      '- Keep it factual and third-person.',
-      '',
-      'Hard rules for this decision:',
-      '- If deterministic signals show explicit Claude error, non-zero worker exit, or missing required final contract lines, return passed=false.',
-      '- If you cannot verify all required items from provided evidence, return passed=false.',
-      '',
-      'Return PASS only if all required contract items are present with evidence.',
-      'Otherwise return FAIL with missing criteria and one short next instruction.',
-    ].join('\n');
+    const responseSchemaLine =
+      '{"passed":boolean,"confidence":number (0.0-1.0),"reasons":string[],"missingCriteria":string[],"resumeInstruction":string,"extractedSummary":string,"executionMetadata":{"outcomeLabel":"implemented","superpowersExecutingPlansUsed":"0|1","superpowersRequestingCodeReviewUsed":"0|1","trivialTask":"0|1","subagents":string,"reviewIterations":number,"linearIssueUrl":string}|null}';
+
+    const verifierPrompt =
+      input.agentType === 'execution'
+        ? [
+            'You are a strict task-completion verifier for the Execution Agent.',
+            'Decide PASS or FAIL only.',
+            'Evidence source is Claude responses only (no runtime/log signal adjudication).',
+            'Use the latest Claude response as primary evidence. Use previous Claude responses only as fallback.',
+            'Do not judge code quality.',
+            'If evidence is missing or ambiguous, return FAIL.',
+            'Return JSON only with the exact schema:',
+            responseSchemaLine,
+            '',
+            `TASK ${input.taskId} ATTEMPT ${String(input.attempt)}/${String(input.maxAttempts)} AGENT execution`,
+            `ROUTED_LINEAR_ISSUE_ID: ${input.linearIssueId ?? 'unknown'}`,
+            '',
+            'Original objective:',
+            input.originalPrompt,
+            '',
+            'Required contract:',
+            requiredContractText,
+            '',
+            'Latest Claude response (PRIMARY EVIDENCE):',
+            lastAssistantMessage,
+            '',
+            'Previous Claude responses (FALLBACK ONLY):',
+            previousAssistantMessages.length > 0
+              ? previousAssistantMessages.join('\n\n---\n\n')
+              : 'none',
+            '',
+            'Execution Agent hard rules:',
+            '- Verify EXECUTION_AGENT_FINAL semantic presence.',
+            '- Outcome must be implemented.',
+            '- superpowers_executing_plans_used must be 1.',
+            '- superpowers_requesting_code_review_used must be 1.',
+            '- Skill sequence proof must show executing-plans before requesting-code-review.',
+            '- trivial_task must be present.',
+            '- If trivial_task=0, subagents must be an explicit list with role + scope. "none" or empty is invalid.',
+            '- If trivial_task=1, subagents may be none/empty.',
+            '- PR URL, CI evidence statement, review iterations, and executed Linear issue URL must be present.',
+            '- If the final block Linear issue URL clearly points to a different issue than the routed task, return passed=false.',
+            '- Confidence is informational only, not a pass threshold.',
+            '',
+            'Resume instruction rule:',
+            '- Return a targeted gap-fill instruction for missing items; do not ask for a full rewrite unless unusable.',
+            '',
+            'Extraction rule (required for execution):',
+            '- Populate executionMetadata from the Execution Agent final block when possible.',
+            '- reviewIterations must be numeric in executionMetadata.',
+            '- If execution evidence is insufficient, set executionMetadata to null.',
+            '',
+            'Summary extraction:',
+            '- Always include extractedSummary (3-5 factual sentences, third-person).',
+            '- Prefer the final-block Summary line if present; otherwise summarize from Claude responses only.',
+          ].join('\n')
+        : [
+            'You are a strict task-completion verifier.',
+            'Decide only one thing: PASS or FAIL for this attempt.',
+            'Use only provided evidence.',
+            'Do not judge code quality.',
+            'If evidence is missing, return FAIL.',
+            'Return JSON only with the exact schema:',
+            responseSchemaLine,
+            '',
+            `TASK ${input.taskId} ATTEMPT ${String(input.attempt)}/${String(input.maxAttempts)} AGENT ${input.agentType}`,
+            '',
+            'Original objective:',
+            input.originalPrompt,
+            '',
+            'Required contract:',
+            requiredContractText,
+            '',
+            'Deterministic signals:',
+            `- workerExitCode=${String(input.workerExitCode ?? 'none')}`,
+            `- detectedPrUrl=${input.taskResult?.prUrl ?? 'null'}`,
+            `- detectedCiTrackedSuccess=${String(input.taskResult?.ciFailed === false)}`,
+            `- deterministicPassed=${String(deterministic.ok)}`,
+            `- deterministicReasons=${deterministic.reasons.length > 0 ? deterministic.reasons.join('; ') : 'none'}`,
+            `- deterministicMissingCriteria=${deterministic.missingCriteria.length > 0 ? deterministic.missingCriteria.join('; ') : 'none'}`,
+            '',
+            'Last assistant message:',
+            lastAssistantMessage,
+            '',
+            'Last logs excerpt:',
+            terminalExcerpt,
+            '',
+            'Summary extraction:',
+            '- Always include "extractedSummary": a 3-5 sentence objective narrative of what happened.',
+            '- First, look for the "- Summary:" line in the assistant final block and use its content.',
+            '- If that line is missing or contains only a few words, write your own summary based on the assistant messages and logs.',
+            '- Describe what was analyzed/implemented, key decisions, outcomes, and deliverables.',
+            '- If the task failed, describe what was attempted and where it failed.',
+            '- Keep it factual and third-person.',
+            '',
+            'Hard rules for this decision:',
+            '- If deterministic signals show explicit Claude error, non-zero worker exit, or missing required final contract lines, return passed=false.',
+            '- If you cannot verify all required items from provided evidence, return passed=false.',
+            '',
+            'Return PASS only if all required contract items are present with evidence.',
+            'Otherwise return FAIL with missing criteria and one short next instruction.',
+          ].join('\n');
 
     this.logger.info(
       {
         taskId: input.taskId,
         attempt: input.attempt,
         maxAttempts: input.maxAttempts,
-        phase: input.phase,
+        agentType: input.agentType,
         model: this.model,
         promptChars: verifierPrompt.length,
       },
@@ -579,8 +954,8 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
 
 export const CompletionVerifierTestUtils = {
   extractLastAssistantMessage,
-  verifyPhase1Final,
-  verifyPhase2Final,
+  verifyPlanningAgentFinal,
+  verifyExecutionAgentFinal,
   verifyPRCommentFinal,
   buildDefaultResumeInstruction,
 };

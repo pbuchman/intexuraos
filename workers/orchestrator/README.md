@@ -6,6 +6,49 @@ Local worker orchestration service for code task execution.
 
 The orchestrator runs on local machines (Mac or VM) behind Cloudflare Tunnel. It receives task dispatch requests from `code-agent`, spawns Claude Code sessions in isolated Docker containers, and reports results via webhooks.
 
+### Agent-Based Routing (Current)
+
+Task dispatch is now agent-based (not phase-based):
+
+- `pull_request`: PR/comment/review-triggered tasks
+- `planning`: Linear issue tasks without `code-task`
+- `execution`: Linear issue tasks with `code-task`
+
+Prompts preserve `[WORKER-MODE]` and inject exactly one agent marker:
+
+- `[AGENT:PLANNING]`
+- `[AGENT:EXECUTION]`
+- `[AGENT:PULL_REQUEST]`
+
+Completion contracts use these final block names (no legacy fallback):
+
+- `PLANNING_AGENT_FINAL`
+- `EXECUTION_AGENT_FINAL`
+- `PULL_REQUEST_AGENT_FINAL`
+
+Planning Agent outcomes:
+
+- `planned` -> orchestrator webhook `status=completed`
+- `unclear` -> orchestrator webhook `status=failed` with `error.code=PLANNING_AGENT_UNCLEAR`
+
+For all Planning Agent runs, orchestrator flattens verifier metadata into webhook `result` using `planning_*` fields. `code-agent` owns deterministic Linear mutations after receiving the webhook.
+
+Execution Agent notes:
+
+- `implemented` is sent as webhook `status=completed`
+- Execution verification is Gemini semantic validation of Claude responses (latest response first, prior responses fallback)
+- Orchestrator flattens execution verifier metadata into webhook `result` using `execution_*` fields:
+  - `execution_outcome_label`
+  - `execution_superpowers_executing_plans_used`
+  - `execution_superpowers_requesting_code_review_used`
+  - `execution_trivial_task`
+  - `execution_subagents`
+  - `execution_review_iterations`
+  - `execution_linear_issue_url`
+- Ownership split:
+  - Worker owns GitHub execution (code/tests/CI/PR/review loop)
+  - `code-agent` owns deterministic Linear enforcement on successful execution callbacks (executed issue only)
+
 ```
 code-agent (Cloud Run)
     |
