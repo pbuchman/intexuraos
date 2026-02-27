@@ -28,7 +28,7 @@ Flattened Planning Agent `result` fields:
 - `planning_outcome_label`
 - `planning_superpowers_writing_plans_used`
 - `planning_issue_url`
-- `planning_trivial_task`
+- `planning_child_issue_count`
 - `planning_doc_path`
 - `planning_pr_url`
 - `planning_clarification_message`

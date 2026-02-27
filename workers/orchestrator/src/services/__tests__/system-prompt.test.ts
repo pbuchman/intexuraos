@@ -20,8 +20,14 @@ describe('system-prompt', () => {
     expect(result).toContain('NO IMPLEMENTATION CODING IS ALLOWED');
     expect(result).toContain('docs/plans/');
     expect(result).toContain('superpowers:writing-plans');
-    expect(result).toContain('parallel work breakdown');
-    expect(result).toContain('service/package');
+    expect(result).toContain('executable in PARALLEL');
+    expect(result).toContain('service/package boundaries');
+    expect(result).toContain('If only ONE child issue');
+    expect(result).toContain('If MULTIPLE child issues');
+    expect(result).toContain('Child issues:');
+    expect(result).toContain('FLAT');
+    expect(result).not.toContain('Trivial task');
+    expect(result).not.toContain('non-trivial');
     expect(result).toContain('PLANNING_AGENT_FINAL:');
   });
 
