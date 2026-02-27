@@ -78,7 +78,7 @@ export interface CodeTask {
   status:
     | 'dispatched'
     | 'running'
-    | 'designed'
+    | 'planned'
     | 'implemented'
     | 'failed'
     | 'interrupted'

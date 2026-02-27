@@ -13,7 +13,7 @@
  * | 7 | processCodeAction uses shared generateWebhookSecret | processCodeAction.ts | Existing use-case tests still pass | No local function definition remains |
  * | 8 | retryTask uses shared generateWebhookSecret | retryTask.ts | Existing use-case tests still pass | No local function definition remains |
  * | 9 | submitTaskFeedback uses shared generateWebhookSecret | submitTaskFeedback.ts | Existing use-case tests still pass | No local function definition remains |
- * | 10 | submitToPhase2 uses shared utilities | submitToPhase2.ts | Existing use-case tests still pass | No local function definitions remain |
+ * | 10 | submitToExecutionAgent uses shared utilities | submitToExecutionAgent.ts | Existing use-case tests still pass | No local function definitions remain |
  */
 
 import { describe, it, expect } from 'vitest';

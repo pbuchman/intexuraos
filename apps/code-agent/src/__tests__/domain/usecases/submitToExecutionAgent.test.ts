@@ -1,9 +1,9 @@
 /**
- * Tests for submitToPhase2 use case.
+ * Tests for submitToExecutionAgent use case.
  *
- * Validates the full workflow of starting Phase 2 implementation
- * from a completed Phase 1 design task, including:
- * - Input validation (task status, phase, Linear issue, duplicate guard)
+ * Validates the full workflow of starting Execution Agent implementation
+ * from a completed Planning Agent task, including:
+ * - Input validation (task status, agent type, Linear issue, duplicate guard)
  * - Label validation (code-task required, unclear blocks)
  * - Worker configuration
  * - Optimistic lock before dispatch
@@ -17,12 +17,12 @@ import type { Logger } from '@intexuraos/common-core';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import { Timestamp } from '@google-cloud/firestore';
 import {
-  submitToPhase2,
-  PHASE2_PROMPT,
-  type SubmitToPhase2Deps,
-} from '../../../domain/usecases/submitToPhase2.js';
+  submitToExecutionAgent,
+  EXECUTION_AGENT_PROMPT,
+  type SubmitToExecutionAgentDeps,
+} from '../../../domain/usecases/submitToExecutionAgent.js';
 
-describe('submitToPhase2', () => {
+describe('submitToExecutionAgent', () => {
   let mockLogger: Logger;
   let mockCodeTaskRepo: {
     findByIdForUser: ReturnType<typeof vi.fn>;
@@ -74,8 +74,8 @@ describe('submitToPhase2', () => {
       workerLocation: 'home-dev',
       repository: 'pbuchman/intexuraos',
       baseBranch: 'development',
-      status: 'designed',
-      executionPhase: 'design',
+      status: 'planned',
+      agentType: 'planning',
       dedupKey: 'dedup-abc',
       callbackReceived: true,
       createdAt: now,
@@ -95,15 +95,15 @@ describe('submitToPhase2', () => {
     return task;
   }
 
-  function createDeps(): SubmitToPhase2Deps {
+  function createDeps(): SubmitToExecutionAgentDeps {
     return {
       logger: mockLogger,
-      codeTaskRepo: mockCodeTaskRepo as unknown as SubmitToPhase2Deps['codeTaskRepo'],
-      linearAgentClient: mockLinearAgentClient as unknown as SubmitToPhase2Deps['linearAgentClient'],
-      taskDispatcher: mockTaskDispatcher as unknown as SubmitToPhase2Deps['taskDispatcher'],
-      whatsappNotifier: mockWhatsAppNotifier as unknown as SubmitToPhase2Deps['whatsappNotifier'],
-      metricsClient: mockMetricsClient as unknown as SubmitToPhase2Deps['metricsClient'],
-      workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitToPhase2Deps['workerSettingsRepo'],
+      codeTaskRepo: mockCodeTaskRepo as unknown as SubmitToExecutionAgentDeps['codeTaskRepo'],
+      linearAgentClient: mockLinearAgentClient as unknown as SubmitToExecutionAgentDeps['linearAgentClient'],
+      taskDispatcher: mockTaskDispatcher as unknown as SubmitToExecutionAgentDeps['taskDispatcher'],
+      whatsappNotifier: mockWhatsAppNotifier as unknown as SubmitToExecutionAgentDeps['whatsappNotifier'],
+      metricsClient: mockMetricsClient as unknown as SubmitToExecutionAgentDeps['metricsClient'],
+      workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitToExecutionAgentDeps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
       serviceUrl: 'https://test.example.com',
     };
@@ -141,11 +141,11 @@ describe('submitToPhase2', () => {
     mockCodeTaskRepo.create.mockResolvedValue(
       ok({
         ...mockTask,
-        id: 'task_phase2',
-        executionPhase: 'execution' as const,
-        followUpReason: 'phase2_implement' as const,
+        id: 'task_execution',
+        agentType: 'execution' as const,
+        followUpReason: 'execution_implement' as const,
         parentTaskId: originalTaskId,
-        traceId: 'phase2-trace-abc',
+        traceId: 'execution-trace-abc',
         sanitizedPrompt: 'Implement feature X',
         systemPromptHash: 'hash123',
         repository: 'pbuchman/intexuraos',
@@ -210,7 +210,7 @@ describe('submitToPhase2', () => {
         err({ code: 'NOT_FOUND', message: 'Not found' })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -226,7 +226,7 @@ describe('submitToPhase2', () => {
       const mockTask = createMockTask({ status: 'running' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -237,11 +237,11 @@ describe('submitToPhase2', () => {
       }
     });
 
-    it('returns invalid_status when executionPhase is not design', async () => {
-      const mockTask = createMockTask({ executionPhase: 'execution' });
+    it('returns invalid_status when agentType is not planning', async () => {
+      const mockTask = createMockTask({ agentType: 'execution' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -249,7 +249,7 @@ describe('submitToPhase2', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('invalid_status');
-        expect(result.error.message).toContain('completed design task');
+        expect(result.error.message).toContain('completed planning task');
       }
     });
 
@@ -258,7 +258,7 @@ describe('submitToPhase2', () => {
       delete (mockTask as { linearIssueId?: string }).linearIssueId;
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -270,11 +270,11 @@ describe('submitToPhase2', () => {
     });
 
     it('returns already_implemented when implementationTaskId is set', async () => {
-      const existingPhase2Id = 'task_existing_phase2';
-      const mockTask = createMockTask({ implementationTaskId: existingPhase2Id });
+      const existingExecutionTaskId = 'task_existing_phase2';
+      const mockTask = createMockTask({ implementationTaskId: existingExecutionTaskId });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -282,7 +282,7 @@ describe('submitToPhase2', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('already_implemented');
-        expect(result.error.existingTaskId).toBe(existingPhase2Id);
+        expect(result.error.existingTaskId).toBe(existingExecutionTaskId);
       }
     });
 
@@ -293,7 +293,7 @@ describe('submitToPhase2', () => {
         ok({ hasActive: true, taskId: 'task_active' })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -314,7 +314,7 @@ describe('submitToPhase2', () => {
         ok({ workers: [] })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -336,7 +336,7 @@ describe('submitToPhase2', () => {
         ok({ workers: [{ ...enabledWorker, enabled: false }] })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -362,7 +362,7 @@ describe('submitToPhase2', () => {
         err({ code: 'UNAVAILABLE', message: 'Down' })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -394,7 +394,7 @@ describe('submitToPhase2', () => {
         })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -427,7 +427,7 @@ describe('submitToPhase2', () => {
         })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -441,7 +441,7 @@ describe('submitToPhase2', () => {
   });
 
   describe('optimistic lock failure', () => {
-    it('returns internal_error when first update (optimistic lock) fails and does not create phase 2 task', async () => {
+    it('returns internal_error when first update (optimistic lock) fails and does not create execution task', async () => {
       const mockTask = createMockTask();
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
       mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(
@@ -465,7 +465,7 @@ describe('submitToPhase2', () => {
         err({ code: 'FIRESTORE_ERROR', message: 'Write failed' })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -474,12 +474,12 @@ describe('submitToPhase2', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('internal_error');
       }
-      // Phase 2 task should NOT be created
+      // Execution Agent task should NOT be created
       expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
     });
   });
 
-  describe('create phase2 task failure with rollback', () => {
+  describe('create execution task failure with rollback', () => {
     it('returns internal_error and rolls back optimistic lock when create fails', async () => {
       const mockTask = createMockTask();
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
@@ -506,7 +506,7 @@ describe('submitToPhase2', () => {
         err({ code: 'FIRESTORE_ERROR', message: 'Create failed' })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -533,7 +533,7 @@ describe('submitToPhase2', () => {
       // update needs to succeed for rollback calls
       mockCodeTaskRepo.update.mockResolvedValue(ok({}));
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -547,7 +547,7 @@ describe('submitToPhase2', () => {
         originalTaskId,
         expect.objectContaining({ implementationTaskId: null })
       );
-      // Should mark phase 2 task as failed
+      // Should mark execution task as failed
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
         expect.stringContaining('task_'),
         expect.objectContaining({
@@ -562,7 +562,7 @@ describe('submitToPhase2', () => {
     it('returns ok with correct result shape on success', async () => {
       setupHappyPathMocks();
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -576,10 +576,10 @@ describe('submitToPhase2', () => {
       }
     });
 
-    it('sets implementationTaskId on original task before creating phase2 task', async () => {
+    it('sets implementationTaskId on original task before creating execution task', async () => {
       setupHappyPathMocks();
 
-      await submitToPhase2(createDeps(), { originalTaskId, userId });
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       // First update call should set implementationTaskId
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
@@ -592,17 +592,17 @@ describe('submitToPhase2', () => {
       expect(updateCallOrder).toBeLessThan(createCallOrder ?? Infinity);
     });
 
-    it('creates phase2 task with correct properties', async () => {
+    it('creates execution task with correct properties', async () => {
       setupHappyPathMocks();
 
-      await submitToPhase2(createDeps(), { originalTaskId, userId });
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          executionPhase: 'execution',
-          followUpReason: 'phase2_implement',
+          agentType: 'execution',
+          followUpReason: 'execution_implement',
           parentTaskId: originalTaskId,
-          traceId: 'phase2-trace-abc',
+          traceId: 'execution-trace-abc',
           linearIssueId,
         })
       );
@@ -611,7 +611,7 @@ describe('submitToPhase2', () => {
     it('calls updateIssueState with in_progress for the Linear issue', async () => {
       setupHappyPathMocks();
 
-      await submitToPhase2(createDeps(), { originalTaskId, userId });
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       expect(mockLinearAgentClient.updateIssueState).toHaveBeenCalledWith({
         userId,
@@ -623,13 +623,13 @@ describe('submitToPhase2', () => {
     it('calls addComment with both task IDs on the Linear issue', async () => {
       setupHappyPathMocks();
 
-      await submitToPhase2(createDeps(), { originalTaskId, userId });
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       expect(mockLinearAgentClient.addComment).toHaveBeenCalledWith(
         expect.objectContaining({
           userId,
           issueId: linearIssueId,
-          body: expect.stringContaining('Phase 2 implementation started'),
+          body: expect.stringContaining('Execution Agent implementation started'),
         })
       );
     });
@@ -637,7 +637,7 @@ describe('submitToPhase2', () => {
     it('calls dispatch with correct parameters including fresh labels', async () => {
       setupHappyPathMocks();
 
-      await submitToPhase2(createDeps(), { originalTaskId, userId });
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -651,7 +651,7 @@ describe('submitToPhase2', () => {
     it('sends WhatsApp notification after successful dispatch', async () => {
       setupHappyPathMocks();
 
-      await submitToPhase2(createDeps(), { originalTaskId, userId });
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       expect(mockWhatsAppNotifier.notifyTaskStarted).toHaveBeenCalledWith(
         userId,
@@ -659,26 +659,26 @@ describe('submitToPhase2', () => {
       );
     });
 
-    it('creates phase2 task with phase2-specific prompt, not original design prompt', async () => {
+    it('creates execution task with execution prompt, not original planning prompt', async () => {
       setupHappyPathMocks({ prompt: 'Analyze the linked Linear issue.', sanitizedPrompt: 'Analyze the linked Linear issue.' });
 
-      await submitToPhase2(createDeps(), { originalTaskId, userId });
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          prompt: PHASE2_PROMPT,
-          sanitizedPrompt: PHASE2_PROMPT,
+          prompt: EXECUTION_AGENT_PROMPT,
+          sanitizedPrompt: EXECUTION_AGENT_PROMPT,
         })
       );
     });
 
-    it('does not copy actionId or approvalEventId from original task to phase2 task', async () => {
+    it('does not copy actionId or approvalEventId from original task to execution task', async () => {
       // actionId and approvalEventId are Firestore dedup keys.
-      // Copying them to the phase2 task causes DUPLICATE_APPROVAL for processCodeAction tasks.
-      // retryTask.ts correctly omits these — phase2 must do the same.
+      // Copying them to the execution task causes DUPLICATE_APPROVAL for processCodeAction tasks.
+      // retryTask.ts correctly omits these — execution path must do the same.
       setupHappyPathMocks({ actionId: 'action_abc123', approvalEventId: 'event_xyz456' });
 
-      await submitToPhase2(createDeps(), { originalTaskId, userId });
+      await submitToExecutionAgent(createDeps(), { originalTaskId, userId });
 
       const createCall = mockCodeTaskRepo.create.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(createCall).toBeDefined();
@@ -694,7 +694,7 @@ describe('submitToPhase2', () => {
         err({ code: 'UNAVAILABLE', message: 'Linear down' })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -712,7 +712,7 @@ describe('submitToPhase2', () => {
         err({ code: 'UNAVAILABLE', message: 'Linear down' })
       );
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });
@@ -720,7 +720,7 @@ describe('submitToPhase2', () => {
       expect(result.ok).toBe(true);
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ linearIssueId }),
-        expect.stringContaining('Failed to add Phase 2 start comment')
+        expect.stringContaining('Failed to add Execution Agent start comment')
       );
     });
 
@@ -753,11 +753,11 @@ describe('submitToPhase2', () => {
       mockCodeTaskRepo.create.mockResolvedValue(
         ok({
           ...mockTask,
-          id: 'task_phase2',
-          executionPhase: 'execution' as const,
-          followUpReason: 'phase2_implement' as const,
+          id: 'task_execution',
+          agentType: 'execution' as const,
+          followUpReason: 'execution_implement' as const,
           parentTaskId: originalTaskId,
-          traceId: 'phase2-trace-abc',
+          traceId: 'execution-trace-abc',
           sanitizedPrompt: 'Implement feature X',
           systemPromptHash: 'hash123',
           repository: 'pbuchman/intexuraos',
@@ -773,7 +773,7 @@ describe('submitToPhase2', () => {
       );
       mockWhatsAppNotifier.notifyTaskStarted.mockResolvedValue(ok(undefined));
 
-      const result = await submitToPhase2(createDeps(), {
+      const result = await submitToExecutionAgent(createDeps(), {
         originalTaskId,
         userId,
       });

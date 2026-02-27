@@ -1,8 +1,8 @@
 /**
- * Use case: Start Phase 2 implementation from a completed Phase 1 design task.
+ * Use case: Start Execution Agent implementation from a completed planning design task.
  *
- * Validates that the Linear issue has the 'code-task' label (set by Phase 1),
- * then dispatches a Phase 2 strict-execution task.
+ * Validates that the Linear issue has the 'code-task' label (set by planning),
+ * then dispatches an Execution Agent strict-execution task.
  */
 
 import { err, ok, type Result } from '@intexuraos/common-core';
@@ -18,23 +18,23 @@ import { hasCodeTaskLabel, hasUnclearLabel } from '../../domain/utils/labelUtils
 import { randomUUID } from 'node:crypto';
 import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 
-export const PHASE2_PROMPT =
+export const EXECUTION_AGENT_PROMPT =
   'Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.';
 
 /**
- * Request to start Phase 2 implementation from a completed Phase 1 design task.
+ * Request to start Execution Agent implementation from a completed planning design task.
  */
-export interface SubmitToPhase2Request {
-  /** The ID of the completed Phase 1 design task */
+export interface SubmitToExecutionAgentRequest {
+  /** The ID of the completed planning design task */
   originalTaskId: string;
   /** User ID submitting the request */
   userId: string;
 }
 
 /**
- * Successful result of submitting to Phase 2.
+ * Successful result of submitting to Execution Agent.
  */
-export interface SubmitToPhase2Result {
+export interface SubmitToExecutionAgentResult {
   codeTaskId: string;
   resourceUrl: string;
   workerLocation: WorkerLocation;
@@ -42,9 +42,9 @@ export interface SubmitToPhase2Result {
 }
 
 /**
- * Error codes for submit to Phase 2.
+ * Error codes for submit to Execution Agent.
  */
-export type SubmitToPhase2ErrorCode =
+export type SubmitToExecutionAgentErrorCode =
   | 'task_not_found'
   | 'invalid_status'
   | 'no_linear_issue'
@@ -55,16 +55,16 @@ export type SubmitToPhase2ErrorCode =
   | 'internal_error';
 
 /**
- * Error result from submitting to Phase 2.
+ * Error result from submitting to Execution Agent.
  */
-export interface SubmitToPhase2Error {
-  code: SubmitToPhase2ErrorCode;
+export interface SubmitToExecutionAgentError {
+  code: SubmitToExecutionAgentErrorCode;
   message: string;
   /** Only set for already_implemented */
   existingTaskId?: string;
 }
 
-export interface SubmitToPhase2Deps {
+export interface SubmitToExecutionAgentDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   linearAgentClient: LinearAgentClient;
@@ -77,27 +77,27 @@ export interface SubmitToPhase2Deps {
 }
 
 /**
- * Submit to Phase 2 use case.
+ * Submit to Execution Agent use case.
  *
  * Workflow:
  * 1. Fetch original task and validate it belongs to user
- * 2. Validate status is 'completed' and executionPhase is 'design'
+ * 2. Validate status is 'planned' and agentType is 'planning'
  * 3. Validate task has a linked Linear issue
  * 4. Guard against duplicate implementation
  * 5. Check for active tasks on same Linear issue
  * 6. Fetch worker settings
  * 7. Validate Linear issue labels (must have 'code-task', must not have 'unclear')
  * 8. Optimistic lock: set implementationTaskId before dispatch
- * 9. Create Phase 2 task
+ * 9. Create Execution Agent task
  * 10. Update Linear issue to In Progress + add comment
  * 11. Build and dispatch to worker
  * 12. Rollback on dispatch failure
  * 13. Generate cancel nonce and send WhatsApp notification
  */
-export async function submitToPhase2(
-  deps: SubmitToPhase2Deps,
-  request: SubmitToPhase2Request
-): Promise<Result<SubmitToPhase2Result, SubmitToPhase2Error>> {
+export async function submitToExecutionAgent(
+  deps: SubmitToExecutionAgentDeps,
+  request: SubmitToExecutionAgentRequest
+): Promise<Result<SubmitToExecutionAgentResult, SubmitToExecutionAgentError>> {
   const { logger, codeTaskRepo, linearAgentClient, taskDispatcher, whatsappNotifier, workerSettingsRepo } = deps;
   const { originalTaskId, userId } = request;
 
@@ -105,7 +105,7 @@ export async function submitToPhase2(
   const originalTaskResult = await codeTaskRepo.findByIdForUser(originalTaskId, userId);
 
   if (!originalTaskResult.ok) {
-    logger.warn({ originalTaskId, userId, error: originalTaskResult.error }, 'Original task not found for Phase 2 submission');
+    logger.warn({ originalTaskId, userId, error: originalTaskResult.error }, 'Original task not found for Execution Agent submission');
     return err({
       code: 'task_not_found',
       message: `Task ${originalTaskId} not found`,
@@ -114,21 +114,21 @@ export async function submitToPhase2(
 
   const originalTask = originalTaskResult.value;
 
-  // Step 2: Validate status is 'designed' and executionPhase is 'design'
-  if (originalTask.status !== 'designed' || originalTask.executionPhase !== 'design') {
+  // Step 2: Validate status is 'planned' and agentType is 'planning'
+  if (originalTask.status !== 'planned' || originalTask.agentType !== 'planning') {
     logger.warn(
-      { taskId: originalTask.id, status: originalTask.status, executionPhase: originalTask.executionPhase },
-      'Attempted to start Phase 2 on non-designed task'
+      { taskId: originalTask.id, status: originalTask.status, agentType: originalTask.agentType },
+      'Attempted to start Execution Agent on non-planning task'
     );
     return err({
       code: 'invalid_status',
-      message: 'Task must be a completed design task to start implementation',
+      message: 'Task must be a completed planning task to start implementation',
     });
   }
 
   // Step 3: Validate task has a linked Linear issue
   if (originalTask.linearIssueId === undefined) {
-    logger.warn({ taskId: originalTask.id }, 'Cannot start Phase 2: task has no linked Linear issue');
+    logger.warn({ taskId: originalTask.id }, 'Cannot start Execution Agent: task has no linked Linear issue');
     return err({
       code: 'no_linear_issue',
       message: 'Cannot implement — this task has no linked Linear issue',
@@ -157,12 +157,12 @@ export async function submitToPhase2(
     // Log error but don't fail - the active task check is best-effort
     logger.error(
       { linearIssueId, error: activeCheckResult.error },
-      'Failed to check for active tasks on Linear issue, proceeding with Phase 2 submission'
+      'Failed to check for active tasks on Linear issue, proceeding with Execution Agent submission'
     );
   } else if (activeCheckResult.value.hasActive) {
     logger.warn(
       { linearIssueId, activeTaskId: activeCheckResult.value.taskId },
-      'Cannot start Phase 2: active task exists for Linear issue'
+      'Cannot start Execution Agent: active task exists for Linear issue'
     );
     return err({
       code: 'active_task_exists',
@@ -174,7 +174,7 @@ export async function submitToPhase2(
   const settingsResult = await workerSettingsRepo.getSettings(userId);
   /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!settingsResult.ok) {
-    logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings for Phase 2 submission');
+    logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings for Execution Agent submission');
     return err({
       code: 'internal_error',
       message: 'Failed to fetch worker settings',
@@ -190,7 +190,7 @@ export async function submitToPhase2(
   /* v8 ignore stop @preserve */
 
   if (enabledWorkers.length === 0) {
-    logger.warn({ userId }, 'User has no workers configured for Phase 2 submission');
+    logger.warn({ userId }, 'User has no workers configured for Execution Agent submission');
     return err({
       code: 'worker_not_configured',
       message: 'No workers configured. Configure workers in Settings.',
@@ -216,7 +216,7 @@ export async function submitToPhase2(
   if (!validateResult.ok) {
     logger.warn(
       { linearIssueId, error: validateResult.error },
-      'Failed to fetch Linear issue labels for Phase 2 submission'
+      'Failed to fetch Linear issue labels for Execution Agent submission'
     );
     return err({
       code: 'label_not_ready',
@@ -229,41 +229,41 @@ export async function submitToPhase2(
 
   // Step 8: Check labels
   if (hasUnclearLabel(freshLabels)) {
-    logger.warn({ linearIssueId, labels: freshLabels }, 'Linear issue has unclear label, cannot proceed to Phase 2');
+    logger.warn({ linearIssueId, labels: freshLabels }, 'Linear issue has unclear label, cannot proceed to Execution Agent');
     return err({
       code: 'label_not_ready',
-      message: 'The design phase flagged questions that need resolution. Review the Linear issue, address open questions, then retry the design phase.',
+      message: 'The planning agent flagged questions that need resolution. Review the Linear issue, address open questions, then retry the planning agent.',
     });
   } else if (!hasCodeTaskLabel(freshLabels)) {
-    logger.warn({ linearIssueId, labels: freshLabels }, 'Linear issue missing code-task label, Phase 1 may not have completed successfully');
+    logger.warn({ linearIssueId, labels: freshLabels }, 'Linear issue missing code-task label, planning may not have completed successfully');
     return err({
       code: 'label_not_ready',
-      message: "The code-task label hasn't been added yet. The design phase may not have completed successfully.",
+      message: "The code-task label hasn't been added yet. The planning agent may not have completed successfully.",
     });
   }
 
-  // Step 9: SET implementationTaskId on Phase 1 task BEFORE dispatch (optimistic lock)
-  const phase2TaskId = `task_${randomUUID()}`;
+  // Step 9: SET implementationTaskId on planning task BEFORE dispatch (optimistic lock)
+  const executionTaskId = `task_${randomUUID()}`;
 
   const lockResult = await codeTaskRepo.update(originalTask.id, {
-    implementationTaskId: phase2TaskId,
+    implementationTaskId: executionTaskId,
   });
 
   if (!lockResult.ok) {
-    logger.error({ taskId: originalTask.id, error: lockResult.error }, 'Failed to set optimistic lock for Phase 2 implementation');
+    logger.error({ taskId: originalTask.id, error: lockResult.error }, 'Failed to set optimistic lock for Execution Agent implementation');
     return err({
       code: 'internal_error',
       message: 'Failed to start implementation',
     });
   }
 
-  // Step 10: Create the Phase 2 task
-  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, phase2TaskId);
+  // Step 10: Create the Execution Agent task
+  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, executionTaskId);
   const createInput = {
-    id: phase2TaskId,
+    id: executionTaskId,
     userId,
-    prompt: PHASE2_PROMPT,
-    sanitizedPrompt: PHASE2_PROMPT,
+    prompt: EXECUTION_AGENT_PROMPT,
+    sanitizedPrompt: EXECUTION_AGENT_PROMPT,
     systemPromptHash: originalTask.systemPromptHash,
     workerType: originalTask.workerType,
     /* v8 ignore start -- ts-type: optional chaining with null fallback creates type narrowing branch @preserve */
@@ -271,11 +271,11 @@ export async function submitToPhase2(
     /* v8 ignore stop @preserve */
     repository: originalTask.repository,
     baseBranch: originalTask.baseBranch,
-    traceId: `phase2-${originalTask.traceId}`,
+    traceId: `execution-${originalTask.traceId}`,
     webhookSecret,
     parentTaskId: originalTask.id,
-    followUpReason: 'phase2_implement' as const,
-    executionPhase: 'execution' as const,
+    followUpReason: 'execution_implement' as const,
+    agentType: 'execution' as const,
     linearIssueId,
     /* v8 ignore start -- ts-type: optional field spread operators create type narrowing branches @preserve */
     ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
@@ -289,7 +289,7 @@ export async function submitToPhase2(
   /* v8 ignore start -- upstream: repository error handling covered by integration tests @preserve */
   if (!createResult.ok) {
     // Rollback the optimistic lock
-    logger.error({ error: createResult.error }, 'Failed to create Phase 2 task, rolling back optimistic lock');
+    logger.error({ error: createResult.error }, 'Failed to create Execution Agent task, rolling back optimistic lock');
     const lockRollbackResult = await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
     if (!lockRollbackResult.ok) {
       logger.error(
@@ -299,16 +299,16 @@ export async function submitToPhase2(
     }
     return err({
       code: 'internal_error',
-      message: 'Failed to create Phase 2 task',
+      message: 'Failed to create Execution Agent task',
     });
   }
   /* v8 ignore stop @preserve */
 
-  const phase2Task = createResult.value;
+  const executionTask = createResult.value;
 
   logger.info(
-    { originalTaskId: originalTask.id, phase2TaskId: phase2Task.id },
-    'Phase 2 task created'
+    { originalTaskId: originalTask.id, executionTaskId: executionTask.id },
+    'Execution Agent task created'
   );
 
   // Step 11: Update Linear issue to In Progress + add comment (best-effort)
@@ -321,15 +321,15 @@ export async function submitToPhase2(
   if (!updateIssueResult.ok) {
     logger.warn(
       { linearIssueId, error: updateIssueResult.error },
-      'Failed to update Linear issue to In Progress for Phase 2'
+      'Failed to update Linear issue to In Progress for Execution Agent'
     );
   }
 
   const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
-  const commentBody = `🚀 **Phase 2 implementation started**
+  const commentBody = `🚀 **Execution Agent implementation started**
 
 **Design task:** [${originalTask.id}](${webUrl}/#/code-tasks/${originalTask.id})
-**Implementation task:** [${phase2TaskId}](${webUrl}/#/code-tasks/${phase2TaskId})`;
+**Implementation task:** [${executionTaskId}](${webUrl}/#/code-tasks/${executionTaskId})`;
 
   const commentResult = await linearAgentClient.addComment({
     userId,
@@ -340,7 +340,7 @@ export async function submitToPhase2(
   if (!commentResult.ok) {
     logger.warn(
       { linearIssueId, error: commentResult.error },
-      'Failed to add Phase 2 start comment to Linear issue'
+      'Failed to add Execution Agent start comment to Linear issue'
     );
   }
 
@@ -348,23 +348,23 @@ export async function submitToPhase2(
   const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
 
   const dispatchRequest = {
-    taskId: phase2TaskId,
+    taskId: executionTaskId,
     linearIssueId,
     linearIssueLabels: freshLabels,
     hasChildren: hasChildrenForDispatch,
-    prompt: phase2Task.sanitizedPrompt,
-    systemPromptHash: phase2Task.systemPromptHash,
-    repository: phase2Task.repository,
-    baseBranch: phase2Task.baseBranch,
-    workerType: phase2Task.workerType,
+    prompt: executionTask.sanitizedPrompt,
+    systemPromptHash: executionTask.systemPromptHash,
+    repository: executionTask.repository,
+    baseBranch: executionTask.baseBranch,
+    workerType: executionTask.workerType,
     webhookUrl,
     /* v8 ignore start -- ts-type: nullish coalescing on webhookSecret which is always set at task creation @preserve */
-    webhookSecret: phase2Task.webhookSecret ?? '',
+    webhookSecret: executionTask.webhookSecret ?? '',
     /* v8 ignore stop @preserve */
-    traceId: phase2Task.traceId,
+    traceId: executionTask.traceId,
     workerCredentials,
-    /* v8 ignore start -- ts-type: fallback branch for backward compatibility @preserve */
-    executionPhase: phase2Task.executionPhase ?? (hasCodeTaskLabel(freshLabels) ? 'execution' : 'design'),
+    /* v8 ignore start -- ts-type: nullish coalescing on narrowed union field @preserve */
+    agentType: executionTask.agentType ?? 'execution',
     /* v8 ignore stop @preserve */
   };
 
@@ -375,21 +375,21 @@ export async function submitToPhase2(
     /* v8 ignore stop @preserve */
     // Step 13: Rollback on dispatch failure
     const dispatchError = dispatchResult.error;
-    logger.error({ taskId: phase2TaskId, error: dispatchError }, 'Failed to dispatch Phase 2 task, rolling back');
+    logger.error({ taskId: executionTaskId, error: dispatchError }, 'Failed to dispatch Execution Agent task, rolling back');
 
-    // Roll back optimistic lock on Phase 1 task
+    // Roll back optimistic lock on planning task
     const lockRollbackResult = await codeTaskRepo.update(originalTask.id, { implementationTaskId: null });
     /* v8 ignore start -- upstream: Firestore write failure within dispatch failure path @preserve */
     if (!lockRollbackResult.ok) {
       logger.error(
-        { taskId: originalTask.id, phase2TaskId, error: lockRollbackResult.error },
+        { taskId: originalTask.id, executionTaskId, error: lockRollbackResult.error },
         'Failed to rollback implementationTaskId after dispatch failure'
       );
     }
     /* v8 ignore stop @preserve */
 
-    // Mark Phase 2 task as failed
-    const failMarkResult = await codeTaskRepo.update(phase2TaskId, {
+    // Mark Execution Agent task as failed
+    const failMarkResult = await codeTaskRepo.update(executionTaskId, {
       status: 'failed',
       error: {
         code: dispatchError.code,
@@ -399,8 +399,8 @@ export async function submitToPhase2(
     /* v8 ignore start -- upstream: Firestore write failure within dispatch failure path @preserve */
     if (!failMarkResult.ok) {
       logger.error(
-        { phase2TaskId, error: failMarkResult.error },
-        'Failed to mark Phase 2 task as failed after dispatch failure'
+        { executionTaskId, error: failMarkResult.error },
+        'Failed to mark Execution Agent task as failed after dispatch failure'
       );
     }
     /* v8 ignore stop @preserve */
@@ -412,15 +412,15 @@ export async function submitToPhase2(
   }
 
   logger.info(
-    { taskId: phase2TaskId, workerLocation: dispatchResult.value.workerLocation },
-    'Phase 2 task dispatched'
+    { taskId: executionTaskId, workerLocation: dispatchResult.value.workerLocation },
+    'Execution Agent task dispatched'
   );
 
   // Step 14: Generate cancel nonce and send WhatsApp notification
   const cancelNonce = generateCancelNonce();
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
-  const updateResult = await codeTaskRepo.update(phase2TaskId, {
+  const updateResult = await codeTaskRepo.update(executionTaskId, {
     workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,
@@ -432,19 +432,19 @@ export async function submitToPhase2(
     const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
     if (!notifyResult.ok) {
       logger.warn(
-        { taskId: phase2TaskId, error: notifyResult.error },
-        'Failed to send task started notification for Phase 2'
+        { taskId: executionTaskId, error: notifyResult.error },
+        'Failed to send task started notification for Execution Agent'
       );
     }
   } else {
-    logger.warn({ taskId: phase2TaskId, error: updateResult.error }, 'Failed to update Phase 2 task with cancel nonce');
+    logger.warn({ taskId: executionTaskId, error: updateResult.error }, 'Failed to update Execution Agent task with cancel nonce');
   }
   /* v8 ignore stop @preserve */
 
   // Step 15: Return success
   return ok({
-    codeTaskId: phase2TaskId,
-    resourceUrl: `/#/code-tasks/${phase2TaskId}`,
+    codeTaskId: executionTaskId,
+    resourceUrl: `/#/code-tasks/${executionTaskId}`,
     workerLocation: dispatchResult.value.workerLocation,
     implementationOf: originalTask.id,
   });

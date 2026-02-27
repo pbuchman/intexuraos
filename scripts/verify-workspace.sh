@@ -77,7 +77,7 @@ cat > "$TEMP_TSCONFIG" << EOF
 }
 EOF
 npx tsc --project "$TEMP_TSCONFIG"
-rm "$TEMP_TSCONFIG"
+rm -f "$TEMP_TSCONFIG"
 
 echo ""
 echo "[3/4] Lint..."

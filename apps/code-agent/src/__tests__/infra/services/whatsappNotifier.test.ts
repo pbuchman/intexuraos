@@ -213,11 +213,11 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).not.toContain('Commits:');
     });
 
-    it('formats completion with summary only (Phase 1, no branch/commits)', async () => {
+    it('formats completion with summary only (planning agent, no branch/commits)', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Analyze auth flow',
         result: {
-          summary: 'Analyzed the feature request and identified three approaches. Created design with test requirements. Task is ready for Phase 2.',
+          summary: 'Analyzed the feature request and identified three approaches. Created design with test requirements. Task is ready for execution.',
         },
       });
 

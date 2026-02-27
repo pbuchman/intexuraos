@@ -200,6 +200,36 @@ describe('taskDispatcherImpl', () => {
       expect(headers['X-Dispatch-Nonce']).toBeDefined();
     });
 
+    it('sends agentType derived from agentType for orchestrator compatibility', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'planning',
+      });
+
+      const fetchCall = vi.mocked(global.fetch).mock.calls[0];
+      if (!fetchCall) throw new Error('Fetch was not called');
+      const options = fetchCall[1];
+      if (!options || typeof options.body !== 'string') throw new Error('Missing body');
+      const body = JSON.parse(options.body) as Record<string, unknown>;
+      expect(body['agentType']).toBe('planning');
+    });
+
     it('falls back to second worker on 503', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
