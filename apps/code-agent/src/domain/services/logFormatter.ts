@@ -39,6 +39,7 @@ interface StreamJsonMessage {
 export interface FormatterState {
   toolCallsById: Map<string, string>;
   lastToolName: string | undefined; // @allow-undefined-type -- mutable state field, always present but nullable
+  partialLine?: string; // Buffered incomplete JSON from previous chunk
 }
 
 export function createFormatterState(): FormatterState {
@@ -61,9 +62,21 @@ export function formatLogChunk(
   const lines = raw.split('\n');
   const result: FormattedLogLine[] = [];
   let seq = startSequence * 1000;
+  const hasExternalState = state !== undefined;
   const s = state ?? createFormatterState();
 
-  for (const line of lines) {
+  // Prepend buffered partial line from previous chunk
+  if (s.partialLine !== undefined && lines.length > 0) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; lines[0] always exists when length > 0 @preserve */
+    lines[0] = s.partialLine + (lines[0] ?? '');
+    /* v8 ignore stop @preserve */
+    delete s.partialLine;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; i is bounded by lines.length @preserve */
+    const line = lines[i] ?? '';
+    /* v8 ignore stop @preserve */
     const trimmed = line.trim();
     if (trimmed === '') continue;
 
@@ -85,6 +98,13 @@ export function formatLogChunk(
       const formatted = formatJsonMessage(obj, s);
       text = formatted !== '' && prefix !== '' ? `${prefix}${formatted}` : formatted;
     } catch {
+      // If this is the last line and looks like incomplete JSON, buffer it for reassembly
+      // Only buffer when external state is provided — stateless calls cannot reassemble
+      if (hasExternalState && i === lines.length - 1 && body.startsWith('{"') && !body.endsWith('}')) {
+        s.partialLine = trimmed;
+        continue; // Skip — will be completed by next chunk
+      }
+
       /* v8 ignore start -- ts-type: catch block handles unparseable JSON; short-line branch not triggered by test fixtures @preserve */
       text = trimmed.length > 2048
         ? trimmed.slice(0, 1024) + '\n[... TRUNCATED from ' + String(trimmed.length) + ' chars ...]\n' + trimmed.slice(-512)
@@ -120,7 +140,10 @@ function formatJsonMessage(obj: StreamJsonMessage, state: FormatterState): strin
     case 'result':
       return formatResult(obj);
     default:
-      return JSON.stringify(obj);
+      // Suppress known internal protocol events
+      if (obj.type === 'rate_limit_event') return '';
+      // Compact fallback for truly unknown types — show type name, not raw JSON
+      return `[event] ${obj.type}`;
   }
 }
 
@@ -220,12 +243,60 @@ const MAX_TOOL_RESULT_CHARS = 2048;
 const HEAD_LINES = 10;
 const TAIL_LINES = 40;
 
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 3) + '...' : s;
+}
+
+function summarizeJsonContent(content: string): string | undefined {
+  if (content.length < 200) return undefined; // Short JSON is fine as-is
+
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return undefined; // Not JSON, let existing handling deal with it
+  }
+
+  // GitHub PR data (gh pr view --json)
+  if ('state' in obj && 'title' in obj && 'headRefName' in obj) {
+    const number = typeof obj['number'] === 'number' ? `#${String(obj['number'])} ` : '';
+    const title = typeof obj['title'] === 'string' ? truncate(obj['title'], 60) : '';
+    const state = typeof obj['state'] === 'string' ? obj['state'] : '';
+    const adds = typeof obj['additions'] === 'number' ? `+${String(obj['additions'])}` : '';
+    const dels = typeof obj['deletions'] === 'number' ? `-${String(obj['deletions'])}` : '';
+    const addsDels = adds !== '' || dels !== '' ? `${adds}/${dels}` : '';
+    const files = typeof obj['changedFiles'] === 'number' ? `${String(obj['changedFiles'])} files` : '';
+    return [number + title, state, addsDels, files].filter(Boolean).join(' | ');
+  }
+
+  // GitHub comment/issue data (gh api .../comments)
+  if ('html_url' in obj && 'id' in obj && 'body' in obj) {
+    const url = typeof obj['html_url'] === 'string' ? obj['html_url'] : '';
+    const id = typeof obj['id'] === 'number' ? String(obj['id']) : '';
+    // Extract issue number from url: .../issues/909#issuecomment-...
+    const issueMatch = /\/issues\/(\d+)/.exec(url);
+    const issue = issueMatch !== null ? ` on #${String(issueMatch[1])}` : '';
+    return `Created comment ${id}${issue}`;
+  }
+
+  // Generic JSON fallback: show key count and truncated preview
+  const keys = Object.keys(obj);
+  return `{${String(keys.length)} keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', ...' : ''}} [${String(content.length)} chars]`;
+}
+
 function formatToolResult(content: string, isError: boolean, toolName?: string): string {
   const trimmed = stripSystemReminders(content).trim();
   if (trimmed === '') return '';
   if (toolName === 'Read' && !isError) return '';
 
   const prefix = isError ? '  \u2717 ' : '  \u2192 ';
+
+  // Summarize JSON tool results (gh pr view, gh api, etc.)
+  if (!isError && trimmed.startsWith('{')) {
+    const summary = summarizeJsonContent(trimmed);
+    if (summary !== undefined) return `${prefix}${summary}`;
+  }
+
   let lines = trimmed.split('\n');
 
   /* v8 ignore start -- ts-type: combined condition branch where length exceeds chars but not lines @preserve */
