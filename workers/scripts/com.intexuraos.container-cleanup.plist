@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS LaunchDaemon for IntexuraOS container cleanup.
+
+  Installation:
+    1. Copy this file to ~/Library/LaunchAgents/
+    2. Edit ProgramArguments[0] to the absolute path of cleanup-containers.sh
+    3. Load:  launchctl load ~/Library/LaunchAgents/com.intexuraos.container-cleanup.plist
+    4. Verify: launchctl list | grep intexuraos
+
+  The job runs every 6 hours (21600 seconds).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.intexuraos.container-cleanup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/Shared/intexuraos/workers/scripts/cleanup-containers.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CONTAINER_PREFIX</key>
+    <string>claude-worker-</string>
+    <key>RETENTION_DAYS</key>
+    <string>1</string>
+    <key>LOG_FILE</key>
+    <string>/tmp/intexuraos-container-cleanup.log</string>
+  </dict>
+
+  <key>StartInterval</key>
+  <integer>21600</integer>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/intexuraos-container-cleanup-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/intexuraos-container-cleanup-stderr.log</string>
+</dict>
+</plist>
