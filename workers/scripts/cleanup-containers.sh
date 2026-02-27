@@ -108,12 +108,11 @@ timestamp_to_epoch() {
 # ---------------------------------------------------------------------------
 # Orchestrator integration (best-effort)
 # ---------------------------------------------------------------------------
-get_running_task_ids() {
+check_orchestrator_health() {
   local response
   response=$(curl -sf --connect-timeout 3 --max-time 5 \
     "${ORCHESTRATOR_URL}/health" 2>/dev/null) || {
     log_warn "Could not reach orchestrator at ${ORCHESTRATOR_URL} — falling back to age-based cleanup only"
-    echo ""
     return
   }
 
@@ -123,7 +122,6 @@ get_running_task_ids() {
   # against deleting active containers relies on Docker state checks
   # (running containers are unconditionally skipped in the main loop).
   log_info "Orchestrator reachable (status: $(echo "${response}" | grep -o '"status":"[^"]*"' | head -1 || echo 'unknown'))"
-  echo ""
 }
 
 # ---------------------------------------------------------------------------
@@ -145,7 +143,7 @@ main() {
   fi
 
   # --- Orchestrator check (best-effort) ---
-  get_running_task_ids
+  check_orchestrator_health
 
   # --- Retention cutoff ---
   local cutoff_epoch
