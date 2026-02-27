@@ -478,7 +478,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         confidence: 0,
         reasons: normalizeMissingCriteria([
           ...deterministic.reasons,
-          `Gemini verifier unavailable: ${llmVerdict.error}`,
+          `Gemini verifier ${llmVerdict.error.startsWith('schema mismatch:') ? llmVerdict.error : `unavailable: ${llmVerdict.error}`}`,
         ]),
         missingCriteria: fallbackMissing,
         /* v8 ignore start -- source-map: cond-expr branch is misattributed to this property line after bundling/source-map transforms @preserve */
@@ -917,7 +917,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         },
         'Gemini completion verifier response parsing failed'
       );
-      return { ok: false, error: errorMessage };
+      return { ok: false, error: `schema mismatch: ${errorMessage}` };
     }
   }
 
