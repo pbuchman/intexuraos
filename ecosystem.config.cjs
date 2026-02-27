@@ -47,7 +47,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
   INTEXURAOS_LINEAR_AGENT_URL: 'http://localhost:8126',
   INTEXURAOS_CHAT_AGENT_URL: 'http://localhost:8129',
-  INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8128',
+  INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
 };
 
