@@ -186,6 +186,14 @@
     "pr_task_locks": {
       "owner": "code-agent",
       "description": "PR task locks ensuring only one Claude task runs per PR at a time (INT-465)"
+    },
+    "github-webhook-agent-runs": {
+      "owner": "code-agent",
+      "description": "GitHubWebhookAgent run records with planner decisions, action plans, and step results"
+    },
+    "github-webhook-agent-leases": {
+      "owner": "code-agent",
+      "description": "Short-lived processing leases for webhook event idempotency (prevents duplicate processing)"
     }
   }
 }
