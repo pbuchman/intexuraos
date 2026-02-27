@@ -157,4 +157,60 @@ describe('system-prompt', () => {
 
     expect(result).toContain('[AGENT:PULL_REQUEST]');
   });
+
+  it('includes PR review overlay in execution prompt', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      taskUrl: 'https://intexuraos.cloud/tasks/task-123',
+    });
+
+    expect(result).toContain('[PR REVIEW MODE');
+    expect(result).toContain('Detecting PR Review Intent');
+    expect(result).toContain('Gathering Feedback');
+    expect(result).toContain('Tracking Comment');
+    expect(result).toContain('PULL_REQUEST_AGENT_FINAL:');
+    expect(result).toContain('https://intexuraos.cloud/tasks/task-123');
+    // Must still have the base execution markers
+    expect(result).toContain('[AGENT:EXECUTION]');
+    expect(result).toContain('EXECUTION_AGENT_FINAL:');
+  });
+
+  it('includes PR review overlay in planning prompt', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['bug'],
+      taskUrl: 'https://intexuraos.cloud/tasks/task-123',
+    });
+
+    expect(result).toContain('[PR REVIEW MODE');
+    expect(result).toContain('Detecting PR Review Intent');
+    expect(result).toContain('Gathering Feedback');
+    expect(result).toContain('Tracking Comment');
+    expect(result).toContain('PULL_REQUEST_AGENT_FINAL:');
+    // Must still have the base planning markers
+    expect(result).toContain('[AGENT:PLANNING]');
+    expect(result).toContain('PLANNING_AGENT_FINAL:');
+  });
+
+  it('does not include PR review overlay in pull request prompt (already native)', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain('[AGENT:PULL_REQUEST]');
+    expect(result).not.toContain('[PR REVIEW MODE');
+  });
+
+  it('renders PR review overlay without task URL when taskUrl is undefined', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(result).toContain('[PR REVIEW MODE');
+    expect(result).not.toContain('View progress');
+    expect(result).not.toContain('View task');
+  });
 });
