@@ -242,6 +242,47 @@ describe('WorktreeManager', () => {
     });
   });
 
+  describe('lifecycle logging', () => {
+    it('should log start and end of createWorktree', async () => {
+      const infoSpy = vi.spyOn(mockLogger, 'info');
+
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.createWorktree('task-log-create', 'feature-branch');
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        { taskId: 'task-log-create', baseBranch: 'feature-branch' },
+        'Creating worktree'
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        { taskId: 'task-log-create', worktreePath: join(worktreeBasePath, 'task-log-create') },
+        'Worktree created'
+      );
+    });
+
+    it('should log start and end of removeWorktree', async () => {
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.createWorktree('task-log-remove', 'feature-branch');
+
+      const infoSpy = vi.spyOn(mockLogger, 'info');
+      infoSpy.mockClear();
+
+      await manager.removeWorktree('task-log-remove');
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        { taskId: 'task-log-remove', worktreePath: join(worktreeBasePath, 'task-log-remove') },
+        'Removing worktree'
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        { taskId: 'task-log-remove' },
+        'Worktree removed'
+      );
+    });
+  });
+
   describe('removeWorktree', () => {
     it('should remove an existing worktree', async () => {
       const WM = await loadWorktreeManager();
