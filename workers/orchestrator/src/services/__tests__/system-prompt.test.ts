@@ -84,6 +84,18 @@ describe('system-prompt', () => {
     expect(result).not.toContain('[AGENT:PLANNING]');
   });
 
+  it('requires gathering feedback from both PR and issue comments', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain('### Gathering Feedback');
+    expect(result).toContain('PR reviews');
+    expect(result).toContain('PR comments');
+    expect(result).toContain('issue comments');
+  });
+
   it('includes Tracking Comment section with taskUrl in PR prompt', () => {
     const result = buildSystemPrompt({
       ...baseParams,
