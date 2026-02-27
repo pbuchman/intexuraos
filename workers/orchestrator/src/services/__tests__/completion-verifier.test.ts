@@ -622,6 +622,53 @@ describe('completion-verifier', () => {
     expect(generate.mock.calls[0]?.[0]).not.toContain('Deterministic signals:');
   });
 
+  it('accepts reviewIterations: null from Gemini and transforms to 0', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          passed: true,
+          confidence: 0.95,
+          reasons: ['all execution criteria met'],
+          missingCriteria: [],
+          resumeInstruction: '',
+          executionMetadata: {
+            outcomeLabel: 'implemented',
+            superpowersExecutingPlansUsed: '1',
+            superpowersRequestingCodeReviewUsed: '0',
+            trivialTask: '0',
+            subagents: 'impl (execution)',
+            reviewIterations: null,
+            linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-2',
+          },
+        }),
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-null-review-iterations',
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'execution',
+      originalPrompt: 'Implement task',
+      rawLogs: assistantLog(validPhase2Final),
+      linearIssueId: 'INT-2',
+      linearIssueLabels: ['code-task'],
+    });
+
+    expect(verdict.passed).toBe(true);
+    expect(verdict.verifierFailure).toBe(false);
+    expect(verdict.executionMetadata).toEqual(
+      expect.objectContaining({
+        outcomeLabel: 'implemented',
+        reviewIterations: 0,
+        linearIssueUrl: 'https://linear.app/intexuraos/issue/INT-2',
+      })
+    );
+  });
+
   it('hard-fails execution verification when execution final block issue URL mismatches routed issue', async () => {
     const generate = vi.fn().mockResolvedValue({
       ok: true,
