@@ -73,6 +73,7 @@ export interface SubmitToPhase2Deps {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
+  serviceUrl: string;
 }
 
 /**
@@ -344,8 +345,7 @@ export async function submitToPhase2(
   }
 
   // Step 12: Build dispatch request and dispatch
-  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
-  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
+  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
 
   const dispatchRequest = {
     taskId: phase2TaskId,

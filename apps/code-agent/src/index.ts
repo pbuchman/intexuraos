@@ -13,6 +13,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_TOKEN_ENCRYPTION_KEY', // For per-user worker credentials encryption (has dev fallback)
   'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
   'INTEXURAOS_GITHUB_WEBHOOK_SECRET', // For GitHub webhook signature verification
+  'INTEXURAOS_SERVICE_URL', // Webhook callback URL — orchestrator calls this to report task status
 ];
 
 /**
@@ -31,7 +32,6 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_ACTIONS_AGENT_URL',
-  'INTEXURAOS_SERVICE_URL',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
