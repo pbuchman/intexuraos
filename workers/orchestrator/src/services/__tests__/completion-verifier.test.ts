@@ -1674,6 +1674,75 @@ describe('completion-verifier', () => {
     );
   });
 
+  describe('stripMarkdownLink', () => {
+    it('extracts URL from markdown link format', () => {
+      expect(
+        CompletionVerifierTestUtils.stripMarkdownLink(
+          '[INT-659](https://linear.app/pbuchman/issue/INT-659)'
+        )
+      ).toBe('https://linear.app/pbuchman/issue/INT-659');
+    });
+
+    it('returns plain URL unchanged', () => {
+      expect(
+        CompletionVerifierTestUtils.stripMarkdownLink(
+          'https://linear.app/pbuchman/issue/INT-659'
+        )
+      ).toBe('https://linear.app/pbuchman/issue/INT-659');
+    });
+
+    it('returns non-URL text unchanged', () => {
+      expect(CompletionVerifierTestUtils.stripMarkdownLink('just some text')).toBe(
+        'just some text'
+      );
+    });
+
+    it('handles empty link text [](url)', () => {
+      expect(
+        CompletionVerifierTestUtils.stripMarkdownLink(
+          '[](https://linear.app/pbuchman/issue/INT-100)'
+        )
+      ).toBe('https://linear.app/pbuchman/issue/INT-100');
+    });
+  });
+
+  describe('extractPlanningMetadataFromMessage strips markdown from URL fields', () => {
+    it('strips markdown from planning issue URL', async () => {
+      const generate = vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          content:
+            '{"passed":true,"confidence":0.95,"reasons":["ok"],"missingCriteria":[],"resumeInstruction":"done","extractedSummary":"Task completed."}',
+        },
+      });
+      createLlmClientMock.mockReturnValue({ generate });
+
+      const verifier = createVerifier();
+      const verdict = await verifier.verify({
+        taskId: 'task-md-planning',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'planning',
+        originalPrompt: 'Plan feature X',
+        rawLogs: assistantLog(`PLANNING_AGENT_FINAL:
+- Outcome: planned
+- superpowers_writing_plans_used: 1
+- Original issue: https://linear.app/intexuraos/issue/INT-1
+- Planning issue: [INT-659](https://linear.app/intexuraos/issue/INT-659)
+- Trivial task: 0
+- Plan doc: docs/plans/test.md
+- Planning PR: [PR #100](https://github.com/org/repo/pull/100)
+- Summary: Planned the feature with markdown URLs.`),
+        linearIssueLabels: ['code-task'],
+      });
+
+      expect(verdict.planningMetadata?.planningIssueUrl).toBe(
+        'https://linear.app/intexuraos/issue/INT-659'
+      );
+      expect(verdict.planningMetadata?.prUrl).toBe('https://github.com/org/repo/pull/100');
+    });
+  });
+
   it('throws when gemini verifier key is an empty string', () => {
     expect(() => createVerifier({ geminiApiKey: '' })).toThrow(
       'INTEXURAOS_GEMINI_APP_API_KEY is required'
