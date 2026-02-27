@@ -96,7 +96,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -123,7 +123,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -150,7 +150,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -177,7 +177,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -204,7 +204,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -278,7 +278,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -345,7 +345,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -429,7 +429,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -503,7 +503,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -556,7 +556,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -645,7 +645,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -724,7 +724,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -797,7 +797,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -885,7 +885,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -965,7 +965,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -1045,7 +1045,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret' },
+      { logger, codeTaskRepo, taskDispatcher, linearIssueService, whatsappNotifier, metricsClient, workerSettingsRepo, orchestratorSecret: 'test-orchestrator-secret', serviceUrl: 'https://test.example.com' },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
