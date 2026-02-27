@@ -156,6 +156,16 @@ describe('system-prompt', () => {
     expect(result).toContain('[AGENT:PULL_REQUEST]');
   });
 
+  it('enforces zero-tolerance review loop in execution prompt', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+
+    expect(result).toContain('zero-tolerance loop');
+    expect(result).toContain('ZERO issues');
+    expect(result).toContain('no issue is too small to skip');
+    expect(result).toContain('reviewer explicitly confirms no remaining issues');
+    expect(result).toContain('fix + re-review cycle');
+  });
+
   it('includes PR review overlay in execution prompt', () => {
     const result = buildSystemPrompt({
       ...baseParams,
