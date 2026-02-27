@@ -69,6 +69,7 @@ export interface SubmitTaskFeedbackDeps {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
+  serviceUrl: string;
 }
 
 /**
@@ -307,8 +308,7 @@ ${feedback.trim()}
   }
 
   // Step 10: Build webhook URL
-  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
-  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
+  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
 
   // Step 11: Dispatch to worker
   const dispatchRequest: {

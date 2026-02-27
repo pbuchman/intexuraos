@@ -76,6 +76,7 @@ export interface RetryTaskDeps {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
+  serviceUrl: string;
 }
 
 /**
@@ -293,8 +294,7 @@ ${additionalContext.trim()}
   const retryTask = createResult.value;
 
   // Step 9: Build webhook URL
-  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
-  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
+  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
 
   // Step 10: Dispatch to worker
   const dispatchRequest: {
