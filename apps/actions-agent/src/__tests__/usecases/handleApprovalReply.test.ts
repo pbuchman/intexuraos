@@ -2540,4 +2540,268 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(sentMessages[0]?.message).toContain('no longer available');
     });
   });
+
+  describe('proceed-implementation button (INT-628)', () => {
+    it('returns error when codeAgentClient is not configured', async () => {
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'proceed-implementation:task-123',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Code agent client not configured');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('service temporarily unavailable');
+    });
+
+    it('sends success message when phase 2 is submitted', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'proceed-implementation:task-123',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      const submitted = codeAgentClient.getSubmittedPhase2Tasks();
+      expect(submitted).toHaveLength(1);
+      expect(submitted[0]?.taskId).toBe('task-123');
+      expect(submitted[0]?.userId).toBe('user-1');
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('Starting implementation');
+    });
+
+    it('sends error message when phase 2 submission fails with known error', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+      codeAgentClient.setNextPhase2Error({
+        code: 'INVALID_STATUS',
+        message: 'Task is not in designed status',
+      });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'proceed-implementation:task-123',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('not in designed status');
+    });
+
+    it('sends generic error for unknown error codes', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+      codeAgentClient.setNextPhase2Error({
+        code: 'UNKNOWN',
+        message: 'Unexpected error',
+      });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'proceed-implementation:task-123',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('Please try again later');
+    });
+
+    it('maps all known error codes to user-friendly messages', async () => {
+      const errorCodes: { code: string; expected: string }[] = [
+        { code: 'TASK_NOT_FOUND', expected: 'Task not found' },
+        { code: 'NO_LINEAR_ISSUE', expected: 'no Linear issue' },
+        { code: 'LABEL_NOT_READY', expected: 'not ready for implementation' },
+        { code: 'ALREADY_IMPLEMENTED', expected: 'already started' },
+        { code: 'ACTIVE_TASK_EXISTS', expected: 'active task already exists' },
+        { code: 'WORKER_NOT_CONFIGURED', expected: 'no workers available' },
+        { code: 'NETWORK_ERROR', expected: 'network error' },
+      ];
+
+      for (const { code, expected } of errorCodes) {
+        whatsappPublisher.clearSentMessages();
+        const { FakeCodeAgentClient } = await import('../fakes.js');
+        const codeAgentClient = new FakeCodeAgentClient();
+        codeAgentClient.setNextPhase2Error({
+          code: code as 'TASK_NOT_FOUND',
+          message: 'Test error',
+        });
+
+        const useCaseWithClient = createHandleApprovalReplyUseCase({
+          actionRepository,
+          approvalMessageRepository,
+          whatsappPublisher,
+          actionEventPublisher,
+          codeAgentClient,
+          logger: createMockLogger(),
+          webAppUrl: 'https://test.intexuraos.cloud',
+        });
+
+        await useCaseWithClient({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          buttonId: 'proceed-implementation:task-123',
+        });
+
+        const messages = whatsappPublisher.getSentMessages();
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.message).toContain(expected);
+      }
+    });
+
+    it('logs warning when error notification fails for unconfigured client', async () => {
+      whatsappPublisher.setFailNext(true, { code: 'PUBLISH_FAILED', message: 'Pub/Sub error' });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'proceed-implementation:task-123',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Code agent client not configured');
+      }
+
+      // Message was attempted but failed, so no sent messages
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(0);
+    });
+
+    it('logs warning when error notification fails after phase2 submission error', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+      codeAgentClient.setNextPhase2Error({
+        code: 'INVALID_STATUS',
+        message: 'Task is not in designed status',
+      });
+
+      // Make publisher fail when the error notification is sent
+      whatsappPublisher.setFailNext(true, { code: 'PUBLISH_FAILED', message: 'Pub/Sub error' });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'proceed-implementation:task-123',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      // Message was attempted but failed
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(0);
+    });
+
+    it('logs warning when success notification fails after phase2 submission', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+
+      // Make publisher fail when the success notification is sent
+      whatsappPublisher.setFailNext(true, { code: 'PUBLISH_FAILED', message: 'Pub/Sub error' });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+        webAppUrl: 'https://test.intexuraos.cloud',
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'proceed-implementation:task-123',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      // Message was attempted but failed
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(0);
+    });
+  });
 });

@@ -378,6 +378,10 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     return this.sentMessages;
   }
 
+  clearSentMessages(): void {
+    this.sentMessages = [];
+  }
+
   setFailNext(fail: boolean, error?: PublishError): void {
     this.failNext = fail;
     this.failError = error ?? null;

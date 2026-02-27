@@ -87,7 +87,7 @@ Branch: ${task.baseBranch}`;
  * Format design complete notification message (Phase 1 completion).
  * INT-628
  */
-function formatDesignCompleteMessage(task: CodeTask): string {
+function formatDesignCompleteMessage(task: CodeTask, includeButtonPrompt: boolean): string {
   /* v8 ignore start -- ts-type: defensive null check for optional Linear title @preserve */
   const title = task.linearIssueTitle ?? task.prompt.slice(0, 50);
   /* v8 ignore stop @preserve */
@@ -96,11 +96,13 @@ function formatDesignCompleteMessage(task: CodeTask): string {
   const summary = result?.summary ?? 'Design completed and ready for implementation.';
   /* v8 ignore stop @preserve */
 
+  const buttonPrompt = includeButtonPrompt
+    ? '\n\nReady to implement? Click the button below to start Phase 2.'
+    : '\n\nReady to implement? Open the web app to start Phase 2.';
+
   return `🎨 Design ready: ${title}
 
-${summary}
-
-Ready to implement? Click the button below to start Phase 2.`;
+${summary}${buttonPrompt}`;
 }
 
 /**
@@ -247,7 +249,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       userId: string,
       task: CodeTask
     ): Promise<Result<void, NotificationError>> {
-      const message = formatDesignCompleteMessage(task);
+      const message = formatDesignCompleteMessage(task, true);
 
       // Build interactive button to proceed to Phase 2 (INT-628)
       const buttons: { type: 'reply'; reply: { id: string; title: string } }[] = [
@@ -267,25 +269,21 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         correlationId: task.traceId,
       });
 
-      /* v8 ignore start -- test-infra: error handling is defensive and covered by integration tests @preserve */
       if (!result.ok) {
-        // Graceful degradation: if buttons can't be sent, try without buttons
-        /* v8 ignore start -- upstream: PUBLISH_FAILED error code is an API contract that would require integration testing @preserve */
+        // Graceful degradation: if buttons can't be sent, try without buttons (with corrected message)
         if (result.error.code === 'PUBLISH_FAILED') {
-          /* v8 ignore stop @preserve */
+          const fallbackMessage = formatDesignCompleteMessage(task, false);
           const fallbackResult = await whatsappPublisher.publishSendMessage({
             userId,
-            message,
+            message: fallbackMessage,
             correlationId: task.traceId,
           });
-          /* v8 ignore start -- test-infra: fallback error handling covered by integration tests @preserve */
           if (!fallbackResult.ok) {
             return err({
               code: 'notification_failed',
               message: fallbackResult.error.message,
             });
           }
-          /* v8 ignore stop @preserve */
           return ok(undefined);
         }
         return err({
@@ -293,7 +291,6 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
           message: result.error.message,
         });
       }
-      /* v8 ignore stop @preserve */
 
       return ok(undefined);
     },

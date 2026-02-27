@@ -597,7 +597,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         // INT-628: If planning agent completed, send notification with button to proceed to execution
         if (task.agentType === 'planning') {
-          await whatsappNotifier.notifyDesignComplete(task.userId, completedTask);
+          const notifyResult = await whatsappNotifier.notifyDesignComplete(task.userId, completedTask);
+          if (!notifyResult.ok) {
+            request.log.warn(
+              { taskId, errorCode: notifyResult.error.code, errorMessage: notifyResult.error.message },
+              'Failed to send design-complete notification — user may not receive Phase 2 button'
+            );
+          }
         } else {
           await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
         }

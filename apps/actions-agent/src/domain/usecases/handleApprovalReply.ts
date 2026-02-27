@@ -784,23 +784,21 @@ async function handleProceedToImplementationButton(
 ): Promise<Result<ApprovalReplyResult>> {
   logger.info({ taskId, userId }, 'Handling proceed-implementation button');
 
-  /* v8 ignore start -- test-infra: codeAgentClient is always configured in production @preserve */
   if (codeAgentClient === undefined) {
     logger.error({ taskId }, 'Code agent client not configured for proceed-implementation');
-    await whatsappPublisher.publishSendMessage({
+    const notifyResult = await whatsappPublisher.publishSendMessage({
       userId,
       message: 'Unable to start implementation: service temporarily unavailable.',
       correlationId: `proceed-implementation-error-${taskId}`,
     });
+    if (!notifyResult.ok) {
+      logger.warn({ taskId, error: notifyResult.error.message }, 'Failed to send error notification to user');
+    }
     return err(new Error('Code agent client not configured'));
   }
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- test-infra: submitToPhase2 result handling tested via integration @preserve */
   const result = await codeAgentClient.submitToPhase2({ taskId, userId });
-  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- test-infra: error handling covered by submitToPhase2 tests @preserve */
   if (!result.ok) {
     const errorMessages: Record<string, string> = {
       'TASK_NOT_FOUND': 'Task not found.',
@@ -810,20 +808,26 @@ async function handleProceedToImplementationButton(
       'ALREADY_IMPLEMENTED': 'Implementation has already started for this task.',
       'ACTIVE_TASK_EXISTS': 'An active task already exists for this request.',
       'WORKER_NOT_CONFIGURED': 'Unable to start implementation: no workers available.',
+      'NETWORK_ERROR': 'Unable to start implementation: network error. Please try again.',
+      'UNKNOWN': 'Unable to start implementation. Please try again later.',
     };
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; all SubmitToPhase2Error code values are mapped @preserve */
     const message = errorMessages[result.error.code] ?? 'Unable to start implementation.';
-  /* v8 ignore stop @preserve */
+    /* v8 ignore stop @preserve */
 
     logger.warn(
       { taskId, errorCode: result.error.code, errorMessage: result.error.message },
       'Failed to proceed to implementation'
     );
 
-    await whatsappPublisher.publishSendMessage({
+    const errorNotifyResult = await whatsappPublisher.publishSendMessage({
       userId,
       message,
       correlationId: `proceed-implementation-error-${taskId}`,
     });
+    if (!errorNotifyResult.ok) {
+      logger.warn({ taskId, error: errorNotifyResult.error.message }, 'Failed to send error notification to user');
+    }
 
     return ok({
       matched: true,
@@ -833,11 +837,14 @@ async function handleProceedToImplementationButton(
 
   logger.info({ taskId, phase2TaskId: result.value.codeTaskId }, 'Phase 2 started successfully via button');
 
-  await whatsappPublisher.publishSendMessage({
+  const successNotifyResult = await whatsappPublisher.publishSendMessage({
     userId,
     message: `🚀 Starting implementation for your task!\n\nTask ID: ${result.value.implementationOf}\n\nYou'll receive another message when it's complete.`,
     correlationId: `proceed-implementation-success-${taskId}`,
   });
+  if (!successNotifyResult.ok) {
+    logger.warn({ taskId, error: successNotifyResult.error.message }, 'Failed to send success notification to user');
+  }
 
   return ok({
     matched: true,
