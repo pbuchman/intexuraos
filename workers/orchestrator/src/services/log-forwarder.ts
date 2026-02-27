@@ -343,8 +343,9 @@ export class LogForwarder {
       state.totalBytes += chunks.reduce((sum, c) => sum + c.length, 0);
     } else {
       state.droppedChunks += chunks.length;
+      const baseUrl = this.config.codeAgentUrl.replace(/\/+$/, '');
       this.logger.error(
-        { taskId, count: chunks.length },
+        { taskId, count: chunks.length, url: `${baseUrl}/internal/logs` },
         'Failed to upload log chunks after retries'
       );
     }
@@ -402,7 +403,7 @@ export class LogForwarder {
         /* v8 ignore stop @preserve */
         /* v8 ignore start -- test-infra: log statement that executes but branch coverage sees as untested @preserve */
         this.logger.warn(
-          { taskId: payload.taskId, attempt: i + 1, ...errorInfo },
+          { taskId: payload.taskId, attempt: i + 1, url, ...errorInfo },
           'Log upload failed, retrying'
         );
         /* v8 ignore stop @preserve */
