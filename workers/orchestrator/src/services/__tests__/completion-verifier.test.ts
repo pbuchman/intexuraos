@@ -413,7 +413,7 @@ describe('completion-verifier', () => {
       ok: true,
       value: {
         content:
-          '{"passed":false,"confidence":0.88,"reasons":["phase contract mismatch"],"missingCriteria":["code-task requires Phase 2 ready: yes"],"resumeInstruction":"Fix PLANNING_AGENT_FINAL consistency."}',
+          '{"passed":false,"confidence":0.88,"reasons":["agent contract mismatch"],"missingCriteria":["code-task requires execution ready: yes"],"resumeInstruction":"Fix PLANNING_AGENT_FINAL consistency."}',
       },
     });
     createLlmClientMock.mockReturnValue({ generate });
@@ -427,7 +427,7 @@ describe('completion-verifier', () => {
       originalPrompt: 'Analyze issue',
       rawLogs: assistantLog(`PLANNING_AGENT_FINAL:
 - Linear label set: code-task
-- Phase 2 ready: no
+- Execution ready: no
 - Linear issue: https://linear.app/intexuraos/issue/INT-1
 - Summary: mismatch`),
       linearIssueLabels: [],
@@ -435,7 +435,7 @@ describe('completion-verifier', () => {
 
     expect(verdict.passed).toBe(false);
     expect(verdict.usedLlm).toBe(true);
-    expect(verdict.missingCriteria).toContain('code-task requires Phase 2 ready: yes');
+    expect(verdict.missingCriteria).toContain('code-task requires execution ready: yes');
     expect(generate).toHaveBeenCalledTimes(1);
   });
 
@@ -1118,7 +1118,7 @@ describe('completion-verifier', () => {
       ok: true,
       value: {
         content:
-          '{"passed":true,"confidence":0.95,"reasons":["all good"],"missingCriteria":[],"resumeInstruction":"","extractedSummary":"Analyzed the issue and enriched the Linear description. Added test requirements and acceptance criteria. Set code-task label for Phase 2."}',
+          '{"passed":true,"confidence":0.95,"reasons":["all good"],"missingCriteria":[],"resumeInstruction":"","extractedSummary":"Analyzed the issue and enriched the Linear description. Added test requirements and acceptance criteria. Set code-task label for execution."}',
       },
     });
     createLlmClientMock.mockReturnValue({ generate });
@@ -1135,7 +1135,7 @@ describe('completion-verifier', () => {
     });
 
     expect(verdict.extractedSummary).toBe(
-      'Analyzed the issue and enriched the Linear description. Added test requirements and acceptance criteria. Set code-task label for Phase 2.'
+      'Analyzed the issue and enriched the Linear description. Added test requirements and acceptance criteria. Set code-task label for execution.'
     );
   });
 

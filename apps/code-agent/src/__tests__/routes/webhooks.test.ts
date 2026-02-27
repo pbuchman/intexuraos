@@ -1237,7 +1237,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.callbackReceived).toBe(true);
     });
 
-    it('accepts result with only summary (Phase 1 design tasks)', async () => {
+    it('accepts result with only summary (planning-agent tasks)', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Analyze auth flow',
