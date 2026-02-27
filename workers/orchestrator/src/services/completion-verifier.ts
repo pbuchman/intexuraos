@@ -102,8 +102,16 @@ const LLM_EXECUTION_METADATA_SCHEMA = z.object({
   superpowersExecutingPlansUsed: z.enum(['0', '1']),
   superpowersRequestingCodeReviewUsed: z.enum(['0', '1']),
   trivialTask: z.enum(['0', '1']),
-  subagents: z.string(),
-  reviewIterations: z.number().int().min(0),
+  subagents: z
+    .string()
+    .nullable()
+    .transform((v) => v ?? ''),
+  reviewIterations: z
+    .number()
+    .int()
+    .min(0)
+    .nullable()
+    .transform((v) => v ?? 0),
   linearIssueUrl: z.string().url(),
 });
 
@@ -470,7 +478,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         confidence: 0,
         reasons: normalizeMissingCriteria([
           ...deterministic.reasons,
-          `Gemini verifier unavailable: ${llmVerdict.error}`,
+          `Gemini verifier ${llmVerdict.error.startsWith('schema mismatch:') ? llmVerdict.error : `unavailable: ${llmVerdict.error}`}`,
         ]),
         missingCriteria: fallbackMissing,
         /* v8 ignore start -- source-map: cond-expr branch is misattributed to this property line after bundling/source-map transforms @preserve */
@@ -482,6 +490,15 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     }
 
     const parsedVerdict = llmVerdict.value;
+    if (input.agentType !== 'execution' && parsedVerdict.executionMetadata !== undefined) {
+      this.logger.warn(
+        {
+          taskId: input.taskId,
+          agentType: input.agentType,
+        },
+        'Gemini returned executionMetadata for non-execution task; discarding'
+      );
+    }
     let mergedReasons = parsedVerdict.reasons;
     let mergedMissingCriteria = normalizeMissingCriteria(parsedVerdict.missingCriteria);
     if (!parsedVerdict.passed) {
@@ -900,7 +917,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         },
         'Gemini completion verifier response parsing failed'
       );
-      return { ok: false, error: errorMessage };
+      return { ok: false, error: `schema mismatch: ${errorMessage}` };
     }
   }
 
