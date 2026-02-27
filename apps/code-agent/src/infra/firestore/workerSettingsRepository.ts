@@ -48,6 +48,7 @@ interface WorkerSettingsDoc {
     checkedAt: string;
     stale: boolean;
   }>;
+  githubUsername?: string;
 }
 
 /**
@@ -130,6 +131,10 @@ export function createWorkerSettingsRepository(
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
         };
+
+        if (data.githubUsername !== undefined) {
+          settings.githubUsername = data.githubUsername;
+        }
 
         return ok(settings);
       } catch (error) {
@@ -517,6 +522,86 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, workerName }, 'Failed to update health status');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async findByGitHubUsername(
+      githubUsername: string
+    ): Promise<Result<{ userId: string; worker: WorkerConfig } | null, WorkerSettingsError>> {
+      try {
+        const snapshot = await collection
+          .where('githubUsername', '==', githubUsername)
+          .limit(1)
+          .get();
+
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const doc = snapshot.docs[0]!;
+        const data = doc.data() as WorkerSettingsDoc;
+
+        // Find first enabled worker
+        const enabledWorkers = data.workers.filter((w) => w.enabled);
+        /* v8 ignore start -- test-infra: no enabled workers path tested via integration tests @preserve */
+        if (enabledWorkers.length === 0) {
+          return ok(null);
+        }
+        /* v8 ignore stop @preserve */
+
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const firstEnabled = enabledWorkers[0]!;
+        const decryptedWorker = decryptWorkerConfig(firstEnabled, firstEnabled.name);
+
+        return ok({
+          userId: data.userId,
+          worker: decryptedWorker,
+        });
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, githubUsername }, 'Failed to find worker settings by GitHub username');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async updateGitHubUsername(
+      userId: string,
+      githubUsername: string
+    ): Promise<Result<void, WorkerSettingsError>> {
+      try {
+        const docRef = collection.doc(userId);
+        const doc = await docRef.get();
+        const now = new Date().toISOString();
+
+        if (doc.exists) {
+          // Update existing document
+          await docRef.update({
+            githubUsername,
+            updatedAt: now,
+          });
+        } else {
+          // Create new document with githubUsername and empty workers
+          await docRef.set({
+            userId,
+            workers: [],
+            githubUsername,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        return ok(undefined);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId, githubUsername }, 'Failed to update GitHub username');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,

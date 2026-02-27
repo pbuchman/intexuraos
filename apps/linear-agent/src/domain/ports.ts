@@ -121,6 +121,30 @@ export interface LinearApiClient {
     stateId: string
   ): Promise<Result<LinearIssue, LinearError>>;
 
+  /** Update issue metadata fields (labels/assignee/parent) */
+  updateIssue(
+    apiKey: string,
+    issueId: string,
+    input: {
+      assigneeId?: string | null;
+      labelIds?: string[];
+      parentId?: string | null;
+    }
+  ): Promise<Result<LinearIssue, LinearError>>;
+
+  /** Add a comment to an issue */
+  createComment(
+    apiKey: string,
+    issueId: string,
+    body: string
+  ): Promise<Result<{ id: string }, LinearError>>;
+
+  /** List team labels for name→id resolution */
+  listIssueLabels(
+    apiKey: string,
+    teamId: string
+  ): Promise<Result<{ id: string; name: string; color: string }[], LinearError>>;
+
   /** Get workflow states for a team */
   getWorkflowStates(
     apiKey: string,
@@ -184,7 +208,7 @@ export interface CodeAgentClient {
     userId: string;
     linearIssueId: string;
     prompt: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
     actionId: string;
     approvalEventId: string;
   }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>>;

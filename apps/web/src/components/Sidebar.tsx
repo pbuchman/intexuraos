@@ -48,7 +48,7 @@ const settingsItems: NavItem[] = [
   { to: '/settings/notion', label: 'Notion', icon: FileText },
   { to: '/settings/calendar', label: 'Google Calendar', icon: Calendar },
   { to: '/settings/linear', label: 'Linear', icon: LayoutList },
-  { to: '/settings/workers', label: 'Workers', icon: Server },
+  { to: '/settings/code', label: 'Code Settings', icon: Server },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
   { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
   { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },

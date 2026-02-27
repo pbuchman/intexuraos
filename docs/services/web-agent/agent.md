@@ -239,7 +239,7 @@ interface SummarizePageResponse {
 | user-service         | Get user's LLM client (with fallback) | Return API_ERROR    |
 | app-settings-service | LLM pricing context at startup        | Service fails start |
 | Crawl4AI             | Fetch page content                    | Return FETCH_FAILED |
-| User's LLM          | Generate summary (primary)            | Fall back to Gemini |
+| User's LLM           | Generate summary (primary)            | Fall back to Gemini |
 | Platform Gemini      | Summary fallback (no user key)        | Fall back to ZAI    |
 | Platform ZAI         | Summary secondary fallback            | Return API_ERROR    |
 

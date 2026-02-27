@@ -1,245 +1,97 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildSystemPrompt } from '../system-prompt.js';
 
 describe('system-prompt', () => {
-  describe('buildSystemPrompt', () => {
-    const baseParams = {
-      taskId: 'task-123',
-      linearIssueId: 'INT-123',
-      linearIssueLabels: [] as string[],
-      hasChildren: false,
-    };
+  const baseParams = {
+    taskId: 'task-123',
+    linearIssueId: 'INT-123',
+    linearIssueLabels: [] as string[],
+    hasChildren: false,
+    workerType: 'auto' as const,
+  };
 
-    describe('Phase 1: Design & Validation', () => {
-      it('should return Phase 1 prompt when code-task label is absent', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['bug', 'high-priority'],
-        });
+  it('builds planning agent prompt with required markers and rules', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
-        expect(result).toContain('Design Agent');
-        expect(result).toContain('DO NOT EXECUTE CODE');
-      });
+    expect(result).toContain('[WORKER-MODE]');
+    expect(result).toContain('[AGENT:PLANNING]');
+    expect(result).toContain('[PLANNING AGENT MODE]');
+    expect(result).toContain('source of truth');
+    expect(result).toContain('NO IMPLEMENTATION CODING IS ALLOWED');
+    expect(result).toContain('docs/plans/');
+    expect(result).toContain('superpowers:writing-plans');
+    expect(result).toContain('parallel work breakdown');
+    expect(result).toContain('service/package');
+    expect(result).toContain('PLANNING_AGENT_FINAL:');
+  });
 
-      it('should include system context in Phase 1', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
+  it('builds execution agent prompt with execution marker and final block', () => {
+    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
 
-        expect(result).toContain('Task ID: task-123');
-        expect(result).toContain('Worktree: /repo');
-        expect(result).toContain('Linear Issue: INT-123');
-      });
+    expect(result).toContain('[WORKER-MODE]');
+    expect(result).toContain('[AGENT:EXECUTION]');
+    expect(result).toContain('[EXECUTION AGENT MODE]');
+    expect(result).toContain('source of truth');
+    expect(result).toContain('DO NOT use the `/linear` skill/command');
+    expect(result).toContain('superpowers:executing-plans');
+    expect(result).toContain('superpowers:requesting-code-review');
+    expect(result).toContain('gh pr create');
+    expect(result).toContain('EXECUTION_AGENT_FINAL:');
+    expect(result).toContain('- Outcome: implemented');
+    expect(result).toContain('- Review iterations: <number>');
+    expect(result).toContain('- Skill sequence proof:');
+    expect(result).not.toContain('- Turn summary:');
+  });
 
-      it('should include mandatory outputs in Phase 1', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
-
-        expect(result).toContain('Enrich Linear Issue Description');
-        expect(result).toContain('Unified Issue Template');
-        expect(result).toContain('Create Subissues (if complex)');
-        expect(result).toContain('code-task');
-      });
-
-      it('should include design documentation section in Phase 1', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
-
-        expect(result).toContain('Design Documentation (Non-Trivial Designs)');
-        expect(result).toContain('docs/plans/INT-123-design.md');
-        expect(result).toContain('/share');
-      });
-
-      it('should include completion criteria in Phase 1', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
-
-        expect(result).toContain('After enriching the issue and adding EITHER');
-        expect(result).toContain('PHASE1_FINAL:');
-        expect(result).toContain('- Linear label set: <code-task|unclear>');
-        expect(result).toContain('- Phase 2 ready: <yes|no>');
-      });
-
-      it('should include WORKER-MODE marker in Phase 1', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
-
-        expect(result).toContain('[WORKER-MODE]');
-      });
-
-      it('should include PHASE:1 marker in Phase 1', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
-
-        expect(result).toContain('[PHASE:1]');
-      });
-
-      it('should mention both code-task and unclear labels in Phase 1', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
-
-        expect(result).toContain('code-task');
-        expect(result).toContain('unclear');
-      });
-
-      it('should not include user supplemental instructions section', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
-
-        expect(result).not.toContain('[USER SUPPLEMENTAL INSTRUCTIONS]');
-      });
-
-      it('should handle missing Linear issue ID in Phase 1', () => {
-        // Omit linearIssueId entirely (exactOptionalPropertyTypes doesn't allow explicit undefined)
-        const { linearIssueId: _, ...paramsWithoutIssueId } = baseParams;
-        void _;
-        const result = buildSystemPrompt({
-          ...paramsWithoutIssueId,
-          linearIssueLabels: [],
-        });
-
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
-        expect(result).not.toContain('\nLinear Issue: ');
-        expect(result).toContain('INT-UNKNOWN');
-      });
+  it('builds pull request agent prompt when pr-comment label is present', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
     });
 
-    describe('Phase 2: Strict Execution', () => {
-      it('should return Phase 2 prompt when code-task label is present', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['code-task'],
-        });
+    expect(result).toContain('[AGENT:PULL_REQUEST]');
+    expect(result).toContain('[PULL REQUEST AGENT MODE]');
+    expect(result).toContain('PULL_REQUEST_AGENT_FINAL:');
+    expect(result).not.toContain('[AGENT:EXECUTION]');
+    expect(result).not.toContain('[AGENT:PLANNING]');
+  });
 
-        expect(result).toContain('[PHASE 2: STRICT EXECUTION]');
-        expect(result).toContain('NON-INTERACTIVE MODE');
-      });
-
-      it('should include mandatory first action in Phase 2', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['code-task'],
-        });
-
-        expect(result).toContain('/linear INT-123');
-      });
-
-      it('should include execution rules in Phase 2', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['code-task'],
-        });
-
-        expect(result).toContain('No Confirmation Prompts');
-        expect(result).toContain('Complete Checkpoints Autonomously');
-        expect(result).toContain('ci:tracked');
-        expect(result).toContain('On CI Failure');
-      });
-
-      it('should include parent execution mode when hasChildren is true', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['code-task'],
-          hasChildren: true,
-        });
-
-        expect(result).toContain('[PARENT EXECUTION MODE]');
-        expect(result).toContain('must execute ALL children continuously');
-        expect(result).toContain('Use single branch for all children');
-        expect(result).toContain('PR description MUST list all children');
-      });
-
-      it('should not include parent execution mode when hasChildren is false', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['code-task'],
-          hasChildren: false,
-        });
-
-        expect(result).not.toContain('[PARENT EXECUTION MODE]');
-        expect(result).not.toContain('child issue');
-      });
-
-      it('should not include user supplemental instructions section in Phase 2', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['code-task'],
-        });
-
-        expect(result).not.toContain('[USER SUPPLEMENTAL INSTRUCTIONS]');
-      });
-
-      it('should include WORKER-MODE marker in Phase 2', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['code-task'],
-        });
-
-        expect(result).toContain('[WORKER-MODE]');
-      });
-
-      it('should include PHASE:2 marker in Phase 2', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['code-task'],
-        });
-
-        expect(result).toContain('[PHASE:2]');
-      });
+  it('uses agentType=execution over missing code-task label', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['bug'],
+      agentType: 'execution',
     });
 
-    describe('Label Detection', () => {
-      it('should detect Phase 1 when labels array is empty', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: [],
-        });
+    expect(result).toContain('[AGENT:EXECUTION]');
+  });
 
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
-      });
-
-      it('should detect Phase 1 when code-task label is not present', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['bug', 'enhancement'],
-        });
-
-        expect(result).toContain('[PHASE 1: DESIGN & VALIDATION - IN-PLACE MODEL]');
-      });
-
-      it('should detect Phase 2 when code-task label is present among others', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['bug', 'code-task', 'high-priority'],
-        });
-
-        expect(result).toContain('[PHASE 2: STRICT EXECUTION]');
-      });
-
-      it('should normalize case for code-task label', () => {
-        const result = buildSystemPrompt({
-          ...baseParams,
-          linearIssueLabels: ['CODE-TASK'],
-        });
-
-        expect(result).toContain('[PHASE 2: STRICT EXECUTION]');
-      });
+  it('uses agentType=planning over present code-task label', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task'],
+      agentType: 'planning',
     });
+
+    expect(result).toContain('[AGENT:PLANNING]');
+  });
+
+  it('falls back to label detection when agentType is absent', () => {
+    expect(buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] })).toContain(
+      '[AGENT:EXECUTION]'
+    );
+    expect(buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] })).toContain(
+      '[AGENT:PLANNING]'
+    );
+  });
+
+  it('pr-comment takes priority over explicit agentType', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['pr-comment'],
+      agentType: 'planning',
+    });
+
+    expect(result).toContain('[AGENT:PULL_REQUEST]');
   });
 });

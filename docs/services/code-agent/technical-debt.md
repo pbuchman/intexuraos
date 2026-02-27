@@ -7,13 +7,13 @@
 
 ## Summary
 
-| Category       | Count | Severity |
-| -------------- | ----- | -------- |
-| TODO comments  | 2     | Medium   |
-| Code smells    | 4     | Low-Med  |
-| Future plans   | 2     | Medium   |
-| TS strictness  | 1     | Low      |
-| SRP violations | 1     | High     |
+| Category       | Count  | Severity |
+| -------------- | ------ | -------- |
+| TODO comments  | 2      | Medium   |
+| Code smells    | 4      | Low-Med  |
+| Future plans   | 2      | Medium   |
+| TS strictness  | 1      | Low      |
+| SRP violations | 1      | High     |
 | **Total**      | **10** | --       |
 
 > Note: codeRoutes.ts has grown to ~3600 lines. Routing split is an ongoing priority.
@@ -64,7 +64,7 @@ The `systemPromptHash` field is designed for audit tracking -- recording which v
 
 **File:** `apps/code-agent/src/routes/codeRoutes.ts`
 
-This single file contains all internal code task routes AND all public code task routes -- over 3600 lines. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, and Phase 2 submission. Each route includes inline Fastify schema definitions that consume significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`) but the original routes remain consolidated.
+This single file contains all internal code task routes AND all public code task routes -- over 3600 lines. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, and execution agent submission. Each route includes inline Fastify schema definitions that consume significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`) but the original routes remain consolidated.
 
 **Impact:** Difficult to navigate, review, and test. Changes to one route risk unintended effects on others.
 
@@ -81,7 +81,7 @@ This single file contains all internal code task routes AND all public code task
 
 ### 2. Duplicated webhook secret and cancel nonce generation
 
-**Files:** `processCodeAction.ts`, `retryTask.ts`, `submitTaskFeedback.ts`, `submitToPhase2.ts`
+**Files:** `processCodeAction.ts`, `retryTask.ts`, `submitTaskFeedback.ts`, `submitToExecutionAgent.ts`
 
 All four use cases contain identical `generateWebhookSecret()` and `generateCancelNonce()` functions copied independently.
 
@@ -153,26 +153,26 @@ Common exemption categories in this service:
 
 ## Resolved Issues
 
-| Issue   | Description                                    | Resolution                                                     |
-| ------- | ---------------------------------------------- | -------------------------------------------------------------- |
-| INT-372 | Zombie task detection                          | Heartbeat + 30-min threshold implemented                       |
-| INT-379 | WhatsApp cancel button                         | Cancel nonce with 15-min TTL                                   |
-| INT-465 | PR comment auto-response                       | Simplified via sendTaskMessage dispatch from webhook handler   |
-| INT-486 | Unified Linear issue templates                 | Two-phase execution model (designed/implemented statuses)      |
-| INT-505 | Rich PR activity timeline                      | Clickable links, comment bodies, deduplication                 |
-| INT-519 | Block agents from QA/Done transitions          | Validate-linear-state hook                                     |
-| INT-520 | Retry mechanism for failed tasks               | retryTask use case with cool-off                               |
-| INT-612 | Prompt sanitization not implemented            | sanitizePrompt() utility applied at all prompt entry points    |
-| --      | Duplicate PR body in synchronize events        | deduplicatePRBody() pass in GET /code/github-pr-events         |
-| --      | Edited comment creates duplicate timeline entry | deduplicateCommentEvents() keeps first position, latest body  |
-| --      | Turn-end metrics not collected                 | TurnMetrics subcollection + FirestoreTurnMetricsRepository     |
-| --      | No way to send mid-task messages or resume     | sendTaskMessage use case + POST /code/tasks/:id/messages       |
-| --      | PR list view requires O(events) query          | github-pr-summaries collection + GET /code/github-pr-summaries |
-| --      | Webhook dedup used shared actionId             | Unique per-submission actionId + propagated dedup errors        |
-| --      | Sender whitelist for webhook dispatch          | Replaced scattered filters with ALLOWED_BOTS Set + owner check |
-| --      | Bot review edit triage                         | Dispatch message includes in-progress detection instructions   |
-| --      | Linear not transitioned on completion          | markInReview called on task-complete webhook when PR exists     |
-| --      | CPU cores hardcoded in metrics                 | Dynamic cgroup-based core count from orchestrator              |
+| Issue   | Description                                     | Resolution                                                     |
+| ------- | ----------------------------------------------- | -------------------------------------------------------------- |
+| INT-372 | Zombie task detection                           | Heartbeat + 30-min threshold implemented                       |
+| INT-379 | WhatsApp cancel button                          | Cancel nonce with 15-min TTL                                   |
+| INT-465 | PR comment auto-response                        | Simplified via sendTaskMessage dispatch from webhook handler   |
+| INT-486 | Unified Linear issue templates                  | Agent-based execution model (planned/implemented statuses)     |
+| INT-505 | Rich PR activity timeline                       | Clickable links, comment bodies, deduplication                 |
+| INT-519 | Block agents from QA/Done transitions           | Validate-linear-state hook                                     |
+| INT-520 | Retry mechanism for failed tasks                | retryTask use case with cool-off                               |
+| INT-612 | Prompt sanitization not implemented             | sanitizePrompt() utility applied at all prompt entry points    |
+| --      | Duplicate PR body in synchronize events         | deduplicatePRBody() pass in GET /code/github-pr-events         |
+| --      | Edited comment creates duplicate timeline entry | deduplicateCommentEvents() keeps first position, latest body   |
+| --      | Turn-end metrics not collected                  | TurnMetrics subcollection + FirestoreTurnMetricsRepository     |
+| --      | No way to send mid-task messages or resume      | sendTaskMessage use case + POST /code/tasks/:id/messages       |
+| --      | PR list view requires O(events) query           | github-pr-summaries collection + GET /code/github-pr-summaries |
+| --      | Webhook dedup used shared actionId              | Unique per-submission actionId + propagated dedup errors       |
+| --      | Sender whitelist for webhook dispatch           | Replaced scattered filters with ALLOWED_BOTS Set + owner check |
+| --      | Bot review edit triage                          | Dispatch message includes in-progress detection instructions   |
+| --      | Linear not transitioned on completion           | markInReview called on task-complete webhook when PR exists    |
+| --      | CPU cores hardcoded in metrics                  | Dynamic cgroup-based core count from orchestrator              |
 
 ---
 

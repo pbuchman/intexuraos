@@ -187,7 +187,7 @@ sequenceDiagram
 | Commit     | Description                                                             | Date       |
 | ---------- | ----------------------------------------------------------------------- | ---------- |
 | `d5810213` | Use unique actionId for webhook dedup and propagate all dedup errors    | 2026-02-21 |
-| `dc45d1ea` | Align auto-trigger prompt with Phase 1 design behavior                  | 2026-02-21 |
+| `dc45d1ea` | Align auto-trigger prompt with planning agent behavior                  | 2026-02-21 |
 | `a88db80f` | Auto-trigger code tasks on Linear issue assignment                      | 2026-02-20 |
 | `6f35c16a` | Pass raw errors to pino logger (improved error observability)           | 2026-02-20 |
 | `b846dcc5` | Include assignee in list issues response mapper                         | 2026-02-20 |
@@ -750,19 +750,19 @@ The Linear API client includes performance optimizations (INT-95):
 
 ## Configuration
 
-| Variable                              | Required | Description                          |
-| ------------------------------------- | -------- | ------------------------------------ |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys            |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth              |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source           |
+| Variable                              | Required | Description                           |
+| ------------------------------------- | -------- | ------------------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys             |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth               |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source            |
 | `INTEXURAOS_CODE_AGENT_URL`           | Yes      | Code agent for auto-trigger on assign |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                  |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                         |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                       |
-| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key              |
-| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key                 |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint (no-op if unset) |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                   |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                          |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                        |
+| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                 |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key               |
+| `INTEXURAOS_ZAI_APP_API_KEY`          | No       | Platform Zai API key                  |
+| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint (no-op if unset)  |
 
 ## Dependencies
 

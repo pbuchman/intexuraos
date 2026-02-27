@@ -290,13 +290,13 @@ Note: `configured: true` because the document still exists, but `connected: fals
 
 ## Troubleshooting
 
-| Error              | Cause                        | Solution                                    |
-| ------------------ | ---------------------------- | ------------------------------------------- |
-| `INVALID_REQUEST`  | Bad token format or missing  | Check token starts with `secret_`           |
-| `UNAUTHORIZED`     | Token rejected by Notion     | Regenerate at notion.so/my-integrations     |
-| `DOWNSTREAM_ERROR` | Notion API unreachable       | Retry later; check Notion status page       |
+| Error              | Cause                        | Solution                                      |
+| ------------------ | ---------------------------- | --------------------------------------------- |
+| `INVALID_REQUEST`  | Bad token format or missing  | Check token starts with `secret_`             |
+| `UNAUTHORIZED`     | Token rejected by Notion     | Regenerate at notion.so/my-integrations       |
+| `DOWNSTREAM_ERROR` | Notion API unreachable       | Retry later; check Notion status page         |
 | `NOT_FOUND`        | No connection or page access | Connect first, or share page with integration |
-| 401 (no token)     | Missing Authorization header | Include `Bearer <token>` header             |
+| 401 (no token)     | Missing Authorization header | Include `Bearer <token>` header               |
 
 ---
 

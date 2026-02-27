@@ -302,11 +302,11 @@ describe('POST /code/submit', () => {
       );
     });
 
-    it('sets executionPhase to execution when issue has code-task label', async () => {
+    it('sets agentType to execution when issue has code-task label', async () => {
       const linearService = getServices().linearIssueService;
       vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-999',
-        linearIssueTitle: 'Phase 2 ready feature',
+        linearIssueTitle: 'Execution ready feature',
         linearIssueLabels: ['code-task'],
         hasChildren: false,
         linearFallback: false,
@@ -322,12 +322,12 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Build phase 2 feature' },
+        payload: { prompt: 'Build execution feature' },
       });
 
       expect(response.statusCode).toBe(200);
       expect(createSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ executionPhase: 'execution' })
+        expect.objectContaining({ agentType: 'execution' })
       );
     });
 
@@ -871,7 +871,7 @@ describe('POST /code/submit', () => {
     });
 
     it('accepts valid worker types', async () => {
-      const workerTypes = ['opus', 'auto', 'glm'] as const;
+      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm'] as const;
 
       // Mock successful dispatch for all iterations
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({

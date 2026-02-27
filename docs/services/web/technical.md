@@ -2,7 +2,7 @@
 
 ## Overview
 
-Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to 15+ backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, an AI chat assistant (Intex Chat), a two-phase code task management system with collapsible tool output, multi-status filtering, saved data visualizations, assignee display on Linear boards, and a developer toolbar (DevBar) for local and dev machine environments.
+Single-page React application built with Vite, serving as the primary user interface for IntexuraOS. Uses Auth0 for authentication, Firestore for real-time data synchronization, and connects to 15+ backend microservices via REST APIs. Deploys as a Progressive Web App (PWA) to Google Cloud Storage behind a load balancer. Supports dark mode, an AI chat assistant (Intex Chat), an agent-based code task management system with collapsible tool output, multi-status filtering, saved data visualizations, assignee display on Linear boards, and a developer toolbar (DevBar) for local and dev machine environments.
 
 ## Architecture
 
@@ -61,24 +61,24 @@ graph TB
 
 ## Recent Changes
 
-| Commit     | Description                                                         | Date       |
-| ---------- | ------------------------------------------------------------------- | ---------- |
-| `1ee7e8c6` | Fix single-space timestamp strip in isBodyLine for log viewer       | 2026-02-22 |
-| `ef2724df` | Fix collapsible tool output in code task logs                       | 2026-02-22 |
-| `fbe7c944` | Fix worker reorder buttons in settings UI                           | 2026-02-22 |
-| `27f15cfc` | Collapsible tool output blocks in log viewer                        | 2026-02-22 |
-| `c9acdce3` | Standardize delete confirmations across all pages                   | 2026-02-21 |
-| `2e3ae30c` | Persist filter and sidebar collapse state across page refresh       | 2026-02-21 |
-| `bcbd5075` | Multi-status filtering and fix pagination for code tasks            | 2026-02-21 |
-| `3b081686` | INT-501: Prevent browser autofill on worker secret fields           | 2026-02-21 |
-| `19442f43` | Handle null assignee in LinearIssuesPage guards                     | 2026-02-20 |
-| `d36c76dd` | Add null to LinearIssue assignee type to match API response         | 2026-02-20 |
-| `c221efd5` | Use emerald green for Linear board assignee badges                  | 2026-02-20 |
-| `20a106c0` | Replace code task Summary with expandable PR events timeline        | 2026-02-20 |
-| `6df58b52` | Display assignee name on Linear board issue cards                   | 2026-02-20 |
-| `27ef6a7b` | INT-505: Show compare URL for PR synchronize events                 | 2026-02-19 |
-| `0e07e938` | Show two-phase flow banner on design tasks with implementation link | 2026-02-19 |
-| `e8bbacd7` | GitHub PR summaries with lazy event loading                         | 2026-02-19 |
+| Commit     | Description                                                            | Date       |
+| ---------- | ---------------------------------------------------------------------- | ---------- |
+| `1ee7e8c6` | Fix single-space timestamp strip in isBodyLine for log viewer          | 2026-02-22 |
+| `ef2724df` | Fix collapsible tool output in code task logs                          | 2026-02-22 |
+| `fbe7c944` | Fix worker reorder buttons in settings UI                              | 2026-02-22 |
+| `27f15cfc` | Collapsible tool output blocks in log viewer                           | 2026-02-22 |
+| `c9acdce3` | Standardize delete confirmations across all pages                      | 2026-02-21 |
+| `2e3ae30c` | Persist filter and sidebar collapse state across page refresh          | 2026-02-21 |
+| `bcbd5075` | Multi-status filtering and fix pagination for code tasks               | 2026-02-21 |
+| `3b081686` | INT-501: Prevent browser autofill on worker secret fields              | 2026-02-21 |
+| `19442f43` | Handle null assignee in LinearIssuesPage guards                        | 2026-02-20 |
+| `d36c76dd` | Add null to LinearIssue assignee type to match API response            | 2026-02-20 |
+| `c221efd5` | Use emerald green for Linear board assignee badges                     | 2026-02-20 |
+| `20a106c0` | Replace code task Summary with expandable PR events timeline           | 2026-02-20 |
+| `6df58b52` | Display assignee name on Linear board issue cards                      | 2026-02-20 |
+| `27ef6a7b` | INT-505: Show compare URL for PR synchronize events                    | 2026-02-19 |
+| `0e07e938` | Show agent-type flow banner on planning tasks with implementation link | 2026-02-19 |
+| `e8bbacd7` | GitHub PR summaries with lazy event loading                            | 2026-02-19 |
 
 ## Application Structure
 
@@ -269,14 +269,14 @@ The app uses Firestore listeners for real-time updates:
 
 ### Multi-Status Filtering
 
-Code tasks support simultaneous filtering by multiple statuses. The filter state persists in localStorage across page refreshes. All seven statuses are filterable: dispatched, running, designed, implemented, failed, interrupted, cancelled.
+Code tasks support simultaneous filtering by multiple statuses. The filter state persists in localStorage across page refreshes. All seven statuses are filterable: dispatched, running, planned, implemented, failed, interrupted, cancelled.
 
-### Two-Phase Flow
+### Agent-Based Flow
 
-Code tasks support an `executionPhase` field: `design` or `execution`.
+Code tasks support an `agentType` field: `planning` or `execution`.
 
-- **Design phase:** Task produces a design artifact. When an implementation task is linked (`implementationTaskId`), an `ImplementationLinkBanner` appears (emerald color) linking to the implementation task.
-- **Execution phase:** Runs the code changes. A `DesignTaskBanner` (violet color) links back to the parent design task with the label "DESIGN".
+- **Planning agent:** Task produces a planning artifact. When an implementation task is linked (`implementationTaskId`), an `ImplementationLinkBanner` appears (emerald color) linking to the implementation task.
+- **Execution agent:** Runs the code changes. A `DesignTaskBanner` (violet color) links back to the parent planning task with the label "DESIGN".
 - **Single-phase tasks:** No banner shown.
 
 ### Collapsible Tool Output
@@ -436,20 +436,20 @@ The `actionConfigLoader` reads this at runtime and `ActionItem` renders buttons 
 
 ## Technology Stack
 
-| Layer      | Technology                                                             |
-| ---------- | ---------------------------------------------------------------------- |
-| Framework  | React 19.1 with TypeScript                                            |
-| Build      | Vite 7.3                                                               |
-| Styling    | TailwindCSS 4.1 (dark mode support)                                   |
-| Auth       | Auth0 SPA SDK                                                          |
-| Real-time  | Firebase SDK (Firestore)                                               |
-| PWA        | vite-plugin-pwa, workbox                                               |
-| Icons      | lucide-react                                                           |
-| Charts     | Vega, Vega-Lite, Vega-Embed                                           |
+| Layer      | Technology                                                              |
+| ---------- | ----------------------------------------------------------------------- |
+| Framework  | React 19.1 with TypeScript                                              |
+| Build      | Vite 7.3                                                                |
+| Styling    | TailwindCSS 4.1 (dark mode support)                                     |
+| Auth       | Auth0 SPA SDK                                                           |
+| Real-time  | Firebase SDK (Firestore)                                                |
+| PWA        | vite-plugin-pwa, workbox                                                |
+| Icons      | lucide-react                                                            |
+| Charts     | Vega, Vega-Lite, Vega-Embed                                             |
 | Log stream | Custom `LogStream` component (CSS color-coded, collapsible tool blocks) |
-| Markdown   | @uiw/react-md-editor                                                   |
-| HTML parse | rehype-raw (PR event comment bodies)                                   |
-| Deployment | GCS + Cloud Load Balancer                                              |
+| Markdown   | @uiw/react-md-editor                                                    |
+| HTML parse | rehype-raw (PR event comment bodies)                                    |
+| Deployment | GCS + Cloud Load Balancer                                               |
 
 ## Deployment
 

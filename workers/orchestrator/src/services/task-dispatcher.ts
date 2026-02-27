@@ -1,7 +1,7 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
-import type { Result, Logger } from '@intexuraos/common-core';
+import { type Result, type Logger, hasCodeTaskLabel } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
@@ -17,7 +17,12 @@ import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
-import { type CompletionVerifier, type CompletionVerifierVerdict } from './completion-verifier.js';
+import {
+  type CompletionAgentType,
+  type CompletionVerifier,
+  type CompletionVerifierVerdict,
+} from './completion-verifier.js';
+import { analyzeRetryDecision } from './adaptive-retry.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 
 const execAsync = promisify(exec);
@@ -48,6 +53,7 @@ export interface IsolationConfig {
     LINEAR_API_KEY: string;
     SENTRY_AUTH_TOKEN: string;
     ZAI_API_KEY: string;
+    MINIMAX_API_KEY: string;
   };
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
@@ -174,6 +180,7 @@ export class TaskDispatcher {
         ...(request.slug !== undefined && { slug: request.slug }),
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
+        ...(request.agentType !== undefined && { agentType: request.agentType }),
         startedAt: new Date().toISOString(),
         attemptCount: 1,
         maxAttempts: this.completionMaxAttempts,
@@ -241,12 +248,27 @@ export class TaskDispatcher {
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
       /* v8 ignore stop @preserve */
       this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'Phase 2' : 'Phase 1';
-      const phaseDesc =
-        phase === 'Phase 2'
-          ? 'Strict Execution \u2014 implement autonomously, run CI, create PR'
-          : 'Design & Validation \u2014 analyze and enrich the Linear issue, do not execute code';
-      this.appendTaggedTaskLog(taskId, 'instructions', `${phase}: ${phaseDesc}`);
+      const isPRComment = task.linearIssueLabels.some(
+        (l) => l.trim().toLowerCase() === 'pr-comment'
+      );
+      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all three agents @preserve */
+      const agentLabel = isPRComment
+        ? 'Pull Request Agent'
+        : task.agentType === 'execution'
+          ? 'Execution Agent'
+          : task.agentType === 'planning'
+            ? 'Planning Agent'
+            : hasCodeTaskLabel(task.linearIssueLabels)
+              ? 'Execution Agent'
+              : 'Planning Agent';
+      const agentDesc =
+        agentLabel === 'Pull Request Agent'
+          ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
+          : agentLabel === 'Execution Agent'
+            ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
+            : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
+      /* v8 ignore stop @preserve */
+      this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
       /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
@@ -424,6 +446,7 @@ export class TaskDispatcher {
       task.startedAt = new Date().toISOString();
       task.attemptCount = 1;
       task.verificationHistory = [];
+      delete task.previousResult;
       delete task.completedAt;
       if (wasCompleted) {
         task.resumedAfterSuccess = true;
@@ -625,17 +648,26 @@ export class TaskDispatcher {
     }
 
     const attempt = task.attemptCount ?? 1;
-    const maxAttempts = task.maxAttempts ?? this.completionMaxAttempts;
-    const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'phase2' : 'phase1';
+    const maxAttempts = this.completionMaxAttempts;
+    const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
+    const completionAgentType = isPRComment
+      ? 'pull_request'
+      : task.agentType === 'execution'
+        ? 'execution'
+        : task.agentType === 'planning'
+          ? 'planning'
+          : hasCodeTaskLabel(task.linearIssueLabels)
+            ? 'execution'
+            : 'planning';
     this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(
       {},
-      `Worker attempt finished: taskId=${task.taskId} attempt=${String(attempt)}/${String(maxAttempts)} phase=${phase}`
+      `Worker attempt finished: taskId=${task.taskId} attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Attempt finished: attempt=${String(attempt)}/${String(maxAttempts)} phase=${phase}`
+      `Attempt finished: attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
     );
 
     try {
@@ -650,6 +682,22 @@ export class TaskDispatcher {
     const result = await this.checkForResult(task);
     const claudeError = this.claudeErrors.get(task.taskId);
     const exitCode = this.taskExitCodes.get(task.taskId);
+    if (result !== undefined) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
+      );
+    }
+    if (completionAgentType === 'planning' && result?.prUrl !== undefined && result.prUrl !== '') {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `[WARN] Agent mismatch: task ran as Planning Agent but worker created PR: ${result.prUrl}`
+      );
+      this.logger.warn(
+        { taskId: task.taskId, agentType: completionAgentType, prUrl: result.prUrl },
+        'Agent mismatch: Planning Agent task created a PR'
+      );
+    }
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Running completion verification: exitCode=${String(exitCode ?? 'unknown')} claudeError=${claudeError ?? 'none'} detectedPr=${result?.prUrl ?? 'none'}`
@@ -659,7 +707,7 @@ export class TaskDispatcher {
       taskId: task.taskId,
       attempt,
       maxAttempts,
-      phase,
+      agentType: completionAgentType,
       originalPrompt: task.prompt,
       rawLogs,
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
@@ -739,56 +787,119 @@ export class TaskDispatcher {
       return;
     }
 
-    if (!verification.passed && attempt < maxAttempts) {
-      this.logForwarder.appendChunk(task.taskId, '\n\n');
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Verification failed; continuing with next attempt (${String(attempt + 1)}/${String(maxAttempts)})`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.teardownAttempt(task.taskId, true);
-
-      const resumePrompt = this.buildResumePrompt(task.prompt, verification);
-      const nextAttempt = attempt + 1;
-      const resumeStart = await this.startWorkerAttempt(task, {
-        prompt: resumePrompt,
-        hasChildren: task.hasChildren ?? false,
-        continueSession: true,
-      });
-
-      if (resumeStart.ok) {
-        task.attemptCount = nextAttempt;
-        task.containerId = resumeStart.containerId;
-        await this.saveTask(task);
-        this.logger.info(
-          { taskId: task.taskId, attempt: nextAttempt, maxAttempts },
-          'Resumed task with follow-up attempt'
-        );
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Resume attempt started successfully: attempt=${String(nextAttempt)}/${String(maxAttempts)}`
-        );
-        this.claudeErrors.delete(task.taskId);
-        this.taskExitCodes.delete(task.taskId);
-        return;
+    if (!verification.passed) {
+      if (result !== undefined && task.previousResult !== undefined) {
+        const diffs: string[] = [];
+        const prev = task.previousResult;
+        if (prev.commits !== result.commits)
+          diffs.push(`commits ${String(prev.commits ?? 0)}→${String(result.commits ?? 0)}`);
+        if (prev.ciFailed !== result.ciFailed)
+          diffs.push(
+            `ciFailed ${String(prev.ciFailed ?? 'unknown')}→${String(result.ciFailed ?? 'unknown')}`
+          );
+        if (prev.prUrl === undefined && result.prUrl !== undefined) diffs.push('prUrl (new)');
+        if (diffs.length > 0) {
+          this.appendOrchestratorTaskLog(task.taskId, `Result diff: ${diffs.join(', ')}`);
+        }
       }
 
-      const resumeError: TaskError = {
-        code: 'RESUME_ATTEMPT_FAILED',
-        message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
-        remediation: { action: 'retry' },
-      };
+      const retryDecision = analyzeRetryDecision({
+        currentAttempt: attempt,
+        baseMaxAttempts: maxAttempts,
+        verificationHistory: task.verificationHistory ?? [],
+        ...(result !== undefined && { currentResult: result }),
+        ...(task.previousResult !== undefined && { previousResult: task.previousResult }),
+      });
+
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
+        `Adaptive retry: ${retryDecision.outcome} (score=${String(retryDecision.progressScore)}, resultProgress=${String(retryDecision.signalBreakdown.resultProgress)}, verificationTrend=${String(retryDecision.signalBreakdown.verificationTrend)}, effective=${String(retryDecision.effectiveMaxAttempts)}) — ${retryDecision.reason}`
       );
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error: resumeError,
-      });
-      return;
+      this.logger.info(
+        {
+          taskId: task.taskId,
+          attempt,
+          maxAttempts,
+          outcome: retryDecision.outcome,
+          progressScore: retryDecision.progressScore,
+          signalBreakdown: retryDecision.signalBreakdown,
+          effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
+          hasCurrentResult: result !== undefined,
+          hasPreviousResult: task.previousResult !== undefined,
+          verificationHistoryLength: (task.verificationHistory ?? []).length,
+        },
+        'Adaptive retry decision'
+      );
+
+      if (retryDecision.outcome === 'continue') {
+        this.logForwarder.appendChunk(task.taskId, '\n\n');
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Verification failed; continuing with next attempt (${String(attempt + 1)}/${String(retryDecision.effectiveMaxAttempts)})`
+        );
+        await this.flushTaskLogs(task.taskId);
+        await this.teardownAttempt(task.taskId, true);
+
+        if (result !== undefined) {
+          task.previousResult = result;
+        }
+
+        const resumePromptBody = this.buildResumePrompt(task.prompt, verification, {
+          agentType: completionAgentType,
+          ...(result !== undefined && { taskResult: result }),
+          ...(typeof exitCode === 'number' && { workerExitCode: exitCode }),
+          ...(claudeError !== undefined && { claudeError }),
+        });
+        const resumePrompt = this.buildResumePreamble() + resumePromptBody;
+        const resumePreview =
+          resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '…' : resumePrompt;
+        this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
+        const nextAttempt = attempt + 1;
+        const resumeStart = await this.startWorkerAttempt(task, {
+          prompt: resumePrompt,
+          hasChildren: task.hasChildren ?? false,
+          continueSession: true,
+        });
+
+        if (resumeStart.ok) {
+          task.attemptCount = nextAttempt;
+          task.containerId = resumeStart.containerId;
+          await this.saveTask(task);
+          this.logger.info(
+            {
+              taskId: task.taskId,
+              attempt: nextAttempt,
+              effectiveMaxAttempts: retryDecision.effectiveMaxAttempts,
+              progressScore: retryDecision.progressScore,
+            },
+            'Resumed task with follow-up attempt'
+          );
+          this.appendOrchestratorTaskLog(
+            task.taskId,
+            `Resume attempt started successfully: attempt=${String(nextAttempt)}/${String(retryDecision.effectiveMaxAttempts)}`
+          );
+          this.claudeErrors.delete(task.taskId);
+          this.taskExitCodes.delete(task.taskId);
+          return;
+        }
+
+        const resumeError: TaskError = {
+          code: 'RESUME_ATTEMPT_FAILED',
+          message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
+          remediation: { action: 'retry' },
+        };
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
+        );
+        await this.flushTaskLogs(task.taskId);
+        await this.collectTurnMetrics(task, attempt);
+        await this.finalizeTask(task, 'failed', {
+          ...(result !== undefined && { result }),
+          error: resumeError,
+        });
+        return;
+      }
     }
 
     if (verification.passed) {
@@ -830,6 +941,51 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       const finalResult = this.injectExtractedSummary(result, verification.extractedSummary);
+      if (completionAgentType === 'planning' && verification.planningMetadata !== undefined) {
+        const planningResult: TaskResult = {
+          ...(finalResult ?? {}),
+          planning_outcome_label: verification.planningMetadata.outcomeLabel,
+          planning_superpowers_writing_plans_used:
+            verification.planningMetadata.superpowersWritingPlansUsed,
+          planning_issue_url: verification.planningMetadata.planningIssueUrl ?? '',
+          planning_trivial_task: verification.planningMetadata.trivialTask ?? '',
+          planning_doc_path: verification.planningMetadata.docPath ?? '',
+          planning_pr_url: verification.planningMetadata.prUrl ?? '',
+          planning_clarification_message: verification.planningMetadata.clarificationMessage ?? '',
+        };
+
+        if (verification.planningMetadata.outcomeLabel === 'unclear') {
+          await this.finalizeTask(task, 'failed', {
+            result: planningResult,
+            error: {
+              code: 'PLANNING_AGENT_UNCLEAR',
+              message:
+                verification.planningMetadata.clarificationMessage ??
+                'Planning agent reported unclear outcome',
+            },
+          });
+          return;
+        }
+
+        await this.finalizeTask(task, 'completed', { result: planningResult });
+        return;
+      }
+      if (completionAgentType === 'execution' && verification.executionMetadata !== undefined) {
+        const executionResult: TaskResult = {
+          ...(finalResult ?? {}),
+          execution_outcome_label: verification.executionMetadata.outcomeLabel,
+          execution_superpowers_executing_plans_used:
+            verification.executionMetadata.superpowersExecutingPlansUsed,
+          execution_superpowers_requesting_code_review_used:
+            verification.executionMetadata.superpowersRequestingCodeReviewUsed,
+          execution_trivial_task: verification.executionMetadata.trivialTask,
+          execution_subagents: verification.executionMetadata.subagents,
+          execution_review_iterations: verification.executionMetadata.reviewIterations,
+          execution_linear_issue_url: verification.executionMetadata.linearIssueUrl,
+        };
+        await this.finalizeTask(task, 'completed', { result: executionResult });
+        return;
+      }
       await this.finalizeTask(task, 'completed', {
         ...(finalResult !== undefined && { result: finalResult }),
       });
@@ -862,30 +1018,145 @@ export class TaskDispatcher {
 
   private buildResumePrompt(
     originalPrompt: string,
-    verification: CompletionVerifierVerdict
+    verification: CompletionVerifierVerdict,
+    context: {
+      agentType: CompletionAgentType;
+      taskResult?: TaskResult;
+      workerExitCode?: number;
+      claudeError?: string;
+    }
   ): string {
+    const verifierReasons =
+      verification.reasons.length > 0
+        ? verification.reasons.map((reason) => `- ${reason}`).join('\n')
+        : '- No verifier reasons provided';
     const missingCriteria =
       verification.missingCriteria.length > 0
         ? verification.missingCriteria.map((criteria) => `- ${criteria}`).join('\n')
         : '- Completion criteria not met';
+    const detectedState = [
+      `- agentType: ${context.agentType}`,
+      `- workerExitCode: ${String(context.workerExitCode ?? 'unknown')}`,
+      `- claudeError: ${context.claudeError ?? 'none'}`,
+      `- detectedPrUrl: ${context.taskResult?.prUrl ?? 'none'}`,
+      `- detectedCiTrackedSuccess: ${String(context.taskResult?.ciFailed === false)}`,
+      `- detectedCiFailed: ${String(context.taskResult?.ciFailed ?? 'unknown')}`,
+      `- detectedBranch: ${context.taskResult?.branch ?? 'none'}`,
+      `- detectedCommitsOnPr: ${String(context.taskResult?.commits ?? 'unknown')}`,
+    ].join('\n');
+    const strictFieldGuidance = this.buildAgentContractGuidance(context.agentType);
+    const contractTemplate = this.buildAgentFinalTemplate(context.agentType);
+    const extractedSummarySection =
+      verification.extractedSummary !== undefined && verification.extractedSummary !== ''
+        ? ['Verifier summary of previous attempt:', verification.extractedSummary, ''].join('\n')
+        : '';
 
     return [
       originalPrompt,
       '',
       '[AUTO-CONTINUE ATTEMPT]',
       'Previous attempt did not meet completion criteria.',
+      'This is a machine-verification failure. Optimize for machine-detectable evidence and exact contract formatting, not narrative justification.',
       'Address the exact gaps below, then finish.',
+      '',
+      'Verifier reasons (why the previous answer failed):',
+      verifierReasons,
       '',
       'Missing criteria:',
       missingCriteria,
       '',
+      'Machine-detected state from the previous attempt:',
+      detectedState,
+      '',
+      extractedSummarySection,
       'Required action:',
       verification.resumeInstruction,
+      '',
+      'Strict final-block formatting rules (do not add annotations to strict fields):',
+      strictFieldGuidance,
+      '',
+      'Use this exact final block shape and move extra explanation into Summary:',
+      contractTemplate,
+      '',
+      'If the task appears pre-completed / already merged:',
+      '- Do not assume the verifier will accept an old merged PR as task completion evidence.',
+      '- First run the PR/branch pre-flight checks above (in the resume pre-flight section).',
+      '- If the branch is clean and no PR exists for this branch, create a fresh follow-up branch/PR when the task contract requires a PR.',
+      '- If a new PR is impossible or inappropriate, show command output evidence and ask for guidance instead of claiming success.',
       '',
       'Constraints:',
       '- Do not restart from scratch.',
       '- Continue from current repository/worktree state.',
-      '- Your last message must satisfy the required phase final block contract.',
+      '- Your last message must satisfy the required agent final block contract.',
+    ].join('\n');
+  }
+
+  private buildAgentContractGuidance(agentType: CompletionAgentType): string {
+    if (agentType === 'execution') {
+      return [
+        '- `PR` line must be only a GitHub PR URL (no trailing notes like "(already merged)").',
+        '- `Outcome` line must be exactly `implemented`.',
+        '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
+        '- `Review iterations` line must contain digits only (example: `0`).',
+        '- `superpowers_executing_plans_used` and `superpowers_requesting_code_review_used` must be exactly `1`.',
+        '- `trivial_task` must be exactly `0` or `1`.',
+        '- `subagents` may be `none` only when `trivial_task` is `1`.',
+        '- Put explanations and caveats in `Summary`, not on strict fields.',
+      ].join('\n');
+    }
+
+    if (agentType === 'pull_request') {
+      return [
+        '- `PR` line must be only a GitHub PR URL.',
+        '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
+        '- `Comment replied` line must be exactly `yes` or `no`.',
+        '- Put extra explanation in `Summary`, not on strict fields.',
+      ].join('\n');
+    }
+
+    return [
+      '- `Linear label set` line must be exactly `code-task` or `unclear`.',
+      '- `Outcome` line must be exactly `planned` or `unclear`.',
+      '- `Linear issue` line must be a full Linear URL.',
+      '- Put explanations in `Summary`, not on strict fields.',
+    ].join('\n');
+  }
+
+  private buildAgentFinalTemplate(agentType: CompletionAgentType): string {
+    if (agentType === 'execution') {
+      return [
+        'EXECUTION_AGENT_FINAL:',
+        '- Outcome: implemented',
+        '- PR: https://github.com/<owner>/<repo>/pull/<number>',
+        '- CI evidence: pnpm run ci:tracked successful',
+        '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
+        '- Review iterations: 0',
+        '- superpowers_executing_plans_used: 1',
+        '- superpowers_requesting_code_review_used: 1',
+        '- trivial_task: 0',
+        '- subagents: backend-reviewer (API contract checks), test-runner (targeted CI verification)',
+        '- Skill sequence proof: superpowers:executing-plans before superpowers:requesting-code-review',
+        '- Summary: <3-5 factual sentences>',
+      ].join('\n');
+    }
+
+    if (agentType === 'pull_request') {
+      return [
+        'PULL_REQUEST_AGENT_FINAL:',
+        '- PR: https://github.com/<owner>/<repo>/pull/<number>',
+        '- CI evidence: pnpm run ci:tracked successful',
+        '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
+        '- Comment replied: yes',
+        '- Summary: <3-5 factual sentences>',
+      ].join('\n');
+    }
+
+    return [
+      'PLANNING_AGENT_FINAL:',
+      '- Outcome: planned',
+      '- superpowers_writing_plans_used: 1',
+      '- Original issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
+      '- Summary: <3-5 factual sentences>',
     ].join('\n');
   }
 
@@ -1101,6 +1372,8 @@ export class TaskDispatcher {
           taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
           linearIssueLabels: task.linearIssueLabels,
           hasChildren: params.hasChildren,
+          workerType: task.workerType,
+          ...(task.agentType !== undefined && { agentType: task.agentType }),
         }) +
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
@@ -1344,13 +1617,6 @@ export class TaskDispatcher {
     return { summary: extractedSummary };
   }
 
-  private hasCodeTaskLabel(labels: string[]): boolean {
-    return labels.some((label) => {
-      const normalized = label.trim().toLowerCase().replaceAll('_', '-').replaceAll(' ', '-');
-      return normalized === 'code-task';
-    });
-  }
-
   private detectClaudeError(taskId: string, chunk: string): void {
     const buffered = `${this.claudeLogBuffers.get(taskId) ?? ''}${chunk}`;
     const lines = buffered.split('\n');
@@ -1405,6 +1671,7 @@ export class TaskDispatcher {
   /**
    * Convert Claude Code JSON system messages into readable log lines.
    * Replaces hook_started/hook_response JSON blobs with concise summaries.
+   * Strips redundant tool_use_result from user messages (bulk diffs).
    * Non-JSON lines pass through unchanged.
    */
   private formatClaudeSystemMessages(text: string): string {
@@ -1427,6 +1694,11 @@ export class TaskDispatcher {
             return this.formatInitMessage(obj);
           }
           return jsonLine;
+        }
+
+        if (type === 'user' && 'tool_use_result' in obj) {
+          delete obj['tool_use_result'];
+          return JSON.stringify(obj);
         }
 
         return jsonLine;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronUp, ChevronDown, Plus, MoreVertical, FlaskConical, Pencil, Trash2, Server } from 'lucide-react';
+import { ChevronUp, ChevronDown, Plus, MoreVertical, FlaskConical, Pencil, Trash2, Server, Code2 } from 'lucide-react';
 import { Button, Card, Input, Layout } from '@/components';
 import { useWorkerSettings } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
@@ -22,9 +22,21 @@ export function WorkerSettingsPage(): React.JSX.Element {
     deleteWorker,
     testConnectivity,
     reorderWorkers,
+    saveGitHubUsername,
   } = useWorkerSettings();
 
   const [showAddForm, setShowAddForm] = useState(false);
+  const [githubUsername, setGithubUsername] = useState('');
+  const [isSavingGithub, setIsSavingGithub] = useState(false);
+  const [githubSaveError, setGithubSaveError] = useState<string | null>(null);
+  const [githubSaveSuccess, setGithubSaveSuccess] = useState(false);
+
+  // Initialize githubUsername from settings
+  useEffect(() => {
+    if (settings?.githubUsername) {
+      setGithubUsername(settings.githubUsername);
+    }
+  }, [settings?.githubUsername]);
 
   if (loading) {
     return (
@@ -41,6 +53,60 @@ export function WorkerSettingsPage(): React.JSX.Element {
 
   return (
     <Layout>
+      {/* GitHub Username Section */}
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex items-center gap-2">
+          <Code2 className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">GitHub Username</h3>
+        </div>
+        <p className="mb-3 mt-1 text-sm text-slate-600 dark:text-slate-300">
+          Set your GitHub username to enable PR comment → task creation. This allows the system to map GitHub users to your account.
+        </p>
+        <div className="flex items-center gap-3">
+          <Input
+            label="GitHub Username"
+            placeholder="octocat"
+            value={githubUsername}
+            onChange={(e): void => {
+              setGithubUsername(e.target.value);
+              setGithubSaveSuccess(false);
+              setGithubSaveError(null);
+            }}
+            className="max-w-xs"
+          />
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            disabled={isSavingGithub}
+            onClick={(): void => {
+              void (async (): Promise<void> => {
+                setIsSavingGithub(true);
+                setGithubSaveError(null);
+                setGithubSaveSuccess(false);
+                try {
+                  await saveGitHubUsername(githubUsername.trim());
+                  setGithubSaveSuccess(true);
+                } catch (err) {
+                  const errorMessage = err instanceof Error ? err.message : 'Failed to save GitHub username';
+                  setGithubSaveError(errorMessage);
+                } finally {
+                  setIsSavingGithub(false);
+                }
+              })();
+            }}
+          >
+            {isSavingGithub ? 'Saving...' : 'Save'}
+          </Button>
+        </div>
+        {githubSaveError !== null && (
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{githubSaveError}</p>
+        )}
+        {githubSaveSuccess && (
+          <p className="mt-2 text-sm text-green-600 dark:text-green-400">GitHub username saved!</p>
+        )}
+      </div>
+
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>

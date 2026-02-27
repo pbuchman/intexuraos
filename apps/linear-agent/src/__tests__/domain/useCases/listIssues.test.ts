@@ -508,9 +508,11 @@ describe('listIssues', () => {
         expect(parent?.children[0]?.id).toBe('child-1');
         expect(parent?.children[1]?.id).toBe('child-2');
 
-        // Children should NOT appear in top-level columns
-        expect(result.value.issues.todo).toHaveLength(0);
-        expect(result.value.issues.done).toHaveLength(0);
+        // Children should appear in their respective state columns (alongside parents)
+        expect(result.value.issues.todo).toHaveLength(1);
+        expect(result.value.issues.todo[0]?.id).toBe('child-1');
+        expect(result.value.issues.done).toHaveLength(1);
+        expect(result.value.issues.done[0]?.id).toBe('child-2');
       }
     });
 
@@ -536,8 +538,9 @@ describe('listIssues', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // Orphan should not appear in any column (not top-level)
-        expect(result.value.issues.backlog).toHaveLength(0);
+        // Orphan (child with missing parent) should appear in its state column
+        expect(result.value.issues.backlog).toHaveLength(1);
+        expect(result.value.issues.backlog[0]?.id).toBe('orphan-1');
       }
     });
 

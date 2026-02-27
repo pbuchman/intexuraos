@@ -150,3 +150,53 @@ check_migration_immutable() {
         echo -e "$issues"
     fi
 }
+
+# Check for v8 ignore comments being added (should write tests first)
+# Args: $1 = file_path, $2 = tool_name, $3 = raw JSON input
+# Returns: issue string or empty
+check_v8_ignore_added() {
+    local file_path="$1"
+    local tool_name="$2"
+    local raw_input="$3"
+    local hook_name="detect-common-patterns"
+
+    # Skip non-TypeScript files
+    [[ ! "$file_path" =~ \.(ts|tsx)$ ]] && return 0
+    # Skip type definitions
+    [[ "$file_path" =~ \.d\.ts$ ]] && return 0
+    # Skip test files
+    [[ "$file_path" =~ \.test\.(ts|tsx)$ ]] && return 0
+    [[ "$file_path" =~ /__tests__/ ]] && return 0
+    # Skip skill files
+    [[ "$file_path" =~ \.claude/skills/ ]] && return 0
+
+    local content=""
+
+    if [[ "$tool_name" == "Edit" ]]; then
+        content=$(echo "$raw_input" | jq -r '.tool_input.new_string // ""')
+    elif [[ "$tool_name" == "Write" ]]; then
+        content=$(echo "$raw_input" | jq -r '.tool_input.content // ""')
+    else
+        return 0
+    fi
+
+    if echo "$content" | grep -q "v8 ignore"; then
+        local issues=""
+        issues+="v8-ignore-added at $file_path - Adding v8 ignore comment. Did you write a test first?\n"
+        issues+="\n"
+        issues+="  REQUIRED WORKFLOW before using v8 ignore:\n"
+        issues+="  1. Write a failing test that exercises this branch\n"
+        issues+="  2. Confirm the branch is GENUINELY untestable (not just inconvenient)\n"
+        issues+="  3. Verify the category matches a canonical pattern\n"
+        issues+="\n"
+        issues+="  NEVER valid for v8 ignore: catch blocks, error paths, validation branches,\n"
+        issues+="  conditional returns, if/else branches, default switch cases, null guards.\n"
+        issues+="  These are ALL testable — mock the dependency or pass different input.\n"
+
+        log_warned "$hook_name" "v8-ignore-added" "$file_path" \
+            "v8 ignore comment being added" \
+            "Write a test first, then add v8 ignore only if genuinely untestable"
+
+        echo -e "$issues"
+    fi
+}

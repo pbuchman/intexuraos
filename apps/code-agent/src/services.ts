@@ -18,6 +18,7 @@ import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 import type { RateLimitService } from './domain/services/rateLimitService.js';
 import type { WorkerSettingsRepository } from './domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from './domain/ports/workerHealthProbe.js';
+import type { UserLookupService } from './domain/ports/userLookupService.js';
 import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from './infra/repositories/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from './infra/repositories/firestoreLogLineRepository.js';
@@ -36,6 +37,7 @@ import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './dom
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
+import { createUserLookupService } from './infra/services/userLookupServiceImpl.js';
 import type { GitHubPREventRepository } from './domain/repositories/gitHubPREventRepository.js';
 import { createFirestoreGitHubPREventsRepository } from './infra/firestore/gitHubPREventsRepository.js';
 import type { TurnMetricsRepository } from './domain/repositories/turnMetricsRepository.js';
@@ -62,6 +64,7 @@ export interface ServiceContainer {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   workerHealthProbe: WorkerHealthProbe;
+  userLookupService?: UserLookupService;
   gitHubPREventRepo: GitHubPREventRepository;
   gitHubPRSummaryRepo: GitHubPRSummaryRepository;
   turnMetricsRepo: TurnMetricsRepository;
@@ -136,6 +139,28 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
       return Promise.resolve(ok({
         commentId: `comment-${String(Date.now())}`,
       }));
+    },
+    fetchIssueTree(request): ReturnType<LinearAgentClient['fetchIssueTree']> {
+      logger.info({ issueId: request.issueId }, '[E2E] Mock Linear issue tree fetch');
+      return Promise.resolve(ok({
+        root: {
+          id: request.issueId,
+          identifier: `INT-${request.issueId}`,
+          url: `https://linear.app/intexuraos/issue/${request.issueId}`,
+          parentId: null,
+          labels: [],
+          assigneeId: null,
+          state: 'Backlog',
+        },
+        descendants: [],
+      }));
+    },
+    updateIssueMetadata(request): ReturnType<LinearAgentClient['updateIssueMetadata']> {
+      logger.info(
+        { issueId: request.issueId, addLabels: request.addLabels, removeLabels: request.removeLabels, assigneeId: request.assigneeId },
+        '[E2E] Mock Linear metadata update'
+      );
+      return Promise.resolve(ok(undefined));
     },
     fetchIssueForDisplay(request): ReturnType<LinearAgentClient['fetchIssueForDisplay']> {
       logger.info({ identifier: request.identifier }, '[E2E] Mock Linear issue fetch for display');
@@ -247,6 +272,10 @@ export function initServices(config: ServiceConfig): void {
     metricsClient,
     workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
     workerHealthProbe: createWorkerHealthProbe(),
+    userLookupService: createUserLookupService({
+      workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
+      logger,
+    }),
     gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
     gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({ logger }),
     turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
