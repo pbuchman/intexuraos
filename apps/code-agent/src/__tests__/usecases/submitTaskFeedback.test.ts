@@ -426,6 +426,84 @@ describe('submitTaskFeedback use case', () => {
       expect(agentTypeAtCreateTime).toBe('execution');
     });
 
+    it('should preserve pull_request agentType from original task instead of using label-based routing', async () => {
+      const mockTask = createMockTask({ agentType: 'pull_request' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      // Even if labels say 'code-task' (execution), pull_request must be preserved
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+        })
+      );
+
+      let createInputAgentType: unknown;
+      mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        return ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+          agentType: input['agentType'],
+        });
+      });
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
+
+      expect(result.ok).toBe(true);
+      // createInput must use pull_request, not execution (even though code-task label exists)
+      expect(createInputAgentType).toBe('pull_request');
+      // dispatchRequest must also carry pull_request
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'pull_request' })
+      );
+    });
+
+    it('should fall back to label-based routing when original task is not pull_request', async () => {
+      // agentType is undefined (legacy task) — should use labels to decide
+      const mockTask = createMockTask();
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      // Labels contain code-task → should pick execution
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: linearIssueId,
+          identifier: linearIssueId,
+          title: 'Feedback mechanism test',
+          url: `https://linear.app/intexuraos/issue/${linearIssueId}`,
+          labels: ['code-task'],
+          childCount: 0,
+        })
+      );
+
+      let createInputAgentType: unknown;
+      mockCodeTaskRepo.create.mockImplementation(async (input: Record<string, unknown>) => {
+        createInputAgentType = input['agentType'];
+        return ok({
+          ...mockTask,
+          id: 'feedback-task-123',
+          parentTaskId: originalTaskId,
+          agentType: input['agentType'],
+        });
+      });
+
+      const deps = createDeps();
+      const result = await submitTaskFeedback(deps, { originalTaskId, userId, feedback });
+
+      expect(result.ok).toBe(true);
+      // createInput must use label-based routing (execution) when no pull_request
+      expect(createInputAgentType).toBe('execution');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ agentType: 'execution' })
+      );
+    });
+
     it('should include feedback in follow-up prompt', async () => {
       const deps = createDeps();
       await submitTaskFeedback(deps, {
