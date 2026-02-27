@@ -152,3 +152,4 @@ export async function generateThumbnailPrompt(
     usage: generateResult.value.usage,
   });
 }
+// Prompt version: 1.0.0
