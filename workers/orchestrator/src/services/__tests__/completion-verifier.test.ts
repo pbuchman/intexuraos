@@ -1179,6 +1179,39 @@ describe('completion-verifier', () => {
     );
   });
 
+  it('reports schema mismatch (not unavailable) when Gemini responds but schema validation fails', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          passed: true,
+          confidence: 'high',
+          reasons: ['looks good'],
+          missingCriteria: [],
+          resumeInstruction: '',
+        }),
+      },
+    });
+    createLlmClientMock.mockReturnValue({ generate });
+
+    const verifier = createVerifier();
+    const verdict = await verifier.verify({
+      taskId: 'task-schema-mismatch',
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'planning',
+      originalPrompt: 'Prepare issue',
+      rawLogs: assistantLog(validPhase1Final),
+      linearIssueLabels: [],
+    });
+
+    expect(verdict.passed).toBe(false);
+    expect(verdict.verifierFailure).toBe(true);
+    const reasonsJoined = verdict.reasons.join(' ');
+    expect(reasonsJoined).toContain('schema mismatch');
+    expect(reasonsJoined).not.toContain('unavailable');
+  });
+
   it('accepts empty resumeInstruction when Gemini returns passed verdict', async () => {
     const generate = vi.fn().mockResolvedValue({
       ok: true,
