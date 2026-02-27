@@ -984,6 +984,238 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.error?.code).toBe('EXECUTION_AGENT_ENFORCEMENT_FAILED');
     });
 
+    // ============================================================
+    // Pull Request Agent Enforcement Tests (INT-655)
+    // ============================================================
+
+    it('pull_request task rejects missing result payload', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Respond to PR comment',
+        sanitizedPrompt: 'Respond to PR comment',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-456',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'pull_request',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.code).toBe('PULL_REQUEST_AGENT_ENFORCEMENT_FAILED');
+      expect(getResult.value.error?.message).toContain('missing result payload');
+    });
+
+    it('pull_request task rejects missing prUrl', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Respond to PR comment',
+        sanitizedPrompt: 'Respond to PR comment',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-456',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'pull_request',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          comment_replied: true,
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.code).toBe('PULL_REQUEST_AGENT_ENFORCEMENT_FAILED');
+      expect(getResult.value.error?.message).toContain('prUrl');
+    });
+
+    it('pull_request task rejects missing comment_replied', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Respond to PR comment',
+        sanitizedPrompt: 'Respond to PR comment',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-456',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'pull_request',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/100',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.code).toBe('PULL_REQUEST_AGENT_ENFORCEMENT_FAILED');
+      expect(getResult.value.error?.message).toContain('comment_replied');
+    });
+
+    it('pull_request task succeeds with valid result and marks Linear In Review', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Respond to PR comment',
+        sanitizedPrompt: 'Respond to PR comment',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-456',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'pull_request',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      const addCommentSpy = vi.mocked(linearAgentClient.addComment);
+      const updateIssueStateSpy = vi.mocked(linearAgentClient.updateIssueState);
+      const linearIssueService = getServices().linearIssueService;
+      const markInReviewSpy = vi.spyOn(linearIssueService, 'markInReview');
+
+      validateIssueSpy.mockReset();
+      validateIssueSpy.mockResolvedValueOnce(
+        ok({
+          id: 'routed-uuid-456',
+          identifier: 'INT-456',
+          title: 'Pull request issue',
+          url: 'https://linear.app/intexuraos/issue/INT-456',
+          labels: ['code-task'],
+          childCount: 0,
+        })
+      );
+      addCommentSpy.mockClear();
+      updateIssueStateSpy.mockClear();
+      markInReviewSpy.mockClear();
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/100',
+          comment_replied: true,
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(addCommentSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issueId: 'routed-uuid-456',
+          body: expect.stringContaining('https://github.com/pbuchman/intexuraos/pull/100'),
+        })
+      );
+      expect(updateIssueStateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 'routed-uuid-456', state: 'in_review' })
+      );
+      expect(markInReviewSpy).not.toHaveBeenCalled();
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('implemented');
+    });
+
     it('handles execution-agent failed webhook without any Linear mutations', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
