@@ -72,12 +72,15 @@ export function createExecuteCalendarActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
+    const text =
+      typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
+
     logger.info(
-      { actionId, userId: action.userId, title: action.title },
+      { actionId, userId: action.userId, title: action.title, textLength: text.length },
       'Processing calendar action via calendar-agent'
     );
 
-    const result = await calendarServiceClient.processAction({ action });
+    const result = await calendarServiceClient.processAction({ action, text });
 
     if (!result.ok) {
       logger.error(
@@ -101,7 +104,7 @@ export function createExecuteCalendarActionUseCase(
       });
     }
 
-    const response = result.value;
+    const response = result.value; // @allow-result-access -- guarded by !result.ok at line 85
 
     if (response.status === 'failed') {
       const errorMessage = response.message;

@@ -126,9 +126,18 @@ export function createCalendarServiceHttpClient(
 
       logger.info(context, 'Processing calendar action via calendar-agent');
 
+      const requestBody = {
+        action: {
+          id: request.action.id,
+          userId: request.action.userId,
+          title: request.action.title,
+        },
+        text: request.text,
+      };
+
       const fetchResult = await fetchInternal(
         url,
-        { method: 'POST', body: request, timeoutMs: 60_000 },
+        { method: 'POST', body: requestBody, timeoutMs: 60_000 },
         config.internalAuthToken,
         logger,
         context,

@@ -22,6 +22,7 @@ export class WorktreeManager {
 
   async createWorktree(taskId: string, baseBranch: string): Promise<string> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
+    this.logger.info({ taskId, baseBranch }, 'Creating worktree');
 
     // Check if worktree already exists
     if (await this.worktreeExists(taskId)) {
@@ -62,6 +63,7 @@ export class WorktreeManager {
         await this.copySettingsLocal(worktreePath);
       }
 
+      this.logger.info({ taskId, worktreePath }, 'Worktree created');
       return worktreePath;
     } catch (error: unknown) {
       /* v8 ignore start -- test-infra: worktree creation failure requires git worktree state manipulation @preserve */
@@ -73,6 +75,7 @@ export class WorktreeManager {
 
   async removeWorktree(taskId: string): Promise<void> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
+    this.logger.info({ taskId, worktreePath }, 'Removing worktree');
 
     if (!existsSync(worktreePath)) {
       throw new Error(`Worktree for task ${taskId} does not exist at ${worktreePath}`);
@@ -89,6 +92,7 @@ export class WorktreeManager {
         throw new Error(`Failed to remove worktree: ${stderr}`);
       }
       /* v8 ignore stop @preserve */
+      this.logger.info({ taskId }, 'Worktree removed');
     } catch (error: unknown) {
       /* v8 ignore start -- test-infra: worktree removal failure requires git worktree state manipulation @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
