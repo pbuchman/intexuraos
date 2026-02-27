@@ -71,9 +71,8 @@ const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
 - superpowers_writing_plans_used: 1
 - Original issue: https://linear.app/intexuraos/issue/INT-123
 - Planning issue: ${outcome === 'planned' ? 'https://linear.app/intexuraos/issue/INT-456' : ''}
-- Trivial task: ${outcome === 'planned' ? '1' : ''}
-- Parallel breakdown proof: 
-- Plan doc: 
+- Child issues: ${outcome === 'planned' ? '1' : '0'}
+- Plan doc:
 - Planning PR: 
 - Clarification message: ${outcome === 'unclear' ? 'Need API contract details from user' : ''}
 - Summary: Planning completed`,
@@ -246,7 +245,7 @@ describe('TaskDispatcher', () => {
       outcomeLabel: 'planned' | 'unclear';
       superpowersWritingPlansUsed: '0' | '1';
       planningIssueUrl?: string;
-      trivialTask?: '0' | '1';
+      childIssueCount?: number;
       docPath?: string;
       prUrl?: string;
       clarificationMessage?: string;
