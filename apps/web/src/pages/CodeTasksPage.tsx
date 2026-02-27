@@ -326,7 +326,7 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE}`}>
               {task.linearIssue.state.name}
             </span>
-            {task.linearIssue.labels !== undefined && task.linearIssue.labels.length > 0 ? (
+            {task.linearIssue.labels.length > 0 ? (
               task.linearIssue.labels.map((label) => (
                 <span
                   key={label.id}
