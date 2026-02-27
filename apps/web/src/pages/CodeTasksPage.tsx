@@ -20,6 +20,14 @@ const LINEAR_STATE_STYLES: Record<string, string> = {
 
 const DEFAULT_STATE_STYLE = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
 
+const ISSUE_TYPE_STYLES: Record<string, string> = {
+  feature: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
+  bug: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+  refactor: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+};
+
+const DEFAULT_BADGE_STYLE = 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
+
 const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
   healthy: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-700 dark:text-emerald-100',
   'orchestrator-unreachable': 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100',
@@ -291,19 +299,50 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}>
           {status.label}
         </span>
+        {task.agentType === 'planning' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+            Planning
+          </span>
+        ) : task.agentType === 'execution' ? (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+            Execution
+          </span>
+        ) : null}
         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize text-slate-700 dark:bg-slate-700 dark:text-slate-300">
           {task.workerType}
         </span>
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
           {task.workerLocation}
         </span>
+        {task.linearIssueType !== undefined ? (
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+            ISSUE_TYPE_STYLES[task.linearIssueType] ?? DEFAULT_BADGE_STYLE
+          }`}>
+            {task.linearIssueType}
+          </span>
+        ) : null}
         {task.linearIssue !== undefined ? (
           <>
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE}`}>
               {task.linearIssue.state.name}
             </span>
+            {task.linearIssue.labels !== undefined && task.linearIssue.labels.length > 0 ? (
+              task.linearIssue.labels.map((label) => (
+                <span
+                  key={label.id}
+                  className="inline-flex items-center rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300"
+                >
+                  {label.name}
+                </span>
+              ))
+            ) : null}
             {task.linearIssue.assignee !== null ? (
               <span className="text-xs text-green-600 dark:text-green-400">{task.linearIssue.assignee.name}</span>
+            ) : null}
+            {task.linearIssue.commentCount > 0 ? (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {String(task.linearIssue.commentCount)} comments
+              </span>
             ) : null}
           </>
         ) : null}
