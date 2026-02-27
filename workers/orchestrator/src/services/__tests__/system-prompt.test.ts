@@ -84,6 +84,29 @@ describe('system-prompt', () => {
     expect(result).not.toContain('[AGENT:PLANNING]');
   });
 
+  it('includes Tracking Comment section with taskUrl in PR prompt', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+      taskUrl: 'https://intexuraos.cloud/tasks/task-123',
+    });
+
+    expect(result).toContain('### Tracking Comment');
+    expect(result).toContain('FIRST action');
+    expect(result).toContain('LAST action');
+    expect(result).toContain('https://intexuraos.cloud/tasks/task-123');
+    expect(result).toContain('Tracking comment:');
+  });
+
+  it('includes Tracking comment line in PULL_REQUEST_AGENT_FINAL contract', () => {
+    const result = buildSystemPrompt({
+      ...baseParams,
+      linearIssueLabels: ['code-task', 'pr-comment'],
+    });
+
+    expect(result).toContain('- Tracking comment: <updated|not_applicable>');
+  });
+
   it('uses agentType=execution over missing code-task label', () => {
     const result = buildSystemPrompt({
       ...baseParams,

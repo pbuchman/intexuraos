@@ -1110,6 +1110,7 @@ export class TaskDispatcher {
         '- `PR` line must be only a GitHub PR URL.',
         '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
         '- `Comment replied` line must be exactly `yes` or `no`.',
+        '- `Tracking comment` line must be exactly `updated` or `not_applicable`.',
         '- Put extra explanation in `Summary`, not on strict fields.',
       ].join('\n');
     }
@@ -1147,6 +1148,7 @@ export class TaskDispatcher {
         '- CI evidence: pnpm run ci:tracked successful',
         '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
         '- Comment replied: yes',
+        '- Tracking comment: updated',
         '- Summary: <3-5 factual sentences>',
       ].join('\n');
     }

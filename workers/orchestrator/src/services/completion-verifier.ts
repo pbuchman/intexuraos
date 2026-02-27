@@ -154,7 +154,7 @@ function buildDefaultResumeInstruction(
     return `Address: ${joined}. Re-run pnpm run ci:tracked, ensure it succeeds, and finish with EXECUTION_AGENT_FINAL.`;
   }
   if (agentType === 'pull_request') {
-    return `Address: ${joined}. Push changes to the PR branch, reply to the comment, and finish with PULL_REQUEST_AGENT_FINAL.`;
+    return `Address: ${joined}. Push changes to the PR branch, update the tracking comment, reply to the comment, and finish with PULL_REQUEST_AGENT_FINAL.`;
   }
   /* v8 ignore stop @preserve */
   return `Address: ${joined}. Finish with PLANNING_AGENT_FINAL and include planning outcome metadata.`;
@@ -417,12 +417,14 @@ function verifyPRCommentFinal(message: string): { ok: true } | { ok: false; miss
   const ciMatch = /- CI evidence:\s*pnpm run ci:tracked successful\s*$/im.exec(message);
   const linearMatch = /- Linear issue:\s*(https:\/\/linear\.app\/\S+)\s*$/im.exec(message);
   const commentMatch = /- Comment replied:\s*(yes|no)\s*$/im.exec(message);
+  const trackingMatch = /- Tracking comment:\s*(updated|not_applicable)\s*$/im.exec(message);
   const summaryMatch = /- Summary:\s*(.+)\s*$/im.exec(message);
 
   if (prMatch?.[1] === undefined) missing.push('PR URL line');
   if (ciMatch?.[0] === undefined) missing.push('CI evidence line');
   if (linearMatch?.[1] === undefined) missing.push('Linear issue URL line');
   if (commentMatch?.[1] === undefined) missing.push('Comment replied line');
+  if (trackingMatch?.[1] === undefined) missing.push('Tracking comment line');
   if ((summaryMatch?.[1] ?? '').trim() === '') missing.push('Summary line');
 
   if (missing.length > 0) {
@@ -715,6 +717,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
               '- CI evidence: pnpm run ci:tracked successful',
               '- Linear issue: <full Linear URL>',
               '- Comment replied: <yes|no>',
+              '- Tracking comment: <updated|not_applicable>',
               '- Summary: <3-5 sentences>',
             ].join('\n')
           : [

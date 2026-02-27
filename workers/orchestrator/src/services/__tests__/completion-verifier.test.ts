@@ -1222,6 +1222,7 @@ describe('completion-verifier', () => {
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
 - Comment replied: yes
+- Tracking comment: updated
 - Summary: Investigated PR comment requesting auth fix. Implemented changes to middleware. CI passes. Pushed to existing branch and replied to commenter.`;
 
     const result = CompletionVerifierTestUtils.verifyPRCommentFinal(validPRCommentFinal);
@@ -1233,12 +1234,40 @@ describe('completion-verifier', () => {
 - PR: https://github.com/intexuraos/intexuraos/pull/42
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
+- Tracking comment: updated
 - Summary: Did some work.`;
 
     const result = CompletionVerifierTestUtils.verifyPRCommentFinal(missingCommentReply);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected invalid result');
     expect(result.missing).toContain('Comment replied line');
+  });
+
+  it('detects missing Tracking comment line in PULL_REQUEST_AGENT_FINAL', () => {
+    const missingTracking = `PULL_REQUEST_AGENT_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/42
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-100
+- Comment replied: yes
+- Summary: Did some work.`;
+
+    const result = CompletionVerifierTestUtils.verifyPRCommentFinal(missingTracking);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected invalid result');
+    expect(result.missing).toContain('Tracking comment line');
+  });
+
+  it('accepts not_applicable value for Tracking comment line', () => {
+    const notApplicable = `PULL_REQUEST_AGENT_FINAL:
+- PR: https://github.com/intexuraos/intexuraos/pull/42
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/intexuraos/issue/INT-100
+- Comment replied: yes
+- Tracking comment: not_applicable
+- Summary: Did some work with tracking comment not applicable.`;
+
+    const result = CompletionVerifierTestUtils.verifyPRCommentFinal(notApplicable);
+    expect(result.ok).toBe(true);
   });
 
   it('builds pr-comment-specific default resume instruction', () => {
@@ -1248,6 +1277,7 @@ describe('completion-verifier', () => {
 
     expect(instruction).toContain('PULL_REQUEST_AGENT_FINAL');
     expect(instruction).toContain('Push changes');
+    expect(instruction).toContain('update the tracking comment');
     expect(instruction).toContain('reply to the comment');
   });
 
@@ -1299,6 +1329,7 @@ describe('completion-verifier', () => {
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
 - Comment replied: yes
+- Tracking comment: updated
 - Summary: Addressed the PR comment by implementing the requested fix. CI passes.`;
 
     const verifier = createVerifier();
@@ -1340,6 +1371,7 @@ describe('completion-verifier', () => {
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
 - Comment replied: yes
+- Tracking comment: updated
 - Summary: Attempted fix but CI fails.`;
 
     const verifier = createVerifier();
@@ -1374,6 +1406,7 @@ describe('completion-verifier', () => {
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
 - Comment replied: yes
+- Tracking comment: updated
 - Summary: Done.`;
 
     const verifier = createVerifier();
@@ -1413,6 +1446,7 @@ describe('completion-verifier', () => {
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: https://linear.app/intexuraos/issue/INT-100
 - Comment replied: yes
+- Tracking comment: updated
 - Summary: Done.`;
 
     const verifier = createVerifier();
