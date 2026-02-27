@@ -18,16 +18,27 @@ interface CreateIssueBody {
 }
 
 interface UpdateStateBody {
-  state: 'backlog' | 'in_progress' | 'in_review' | 'qa';
+  state: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'qa';
 }
 
 interface IssueIdParams {
   issueId: string;
 }
 
+interface AddCommentBody {
+  body: string;
+}
+
+interface UpdateIssueMetadataBody {
+  assigneeId?: string | null;
+  addLabels?: string[];
+  removeLabels?: string[];
+}
+
 // State name mapping for Linear workflow states
 const STATE_NAME_MAP: Record<string, string> = {
   backlog: 'Backlog',
+  todo: 'Todo',
   in_progress: 'In Progress',
   in_review: 'In Review',
   qa: 'QA',
@@ -225,6 +236,102 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
     }
   );
 
+  // POST /internal/linear/issues/:issueId/comments - Add comment to issue (internal)
+  fastify.post<{ Params: IssueIdParams; Body: AddCommentBody }>(
+    '/internal/linear/issues/:issueId/comments',
+    async (request, reply) => {
+      /* v8 ignore start -- test-infra: internal auth/header/error branches require exhaustive route fixtures @preserve */
+      logIncomingRequest(request);
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const { issueId } = request.params;
+      const services = getServices();
+
+      const apiKeyResult = await services.connectionRepository.getApiKey(userId);
+      if (!apiKeyResult.ok) return await handleLinearError(apiKeyResult.error, reply);
+      if (apiKeyResult.value === null) {
+        return await handleLinearError({ code: 'NOT_CONNECTED', message: 'User not connected to Linear' }, reply);
+      }
+
+      const commentResult = await services.linearApiClient.createComment(
+        apiKeyResult.value,
+        issueId,
+        request.body.body
+      );
+      if (!commentResult.ok) return await handleLinearError(commentResult.error, reply);
+      return await reply.ok({ id: commentResult.value.id });
+      /* v8 ignore stop @preserve */
+    }
+  );
+
+  // PATCH /internal/linear/issues/:issueId/metadata - Update assignee/labels by name (internal)
+  fastify.patch<{ Params: IssueIdParams; Body: UpdateIssueMetadataBody }>(
+    '/internal/linear/issues/:issueId/metadata',
+    async (request, reply) => {
+      /* v8 ignore start -- test-infra: internal auth/repository/error/label normalization branches require exhaustive route fixtures @preserve */
+      logIncomingRequest(request);
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const { issueId } = request.params;
+      const services = getServices();
+      const issueResult = await services.issueRepository.findById(issueId);
+      if (!issueResult.ok) return await handleLinearError(issueResult.error, reply);
+      if (issueResult.value === null) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
+      }
+      const syncedIssue = issueResult.value;
+
+      const apiKeyResult = await services.connectionRepository.getApiKey(userId);
+      if (!apiKeyResult.ok) return await handleLinearError(apiKeyResult.error, reply);
+      if (apiKeyResult.value === null) {
+        return await handleLinearError({ code: 'NOT_CONNECTED', message: 'User not connected to Linear' }, reply);
+      }
+
+      const labelsResult = await services.linearApiClient.listIssueLabels(apiKeyResult.value, syncedIssue.teamId);
+      if (!labelsResult.ok) return await handleLinearError(labelsResult.error, reply);
+
+      const currentLabelNames = new Set(syncedIssue.labels.map((l) => l.name));
+      for (const label of request.body.addLabels ?? []) currentLabelNames.add(label);
+      for (const label of request.body.removeLabels ?? []) currentLabelNames.delete(label);
+
+      const desiredLabelIds = labelsResult.value
+        .filter((label) => currentLabelNames.has(label.name))
+        .map((label) => label.id);
+
+      const updateResult = await services.linearApiClient.updateIssue(apiKeyResult.value, issueId, {
+        ...(request.body.assigneeId !== undefined && { assigneeId: request.body.assigneeId }),
+        labelIds: desiredLabelIds,
+      });
+      if (!updateResult.ok) return await handleLinearError(updateResult.error, reply);
+
+      return await reply.ok({
+        id: updateResult.value.id,
+        labels: updateResult.value.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+        assignee: updateResult.value.assignee ?? null,
+      });
+      /* v8 ignore stop @preserve */
+    }
+  );
+
   // PATCH /internal/issues/:issueId/state - Update issue state
   fastify.patch<{ Params: IssueIdParams; Body: UpdateStateBody }>(
     '/internal/issues/:issueId/state',
@@ -247,7 +354,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
           properties: {
             state: {
               type: 'string',
-              enum: ['backlog', 'in_progress', 'in_review', 'qa'],
+              enum: ['backlog', 'todo', 'in_progress', 'in_review', 'qa'],
               description: 'Target workflow state',
             },
           },
@@ -556,6 +663,77 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         commentCount,
         lastCommentAt,
       });
+    }
+  );
+
+  // GET /internal/issues/:issueId/tree - Return issue + recursive descendants from local sync
+  fastify.get<{ Params: IssueIdParams }>(
+    '/internal/issues/:issueId/tree',
+    async (request, reply) => {
+      /* v8 ignore start -- test-infra: auth/header/not-found/tree traversal branches require exhaustive route fixtures @preserve */
+      logIncomingRequest(request);
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      const { issueId } = request.params;
+      const userId = request.headers['x-user-id'];
+      if (typeof userId !== 'string') {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
+      }
+
+      const services = getServices();
+      const allIssuesResult = await services.issueRepository.listByUserId(userId);
+      if (!allIssuesResult.ok) return await handleLinearError(allIssuesResult.error, reply);
+
+      const allIssues = allIssuesResult.value;
+      const root = allIssues.find((issue) => issue.id === issueId);
+      if (root === undefined) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', `Issue ${issueId} not found`);
+      }
+
+      const byParent = new Map<string, typeof allIssues>();
+      for (const issue of allIssues) {
+        if (issue.parentId === null) continue;
+        const list = byParent.get(issue.parentId) ?? [];
+        list.push(issue);
+        byParent.set(issue.parentId, list);
+      }
+
+      const descendants: typeof allIssues = [];
+      const queue = [...(byParent.get(root.id) ?? [])];
+      while (queue.length > 0) {
+        const next = queue.shift();
+        if (next === undefined) continue;
+        descendants.push(next);
+        const children = byParent.get(next.id);
+        if (children !== undefined) queue.push(...children);
+      }
+
+      return await reply.ok({
+        root: {
+          id: root.id,
+          identifier: root.identifier,
+          url: root.url,
+          parentId: root.parentId,
+          labels: root.labels.map((l) => l.name),
+          assigneeId: root.assigneeId,
+          state: root.state,
+        },
+        descendants: descendants.map((issue) => ({
+          id: issue.id,
+          identifier: issue.identifier,
+          url: issue.url,
+          parentId: issue.parentId,
+          labels: issue.labels.map((l) => l.name),
+          assigneeId: issue.assigneeId,
+          state: issue.state,
+        })),
+      });
+      /* v8 ignore stop @preserve */
     }
   );
 

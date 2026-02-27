@@ -39,7 +39,7 @@ interface WorkerTaskRequest {
   systemPromptHash: string;
   repository: string;
   baseBranch: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   webhookUrl: string;
   webhookSecret: string;
   /** Labels from the validated Linear issue */
@@ -48,6 +48,7 @@ interface WorkerTaskRequest {
   hasChildren: boolean;
   linearIssueId?: string;
   traceId?: string;
+  agentType?: 'planning' | 'execution' | 'pull_request';
 }
 
 /**
@@ -107,6 +108,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     // Only add traceId if provided
     if (request.traceId !== undefined) {
       taskRequest.traceId = request.traceId;
+    }
+    if (request.agentType !== undefined) {
+      taskRequest.agentType = request.agentType;
     }
 
     const body = JSON.stringify(taskRequest);

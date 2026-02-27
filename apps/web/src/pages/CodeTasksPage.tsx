@@ -34,13 +34,13 @@ interface StatusStyle {
 }
 
 const ALL_TASK_STATUSES: CodeTaskStatus[] = [
-  'dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled',
+  'dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled',
 ];
 
 const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
   dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched' },
   running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running' },
-  designed: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Designed' },
+  planned: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Planned' },
   implemented: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Implemented' },
   failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed' },
   interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted' },
@@ -340,7 +340,7 @@ function CodeTaskCard({ task, workersStatus, onDelete }: CodeTaskCardProps): Rea
       <div className="mt-3 flex items-center justify-between">
         <div className="flex gap-4 text-sm text-slate-500 dark:text-slate-400">
           <span>Created: {formatDateTime(task.createdAt)}</span>
-          {(task.status === 'designed' || task.status === 'implemented') ? (
+          {(task.status === 'planned' || task.status === 'implemented') ? (
             <span>Completed: {formatDateTime(task.updatedAt)}</span>
           ) : null}
         </div>

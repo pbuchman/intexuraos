@@ -128,13 +128,13 @@ interface Action {
 
 **Features:**
 
-- Task list with multi-status filtering (dispatched, running, designed, implemented, failed, interrupted, cancelled) and cursor-based pagination
+- Task list with multi-status filtering (dispatched, running, planned, implemented, failed, interrupted, cancelled) and cursor-based pagination
 - Filter state persists in localStorage across page refreshes
 - Task creation with markdown editor, model selection (auto/opus/glm), and Linear issue linking (via `LinearIssueSelectorModal`)
 - Task detail view (`CodeTaskViewPage`) with:
   - Real-time `LogStream` component (Firestore-backed, custom CSS color-coded log lines)
   - Collapsible tool output blocks: `[tool]` tagged lines and subsequent indented lines group into expandable sections, preventing long tool results from overwhelming the log
-  - Two-phase design/execution flow with `DesignTaskBanner` (violet, links to design) and `ImplementationLinkBanner` (emerald, links to implementation)
+  - Agent-based planning/execution flow with `DesignTaskBanner` (violet, links to planning task) and `ImplementationLinkBanner` (emerald, links to implementation)
   - Queue-based follow-up messaging without interrupting running tasks
   - Worker offline banner with worker name
   - Copy-all-logs button
@@ -145,12 +145,12 @@ interface Action {
 - GitHub PR events aggregated view (`GET /code/github-pr-events`)
 - Standardized delete confirmations
 
-**Two-Phase Code Task Flow:**
+**Agent-Based Code Task Flow:**
 
 ```
-executionPhase: 'design'  -> Shows ImplementationLinkBanner when implementationTaskId is set
-executionPhase: 'execution' -> Shows DesignTaskBanner linking back to design task
-No executionPhase -> Single-phase task, no banner
+agentType: 'planning'  -> Shows ImplementationLinkBanner when implementationTaskId is set
+agentType: 'execution' -> Shows DesignTaskBanner linking back to planning task
+No agentType -> Single-phase task, no banner
 ```
 
 ### GitHub PR Events
@@ -292,13 +292,13 @@ No executionPhase -> Single-phase task, no banner
 6. Opens ActionDetailModal
 ```
 
-### Pattern 4: Code Task Two-Phase Navigation
+### Pattern 4: Code Task Agent-Based Navigation
 
 ```
-1. User views design task -> ImplementationLinkBanner renders if implementationTaskId present
+1. User views planning task -> ImplementationLinkBanner renders if implementationTaskId present
 2. User clicks banner link -> Navigates to /code-tasks/:implementationTaskId
 3. CodeTaskViewPage remounts (key={id}) for the implementation task
-4. Execution phase log stream shows live progress
+4. Execution agent log stream shows live progress
 ```
 
 ### Pattern 5: PR Events Lazy Loading

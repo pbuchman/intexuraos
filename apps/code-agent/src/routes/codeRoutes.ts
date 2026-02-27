@@ -11,12 +11,12 @@ import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
-import { submitToPhase2 } from '../domain/usecases/submitToPhase2.js';
+import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { randomUUID } from 'node:crypto';
-import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
+import { generateWebhookSecret } from '../domain/utils/secrets.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
 import { loadConfig } from '../config.js';
 
@@ -43,14 +43,14 @@ const codeTaskSchema = {
     prompt: { type: 'string' },
     sanitizedPrompt: { type: 'string' },
     systemPromptHash: { type: 'string' },
-    workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+    workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'] },
     workerLocation: { type: 'string' },
     repository: { type: 'string' },
     baseBranch: { type: 'string' },
     traceId: { type: 'string' },
     status: {
       type: 'string',
-      enum: ['dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled'],
+      enum: ['dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled'],
     },
     dedupKey: { type: 'string' },
     callbackReceived: { type: 'boolean' },
@@ -62,7 +62,7 @@ const codeTaskSchema = {
     linearIssueTitle: { type: 'string', nullable: true },
     linearIssueUrl: { type: 'string', nullable: true },
     linearFallback: { type: 'boolean', nullable: true },
-    executionPhase: { type: 'string', enum: ['design', 'execution'] },
+    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
     implementationTaskId: { type: 'string' },
     parentTaskId: { type: 'string' },
     followUpReason: { type: 'string' },
@@ -144,12 +144,12 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   workerLocation: string;
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
+  status: 'dispatched' | 'running' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: unknown;
@@ -160,7 +160,7 @@ function taskToApiResponse(task: {
   linearIssueTitle?: string;
   linearIssueUrl?: string;
   linearFallback?: boolean;
-  executionPhase?: 'design' | 'execution';
+  agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: string;
@@ -193,12 +193,12 @@ function taskToApiResponse(task: {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   workerLocation: string;
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: 'dispatched' | 'running' | 'designed' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
+  status: 'dispatched' | 'running' | 'planned' | 'implemented' | 'failed' | 'interrupted' | 'cancelled';
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;
@@ -209,7 +209,7 @@ function taskToApiResponse(task: {
   linearIssueTitle?: string;
   linearIssueUrl?: string;
   linearFallback?: boolean;
-  executionPhase?: 'design' | 'execution';
+  agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
   followUpReason?: string;
@@ -270,7 +270,7 @@ function taskToApiResponse(task: {
     ...(task.linearFallback !== undefined && { linearFallback: task.linearFallback }),
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
-    ...(task.executionPhase !== undefined && { executionPhase: task.executionPhase }),
+    ...(task.agentType !== undefined && { agentType: task.agentType }),
     /* v8 ignore stop @preserve */
     /* v8 ignore start -- ts-type: optional property spread @preserve */
     ...(task.implementationTaskId !== undefined && { implementationTaskId: task.implementationTaskId }),
@@ -304,7 +304,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       userId: string;
       payload: {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'glm';
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -328,7 +328,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               type: 'object',
               properties: {
                 prompt: { type: 'string' },
-                workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+                workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'] },
                 linearIssueId: { type: 'string' },
                 repository: { type: 'string' },
                 baseBranch: { type: 'string' },
@@ -423,7 +423,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/code/process',
       });
@@ -458,7 +458,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         approvalEventId: string;
         userId: string;
         prompt: string;
-        workerType: 'opus' | 'auto' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
@@ -493,6 +493,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         processRequest
       );
@@ -572,7 +573,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
   fastify.patch<{
     Params: { taskId: string };
     Body: {
-      status?: 'designed' | 'implemented' | 'failed' | 'interrupted';
+      status?: 'planned' | 'implemented' | 'failed' | 'interrupted';
       result?: {
         branch: string;
         commits: number;
@@ -618,7 +619,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             status: {
               type: 'string',
-              enum: ['designed', 'implemented', 'failed', 'interrupted'],
+              enum: ['planned', 'implemented', 'failed', 'interrupted'],
             },
             result: {
               type: 'object',
@@ -719,7 +720,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request: FastifyRequest<{
         Params: { taskId: string };
         Body: {
-          status?: 'designed' | 'implemented' | 'failed' | 'interrupted';
+          status?: 'planned' | 'implemented' | 'failed' | 'interrupted';
           result?: {
             branch: string;
             commits: number;
@@ -795,7 +796,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Record task completion for rate limiting (decrement concurrent, update cost)
       // Do this for terminal states: completed, failed, cancelled, interrupted
       /* v8 ignore start -- ts-type: optional chaining and array includes create type narrowing branches @preserve */
-      const terminalStatuses = ['designed', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
+      const terminalStatuses = ['planned', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
       /* v8 ignore stop @preserve */
       /* v8 ignore start -- ts-type: terminal status includes check @preserve */
       if (body.status !== undefined && terminalStatuses.includes(body.status)) {
@@ -1003,7 +1004,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
   fastify.post<{
     Body: {
       prompt: string;
-      workerType?: 'opus' | 'auto' | 'glm';
+      workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       workerLocation?: string;
       linearIssueId?: string;
       linearIssueTitle?: string;
@@ -1021,7 +1022,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           type: 'object',
           properties: {
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
-            workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+            workerType: { type: 'string', enum: ['opus', 'auto', 'sonnet', 'minimax', 'glm'] },
             workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
             linearIssueTitle: { type: 'string' },
@@ -1148,7 +1149,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/submit',
         includeParams: true,
@@ -1157,7 +1158,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo } = getServices();
       const body = request.body as {
         prompt: string;
-        workerType?: 'opus' | 'auto' | 'glm';
+        workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         workerLocation?: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
@@ -1207,7 +1208,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         prompt: string;
         sanitizedPrompt: string;
         systemPromptHash: string;
-        workerType: 'opus' | 'auto' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         workerLocation: string;
         repository: string;
         baseBranch: string;
@@ -1217,7 +1218,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueTitle?: string;
         linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
         linearFallback?: boolean;
-        executionPhase: 'design' | 'execution';
+        agentType: 'planning' | 'execution';
       } = {
         id: taskId,
         userId,
@@ -1230,7 +1231,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         webhookSecret,
-        executionPhase: hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'design',
+        agentType: hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning',
       };
 
       // Save linearIssueId if available (linking to existing issue)
@@ -1356,11 +1357,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         systemPromptHash: string;
         repository: string;
         baseBranch: string;
-        workerType: 'opus' | 'auto' | 'glm';
+        workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
         webhookUrl: string;
         webhookSecret: string;
         linearIssueLabels: string[];
         hasChildren: boolean;
+        agentType: 'planning' | 'execution' | 'pull_request';
         workerCredentials: { workers: Array<{ name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }> };
       } = {
         taskId: task.id,
@@ -1373,6 +1375,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         webhookSecret,
         linearIssueLabels: issueResult.linearIssueLabels,
         hasChildren: issueResult.hasChildren,
+        /* v8 ignore start -- ts-type: nullish coalescing on optional agentType with label fallback @preserve */
+        agentType: task.agentType ?? (hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning'),
+        /* v8 ignore stop @preserve */
         workerCredentials,
       };
 
@@ -1519,7 +1524,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
 
       // Parse comma-separated status filter (matching actions-agent pattern)
-      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'designed', 'implemented', 'failed', 'interrupted', 'cancelled'];
+      const validStatuses: TaskStatus[] = ['dispatched', 'running', 'planned', 'implemented', 'failed', 'interrupted', 'cancelled'];
       let statusFilter: TaskStatus[] | undefined;
       if (request.query.status !== undefined) {
         statusFilter = request.query.status
@@ -1614,7 +1619,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   linearIssueId: { type: 'string' },
                   linearIssueTitle: { type: 'string' },
                   linearFallback: { type: 'boolean' },
-                  executionPhase: { type: 'string', enum: ['design', 'execution'] },
+                  agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request'] },
                   implementationTaskId: { type: 'string' },
                   parentTaskId: { type: 'string' },
                   followUpReason: { type: 'string' },
@@ -3079,6 +3084,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         retryRequest
       );
@@ -3270,6 +3276,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         {
           originalTaskId: taskId,
@@ -3315,15 +3322,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
-  // POST /code/tasks/:taskId/implement - Start Phase 2 implementation from a completed design task
+  // POST /code/tasks/:taskId/implement - Start Execution Agent implementation from a completed planning task
   fastify.post(
     '/code/tasks/:taskId/implement',
     {
       onRequest: jwtValidator,
       schema: {
-        operationId: 'submitToPhase2',
-        summary: 'Start Phase 2 implementation from a completed design task',
-        description: 'Dispatches a Phase 2 strict-execution task from a completed Phase 1 design task. Requires Auth0 JWT.',
+        operationId: 'submitToExecutionAgent',
+        summary: 'Start Execution Agent implementation from a completed planning task',
+        description: 'Dispatches an Execution Agent task from a completed planning task. Route path remains stable for UI compatibility. Requires Auth0 JWT.',
         tags: ['public'],
         params: {
           type: 'object',
@@ -3331,13 +3338,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             taskId: {
               type: 'string',
-              description: 'The ID of the completed Phase 1 design task',
+                  description: 'The ID of the completed planning task',
             },
           },
         },
         response: {
           200: {
-            description: 'Phase 2 task dispatched successfully',
+            description: 'Execution Agent task dispatched successfully',
             type: 'object',
             required: ['success', 'data'],
             properties: {
@@ -3458,9 +3465,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       /* v8 ignore stop @preserve */
 
-      request.log.info({ taskId, userId }, 'Processing Phase 2 implementation request');
+      request.log.info({ taskId, userId }, 'Processing Execution Agent implementation request');
 
-      const result = await submitToPhase2(
+      const result = await submitToExecutionAgent(
         {
           logger: request.log,
           codeTaskRepo,
@@ -3470,6 +3477,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient,
           workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         { originalTaskId: taskId, userId }
       );

@@ -10,20 +10,14 @@ import type { CodeTask } from './client.js';
 /**
  * Terminal task statuses that won't change.
  */
-const TERMINAL_STATUSES = [
-  'designed',
-  'implemented',
-  'failed',
-  'cancelled',
-  'interrupted',
-] as const;
+const TERMINAL_STATUSES = ['planned', 'implemented', 'failed', 'cancelled', 'interrupted'] as const;
 
 /**
- * Success terminal statuses (task completed a phase successfully).
- * Whether a task ends as 'designed' or 'implemented' depends on whether
+ * Success terminal statuses (task completed successfully).
+ * Whether a task ends as 'planned' or 'implemented' depends on whether
  * the Linear issue has the code-task label — don't hardcode one.
  */
-const SUCCESS_STATUSES = ['designed', 'implemented'] as const;
+const SUCCESS_STATUSES = ['planned', 'implemented'] as const;
 type SuccessStatus = (typeof SUCCESS_STATUSES)[number];
 
 /**
@@ -88,7 +82,7 @@ export async function waitForTaskStatus(
 }
 
 /**
- * Poll until task reaches a success terminal status ('designed' or 'implemented').
+ * Poll until task reaches a success terminal status ('planned' or 'implemented').
  *
  * Use this instead of waitForTaskStatus when you don't know which phase will
  * complete — it depends on whether the Linear issue has the code-task label.

@@ -13,7 +13,7 @@ export interface CreateTaskInput {
   prompt: string;
   sanitizedPrompt: string;
   systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
   workerLocation: string;
   repository: string;
   baseBranch: string;
@@ -37,8 +37,8 @@ export interface CreateTaskInput {
 
   // Follow-up tracking (INT-465)
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
-  executionPhase?: 'design' | 'execution';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
+  agentType?: 'planning' | 'execution' | 'pull_request';
 }
 
 export interface UpdateTaskInput {

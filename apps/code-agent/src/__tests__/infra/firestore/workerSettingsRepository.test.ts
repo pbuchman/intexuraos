@@ -687,4 +687,117 @@ describe('workerSettingsRepository', () => {
       }
     });
   });
+
+  describe('findByGitHubUsername', () => {
+    it('should return null when no user has the GitHub username', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Add worker without githubUsername
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+
+      const result = await repo.findByGitHubUsername('unknown-user');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe(null);
+      }
+    });
+
+    it('should return null when user has no enabled workers', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Directly set githubUsername with disabled worker via Firestore
+      const collection = fakeFirestore.collection('code_worker_settings');
+      await collection.doc('user-456').set({
+        userId: 'user-456',
+        workers: [{
+          name: 'home-mac',
+          url: 'https://worker.example.com',
+          cfAccessClientId: 'encrypted-id',
+          cfAccessClientSecret: 'encrypted-secret',
+          dispatchSigningSecret: 'encrypted-signing',
+          enabled: false,
+        }],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        githubUsername: 'disabled-user',
+      });
+
+      const result = await repo.findByGitHubUsername('disabled-user');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe(null);
+      }
+    });
+
+    // Note: Query-based tests require Firestore indexing which is complex in fake Firestore.
+    // The method implementation is tested via integration tests in webhooks.test.ts
+  });
+
+  describe('updateGitHubUsername', () => {
+    it('should update githubUsername for existing document', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // First add a worker to create the document
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+
+      // Now update the githubUsername
+      const result = await repo.updateGitHubUsername('user-1', 'octocat');
+
+      expect(result.ok).toBe(true);
+
+      // Verify the update
+      const settingsResult = await repo.getSettings('user-1');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.githubUsername).toBe('octocat');
+      }
+    });
+
+    it('should create document with githubUsername when no document exists', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Update githubUsername for user with no settings
+      const result = await repo.updateGitHubUsername('new-user', 'new-user');
+
+      expect(result.ok).toBe(true);
+
+      // Verify the document was created with empty workers and githubUsername
+      const settingsResult = await repo.getSettings('new-user');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.githubUsername).toBe('new-user');
+        expect(settingsResult.value.workers).toHaveLength(0);
+      }
+    });
+
+    it('should return githubUsername in getSettings after update', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create document with githubUsername
+      await repo.updateGitHubUsername('test-user', 'testuser');
+
+      // Verify getSettings returns the githubUsername
+      const result = await repo.getSettings('test-user');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.githubUsername).toBe('testuser');
+      }
+    });
+  });
 });

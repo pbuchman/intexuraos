@@ -131,7 +131,7 @@ None. The service uses current versions of:
 | Date       | Issue                                                | Resolution                                                       |
 | ---------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
 | 2026-02-21 | Webhook dedup action IDs could collide               | Unique actionId format: `webhook-assign-{id}-{timestamp}`        |
-| 2026-02-21 | Auto-trigger prompt misaligned with Phase 1 design   | Aligned prompt to analyze/enrich/mark-ready behavior             |
+| 2026-02-21 | Auto-trigger prompt misaligned with planning agent   | Aligned prompt to analyze/enrich/mark-ready behavior             |
 | 2026-02-20 | Assignee lost during full sync                       | Fetch assignee data from Linear API in listIssues (INT-573)      |
 | 2026-02-20 | Assignee missing from dashboard response             | Include assignee in syncedToLinearIssue mapper                   |
 | 2026-02-20 | Raw errors not passed to pino logger                 | Pass raw error objects to logger for structured logging          |

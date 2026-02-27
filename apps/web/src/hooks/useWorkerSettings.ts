@@ -11,6 +11,7 @@ import {
   deleteWorker as deleteWorkerApi,
   testWorkerConnectivity,
   reorderWorkers as reorderWorkersApi,
+  saveGitHubUsername as saveGitHubUsernameApi,
 } from '@/services/workerSettingsApi';
 import type {
   WorkerSettingsResponse,
@@ -29,6 +30,7 @@ interface UseWorkerSettingsResult {
   deleteWorker: (workerName: string) => Promise<void>;
   testConnectivity: (workerName: string) => Promise<TestWorkerConnectivityResponse>;
   reorderWorkers: (workerNames: string[]) => Promise<void>;
+  saveGitHubUsername: (githubUsername: string) => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
 }
 
@@ -178,6 +180,23 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     [user?.sub, getAccessToken, refresh]
   );
 
+  const handleSaveGitHubUsername = useCallback(
+    async (githubUsername: string): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      try {
+        const token = await getAccessToken();
+        await saveGitHubUsernameApi(token, { githubUsername });
+        await refresh(false);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to save GitHub username'));
+        throw err;
+      }
+    },
+    [user?.sub, getAccessToken, refresh]
+  );
+
   return {
     settings,
     loading,
@@ -188,6 +207,7 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     deleteWorker: handleDeleteWorker,
     testConnectivity,
     reorderWorkers: handleReorderWorkers,
+    saveGitHubUsername: handleSaveGitHubUsername,
     refresh,
   };
 }

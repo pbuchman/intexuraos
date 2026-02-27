@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Worker type validation
-export const WorkerTypeSchema = z.enum(['opus', 'auto', 'glm']);
+export const WorkerTypeSchema = z.enum(['opus', 'auto', 'sonnet', 'minimax', 'glm']);
 
 // Task status validation
 export const TaskStatusSchema = z.enum([
@@ -37,6 +37,7 @@ export const CreateTaskRequestSchema = z.object({
   webhookUrl: z.string().url(),
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
+  agentType: z.enum(['planning', 'execution', 'pull_request']).optional(),
 });
 
 // POST /tasks/:id/message request schema

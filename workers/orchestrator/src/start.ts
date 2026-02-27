@@ -152,9 +152,27 @@ function validatePortAvailable(port: number): void {
  * Warns (does not exit) so tasks of one type can still run if the other fails.
  */
 /* v8 ignore start -- test-infra: startup validation with network call @preserve */
+async function fetchWithRetry(
+  input: string,
+  init: RequestInit & { signal?: AbortSignal },
+  retries = 3,
+  delayMs = 2000
+): Promise<Response> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(10_000) });
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+    }
+  }
+  throw new Error('fetchWithRetry: unreachable');
+}
+
 async function validateWorkerApiKeys(
   credentialMonitor: CredentialMonitor,
   zaiKey: string,
+  minimaxKey: string,
   logger: pino.Logger
 ): Promise<void> {
   const suffix = (key: string): string => (key.length > 4 ? '...' + key.slice(-4) : '****');
@@ -181,10 +199,9 @@ async function validateWorkerApiKeys(
   if (zaiKey !== '') {
     const keySuffix = suffix(zaiKey);
     try {
-      const resp = await fetch('https://api.z.ai/api/anthropic/v1/models', {
+      const resp = await fetchWithRetry('https://api.z.ai/api/anthropic/v1/models', {
         method: 'GET',
         headers: { 'x-api-key': zaiKey, 'anthropic-version': '2023-06-01' },
-        signal: AbortSignal.timeout(10_000),
       });
       if (resp.ok) {
         logger.info({ apiKey: keySuffix }, 'ZAI_API_KEY validated successfully');
@@ -198,6 +215,38 @@ async function validateWorkerApiKeys(
       logger.warn(
         { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
         'ZAI_API_KEY validation request failed (network issue) — key may still be valid'
+      );
+    }
+  }
+
+  if (minimaxKey !== '') {
+    const keySuffix = suffix(minimaxKey);
+    try {
+      const resp = await fetchWithRetry('https://api.minimax.io/anthropic/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': minimaxKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'MiniMax-M2.5',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'ping' }],
+        }),
+      });
+      if (resp.ok) {
+        logger.info({ apiKey: keySuffix }, 'MINIMAX_API_KEY validated successfully');
+      } else {
+        logger.error(
+          { status: resp.status, apiKey: keySuffix },
+          'MINIMAX_API_KEY validation failed — minimax tasks will fail'
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error), apiKey: keySuffix },
+        'MINIMAX_API_KEY validation request failed (network issue) — key may still be valid'
       );
     }
   }
@@ -363,6 +412,14 @@ async function bootstrap(): Promise<void> {
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
 
+  let codeVersion = 'unknown';
+  try {
+    codeVersion = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    // git may not be available in all environments
+  }
+  logger.info({ codeVersion, nodeVersion: process.version }, 'Orchestrator code version');
+
   // Ensure repository is cloned and up-to-date
   await ensureRepository(repoUrl, repoPath, logger);
 
@@ -434,6 +491,18 @@ async function bootstrap(): Promise<void> {
   if (keepContainersAlive) {
     logger.info({}, 'Debug mode: containers will be kept alive after task completion');
   }
+  const workerForensicsMode = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_FORENSICS', '0') === '1';
+  const workerForensicsBasePath = getOptionalEnv(
+    'INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH',
+    join(orchestratorDir, 'forensics')
+  );
+  if (workerForensicsMode) {
+    ensureDirectoryExists(workerForensicsBasePath);
+    logger.warn(
+      { workerForensicsBasePath },
+      'Claude worker forensics mode enabled (core dumps, exec stream persistence, crash snapshots)'
+    );
+  }
   const preserveFailedContainers =
     getOptionalEnv('INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS', '1') !== '0';
   const sharedCredsPath = join(orchestratorDir, 'claude-creds');
@@ -446,6 +515,8 @@ async function bootstrap(): Promise<void> {
       keepContainersAlive,
       imageName: workerImage,
       sharedCredsPath,
+      forensicsMode: workerForensicsMode,
+      forensicsBasePath: workerForensicsBasePath,
       ...(gitUserName !== undefined ? { gitUserName } : {}),
       ...(gitUserEmail !== undefined ? { gitUserEmail } : {}),
     },
@@ -499,6 +570,7 @@ async function bootstrap(): Promise<void> {
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     ZAI_API_KEY: getRequiredEnv('INTEXURAOS_ZAI_APP_API_KEY'),
+    MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
   };
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
@@ -518,7 +590,13 @@ async function bootstrap(): Promise<void> {
   };
 
   // Validate API keys asynchronously (non-blocking, warns on failure)
-  void validateWorkerApiKeys(credentialMonitor, isolationConfig.getSecrets().ZAI_API_KEY, logger);
+  const secrets = isolationConfig.getSecrets();
+  void validateWorkerApiKeys(
+    credentialMonitor,
+    secrets.ZAI_API_KEY,
+    secrets.MINIMAX_API_KEY,
+    logger
+  );
 
   const completionMaxAttemptsRaw = parseInt(
     getOptionalEnv('INTEXURAOS_COMPLETION_MAX_ATTEMPTS', String(DEFAULT_COMPLETION_MAX_ATTEMPTS)),
