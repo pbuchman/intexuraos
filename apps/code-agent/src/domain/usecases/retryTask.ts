@@ -273,7 +273,9 @@ ${additionalContext.trim()}
     traceId: `retry-${String(Date.now())}`,
     webhookSecret,
     retriedFrom: originalTaskId,
-    agentType: hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const),
+    agentType: originalTask.agentType === 'pull_request'
+      ? ('pull_request' as const)
+      : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const),
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
     /* v8 ignore start -- ts-type: optional property spread @preserve */
@@ -312,7 +314,7 @@ ${additionalContext.trim()}
     retriedFrom?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
-    agentType: 'planning' | 'execution';
+    agentType: 'planning' | 'execution' | 'pull_request';
   } = {
     taskId: retryTask.id,
     prompt: retryTask.sanitizedPrompt,
@@ -326,9 +328,7 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     linearIssueLabels: linearIssueLabelsForDispatch,
     hasChildren: hasChildrenForDispatch,
-    /* v8 ignore start -- source-map: object literal ternary branch is misattributed after transforms @preserve */
-    agentType: retryTask.agentType === 'execution' ? 'execution' : 'planning',
-    /* v8 ignore stop @preserve */
+    agentType: retryTask.agentType ?? 'planning',
   };
 
   // Only include optional fields if defined
