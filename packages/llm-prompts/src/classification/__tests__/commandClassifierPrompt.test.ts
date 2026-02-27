@@ -171,6 +171,54 @@ describe('commandClassifierPrompt', () => {
       expect(prompt).toContain('"create issue for auth bug" → linear');
       expect(prompt).toContain('"track this: mobile menu broken" → linear');
     });
+
+    it('includes calendar event definition requiring time slot', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('occupies a time slot');
+    });
+
+    it('includes calendar vs todo tiebreaker guidance', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('action verb');
+      expect(prompt).toMatch(/todo.*unless.*named event|todo.*unless.*event to attend/i);
+    });
+
+    it('lists todo before calendar in Step 5 priority', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      const step5Start = prompt.indexOf('STEP 5: Category Detection');
+      expect(step5Start).toBeGreaterThan(-1);
+
+      const afterStep5 = prompt.slice(step5Start);
+      const todoPos = afterStep5.indexOf('**todo**');
+      const calendarPos = afterStep5.indexOf('**calendar**');
+
+      expect(todoPos).toBeGreaterThan(-1);
+      expect(calendarPos).toBeGreaterThan(-1);
+      expect(todoPos).toBeLessThan(calendarPos);
+    });
+
+    it('includes example: todo with deadline stays todo', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toMatch(/Send contract.*→ todo|contract.*by Friday.*→ todo/i);
+    });
+
+    it('includes example: named event is calendar', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toMatch(/[Bb]oard meeting.*→ calendar|[Mm]eeting.*Thursday.*→ calendar/i);
+    });
+
+    it('includes example: action + date = todo', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toMatch(
+        /[Ss]ign up.*deadline.*→ todo|[Ss]ign up.*exam.*→ todo|[Pp]repare.*→ todo/i
+      );
+    });
   });
 
   describe('metadata', () => {
@@ -180,6 +228,10 @@ describe('commandClassifierPrompt', () => {
         'Classifies user messages into command categories'
       );
       expect(commandClassifierPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+    });
+
+    it('has version 2.0.0', () => {
+      expect(commandClassifierPrompt.version).toBe('2.0.0');
     });
   });
 });
