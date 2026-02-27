@@ -46,9 +46,7 @@ describe('system-prompt', () => {
   it('renders PR Description Format with fallback values when optional fields are missing', () => {
     const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
 
-    expect(result).toContain(
-      '- Linear: [INT-123](https://linear.app/pbuchman/issue/INT-123)'
-    );
+    expect(result).toContain('- Linear: [INT-123](https://linear.app/pbuchman/issue/INT-123)');
     expect(result).not.toContain('IntexuraOS Code Task');
     expect(result).toContain('- Worker Type: `auto`');
   });

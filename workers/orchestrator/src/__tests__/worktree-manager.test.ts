@@ -276,10 +276,7 @@ describe('WorktreeManager', () => {
         { taskId: 'task-log-remove', worktreePath: join(worktreeBasePath, 'task-log-remove') },
         'Removing worktree'
       );
-      expect(infoSpy).toHaveBeenCalledWith(
-        { taskId: 'task-log-remove' },
-        'Worktree removed'
-      );
+      expect(infoSpy).toHaveBeenCalledWith({ taskId: 'task-log-remove' }, 'Worktree removed');
     });
   });
 
