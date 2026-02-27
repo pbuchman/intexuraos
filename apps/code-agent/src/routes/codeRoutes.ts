@@ -2875,11 +2875,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'invalid_status':
           case 'no_linear_issue':
           case 'label_not_ready':
-            return await reply.fail('INVALID_REQUEST', error.message);
+            return await reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
-            return await reply.code(409).send({
+            return await reply.code(409).send({ // @allow-raw-send: 409 with existingTaskId details
               success: false,
               error: {
                 code: error.code,
@@ -2888,7 +2888,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               },
             });
           case 'active_task_exists':
-            return await reply.fail('CONFLICT', error.message);
+            return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'internal_error':
           default:
             return await reply.fail('INTERNAL_ERROR', error.message);
@@ -3620,7 +3620,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'worker_not_configured':
             return reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
-            // Include existingTaskId in details so frontend can navigate
+            // @allow-raw-send: 409 with existingTaskId details for frontend navigation
             return reply.code(409).send({
               success: false,
               error: {
@@ -3628,7 +3628,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 message: error.message,
                 details: { existingTaskId: error.existingTaskId },
               },
-            }); // @allow-raw-send: 409 with structured error payload containing existingTaskId
+            });
           case 'active_task_exists':
             return reply.fail('CONFLICT', error.message);
           case 'internal_error':

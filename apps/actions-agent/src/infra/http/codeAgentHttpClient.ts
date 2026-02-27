@@ -334,12 +334,9 @@ export function createCodeAgentHttpClient(
       }
 
       // Success response (200)
-      /* v8 ignore start -- test-infra: 200 response handled, error responses covered by different status codes @preserve */
       if (response.status === 200) {
-        /* v8 ignore stop @preserve */
         try {
           const body = await response.json() as { success: boolean; data?: SubmitToPhase2Output };
-          /* v8 ignore start -- test-infra: body validation branch covered by integration tests @preserve */
           if (!body.success || body.data === undefined) {
             logger.error({ body }, 'Invalid response from code-agent submit-to-phase2');
             return err({
@@ -347,9 +344,13 @@ export function createCodeAgentHttpClient(
               message: 'Invalid response from code-agent',
             });
           }
-          /* v8 ignore stop @preserve */
           logger.info({ codeTaskId: body.data.codeTaskId }, 'Phase 2 submitted successfully');
-          return ok(body.data);
+          return ok({
+            codeTaskId: body.data.codeTaskId,
+            resourceUrl: body.data.resourceUrl,
+            workerLocation: body.data.workerLocation,
+            implementationOf: body.data.implementationOf,
+          });
         } catch (error) {
           logger.error({ error: getErrorMessage(error) }, 'Invalid JSON response from code-agent submit-to-phase2');
           return err({
@@ -360,59 +361,55 @@ export function createCodeAgentHttpClient(
       }
 
       // Parse error response
-      /* v8 ignore start -- test-infra: error body parsing is defensive @preserve */
-      let errorBody: { error?: { code?: string; message?: string; details?: { existingTaskId?: string } } } = {};
+      let errorBody: { error?: { code?: string; message?: string; details?: { existingTaskId?: string; serverCode?: string } } } = {};
       try {
         errorBody = await response.json() as typeof errorBody;
       } catch {
         // Ignore JSON parsing errors
       }
-      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: default values provide safe fallbacks @preserve */
       const errorCode = errorBody.error?.code ?? '';
       const errorMessage = errorBody.error?.message ?? 'Unknown error';
-      /* v8 ignore stop @preserve */
+      const serverCode = errorBody.error?.details?.serverCode;
 
       // Map HTTP status to error codes
-      /* v8 ignore start -- test-infra: status handling branches tested via mock @preserve */
       if (response.status === 404) {
         logger.info({ taskId: input.taskId }, 'Task not found for submit-to-phase2');
         return err({ code: 'TASK_NOT_FOUND', message: errorMessage });
-      } else if (response.status === 400) {
-        const codeMap: Record<string, SubmitToPhase2Error['code']> = {
-          'INVALID_REQUEST': 'INVALID_STATUS',
-          'task_not_found': 'TASK_NOT_FOUND',
+      }
+
+      if (response.status === 400) {
+        // Use serverCode from details (preserved by route handler) for precise mapping
+        const serverCodeMap: Record<string, SubmitToPhase2Error['code']> = {
           'invalid_status': 'INVALID_STATUS',
           'no_linear_issue': 'NO_LINEAR_ISSUE',
           'label_not_ready': 'LABEL_NOT_READY',
-          'already_implemented': 'ALREADY_IMPLEMENTED',
-          'active_task_exists': 'ACTIVE_TASK_EXISTS',
         };
-        const mappedCode = codeMap[errorCode];
-        if (mappedCode !== undefined) {
-          if (mappedCode === 'ALREADY_IMPLEMENTED') {
-            const existingId = errorBody.error?.details?.existingTaskId;
-            return err({
-              code: mappedCode,
-              message: errorMessage,
-              existingTaskId: existingId ?? 'unknown',
-            });
-          }
-          return err({ code: mappedCode, message: errorMessage });
+        if (serverCode !== undefined && serverCodeMap[serverCode] !== undefined) {
+          return err({ code: serverCodeMap[serverCode], message: errorMessage });
         }
-        logger.warn({ taskId: input.taskId, errorCode, errorMessage }, 'Unknown error from submit-to-phase2');
+        // Fallback: map framework error code
+        if (errorCode === 'INVALID_REQUEST') {
+          return err({ code: 'INVALID_STATUS', message: errorMessage });
+        }
+        logger.warn({ taskId: input.taskId, errorCode, serverCode, errorMessage }, 'Unknown error from submit-to-phase2');
         return err({ code: 'UNKNOWN', message: errorMessage });
-      } else if (response.status === 409) {
-        logger.info({ taskId: input.taskId }, 'Conflict - implementation already exists or active task exists');
+      }
+
+      if (response.status === 409) {
+        // Use serverCode to differentiate CONFLICT (active_task_exists) from already_implemented
+        if (serverCode === 'active_task_exists') {
+          return err({ code: 'ACTIVE_TASK_EXISTS', message: errorMessage });
+        }
         const existingId = errorBody.error?.details?.existingTaskId;
         return err({
           code: 'ALREADY_IMPLEMENTED',
           message: errorMessage,
-          existingTaskId: existingId ?? 'unknown',
+          ...(existingId !== undefined && { existingTaskId: existingId }),
         });
-      } else if (response.status === 503) {
-      /* v8 ignore stop @preserve */
+      }
+
+      if (response.status === 503) {
         logger.warn({ taskId: input.taskId }, 'Worker not configured for submit-to-phase2');
         return err({ code: 'WORKER_NOT_CONFIGURED', message: errorMessage });
       }
