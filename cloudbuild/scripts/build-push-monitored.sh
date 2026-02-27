@@ -43,6 +43,13 @@ MULTI_ARCH_SERVICES="claude-worker"
 if echo "$MULTI_ARCH_SERVICES" | grep -qw "$SERVICE_NAME"; then
   echo "🔨 [BUILD] Multi-arch build for $SERVICE_NAME (amd64 + arm64)..."
 
+  # Ensure QEMU binfmt is registered for cross-platform builds.
+  # This is idempotent and survives reboots/reinstalls by re-running each deploy.
+  if ! cat /proc/sys/fs/binfmt_misc/qemu-aarch64 >/dev/null 2>&1; then
+    echo "📦 [SETUP] Registering QEMU binfmt for cross-platform builds..."
+    docker run --rm --privileged multiarch/qemu-user-static --reset -p yes >/dev/null 2>&1
+  fi
+
   # Ensure buildx builder with multi-platform support exists
   docker buildx inspect multiarch >/dev/null 2>&1 || \
     docker buildx create --name multiarch --driver docker-container --use
