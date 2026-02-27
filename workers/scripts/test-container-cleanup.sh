@@ -217,19 +217,16 @@ test_T7_orchestrator_unreachable() {
   cleanup_test_containers
 }
 
-# T8: Container without creation time handled
+# T8: Valid container timestamps are parsed without warnings
+# Note: Testing truly unparseable timestamps requires mocking Docker output,
+# which is out of scope for this integration test suite. This test verifies
+# that real Docker timestamps parse correctly — the error path (log warning +
+# skip) is a defensive guard against future Docker format changes.
 test_T8_no_creation_time() {
-  log_test "T8: Container with unparseable creation time is skipped with warning"
-  # We cannot easily make Docker return an unparseable timestamp, but we can
-  # verify the script handles the case by checking the code path exists.
-  # Instead, we create a container and run with an impossible retention that
-  # forces the age check. The real T8 scenario (broken timestamp) would only
-  # occur if Docker output changes format. We test that the script logs
-  # "Could not parse" when it encounters a bad timestamp by feeding a mock.
+  log_test "T8: Valid container timestamps are parsed without warnings"
   cleanup_test_containers
   create_test_container "${TEST_PREFIX}timestamp-test"
 
-  # Run normally first — should NOT produce a "Could not parse" warning
   local out
   out=$(CONTAINER_PREFIX="${TEST_PREFIX}" DRY_RUN=true RETENTION_DAYS=0 \
     bash "${CLEANUP_SCRIPT}" 2>&1) || true
@@ -263,17 +260,17 @@ test_T9_multiple_containers() {
   cleanup_test_containers
 }
 
-# T10: Script handles permission errors (logs error, continues)
+# T10: Successful removal reports zero errors in summary
+# Note: Simulating `docker rm` permission failures requires mocking, which is
+# out of scope for this integration test suite. This test verifies the error
+# counter works correctly on the success path (Errors=0). The error path
+# (Errors>0) would fire when `docker rm` returns non-zero.
 test_T10_permission_errors() {
-  log_test "T10: Permission errors are logged and counted"
+  log_test "T10: Successful removal reports zero errors in summary"
   cleanup_test_containers
   create_test_container "${TEST_PREFIX}perm-test-1"
   create_test_container "${TEST_PREFIX}perm-test-2"
 
-  # We can't easily simulate a permission error with real Docker, but we
-  # verify the error-counting mechanism works by confirming successful
-  # removal reports Errors=0. The error path is exercised when Docker
-  # returns a non-zero exit from `docker rm`.
   local out
   out=$(CONTAINER_PREFIX="${TEST_PREFIX}" DRY_RUN=false RETENTION_DAYS=0 \
     bash "${CLEANUP_SCRIPT}" 2>&1) || true

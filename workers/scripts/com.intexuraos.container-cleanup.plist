@@ -12,8 +12,8 @@
     4. Verify: launchctl list | grep intexuraos
 
   The job runs every 6 hours (21600 seconds).
-  Logs are written to ~/Library/Logs/intexuraos/ for persistence (/tmp is
-  periodically cleaned by macOS).
+  Logs default to /tmp/ — see the NOTE at the bottom to switch to a
+  persistent location (recommended: ~/Library/Logs/intexuraos/).
 -->
 <plist version="1.0">
 <dict>
