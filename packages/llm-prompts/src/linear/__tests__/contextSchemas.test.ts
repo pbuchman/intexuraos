@@ -276,7 +276,7 @@ describe('LinearIssueDataSchema', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0]?.path[0]).toBe('title');
+        expect(result.error.issues[0].path[0]).toBe('title');
       }
     });
   });
