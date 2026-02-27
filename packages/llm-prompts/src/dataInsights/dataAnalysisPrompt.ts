@@ -34,7 +34,7 @@ function buildChartTypesTable(chartTypes: ChartTypeInfo[]): string {
 export const dataAnalysisPrompt: PromptBuilder<DataAnalysisPromptInput, DataAnalysisPromptDeps> = {
   name: 'data-analysis',
   description: 'Analyzes composite feed data and generates measurable, trackable insights',
-  version: '1.2.0',
+  version: '1.2.1',
   build(input: DataAnalysisPromptInput): string {
     const chartTypesTable = buildChartTypesTable(input.chartTypes);
     const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
@@ -61,7 +61,7 @@ ${chartTypesTable}
 Generate up to 5 data insights. Each insight MUST follow this EXACT format:
 
 INSIGHT_1: Title=<title>; Description=<2-3 sentences>; Trackable=<metric description>; ChartType=<chart ID from table>
-INSIGHT_2: Title=<title>; Description=<2-3 sentences>; Trackable=<chart ID from table>; ChartType=<chart ID from table>
+INSIGHT_2: Title=<title>; Description=<2-3 sentences>; Trackable=<metric description>; ChartType=<chart ID from table>
 ...
 
 If you cannot generate any insights, respond with:
