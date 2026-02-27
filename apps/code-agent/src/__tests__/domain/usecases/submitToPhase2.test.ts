@@ -105,6 +105,7 @@ describe('submitToPhase2', () => {
       metricsClient: mockMetricsClient as unknown as SubmitToPhase2Deps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitToPhase2Deps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
+      serviceUrl: 'https://test.example.com',
     };
   }
 
