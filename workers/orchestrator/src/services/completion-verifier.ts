@@ -224,9 +224,15 @@ function extractPlanningMetadataFromMessage(message: string): PlanningMetadataEx
   const outcome = readValue('- Outcome:');
   const superpowers = readValue('- superpowers_writing_plans_used:');
   const rawOriginalIssueUrl = readValue('- Original issue:');
-  const originalIssueUrl = rawOriginalIssueUrl !== undefined ? stripMarkdownLink(rawOriginalIssueUrl) : rawOriginalIssueUrl;
+  const originalIssueUrl =
+    rawOriginalIssueUrl !== undefined
+      ? stripMarkdownLink(rawOriginalIssueUrl)
+      : rawOriginalIssueUrl;
   const rawPlanningIssueUrl = readValue('- Planning issue:');
-  const planningIssueUrl = rawPlanningIssueUrl !== undefined ? stripMarkdownLink(rawPlanningIssueUrl) : rawPlanningIssueUrl;
+  const planningIssueUrl =
+    rawPlanningIssueUrl !== undefined
+      ? stripMarkdownLink(rawPlanningIssueUrl)
+      : rawPlanningIssueUrl;
   const trivialTask = readValue('- Trivial task:');
   const parallelBreakdownProof = readValue('- Parallel breakdown proof:');
   const docPath = readValue('- Plan doc:');
@@ -318,7 +324,8 @@ function parseExecutionMetadataFromMessage(message: string): ExecutionMetadataEx
   const prUrl = rawPrUrl !== undefined ? stripMarkdownLink(rawPrUrl) : rawPrUrl;
   const ciEvidence = readValue('- CI evidence:');
   const rawLinearIssueUrl = readValue('- Linear issue:');
-  const linearIssueUrl = rawLinearIssueUrl !== undefined ? stripMarkdownLink(rawLinearIssueUrl) : rawLinearIssueUrl;
+  const linearIssueUrl =
+    rawLinearIssueUrl !== undefined ? stripMarkdownLink(rawLinearIssueUrl) : rawLinearIssueUrl;
   const reviewIterationsRaw = readValue('- Review iterations:');
   const execPlansUsed = readValue('- superpowers_executing_plans_used:');
   const codeReviewUsed = readValue('- superpowers_requesting_code_review_used:');
