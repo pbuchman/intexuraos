@@ -595,8 +595,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
         /* v8 ignore stop @preserve */
 
-        // INT-628: If Phase 1 (design) completed, send notification with button to proceed to Phase 2
-        if (task.executionPhase === 'design') {
+        // INT-628: If planning agent completed, send notification with button to proceed to execution
+        if (task.agentType === 'planning') {
           await whatsappNotifier.notifyDesignComplete(task.userId, completedTask);
         } else {
           await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);

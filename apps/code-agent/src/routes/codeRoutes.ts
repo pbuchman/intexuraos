@@ -2786,7 +2786,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     '/internal/code/submit-phase2',
     {
       schema: {
-        operationId: 'submitToPhase2Internal',
+        operationId: 'submitToExecutionAgentInternal',
         summary: 'Submit Phase 2 implementation from WhatsApp button',
         description: 'Internal endpoint for submitting Phase 2 from WhatsApp button callback. Requires internal authentication.',
         tags: ['internal'],
@@ -2846,9 +2846,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ taskId, userId }, 'Processing submit-phase2 request');
 
-      // Call existing submitToPhase2 use case
-      /* v8 ignore start -- test-infra: submitToPhase2 use case has its own tests @preserve */
-      const result = await submitToPhase2(
+      // Call existing submitToExecutionAgent use case
+      /* v8 ignore start -- test-infra: submitToExecutionAgent use case has its own tests @preserve */
+      const result = await submitToExecutionAgent(
         {
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
@@ -2858,12 +2858,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           metricsClient: services.metricsClient,
           workerSettingsRepo: services.workerSettingsRepo,
           orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
         },
         { originalTaskId: taskId, userId }
       );
       /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- test-infra: error handling branches covered by submitToPhase2 tests @preserve */
+      /* v8 ignore start -- test-infra: error handling branches covered by submitToExecutionAgent tests @preserve */
       if (!result.ok) {
         const error = result.error;
         request.log.warn({ taskId, errorCode: error.code, errorMessage: error.message }, 'Submit-phase2 failed');
