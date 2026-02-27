@@ -89,7 +89,7 @@ describe('triggerCodeTaskFromAssignment', () => {
     expect(req?.workerType).toBe('auto');
   });
 
-  it('uses PHASE2_PROMPT when issue has code-task label', async () => {
+  it('uses EXECUTION_PROMPT when issue has code-task label', async () => {
     const client = new FakeCodeAgentClient();
     const logger = createFakeLogger();
 

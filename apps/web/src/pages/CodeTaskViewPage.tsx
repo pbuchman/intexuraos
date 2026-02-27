@@ -48,7 +48,7 @@ interface StatusConfig {
 const STATUS_MAP: Record<CodeTaskStatus, StatusConfig> = {
   dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched', icon: Clock },
   running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running', icon: Loader2 },
-  designed: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Designed', icon: CheckCircle2 },
+  planned: { bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-800 dark:text-violet-300', label: 'Planned', icon: CheckCircle2 },
   implemented: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Implemented', icon: CheckCircle2 },
   failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed', icon: XCircle },
   interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted', icon: AlertCircle },
@@ -193,7 +193,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
     : undefined;
   const isTaskWorkerOnline = taskWorkerStatus === undefined || taskWorkerStatus.healthy;
   const workerStatusTag: WorkerStatusTag | null = taskWorkerStatus?.status ?? null;
-  const isImplementable = task.status === 'designed' &&
+  const isImplementable = task.status === 'planned' &&
     task.implementationTaskId === undefined &&
     task.linearIssueId !== undefined;
 
@@ -203,12 +203,12 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
       <MemoActiveProgress task={task} />
 
-      {task.parentTaskId !== undefined && task.followUpReason === 'phase2_implement' ? (
+      {task.parentTaskId !== undefined && task.followUpReason === 'execution_implement' ? (
         <DesignTaskBanner
           parentTaskId={task.parentTaskId}
         />
       ) : null}
-      {task.executionPhase === 'design' && task.implementationTaskId !== undefined ? (
+      {task.agentType === 'planning' && task.implementationTaskId !== undefined ? (
         <ImplementationLinkBanner implementationTaskId={task.implementationTaskId} />
       ) : null}
 
@@ -297,18 +297,18 @@ function TaskHeader({ task, workerStatusTag }: { task: CodeTask; workerStatusTag
         {!isActiveStatus(task.status) ? (
           <span>Updated: {formatRelative(task.updatedAt)}</span>
         ) : null}
-        {task.executionPhase === 'design' ? (
+        {task.agentType === 'planning' ? (
           <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
-            Design
+            Planning
           </span>
-        ) : task.executionPhase === 'execution' ? (
+        ) : task.agentType === 'execution' ? (
           <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
             Execution
           </span>
         ) : null}
-        {task.executionPhase === 'design' && task.result?.prUrl !== undefined && task.result.prUrl !== '' ? (
+        {task.agentType === 'planning' && task.result?.prUrl !== undefined && task.result.prUrl !== '' ? (
           <span className="inline-flex items-center rounded-full bg-yellow-900/50 px-2 py-0.5 text-xs font-medium text-yellow-400">
-            Phase mismatch: design task created PR
+            Agent-type mismatch: planning task created PR
           </span>
         ) : null}
         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
@@ -501,12 +501,12 @@ const MemoActiveProgress = memo(function ActiveProgress({ task }: { task: CodeTa
 function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
-      {'This task implements the IntexuraOS Two-Phase Code Task Execution Flow. '}
+      {'This task implements the IntexuraOS Agent-Based Code Task Execution Flow. '}
       <a
         href={`/#/code-tasks/${parentTaskId}`}
         className="font-medium underline hover:no-underline"
       >
-        {'DESIGN'}
+        {'PLANNING'}
       </a>
     </div>
   );
@@ -515,7 +515,7 @@ function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX
 function ImplementationLinkBanner({ implementationTaskId }: { implementationTaskId: string }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-      {'This task is the design phase of the IntexuraOS Two-Phase Code Task Execution Flow. '}
+      {'This task is the planning step of the IntexuraOS Agent-Based Code Task Execution Flow. '}
       <a
         href={`/#/code-tasks/${implementationTaskId}`}
         className="font-medium underline hover:no-underline"

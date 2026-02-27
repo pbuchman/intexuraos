@@ -491,6 +491,18 @@ async function bootstrap(): Promise<void> {
   if (keepContainersAlive) {
     logger.info({}, 'Debug mode: containers will be kept alive after task completion');
   }
+  const workerForensicsMode = getOptionalEnv('INTEXURAOS_CLAUDE_WORKER_FORENSICS', '0') === '1';
+  const workerForensicsBasePath = getOptionalEnv(
+    'INTEXURAOS_CLAUDE_WORKER_FORENSICS_PATH',
+    join(orchestratorDir, 'forensics')
+  );
+  if (workerForensicsMode) {
+    ensureDirectoryExists(workerForensicsBasePath);
+    logger.warn(
+      { workerForensicsBasePath },
+      'Claude worker forensics mode enabled (core dumps, exec stream persistence, crash snapshots)'
+    );
+  }
   const preserveFailedContainers =
     getOptionalEnv('INTEXURAOS_PRESERVE_FAILED_WORKER_CONTAINERS', '1') !== '0';
   const sharedCredsPath = join(orchestratorDir, 'claude-creds');
@@ -503,6 +515,8 @@ async function bootstrap(): Promise<void> {
       keepContainersAlive,
       imageName: workerImage,
       sharedCredsPath,
+      forensicsMode: workerForensicsMode,
+      forensicsBasePath: workerForensicsBasePath,
       ...(gitUserName !== undefined ? { gitUserName } : {}),
       ...(gitUserEmail !== undefined ? { gitUserEmail } : {}),
     },
