@@ -22,6 +22,20 @@ import type { LogLine, MessageStatus } from '@/hooks';
 import { formatDateTime, formatElapsedTime, formatRelative } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus, WorkerStatusTag } from '@/types';
 
+// --- Worker type config ---
+
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+
+const WORKER_TYPES: WorkerType[] = ['auto', 'opus', 'sonnet', 'minimax', 'glm'];
+
+const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
+  auto: 'Auto',
+  opus: 'Opus',
+  sonnet: 'Sonnet',
+  minimax: 'Minimax',
+  glm: 'GLM',
+};
+
 // --- Status badge config ---
 
 interface StatusConfig {
@@ -118,18 +132,34 @@ export function CodeTaskViewPage(): React.JSX.Element {
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
 
-  const handleRetry = useCallback(async () => {
+  // Worker type selection state
+  const [selectedWorkerType, setSelectedWorkerType] = useState<WorkerType>('auto');
+  const [showRetryDropdown, setShowRetryDropdown] = useState(false);
+  const [showImplementDropdown, setShowImplementDropdown] = useState(false);
+
+  // Set default worker type from task when it loads
+  useEffect(() => {
+    if (task?.workerType !== undefined) {
+      setSelectedWorkerType(task.workerType);
+    }
+  }, [task?.workerType]);
+
+  const handleRetryWithWorkerType = useCallback(async (type: WorkerType) => {
+    setSelectedWorkerType(type);
+    setShowRetryDropdown(false);
     try {
-      const newId = await retryTask();
+      const newId = await retryTask(type);
       void navigate(`/code-tasks/${newId}`);
     } catch {
       // retryTask already sets retryError state
     }
   }, [retryTask, navigate]);
 
-  const handleImplement = useCallback(async () => {
+  const handleImplementWithWorkerType = useCallback(async (type: WorkerType) => {
+    setSelectedWorkerType(type);
+    setShowImplementDropdown(false);
     try {
-      const newId = await startImplementation();
+      const newId = await startImplementation(type);
       void navigate(`/code-tasks/${newId}`);
     } catch {
       // startImplementation already sets implementError state
@@ -205,7 +235,10 @@ export function CodeTaskViewPage(): React.JSX.Element {
         implementing={implementing}
         implementError={implementError}
         {...(task.implementationTaskId !== undefined ? { implementationTaskId: task.implementationTaskId } : {})}
-        onImplement={handleImplement}
+        selectedWorkerType={selectedWorkerType}
+        showDropdown={showImplementDropdown}
+        onToggleDropdown={(): void => { setShowImplementDropdown(!showImplementDropdown); }}
+        onSelectWorkerType={(type): void => { void handleImplementWithWorkerType(type); }}
       />
 
       <MemoTaskActions
@@ -216,7 +249,10 @@ export function CodeTaskViewPage(): React.JSX.Element {
         isRetryable={isRetryable}
         retrying={retrying}
         retryError={retryError}
-        onRetry={handleRetry}
+        selectedWorkerType={selectedWorkerType}
+        showDropdown={showRetryDropdown}
+        onToggleDropdown={(): void => { setShowRetryDropdown(!showRetryDropdown); }}
+        onSelectWorkerType={(type): void => { void handleRetryWithWorkerType(type); }}
       />
     </Layout>
   );
@@ -350,7 +386,8 @@ function isActiveStatus(status: CodeTaskStatus): boolean {
 
 function TaskActions({
   isActive, cancelling, cancelError, onCancel,
-  isRetryable, retrying, retryError, onRetry,
+  isRetryable, retrying, retryError,
+  selectedWorkerType, showDropdown, onToggleDropdown, onSelectWorkerType,
 }: {
   isActive: boolean;
   cancelling: boolean;
@@ -359,7 +396,10 @@ function TaskActions({
   isRetryable: boolean;
   retrying: boolean;
   retryError: string | null;
-  onRetry: () => Promise<void>;
+  selectedWorkerType: WorkerType;
+  showDropdown: boolean;
+  onToggleDropdown: () => void;
+  onSelectWorkerType: (type: WorkerType) => void;
 }): React.JSX.Element | null {
   if (!isActive && !isRetryable && cancelError === null && retryError === null) return null;
 
@@ -377,15 +417,34 @@ function TaskActions({
         </Button>
       ) : null}
       {isRetryable ? (
-        <Button
-          onClick={(): void => { void onRetry(); }}
-          disabled={retrying}
-          isLoading={retrying}
-          loadingText="Retrying..."
-        >
-          <RotateCcw className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Retry Task</span>
-        </Button>
+        <div className="relative">
+          <Button
+            onClick={(): void => { onToggleDropdown(); }}
+            disabled={retrying}
+            isLoading={retrying}
+            loadingText="Retrying..."
+          >
+            <RotateCcw className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Retry Task</span>
+            <ChevronDown className="ml-2 h-4 w-4" />
+          </Button>
+          {showDropdown && (
+            <div className="absolute z-10 mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+              {WORKER_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={(): void => { onSelectWorkerType(type); }}
+                  className={`block w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                    selectedWorkerType === type ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  {WORKER_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       ) : null}
       {cancelError !== null ? (
         <p className="text-sm text-red-600 dark:text-red-400">{cancelError}</p>
@@ -472,7 +531,10 @@ interface NextStepsProps {
   implementing: boolean;
   implementError: string | null;
   implementationTaskId?: string;
-  onImplement: () => Promise<void>;
+  selectedWorkerType: WorkerType;
+  showDropdown: boolean;
+  onToggleDropdown: () => void;
+  onSelectWorkerType: (type: WorkerType) => void;
 }
 
 function NextSteps({
@@ -480,7 +542,10 @@ function NextSteps({
   implementing,
   implementError,
   implementationTaskId,
-  onImplement,
+  selectedWorkerType,
+  showDropdown,
+  onToggleDropdown,
+  onSelectWorkerType,
 }: NextStepsProps): React.JSX.Element | null {
   if (!isImplementable && implementationTaskId === undefined && implementError === null) return null;
 
@@ -495,15 +560,34 @@ function NextSteps({
           View Implementation
         </a>
       ) : isImplementable ? (
-        <Button
-          onClick={(): void => { void onImplement(); }}
-          disabled={implementing}
-          isLoading={implementing}
-          loadingText="Starting Implementation..."
-        >
-          <Play className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Start Implementation</span>
-        </Button>
+        <div className="relative">
+          <Button
+            onClick={(): void => { onToggleDropdown(); }}
+            disabled={implementing}
+            isLoading={implementing}
+            loadingText="Starting Implementation..."
+          >
+            <Play className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Start Implementation</span>
+            <ChevronDown className="ml-2 h-4 w-4" />
+          </Button>
+          {showDropdown && (
+            <div className="absolute z-10 mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+              {WORKER_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={(): void => { onSelectWorkerType(type); }}
+                  className={`block w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                    selectedWorkerType === type ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  {WORKER_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       ) : null}
       {implementError !== null ? (
         <div className="mt-3 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
