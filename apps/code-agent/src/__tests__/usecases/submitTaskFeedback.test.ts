@@ -148,6 +148,7 @@ describe('submitTaskFeedback use case', () => {
       metricsClient: mockMetricsClient as unknown as SubmitTaskFeedbackDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitTaskFeedbackDeps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
+      serviceUrl: 'https://test.example.com',
     };
   }
 

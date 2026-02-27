@@ -105,6 +105,7 @@ describe('submitToExecutionAgent', () => {
       metricsClient: mockMetricsClient as unknown as SubmitToExecutionAgentDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as SubmitToExecutionAgentDeps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
+      serviceUrl: 'https://test.example.com',
     };
   }
 

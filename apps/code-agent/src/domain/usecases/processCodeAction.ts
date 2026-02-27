@@ -74,6 +74,7 @@ export interface ProcessCodeActionDeps {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
+  serviceUrl: string;
 }
 
 /**
@@ -264,9 +265,8 @@ export async function processCodeAction(
 
   const task = createResult.value;
 
-  // Step 6: Build webhook URL for callback (use SERVICE_URL for local/E2E environments)
-  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
-  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
+  // Step 6: Build webhook URL for callback
+  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
 
   // Step 7: Dispatch to worker with per-user credentials
   const dispatchRequest: {

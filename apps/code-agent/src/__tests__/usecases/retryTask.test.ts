@@ -164,6 +164,7 @@ describe('retryTask use case', () => {
       metricsClient: mockMetricsClient as unknown as RetryTaskDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as RetryTaskDeps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
+      serviceUrl: 'https://test.example.com',
     };
   }
 
