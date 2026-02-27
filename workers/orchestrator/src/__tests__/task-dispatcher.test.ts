@@ -3659,6 +3659,34 @@ describe('TaskDispatcher', () => {
         .mock.calls.filter((call) => typeof call[1] === 'string' && call[1].includes('[prompt]'))
         .map((call) => call[1] as string);
 
+    it('logs system prompt built with agent type and lengths', async () => {
+      const infoSpy = vi.spyOn(mockLogger, 'info');
+
+      const request: CreateTaskRequest = {
+        taskId: 'sys-prompt-log-test',
+        workerType: 'auto',
+        prompt: 'Test prompt for logging',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      const promptLogCall = infoSpy.mock.calls.find(
+        (call) => call[1] === 'System prompt built'
+      );
+      expect(promptLogCall).toBeDefined();
+
+      const logData = promptLogCall?.[0] as Record<string, unknown>;
+      expect(logData['taskId']).toBe('sys-prompt-log-test');
+      expect(logData['agentType']).toBe('default');
+      expect(typeof logData['systemPromptLength']).toBe('number');
+      expect(typeof logData['userPromptLength']).toBe('number');
+      expect(logData['userPromptLength']).toBe('Test prompt for logging'.length);
+    });
+
     it('logs result details after checkForResult', async () => {
       vi.useFakeTimers();
       const obsState = createStatePersistence();
