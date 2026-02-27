@@ -76,7 +76,7 @@ describe('analyzeRetryDecision', () => {
     });
 
     it('stops when same missing criteria repeat', () => {
-      const stagnantCriteria = ['PHASE2_FINAL block', 'PR URL line'];
+      const stagnantCriteria = ['EXECUTION_AGENT_FINAL block', 'PR URL line'];
       const input: RetryDecisionInput = {
         currentAttempt: 3,
         baseMaxAttempts: 3,
@@ -207,7 +207,7 @@ describe('analyzeRetryDecision', () => {
 
   describe('early stopping', () => {
     it('stops early when stagnant with no result', () => {
-      const stagnantCriteria = ['PHASE2_FINAL block'];
+      const stagnantCriteria = ['EXECUTION_AGENT_FINAL block'];
       const input: RetryDecisionInput = {
         currentAttempt: 2,
         baseMaxAttempts: 3,

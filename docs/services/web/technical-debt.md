@@ -24,7 +24,7 @@ Based on code analysis and recent commits:
 - **Refactoring for improved coverage:** The web app is exempt from the 95% coverage threshold due to planned refactoring (see CLAUDE.md)
 - **PWA enhancements:** Enhanced offline capabilities and background sync
 - **Mobile optimization:** Continued improvements to mobile responsiveness across all pages
-- **Code task UX refinement:** Ongoing iteration on collapsible tool output, multi-status filtering, and two-phase flow
+- **Code task UX refinement:** Ongoing iteration on collapsible tool output, multi-status filtering, and agent-based flow
 - **Component extraction:** Large page files (InboxPage, CodeTaskViewPage, LinearIssuesPage) are candidates for decomposition into smaller, focused components
 
 ---
@@ -39,7 +39,7 @@ None identified.
 
 | File                     | Issue                                     | Impact                                                                                                                                 |
 | ------------------------ | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `CodeTaskViewPage.tsx`   | 1021 lines with collapsible log viewer    | Task detail, collapsible tool output, two-phase banner, queue messaging, retry, and PR events timeline all in one file.                |
+| `CodeTaskViewPage.tsx`   | 1021 lines with collapsible log viewer    | Task detail, collapsible tool output, agent-type banner, queue messaging, retry, and PR events timeline all in one file.               |
 | `InboxPage.tsx`          | 871 lines (exceeds SRP guideline)         | Handles UI, state management, real-time listeners, filtering, pagination, and deep linking. Consider extracting to smaller components. |
 | `LinearIssuesPage.tsx`   | 810 lines with inline sub-issue rendering | Board columns, Firestore listener, sub-issue tree, assignee badges, label display, and sync management all in one file.                |
 | `WorkerSettingsPage.tsx` | 637 lines with inline form components     | Worker add/edit forms, drag-and-drop reorder, connectivity testing, and autofill prevention all in one file.                           |
@@ -125,7 +125,7 @@ None identified. The codebase is clean of TODO/FIXME/HACK comments.
 | File                     | Lines | Issue                                                                         | Suggestion                                                                                                         |
 | ------------------------ | ----- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `ResearchDetailPage.tsx` | 1818  | Report detail, markdown, model attribution, cover image, export, share        | Extract `ResearchReport`, `ModelAttribution`, `CoverImageViewer`, and `ExportPanel` components                     |
-| `CodeTaskViewPage.tsx`   | 1021  | Task detail, collapsible tool log, two-phase banner, queue messaging, retry   | Extract `CollapsibleLogViewer`, `DesignTaskBanner`, `TaskActions`, and `TaskMessaging` into separate components    |
+| `CodeTaskViewPage.tsx`   | 1021  | Task detail, collapsible tool log, agent-type banner, queue messaging, retry  | Extract `CollapsibleLogViewer`, `DesignTaskBanner`, `TaskActions`, and `TaskMessaging` into separate components    |
 | `TodosListPage.tsx`      | 1149  | Todo list, inline editing, item management, drag-and-drop, filtering          | Extract `TodoCard`, `TodoItemList`, and `TodoFilters` components                                                   |
 | `BookmarksListPage.tsx`  | 1134  | Bookmark list, search, OG preview, AI summary, archive, filtering             | Extract `BookmarkCard`, `BookmarkSearch`, and `BookmarkFilters` components                                         |
 | `InboxPage.tsx`          | 871   | Routing, state, listeners, filtering, pagination, modals                      | Extract filtering to `useInboxFilters` hook, pagination to `useInfiniteScroll` hook, modals to separate components |

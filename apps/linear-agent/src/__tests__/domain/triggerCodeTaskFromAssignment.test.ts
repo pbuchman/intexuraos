@@ -58,48 +58,21 @@ describe('shouldTriggerCodeTask', () => {
     expect(shouldTriggerCodeTask(event)).toBe(false);
   });
 
-  it('returns false when state is not unstarted', () => {
+  it('returns false when state is not backlog or unstarted', () => {
     const event = createEvent();
     event.data.state = { id: 'state-2', name: 'In Progress', type: 'started' };
     expect(shouldTriggerCodeTask(event)).toBe(false);
   });
 
-  it('returns false when issue has Code Task label', () => {
+  it('returns true for backlog state', () => {
     const event = createEvent();
-    event.data.labels = [{ id: 'label-code', name: 'Code Task' }];
-    expect(shouldTriggerCodeTask(event)).toBe(false);
-  });
-
-  it('returns false when issue has code-task label (lowercase)', () => {
-    const event = createEvent();
-    event.data.labels = [{ id: 'label-code', name: 'code-task' }];
-    expect(shouldTriggerCodeTask(event)).toBe(false);
-  });
-
-  it('returns false when issue has code_task label (underscore)', () => {
-    const event = createEvent();
-    event.data.labels = [{ id: 'label-code', name: 'code_task' }];
-    expect(shouldTriggerCodeTask(event)).toBe(false);
-  });
-
-  it('returns false when issue has Code_Task label (mixed)', () => {
-    const event = createEvent();
-    event.data.labels = [{ id: 'label-code', name: 'Code_Task' }];
-    expect(shouldTriggerCodeTask(event)).toBe(false);
-  });
-
-  it('returns true with multiple non-Code-Task labels', () => {
-    const event = createEvent();
-    event.data.labels = [
-      { id: 'l1', name: 'bug' },
-      { id: 'l2', name: 'feature' },
-    ];
+    event.data.state = { id: 'state-backlog', name: 'Backlog', type: 'backlog' };
     expect(shouldTriggerCodeTask(event)).toBe(true);
   });
 });
 
 describe('triggerCodeTaskFromAssignment', () => {
-  it('sends correct request to code-agent client', async () => {
+  it('sends correct request to code-agent client without code-task label', async () => {
     const client = new FakeCodeAgentClient();
     const logger = createFakeLogger();
 
@@ -114,6 +87,27 @@ describe('triggerCodeTaskFromAssignment', () => {
     expect(req?.linearIssueId).toBe('INT-123');
     expect(req?.prompt).toBe('Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.');
     expect(req?.workerType).toBe('auto');
+  });
+
+  it('uses EXECUTION_PROMPT when issue has code-task label', async () => {
+    const client = new FakeCodeAgentClient();
+    const logger = createFakeLogger();
+
+    const event = createEvent({
+      data: {
+        ...createEvent().data,
+        labels: [{ id: 'label-code', name: 'code-task' }],
+      },
+    });
+
+    await triggerCodeTaskFromAssignment(event, 'user-123', {
+      codeAgentClient: client,
+      logger,
+    });
+
+    const req = client.getLastRequest();
+    expect(req).not.toBeNull();
+    expect(req?.prompt).toBe('Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.');
   });
 
   it('uses identifier and timestamp for actionId and approvalEventId deduplication', async () => {

@@ -237,7 +237,7 @@ describe('statusMirrorService', () => {
     it.each([
       ['dispatched', 'dispatched'],
       ['running', 'running'],
-      ['designed', 'completed'],
+      ['planned', 'completed'],
       ['implemented', 'completed'],
       ['failed', 'failed'],
       ['cancelled', 'cancelled'],
