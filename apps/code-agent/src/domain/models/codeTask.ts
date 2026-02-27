@@ -63,6 +63,7 @@ export interface TaskResult {
   ciFailed?: boolean;       // True if CI checks failed
   partialWork?: boolean;    // True if task timed out with partial progress
   rebaseResult?: 'success' | 'conflict' | 'skipped';  // For long tasks (design lines 1356-1364)
+  comment_replied?: boolean; // True if PR comment reply was sent (for pull_request agent)
   planning_outcome_label?: 'planned' | 'unclear';
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_issue_url?: string;
