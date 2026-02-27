@@ -134,10 +134,13 @@ Required PR flow pattern:
 - Create or update the PR for this exact routed issue.
 - Complete the review loop using \`superpowers:requesting-code-review\`.
 
-### MANDATORY Code Review
+### MANDATORY Code Review (zero-tolerance loop)
 After creating the PR:
 - You MUST use the \`superpowers:requesting-code-review\` skill
-- Follow that skill's process for iterative reviews and fixes
+- Follow that skill's iterative review/fix process until the reviewer finds ZERO issues
+- Even minor issues (naming, style, edge cases, documentation) MUST be fixed — no issue is too small to skip
+- Do NOT finalize until the reviewer explicitly confirms no remaining issues
+- Every review iteration that surfaces issues requires another fix + re-review cycle
 
 ### PR Title Format
 The PR title MUST follow this format: \`[INT-XXX] title\`
