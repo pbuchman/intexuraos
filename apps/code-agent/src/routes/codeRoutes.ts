@@ -3490,9 +3490,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request.log.info({ taskId, userId, workerType: requestedWorkerType }, 'Processing Execution Agent implementation request');
 
       // Only add workerType if provided and valid
-      const phase2Request: { originalTaskId: string; userId: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' } = { originalTaskId: taskId, userId };
+      const executionAgentRequest: { originalTaskId: string; userId: string; workerType?: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' } = { originalTaskId: taskId, userId };
       if (requestedWorkerType !== undefined && ['opus', 'auto', 'sonnet', 'minimax', 'glm'].includes(requestedWorkerType)) {
-        phase2Request.workerType = requestedWorkerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
+        executionAgentRequest.workerType = requestedWorkerType as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       }
 
       const result = await submitToExecutionAgent(
@@ -3507,7 +3507,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           orchestratorSecret: loadConfig().orchestratorSecret,
           serviceUrl: loadConfig().serviceUrl,
         },
-        phase2Request
+        executionAgentRequest
       );
 
       /* v8 ignore start -- test-infra: error handling paths covered by use case tests @preserve */
