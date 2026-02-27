@@ -5,9 +5,11 @@ import { Timestamp } from '@google-cloud/firestore';
  * Design reference: Lines 1207-1212
  * - opus: Force Opus model
  * - auto: Automatic model selection (default)
+ * - sonnet: Force Sonnet model
+ * - minimax: Use MiniMax M2.5 model
  * - glm: Use Z.ai GLM model
  */
-export type WorkerType = 'opus' | 'auto' | 'glm';
+export type WorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
 
 /**
  * Worker location for routing.
@@ -16,23 +18,23 @@ export type WorkerType = 'opus' | 'auto' | 'glm';
  */
 export type WorkerLocation = string;
 
-export type ExecutionPhase = 'design' | 'execution';
+export type AgentType = 'planning' | 'execution' | 'pull_request';
 
 /**
  * Task status lifecycle.
  * Design reference: Lines 316, 1422
  *
- * Flow: dispatched → running → designed|implemented|failed|cancelled
+ * Flow: dispatched → running → planned|implemented|failed|cancelled
  *       dispatched → interrupted (if worker dies)
  *
- * 'designed'     = Phase 1 design task completed successfully
- * 'implemented'  = Phase 2 execution task completed successfully
+ * 'planned'      = Planning Agent task completed successfully
+ * 'implemented'  = Execution Agent task completed successfully
  */
 export type TaskStatus =
   | 'dispatched'   // Sent to worker, awaiting start
   | 'running'      // Worker actively processing
-  | 'designed'     // Phase 1 design task finished
-  | 'implemented'  // Phase 2 execution task finished
+  | 'planned'      // Planning Agent task finished
+  | 'implemented'  // Execution Agent task finished
   | 'failed'       // Error occurred
   | 'interrupted'  // Worker died unexpectedly
   | 'cancelled';   // User cancelled
@@ -55,12 +57,26 @@ export type TaskPhase =
  */
 export interface TaskResult {
   prUrl?: string;           // GitHub PR URL (may be absent if PR creation failed)
-  branch?: string;          // Git branch name (absent for Phase 1 design tasks)
-  commits?: number;         // Number of commits made (absent for Phase 1 design tasks)
+  branch?: string;          // Git branch name (absent for planning-agent tasks)
+  commits?: number;         // Number of commits made (absent for planning-agent tasks)
   summary?: string;         // AI-generated summary of changes
   ciFailed?: boolean;       // True if CI checks failed
   partialWork?: boolean;    // True if task timed out with partial progress
   rebaseResult?: 'success' | 'conflict' | 'skipped';  // For long tasks (design lines 1356-1364)
+  planning_outcome_label?: 'planned' | 'unclear';
+  planning_superpowers_writing_plans_used?: '0' | '1';
+  planning_issue_url?: string;
+  planning_trivial_task?: '0' | '1' | '';
+  planning_doc_path?: string;
+  planning_pr_url?: string;
+  planning_clarification_message?: string;
+  execution_outcome_label?: 'implemented';
+  execution_superpowers_executing_plans_used?: '0' | '1';
+  execution_superpowers_requesting_code_review_used?: '0' | '1';
+  execution_trivial_task?: '0' | '1';
+  execution_subagents?: string;
+  execution_review_iterations?: number;
+  execution_linear_issue_url?: string;
 }
 
 /**
@@ -134,8 +150,8 @@ export interface CodeTask {
 
   // Resume/Follow-up tracking (for PR comment auto-response - INT-465)
   parentTaskId?: string;       // If this task is a follow-up to another
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
-  executionPhase?: ExecutionPhase;
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
+  agentType?: AgentType;
   implementationTaskId?: string;
 
   // Results

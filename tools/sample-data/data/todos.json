@@ -1,0 +1,62 @@
+[
+  {
+    "id": "todo-01",
+    "domain": "Work / Admin",
+    "sourceType": "whatsapp_text",
+    "text": "I need to send the updated contract to Meridian Group by end of this week. They've been waiting since Tuesday and the procurement team said they can't proceed without it."
+  },
+  {
+    "id": "todo-02",
+    "domain": "Personal / Errands",
+    "sourceType": "whatsapp_text",
+    "text": "Buy groceries today: olive oil, chicken thighs, Greek yogurt, spinach, eggs, and that sourdough bread from the bakery on Marszalkowska. Also need to pick up the dry cleaning before 6pm."
+  },
+  {
+    "id": "todo-03",
+    "domain": "Home maintenance",
+    "sourceType": "whatsapp_voice",
+    "text": "The kitchen faucet is leaking again. I tried tightening it but it didn't help. Need to call the plumber this week — maybe Marek can recommend someone. Also should check the water heater filter, I think it hasn't been cleaned in over six months."
+  },
+  {
+    "id": "todo-04",
+    "domain": "Health",
+    "sourceType": "whatsapp_text",
+    "text": "Urgent: schedule a dentist appointment ASAP. That filling on the lower left molar feels loose and it's starting to hurt when I drink cold water. Dr. Kowalski's office number is in my contacts."
+  },
+  {
+    "id": "todo-05",
+    "domain": "Work / Project",
+    "sourceType": "pwa-shared",
+    "text": "Prepare the quarterly presentation for the board meeting next Thursday. Must include: revenue dashboard from Metabase, customer churn analysis that Anna prepared, and the new product roadmap timeline. Ask Derek for the engineering velocity metrics."
+  },
+  {
+    "id": "todo-06",
+    "domain": "Finance",
+    "sourceType": "whatsapp_text",
+    "text": "Transfer rent money to the landlord before the 1st. Also need to review the investment portfolio — the tech ETF has been underperforming and I should consider rebalancing. Maybe move some allocation to the bond fund Tomasz recommended."
+  },
+  {
+    "id": "todo-07",
+    "domain": "Social / Family",
+    "sourceType": "whatsapp_voice",
+    "text": "Mom's birthday is coming up on March 15th. I should order something nice — she mentioned wanting that ceramic plant pot from the local pottery studio. Also need to coordinate with my sister about the dinner reservation. Try to book that Italian place in Mokotow she likes, for about 8 people."
+  },
+  {
+    "id": "todo-08",
+    "domain": "Learning / Professional development",
+    "sourceType": "whatsapp_text",
+    "text": "Sign up for the AWS Solutions Architect certification exam. The deadline for the early bird discount is March 10th. Should also finish the remaining 4 modules of the practice course on Udemy and do at least two full practice tests before scheduling the exam."
+  },
+  {
+    "id": "todo-09",
+    "domain": "Travel",
+    "sourceType": "whatsapp_text",
+    "text": "Book the Hakone ryokan for the Japan trip — the one with the private onsen that had great reviews. Check availability for April 3-5. Also need to order the JR Pass online because it's cheaper than buying in Japan. And don't forget to book the TeamLab Borderless tickets, they sell out weeks in advance."
+  },
+  {
+    "id": "todo-10",
+    "domain": "Work / Technical",
+    "sourceType": "pwa-shared",
+    "text": "Create a pull request for the authentication service reliability improvements. Need to update the rate limiter configuration, add circuit breaker for the external OAuth provider, and write the migration for the new session tracking table. High priority — Derek wants this done before the next on-call rotation."
+  }
+]

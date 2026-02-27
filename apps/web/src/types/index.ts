@@ -987,6 +987,8 @@ export interface LinearIssue {
   dueDate: string | null;
   url: string;
   labels: LinearLabel[];
+  /** ID of parent issue (null if top-level, set if subtask) */
+  parentId: string | null;
   /** Number of child issues (subtasks) */
   childCount: number;
   /** Child issues (populated when parent issue has children) */
@@ -1090,7 +1092,7 @@ export interface CalendarPreview {
 /**
  * Worker type determines which model Claude uses.
  */
-export type CodeTaskWorkerType = 'opus' | 'auto' | 'glm';
+export type CodeTaskWorkerType = 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
 
 /**
  * Worker location for routing.
@@ -1103,7 +1105,7 @@ export type CodeTaskWorkerLocation = string;
 export type CodeTaskStatus =
   | 'dispatched'
   | 'running'
-  | 'designed'
+  | 'planned'
   | 'implemented'
   | 'failed'
   | 'interrupted'
@@ -1172,10 +1174,10 @@ export interface CodeTask {
     commentCount: number;
     lastCommentAt: string | null;
   };
-  executionPhase?: 'design' | 'execution';
+  agentType?: 'planning' | 'execution' | 'pull_request';
   implementationTaskId?: string;
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'phase2_implement';
+  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement';
   result?: CodeTaskResult;
   error?: CodeTaskError;
 }
@@ -1221,7 +1223,7 @@ export interface RetryCodeTaskResponse {
 }
 
 /**
- * Response from starting Phase 2 implementation of a design task
+ * Response from starting execution-agent implementation of a planning task
  */
 export interface StartImplementationResponse {
   codeTaskId: string;

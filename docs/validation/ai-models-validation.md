@@ -377,40 +377,40 @@ The `FAST_MODEL_DISPLAY_NAMES` constant in `supportedModels.ts` defines the cano
 
 | #   | Issue                                                               | Status                 | Impact                                                 |
 | --- | ------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------ |
-| 1   | `gpt-4.1` not in llm-contract                                       | ❌ Open                | Model exists in production but not in central registry |
-| 2   | `text-embedding-3-small` not in llm-contract                        | ❌ Open                | Embedding model not tracked in central model inventory |
-| 3   | `o4-mini` used in test fixtures (should be `o4-mini-deep-research`) | ❌ Open                | Test data uses invalid model ID -- could hide bugs     |
-| 4   | chat-agent and code-agent missing from overview.md and index.md     | ✅ Resolved 2026-02-19 | Both services now documented                           |
+| 1   | `gpt-4.1` not in llm-contract                                       | ❌ Open                 | Model exists in production but not in central registry |
+| 2   | `text-embedding-3-small` not in llm-contract                        | ❌ Open                 | Embedding model not tracked in central model inventory |
+| 3   | `o4-mini` used in test fixtures (should be `o4-mini-deep-research`) | ❌ Open                 | Test data uses invalid model ID -- could hide bugs     |
+| 4   | chat-agent and code-agent missing from overview.md and index.md     | ✅ Resolved 2026-02-19  | Both services now documented                           |
 
 ### High Severity Issues (HIGH = model count wrong in docs)
 
 | #   | Issue                                                                                           | Status  | Impact                                           |
 | --- | ----------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------ |
-| 5   | overview.md says "17 models" then "16 models" -- self-contradicting                             | ❌ Open | Contradictory model count in same doc            |
-| 6   | index.md claims "17 models" -- wrong count                                                      | ❌ Open | Incorrect count for the 16-model registry        |
-| 7   | GLM-4.7 listed as ValidationModel in index.md but `ValidationModel` type only has GLM-4.7-Flash | ❌ Open | Type vs doc mismatch -- 5 vs 6 validation models |
-| 8   | `llm-factory` limitation (Google + Zai only) not documented                                     | ❌ Open | Developers may try to use factory for Claude/GPT |
+| 5   | overview.md says "17 models" then "16 models" -- self-contradicting                             | ❌ Open  | Contradictory model count in same doc            |
+| 6   | index.md claims "17 models" -- wrong count                                                      | ❌ Open  | Incorrect count for the 16-model registry        |
+| 7   | GLM-4.7 listed as ValidationModel in index.md but `ValidationModel` type only has GLM-4.7-Flash | ❌ Open  | Type vs doc mismatch -- 5 vs 6 validation models |
+| 8   | `llm-factory` limitation (Google + Zai only) not documented                                     | ❌ Open  | Developers may try to use factory for Claude/GPT |
 
 ### Medium Severity Issues (MEDIUM = naming inconsistency)
 
 | #   | Issue                                                                                                       | Status  | Impact                                       |
 | --- | ----------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------- |
-| 9   | Anthropic model IDs in docs use short names (claude-opus-4.5, claude-sonnet-4.5)                            | ❌ Open | Developers may use wrong model IDs from docs |
-| 10  | index.md omits GLM-4.7-Flash from commands-agent                                                            | ❌ Open | Incomplete capability documentation          |
-| 11  | index.md says todos-agent uses "Via commands-agent"                                                         | ❌ Open | Incorrect -- todos-agent calls LLM directly  |
-| 12  | Overview omits Gemini 2.0 Flash, GPT-4o Mini, GPT-4.1 from provider table                                   | ❌ Open | Incomplete model listing                     |
-| 13  | data-insights-agent and web-agent docs claim specific models when they actually use user's configured model | ❌ Open | Misleading specificity                       |
-| 14  | infra-claude JSDoc uses `claude-sonnet-4-5` (no version suffix); infra-gpt JSDoc uses `gpt-4.1`             | ❌ Open | Misleading code examples in package docs     |
-| 15  | `gemini-2.0-flash-exp` used in test fixtures (deprecated; should be `gemini-2.0-flash`)                     | ❌ Open | Deprecated model in test data                |
+| 9   | Anthropic model IDs in docs use short names (claude-opus-4.5, claude-sonnet-4.5)                            | ❌ Open  | Developers may use wrong model IDs from docs |
+| 10  | index.md omits GLM-4.7-Flash from commands-agent                                                            | ❌ Open  | Incomplete capability documentation          |
+| 11  | index.md says todos-agent uses "Via commands-agent"                                                         | ❌ Open  | Incorrect -- todos-agent calls LLM directly  |
+| 12  | Overview omits Gemini 2.0 Flash, GPT-4o Mini, GPT-4.1 from provider table                                   | ❌ Open  | Incomplete model listing                     |
+| 13  | data-insights-agent and web-agent docs claim specific models when they actually use user's configured model | ❌ Open  | Misleading specificity                       |
+| 14  | infra-claude JSDoc uses `claude-sonnet-4-5` (no version suffix); infra-gpt JSDoc uses `gpt-4.1`             | ❌ Open  | Misleading code examples in package docs     |
+| 15  | `gemini-2.0-flash-exp` used in test fixtures (deprecated; should be `gemini-2.0-flash`)                     | ❌ Open  | Deprecated model in test data                |
 
 ### Low Severity Issues (LOW = cosmetic)
 
 | #   | Issue                                                                          | Status  | Impact                                       |
 | --- | ------------------------------------------------------------------------------ | ------- | -------------------------------------------- |
-| 16  | Gemini Flash Image naming varies across docs                                   | ❌ Open | Cosmetic inconsistency                       |
-| 17  | GPT-Image-1 redundant parenthetical in index.md                                | ❌ Open | Cosmetic                                     |
-| 18  | overview.md "5 providers" claim does not count OpenAI embedding API separately | ❌ Open | Technically correct but incomplete           |
-| 19  | No canonical display name registry for all 16 models (only FastModel covered)  | ❌ Open | Minor -- FAST_MODEL_DISPLAY_NAMES incomplete |
+| 16  | Gemini Flash Image naming varies across docs                                   | ❌ Open  | Cosmetic inconsistency                       |
+| 17  | GPT-Image-1 redundant parenthetical in index.md                                | ❌ Open  | Cosmetic                                     |
+| 18  | overview.md "5 providers" claim does not count OpenAI embedding API separately | ❌ Open  | Technically correct but incomplete           |
+| 19  | No canonical display name registry for all 16 models (only FastModel covered)  | ❌ Open  | Minor -- FAST_MODEL_DISPLAY_NAMES incomplete |
 
 ---
 

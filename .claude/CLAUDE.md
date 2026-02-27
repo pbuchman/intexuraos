@@ -166,22 +166,44 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 - Pattern: `setServices({fakes})` in `beforeEach`, `resetServices()` in `afterEach`
 - Routes: integration via `app.inject()`. Domain: unit tests.
 - **Coverage: 100% branch coverage required.** Every branch must be:
-  1. Covered by tests, OR
-  2. Exempted with `/* v8 ignore <CATEGORY> -- reason @preserve */`
+  1. Covered by tests (**STRONGLY preferred**), OR
+  2. Exempted with `/* v8 ignore <CATEGORY> -- reason @preserve */` (**LAST RESORT only**)
 
 CI fails on any unaccounted branch. No exceptions.
 
 ### Coverage Exemptions
 
-**RULE:** All uncovered branches must have a `/* v8 ignore <CATEGORY> -- reason */` comment with valid category.
+**RULE:** `v8 ignore` is a LAST RESORT, not a shortcut. Always write a test first.
+
+**Before adding ANY v8 ignore comment, you MUST:**
+
+1. Write a test that exercises the branch
+2. Confirm the branch is **genuinely untestable** (not just inconvenient)
+3. Verify the category matches a canonical pattern from the list below
+
+**NEVER valid for v8 ignore** — these are ALWAYS testable:
+
+| Pattern              | How to Test It                          |
+| -------------------- | --------------------------------------- |
+| Catch blocks         | Throw in the test (mock the dependency) |
+| Error paths          | Mock the dependency to return an error  |
+| Validation branches  | Pass invalid input                      |
+| Conditional returns  | Test both branches with different input |
+| If/else branches     | Test both conditions                    |
+| Default switch cases | Pass an unmatched value                 |
+| Null guards          | Pass null/undefined input               |
 
 **Valid categories:** `ts-type`, `regex`, `module-init`, `async-timing`, `test-infra`, `upstream`, `module-mock`, `schema`, `source-map`, `auth-guard`
 
 **Validation:** `pnpm run verify:v8-ignore` (runs in CI Static Validation phase)
 
+**Hook-enforced:** Adding `v8 ignore` triggers a PostToolUse soft-block reminder.
+
 **NEVER** add v8 ignore comments without a valid category. CI will fail.
 
 **Reference:** `.claude/skills/coverage/reference/canonical-categories.md`
+
+Rationalizing? See `.claude/reference/rationalization-traps.md` > V8 Ignore Traps.
 
 ### Web App Exception
 
@@ -492,7 +514,9 @@ If changed: run `terraform fmt -check -recursive` and `terraform validate` (with
 
 **Before EVERY commit:** [Commit Gate](#-commit-gate) must pass.
 
-**Before creating a PR:** merge latest base branch and resolve conflicts.
+**Before creating a PR:** merge latest base branch and resolve conflicts. PRs target `development`.
+
+**Git worktrees are NOT allowed.** Work directly on feature branches or `development`.
 
 ```bash
 pnpm run ci:tracked              # MUST pass first
@@ -581,14 +605,15 @@ STEP 4: Check service status with the right tool (see below).
 
 **On home-dev — all services run on the SAME machine:**
 
-| Component                    | Manager        | Commands                                              |
-| ---------------------------- | -------------- | ----------------------------------------------------- |
-| Apps (18 services + web)     | PM2 (watch)    | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>` |
-| Workers (orchestrator, etc.) | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`        |
+| Component                 | Manager        | Commands                                                         |
+| ------------------------- | -------------- | ---------------------------------------------------------------- |
+| Apps (18 services + web)  | PM2            | `pm2 status`, `pm2 logs <name>`, `pm2 restart <name>`            |
+| Orchestrator              | systemd        | `sudo systemctl status/restart intexuraos-orchestrator@pbuchman` |
+| Workers (cloud functions) | Direct process | `pnpm dev` (tsx watch) or `node dist/index.js`                   |
 
-**Workers are NOT in PM2.** The orchestrator, claude-worker, log-cleanup, and vm-lifecycle run as separate processes outside PM2. Check with `ps aux | grep orchestrator`, not `pm2 status`.
+**Orchestrator is NOT in PM2.** It runs under systemd as `intexuraos-orchestrator@pbuchman`, executing compiled `dist/index.js`. Check with `systemctl status`, not `pm2 status`.
 
-**Auto-reload: No manual restart or deploy needed.** PM2 runs with `watch: true` and the orchestrator runs with `tsx watch` — code changes are picked up automatically. On home-dev, `~/deploy/intexuraos` has a git hook that pulls and triggers reload on push.
+**Auto-deploy via webhook handler.** A GitHub webhook at `~/tools/webhook-handler/` receives push events to `development`, detects changed files, and restarts affected services. PM2 services restart via `pm2 restart`; the orchestrator rebuilds (`pnpm --filter orchestrator build`) then restarts via `systemctl restart`. PM2 file watching is disabled (`watch: false`).
 
 **Key port map** (full list in `ecosystem.config.cjs`):
 
@@ -605,7 +630,7 @@ STEP 4: Check service status with the right tool (see below).
 - "This is a prod issue" — verify first by checking where the logs came from.
 - "I can't access that service" — on home-dev, you CAN. It's localhost.
 - "Not related to my changes" — if it's on the same machine, investigate it.
-- "We need to restart/deploy" — watch mode auto-reloads on home-dev. Just push.
+- "We need to restart/deploy" — webhook auto-deploys on push to development. Just push.
 
 ---
 

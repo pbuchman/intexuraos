@@ -16,32 +16,15 @@ import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js
 import type { MetricsClient } from '../../domain/services/metrics.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
-import { randomBytes, randomUUID, createHmac } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
+import { generateWebhookSecret, generateCancelNonce, CANCEL_NONCE_TTL_MS } from '../utils/secrets.js';
 
 /**
  * Cool-off period before retry is allowed (1 minute).
  */
 const RETRY_COOL_OFF_MS = 1 * 60 * 1000;
-
-/**
- * Generate a deterministic webhook secret for a task.
- * Derives from HMAC-SHA256(sharedSecret, taskId) so both sides can compute independently.
- */
-function generateWebhookSecret(sharedSecret: string, taskId: string): string {
-  return createHmac('sha256', sharedSecret).update(taskId).digest('hex');
-}
-
-/**
- * Generate a cancel nonce for task cancellation.
- */
-function generateCancelNonce(): string {
-  const buffer = randomBytes(2);
-  return buffer.toString('hex');
-}
-
-const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
 
 /**
  * Request to retry a failed task.
@@ -93,6 +76,7 @@ export interface RetryTaskDeps {
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
   orchestratorSecret: string;
+  serviceUrl: string;
 }
 
 /**
@@ -289,7 +273,7 @@ ${additionalContext.trim()}
     traceId: `retry-${String(Date.now())}`,
     webhookSecret,
     retriedFrom: originalTaskId,
-    executionPhase: hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('design' as const),
+    agentType: hasCodeTaskLabel(linearIssueLabelsForDispatch) ? ('execution' as const) : ('planning' as const),
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.linearIssueTitle !== undefined && { linearIssueTitle: originalTask.linearIssueTitle }),
     /* v8 ignore start -- ts-type: optional property spread @preserve */
@@ -310,8 +294,7 @@ ${additionalContext.trim()}
   const retryTask = createResult.value;
 
   // Step 9: Build webhook URL
-  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
-  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
+  const webhookUrl = `${deps.serviceUrl}/internal/webhooks/task-complete`;
 
   // Step 10: Dispatch to worker
   const dispatchRequest: {
@@ -321,7 +304,7 @@ ${additionalContext.trim()}
     systemPromptHash: string;
     repository: string;
     baseBranch: string;
-    workerType: 'opus' | 'auto' | 'glm';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;
@@ -329,6 +312,7 @@ ${additionalContext.trim()}
     retriedFrom?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
+    agentType: 'planning' | 'execution';
   } = {
     taskId: retryTask.id,
     prompt: retryTask.sanitizedPrompt,
@@ -342,6 +326,9 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     linearIssueLabels: linearIssueLabelsForDispatch,
     hasChildren: hasChildrenForDispatch,
+    /* v8 ignore start -- source-map: object literal ternary branch is misattributed after transforms @preserve */
+    agentType: retryTask.agentType === 'execution' ? 'execution' : 'planning',
+    /* v8 ignore stop @preserve */
   };
 
   // Only include optional fields if defined

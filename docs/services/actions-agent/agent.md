@@ -460,14 +460,14 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 
 ## Error Handling
 
-| Error Code       | HTTP | Meaning                    | Recovery Action               |
-| ---------------- | ---- | -------------------------- | ----------------------------- |
-| `INVALID_REQUEST`| 400  | Invalid input or state     | Fix request payload           |
-| `UNAUTHORIZED`   | 401  | Invalid or missing auth    | Refresh token or check header |
-| `FORBIDDEN`      | 403  | User not owner             | Verify user ID matches        |
-| `NOT_FOUND`      | 404  | Action does not exist      | Verify action ID              |
-| `INTERNAL_ERROR` | 500  | Processing failure         | Retry with backoff            |
-| `DOWNSTREAM_ERROR`| 502 | Calendar/other service err | Wait and retry                |
+| Error Code         | HTTP | Meaning                    | Recovery Action               |
+| ------------------ | ---- | -------------------------- | ----------------------------- |
+| `INVALID_REQUEST`  | 400  | Invalid input or state     | Fix request payload           |
+| `UNAUTHORIZED`     | 401  | Invalid or missing auth    | Refresh token or check header |
+| `FORBIDDEN`        | 403  | User not owner             | Verify user ID matches        |
+| `NOT_FOUND`        | 404  | Action does not exist      | Verify action ID              |
+| `INTERNAL_ERROR`   | 500  | Processing failure         | Retry with backoff            |
+| `DOWNSTREAM_ERROR` | 502  | Calendar/other service err | Wait and retry                |
 
 ### Cancel-task Error Codes (v4.0.0)
 

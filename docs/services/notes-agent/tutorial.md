@@ -289,13 +289,13 @@ curl -s http://localhost:8121/notes \
 
 ## Troubleshooting
 
-| Problem         | Symptom                  | Solution                                                       |
-| --------------- | ------------------------ | -------------------------------------------------------------- |
-| Auth failed     | 401 Unauthorized         | Check JWT token validity and ensure correct audience/issuer    |
-| Note not found  | 404 NOT_FOUND            | Verify note ID exists and belongs to your account              |
-| Access denied   | 403 FORBIDDEN            | Note belongs to a different user                               |
-| Invalid request | 400 Bad Request          | Check required fields: title, content, tags, source, sourceId  |
-| Server error    | 500 INTERNAL_ERROR       | Check Firestore connectivity; review service logs              |
+| Problem         | Symptom                  | Solution                                                             |
+| --------------- | ------------------------ | -------------------------------------------------------------------- |
+| Auth failed     | 401 Unauthorized         | Check JWT token validity and ensure correct audience/issuer          |
+| Note not found  | 404 NOT_FOUND            | Verify note ID exists and belongs to your account                    |
+| Access denied   | 403 FORBIDDEN            | Note belongs to a different user                                     |
+| Invalid request | 400 Bad Request          | Check required fields: title, content, tags, source, sourceId        |
+| Server error    | 500 INTERNAL_ERROR       | Check Firestore connectivity; review service logs                    |
 | Internal auth   | 401 on /internal/notes   | Verify X-Internal-Auth header matches INTEXURAOS_INTERNAL_AUTH_TOKEN |
 
 ---

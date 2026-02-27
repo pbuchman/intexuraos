@@ -77,9 +77,9 @@ The app will be available at `http://localhost:3000`
 
 The web app can connect to either:
 
-| Option         | When to Use       | How                                             |
-| -------------- | ----------------- | ----------------------------------------------- |
-| Cloud services | Production build  | `pnpm build` -- uses absolute service URLs      |
+| Option         | When to Use       | How                                              |
+| -------------- | ----------------- | ------------------------------------------------ |
+| Cloud services | Production build  | `pnpm build` -- uses absolute service URLs       |
 | Dev mode       | Local development | `pnpm dev` -- Vite proxy routes `/api/*` locally |
 
 ### Step 2.2: Vite Proxy Configuration
@@ -300,7 +300,7 @@ Serves the production build locally at `http://localhost:3000`
 | "Auth0 unauthorized"                    | Verify `AUTH_AUDIENCE` matches your Auth0 API configuration                                |
 | "CORS errors"                           | Ensure backend service allows requests from localhost                                      |
 | "Service worker not registering"        | Clear site data and reload in DevTools Application tab                                     |
-| "Vite HMR not working"                  | HMR is disabled by default (`hmr: false` in vite.config.ts); use full page reload         |
+| "Vite HMR not working"                  | HMR is disabled by default (`hmr: false` in vite.config.ts); use full page reload          |
 | DevBar not showing                      | Only visible in dev mode (`pnpm dev`) or on `dev.intexuraos.cloud`, not in production      |
 | Chat not working as guest               | Guest sessions are rate-limited; clear `intex-guest-session-id` from localStorage to reset |
 | Dark mode not persisting                | Ensure localStorage is available (not in strict private mode)                              |
@@ -338,7 +338,7 @@ Now that you understand the basics:
 2. Read [`apiClient.ts`](../../../apps/web/src/services/apiClient.ts) for request handling
 3. Check [`App.tsx`](../../../apps/web/src/App.tsx) for routing structure
 4. Study the [`Chat`](../../../apps/web/src/components/Chat/Chat.tsx) component for the chat assistant architecture
-5. Review [`CodeTaskViewPage.tsx`](../../../apps/web/src/pages/CodeTaskViewPage.tsx) for collapsible tool output, two-phase banners, queued messaging, and LogStream
+5. Review [`CodeTaskViewPage.tsx`](../../../apps/web/src/pages/CodeTaskViewPage.tsx) for collapsible tool output, agent-type banners, queued messaging, and LogStream
 6. See [`PREventsPage.tsx`](../../../apps/web/src/pages/PREventsPage.tsx) for lazy-loaded summaries with `useGitHubPRSummaries` + `useGitHubPREvents`
 7. Study [`CodeTasksPage.tsx`](../../../apps/web/src/pages/CodeTasksPage.tsx) for multi-status filtering with persistent state
 

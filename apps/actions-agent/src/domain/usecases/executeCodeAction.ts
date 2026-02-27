@@ -92,7 +92,7 @@ export function createExecuteCodeActionUseCase(
 
     // Get payload fields
     const prompt = typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
-    const workerTypeRaw = action.payload['workerType'] as 'opus' | 'auto' | 'glm' | undefined;
+    const workerTypeRaw = action.payload['workerType'] as 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | undefined;
     const workerType = workerTypeRaw ?? 'auto';
     const linearIssueId = action.payload['linearIssueId'] as string | undefined;
     const linearIssueTitle = action.payload['linearIssueTitle'] as string | undefined;
@@ -105,7 +105,7 @@ export function createExecuteCodeActionUseCase(
     // Build payload without undefined values (exactOptionalPropertyTypes)
     const payload: {
       prompt: string;
-      workerType: 'opus' | 'auto' | 'glm';
+      workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm';
       linearIssueId?: string;
       linearIssueTitle?: string;
     } = { prompt, workerType };
