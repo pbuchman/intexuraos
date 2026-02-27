@@ -386,6 +386,9 @@ function detectMultipleOptions(text: string): string | null {
     return 'Response contains multiple options - should be a single improved prompt';
   }
 
+  // Known limitation: comma-separated alternatives (e.g., "Option A, option B, or option C")
+  // are not detected. This is intentional to avoid false positives on natural prose.
+
   return null;
 }
 
@@ -421,7 +424,8 @@ function getNonLatinRatio(text: string): number {
     return 0;
   }
 
-  // Match only basic Latin letters (a-z, A-Z)
+  // Match only basic ASCII Latin letters (a-z, A-Z). Accented Latin characters (e, u, etc.)
+  // are counted as "non-Latin" here, but the 0.3/0.1 thresholds account for this.
   const latinAlpha = text.match(/[a-zA-Z]/g);
   const latinCount = latinAlpha === null ? 0 : latinAlpha.length;
 
