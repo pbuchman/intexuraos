@@ -103,7 +103,12 @@ const LLM_EXECUTION_METADATA_SCHEMA = z.object({
   superpowersRequestingCodeReviewUsed: z.enum(['0', '1']),
   trivialTask: z.enum(['0', '1']),
   subagents: z.string(),
-  reviewIterations: z.number().int().min(0),
+  reviewIterations: z
+    .number()
+    .int()
+    .min(0)
+    .nullable()
+    .transform((v) => v ?? 0),
   linearIssueUrl: z.string().url(),
 });
 
