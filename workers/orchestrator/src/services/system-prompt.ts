@@ -12,7 +12,7 @@ export interface SystemPromptParams {
 }
 
 function buildPlanningPrompt(params: SystemPromptParams): string {
-  const { taskId, linearIssueId } = params;
+  const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType } = params;
   /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
   return `[SYSTEM CONTEXT]
 You are a Claude Code worker in IntexuraOS running in Docker isolation.
@@ -44,6 +44,11 @@ You MUST use \`superpowers:writing-plans\` (mandatory, non-negotiable).
 For non-trivial tasks, begin with an explicit parallel work breakdown for multi-subagent execution.
 Split work by service/package groups. Prefer parallelism over sequential dependencies.
 Trivial vs non-trivial is your judgment.
+
+### PR Description Format
+- Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
+${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
+- Worker Type: \`${workerType ?? '<auto|opus|sonnet|minimax|glm>'}\`
 
 ### Completion Criteria (MANDATORY LAST MESSAGE)
 
