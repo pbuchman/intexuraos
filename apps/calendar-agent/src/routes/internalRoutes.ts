@@ -13,6 +13,7 @@ interface ProcessActionBody {
     userId: string;
     title: string;
   };
+  text?: string;
 }
 
 interface GeneratePreviewMessage {
@@ -77,9 +78,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               properties: {
                 id: { type: 'string', description: 'Action ID' },
                 userId: { type: 'string', description: 'User ID' },
-                title: { type: 'string', description: 'User message text to extract event from' },
+                title: { type: 'string', description: 'Short classifier-generated title' },
               },
             },
+            text: { type: 'string', description: 'Full user prompt text to extract event from (falls back to action.title)' },
           },
         },
         response: {
@@ -150,10 +152,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const services = getServices();
-      const { action } = request.body;
+      const { action, text: requestText } = request.body;
+      const text = typeof requestText === 'string' && requestText.length > 0 ? requestText : action.title;
 
       request.log.info(
-        { actionId: action.id, userId: action.userId, textLength: action.title.length },
+        { actionId: action.id, userId: action.userId, textLength: text.length, hasFullText: typeof requestText === 'string' },
         'internal/processCalendarAction: processing action'
       );
 
@@ -161,7 +164,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         {
           actionId: action.id,
           userId: action.userId,
-          text: action.title,
+          text,
         },
         {
           userServiceClient: services.userServiceClient,

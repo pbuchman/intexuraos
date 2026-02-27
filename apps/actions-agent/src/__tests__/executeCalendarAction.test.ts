@@ -387,4 +387,76 @@ describe('executeCalendarAction usecase', () => {
       expect(result.value.status).toBe('completed');
     }
   });
+
+  it('passes full prompt text from payload.prompt to calendar service', async () => {
+    const fullPrompt = 'Set up a weekly standup every Monday at 9:15am starting next week';
+    const action = createAction({
+      status: 'awaiting_approval',
+      title: 'Weekly standup',
+      payload: { prompt: fullPrompt },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const processedActions = fakeCalendarClient.getProcessedActions();
+    expect(processedActions).toHaveLength(1);
+    expect(processedActions[0]?.text).toBe(fullPrompt);
+    // Should NOT pass the short title as text
+    expect(processedActions[0]?.text).not.toBe('Weekly standup');
+  });
+
+  it('falls back to title when payload.prompt is not present', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      title: 'Meeting with John',
+      payload: {},
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const processedActions = fakeCalendarClient.getProcessedActions();
+    expect(processedActions).toHaveLength(1);
+    expect(processedActions[0]?.text).toBe('Meeting with John');
+  });
+
+  it('falls back to title when payload.prompt is not a string', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      title: 'Team sync',
+      payload: { prompt: 42 },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const processedActions = fakeCalendarClient.getProcessedActions();
+    expect(processedActions).toHaveLength(1);
+    expect(processedActions[0]?.text).toBe('Team sync');
+  });
 });
