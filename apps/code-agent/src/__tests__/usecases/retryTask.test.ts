@@ -164,6 +164,7 @@ describe('retryTask use case', () => {
       metricsClient: mockMetricsClient as unknown as RetryTaskDeps['metricsClient'],
       workerSettingsRepo: mockWorkerSettingsRepo as unknown as RetryTaskDeps['workerSettingsRepo'],
       orchestratorSecret: 'test-orchestrator-secret',
+      serviceUrl: 'https://test.example.com',
     };
   }
 
@@ -635,9 +636,9 @@ describe('retryTask use case', () => {
       const createCallInput = mockCodeTaskRepo.create.mock.calls[0]?.[0];
       expect(createCallInput?.retriedFrom).toBe(originalTaskId);
 
-      // Verify executionPhase is 'design' when validateIssue returns no 'code-task' label
+      // Verify agentType is 'design' when validateIssue returns no 'code-task' label
       // (default mock returns labels: ['unclear'])
-      expect(createCallInput?.executionPhase).toBe('design');
+      expect(createCallInput?.agentType).toBe('planning');
     });
 
     it('should update Linear issue state to In Progress', async () => {
@@ -718,10 +719,10 @@ describe('retryTask use case', () => {
         })
       );
 
-      // Verify executionPhase is 'execution' when validateIssue returns 'code-task' label
+      // Verify agentType is 'execution' when validateIssue returns 'code-task' label
       expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          executionPhase: 'execution',
+          agentType: 'execution',
         })
       );
     });

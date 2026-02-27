@@ -18,7 +18,7 @@ import type { ApiKeyValidator } from './api-key-validator.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
 import {
-  type CompletionPhase,
+  type CompletionAgentType,
   type CompletionVerifier,
   type CompletionVerifierVerdict,
 } from './completion-verifier.js';
@@ -180,7 +180,7 @@ export class TaskDispatcher {
         ...(request.slug !== undefined && { slug: request.slug }),
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
-        ...(request.executionPhase !== undefined && { executionPhase: request.executionPhase }),
+        ...(request.agentType !== undefined && { agentType: request.agentType }),
         startedAt: new Date().toISOString(),
         attemptCount: 1,
         maxAttempts: this.completionMaxAttempts,
@@ -251,24 +251,24 @@ export class TaskDispatcher {
       const isPRComment = task.linearIssueLabels.some(
         (l) => l.trim().toLowerCase() === 'pr-comment'
       );
-      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all three phases @preserve */
-      const phase = isPRComment
-        ? 'PR Comment'
-        : task.executionPhase === 'execution'
-          ? 'Phase 2'
-          : task.executionPhase === 'design'
-            ? 'Phase 1'
+      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all three agents @preserve */
+      const agentLabel = isPRComment
+        ? 'Pull Request Agent'
+        : task.agentType === 'execution'
+          ? 'Execution Agent'
+          : task.agentType === 'planning'
+            ? 'Planning Agent'
             : hasCodeTaskLabel(task.linearIssueLabels)
-              ? 'Phase 2'
-              : 'Phase 1';
-      const phaseDesc =
-        phase === 'PR Comment'
-          ? 'PR Comment Execution \u2014 respond to PR comment, push to existing PR branch'
-          : phase === 'Phase 2'
-            ? 'Strict Execution \u2014 implement autonomously, run CI, create PR'
-            : 'Design & Validation \u2014 analyze and enrich the Linear issue, do not execute code';
+              ? 'Execution Agent'
+              : 'Planning Agent';
+      const agentDesc =
+        agentLabel === 'Pull Request Agent'
+          ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
+          : agentLabel === 'Execution Agent'
+            ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
+            : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
       /* v8 ignore stop @preserve */
-      this.appendTaggedTaskLog(taskId, 'instructions', `${phase}: ${phaseDesc}`);
+      this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
       /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
@@ -650,24 +650,24 @@ export class TaskDispatcher {
     const attempt = task.attemptCount ?? 1;
     const maxAttempts = this.completionMaxAttempts;
     const isPRComment = task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-    const phase = isPRComment
-      ? 'pr-comment'
-      : task.executionPhase === 'execution'
-        ? 'phase2'
-        : task.executionPhase === 'design'
-          ? 'phase1'
+    const completionAgentType = isPRComment
+      ? 'pull_request'
+      : task.agentType === 'execution'
+        ? 'execution'
+        : task.agentType === 'planning'
+          ? 'planning'
           : hasCodeTaskLabel(task.linearIssueLabels)
-            ? 'phase2'
-            : 'phase1';
+            ? 'execution'
+            : 'planning';
     this.attemptCompletionSignals.delete(task.taskId);
 
     this.logger.info(
       {},
-      `Worker attempt finished: taskId=${task.taskId} attempt=${String(attempt)}/${String(maxAttempts)} phase=${phase}`
+      `Worker attempt finished: taskId=${task.taskId} attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
     );
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Attempt finished: attempt=${String(attempt)}/${String(maxAttempts)} phase=${phase}`
+      `Attempt finished: attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
     );
 
     try {
@@ -688,14 +688,14 @@ export class TaskDispatcher {
         `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
       );
     }
-    if (phase === 'phase1' && result?.prUrl !== undefined && result.prUrl !== '') {
+    if (completionAgentType === 'planning' && result?.prUrl !== undefined && result.prUrl !== '') {
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `[WARN] Phase mismatch: task ran as Phase 1 (design) but worker created PR: ${result.prUrl}`
+        `[WARN] Agent mismatch: task ran as Planning Agent but worker created PR: ${result.prUrl}`
       );
       this.logger.warn(
-        { taskId: task.taskId, phase, prUrl: result.prUrl },
-        'Phase mismatch: Phase 1 task created a PR'
+        { taskId: task.taskId, agentType: completionAgentType, prUrl: result.prUrl },
+        'Agent mismatch: Planning Agent task created a PR'
       );
     }
     this.appendOrchestratorTaskLog(
@@ -707,7 +707,7 @@ export class TaskDispatcher {
       taskId: task.taskId,
       attempt,
       maxAttempts,
-      phase,
+      agentType: completionAgentType,
       originalPrompt: task.prompt,
       rawLogs,
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
@@ -845,7 +845,7 @@ export class TaskDispatcher {
         }
 
         const resumePromptBody = this.buildResumePrompt(task.prompt, verification, {
-          phase,
+          agentType: completionAgentType,
           ...(result !== undefined && { taskResult: result }),
           ...(typeof exitCode === 'number' && { workerExitCode: exitCode }),
           ...(claudeError !== undefined && { claudeError }),
@@ -941,6 +941,51 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       const finalResult = this.injectExtractedSummary(result, verification.extractedSummary);
+      if (completionAgentType === 'planning' && verification.planningMetadata !== undefined) {
+        const planningResult: TaskResult = {
+          ...(finalResult ?? {}),
+          planning_outcome_label: verification.planningMetadata.outcomeLabel,
+          planning_superpowers_writing_plans_used:
+            verification.planningMetadata.superpowersWritingPlansUsed,
+          planning_issue_url: verification.planningMetadata.planningIssueUrl ?? '',
+          planning_trivial_task: verification.planningMetadata.trivialTask ?? '',
+          planning_doc_path: verification.planningMetadata.docPath ?? '',
+          planning_pr_url: verification.planningMetadata.prUrl ?? '',
+          planning_clarification_message: verification.planningMetadata.clarificationMessage ?? '',
+        };
+
+        if (verification.planningMetadata.outcomeLabel === 'unclear') {
+          await this.finalizeTask(task, 'failed', {
+            result: planningResult,
+            error: {
+              code: 'PLANNING_AGENT_UNCLEAR',
+              message:
+                verification.planningMetadata.clarificationMessage ??
+                'Planning agent reported unclear outcome',
+            },
+          });
+          return;
+        }
+
+        await this.finalizeTask(task, 'completed', { result: planningResult });
+        return;
+      }
+      if (completionAgentType === 'execution' && verification.executionMetadata !== undefined) {
+        const executionResult: TaskResult = {
+          ...(finalResult ?? {}),
+          execution_outcome_label: verification.executionMetadata.outcomeLabel,
+          execution_superpowers_executing_plans_used:
+            verification.executionMetadata.superpowersExecutingPlansUsed,
+          execution_superpowers_requesting_code_review_used:
+            verification.executionMetadata.superpowersRequestingCodeReviewUsed,
+          execution_trivial_task: verification.executionMetadata.trivialTask,
+          execution_subagents: verification.executionMetadata.subagents,
+          execution_review_iterations: verification.executionMetadata.reviewIterations,
+          execution_linear_issue_url: verification.executionMetadata.linearIssueUrl,
+        };
+        await this.finalizeTask(task, 'completed', { result: executionResult });
+        return;
+      }
       await this.finalizeTask(task, 'completed', {
         ...(finalResult !== undefined && { result: finalResult }),
       });
@@ -975,7 +1020,7 @@ export class TaskDispatcher {
     originalPrompt: string,
     verification: CompletionVerifierVerdict,
     context: {
-      phase: CompletionPhase;
+      agentType: CompletionAgentType;
       taskResult?: TaskResult;
       workerExitCode?: number;
       claudeError?: string;
@@ -990,7 +1035,7 @@ export class TaskDispatcher {
         ? verification.missingCriteria.map((criteria) => `- ${criteria}`).join('\n')
         : '- Completion criteria not met';
     const detectedState = [
-      `- phase: ${context.phase}`,
+      `- agentType: ${context.agentType}`,
       `- workerExitCode: ${String(context.workerExitCode ?? 'unknown')}`,
       `- claudeError: ${context.claudeError ?? 'none'}`,
       `- detectedPrUrl: ${context.taskResult?.prUrl ?? 'none'}`,
@@ -999,8 +1044,8 @@ export class TaskDispatcher {
       `- detectedBranch: ${context.taskResult?.branch ?? 'none'}`,
       `- detectedCommitsOnPr: ${String(context.taskResult?.commits ?? 'unknown')}`,
     ].join('\n');
-    const strictFieldGuidance = this.buildPhaseContractGuidance(context.phase);
-    const contractTemplate = this.buildPhaseFinalTemplate(context.phase);
+    const strictFieldGuidance = this.buildAgentContractGuidance(context.agentType);
+    const contractTemplate = this.buildAgentFinalTemplate(context.agentType);
     const extractedSummarySection =
       verification.extractedSummary !== undefined && verification.extractedSummary !== ''
         ? ['Verifier summary of previous attempt:', verification.extractedSummary, ''].join('\n')
@@ -1042,21 +1087,25 @@ export class TaskDispatcher {
       'Constraints:',
       '- Do not restart from scratch.',
       '- Continue from current repository/worktree state.',
-      '- Your last message must satisfy the required phase final block contract.',
+      '- Your last message must satisfy the required agent final block contract.',
     ].join('\n');
   }
 
-  private buildPhaseContractGuidance(phase: CompletionPhase): string {
-    if (phase === 'phase2') {
+  private buildAgentContractGuidance(agentType: CompletionAgentType): string {
+    if (agentType === 'execution') {
       return [
         '- `PR` line must be only a GitHub PR URL (no trailing notes like "(already merged)").',
+        '- `Outcome` line must be exactly `implemented`.',
         '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
         '- `Review iterations` line must contain digits only (example: `0`).',
-        '- Put explanations, caveats, and merged-history context in `Turn summary` or `Summary` only.',
+        '- `superpowers_executing_plans_used` and `superpowers_requesting_code_review_used` must be exactly `1`.',
+        '- `trivial_task` must be exactly `0` or `1`.',
+        '- `subagents` may be `none` only when `trivial_task` is `1`.',
+        '- Put explanations and caveats in `Summary`, not on strict fields.',
       ].join('\n');
     }
 
-    if (phase === 'pr-comment') {
+    if (agentType === 'pull_request') {
       return [
         '- `PR` line must be only a GitHub PR URL.',
         '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
@@ -1067,28 +1116,33 @@ export class TaskDispatcher {
 
     return [
       '- `Linear label set` line must be exactly `code-task` or `unclear`.',
-      '- `Phase 2 ready` line must be exactly `yes` or `no`.',
+      '- `Outcome` line must be exactly `planned` or `unclear`.',
       '- `Linear issue` line must be a full Linear URL.',
       '- Put explanations in `Summary`, not on strict fields.',
     ].join('\n');
   }
 
-  private buildPhaseFinalTemplate(phase: CompletionPhase): string {
-    if (phase === 'phase2') {
+  private buildAgentFinalTemplate(agentType: CompletionAgentType): string {
+    if (agentType === 'execution') {
       return [
-        'PHASE2_FINAL:',
+        'EXECUTION_AGENT_FINAL:',
+        '- Outcome: implemented',
         '- PR: https://github.com/<owner>/<repo>/pull/<number>',
         '- CI evidence: pnpm run ci:tracked successful',
         '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
         '- Review iterations: 0',
-        '- Turn summary: <short statement> | <short statement> | <short statement>',
+        '- superpowers_executing_plans_used: 1',
+        '- superpowers_requesting_code_review_used: 1',
+        '- trivial_task: 0',
+        '- subagents: backend-reviewer (API contract checks), test-runner (targeted CI verification)',
+        '- Skill sequence proof: superpowers:executing-plans before superpowers:requesting-code-review',
         '- Summary: <3-5 factual sentences>',
       ].join('\n');
     }
 
-    if (phase === 'pr-comment') {
+    if (agentType === 'pull_request') {
       return [
-        'PR_COMMENT_FINAL:',
+        'PULL_REQUEST_AGENT_FINAL:',
         '- PR: https://github.com/<owner>/<repo>/pull/<number>',
         '- CI evidence: pnpm run ci:tracked successful',
         '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
@@ -1098,10 +1152,10 @@ export class TaskDispatcher {
     }
 
     return [
-      'PHASE1_FINAL:',
-      '- Linear label set: code-task',
-      '- Phase 2 ready: yes',
-      '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
+      'PLANNING_AGENT_FINAL:',
+      '- Outcome: planned',
+      '- superpowers_writing_plans_used: 1',
+      '- Original issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
       '- Summary: <3-5 factual sentences>',
     ].join('\n');
   }
@@ -1319,7 +1373,7 @@ export class TaskDispatcher {
           linearIssueLabels: task.linearIssueLabels,
           hasChildren: params.hasChildren,
           workerType: task.workerType,
-          ...(task.executionPhase !== undefined && { executionPhase: task.executionPhase }),
+          ...(task.agentType !== undefined && { agentType: task.agentType }),
         }) +
         /* v8 ignore stop @preserve */
         (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),

@@ -21,8 +21,8 @@ export interface CreateTaskRequest {
    * Used for tracking retry chains and debugging.
    */
   retriedFrom?: string;
-  /** Execution phase determined by code-agent from label analysis. */
-  executionPhase?: 'design' | 'execution';
+  /** Agent type determined by code-agent routing analysis. */
+  agentType?: 'planning' | 'execution' | 'pull_request';
 }
 
 // GET /health response

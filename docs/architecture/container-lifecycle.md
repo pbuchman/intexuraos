@@ -397,16 +397,16 @@ When the orchestrator restarts:
 
 | Component         | Survives? | Notes                        |
 | ----------------- | --------- | ---------------------------- |
-| Docker containers | ✅ Yes    | Containers run independently |
-| Git worktrees     | ✅ Yes    | Filesystem persists          |
-| Firestore tasks   | ✅ Yes    | Database persists            |
+| Docker containers | ✅ Yes     | Containers run independently |
+| Git worktrees     | ✅ Yes     | Filesystem persists          |
+| Firestore tasks   | ✅ Yes     | Database persists            |
 
 ### What Is Lost
 
 | Component                                  | Survives? | Notes                |
 | ------------------------------------------ | --------- | -------------------- |
-| In-memory Maps (workers, preservedWorkers) | ❌ No     | Recreated on startup |
-| Task state in orchestrator                 | ❌ No     | Read from Firestore  |
+| In-memory Maps (workers, preservedWorkers) | ❌ No      | Recreated on startup |
+| Task state in orchestrator                 | ❌ No      | Read from Firestore  |
 
 ### Recovery Flow
 

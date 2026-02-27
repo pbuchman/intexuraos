@@ -187,7 +187,7 @@ sequenceDiagram
 | Commit     | Description                                                             | Date       |
 | ---------- | ----------------------------------------------------------------------- | ---------- |
 | `d5810213` | Use unique actionId for webhook dedup and propagate all dedup errors    | 2026-02-21 |
-| `dc45d1ea` | Align auto-trigger prompt with Phase 1 design behavior                  | 2026-02-21 |
+| `dc45d1ea` | Align auto-trigger prompt with planning agent behavior                  | 2026-02-21 |
 | `a88db80f` | Auto-trigger code tasks on Linear issue assignment                      | 2026-02-20 |
 | `6f35c16a` | Pass raw errors to pino logger (improved error observability)           | 2026-02-20 |
 | `b846dcc5` | Include assignee in list issues response mapper                         | 2026-02-20 |
