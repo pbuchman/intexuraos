@@ -213,7 +213,9 @@ ${feedback.trim()}
     }
   }
 
-  const agentType: 'planning' | 'execution' = hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'planning';
+  const agentType: 'planning' | 'execution' | 'pull_request' = originalTask.agentType === 'pull_request'
+    ? 'pull_request'
+    : hasCodeTaskLabel(linearIssueLabelsForDispatch) ? 'execution' : 'planning';
 
   // Step 8: Create follow-up task with parentTaskId
   const createInput = {
@@ -326,7 +328,7 @@ ${feedback.trim()}
     parentTaskId?: string;
     linearIssueLabels: string[];
     hasChildren: boolean;
-    agentType: 'planning' | 'execution';
+    agentType: 'planning' | 'execution' | 'pull_request';
   } = {
     taskId: followUpTask.id,
     prompt: followUpTask.sanitizedPrompt,
@@ -340,9 +342,7 @@ ${feedback.trim()}
     parentTaskId: originalTask.id,
     linearIssueLabels: linearIssueLabelsForDispatch,
     hasChildren: hasChildrenForDispatch,
-    /* v8 ignore start -- source-map: object literal ternary branch is misattributed after transforms @preserve */
-    agentType: followUpTask.agentType === 'execution' ? 'execution' : 'planning',
-    /* v8 ignore stop @preserve */
+    agentType: followUpTask.agentType ?? 'planning',
   };
 
   // Add optional fields if defined
