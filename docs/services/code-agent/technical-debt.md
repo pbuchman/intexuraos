@@ -64,7 +64,7 @@ The `systemPromptHash` field is designed for audit tracking -- recording which v
 
 **File:** `apps/code-agent/src/routes/codeRoutes.ts`
 
-This single file contains all internal code task routes AND all public code task routes -- over 3600 lines. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, and Phase 2 submission. Each route includes inline Fastify schema definitions that consume significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`) but the original routes remain consolidated.
+This single file contains all internal code task routes AND all public code task routes -- over 3600 lines. It handles task submission, task updates, task listing, task cancellation, heartbeats, zombie detection, log cleanup, retry, feedback, mid-task messaging, and execution agent submission. Each route includes inline Fastify schema definitions that consume significant line count. New routes are added to `routes/code/` as separate files (e.g., `github-pre-events.ts`, `github-pr-summaries.ts`) but the original routes remain consolidated.
 
 **Impact:** Difficult to navigate, review, and test. Changes to one route risk unintended effects on others.
 
@@ -81,7 +81,7 @@ This single file contains all internal code task routes AND all public code task
 
 ### 2. Duplicated webhook secret and cancel nonce generation
 
-**Files:** `processCodeAction.ts`, `retryTask.ts`, `submitTaskFeedback.ts`, `submitToPhase2.ts`
+**Files:** `processCodeAction.ts`, `retryTask.ts`, `submitTaskFeedback.ts`, `submitToExecutionAgent.ts`
 
 All four use cases contain identical `generateWebhookSecret()` and `generateCancelNonce()` functions copied independently.
 
@@ -158,7 +158,7 @@ Common exemption categories in this service:
 | INT-372 | Zombie task detection                           | Heartbeat + 30-min threshold implemented                       |
 | INT-379 | WhatsApp cancel button                          | Cancel nonce with 15-min TTL                                   |
 | INT-465 | PR comment auto-response                        | Simplified via sendTaskMessage dispatch from webhook handler   |
-| INT-486 | Unified Linear issue templates                  | Two-phase execution model (designed/implemented statuses)      |
+| INT-486 | Unified Linear issue templates                  | Agent-based execution model (planned/implemented statuses)     |
 | INT-505 | Rich PR activity timeline                       | Clickable links, comment bodies, deduplication                 |
 | INT-519 | Block agents from QA/Done transitions           | Validate-linear-state hook                                     |
 | INT-520 | Retry mechanism for failed tasks                | retryTask use case with cool-off                               |

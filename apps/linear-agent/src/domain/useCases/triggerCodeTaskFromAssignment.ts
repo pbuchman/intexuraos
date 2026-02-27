@@ -10,7 +10,7 @@ export interface TriggerCodeTaskDeps {
 const ASSIGNMENT_PROMPT =
   'Analyze the linked Linear issue. Enrich the description with requirements, acceptance criteria, and test plan. Then mark it ready for execution or flag it as unclear.';
 
-const PHASE2_PROMPT =
+const EXECUTION_PROMPT =
   'Implement the requirements defined in the linked Linear issue. Follow the test plan, write code, run CI, and create a PR.';
 
 const CODE_TASK_LABEL = 'code-task';
@@ -34,7 +34,7 @@ export async function triggerCodeTaskFromAssignment(
 
   // Check if issue has code-task label to determine prompt
   const hasCodeTaskLabel = event.data.labels.some((label) => label.name === CODE_TASK_LABEL);
-  const prompt = hasCodeTaskLabel ? PHASE2_PROMPT : ASSIGNMENT_PROMPT;
+  const prompt = hasCodeTaskLabel ? EXECUTION_PROMPT : ASSIGNMENT_PROMPT;
 
   const result = await codeAgentClient.triggerCodeTask({
     userId,
