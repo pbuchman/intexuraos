@@ -2884,7 +2884,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               error: {
                 code: error.code,
                 message: error.message,
-                details: { existingTaskId: error.existingTaskId },
+                details: { existingTaskId: error.existingTaskId, serverCode: error.code },
               },
             });
           case 'active_task_exists':
@@ -3616,7 +3616,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'invalid_status':
           case 'no_linear_issue':
           case 'label_not_ready':
-            return reply.fail('INVALID_REQUEST', error.message);
+            return reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
@@ -3626,11 +3626,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               error: {
                 code: error.code,
                 message: error.message,
-                details: { existingTaskId: error.existingTaskId },
+                details: { existingTaskId: error.existingTaskId, serverCode: error.code },
               },
             });
           case 'active_task_exists':
-            return reply.fail('CONFLICT', error.message);
+            return reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'internal_error':
           default:
             return reply.fail('INTERNAL_ERROR', error.message);
