@@ -32,6 +32,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         ciFailed?: boolean;
         partialWork?: boolean;
         rebaseResult?: 'success' | 'conflict' | 'skipped';
+        comment_replied?: boolean;
         planning_outcome_label?: 'planned' | 'unclear';
         planning_superpowers_writing_plans_used?: '0' | '1';
         planning_issue_url?: string;
@@ -76,6 +77,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 ciFailed: { type: 'boolean' },
                 partialWork: { type: 'boolean' },
                 rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'] },
+                comment_replied: { type: 'boolean' },
                 planning_outcome_label: { type: 'string', enum: ['planned', 'unclear'] },
                 planning_superpowers_writing_plans_used: { type: 'string', enum: ['0', '1'] },
                 planning_issue_url: { type: 'string' },
@@ -136,7 +138,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_issue_url?: string; planning_trivial_task?: '0' | '1' | ''; planning_doc_path?: string; planning_pr_url?: string; planning_clarification_message?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_trivial_task?: '0' | '1'; execution_subagents?: string; execution_review_iterations?: number; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { taskId: string; status: 'completed' | 'failed' | 'interrupted' | 'cancelled'; result?: { prUrl?: string; branch?: string; commits?: number; summary?: string; ciFailed?: boolean; partialWork?: boolean; rebaseResult?: 'success' | 'conflict' | 'skipped'; comment_replied?: boolean; planning_outcome_label?: 'planned' | 'unclear'; planning_superpowers_writing_plans_used?: '0' | '1'; planning_issue_url?: string; planning_trivial_task?: '0' | '1' | ''; planning_doc_path?: string; planning_pr_url?: string; planning_clarification_message?: string; execution_outcome_label?: 'implemented'; execution_superpowers_executing_plans_used?: '0' | '1'; execution_superpowers_requesting_code_review_used?: '0' | '1'; execution_trivial_task?: '0' | '1'; execution_subagents?: string; execution_review_iterations?: number; execution_linear_issue_url?: string }; error?: { code: string; message: string }; duration?: number } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/webhooks/task-complete',
       });
@@ -475,6 +477,72 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { ok: true };
       };
 
+      const enforcePullRequestOutcome = async (
+        pullRequestResult: NonNullable<typeof result>
+      ): Promise<{ ok: true } | { ok: false; message: string; code: string }> => {
+        if (task.linearIssueId === undefined) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: 'Pull request enforcement requires routed linearIssueId',
+          };
+        }
+        if (!pullRequestResult.prUrl) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: 'Pull request enforcement requires result.prUrl',
+          };
+        }
+        if (pullRequestResult.comment_replied === undefined) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: 'Pull request enforcement requires result.comment_replied',
+          };
+        }
+
+        const routedIssueValidation = await linearAgentClient.validateIssue({
+          userId: task.userId,
+          identifier: task.linearIssueId,
+        });
+        if (!routedIssueValidation.ok) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to validate routed issue: ${routedIssueValidation.error.message}`,
+          };
+        }
+
+        const commentResult = await linearAgentClient.addComment({
+          userId: task.userId,
+          issueId: routedIssueValidation.value.id,
+          body: `Pull request: ${pullRequestResult.prUrl}`,
+        });
+        if (!commentResult.ok) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to comment on issue with PR URL: ${commentResult.error.message}`,
+          };
+        }
+
+        const markReview = await linearAgentClient.updateIssueState({
+          userId: task.userId,
+          issueId: routedIssueValidation.value.id,
+          state: 'in_review',
+        });
+        if (!markReview.ok) {
+          return {
+            ok: false,
+            code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+            message: `Failed to move issue to In Review: ${markReview.error.message}`,
+          };
+        }
+
+        return { ok: true };
+      };
+
       // Step 3: Update task based on status
       if (status === 'completed') {
         if (task.agentType === 'execution') {
@@ -530,6 +598,59 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
+        if (task.agentType === 'pull_request') {
+          if (result === undefined) {
+            request.log.error(
+              { taskId, routedIssueId: task.linearIssueId },
+              'Pull request completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
+                message: 'Pull request completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+
+          const pullRequestEnforcement = await enforcePullRequestOutcome(result);
+          if (!pullRequestEnforcement.ok) {
+            request.log.error(
+              {
+                taskId,
+                routedIssueId: task.linearIssueId,
+                prUrl: result.prUrl,
+                commentReplied: result.comment_replied,
+                errorCode: pullRequestEnforcement.code,
+                error: pullRequestEnforcement.message,
+              },
+              'Pull request deterministic enforcement failed'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: pullRequestEnforcement.code,
+                message: pullRequestEnforcement.message,
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return reply.fail('INTERNAL_ERROR', failResult.error.message);
+            }
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+        }
+
         if (result?.planning_outcome_label === 'planned') {
           const planningEnforcement = await enforcePlanningOutcome('planned', result);
           if (!planningEnforcement.ok) {
@@ -567,9 +688,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
 
-        // Transition Linear issue to In Review when PR is created (best-effort)
+        // Transition Linear issue to In Review when PR is created (best-effort for planning only)
+        // execution and pull_request agents have deterministic enforcement
         /* v8 ignore start -- ts-type: optional property checks create type narrowing branches @preserve */
-        if (task.agentType !== 'execution' && prNumber !== undefined && task.linearIssueId !== undefined) {
+        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && prNumber !== undefined && task.linearIssueId !== undefined) {
           await linearIssueService.markInReview(task.userId, task.linearIssueId);
         }
         /* v8 ignore stop @preserve */
