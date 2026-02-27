@@ -168,6 +168,53 @@ describe('firestoreCodeTaskRepository', () => {
       expect(phase2.ok).toBe(true);
     });
 
+    it('Layer 2: allows same prompt for different Linear issues within 5 minutes', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({
+        prompt: 'Implement exactly as described in the linked Linear issue.',
+        linearIssueId: 'INT-100',
+      }));
+      expect(first.ok).toBe(true);
+
+      // Complete the first task so Layer 3 doesn't block
+      if (first.ok) {
+        await repo.update(first.value.id, { status: 'designed' });
+      }
+
+      // Same prompt, different Linear issue — should NOT be blocked by Layer 2
+      const second = await repo.create(createTaskInput({
+        prompt: 'Implement exactly as described in the linked Linear issue.',
+        linearIssueId: 'INT-200',
+      }));
+      expect(second.ok).toBe(true);
+    });
+
+    it('Layer 2: still blocks same prompt + same Linear issue within 5 minutes', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({
+        prompt: 'Implement exactly as described in the linked Linear issue.',
+        linearIssueId: 'INT-100',
+      }));
+      expect(first.ok).toBe(true);
+
+      // Same prompt AND same Linear issue — should be blocked by Layer 2
+      const second = await repo.create(createTaskInput({
+        prompt: 'Implement exactly as described in the linked Linear issue.',
+        linearIssueId: 'INT-100',
+      }));
+      expect(second.ok).toBe(false);
+      if (second.ok) return;
+      expect(['DUPLICATE_PROMPT', 'ACTIVE_TASK_EXISTS']).toContain(second.error.code);
+    });
+
     it('Layer 2: allows same prompt after 5 minutes', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -519,7 +566,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.tasks.length).toBeGreaterThanOrEqual(0);
     });
 
-    it('filters by status', async () => {
+    it('filters by status array', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -531,7 +578,7 @@ describe('firestoreCodeTaskRepository', () => {
       if (!task2.ok) return;
       await repo.update(task2.value.id, { status: 'designed' });
 
-      const result = await repo.list({ userId: 'user-123', status: 'designed' });
+      const result = await repo.list({ userId: 'user-123', status: ['designed'] });
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -727,7 +774,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.tasks).toHaveLength(2);
     });
 
-    it('filters by status', async () => {
+    it('filters by single status (array with one element)', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -742,7 +789,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       await repo.create(createTaskInput({ userId: 'user-123' }));
 
-      const result = await repo.list({ userId: 'user-123', status: 'designed' });
+      const result = await repo.list({ userId: 'user-123', status: ['designed'] });
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -751,7 +798,57 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.tasks[0]?.status).toBe('designed');
     });
 
-    it('paginates with limit', async () => {
+    it('filters by multiple statuses', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create tasks with different statuses
+      const task1 = await repo.create(createTaskInput({ userId: 'user-123', prompt: 'multi-1' }));
+      expect(task1.ok).toBe(true);
+      if (task1.ok) {
+        await repo.update(task1.value.id, { status: 'designed' });
+      }
+
+      const task2 = await repo.create(createTaskInput({ userId: 'user-123', prompt: 'multi-2' }));
+      expect(task2.ok).toBe(true);
+      if (task2.ok) {
+        await repo.update(task2.value.id, { status: 'failed' });
+      }
+
+      // dispatched task (should not be returned)
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'multi-3' }));
+
+      const result = await repo.list({ userId: 'user-123', status: ['designed', 'failed'] });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.tasks).toHaveLength(2);
+      const statuses = result.value.tasks.map((t) => t.status);
+      expect(statuses).toContain('designed');
+      expect(statuses).toContain('failed');
+    });
+
+    it('returns all tasks when status is empty array', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'empty-filter-1' }));
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'empty-filter-2' }));
+
+      const result = await repo.list({ userId: 'user-123', status: [] });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.tasks).toHaveLength(2);
+    });
+
+    it('paginates with limit and returns nextCursor when more exist', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -769,6 +866,26 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.tasks).toHaveLength(2);
       expect(result.value.nextCursor).toBeDefined();
+    });
+
+    it('omits nextCursor on the last page', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create exactly 2 tasks
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Last page 1' }));
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Last page 2' }));
+
+      // Request with limit >= total count
+      const result = await repo.list({ userId: 'user-123', limit: 5 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.tasks).toHaveLength(2);
+      expect(result.value.nextCursor).toBeUndefined();
     });
 
     it('returns empty array when user has no tasks', async () => {
@@ -963,6 +1080,28 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
 
       expect(result.value.implementationTaskId).toBe('task_phase2');
+    });
+
+    it('sets prNumber and prBranch on update (INT-465)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        prNumber: 835,
+        prBranch: 'fix/login-bug',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.prNumber).toBe(835);
+      expect(result.value.prBranch).toBe('fix/login-bug');
     });
 
     it('clears implementationTaskId when set to null', async () => {

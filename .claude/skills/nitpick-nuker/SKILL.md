@@ -13,7 +13,7 @@ Autonomous PR comment triage that processes GitHub review comments, fixes action
 
 ## Core Mandates
 
-1. **NEVER** process comments that already have 🚀 from bot
+1. **NEVER** process comments that already have 😄 from bot
 2. **ALWAYS** post summary comment after each run
 3. **ALWAYS** loop on CI failure until success
 4. **NEVER** watch `zai-claude-code-review.yml` workflow
@@ -36,8 +36,8 @@ All scripts are in `.claude/skills/nitpick-nuker/scripts/`:
 
 | Script                          | Purpose                              |
 | ------------------------------- | ------------------------------------ |
-| `fetch-unprocessed-comments.sh` | Fetch comments without 🚀 from bot   |
-| `add-reaction.sh`               | Add 🚀 reaction to processed comment |
+| `fetch-unprocessed-comments.sh` | Fetch comments without 😄 from bot   |
+| `add-reaction.sh`               | Add 😄 reaction to processed comment |
 | `post-summary.sh`               | Post summary comment to PR           |
 | `watch-ci.sh`                   | Watch CI with workflow filtering     |
 

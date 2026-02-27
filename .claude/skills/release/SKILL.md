@@ -1,6 +1,6 @@
 ---
 name: release
-description: Orchestrate a 6-phase release workflow with automated service documentation, high-level docs updates, README "What's New" section, website improvements, and semantic versioning. Use when preparing a new release.
+description: Orchestrate a 6-phase release workflow with automated service documentation, high-level docs updates, README "What's New" section, website improvements, RAG embeddings refresh, and semantic versioning. Use when preparing a new release.
 argument-hint: '[--skip-docs | --phase N]'
 ---
 
@@ -25,17 +25,21 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 5. **Three Suggestions Only**: Phase 5 website audit produces EXACTLY 3 improvement suggestions
 6. **Monorepo Version Sync**: Phase 6 MUST update ALL package.json files (root, apps/\*, packages/\*, workers/\*) to the new version — not just the root
 7. **Claude Code Changelog Style**: All changelog entries use simplified format — version headers, verb-first bullets, no subcategories
+8. **Tag on Main**: Tag MUST be created on `main` after merge, not on `development`
+9. **GitHub Release**: Phase 6 MUST create a GitHub Release with categorized release notes
+10. **Post-Release Validation**: Phase 6 MUST run 5 validation checks after release creation — all must PASS
+11. **Change Prioritization**: Step 5.1 MUST ask user to assign High/Medium/Low/Skip priority to each change before building the CHANGELOG
 
 ## Phase Overview
 
-| Phase | Name            | Interaction    | Key Actions                                       |
-| ----- | --------------- | -------------- | ------------------------------------------------- |
-| 1     | Kickoff         | User Input     | Run semver analysis, detect modified services     |
-| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel           |
-| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait            |
-| 4     | README          | **Checkpoint** | Propose "What's New" section, wait                |
-| 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions              |
-| 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, commit, tag push |
+| Phase | Name            | Interaction    | Key Actions                                                                                          |
+| ----- | --------------- | -------------- | ---------------------------------------------------------------------------------------------------- |
+| 1     | Kickoff         | User Input     | Run semver analysis, detect modified services                                                        |
+| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel                                                              |
+| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait                                                               |
+| 4     | README          | **Checkpoint** | Propose "What's New" section, wait                                                                   |
+| 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions                                                                 |
+| 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, RAG embeddings, commit, merge dev→main, tag on main, GitHub Release |
 
 ## Tool Verification (Fail Fast)
 
@@ -68,7 +72,7 @@ Aborting.
 2. Find last release tag: `git tag -l "v*" --sort=-v:refname | head -1`
 3. List merged PRs since last release
 4. Detect modified services (apps changed since last tag)
-5. Run semver-release logic to determine version bump
+5. Run semver analysis to determine version bump (see `reference/semver-analysis.md`)
 6. Ask user for release focus/highlights guidance
 
 ### Phase 2: Service Documentation (Silent)
@@ -204,11 +208,33 @@ When releasing a NEW major version (e.g., v3.0.0):
 1. **Update ALL package.json versions** — root, apps/\*, packages/\*, workers/\* (CRITICAL)
 2. **Update CHANGELOG.md** using Claude Code style (see Changelog Format below)
 3. Run `pnpm run ci:tracked` — MUST pass
-4. Stage all changes
-5. Commit with release message
-6. Create version tag
-7. Push tag to remote
-8. Display release summary
+4. **Refresh RAG embeddings** — re-embed all docs into production Firestore (see below)
+5. Stage & commit on `development`
+6. Push `development` to remote
+7. **Merge `development` → `main`** — via existing PR or direct merge
+8. **Tag on `main`** — tag the merge commit, not `development` (CRITICAL)
+9. Push tag to remote
+10. **Create GitHub Release** — with categorized release notes from Step 7.1
+11. **Post-release validation** — verify tag on main, GitHub Release exists, CHANGELOG committed, versions match, on development branch
+12. Display release summary (including release URL and validation results)
+
+#### RAG Embeddings Refresh (Step 4)
+
+After CI passes (docs are finalized), re-generate embeddings for the chat-agent RAG pipeline:
+
+```bash
+FIRESTORE_EMULATOR_HOST="" \
+GOOGLE_CLOUD_PROJECT=intexuraos-dev-pbuchman \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+OPENAI_API_KEY=$INTEXURAOS_OPENAI_APP_API_KEY \
+pnpm run embed-docs
+```
+
+This reads all `docs/**/*.md`, chunks by headers, generates OpenAI embeddings, and uploads to the `doc_embeddings` Firestore collection. Stale embeddings (from deleted docs) are cleaned automatically.
+
+**Skip condition:** If `--skip-docs` was used, skip this step too (no doc changes to re-embed).
+
+**Failure handling:** Log the error but do NOT block the release. Embeddings can be re-run manually after release.
 
 ## Changelog Format (Claude Code Style)
 

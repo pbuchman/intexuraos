@@ -1,6 +1,6 @@
-# Image Service - Technical Debt
+# Image Service -- Technical Debt
 
-**Last Updated:** 2026-02-19 (re-run)
+**Last Updated:** 2026-02-22
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -9,13 +9,14 @@
 
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
+| Code Smells         | 1     | Medium   |
 | TODO/FIXME Comments | 0     | -        |
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 0     | -        |
 | SRP Violations      | 0     | -        |
-| Code Duplicates     | 0     | -        |
+| Code Duplicates     | 1     | Low      |
 | Deprecations        | 0     | -        |
-| **Total**           | **0** | —        |
+| **Total**           | **2** | --       |
 
 ---
 
@@ -25,45 +26,52 @@
 
 Planned support for:
 
-1. **Midjourney** - Via API when available
-2. **Stable Diffusion** - Self-hosted option
-3. **Ideogram** - For text-in-image generation
+1. **Midjourney** -- Via API when available
+2. **Stable Diffusion** -- Self-hosted option for cost control
+3. **Ideogram** -- For text-in-image generation use cases
 
 ### Enhanced Features
 
-1. **Image editing** - Inpainting, outpainting, variations
-2. **Style presets** - Pre-defined artistic styles
-3. **Batch generation** - Generate multiple variations at once
-4. **Image search** - Find similar images in user's collection
+1. **Image editing** -- Inpainting, outpainting, and variation generation
+2. **Style presets** -- Pre-defined artistic styles for consistent branding
+3. **Batch generation** -- Generate multiple variations from a single prompt
+4. **Image search** -- Find similar images in a user's collection
 
 ### Cost Management
 
-1. **Per-user budgets** - Enforce spending limits
-2. **Cost estimation** - Preview cost before generation
-3. **Usage analytics** - Track generation patterns
+1. **Per-user budgets** -- Enforce spending limits on image generation
+2. **Cost estimation** -- Preview cost before generating an image
+3. **Usage analytics** -- Track generation patterns and provider costs
 
 ---
 
 ## Code Smells
 
-### None Detected
+### Medium Priority
 
-No active code smells found in current codebase.
+| File        | Issue                          | Impact                                                                    |
+| ----------- | ------------------------------ | ------------------------------------------------------------------------- |
+| `index.ts` + `services.ts` | Pricing model mismatch | `REQUIRED_MODELS` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but prompt adapters use `gemini-2.5-pro` and `gpt-4.1`. Cost tracking may use incorrect per-token rates for prompt generation. |
+
+### Low Priority
+
+None detected.
 
 ---
 
-## Test Coverage
+## Test Coverage Gaps
 
 ### Current Status
 
-Comprehensive test coverage achieved in v2.0.0:
+Comprehensive test coverage achieved. All adapters, routes, and infrastructure layers are tested:
 
-- Image generators: OpenAI and Google adapters fully tested
-- Prompt generation: GPT and Gemini adapters tested
-- GCS storage: Upload, delete, signed URL generation tested
-- Routes: Internal endpoints with auth validation tested
+- Image generators: OpenAI and Google adapters fully tested including error paths
+- Prompt generation: GPT and Gemini adapters tested including `mapError` function
+- GCS storage: Upload, delete, and path building tested
+- Routes: Internal endpoints with auth validation, error handling, and success paths tested
+- Models: Validation functions and configuration objects tested
 
-**Resolution:** INT-167 addressed uncovered branches.
+No v8 ignore comments present in the codebase.
 
 ---
 
@@ -71,7 +79,15 @@ Comprehensive test coverage achieved in v2.0.0:
 
 ### None Detected
 
-No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
+No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found in source files. Test files use `'any-token'` as a string literal value (not an `any` type).
+
+---
+
+## TODO/FIXME Comments
+
+### None Detected
+
+No TODO, FIXME, HACK, or XXX comments found in the source code.
 
 ---
 
@@ -81,22 +97,27 @@ No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
 
 All files are within reasonable size limits:
 
-| File                      | Lines | Status |
-| ------------------------- | ----- | ------ |
-| `internalRoutes.ts`       | 297   | OK     |
-| `GcsImageStorage.ts`      | 113   | OK     |
-| `OpenAIImageGenerator.ts` | 112   | OK     |
-| `GoogleImageGenerator.ts` | 113   | OK     |
-| `GeminiPromptAdapter.ts`  | 75    | OK     |
-| `GptPromptAdapter.ts`     | 75    | OK     |
+| File                                         | Lines | Status |
+| -------------------------------------------- | ----- | ------ |
+| `routes/internalRoutes.ts`                   | 288   | OK     |
+| `services.ts`                                | 131   | OK     |
+| `infra/storage/GcsImageStorage.ts`           | 112   | OK     |
+| `infra/image/GoogleImageGenerator.ts`        | 112   | OK     |
+| `infra/image/OpenAIImageGenerator.ts`        | 111   | OK     |
+| `infra/llm/parseResponse.ts`                 | 107   | OK     |
+| `infra/llm/GeminiPromptAdapter.ts`           | 74    | OK     |
+| `infra/llm/GptPromptAdapter.ts`              | 74    | OK     |
 
 ---
 
 ## Code Duplicates
 
-### None Detected
+### Low Priority
 
-No significant code duplication patterns identified. The OpenAI and Google image generators share a common pattern via the `ImageGenerator` interface.
+| Pattern               | Locations                                                  | Suggestion                        |
+| --------------------- | ---------------------------------------------------------- | --------------------------------- |
+| `mapError` function   | `GptPromptAdapter.ts` (exported), `GeminiPromptAdapter.ts` (private) | Extract to shared `mapError.ts` utility. Both implement identical switch logic over `INVALID_KEY`, `RATE_LIMITED`, `TIMEOUT`, `PARSE_ERROR` codes. |
+| `mapLlmError` function | `OpenAIImageGenerator.ts`, `GoogleImageGenerator.ts`       | Extract to shared utility. Both implement identical switch over `INVALID_KEY`, `RATE_LIMITED`, `TIMEOUT` codes. |
 
 ---
 
@@ -115,60 +136,51 @@ No deprecated APIs or dependencies in use.
 **Issue:** Raw pino JSON output in PM2 logs was unreadable during local development.
 
 **Resolution:**
-
 - `server.ts` updated to use `createLogStream()` from `@intexuraos/infra-sentry`
 - Colorized format: `service-name | HH:mm:ss | LEVEL | message | {extras}`
 - Applied across all 18 service `server.ts` files via `6063175b`
-
-### 2026-02-15: Gemini Platform Fallback Added
-
-**Issue:** Platform fallback only supported ZAI (GLM-4.7-flash), which was taking 29s for title generation and exceeding the 10s HTTP timeout.
-
-**Resolution:**
-
-- `platformGeminiApiKey` added to `createUserServiceClient()` in `internal-clients`
-- `INTEXURAOS_GEMINI_APP_API_KEY` used as primary fallback before ZAI
-- Gemini 2.5 Flash is now the default platform model for faster responses
 
 ### 2026-02-16: Dash0 OpenTelemetry Integration
 
 **Issue:** No distributed tracing or OpenTelemetry metrics across services.
 
 **Resolution:**
-
 - New `packages/infra-otel` package with preload module loaded via `--import` in Dockerfile
 - All 19 services instrumented transparently; no-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` unset
-- Traces, metrics, and logs exported via OTLP/HTTP to Dash0
+
+### 2026-02-15: Gemini Platform Fallback Added
+
+**Issue:** Platform fallback only supported ZAI (GLM-4.7-flash), which took 29s for title generation and exceeded the 10s HTTP timeout.
+
+**Resolution:**
+- `platformGeminiApiKey` added to `createUserServiceClient()` in `internal-clients`
+- `INTEXURAOS_GEMINI_APP_API_KEY` used as primary fallback before ZAI
+- Gemini 2.5 Flash is now the default platform model for faster responses
 
 ### 2026-02-15: API Key Naming Standardization
 
 **Issue:** Platform API key env vars used inconsistent naming (`GUEST_ZAI`, `ZAI`, `OPENAI_API_KEY`).
 
 **Resolution:**
-
 - `INTEXURAOS_ZAI_APP_API_KEY` consolidates `INTEXURAOS_GUEST_ZAI_API_KEY` + `INTEXURAOS_ZAI_API_KEY`
 - All platform keys now follow `INTEXURAOS_<PROVIDER>_APP_API_KEY` pattern
-- `services.ts` updated to use `platformZaiApiKey: process.env['INTEXURAOS_ZAI_APP_API_KEY']`
 
 ### 2026-02-09: Platform Key Fallback for User Service Client
 
 **Issue:** Users without personal API keys could not generate images.
 
 **Resolution:**
-
 - `createUserServiceClient()` now accepts `platformZaiApiKey` and `platformGeminiApiKey`
 - `getApiKeys()` returns platform-owned keys as fallback when user has none configured
-- Image generation available to all users without requiring personal API key setup
 
 ### 2026-02-08: Standardized Response Contract Migration
 
-**Issue:** Internal endpoints used ad-hoc response formats (`{ error: 'Unauthorized' }`) with manual `reply.status()` calls and `apiFail()` helper.
+**Issue:** Internal endpoints used ad-hoc response formats with manual `reply.status()` calls and `apiFail()` helper.
 
 **Resolution:**
-
-- Migrated all auth failures to `reply.fail('UNAUTHORIZED', message)`
-- Rate limit errors now use `reply.fail('RATE_LIMITED', message)` instead of manual `apiFail()` + `reply.status(429)`
-- Downstream errors use `reply.fail('DOWNSTREAM_ERROR', message)` instead of manual `reply.status(502)`
+- All auth failures migrated to `reply.fail('UNAUTHORIZED', message)`
+- Rate limit errors use `reply.fail('RATE_LIMITED', message)`
+- Downstream errors use `reply.fail('DOWNSTREAM_ERROR', message)`
 - Removed `apiFail` import from `@intexuraos/common-http`
 
 ### 2026-02-08: Sentry-Enabled Logger Migration
@@ -176,66 +188,53 @@ No deprecated APIs or dependencies in use.
 **Issue:** Direct `pino()` logger usage in `services.ts` bypassed Sentry error tracking.
 
 **Resolution:**
-
 - Replaced `pino({ name: 'user-service-client' })` with `createAppLogger({ name: 'user-service-client' })`
-- Errors now automatically sent to Sentry
 
 ### 2026-02-08: Direct Import from internal-clients
 
 **Issue:** Local re-export barrel file `infra/user/index.ts` added unnecessary indirection.
 
 **Resolution:**
-
 - Deleted `apps/image-service/src/infra/user/index.ts`
-- All imports changed from `./infra/user/index.js` to `@intexuraos/internal-clients` directly
-- `FakeUserServiceClient` updated with `getOAuthToken` method for new interface
+- All imports changed to `@intexuraos/internal-clients` directly
 
 ### 2026-02-08: Env Var Registration and Coverage
 
-**Issue:** `INTEXURAOS_IMAGE_PUBLIC_BASE_URL` was used but not in `REQUIRED_ENV`. `mapError` function lacked test coverage.
+**Issue:** `INTEXURAOS_IMAGE_PUBLIC_BASE_URL` was used but not in `REQUIRED_ENV`. `mapError` lacked test coverage.
 
 **Resolution:**
-
 - Added `INTEXURAOS_IMAGE_PUBLIC_BASE_URL` to `REQUIRED_ENV` in `index.ts`
 - Exported `mapError` from `GptPromptAdapter.ts` and added dedicated tests
 
 ### 2025-01-25: INT-269 Internal-Clients Migration
 
-**Issue:** Direct HTTP calls to user-service for API key retrieval were duplicated across services.
+**Issue:** Direct HTTP calls to user-service duplicated across services.
 
 **Resolution:**
-
 - Migrated to `@intexuraos/internal-clients/user-service` package
-- `UserServiceClient` now imported from shared package
 - Removed local HTTP implementation
-- Backwards compatible - `getApiKeys()` signature unchanged
 
 ### 2025-01-24: INT-266 UsageLogger Migration
 
 **Issue:** LLM pricing tracking needed centralized implementation.
 
 **Resolution:**
-
-- Migrated LLM clients to use `UsageLogger` class
-- Centralized cost tracking logic
-- Consistent pricing across all services
+- Migrated LLM clients to use `UsageLogger` class for consistent cost tracking
 
 ### 2025-01-19: Test Coverage Improvements
 
 **Issue:** Some branches in image generation flow had no coverage.
 
 **Resolution:**
-
 - Added tests for error paths in both OpenAI and Google generators
-- Covered thumbnail generation edge cases
-- Tested GCS upload failure scenarios
+- Covered thumbnail generation edge cases and GCS upload failure scenarios
 
 ---
 
 ## Related
 
-- [Features](features.md) - User-facing documentation
-- [Technical](technical.md) - Developer reference
-- [Tutorial](tutorial.md) - Getting-started guide
-- [Agent](agent.md) - Machine-readable interface
+- [Features](features.md) -- User-facing documentation
+- [Technical](technical.md) -- Developer reference
+- [Tutorial](tutorial.md) -- Getting-started guide
+- [Agent](agent.md) -- Machine-readable interface
 - [Documentation Run Log](../../documentation-runs.md)

@@ -1,4 +1,4 @@
-# todos-agent — Agent Interface
+# todos-agent -- Agent Interface
 
 > Machine-readable interface definition for AI agents interacting with todos-agent.
 
@@ -146,14 +146,16 @@ interface Todo {
 
 ## Constraints
 
-| Rule                    | Description                                   |
-| ----------------------- | --------------------------------------------- |
-| **Archive Restriction** | Can only archive completed or cancelled todos |
-| **Cancel Restriction**  | Cannot cancel already completed todos         |
-| **Item Completion**     | Items are independent - no auto-complete      |
-| **Ownership**           | Users can only access their own todos         |
-| **Reorder**             | Item IDs must match existing items exactly    |
-| **Description Limit**   | Descriptions over 10,000 chars are truncated  |
+| Rule                    | Description                                         |
+| ----------------------- | --------------------------------------------------- |
+| **Archive Restriction** | Can only archive completed or cancelled todos       |
+| **Cancel Restriction**  | Cannot cancel already completed todos               |
+| **Auto Status**         | Completing all items auto-completes the todo        |
+| **Ownership**           | Users can only access their own todos               |
+| **Reorder**             | Item IDs must match existing items exactly           |
+| **Description Limit**   | Descriptions over 10,000 chars truncated for AI     |
+| **Max Items**           | AI extraction capped at 50 items per todo           |
+| **Default Priority**    | New todos default to `medium` priority if not set   |
 
 ---
 
@@ -194,12 +196,13 @@ const archived = await listTodos({ archived: true });
 ### Complete Items Progressively
 
 ```typescript
-// Mark first item complete
-await updateTodoItem(todoId, itemId, { status: 'completed' });
+// Mark first item complete -- todo auto-transitions to in_progress
+await updateTodoItem(todoId, item1Id, { status: 'completed' });
 
-// Items are independent - todo does NOT auto-complete
-// To complete todo, use updateTodo with status: 'completed'
-await updateTodo(todoId, { status: 'completed' });
+// Mark remaining items complete -- todo auto-transitions to completed
+await updateTodoItem(todoId, item2Id, { status: 'completed' });
+await updateTodoItem(todoId, item3Id, { status: 'completed' });
+// todo.status is now 'completed', todo.completedAt is set
 ```
 
 ### Archive Completed Todos
@@ -209,6 +212,22 @@ const todos = await listTodos({ status: 'completed', archived: false });
 for (const todo of todos) {
   await archiveTodo(todo.id);
 }
+```
+
+### Create via Internal API (Other Services)
+
+```typescript
+// POST /internal/todos with X-Internal-Auth header
+// Status set to 'processing', triggers AI extraction via Pub/Sub
+const feedback = await createTodoInternal({
+  userId: 'user_123',
+  title: 'Weekly Planning',
+  description: 'Plan my week: finish presentation, call dentist, review updates',
+  tags: ['planning'],
+  source: 'commands-agent',
+  sourceId: 'cmd_456',
+});
+// feedback.resourceUrl = '/#/todos/<todoId>'
 ```
 
 ---
@@ -225,18 +244,18 @@ for (const todo of todos) {
 ## Status Workflow
 
 ```
-draft → processing → pending → in_progress → completed → archived
-                        ↓                        ↑
-                    cancelled ──────────────────→
+draft -> processing -> pending -> in_progress -> completed -> archived
+                         |                         ^
+                     cancelled ____________________/
 ```
 
 **Notes:**
 
-- `draft`: Initial state, not visible in lists
+- `draft`: Initial state, not yet visible in lists
 - `processing`: AI extraction in progress (async via Pub/Sub)
 - `pending`: Ready to work on
-- `in_progress`: Currently being worked on
-- `completed`: Done (can be archived)
+- `in_progress`: At least one item completed
+- `completed`: All items completed (auto-computed or manual)
 - `cancelled`: Cancelled before completion (can be archived)
 - `archived`: Soft delete, not in default lists
 
@@ -250,19 +269,20 @@ draft → processing → pending → in_progress → completed → archived
 | 401        | Unauthorized       | Refresh token             |
 | 403        | Forbidden          | Verify todo ownership     |
 | 404        | Resource not found | Verify todo ID exists     |
-| 422        | Invalid operation  | Check status restrictions |
 | 500        | Server error       | Retry with backoff        |
 
 ---
 
 ## AI Item Extraction
 
-Todos with a `description` trigger automatic AI item extraction:
+Todos created via `/internal/todos` with a `description` trigger automatic AI extraction:
 
-1. Create todo with description → status = `processing`
-2. Pub/Sub event fires → handler calls LLM
-3. LLM extracts items (Zod-validated)
-4. Items added to todo → status = `pending`
+1. Create todo with description -> status = `processing`
+2. Pub/Sub event fires -> handler calls LLM via user-service
+3. LLM extracts items (Zod-validated via `TodoExtractionResponseSchema`)
+4. Items added to todo -> status = `pending`
+
+**Model chain:** Gemini 2.5 Flash (primary), GLM-4.7 (fallback), GLM-4.7-Flash (fallback)
 
 **Fallback behaviors:**
 
@@ -272,4 +292,4 @@ Todos with a `description` trigger automatic AI item extraction:
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22

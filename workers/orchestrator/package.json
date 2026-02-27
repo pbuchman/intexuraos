@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/orchestrator",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -25,6 +25,8 @@
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
+    "@octokit/core": "^6.1.0",
+    "@octokit/plugin-retry": "^7.1.0",
     "async-mutex": "^0.5.0",
     "dockerode": "^4.0.9",
     "fastify": "^5.6.2",

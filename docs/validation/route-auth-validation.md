@@ -136,10 +136,9 @@
 
 ### data-insights-agent
 
-| Method | Path                             | Auth Type                               | Status |
-| ------ | -------------------------------- | --------------------------------------- | ------ |
-| POST   | /internal/visualizations/compute | `validateInternalAuth()`                | OK     |
-| POST   | /internal/snapshots/refresh      | PubSub OIDC or `validateInternalAuth()` | OK     |
+| Method | Path                             | Auth Type                | Status |
+| ------ | -------------------------------- | ------------------------ | ------ |
+| POST   | /internal/visualizations/compute | `validateInternalAuth()` | OK     |
 
 ### image-service
 

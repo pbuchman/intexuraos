@@ -362,8 +362,14 @@ export class TaskDispatcher {
     taskId: string,
     message: string
   ): Promise<Result<SendMessageResult, SendMessageError>> {
-    const state = await this.statePersistence.load();
-    const task = state.tasks[taskId];
+    const loadResult = await this.statePersistence.load().catch((error: unknown) => {
+      this.logger.error({ taskId, error }, 'Failed to load state persistence');
+      return null;
+    });
+    if (loadResult === null) {
+      return { ok: false, error: { type: 'service_error', message: 'Failed to load task state' } };
+    }
+    const task = loadResult.tasks[taskId];
 
     if (task === undefined) {
       return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
@@ -382,6 +388,7 @@ export class TaskDispatcher {
     }
 
     if (task.status === 'completed' || task.status === 'failed' || task.status === 'interrupted') {
+      const wasCompleted = task.status === 'completed';
       await this.teardownAttempt(taskId, true);
 
       // Register secret BEFORE any appendOrchestratorTaskLog calls, because
@@ -396,10 +403,12 @@ export class TaskDispatcher {
         message.length > 200 ? message.slice(0, 200) + '\u2026' : message
       );
 
+      const preamble = this.buildResumePreamble();
       const resumeResult = await this.startWorkerAttempt(task, {
-        prompt: message,
+        prompt: preamble + message,
         hasChildren: task.hasChildren ?? false,
         continueSession: true,
+        injectActiveGoal: true,
       });
 
       if (!resumeResult.ok) {
@@ -416,6 +425,11 @@ export class TaskDispatcher {
       task.attemptCount = 1;
       task.verificationHistory = [];
       delete task.completedAt;
+      if (wasCompleted) {
+        task.resumedAfterSuccess = true;
+      } else {
+        delete task.resumedAfterSuccess;
+      }
       await this.saveTask(task);
 
       this.runningCount++;
@@ -576,7 +590,11 @@ export class TaskDispatcher {
             const silenceMs = Date.now() - lastActivity;
             if (silenceMs >= ACTIVITY_HEARTBEAT_THRESHOLD_MS) {
               const silenceSeconds = Math.round(silenceMs / 1000);
-              this.appendTaggedTaskLog(taskId, 'system', `Still processing... no output for ${String(silenceSeconds)}s`);
+              this.appendTaggedTaskLog(
+                taskId,
+                'system',
+                `Still processing... no output for ${String(silenceSeconds)}s`
+              );
             }
           }
 
@@ -601,6 +619,11 @@ export class TaskDispatcher {
   }
 
   private async handleTaskCompletion(task: Task): Promise<void> {
+    if (task.resumedAfterSuccess === true) {
+      await this.handleResumedAfterSuccessCompletion(task);
+      return;
+    }
+
     const attempt = task.attemptCount ?? 1;
     const maxAttempts = task.maxAttempts ?? this.completionMaxAttempts;
     const phase = this.hasCodeTaskLabel(task.linearIssueLabels) ? 'phase2' : 'phase1';
@@ -785,6 +808,7 @@ export class TaskDispatcher {
           prompt: combinedPrompt,
           hasChildren: task.hasChildren ?? false,
           continueSession: true,
+          injectActiveGoal: true,
         });
         if (resumeResult.ok) {
           task.containerId = resumeResult.containerId;
@@ -860,9 +884,177 @@ export class TaskDispatcher {
     ].join('\n');
   }
 
+  private buildResumePreamble(): string {
+    return [
+      '[RESUME PRE-FLIGHT — MANDATORY]',
+      'Before making ANY changes, check your PR state:',
+      '  gh pr view --json state,merged,number 2>/dev/null || echo "NO_PR"',
+      '',
+      'If PR is MERGED or CLOSED or NO_PR:',
+      '  1. git fetch origin',
+      '  2. git checkout -b followup/<short-desc> origin/development',
+      '  3. After changes → create NEW PR targeting development',
+      '  4. Do NOT push to the old branch',
+      '',
+      'If PR is OPEN:',
+      '  1. Continue on current branch normally',
+      '  2. Check for unaddressed PR comments:',
+      '     gh api /repos/{owner}/{repo}/pulls/{number}/comments --jq "[.[] | select(.user.login != \\"intexuraos-code-worker[bot]\\")] | length"',
+      '  3. If the message below references a PR comment or review, address it',
+      '---',
+      '',
+    ].join('\n');
+  }
+
+  private buildActiveGoalSection(prompt: string): string {
+    const preamble = this.buildResumePreamble();
+    const goalText = prompt.startsWith(preamble) ? prompt.slice(preamble.length) : prompt;
+    return [
+      '',
+      '',
+      '[ACTIVE GOAL — HIGHEST PRIORITY]',
+      'A new user message has been received. This is your PRIMARY task.',
+      'Complete this goal before doing anything else. If context was compacted,',
+      'this section survives and takes absolute priority over conversation history.',
+      '',
+      goalText,
+    ].join('\n');
+  }
+
+  private async handleResumedAfterSuccessCompletion(task: Task): Promise<void> {
+    this.attemptCompletionSignals.delete(task.taskId);
+    const attempt = task.attemptCount ?? 1;
+
+    this.logger.info(
+      {},
+      `Resumed-after-success completion: taskId=${task.taskId} attempt=${String(attempt)}`
+    );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Resumed-after-success completion: using loosened verification (exit code + Claude error only)`
+    );
+
+    try {
+      await this.logForwarder.flushAndStop(task.taskId);
+    } catch (flushError: unknown) {
+      this.logger.error(
+        { taskId: task.taskId, error: flushError },
+        'Failed to flush logs on resumed-after-success completion'
+      );
+    }
+
+    const result = await this.checkForResult(task);
+    const claudeError = this.claudeErrors.get(task.taskId);
+    const exitCode = this.taskExitCodes.get(task.taskId);
+
+    const hasHardError =
+      (typeof exitCode === 'number' && exitCode !== 0) || claudeError !== undefined;
+
+    if (typeof exitCode === 'number') {
+      task.lastExitCode = exitCode;
+    } else {
+      delete task.lastExitCode;
+    }
+
+    task.verificationHistory = [
+      ...(task.verificationHistory ?? []),
+      {
+        attempt,
+        passed: !hasHardError,
+        confidence: 1,
+        reasons: hasHardError
+          ? [
+              ...(typeof exitCode === 'number' && exitCode !== 0
+                ? [`Non-zero exit code: ${String(exitCode)}`]
+                : []),
+              ...(claudeError !== undefined ? [`Claude error: ${claudeError}`] : []),
+            ]
+          : ['Loosened verification passed (resumed after success)'],
+        missingCriteria: [],
+        resumeInstruction: hasHardError ? 'Resolve the error and retry.' : '',
+        usedLlm: false,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    if (hasHardError) {
+      const error: TaskError = {
+        code: 'TASK_RESUMED_HARD_ERROR',
+        message: [
+          ...(typeof exitCode === 'number' && exitCode !== 0
+            ? [`Non-zero exit code: ${String(exitCode)}`]
+            : []),
+          ...(claudeError !== undefined ? [`Claude error: ${claudeError}`] : []),
+        ].join('; '),
+        remediation: { action: 'retry' },
+      };
+
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Resumed-after-success hard error: ${error.message}`
+      );
+      await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
+      delete task.resumedAfterSuccess;
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
+      return;
+    }
+
+    // Check for pending messages before finalizing
+    const pendingQueue = this.pendingMessages.get(task.taskId);
+    if (pendingQueue !== undefined && pendingQueue.length > 0) {
+      this.pendingMessages.delete(task.taskId);
+      const combinedPrompt = pendingQueue.join('\n\n');
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
+      );
+      this.appendTaggedTaskLog(
+        task.taskId,
+        'prompt',
+        combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
+      );
+      await this.flushTaskLogs(task.taskId);
+      await this.teardownAttempt(task.taskId, true);
+      const resumeResult = await this.startWorkerAttempt(task, {
+        prompt: combinedPrompt,
+        hasChildren: task.hasChildren ?? false,
+        continueSession: true,
+        injectActiveGoal: true,
+      });
+      if (resumeResult.ok) {
+        task.containerId = resumeResult.containerId;
+        await this.saveTask(task);
+        this.claudeErrors.delete(task.taskId);
+        this.taskExitCodes.delete(task.taskId);
+        return;
+      }
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        'Failed to deliver queued messages, finalizing normally'
+      );
+    }
+
+    this.appendOrchestratorTaskLog(task.taskId, 'Resumed-after-success verification passed');
+    await this.flushTaskLogs(task.taskId);
+    await this.collectTurnMetrics(task, attempt);
+    delete task.resumedAfterSuccess;
+    await this.finalizeTask(task, 'completed', {
+      ...(result !== undefined && { result }),
+    });
+  }
+
   private async startWorkerAttempt(
     task: Task,
-    params: { prompt: string; hasChildren: boolean; continueSession: boolean }
+    params: {
+      prompt: string;
+      hasChildren: boolean;
+      continueSession: boolean;
+      injectActiveGoal?: boolean;
+    }
   ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
     this.attemptCompletionSignals.delete(task.taskId);
     this.appendOrchestratorTaskLog(
@@ -896,15 +1088,17 @@ export class TaskDispatcher {
       worktreePath: task.worktreePath,
       prompt: params.prompt,
       /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
-      systemPrompt: buildSystemPrompt({
-        taskId: task.taskId,
-        ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-        ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
-        taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
-        linearIssueLabels: task.linearIssueLabels,
-        hasChildren: params.hasChildren,
-      }),
-      /* v8 ignore stop @preserve */
+      systemPrompt:
+        buildSystemPrompt({
+          taskId: task.taskId,
+          ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+          ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
+          taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
+          linearIssueLabels: task.linearIssueLabels,
+          hasChildren: params.hasChildren,
+        }) +
+        /* v8 ignore stop @preserve */
+        (params.injectActiveGoal === true ? this.buildActiveGoalSection(params.prompt) : ''),
       workerType: task.workerType,
       secrets: this.isolation.getSecrets(),
       gcpSaKeyPath: this.isolation.gcpSaKeyPath,
@@ -1011,6 +1205,7 @@ export class TaskDispatcher {
 
     task.status = finalStatus;
     task.completedAt = new Date().toISOString();
+    delete task.resumedAfterSuccess;
     await this.saveTask(task);
 
     /* v8 ignore start -- test-infra: guard prevents negative runningCount on double-decrement race @preserve */
@@ -1273,13 +1468,20 @@ export class TaskDispatcher {
 
   private async collectTurnMetrics(task: Task, attempt: number): Promise<void> {
     if (this.turnMetricsCollector === undefined) return;
-    await this.turnMetricsCollector.collectAndPublish({
-      taskId: task.taskId,
-      containerId: task.containerId,
-      attempt,
-      startedAt: task.startedAt,
-      completedAt: new Date().toISOString(),
-    });
+    try {
+      await this.turnMetricsCollector.collectAndPublish({
+        taskId: task.taskId,
+        containerId: task.containerId,
+        attempt,
+        startedAt: task.startedAt,
+        completedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logger.error(
+        { taskId: task.taskId, attempt, error },
+        'Failed to collect turn metrics (non-fatal, task finalization continues)'
+      );
+    }
   }
 
   private clearTaskTimers(taskId: string): void {

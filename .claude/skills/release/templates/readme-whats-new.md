@@ -116,3 +116,16 @@ Always update the version in the header:
 - ## What's New in v2.0.0
 + ## What's New in v2.1.0
 ```
+
+### Accumulation Pattern (MANDATORY for patch/minor releases)
+
+For patch/minor releases within the same major version:
+
+1. Read existing "What's New" tiles
+2. APPEND new tiles to the section — do NOT replace
+3. Update the version number in the header
+
+For major releases (X+1.0.0):
+
+1. Move old "What's New" content to VersionHistorySection
+2. Create fresh "What's New" section with only the new release tiles

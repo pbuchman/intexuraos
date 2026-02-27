@@ -1,112 +1,95 @@
 # Web App
 
-The single-page Progressive Web App that brings all of IntexuraOS into one unified dashboard.
+Your window into the machine — one interface for everything IntexuraOS is doing on your behalf.
 
 ## The Problem
 
-Managing your digital life across multiple services creates constant friction. Switching between WhatsApp for messages, calendar for events, notes for thoughts, and bookmarks for links breaks your flow. Each interface has different patterns, requires context switching, and lacks unified visibility into what needs your attention.
+Running software that works through tasks on its own is only useful if you can see what it is doing. Without a central interface, you are left checking multiple tools, refreshing dashboards, and hoping nothing went wrong while you were not looking. The system might be classifying your inbox, writing code, or running research — but if you cannot observe and intervene, autonomy becomes anxiety.
+
+The deeper problem is control. Autonomous systems make decisions, and some of those decisions need human approval. If approvals are buried in notifications across different apps, things slip through. A code task finishes its planning phase and needs a green light before the system starts writing code. A research query returns results that need review. A message arrives that requires your judgment. Without a single place to act on these, you either slow the system down by missing prompts or speed it up by rubber-stamping things you did not read.
+
+This is not a passive dashboard. The web app closes a loop: you observe what the system did, and that observation directly unblocks what it does next. Your attention is not optional — it is the mechanism that keeps autonomous work moving safely.
+
+## Use Case: A Morning of Agent Oversight
+
+You wake up and open the web app on your phone — it is installed as a standalone app, no browser chrome, just your system. Overnight, the agents processed twelve commands from your inbox. Three turned into action items waiting for your approval. One kicked off a code task that finished its design phase — the plan is sitting there, ready for you to read and greenlight. A research report on competitor pricing came back with four sources. Your calendar shows two meetings today, and a Linear issue you filed yesterday already has sub-issues broken out by the planning agent.
+
+You approve two actions, reject one that misread your intent, read the code task plan and tap to start execution. While you eat breakfast, the log stream shows the code agent working — cyan lines for your original request, blue lines as it writes files, yellow flashes when it runs tools. You scroll up to check something, and the stream pauses so you do not lose your place. When you scroll back to the bottom, it catches up automatically.
+
+By the time you sit down at your desk, half your morning work is already done. You did not write a single line of code or open a single email. You just watched, approved, and moved on.
 
 ## How It Helps
 
-### Unified Command Center
+### Watch Code Being Written in Real Time
 
-Access all IntexuraOS capabilities from a single, fast interface. Inbox, research, calendar, notes, todos, bookmarks, Linear issues, and data insights are one tap away.
+You send a coding request and switch to the code tasks view. The log stream starts immediately — every action the code agent takes appears as a color-coded line. Your original input shows in cyan. When the agent queues work, amber lines appear. Tool invocations flash yellow. Errors — if they happen — show in red, so you spot problems the moment they occur rather than discovering them after the task finishes.
 
-**Example:** Open the app to see 3 actions awaiting approval, 2 research reports ready, and calendar events for today — no tab switching required.
+The stream follows the agent's output in real time. If you scroll up to re-read an earlier section, auto-scroll pauses and stays where you put it. Scroll back to the bottom, and follow mode re-engages. A live indicator pulses while the task runs, and a line count tells you how much output has accumulated. When you need to share the full log with someone, one button copies every line to your clipboard.
 
-### Real-Time Action Inbox
+**Example:** Your code agent is halfway through implementing a new API endpoint. You notice in the log stream that it is creating a file in the wrong directory — a yellow tool line shows the path. You type a follow-up message directly into the task. The message queues without interrupting the agent's current work, and within seconds you see it pick up your correction and adjust course. No restart, no lost progress.
 
-Watch actions arrive and update in real-time via Firestore listeners. Approve, reject, or execute with a single tap. Filter by status, archive completed items, and deep-link to specific actions.
+### Approve a Plan Before the System Writes Code
 
-**Example:** You send a WhatsApp message "schedule team standup for Tuesday 2pm". Within seconds, a calendar preview appears in your inbox. You review the event details and tap approve — it is created immediately.
+Code tasks run in two phases, and you control the gate between them. The design phase produces a plan — what the agent intends to build, which files it will touch, what approach it will take. That plan lands in your web app as a reviewable document. Nothing happens until you approve it.
 
-### Configurable Action Buttons
+Once you approve, the execution phase begins. The web app links the two phases together with color-coded banners — on the execution task, a violet banner links back to the design; on the design task, an emerald banner links forward to the implementation. You can navigate between them to compare what was planned against what was built. When the execution finishes, GitHub pull request events appear inline, with expandable details and clickable links straight to the code.
 
-Every action displays dynamically generated buttons based on YAML configuration. Approve, reject, retry, delete, or custom actions execute directly from the UI.
+**Example:** You ask the system to refactor your authentication module. The design phase comes back with a plan that proposes changing three files and adding a new utility. You read it, notice it missed an edge case in token refresh, and type that feedback as a follow-up. The agent revises the plan. You approve the updated version, and execution begins. Twenty minutes later, the PR events show up — you expand them, read the review comments and activity, and click through to GitHub to merge.
 
-**Example:** A research action shows "Approve", "Retry with different models", and "Delete" buttons. A calendar action shows "Approve" with the event preview card, or "Reject" if the time doesn't work.
+### Act on Everything From One Inbox
 
-### Progressive Web App
+Commands and actions flow into a single inbox. Commands are things the system received — messages, requests, inputs from various channels. Actions are things the system wants to do about them. Some actions just need your awareness. Others need your explicit approval before the system proceeds.
 
-Install IntexuraOS on your home screen for an app-like experience on mobile. Offline support, push notifications, and background sync keep you productive without a constant connection.
+Each action item shows configurable buttons — approve, reject, or whatever responses the originating service defined. You do not need to context-switch to another app or remember which service generated the request. The inbox is the one place where human judgment enters the loop.
 
-**Example:** Commuting without signal? Open the app to review previously loaded actions. Your actions queue locally and execute when connectivity returns.
+**Example:** You sent a WhatsApp message last night saying "cancel my dentist appointment and reschedule for next week." The system classified it, created an action item, and is waiting. You open the inbox this morning, see the proposed calendar changes, tap approve, and the system handles the rest — cancellation message, new appointment request, calendar update. One tap, three operations.
 
-### Intex Chat Assistant
+### Track Your Projects as They Move
 
-Talk to IntexuraOS using natural language through the floating chat bubble. Ask questions, create commands, and get context-aware responses. Works for both authenticated users and guests.
+The Linear integration presents your issues in grouped columns — Planning, In Progress, and Recently Closed — with sub-statuses nested within each. Sub-issues nest under their parents, so you see the full breakdown of a project without opening Linear separately. Labels show in their assigned colors. The board refreshes periodically, so changes appear shortly after they happen.
 
-**Example:** You type "remind me to call the dentist tomorrow" in the chat. The assistant suggests creating a todo command. You confirm, and it appears in your inbox within seconds.
+**Example:** You filed an issue for a new feature last week. The planning agent broke it into four sub-issues overnight. You open the Linear board in the web app and see all four nested under the parent, each with status labels. One is already In Progress — the code agent picked it up. You tap into it, see the linked code task, and jump to the log stream to watch the work happening.
 
-### Code Task Management with Two-Phase Execution
+### Review Research and Visualize Data
 
-Submit code generation tasks with markdown instructions, choose a model (Auto, Opus, or GLM via default model selector), and link to Linear issues. Tasks support a two-phase design/execution flow: when a design task produces an implementation plan, the UI shows a banner linking directly to the implementation task so you can navigate between phases without searching.
+Research tasks return structured reports with sources, summaries, and findings. The web app shows them in a list view, and you can drill into any report to read the full analysis. Data insights sit alongside — combined views that pull together information from multiple sources into a single feed, saved visualizations you have configured, and static data sources you have uploaded for reference.
 
-Monitor task execution through a live log stream that color-codes each log line by type — user messages, prompts, tool calls, errors, and orchestrator output each render in distinct colors. Send follow-up messages in a queue without interrupting the running task. Retry interrupted or failed tasks from the task detail page.
+**Example:** You asked the system to research pricing models for a competitor. The report comes back with four sources, a summary table, and a recommendation section. You read it in the web app, decide you want deeper analysis on one point, and send a follow-up research request. The new report lands in the same list, and you compare the two side by side.
 
-**Example:** You describe a refactoring task, select Auto worker, and submit. The log stream shows live progress with color-coded lines. When the design phase completes, a "View implementation task" banner appears. One click takes you to the execution task already in progress.
+### Everything Else in One Place
 
-### GitHub PR Events
+Calendar events show your schedule. Todos and notes capture your running lists and scratch thoughts. Bookmarks save things you want to return to, with real-time sync so additions from other parts of the system appear immediately. Mobile notification history shows what the system pushed to your phone, so you can trace back anything you dismissed. Settings pages let you configure every connected service — WhatsApp, Notion, Google Calendar, Linear webhooks, mobile notifications, worker processes, API keys, LLM pricing, usage costs, and share history.
 
-View aggregated GitHub pull request activity: reviews, comments, pushes, and status checks grouped by PR. PR groups load summaries immediately; full event details load lazily when you expand a group. Comment bodies render in GitHub style with HTML support. Synchronize events show the compare URL for the push.
+A floating chat assistant is available on every page. It connects to an AI assistant that can answer questions and create commands on your behalf — the same commands that flow through the inbox for processing. If someone visits without an account, the chat still works in guest mode — useful for sharing a link with a colleague who wants to ask a quick question.
 
-**Example:** You open the PR Events page and see that PR #762 received 2 reviews and 3 inline comments since yesterday, all collapsed into a single expandable group. You click the group to expand it and read the inline comment text without leaving IntexuraOS.
+**Example:** You are on the calendar page reviewing tomorrow's meetings. You remember you need to add a note about preparation for one of them. You tap into notes, write it, and switch to bookmarks to check a link you saved last week. No app-switching, no separate logins — it is all one surface.
 
-### Linear Issues Dashboard
+### Install Once, Check From Anywhere
 
-View your Linear board as a 3-column layout: Planning, Work, and Closed. Sub-issues appear indented under their parent. Labels show as colored badges on each issue. The board updates in real-time via Firestore — no manual sync needed.
+The web app is a Progressive Web App. On Android and iOS, you install it to your home screen and it runs in standalone mode — no browser bar, no tabs, just the app. It auto-updates silently, and the shell loads even when your connection drops momentarily. The share target integration means you can share a link or text from any app on your phone directly into IntexuraOS, the same way you would share to Messages or Email.
 
-**Example:** You open Linear and see a parent issue with 3 child tasks. One child just moved to "In Review" and its badge updated without you refreshing.
+**Example:** You are reading an article on your phone and spot a competitor announcement worth tracking. You hit the share button, select IntexuraOS from the share sheet, and the link flows into the system as a command in your inbox — ready for the system to process. No manual copy-paste required.
 
-### Saved Data Visualizations
+## Getting Started
 
-Create Vega/Vega-Lite chart visualizations from your composite data feeds and save them. Browse saved visualizations globally or per-feed. Charts persist across sessions and are shareable within your account.
-
-**Example:** You build a weekly spending chart from a composite feed, save it, and pin it to your Data Insights dashboard. It reloads automatically the next time you open the app.
-
-### Dark Mode
-
-Switch between light, dark, and system-following themes. The preference persists across sessions and applies throughout the entire UI.
-
-**Example:** You toggle to dark mode in the header. Every page, modal, and component instantly adapts to the dark palette.
-
-### Developer Toolbar (DevBar)
-
-Available in dev environments (local and dev machine), the DevBar provides tabs for running commands against backend services, viewing real-time PM2 logs via SSE, and monitoring Pub/Sub events. State and logs persist across page reloads.
-
-**Example:** While developing on the dev machine, you expand the DevBar to see real-time logs from all backend services, filter to just calendar-agent, and spot a payload parsing error.
-
-### External Integration Management
-
-Connect and manage all your external integrations from settings pages. Google Calendar, Notion, Linear (including webhook secret configuration), WhatsApp (including phone verification), mobile notifications, worker configuration, API keys, and LLM pricing are configured in one place.
-
-**Example:** Your Google Calendar token expires. The settings page shows "Reconnect required". One tap opens the OAuth flow, and you're back in business.
-
-## Use Case
-
-You wake up and open IntexuraOS on your phone. The inbox shows 5 items from overnight: 3 WhatsApp messages auto-classified as research, todos, and a note, plus 2 calendar actions awaiting approval. You tap approve on the calendar events after verifying times, then review the research report. One tap archives completed items. You check the chat to ask "what's on my plate today?" and get a summary. Then you submit a code task to fix a bug described in a Linear issue, and watch the live log stream as it runs. When the design phase finishes, you navigate to the implementation task from the banner. You never opened WhatsApp, calendar, GitHub, or a notes app.
+Install the web app from your browser — on mobile, use "Add to Home Screen." Sign in with your account, or start a guest chat session without one. The inbox shows what has accumulated since your last visit. Code tasks, research reports, calendar events, and Linear issues are each one tap away.
 
 ## Key Benefits
 
-- Single interface for all IntexuraOS services
-- Real-time updates without page refresh
-- Works offline as an installed PWA
-- Unified approval workflow across all action types
-- AI chat assistant for natural language interaction (works without login)
-- Code task submission with two-phase design/execution tracking
-- Real-time log stream with color-coded lines, follow mode, and message queuing
-- GitHub PR events with lazy loading and HTML comment rendering
-- Linear board with sub-issues, labels, and Firestore real-time updates
-- Saved data visualizations per feed
-- Dark mode support
-- External service management in one place
+- **One screen for autonomous operations** — every agent's work surfaces in a single interface, so you stop checking five different tools
+- **Approval without context-switching** — action items, code task gates, and research reviews all happen in the same app you are already looking at
+- **Real-time visibility into code generation** — color-coded log streams show exactly what the agent is doing, not a summary after the fact
+- **Phone-native experience** — install it to your home screen, share content from any app, and the shell loads even offline — the system is always one tap away
+- **Control without friction** — follow-up messages, approval buttons, and phase gates give you authority over the system's next move without slowing it down
 
 ## Limitations
 
-- Requires network connection for most operations (PWA caching available for static assets)
-- Mobile interface optimized but some features like chart configuration and terminal logs work best on desktop
-- Auth0 authentication required for most features (chat available as guest with rate limits)
+- **Offline loads the shell, not live data** — the app opens without a connection, but everything meaningful requires network access
+- **Real-time updates need an active connection** — if your connection drops, updates pause until it reconnects
+- **Guest access is limited to the chat assistant** — inbox, code tasks, and other views require a full account
+- **Share target requires installation** — sending content from other apps only works when the PWA is installed to your home screen
+- **Some settings assume familiarity** — pages like webhook configuration and worker setup have no guided wizard yet
 
 ---
 
-_Part of [IntexuraOS](../overview.md) — Your AI-Native Personal Operating System_
+_Part of [IntexuraOS](../overview.md) — Your window into the machine._

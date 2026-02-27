@@ -374,5 +374,5 @@ To enable approval via WhatsApp with interactive buttons:
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22
 **Version:** 4.0.0

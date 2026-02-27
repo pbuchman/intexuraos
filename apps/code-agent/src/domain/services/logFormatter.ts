@@ -254,9 +254,7 @@ function formatResult(obj: StreamJsonMessage): string {
   if (typeof obj.total_cost_usd === 'number') parts.push(`$${obj.total_cost_usd.toFixed(3)}`);
 
   const summary = parts.length > 0 ? parts.join(', ') : 'Completed';
-  const resultText =
-    typeof obj.result === 'string' && obj.result.trim() !== '' ? `\n${obj.result}` : '';
-  return `[done] ${summary}${resultText}`;
+  return `[done] ${summary}`;
 }
 
 function collapseOutput(output: string): string {

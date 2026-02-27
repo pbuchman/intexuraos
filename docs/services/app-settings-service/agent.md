@@ -1,59 +1,33 @@
-# app-settings-service — Agent Interface
+# app-settings-service -- Agent Interface
 
-> Machine-readable interface definition for AI agents interacting with app-settings-service.
-
----
+> Machine-readable specification for AI agent integration
 
 ## Identity
 
-| Field    | Value                                                    |
-| -------- | -------------------------------------------------------- |
-| **Name** | app-settings-service                                     |
-| **Role** | Application Configuration Service                        |
-| **Goal** | Manage LLM pricing configuration and usage cost tracking |
-
----
+| Attribute | Value                                                                    |
+| --------- | ------------------------------------------------------------------------ |
+| Name      | app-settings-service                                                     |
+| Role      | Centralized LLM pricing configuration and per-user usage cost analytics |
+| Goal      | Provide accurate, up-to-date pricing for all LLM models and track individual usage costs |
 
 ## Capabilities
 
-### Tools (Endpoints)
+### Get LLM Pricing (Public)
+
+**Endpoint:** `GET /settings/pricing`
+
+**When to use:** When a user or UI needs current pricing for all LLM providers to display costs or estimate charges before making API calls.
+
+**Input Schema:**
 
 ```typescript
-interface AppSettingsServiceTools {
-  // Get LLM pricing for all providers (authenticated user)
-  getPricing(): Promise<AllProvidersPricing>;
-
-  // Get user's LLM usage costs (scoped to authenticated user)
-  getUsageCosts(params?: {
-    days?: number; // Default: 90, max: 365
-  }): Promise<AggregatedCosts>;
-}
+// No request body. Requires Authorization header.
+// Headers: { Authorization: 'Bearer <jwt>' }
 ```
 
-### Types
+**Output Schema:**
 
 ```typescript
-type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
-
-type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
-
-interface ModelPricing {
-  inputPricePerMillion: number; // USD per 1M input tokens
-  outputPricePerMillion: number; // USD per 1M output tokens
-  cacheReadMultiplier?: number; // Multiplier on input cost for cache reads
-  cacheWriteMultiplier?: number; // Multiplier on input cost for cache writes
-  webSearchCostPerCall?: number; // Fixed cost per web search call (USD)
-  groundingCostPerRequest?: number; // Fixed cost per grounding request (USD)
-  imagePricing?: Record<ImageSize, number>; // Cost per image generation by size
-  useProviderCost?: boolean; // Use provider's reported cost instead of calculated
-}
-
-interface ProviderPricing {
-  provider: LlmProvider;
-  models: Record<string, ModelPricing>;
-  updatedAt: string; // ISO date string of last pricing update
-}
-
 interface AllProvidersPricing {
   google: ProviderPricing;
   openai: ProviderPricing;
@@ -62,104 +36,237 @@ interface AllProvidersPricing {
   zai: ProviderPricing;
 }
 
-interface MonthlyCost {
-  month: string; // "2026-01"
-  costUsd: number;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  percentage: number; // % of total cost (0-100, rounded)
+interface ProviderPricing {
+  provider: 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai';
+  models: Record<string, ModelPricing>;
+  updatedAt: string; // ISO date
 }
 
-interface ModelCost {
-  model: string;
-  costUsd: number;
-  calls: number;
-  percentage: number; // % of total cost (0-100, rounded)
+interface ModelPricing {
+  inputPricePerMillion: number;
+  outputPricePerMillion: number;
+  cacheReadMultiplier?: number;
+  cacheWriteMultiplier?: number;
+  webSearchCostPerCall?: number;
+  groundingCostPerRequest?: number;
+  imagePricing?: Record<'1024x1024' | '1536x1024' | '1024x1536', number>;
+  useProviderCost?: boolean;
 }
+```
 
-interface CallTypeCost {
-  callType: string; // e.g. "research", "classification"
-  costUsd: number;
-  calls: number;
-  percentage: number; // % of total cost (0-100, rounded)
+**Example:**
+
+```json
+// Request
+// GET /settings/pricing
+// Authorization: Bearer eyJhbG...
+
+// Response (200)
+{
+  "success": true,
+  "data": {
+    "google": {
+      "provider": "google",
+      "updatedAt": "2026-02-01T00:00:00Z",
+      "models": {
+        "gemini-2.5-flash": {
+          "inputPricePerMillion": 0.075,
+          "outputPricePerMillion": 0.30,
+          "groundingCostPerRequest": 0.0035
+        }
+      }
+    },
+    "openai": { "provider": "openai", "models": { "..." : "..." }, "updatedAt": "..." },
+    "anthropic": { "..." : "..." },
+    "perplexity": { "..." : "..." },
+    "zai": { "..." : "..." }
+  }
 }
+```
 
+### Get LLM Pricing (Internal)
+
+**Endpoint:** `GET /internal/settings/pricing`
+
+**When to use:** When a service needs to load pricing at startup for its PricingContext. Uses internal auth, not Bearer tokens.
+
+**Input Schema:**
+
+```typescript
+// No request body. Requires X-Internal-Auth header.
+// Headers: { 'X-Internal-Auth': '<shared-secret>' }
+```
+
+**Output Schema:** Same as public pricing endpoint.
+
+**Example:**
+
+```json
+// Request
+// GET /internal/settings/pricing
+// X-Internal-Auth: <token>
+
+// Response (200)
+{
+  "success": true,
+  "data": {
+    "google": { "..." : "..." },
+    "openai": { "..." : "..." },
+    "anthropic": { "..." : "..." },
+    "perplexity": { "..." : "..." },
+    "zai": { "..." : "..." }
+  }
+}
+```
+
+### Get User Usage Costs
+
+**Endpoint:** `GET /settings/usage-costs`
+
+**When to use:** When displaying a user's LLM spending history with breakdowns by month, model, and call type.
+
+**Input Schema:**
+
+```typescript
+interface UsageCostsQuery {
+  days?: number; // 1-365, default: 90
+}
+// Headers: { Authorization: 'Bearer <jwt>' }
+```
+
+**Output Schema:**
+
+```typescript
 interface AggregatedCosts {
   totalCostUsd: number;
   totalCalls: number;
   totalInputTokens: number;
   totalOutputTokens: number;
   monthlyBreakdown: MonthlyCost[]; // Sorted newest first
-  byModel: ModelCost[]; // Sorted by cost descending
-  byCallType: CallTypeCost[]; // Sorted by cost descending
+  byModel: ModelCost[];             // Sorted by cost descending
+  byCallType: CallTypeCost[];       // Sorted by cost descending
+}
+
+interface MonthlyCost {
+  month: string;        // "2026-01"
+  costUsd: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  percentage: number;   // 0-100, rounded
+}
+
+interface ModelCost {
+  model: string;
+  costUsd: number;
+  calls: number;
+  percentage: number;
+}
+
+interface CallTypeCost {
+  callType: string;     // e.g. "research", "classification"
+  costUsd: number;
+  calls: number;
+  percentage: number;
 }
 ```
 
----
+**Example:**
+
+```json
+// Request
+// GET /settings/usage-costs?days=30
+// Authorization: Bearer eyJhbG...
+
+// Response (200)
+{
+  "success": true,
+  "data": {
+    "totalCostUsd": 12.45,
+    "totalCalls": 234,
+    "totalInputTokens": 1450000,
+    "totalOutputTokens": 320000,
+    "monthlyBreakdown": [
+      { "month": "2026-02", "costUsd": 5.20, "calls": 60, "inputTokens": 620000, "outputTokens": 140000, "percentage": 42 }
+    ],
+    "byModel": [
+      { "model": "gemini-2.5-flash", "costUsd": 8.10, "calls": 95, "percentage": 65 }
+    ],
+    "byCallType": [
+      { "callType": "research", "costUsd": 10.20, "calls": 110, "percentage": 82 }
+    ]
+  }
+}
+```
 
 ## Constraints
 
-| Rule               | Description                                       |
-| ------------------ | ------------------------------------------------- |
-| **Authentication** | All public endpoints require valid Bearer token   |
-| **Days Range**     | Usage costs: 1-365 days, default 90               |
-| **5 Providers**    | Pricing available for all supported LLM providers |
-| **User Scoped**    | Usage costs scoped to authenticated user only     |
-| **Startup Check**  | Service fails to start if any model lacks pricing |
+**Do NOT:**
 
----
+- Call pricing endpoints without authentication (returns 401)
+- Request usage costs with `days` outside 1-365 range (returns 400)
+- Expect per-day granularity in usage responses (aggregation is by month only)
+- Expect write operations (service is read-only for pricing and usage data)
+
+**Requires:**
+
+- Valid Bearer JWT token for public endpoints
+- Valid `X-Internal-Auth` header for internal endpoint
+- Firestore pricing data must be populated via migrations before service starts
 
 ## Usage Patterns
 
-### Get Current Pricing
+### Pattern 1: Service Startup Pricing Load
 
-```typescript
-const pricing = await getPricing();
-// pricing.google.models['gemini-2.5-flash'].inputPricePerMillion
-// pricing.openai.models['gpt-4o'].outputPricePerMillion
+```
+1. Call GET /internal/settings/pricing with X-Internal-Auth header
+2. Parse response.data into PricingContext
+3. Use PricingContext for cost calculation during LLM calls
 ```
 
-### Get Usage Costs
+### Pattern 2: Display User Cost Dashboard
 
-```typescript
-const costs = await getUsageCosts({ days: 30 });
-// costs.totalCostUsd: 12.45
-// costs.totalInputTokens: 1_450_000
-// costs.monthlyBreakdown: [{ month: "2026-01", costUsd: 12.45, calls: 150, percentage: 100 }]
-// costs.byModel: [{ model: "gemini-2.5-flash", costUsd: 5.20, percentage: 42 }]
+```
+1. Call GET /settings/usage-costs?days=90 with Bearer token
+2. Render monthlyBreakdown as a bar chart (month on x-axis, costUsd on y-axis)
+3. Render byModel as a pie chart (model as label, percentage as value)
+4. Show totalCostUsd and totalCalls as summary cards
 ```
 
-### Calculate Cost Preview
+### Pattern 3: Cost Preview Before LLM Call
 
-```typescript
-const pricing = await getPricing();
-const model = pricing.google.models['gemini-2.5-flash'];
-const estimatedCost =
-  (inputTokens / 1_000_000) * model.inputPricePerMillion +
-  (outputTokens / 1_000_000) * model.outputPricePerMillion;
+```
+1. Call GET /settings/pricing with Bearer token
+2. Lookup the target model in the appropriate provider
+3. Calculate: (inputTokens / 1_000_000) * inputPricePerMillion + (outputTokens / 1_000_000) * outputPricePerMillion
+4. Add groundingCostPerRequest or webSearchCostPerCall if applicable
+5. Display estimated cost to user before confirming the call
 ```
 
----
+## Error Handling
 
-## Internal Endpoints
+| Error Code | Meaning                    | Recovery Action                                      |
+| ---------- | -------------------------- | ---------------------------------------------------- |
+| 400        | Invalid days parameter     | Use integer between 1 and 365                        |
+| 401        | Unauthorized               | Refresh Bearer token or check internal auth header   |
+| 500        | Missing provider pricing   | Contact admin -- Firestore pricing migration needed  |
 
-| Method | Path                         | Purpose                                            | Auth            |
-| ------ | ---------------------------- | -------------------------------------------------- | --------------- |
-| GET    | `/internal/settings/pricing` | Get all LLM provider pricing (for service startup) | Internal header |
+## Dependencies
 
----
+| Service    | Why Needed                                      | Failure Behavior            |
+| ---------- | ----------------------------------------------- | --------------------------- |
+| Firestore  | Pricing config and usage statistics storage     | 500 error on all endpoints  |
 
 ## Provider Coverage
 
-| Provider   | Models Tracked                                     |
-| ---------- | -------------------------------------------------- |
-| Google     | gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro |
-| OpenAI     | gpt-4o, gpt-4o-mini, o1-mini                       |
-| Anthropic  | claude-sonnet-4-20250514                           |
-| Perplexity | sonar, sonar-pro                                   |
-| Zai        | glm-4-flash                                        |
+| Provider   | Models (16 total)                                                          |
+| ---------- | -------------------------------------------------------------------------- |
+| Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image |
+| OpenAI     | gpt-5.2, gpt-4o-mini, o4-mini-deep-research, gpt-image-1                  |
+| Anthropic  | claude-opus-4-5-20251101, claude-sonnet-4-5-20250929, claude-3-5-haiku-20241022 |
+| Perplexity | sonar, sonar-pro, sonar-deep-research                                      |
+| Zai        | glm-4.7, glm-4.7-flash                                                    |
 
 ---
 
-**Last updated:** 2026-02-19 (v2 run verification)
+**Last updated:** 2026-02-22

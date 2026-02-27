@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { glob } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
 import { join } from 'node:path';
+import { availableParallelism } from 'node:os';
 import type { Logger } from '@intexuraos/common-core';
 
 export interface TurnMetrics {
@@ -34,6 +35,7 @@ export interface TurnMetricsCollectorConfig {
   orchestratorSecret: string;
   internalAuthToken: string;
   secretsBasePath: string;
+  sharedCredsPath?: string;
 }
 
 interface SessionEntry {
@@ -66,8 +68,6 @@ interface TokenAggregation {
   apiCallCount: number;
 }
 
-const CPU_CORES = 2; // Container allocation
-
 export class TurnMetricsCollector {
   constructor(
     private readonly config: TurnMetricsCollectorConfig,
@@ -84,10 +84,14 @@ export class TurnMetricsCollector {
     try {
       const cgroupPath = `/sys/fs/cgroup/system.slice/docker-${params.containerId}.scope`;
 
-      const [cpuTimeSeconds, peakMemoryMB, sessionData] = await Promise.all([
+      const [cpuTimeSeconds, peakMemoryMB, cpuCores, sessionData] = await Promise.all([
         this.readCpuTimeSec(cgroupPath),
         this.readPeakMemoryMB(cgroupPath),
-        this.parseSessionJsonl(params.taskId),
+        this.readCpuCores(cgroupPath),
+        this.parseSessionJsonl(params.taskId, {
+          startedAt: params.startedAt,
+          completedAt: params.completedAt,
+        }),
       ]);
 
       const wallTimeSeconds =
@@ -97,7 +101,7 @@ export class TurnMetricsCollector {
       const tokens = sessionData.tokens;
 
       const cpuUtilizationPercent =
-        wallTimeSeconds > 0 ? (cpuTimeSeconds / (wallTimeSeconds * CPU_CORES)) * 100 : 0;
+        wallTimeSeconds > 0 ? (cpuTimeSeconds / (wallTimeSeconds * cpuCores)) * 100 : 0;
       const idlePercent =
         wallTimeSeconds > 0
           ? ((timeClassification.apiWaitSeconds + timeClassification.backgroundWaitSeconds) /
@@ -110,7 +114,7 @@ export class TurnMetricsCollector {
         attempt: params.attempt,
         timestamp: params.completedAt,
         cpuTimeSeconds,
-        cpuCores: CPU_CORES,
+        cpuCores,
         peakMemoryMB,
         wallTimeSeconds,
         apiWaitSeconds: timeClassification.apiWaitSeconds,
@@ -174,16 +178,60 @@ export class TurnMetricsCollector {
     }
   }
 
+  async readCpuCores(cgroupPath: string): Promise<number> {
+    try {
+      const content = await readFile(join(cgroupPath, 'cpu.max'), 'utf-8');
+      const match = /^(\S+)\s+(\d+)$/m.exec(content.trim());
+      if (match?.[1] !== undefined && match[2] !== undefined) {
+        if (match[1] === 'max') {
+          return availableParallelism();
+        }
+        const quota = parseInt(match[1], 10);
+        const period = parseInt(match[2], 10);
+        /* v8 ignore start -- test-infra: cgroup mock always provides non-zero period @preserve */
+        if (period > 0) {
+          return quota / period;
+        }
+        /* v8 ignore stop @preserve */
+      }
+      return availableParallelism();
+    } catch {
+      return availableParallelism();
+    }
+  }
+
   async parseSessionJsonl(
-    taskId: string
+    taskId: string,
+    timeWindow?: { startedAt: string; completedAt: string }
   ): Promise<{ timeClassification: TimeClassification; tokens: TokenAggregation }> {
     const entries: SessionEntry[] = [];
-    const sessionDir = join(this.config.secretsBasePath, `claude-session-${taskId}`);
-    const pattern = join(sessionDir, 'projects', '**', '*.jsonl');
+    const sharedCredsPath = this.config.sharedCredsPath;
+    const basePath =
+      sharedCredsPath ?? join(this.config.secretsBasePath, `claude-session-${taskId}`);
+    const pattern = join(basePath, 'projects', '**', '*.jsonl');
 
     try {
       for await (const filePath of glob(pattern)) {
         const content = await readFile(filePath, 'utf-8');
+
+        if (sharedCredsPath !== undefined && timeWindow !== undefined) {
+          const firstNewline = content.indexOf('\n');
+          const firstLine = firstNewline === -1 ? content : content.slice(0, firstNewline);
+          if (firstLine.trim() !== '') {
+            try {
+              const firstEntry = JSON.parse(firstLine) as SessionEntry;
+              if (firstEntry.timestamp !== undefined) {
+                const ts = new Date(firstEntry.timestamp).getTime();
+                const start = new Date(timeWindow.startedAt).getTime();
+                const end = new Date(timeWindow.completedAt).getTime();
+                if (ts < start || ts > end) continue;
+              }
+            } catch {
+              continue;
+            }
+          }
+        }
+
         for (const line of content.split('\n')) {
           if (line.trim() === '') continue;
           try {

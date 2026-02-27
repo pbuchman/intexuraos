@@ -42,13 +42,20 @@ vi.mock('jose', () => {
       return this;
     }
     async sign(): Promise<string> {
-      return 'mock-jwt-token';
+      return 'mock.jwt.token';
     }
   }
   return { SignJWT: MockSignJWT };
 });
 
-// Mock fetch
+// Mock createRetryOctokit — default: mock Octokit (no real fetch/retry)
+vi.mock('../../../github/octokit-client.js', () => ({
+  createRetryOctokit: vi.fn(),
+}));
+
+import { createRetryOctokit } from '../../../github/octokit-client.js';
+
+// Keep mockFetch for retry-specific tests that use real Octokit
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
@@ -65,7 +72,7 @@ const createTestConfig = (overrides: Partial<TokenRefresherConfig> = {}): TokenR
   secretsBasePath: '/tmp/claude-secrets',
   githubAppId: 'test-app-id',
   githubAppPrivateKeyPath: '/test/github-app.pem',
-  githubInstallationId: 'test-installation-id',
+  githubInstallationId: '12345',
   refreshIntervalMs: 30 * 60 * 1000, // 30 minutes
   ...overrides,
 });
@@ -76,6 +83,7 @@ describe('TokenRefresher', () => {
   let config: TokenRefresherConfig;
   let mockReadFile: Mock;
   let mockWriteFile: Mock;
+  let mockOctokitRequest: Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -93,11 +101,13 @@ describe('TokenRefresher', () => {
       '-----BEGIN RSA PRIVATE KEY-----\ntest-key\n-----END RSA PRIVATE KEY-----'
     );
 
-    // Default mock for GitHub API
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ token: 'ghs_mock_installation_token' }),
+    // Default: mock Octokit request that returns a token
+    mockOctokitRequest = vi.fn().mockResolvedValue({
+      data: { token: 'ghs_mock_installation_token' },
     });
+    vi.mocked(createRetryOctokit).mockReturnValue({
+      request: mockOctokitRequest,
+    } as unknown as ReturnType<typeof createRetryOctokit>);
   });
 
   afterEach(() => {
@@ -133,18 +143,13 @@ describe('TokenRefresher', () => {
       expect(mockWriteFile).toHaveBeenCalledTimes(2);
     });
 
-    it('calls GitHub API with correct installation ID', async () => {
+    it('calls Octokit with correct installation ID and JWT', async () => {
       await refresher.registerTask('task-123');
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.github.com/app/installations/test-installation-id/access_tokens',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer mock-jwt-token',
-            Accept: 'application/vnd.github+json',
-          }),
-        })
+      expect(createRetryOctokit).toHaveBeenCalledWith('mock.jwt.token');
+      expect(mockOctokitRequest).toHaveBeenCalledWith(
+        'POST /app/installations/{installation_id}/access_tokens',
+        { installation_id: 12345 }
       );
     });
   });
@@ -185,43 +190,48 @@ describe('TokenRefresher', () => {
 
   describe('error handling', () => {
     it('throws when GitHub API fails during registerTask', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        text: () => Promise.resolve('Bad credentials'),
-      });
+      const error = new Error('Bad credentials');
+      (error as Error & { status: number }).status = 401;
+      mockOctokitRequest.mockRejectedValueOnce(error);
 
-      await expect(refresher.registerTask('task-123')).rejects.toThrow(
-        'GitHub token mint failed: 401'
-      );
+      await expect(refresher.registerTask('task-123')).rejects.toThrow('Bad credentials');
       expect(mockLogger.error).toHaveBeenCalledWith(
         {
-          url: 'https://api.github.com/app/installations/test-installation-id/access_tokens',
+          errorMessage: 'Bad credentials',
+          causeMessage: undefined,
+          causeCode: undefined,
+          causeSyscall: undefined,
           status: 401,
-          body: 'Bad credentials',
         },
-        'GitHub token mint HTTP error'
+        'GitHub token mint failed after retries'
       );
     });
 
-    it('logs network-level cause when fetch throws TypeError', async () => {
-      const cause = new Error('getaddrinfo ENOTFOUND api.github.com');
-      (cause as NodeJS.ErrnoException).code = 'ENOTFOUND';
-      (cause as NodeJS.ErrnoException).syscall = 'getaddrinfo';
+    it('logs cause details when Octokit request fails with cause chain', async () => {
       const fetchError = new TypeError('fetch failed');
-      fetchError.cause = cause;
-      mockFetch.mockRejectedValueOnce(fetchError);
+      const innerCause = new Error('getaddrinfo ENOTFOUND api.github.com');
+      (innerCause as NodeJS.ErrnoException).code = 'ENOTFOUND';
+      (innerCause as NodeJS.ErrnoException).syscall = 'getaddrinfo';
+      fetchError.cause = innerCause;
 
-      await expect(refresher.registerTask('task-123')).rejects.toThrow('fetch failed');
+      // Simulate Octokit's RequestError wrapping
+      const requestError = new Error('getaddrinfo ENOTFOUND api.github.com');
+      requestError.cause = fetchError;
+      (requestError as Error & { status: number }).status = 500;
+      mockOctokitRequest.mockRejectedValueOnce(requestError);
+
+      await expect(refresher.registerTask('task-123')).rejects.toThrow(
+        'getaddrinfo ENOTFOUND api.github.com'
+      );
       expect(mockLogger.error).toHaveBeenCalledWith(
         {
-          url: 'https://api.github.com/app/installations/test-installation-id/access_tokens',
-          errorMessage: 'fetch failed',
-          causeMessage: 'getaddrinfo ENOTFOUND api.github.com',
-          causeCode: 'ENOTFOUND',
-          causeSyscall: 'getaddrinfo',
+          errorMessage: 'getaddrinfo ENOTFOUND api.github.com',
+          causeMessage: 'fetch failed',
+          causeCode: undefined,
+          causeSyscall: undefined,
+          status: 500,
         },
-        'GitHub token mint fetch failed'
+        'GitHub token mint failed after retries'
       );
     });
 
@@ -240,13 +250,9 @@ describe('TokenRefresher', () => {
       vi.mocked(mockLogger.error).mockClear();
 
       // First task fails, second succeeds
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          text: () => Promise.resolve('Internal Server Error'),
-        })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ token: 'new-token' }) });
+      mockOctokitRequest
+        .mockRejectedValueOnce(Object.assign(new Error('Internal Server Error'), { status: 500 }))
+        .mockResolvedValueOnce({ data: { token: 'new-token' } });
 
       await vi.advanceTimersByTimeAsync(config.refreshIntervalMs + 1);
 
@@ -259,6 +265,93 @@ describe('TokenRefresher', () => {
         'new-token',
         expect.any(Object)
       );
+    });
+  });
+
+  describe('retry behavior', () => {
+    it('retries on transient 500 error', async () => {
+      // Use real Octokit with fast retry
+      const { Octokit } = await import('@octokit/core');
+      const { retry } = await import('@octokit/plugin-retry');
+      const RetryOctokit = Octokit.plugin(retry);
+      vi.mocked(createRetryOctokit).mockImplementation(
+        (jwt: string) =>
+          new RetryOctokit({
+            auth: jwt,
+            request: { retries: 3 },
+            retry: { retryAfterBaseValue: 1 },
+          })
+      );
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ message: 'Internal Server Error' }), {
+              status: 500,
+              headers: { 'content-type': 'application/json' },
+            })
+          );
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ token: 'ghs_recovered_token' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        );
+      });
+
+      const promise = refresher.registerTask('task-123');
+      await vi.advanceTimersByTimeAsync(100);
+      await promise;
+
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        '/tmp/claude-secrets/task-123/github-token',
+        'ghs_recovered_token',
+        { mode: 0o600 }
+      );
+      expect(callCount).toBeGreaterThanOrEqual(2);
+    });
+
+    it('retries on network error', async () => {
+      // Use real Octokit with fast retry
+      const { Octokit } = await import('@octokit/core');
+      const { retry } = await import('@octokit/plugin-retry');
+      const RetryOctokit = Octokit.plugin(retry);
+      vi.mocked(createRetryOctokit).mockImplementation(
+        (jwt: string) =>
+          new RetryOctokit({
+            auth: jwt,
+            request: { retries: 3 },
+            retry: { retryAfterBaseValue: 1 },
+          })
+      );
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.reject(new TypeError('fetch failed'));
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ token: 'ghs_recovered_token' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        );
+      });
+
+      const promise = refresher.registerTask('task-123');
+      await vi.advanceTimersByTimeAsync(100);
+      await promise;
+
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        '/tmp/claude-secrets/task-123/github-token',
+        'ghs_recovered_token',
+        { mode: 0o600 }
+      );
+      expect(callCount).toBeGreaterThanOrEqual(2);
     });
   });
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-User-service provides authentication, user settings management, LLM API key storage with encryption, and OAuth token management. It integrates with Auth0 for identity management and uses AES-256-GCM encryption for all sensitive data.
+User-service provides authentication, user settings management, LLM API key storage with encryption, and OAuth token management. It integrates with Auth0 for identity management and uses AES-256-GCM encryption for all sensitive data. Runs on Cloud Run with Fastify.
 
 ## Architecture
 
@@ -83,6 +83,24 @@ sequenceDiagram
     end
 ```
 
+## Recent Changes
+
+| Commit     | Description                                      | Date       |
+| ---------- | ------------------------------------------------ | ---------- |
+| `b3f34d85` | Release v3.1.0                                   | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                   | 2026-02-19 |
+| `6063175b` | Dev-mode log formatting for PM2 readability      | 2026-02-16 |
+| `a52a6bbc` | Dash0 OpenTelemetry integration                  | 2026-02-16 |
+| `d5fbb354` | Fix start:local to use tsx instead of node        | 2026-02-14 |
+| `45f001c1` | Switch PM2 ecosystem to pnpm --filter             | 2026-02-14 |
+| `65b90801` | Simplify local dev to Pub/Sub emulator only       | 2026-02-14 |
+| `0f69a74b` | Add default model selector with platform fallback | 2026-02-08 |
+| `308ba74e` | Add v8 ignore for JWT claims type guards          | 2026-02-08 |
+| `f33b6251` | Fix namespaced Auth0 claims for user profile      | 2026-02-08 |
+| `5aa3e1bd` | Enable strict 100% coverage enforcement           | 2026-02-01 |
+| `9723dc24` | Standardize DELETE endpoints response contract    | 2026-02-01 |
+| `c3198407` | Fix all 132 response contract violations          | 2026-02-01 |
+
 ## API Endpoints
 
 ### Authentication Endpoints
@@ -161,6 +179,12 @@ sequenceDiagram
 | `message`  | string                 | LLM response or error |
 | `testedAt` | string                 | ISO 8601 timestamp    |
 
+### LlmPreferences
+
+| Field          | Type     | Description                          |
+| -------------- | -------- | ------------------------------------ |
+| `defaultModel` | LLMModel | User's preferred default fast model  |
+
 ### OAuthConnection
 
 | Field       | Type        | Description                |
@@ -180,6 +204,17 @@ sequenceDiagram
 | `refreshToken` | string | Encrypted refresh token |
 | `expiresAt`    | string | Access token expiry     |
 | `scope`        | string | Granted scopes          |
+
+### AuthTokens
+
+| Field          | Type   | Description                    |
+| -------------- | ------ | ------------------------------ |
+| `accessToken`  | string | Auth0 access token             |
+| `refreshToken` | string | Auth0 refresh token            |
+| `tokenType`    | string | Token type (Bearer)            |
+| `expiresIn`    | number | Expiry in seconds              |
+| `scope`        | string | Granted scopes (optional)      |
+| `idToken`      | string | OIDC ID token (optional)       |
 
 ## LLM Error Formatting (v2.0.0)
 
@@ -277,22 +312,22 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 
 ## Configuration
 
-| Environment Variable                    | Required | Description                                              |
-| --------------------------------------- | -------- | -------------------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project ID (Firestore, Firebase)                     |
-| `INTEXURAOS_AUTH0_DOMAIN`               | Yes      | Auth0 tenant domain                                      |
-| `INTEXURAOS_AUTH0_CLIENT_ID`            | Yes      | Auth0 application client ID                              |
-| `INTEXURAOS_AUTH_JWKS_URL`              | Yes      | Auth0 JWKS endpoint for JWT verification                 |
-| `INTEXURAOS_AUTH_ISSUER`                | Yes      | JWT issuer (Auth0 tenant URL)                            |
-| `INTEXURAOS_AUTH_AUDIENCE`              | Yes      | JWT audience (API identifier)                            |
-| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`       | Yes      | Key for encrypting stored Auth0 tokens                   |
-| `INTEXURAOS_ENCRYPTION_KEY`             | Yes      | AES-256 key for API key encryption (64 hex chars)        |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Shared secret for internal endpoints                     |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`   | Yes      | URL of app-settings-service (fetches LLM pricing)        |
-| `INTEXURAOS_WEB_APP_URL`                | Yes      | Web app URL for OAuth redirects                          |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes      | Google OAuth client ID                                   |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes      | Google OAuth client secret                               |
-| `INTEXURAOS_SENTRY_DSN`                 | No       | Sentry DSN for error tracking (optional)                 |
+| Environment Variable                    | Required | Description                                               |
+| --------------------------------------- | -------- | --------------------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project ID (Firestore, Firebase)                      |
+| `INTEXURAOS_AUTH0_DOMAIN`               | Yes      | Auth0 tenant domain                                       |
+| `INTEXURAOS_AUTH0_CLIENT_ID`            | Yes      | Auth0 application client ID                               |
+| `INTEXURAOS_AUTH_JWKS_URL`              | Yes      | Auth0 JWKS endpoint for JWT verification                  |
+| `INTEXURAOS_AUTH_ISSUER`                | Yes      | JWT issuer (Auth0 tenant URL)                             |
+| `INTEXURAOS_AUTH_AUDIENCE`              | Yes      | JWT audience (API identifier)                             |
+| `INTEXURAOS_TOKEN_ENCRYPTION_KEY`       | Yes      | Key for encrypting stored Auth0 tokens                    |
+| `INTEXURAOS_ENCRYPTION_KEY`             | Yes      | AES-256 key for API key encryption (64 hex chars)         |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Shared secret for internal endpoints                      |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`   | Yes      | URL of app-settings-service (fetches LLM pricing)         |
+| `INTEXURAOS_WEB_APP_URL`               | Yes      | Web app URL for OAuth redirects                           |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes      | Google OAuth client ID                                    |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes      | Google OAuth client secret                                |
+| `INTEXURAOS_SENTRY_DSN`                 | No       | Sentry DSN for error tracking (optional)                  |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`        | No       | Dash0 OTLP endpoint for tracing/metrics (no-op if unset) |
 
 ## Gotchas
@@ -315,7 +350,7 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 
 **Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`, `zai`) differ from display names.
 
-**Internal endpoints use response contract**: All internal endpoints now return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`. Callers must read from `response.data` instead of the top level.
+**Internal endpoints use response contract**: All internal endpoints return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`. Callers must read from `response.data` instead of the top level.
 
 **Default model validation**: `PATCH /users/:uid/settings` validates `defaultModel` against `isFastModel()` from `@intexuraos/llm-contract`. Unsupported model names return 400 `INVALID_REQUEST`.
 
@@ -325,6 +360,8 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 
 **Error code mapping**: Internal endpoint error codes follow the standard response contract codes: `UNAUTHORIZED` (401), `NOT_FOUND` (404), `MISCONFIGURED` (503), `DOWNSTREAM_ERROR` (502).
 
+**Pricing context at startup**: The service fetches LLM pricing from `app-settings-service` at boot. If that service is unavailable, startup fails.
+
 ## File Structure
 
 ```
@@ -333,6 +370,7 @@ apps/user-service/src/
     identity/
       models/
         AuthToken.ts           # Auth token types
+        AuthError.ts           # Auth error types
       ports/
         Auth0Client.ts         # Auth0 interface
         AuthTokenRepository.ts # Token storage interface
@@ -341,17 +379,20 @@ apps/user-service/src/
     settings/
       models/
         UserSettings.ts        # Settings aggregate
+        SettingsError.ts       # Settings error types
       ports/
         UserSettingsRepository.ts # Settings storage
         Encryptor.ts           # Encryption interface
         LlmValidator.ts        # Key validation interface
       usecases/
         getUserSettings.ts     # Get settings use case
+      utils/
+        maskApiKey.ts          # Key masking utility
       formatLlmError.ts        # Error message formatting
-      maskApiKey.ts            # Key masking utility
     oauth/
       models/
         OAuthConnection.ts     # OAuth connection types
+        OAuthError.ts          # OAuth error types
       ports/
         GoogleOAuthClient.ts   # Google OAuth interface
         OAuthConnectionRepository.ts
@@ -370,6 +411,7 @@ apps/user-service/src/
       authTokenRepository.ts   # Token storage
       userSettingsRepository.ts # Settings storage
       oauthConnectionRepository.ts
+      encryption.ts            # Firestore encryption helpers
     google/
       googleOAuthClient.ts     # Google OAuth client
     llm/
@@ -378,12 +420,17 @@ apps/user-service/src/
     deviceRoutes.ts            # Device code flow
     tokenRoutes.ts             # Token refresh
     firebaseRoutes.ts          # Firebase token exchange
-    oauthRoutes.ts             # OAuth endpoints
-    oauthConnectionRoutes.ts   # OAuth connection management
+    oauthRoutes.ts             # OAuth2 endpoints (ChatGPT Actions)
+    oauthConnectionRoutes.ts   # Google OAuth connection management
     configRoutes.ts            # Auth0 config
-    settingsRoutes.ts          # User settings CRUD
-    llmKeysRoutes.ts           # LLM key management
-    frontendRoutes.ts          # Login/logout pages
-    internalRoutes.ts          # Service-to-service
+    settingsRoutes.ts          # User settings + default model
+    llmKeysRoutes.ts           # LLM key management (CRUD + test)
+    frontendRoutes.ts          # Login/logout/me pages
+    internalRoutes.ts          # Service-to-service (4 endpoints)
+    schemas.ts                 # Zod request schemas
+    shared.ts                  # Shared helpers (loadAuth0Config)
+    httpClient.ts              # HTTP client for Auth0 calls
   services.ts                  # DI container
+  server.ts                    # Fastify server builder
+  index.ts                     # Entry point with env validation
 ```

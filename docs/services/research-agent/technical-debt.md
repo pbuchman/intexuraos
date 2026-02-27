@@ -1,7 +1,7 @@
 # Research Agent - Technical Debt
 
-**Last Updated:** 2026-02-19
-**Analysis Run:** v2.4.0 documentation update
+**Last Updated:** 2026-02-22
+**Analysis Run:** v3.1.0 documentation update
 
 ---
 
@@ -111,7 +111,9 @@ Comprehensive test coverage across all layers with 100% branch coverage enforced
 
 ### None Detected
 
-No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
+No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found in production code.
+
+The `@ts-expect-error` usages in `researchExportSettingsRepository.test.ts` (4 instances) are test-only, used for injecting fake Firestore implementations.
 
 The Zod schema migration (INT-86, INT-218) improved type safety by deriving types from schemas using `z.infer<>`.
 
@@ -163,6 +165,13 @@ The Zod schema definitions in `@intexuraos/llm-prompts` are shared across resear
 ---
 
 ## Resolved Issues
+
+### 2026-02-22 - v3.1.0 Prompt Audit & Version Alignment
+
+| Date       | Issue                                         | Resolution                                                                           |
+| ---------- | --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 2026-02-22 | Unsafe casts in ContextInferenceAdapter        | Simplified with safer fallback defaults during adversarial dual-agent prompt audit    |
+| 2026-02-22 | Package version behind monorepo-wide releases | Aligned to v3.1.0 (v3.0.0 and v3.1.0 were version bumps only for research-agent)    |
 
 ### 2026-02-19 - v2.4.0 Observability & Developer Experience
 
@@ -234,7 +243,7 @@ No previously resolved issues tracked prior to v2.0.0.
 
 ---
 
-## v2.4.0 Architecture Quality
+## v3.1.0 Architecture Quality
 
 ### Strengths
 
@@ -246,6 +255,7 @@ No previously resolved issues tracked prior to v2.0.0.
 6. **100% branch coverage** - Strict enforcement with categorized v8 ignore exemptions
 7. **Sentry integration** - All loggers use `createAppLogger()` for error forwarding
 8. **Distributed tracing** - Dash0 OpenTelemetry preload provides transparent trace propagation across all services
+9. **Prompt versioning** - All prompts follow semver; adversarial audit ensured quality (v3.1.0)
 
 ### Areas for Future Improvement
 

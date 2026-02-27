@@ -107,7 +107,7 @@ curl -X POST https://calendar-agent.intexuraos.com/calendar/events \
 
 Note: All-day events use `date` (YYYY-MM-DD), not `dateTime`. End date is exclusive.
 
-## Part 3: Using Preview Generation (v2.0.0)
+## Part 3: Using Preview Generation
 
 The preview flow allows users to see what will be created before committing.
 
@@ -126,10 +126,12 @@ curl -X GET "https://calendar-agent.intexuraos.com/internal/calendar/preview/act
 {
   "success": true,
   "data": {
-    "actionId": "action-123",
-    "userId": "user-456",
-    "status": "pending",
-    "generatedAt": "2026-01-24T10:00:00Z"
+    "preview": {
+      "actionId": "action-123",
+      "userId": "user-456",
+      "status": "pending",
+      "generatedAt": "2026-01-24T10:00:00Z"
+    }
   }
 }
 ```
@@ -140,16 +142,18 @@ curl -X GET "https://calendar-agent.intexuraos.com/internal/calendar/preview/act
 {
   "success": true,
   "data": {
-    "actionId": "action-123",
-    "userId": "user-456",
-    "status": "ready",
-    "summary": "Dentist appointment",
-    "start": "2026-01-28T14:00:00",
-    "end": "2026-01-28T15:00:00",
-    "duration": "1 hour",
-    "isAllDay": false,
-    "reasoning": "Interpreted 'next Tuesday at 2pm' as January 28th based on current date.",
-    "generatedAt": "2026-01-24T10:00:05Z"
+    "preview": {
+      "actionId": "action-123",
+      "userId": "user-456",
+      "status": "ready",
+      "summary": "Dentist appointment",
+      "start": "2026-01-28T14:00:00",
+      "end": "2026-01-28T15:00:00",
+      "duration": "1 hour",
+      "isAllDay": false,
+      "reasoning": "Interpreted 'next Tuesday at 2pm' as January 28th based on current date.",
+      "generatedAt": "2026-01-24T10:00:05Z"
+    }
   }
 }
 ```
@@ -180,7 +184,20 @@ curl -X POST "https://calendar-agent.intexuraos.com/internal/calendar/process-ac
   }'
 ```
 
-If preview is ready, it skips LLM extraction and uses cached data.
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "completed",
+    "message": "Event \"Dentist appointment\" created successfully",
+    "resourceUrl": "https://www.google.com/calendar/event?eid=abc123"
+  }
+}
+```
+
+If preview is ready, it skips LLM extraction and uses cached data. The `resourceUrl` links directly to the created Google Calendar event. If the event has no `htmlLink`, it falls back to `/#/calendar`.
 
 ## Part 4: Handle Errors
 
@@ -216,15 +233,14 @@ If preview is ready, it skips LLM extraction and uses cached data.
 
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Preview not found for action action-123"
+  "success": true,
+  "data": {
+    "preview": null
   }
 }
 ```
 
-**Solution:** Preview may not exist yet. Poll until status changes or timeout.
+**Solution:** Preview may not exist yet. Poll until it appears and status changes, or timeout.
 
 ### Error: Preview Failed
 
@@ -232,10 +248,12 @@ If preview is ready, it skips LLM extraction and uses cached data.
 {
   "success": true,
   "data": {
-    "actionId": "action-123",
-    "status": "failed",
-    "error": "Could not extract date from 'sometime next week'. Please specify a date.",
-    "reasoning": "The phrase 'sometime next week' is too vague for scheduling."
+    "preview": {
+      "actionId": "action-123",
+      "status": "failed",
+      "error": "Could not extract date from 'sometime next week'. Please specify a date.",
+      "reasoning": "The phrase 'sometime next week' is too vague for scheduling."
+    }
   }
 }
 ```
@@ -409,11 +427,12 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 
 1. **Poll preview status** - Check every 1-2 seconds until ready or failed
 2. **Always specify timeMin/timeMax** - Reduces data transfer and improves performance
-3. **Use pagination** - Don't fetch all events at once
+3. **Use pagination** - Set maxResults to avoid fetching all events at once
 4. **Handle partial success** - Free/busy may return some calendars with errors
 5. **Implement caching** - Cache event data for short periods
 6. **Respect rate limits** - Google Calendar has daily quota limits
 7. **Display reasoning** - Show users why dates were interpreted a certain way
+8. **Use resourceUrl** - The process-action response links directly to Google Calendar
 
 ## Exercises
 
@@ -438,4 +457,4 @@ curl -X DELETE "https://calendar-agent.intexuraos.com/calendar/failed-events/fai
 
 ---
 
-**Last updated:** 2026-02-19 (fix processAction request body shape)
+**Last updated:** 2026-02-22

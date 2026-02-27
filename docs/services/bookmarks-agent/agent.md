@@ -1,80 +1,220 @@
 # bookmarks-agent - Agent Interface
 
-> Machine-readable interface definition for AI agents interacting with bookmarks-agent.
+> Machine-readable specification for AI agent integration
 
 ---
 
 ## Identity
 
-| Field    | Value                                                                                             |
-| -------- | ------------------------------------------------------------------------------------------------- |
-| **Name** | bookmarks-agent                                                                                   |
-| **Role** | Link Intelligence Service                                                                         |
-| **Goal** | Save, enrich, and organize bookmarks with OpenGraph metadata, AI summaries, and WhatsApp delivery |
+| Attribute | Value                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| Name      | bookmarks-agent                                                                                   |
+| Version   | 3.1.0                                                                                             |
+| Port      | 8124                                                                                              |
+| Role      | Link Intelligence Service                                                                         |
+| Goal      | Save, enrich, and organize bookmarks with OpenGraph metadata, AI summaries, and WhatsApp delivery |
 
 ---
 
 ## Capabilities
 
-### Tools (Endpoints)
+### Create Bookmark (Public)
+
+**Endpoint:** `POST /bookmarks`
+**Auth:** Bearer token
+
+**When to use:** When creating a bookmark directly from the web dashboard. Does NOT trigger enrichment pipeline.
+
+**Input Schema:**
 
 ```typescript
-interface BookmarksAgentTools {
-  // List bookmarks with filters
-  listBookmarks(params?: {
-    archived?: boolean;
-    tags?: string[];
-    ogFetchStatus?: OgFetchStatus;
-  }): Promise<Bookmark[]>;
-
-  // Create new bookmark (triggers async enrichment + WhatsApp notification)
-  createBookmark(params: {
-    url: string;
-    title?: string;
-    description?: string;
-    tags?: string[];
-    source: string;
-    sourceId: string;
-  }): Promise<Bookmark>;
-
-  // Get single bookmark
-  getBookmark(id: string): Promise<Bookmark>;
-
-  // Update bookmark
-  updateBookmark(
-    id: string,
-    params: {
-      title?: string;
-      description?: string;
-      tags?: string[];
-      archived?: boolean;
-    }
-  ): Promise<Bookmark>;
-
-  // Delete bookmark
-  deleteBookmark(id: string): Promise<void>;
-
-  // Archive bookmark
-  archiveBookmark(id: string): Promise<Bookmark>;
-
-  // Unarchive bookmark
-  unarchiveBookmark(id: string): Promise<Bookmark>;
-
-  // Force refresh OG metadata (internal only)
-  forceRefreshBookmark(id: string): Promise<Bookmark>;
-
-  // Proxy external image (bypasses CORS)
-  proxyImage(params: { url: string }): Promise<Buffer>;
+interface CreateBookmarkInput {
+  url: string;         // Valid HTTP/HTTPS URL
+  title?: string;
+  description?: string;
+  tags?: string[];
+  source: string;      // e.g., 'manual', 'whatsapp'
+  sourceId: string;    // ID in source system
 }
 ```
 
-### Types
+**Output Schema:**
+
+```typescript
+interface CreateBookmarkOutput {
+  success: true;
+  data: Bookmark;
+}
+```
+
+### Create Bookmark (Internal)
+
+**Endpoint:** `POST /internal/bookmarks`
+**Auth:** `X-Internal-Auth` header
+
+**When to use:** When creating a bookmark from another service (e.g., actions-agent). Triggers async enrichment pipeline (OG fetch -> AI summary -> WhatsApp notification).
+
+**Input Schema:**
+
+```typescript
+interface CreateBookmarkInternalInput {
+  userId: string;
+  url: string;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  status?: 'draft' | 'active';
+  source: string;
+  sourceId: string;
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface CreateBookmarkInternalOutput {
+  success: true;
+  data: {
+    id: string;       // Bookmark ID
+    url: string;       // App deep link: "/#/bookmarks/{id}"
+    bookmark: Bookmark;
+  };
+}
+```
+
+**Example:**
+
+```json
+// Request
+{
+  "userId": "user-abc-123",
+  "url": "https://example.com/article",
+  "source": "whatsapp",
+  "sourceId": "wamid.123"
+}
+
+// Response (201)
+{
+  "success": true,
+  "data": {
+    "id": "bk_xyz789",
+    "url": "/#/bookmarks/bk_xyz789",
+    "bookmark": {
+      "id": "bk_xyz789",
+      "ogFetchStatus": "pending",
+      "aiSummary": null
+    }
+  }
+}
+```
+
+### List Bookmarks
+
+**Endpoint:** `GET /bookmarks`
+**Auth:** Bearer token
+
+**When to use:** To retrieve all bookmarks for the authenticated user, optionally filtered.
+
+**Query Parameters:**
+
+```typescript
+interface ListBookmarksQuery {
+  archived?: 'true' | 'false';
+  tags?: string;              // Comma-separated tag names
+  ogFetchStatus?: 'pending' | 'processed' | 'failed';
+}
+```
+
+### Get Bookmark
+
+**Endpoint:** `GET /bookmarks/:id`
+**Auth:** Bearer token
+
+**When to use:** To retrieve a single bookmark by ID. Returns 403 if the bookmark belongs to a different user.
+
+### Get Bookmark (Internal)
+
+**Endpoint:** `GET /internal/bookmarks/:id?userId={userId}`
+**Auth:** `X-Internal-Auth` header
+
+**When to use:** To retrieve a bookmark from another service. Requires `userId` query parameter.
+
+### Update Bookmark
+
+**Endpoint:** `PATCH /bookmarks/:id`
+**Auth:** Bearer token
+
+**When to use:** To update user-editable fields (title, description, tags, archived).
+
+**Input Schema:**
+
+```typescript
+interface UpdateBookmarkInput {
+  title?: string;
+  description?: string;
+  tags?: string[];
+  archived?: boolean;
+}
+```
+
+### Update Bookmark (Internal)
+
+**Endpoint:** `PATCH /internal/bookmarks/:id`
+**Auth:** `X-Internal-Auth` header
+
+**When to use:** To update bookmark with enrichment data (OG preview, AI summary). Used by the enrichment pipeline.
+
+**Input Schema:**
+
+```typescript
+interface UpdateBookmarkInternalInput {
+  title?: string;
+  description?: string;
+  tags?: string[];
+  archived?: boolean;
+  aiSummary?: string;
+  ogPreview?: OpenGraphPreview;
+  ogFetchStatus?: 'pending' | 'processed' | 'failed';
+}
+```
+
+### Delete Bookmark
+
+**Endpoint:** `DELETE /bookmarks/:id`
+**Auth:** Bearer token
+
+**When to use:** To permanently delete a bookmark. This is a hard delete.
+
+### Archive / Unarchive
+
+**Endpoint:** `POST /bookmarks/:id/archive` | `POST /bookmarks/:id/unarchive`
+**Auth:** Bearer token
+
+**When to use:** To soft-delete (archive) or restore (unarchive) a bookmark. Idempotent -- archiving an already-archived bookmark returns success.
+
+### Force Refresh
+
+**Endpoint:** `POST /internal/bookmarks/:id/force-refresh`
+**Auth:** `X-Internal-Auth` header
+
+**When to use:** To re-fetch OG metadata for a bookmark. Always fetches fresh data regardless of current `ogFetchStatus`. Synchronous operation (does not use Pub/Sub).
+
+### Image Proxy
+
+**Endpoint:** `GET /images/proxy?url={encodedUrl}`
+**Auth:** None
+
+**When to use:** To display external OG images in the web dashboard, bypassing CORS. Returns the raw image bytes with appropriate content type. 10-second timeout. Validates URL is HTTP/HTTPS and response is `image/*`.
+
+---
+
+## Types
 
 ```typescript
 type OgFetchStatus = 'pending' | 'processed' | 'failed';
 type BookmarkStatus = 'draft' | 'active';
 
-interface OgPreview {
+interface OpenGraphPreview {
   title: string | null;
   description: string | null;
   image: string | null;
@@ -91,16 +231,16 @@ interface Bookmark {
   title: string | null;
   description: string | null;
   tags: string[];
-  ogPreview: OgPreview | null;
-  ogFetchedAt: string | null;
+  ogPreview: OpenGraphPreview | null;
+  ogFetchedAt: string | null;       // ISO 8601
   ogFetchStatus: OgFetchStatus;
   aiSummary: string | null;
-  aiSummarizedAt: string | null;
+  aiSummarizedAt: string | null;    // ISO 8601
   source: string;
   sourceId: string;
   archived: boolean;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string;                // ISO 8601
+  updatedAt: string;                // ISO 8601
 }
 ```
 
@@ -108,123 +248,73 @@ interface Bookmark {
 
 ## Constraints
 
-| Rule                      | Description                                            |
-| ------------------------- | ------------------------------------------------------ |
-| **Duplicate Detection**   | Returns 409 CONFLICT if URL already bookmarked by user |
-| **URL Format**            | Must be valid HTTP/HTTPS URL                           |
-| **Ownership**             | Users can only access their own bookmarks              |
-| **Image Proxy**           | Only HTTP/HTTPS images allowed, 10s timeout            |
-| **Async Enrichment**      | OG data and AI summary populate after creation         |
-| **WhatsApp Notification** | Summary sent to user's WhatsApp after AI processing    |
+**Do NOT:**
+
+- Create bookmarks without a valid HTTP/HTTPS URL
+- Access bookmarks owned by other users (returns 403)
+- Expect OG data or AI summary immediately after creation (async pipeline)
+- Send more than one bookmark creation for the same userId+url pair (returns 409 CONFLICT)
+
+**Requires:**
+
+- Bearer token (Auth0 JWT) for public endpoints
+- `X-Internal-Auth` header for internal endpoints
+- web-agent must be running for enrichment and summarization
+- Pub/Sub topics must be configured for async pipeline
 
 ---
 
 ## Usage Patterns
 
-### Create Bookmark with WhatsApp Notification
+### Pattern 1: Create and Wait for Enrichment
 
-```typescript
-// Creation returns immediately with pending status
-const bookmark = await createBookmark({
-  url: 'https://example.com/article',
-  tags: ['tech', 'reading'],
-  source: 'action',
-  sourceId: 'act_123',
-});
-
-// bookmark.ogFetchStatus === 'pending'
-// bookmark.aiSummary === null
-
-// After async processing (5-10 seconds):
-// 1. ogPreview populated
-// 2. aiSummary populated
-// 3. WhatsApp message sent to user with summary
+```
+1. POST /internal/bookmarks -> get bookmark ID
+2. Poll GET /bookmarks/:id until ogFetchStatus !== 'pending'
+3. Bookmark now has ogPreview and aiSummary populated
+4. User receives WhatsApp notification automatically
 ```
 
-### Wait for Enrichment
+### Pattern 2: Handle Duplicate URL
 
-```typescript
-let bookmark = await getBookmark(id);
-while (bookmark.ogFetchStatus === 'pending') {
-  await sleep(2000);
-  bookmark = await getBookmark(id);
-}
-// bookmark.ogPreview and bookmark.aiSummary now populated
+```
+1. POST /internal/bookmarks or POST /bookmarks
+2. If 409 CONFLICT response:
+   a. Extract existingBookmarkId from error.details
+   b. GET /bookmarks/:existingBookmarkId to retrieve existing bookmark
 ```
 
-### Handle Duplicate
+### Pattern 3: Find Failed Enrichments and Retry
 
-```typescript
-try {
-  const bookmark = await createBookmark({
-    url: 'https://example.com/article',
-    source: 'whatsapp',
-    sourceId: 'wamid.123',
-  });
-} catch (error) {
-  if (error.code === 'CONFLICT') {
-    // Bookmark already exists
-    const existingId = error.details.existingBookmarkId;
-    const existing = await getBookmark(existingId);
-    // Use existing bookmark instead
-  }
-}
 ```
-
-### Filter by Tag
-
-```typescript
-const techBookmarks = await listBookmarks({
-  tags: ['tech'],
-  archived: false,
-});
-```
-
-### Find Failed Enrichments
-
-```typescript
-const failedBookmarks = await listBookmarks({
-  ogFetchStatus: 'failed',
-});
-// Consider force-refreshing these or alerting user
+1. GET /bookmarks?ogFetchStatus=failed
+2. For each failed bookmark:
+   POST /internal/bookmarks/:id/force-refresh
 ```
 
 ---
 
-## Internal Endpoints
-
-| Method | Path                                    | Purpose                              |
-| ------ | --------------------------------------- | ------------------------------------ |
-| POST   | `/internal/bookmarks`                   | Create bookmark from actions-agent   |
-| GET    | `/internal/bookmarks/:id`               | Get bookmark for internal services   |
-| PATCH  | `/internal/bookmarks/:id`               | Update bookmark with OG/AI data      |
-| POST   | `/internal/bookmarks/:id/force-refresh` | Force refresh OG data                |
-| POST   | `/internal/bookmarks/pubsub/enrich`     | Pub/Sub handler for OG enrichment    |
-| POST   | `/internal/bookmarks/pubsub/summarize`  | Pub/Sub handler for AI summarization |
-
----
-
-## Event Flow (INT-210)
+## Event Flow
 
 ```
-createBookmark
-      ↓
+createBookmark (internal)
+      |
 ogFetchStatus: 'pending'
-      ↓
+      |
 Pub/Sub: bookmarks.enrich
-      ↓
+      |
 web-agent fetches OG data
-      ↓
+      |
 ogFetchStatus: 'processed', ogPreview populated
-      ↓
+      |
 Pub/Sub: bookmarks.summarize
-      ↓
+      |
 web-agent generates AI summary
-      ↓                          ↓ (transient error: 429, timeout, etc.)
-aiSummary populated              HTTP 503 → Pub/Sub retries with backoff
-      ↓
+      |                          | (transient error: 429, timeout)
+aiSummary populated              HTTP 503 -> Pub/Sub retries with backoff
+      |
 Pub/Sub: whatsapp.message.send
-      ↓
+      |
 WhatsApp message delivered to user
 ```
 
@@ -244,14 +334,24 @@ WhatsApp message delivered to user
 
 ---
 
+## Dependencies
+
+| Service            | Why Needed                  | Failure Behavior                          |
+| ------------------ | --------------------------- | ----------------------------------------- |
+| web-agent          | OG metadata + AI summaries  | Enrichment fails; bookmark remains pending|
+| Firestore          | Bookmark persistence        | All operations fail                       |
+| Pub/Sub            | Async enrichment pipeline   | Enrichment delayed; retried automatically |
+| whatsapp-service   | Summary delivery            | Fire-and-forget; summary still saved      |
+
+---
+
 ## Integration Notes
 
 ### From actions-agent
 
-When processing a `link` action:
+When processing a `link` action from WhatsApp:
 
 ```typescript
-// actions-agent calls internal endpoint
 const response = await fetch(`${BOOKMARKS_AGENT_URL}/internal/bookmarks`, {
   method: 'POST',
   headers: {
@@ -267,34 +367,22 @@ const response = await fetch(`${BOOKMARKS_AGENT_URL}/internal/bookmarks`, {
 });
 ```
 
-### WhatsApp Delivery
+### WhatsApp Delivery Message Format
 
-The service publishes to `whatsapp.message.send` topic after AI summarization. The message uses WhatsApp markdown formatting:
+After AI summarization, the service publishes a WhatsApp message:
 
 ```
-📑 *Bookmark Summary*
+[bookmark emoji] *Bookmark Summary*
 
 *[Page Title]*
 
 [AI Summary]
 
-🔗 [Original URL]
+[link emoji] [Original URL]
 ```
 
-The title line is omitted if no title is available. `correlationId` is set to `bookmark-{bookmarkId}`. whatsapp-service's SendMessageWorker handles delivery using the userId to look up the phone number.
-
-### Internal Create Response Shape
-
-`POST /internal/bookmarks` returns `{ id, url, bookmark }` where `url` is the app deep link (not the bookmarked URL):
-
-```typescript
-interface CreateBookmarkInternalResponse {
-  id: string; // bookmark ID
-  url: string; // app deep link: "/#/bookmarks/{id}"
-  bookmark: Bookmark; // full bookmark object
-}
-```
+The title line is omitted if no title is available. `correlationId` is `bookmark-{bookmarkId}`.
 
 ---
 
-**Last updated:** 2026-02-19 (v2 documentation run)
+**Last updated:** 2026-02-22 (v3.1.0 documentation refresh)

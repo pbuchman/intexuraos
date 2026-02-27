@@ -43,7 +43,6 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
@@ -206,10 +205,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         logger,
       }),
       gitHubPRSummaryRepo: {} as never,
-      prTaskLockRepo: createFirestorePRTaskLockRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
       turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -235,7 +230,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
-      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
@@ -931,46 +925,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(recordCompleteSpy).toHaveBeenCalledWith('user-123', undefined);
     });
 
-    it('calls markInReview when task has prUrl and linearIssueId', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      // Create a task with a linearIssueId
-      const createResult = await repo.create({
-        userId: 'user-123',
-        prompt: 'Test',
-        sanitizedPrompt: 'Test',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'test/repo',
-        baseBranch: 'main',
-        traceId: 'trace_123',
-        linearIssueId: 'INT-999',
-      });
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) return;
-      const task = createResult.value;
-
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-      const markInReviewSpy = vi.spyOn(services.linearIssueService, 'markInReview');
-
-      const response = await server.inject({
-        method: 'PATCH',
-        url: `/internal/code-tasks/${task.id}`,
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          status: 'designed',
-          result: { branch: 'test', commits: 1, summary: 'Done', prUrl: 'https://github.com/test/pr/1' },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(markInReviewSpy).toHaveBeenCalledWith('user-123', 'INT-999');
-    });
   });
 
   describe('POST /internal/code/process error handling', () => {

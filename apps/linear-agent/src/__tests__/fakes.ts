@@ -26,6 +26,7 @@ import type {
   LinearComment,
 } from '../domain/index.js';
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
+import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../domain/index.js';
 import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
 import type { LLMError, LLMErrorCode } from '@intexuraos/llm-contract';
 import type { IssueStateCategory, LinearPriority } from '../domain/models.js';
@@ -795,5 +796,49 @@ export class FakeLinearCommentRepository implements LinearCommentRepository {
     this.shouldFailListByIssueId = false;
     this.shouldFailCountByIssueId = false;
     this.shouldFailDeleteById = false;
+  }
+}
+
+export class FakeCodeAgentClient implements CodeAgentClient {
+  private shouldFail = false;
+  private failError: CodeAgentError = { code: 'UNAVAILABLE', message: 'code-agent unavailable' };
+  private lastRequest: { userId: string; linearIssueId: string; prompt: string; workerType: string; actionId: string; approvalEventId: string } | null = null;
+  private taskIdCounter = 1;
+
+  async triggerCodeTask(request: {
+    userId: string;
+    linearIssueId: string;
+    prompt: string;
+    workerType: 'opus' | 'auto' | 'glm';
+    actionId: string;
+    approvalEventId: string;
+  }): Promise<Result<TriggerCodeTaskResponse, CodeAgentError>> {
+    this.lastRequest = {
+      userId: request.userId,
+      linearIssueId: request.linearIssueId,
+      prompt: request.prompt,
+      workerType: request.workerType,
+      actionId: request.actionId,
+      approvalEventId: request.approvalEventId,
+    };
+
+    if (this.shouldFail) return err(this.failError);
+
+    return ok({ codeTaskId: `code-task-${this.taskIdCounter++}` });
+  }
+
+  setFailure(fail: boolean, error?: CodeAgentError): void {
+    this.shouldFail = fail;
+    if (error) this.failError = error;
+  }
+
+  getLastRequest(): typeof this.lastRequest {
+    return this.lastRequest;
+  }
+
+  reset(): void {
+    this.shouldFail = false;
+    this.lastRequest = null;
+    this.taskIdCounter = 1;
   }
 }

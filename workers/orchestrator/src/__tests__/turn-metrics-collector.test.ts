@@ -107,6 +107,55 @@ describe('TurnMetricsCollector', () => {
     });
   });
 
+  describe('readCpuCores', () => {
+    it('parses quota/period from cpu.max to compute cores', async () => {
+      mockReadFile.mockResolvedValueOnce('200000 100000\n');
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/test');
+
+      expect(result).toBe(2);
+      expect(mockReadFile).toHaveBeenCalledWith('/sys/fs/cgroup/test/cpu.max', 'utf-8');
+    });
+
+    it('returns fractional cores for partial quota', async () => {
+      mockReadFile.mockResolvedValueOnce('50000 100000\n');
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/test');
+
+      expect(result).toBe(0.5);
+    });
+
+    it('falls back to os.availableParallelism when cpu.max is "max"', async () => {
+      mockReadFile.mockResolvedValueOnce('max 100000\n');
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/test');
+
+      const os = await import('node:os');
+      const expected = os.availableParallelism();
+      expect(result).toBe(expected);
+    });
+
+    it('falls back to os.availableParallelism when file is missing', async () => {
+      mockReadFile.mockRejectedValueOnce(new Error('ENOENT'));
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/missing');
+
+      const os = await import('node:os');
+      const expected = os.availableParallelism();
+      expect(result).toBe(expected);
+    });
+
+    it('falls back to os.availableParallelism when content is malformed', async () => {
+      mockReadFile.mockResolvedValueOnce('garbage data\n');
+
+      const result = await collector.readCpuCores('/sys/fs/cgroup/test');
+
+      const os = await import('node:os');
+      const expected = os.availableParallelism();
+      expect(result).toBe(expected);
+    });
+  });
+
   describe('classifyTime', () => {
     const baseTime = new Date('2025-01-01T00:00:00Z').getTime();
 
@@ -364,6 +413,166 @@ describe('TurnMetricsCollector', () => {
       // Should have parsed the 2 valid entries
       expect(result.timeClassification.apiWaitSeconds).toBe(3);
     });
+
+    it('reads from sharedCredsPath when configured', async () => {
+      const sharedCollector = new TurnMetricsCollector(
+        { ...config, sharedCredsPath: '/tmp/shared-creds' },
+        mockLogger
+      );
+
+      const jsonlContent = [
+        JSON.stringify({ type: 'user', timestamp: '2025-06-01T10:00:00Z' }),
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2025-06-01T10:00:05Z',
+          message: { usage: { input_tokens: 200, output_tokens: 75 } },
+        }),
+      ].join('\n');
+
+      async function* fakeGlob(): AsyncGenerator<string> {
+        yield '/tmp/shared-creds/projects/test/session.jsonl';
+      }
+      mockGlob.mockReturnValueOnce(fakeGlob() as never);
+      mockReadFile.mockResolvedValueOnce(jsonlContent);
+
+      const result = await sharedCollector.parseSessionJsonl('task1', {
+        startedAt: '2025-06-01T09:00:00Z',
+        completedAt: '2025-06-01T11:00:00Z',
+      });
+
+      expect(mockGlob).toHaveBeenCalledWith('/tmp/shared-creds/projects/**/*.jsonl');
+      expect(result.tokens.totalInputTokens).toBe(200);
+      expect(result.tokens.totalOutputTokens).toBe(75);
+      expect(result.tokens.apiCallCount).toBe(1);
+    });
+
+    it('excludes files outside the time window', async () => {
+      const sharedCollector = new TurnMetricsCollector(
+        { ...config, sharedCredsPath: '/tmp/shared-creds' },
+        mockLogger
+      );
+
+      const oldFileContent = [
+        JSON.stringify({ type: 'user', timestamp: '2024-01-01T00:00:00Z' }),
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-01T00:00:05Z',
+          message: { usage: { input_tokens: 999, output_tokens: 999 } },
+        }),
+      ].join('\n');
+
+      const inWindowContent = [
+        JSON.stringify({ type: 'user', timestamp: '2025-06-01T10:00:00Z' }),
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2025-06-01T10:00:05Z',
+          message: { usage: { input_tokens: 50, output_tokens: 25 } },
+        }),
+      ].join('\n');
+
+      async function* fakeGlob(): AsyncGenerator<string> {
+        yield '/tmp/shared-creds/projects/test/old.jsonl';
+        yield '/tmp/shared-creds/projects/test/current.jsonl';
+      }
+      mockGlob.mockReturnValueOnce(fakeGlob() as never);
+      mockReadFile.mockResolvedValueOnce(oldFileContent).mockResolvedValueOnce(inWindowContent);
+
+      const result = await sharedCollector.parseSessionJsonl('task1', {
+        startedAt: '2025-06-01T09:00:00Z',
+        completedAt: '2025-06-01T11:00:00Z',
+      });
+
+      expect(result.tokens.totalInputTokens).toBe(50);
+      expect(result.tokens.totalOutputTokens).toBe(25);
+      expect(result.tokens.apiCallCount).toBe(1);
+    });
+
+    it('handles single-line JSONL file without trailing newline', async () => {
+      const sharedCollector = new TurnMetricsCollector(
+        { ...config, sharedCredsPath: '/tmp/shared-creds' },
+        mockLogger
+      );
+
+      const singleLine = JSON.stringify({
+        type: 'user',
+        timestamp: '2025-06-01T10:00:00Z',
+      });
+
+      async function* fakeGlob(): AsyncGenerator<string> {
+        yield '/tmp/shared-creds/projects/-repo/single.jsonl';
+      }
+      mockGlob.mockReturnValueOnce(fakeGlob() as never);
+      mockReadFile.mockResolvedValueOnce(singleLine);
+
+      const result = await sharedCollector.parseSessionJsonl('task1', {
+        startedAt: '2025-06-01T09:00:00Z',
+        completedAt: '2025-06-01T11:00:00Z',
+      });
+
+      expect(result.timeClassification.wallTimeSeconds).toBe(0);
+    });
+
+    it('skips file with empty first line in shared mode', async () => {
+      const sharedCollector = new TurnMetricsCollector(
+        { ...config, sharedCredsPath: '/tmp/shared-creds' },
+        mockLogger
+      );
+
+      async function* fakeGlob(): AsyncGenerator<string> {
+        yield '/tmp/shared-creds/projects/-repo/empty.jsonl';
+      }
+      mockGlob.mockReturnValueOnce(fakeGlob() as never);
+      mockReadFile.mockResolvedValueOnce('\n{"type":"user","timestamp":"2025-06-01T10:00:00Z"}');
+
+      const result = await sharedCollector.parseSessionJsonl('task1', {
+        startedAt: '2025-06-01T09:00:00Z',
+        completedAt: '2025-06-01T11:00:00Z',
+      });
+
+      expect(result.tokens.apiCallCount).toBe(0);
+    });
+
+    it('includes file when first entry has no timestamp field', async () => {
+      const sharedCollector = new TurnMetricsCollector(
+        { ...config, sharedCredsPath: '/tmp/shared-creds' },
+        mockLogger
+      );
+
+      const content = [
+        JSON.stringify({ type: 'queue-operation', operation: 'enqueue' }),
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2025-06-01T10:00:05Z',
+          message: { usage: { input_tokens: 42 } },
+        }),
+      ].join('\n');
+
+      async function* fakeGlob(): AsyncGenerator<string> {
+        yield '/tmp/shared-creds/projects/-repo/no-ts.jsonl';
+      }
+      mockGlob.mockReturnValueOnce(fakeGlob() as never);
+      mockReadFile.mockResolvedValueOnce(content);
+
+      const result = await sharedCollector.parseSessionJsonl('task1', {
+        startedAt: '2025-06-01T09:00:00Z',
+        completedAt: '2025-06-01T11:00:00Z',
+      });
+
+      expect(result.tokens.totalInputTokens).toBe(42);
+    });
+
+    it('falls back to per-task path when sharedCredsPath not set', async () => {
+      async function* fakeGlob(): AsyncGenerator<string> {
+        // yield nothing
+      }
+      mockGlob.mockReturnValueOnce(fakeGlob() as never);
+
+      await collector.parseSessionJsonl('task-abc');
+
+      expect(mockGlob).toHaveBeenCalledWith(
+        '/tmp/secrets/claude-session-task-abc/projects/**/*.jsonl'
+      );
+    });
   });
 
   describe('collectAndPublish', () => {
@@ -381,7 +590,9 @@ describe('TurnMetricsCollector', () => {
         // cpu.stat
         .mockResolvedValueOnce('usage_usec 3600000000\n')
         // memory.peak
-        .mockResolvedValueOnce('2147483648\n'); // 2 GB
+        .mockResolvedValueOnce('2147483648\n') // 2 GB
+        // cpu.max
+        .mockResolvedValueOnce('200000 100000\n'); // 2 cores
 
       // Mock glob for JSONL (empty)
       async function* emptyGlob(): AsyncGenerator<string> {
@@ -434,7 +645,10 @@ describe('TurnMetricsCollector', () => {
     });
 
     it('sets utilization and idle to 0 when wall time is 0', async () => {
-      mockReadFile.mockResolvedValueOnce('usage_usec 1000000\n').mockResolvedValueOnce('1048576\n'); // 1 MB
+      mockReadFile
+        .mockResolvedValueOnce('usage_usec 1000000\n')
+        .mockResolvedValueOnce('1048576\n') // 1 MB
+        .mockResolvedValueOnce('200000 100000\n'); // cpu.max
 
       async function* emptyGlob(): AsyncGenerator<string> {
         // yield nothing

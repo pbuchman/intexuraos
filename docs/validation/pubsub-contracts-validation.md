@@ -10,17 +10,17 @@
 
 | Category                                         | Count |
 | ------------------------------------------------ | ----- |
-| Total Terraform topics                           | 16    |
-| Topics using `pubsub-push` module (DLQ included) | 14    |
+| Total Terraform topics                           | 15    |
+| Topics using `pubsub-push` module (DLQ included) | 13    |
 | Raw topics (no DLQ)                              | 2     |
-| Topics with active publishers                    | 14    |
-| Topics with active subscribers                   | 16    |
+| Topics with active publishers                    | 13    |
+| Topics with active subscribers                   | 15    |
 | CRITICAL discrepancies                           | 0     |
 | HIGH discrepancies                               | 1     |
 | MEDIUM discrepancies                             | 4     |
 | LOW discrepancies                                | 3     |
 
-**Overall health:** IAM permission matrix is correct and all push subscription endpoints match active route handlers. One dead publisher class exists in the codebase. Documentation topic names are systematically outdated. All topics that use the `pubsub-push` module automatically receive dead-letter queue configuration. Two special-purpose topics (`log_cleanup`, `snapshot_refresh`) are raw resources without DLQ.
+**Overall health:** IAM permission matrix is correct and all push subscription endpoints match active route handlers. One dead publisher class exists in the codebase. Documentation topic names are systematically outdated. All topics that use the `pubsub-push` module automatically receive dead-letter queue configuration. One special-purpose topic (`log_cleanup`) is a raw resource without DLQ.
 
 ---
 
@@ -28,24 +28,23 @@
 
 All topics using the `pubsub-push` Terraform module include: HTTP push subscription, OIDC authentication, dead-letter queue (DLQ) topic + pull subscription, and retry policy. Defaults: `max_delivery_attempts=5`, `retry_minimum_backoff=10s`, `retry_maximum_backoff=600s`, `message_retention_duration=604800s` (7 days).
 
-| #   | Terraform Resource                | Topic Name                                  | Push Endpoint                                  | Ack Deadline | DLQ? | Subscriber SA       |
-| --- | --------------------------------- | ------------------------------------------- | ---------------------------------------------- | ------------ | ---- | ------------------- |
-| 1   | `pubsub_actions_queue`            | `intexuraos-actions-queue-{env}`            | `/internal/actions/process`                    | 60s          | YES  | actions_agent       |
-| 2   | `pubsub_approval_reply`           | `intexuraos-approval-reply-{env}`           | `/internal/actions/approval-reply`             | 60s          | YES  | actions_agent       |
-| 3   | `pubsub_bookmark_enrich`          | `intexuraos-bookmark-enrich-{env}`          | `/internal/bookmarks/pubsub/enrich`            | 60s          | YES  | bookmarks_agent     |
-| 4   | `pubsub_bookmark_summarize`       | `intexuraos-bookmark-summarize-{env}`       | `/internal/bookmarks/pubsub/summarize`         | 120s ¹       | YES  | bookmarks_agent     |
-| 5   | `pubsub_calendar_preview`         | `intexuraos-calendar-preview-{env}`         | `/internal/calendar/generate-preview`          | 120s         | YES  | calendar_agent      |
-| 6   | `pubsub_commands_ingest`          | `intexuraos-commands-ingest-{env}`          | `/internal/commands`                           | 60s          | YES  | commands_agent      |
-| 7   | `pubsub_llm_analytics`            | `intexuraos-llm-analytics-{env}`            | `/internal/llm/pubsub/report-analytics`        | 300s         | YES  | research_agent      |
-| 8   | `pubsub_llm_call`                 | `intexuraos-llm-call-{env}`                 | `/internal/llm/pubsub/process-llm-call`        | 600s ²       | YES  | research_agent      |
-| 9   | `pubsub_media_cleanup`            | `intexuraos-whatsapp-media-cleanup-{env}`   | `/internal/whatsapp/pubsub/media-cleanup`      | 60s          | YES  | whatsapp_service    |
-| 10  | `pubsub_research_process`         | `intexuraos-research-process-{env}`         | `/internal/llm/pubsub/process-research`        | 600s ²       | YES  | research_agent      |
-| 11  | `pubsub_todos_processing`         | `intexuraos-todos-processing-{env}`         | `/internal/todos/pubsub/todos-processing`      | 60s          | YES  | todos_agent         |
-| 12  | `pubsub_whatsapp_send`            | `intexuraos-whatsapp-send-{env}`            | `/internal/whatsapp/pubsub/send-message`       | 60s          | YES  | whatsapp_service    |
-| 13  | `pubsub_whatsapp_transcription`   | `intexuraos-whatsapp-transcription-{env}`   | `/internal/whatsapp/pubsub/transcribe-audio`   | 600s ²       | YES  | whatsapp_service    |
-| 14  | `pubsub_whatsapp_webhook_process` | `intexuraos-whatsapp-webhook-process-{env}` | `/internal/whatsapp/pubsub/process-webhook`    | 120s         | YES  | whatsapp_service    |
-| 15  | `snapshot_refresh_pubsub`         | `snapshot-refresh-{env}`                    | `/internal/snapshots/refresh`                  | 600s ²       | YES  | data_insights_agent |
-| 16  | `google_pubsub_topic.log_cleanup` | `intexuraos-log-cleanup-{env}`              | Cloud Function trigger (Pub/Sub event trigger) | N/A ³        | NO   | cloud_functions SA  |
+| #   | Terraform Resource                | Topic Name                                  | Push Endpoint                                  | Ack Deadline | DLQ? | Subscriber SA      |
+| --- | --------------------------------- | ------------------------------------------- | ---------------------------------------------- | ------------ | ---- | ------------------ |
+| 1   | `pubsub_actions_queue`            | `intexuraos-actions-queue-{env}`            | `/internal/actions/process`                    | 60s          | YES  | actions_agent      |
+| 2   | `pubsub_approval_reply`           | `intexuraos-approval-reply-{env}`           | `/internal/actions/approval-reply`             | 60s          | YES  | actions_agent      |
+| 3   | `pubsub_bookmark_enrich`          | `intexuraos-bookmark-enrich-{env}`          | `/internal/bookmarks/pubsub/enrich`            | 60s          | YES  | bookmarks_agent    |
+| 4   | `pubsub_bookmark_summarize`       | `intexuraos-bookmark-summarize-{env}`       | `/internal/bookmarks/pubsub/summarize`         | 120s ¹       | YES  | bookmarks_agent    |
+| 5   | `pubsub_calendar_preview`         | `intexuraos-calendar-preview-{env}`         | `/internal/calendar/generate-preview`          | 120s         | YES  | calendar_agent     |
+| 6   | `pubsub_commands_ingest`          | `intexuraos-commands-ingest-{env}`          | `/internal/commands`                           | 60s          | YES  | commands_agent     |
+| 7   | `pubsub_llm_analytics`            | `intexuraos-llm-analytics-{env}`            | `/internal/llm/pubsub/report-analytics`        | 300s         | YES  | research_agent     |
+| 8   | `pubsub_llm_call`                 | `intexuraos-llm-call-{env}`                 | `/internal/llm/pubsub/process-llm-call`        | 600s ²       | YES  | research_agent     |
+| 9   | `pubsub_media_cleanup`            | `intexuraos-whatsapp-media-cleanup-{env}`   | `/internal/whatsapp/pubsub/media-cleanup`      | 60s          | YES  | whatsapp_service   |
+| 10  | `pubsub_research_process`         | `intexuraos-research-process-{env}`         | `/internal/llm/pubsub/process-research`        | 600s ²       | YES  | research_agent     |
+| 11  | `pubsub_todos_processing`         | `intexuraos-todos-processing-{env}`         | `/internal/todos/pubsub/todos-processing`      | 60s          | YES  | todos_agent        |
+| 12  | `pubsub_whatsapp_send`            | `intexuraos-whatsapp-send-{env}`            | `/internal/whatsapp/pubsub/send-message`       | 60s          | YES  | whatsapp_service   |
+| 13  | `pubsub_whatsapp_transcription`   | `intexuraos-whatsapp-transcription-{env}`   | `/internal/whatsapp/pubsub/transcribe-audio`   | 600s ²       | YES  | whatsapp_service   |
+| 14  | `pubsub_whatsapp_webhook_process` | `intexuraos-whatsapp-webhook-process-{env}` | `/internal/whatsapp/pubsub/process-webhook`    | 120s         | YES  | whatsapp_service   |
+| 15  | `google_pubsub_topic.log_cleanup` | `intexuraos-log-cleanup-{env}`              | Cloud Function trigger (Pub/Sub event trigger) | N/A ³        | NO   | cloud_functions SA |
 
 ¹ Custom retry: `retry_minimum_backoff=30s`, `retry_maximum_backoff=600s`, `max_delivery_attempts=50` (6-hour resilience window for Crawl4AI transient errors)
 ² 600s = GCP maximum ack deadline (used for long-running AI tasks)
@@ -66,7 +65,7 @@ The `pubsub-push` module always creates a DLQ topology:
 {topic-name}-dlq-sub   ← pull subscription for manual inspection
 ```
 
-The GCP Pub/Sub service account (`service-{project_number}@gcp-sa-pubsub.iam.gserviceaccount.com`) is always granted `roles/pubsub.publisher` on the DLQ topic to enable forwarding. All 14 module-managed topics follow this pattern.
+The GCP Pub/Sub service account (`service-{project_number}@gcp-sa-pubsub.iam.gserviceaccount.com`) is always granted `roles/pubsub.publisher` on the DLQ topic to enable forwarding. All 13 module-managed topics follow this pattern.
 
 | Topic                                       | DLQ Topic Name                                  | Max Attempts | DLQ Retention |
 | ------------------------------------------- | ----------------------------------------------- | ------------ | ------------- |
@@ -84,7 +83,6 @@ The GCP Pub/Sub service account (`service-{project_number}@gcp-sa-pubsub.iam.gse
 | `intexuraos-whatsapp-send-{env}`            | `intexuraos-whatsapp-send-{env}-dlq`            | 5 (default)  | 7 days        |
 | `intexuraos-whatsapp-transcription-{env}`   | `intexuraos-whatsapp-transcription-{env}-dlq`   | 5 (default)  | 7 days        |
 | `intexuraos-whatsapp-webhook-process-{env}` | `intexuraos-whatsapp-webhook-process-{env}-dlq` | 5 (default)  | 7 days        |
-| `snapshot-refresh-{env}`                    | `snapshot-refresh-{env}-dlq`                    | 5 (default)  | 7 days        |
 
 ¹ `pubsub_bookmark_summarize` intentionally sets `max_delivery_attempts=50` to provide a ~6-hour retry window for transient Crawl4AI API errors. No other topic overrides this default.
 
@@ -94,7 +92,7 @@ The GCP Pub/Sub service account (`service-{project_number}@gcp-sa-pubsub.iam.gse
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------- | ---- |
 | `intexuraos-log-cleanup-{env}` | Cloud Functions event trigger — framework handles delivery; log cleanup is fire-and-forget, loss is acceptable | LOW  |
 
-**Note:** `snapshot-refresh-{env}` uses `pubsub-push` module and has a DLQ. The log_cleanup topic is the only gap.
+**Note:** The log_cleanup topic is the only topic without a DLQ.
 
 ---
 
@@ -119,7 +117,6 @@ The `pubsub-push` module sets exponential backoff on all subscriptions unless ov
 | `intexuraos-research-process-{env}`       | 10s         | 600s        | 5            | Ack deadline: 600s (long AI tasks) |
 | `intexuraos-llm-call-{env}`               | 10s         | 600s        | 5            | Ack deadline: 600s (LLM calls)     |
 | `intexuraos-whatsapp-transcription-{env}` | 10s         | 600s        | 5            | Ack deadline: 600s (audio to text) |
-| `snapshot-refresh-{env}`                  | 10s         | 600s        | 5            | Ack deadline: 600s (batch process) |
 | All others                                | 10s         | 600s        | 5            | Module defaults                    |
 
 **Key observation:** Only `pubsub_bookmark_summarize` customizes retry behavior. All other topics use module defaults. The asymmetry between `ack_deadline_seconds` (up to 600s for long-running tasks) and `max_delivery_attempts=5` means long-running tasks that always fail will be sent to DLQ after only 5 attempts (~50 minutes at max backoff).
@@ -146,7 +143,6 @@ Validated by reading publisher implementations (`packages/infra-pubsub/src/`, `a
 | `intexuraos-whatsapp-send-{env}`            | `whatsapp.message.send`                            | `packages/infra-pubsub/src/whatsappSendPublisher.ts`              | YES                          |
 | `intexuraos-whatsapp-transcription-{env}`   | `TranscribeAudioEvent`                             | `apps/whatsapp-service/src/infra/pubsub/publisher.ts`             | YES                          |
 | `intexuraos-whatsapp-webhook-process-{env}` | `WebhookProcessEvent` / `ExtractLinkPreviewsEvent` | `apps/whatsapp-service/src/infra/pubsub/publisher.ts`             | Partial — see D-4            |
-| `snapshot-refresh-{env}`                    | `{ trigger: "scheduled" }`                         | Cloud Scheduler `pubsub_target`                                   | N/A (no type field)          |
 | `intexuraos-log-cleanup-{env}`              | `{ trigger: "scheduled" }`                         | Cloud Scheduler `pubsub_target`                                   | N/A (no type field)          |
 
 **Schema consistency status:** All schemas are consistent between publisher and subscriber where an active publisher exists. The `intexuraos-llm-analytics-{env}` topic has a schema defined but no active publisher (see D-1). The `intexuraos-whatsapp-webhook-process-{env}` multiplexes two event types without discriminated routing (see D-4).
@@ -167,24 +163,23 @@ This centralization ensures publisher-subscriber schema contracts are enforced a
 
 ## Publisher–Subscriber Map
 
-| Topic                                       | Publisher(s)                                               | Subscriber          | Pattern                                         |
-| ------------------------------------------- | ---------------------------------------------------------- | ------------------- | ----------------------------------------------- |
-| `intexuraos-actions-queue-{env}`            | commands-agent, actions-agent                              | actions-agent       | Fan-out + self-loop for deferred work           |
-| `intexuraos-approval-reply-{env}`           | whatsapp-service                                           | actions-agent       | User approval responses                         |
-| `intexuraos-bookmark-enrich-{env}`          | bookmarks-agent                                            | bookmarks-agent     | Self-loop: async link metadata fetch            |
-| `intexuraos-bookmark-summarize-{env}`       | bookmarks-agent                                            | bookmarks-agent     | Self-loop: async AI summarization               |
-| `intexuraos-calendar-preview-{env}`         | actions-agent                                              | calendar-agent      | Cross-service preview generation                |
-| `intexuraos-commands-ingest-{env}`          | whatsapp-service                                           | commands-agent      | Entry point for user commands from WhatsApp     |
-| `intexuraos-llm-analytics-{env}`            | _(dead code — see D-1)_                                    | research-agent      | **INACTIVE** — no active publisher              |
-| `intexuraos-llm-call-{env}`                 | research-agent                                             | research-agent      | Self-loop: individual LLM call dispatch         |
-| `intexuraos-whatsapp-media-cleanup-{env}`   | whatsapp-service                                           | whatsapp-service    | Self-loop: deferred media expiry cleanup        |
-| `intexuraos-research-process-{env}`         | research-agent                                             | research-agent      | Self-loop: async research task execution        |
-| `intexuraos-todos-processing-{env}`         | todos-agent                                                | todos-agent         | Self-loop: AI todo item extraction              |
-| `intexuraos-whatsapp-send-{env}`            | actions-agent, research-agent, bookmarks-agent, code-agent | whatsapp-service    | Multi-publisher notification bus                |
-| `intexuraos-whatsapp-transcription-{env}`   | whatsapp-service                                           | whatsapp-service    | Self-loop: audio-to-text transcription          |
-| `intexuraos-whatsapp-webhook-process-{env}` | whatsapp-service (two event types)                         | whatsapp-service    | Self-loop: async webhook + link-preview events  |
-| `snapshot-refresh-{env}`                    | Cloud Scheduler                                            | data-insights-agent | Scheduled trigger (not a service publisher)     |
-| `intexuraos-log-cleanup-{env}`              | Cloud Scheduler                                            | Cloud Function      | Scheduled trigger for log retention enforcement |
+| Topic                                       | Publisher(s)                                               | Subscriber       | Pattern                                         |
+| ------------------------------------------- | ---------------------------------------------------------- | ---------------- | ----------------------------------------------- |
+| `intexuraos-actions-queue-{env}`            | commands-agent, actions-agent                              | actions-agent    | Fan-out + self-loop for deferred work           |
+| `intexuraos-approval-reply-{env}`           | whatsapp-service                                           | actions-agent    | User approval responses                         |
+| `intexuraos-bookmark-enrich-{env}`          | bookmarks-agent                                            | bookmarks-agent  | Self-loop: async link metadata fetch            |
+| `intexuraos-bookmark-summarize-{env}`       | bookmarks-agent                                            | bookmarks-agent  | Self-loop: async AI summarization               |
+| `intexuraos-calendar-preview-{env}`         | actions-agent                                              | calendar-agent   | Cross-service preview generation                |
+| `intexuraos-commands-ingest-{env}`          | whatsapp-service                                           | commands-agent   | Entry point for user commands from WhatsApp     |
+| `intexuraos-llm-analytics-{env}`            | _(dead code — see D-1)_                                    | research-agent   | **INACTIVE** — no active publisher              |
+| `intexuraos-llm-call-{env}`                 | research-agent                                             | research-agent   | Self-loop: individual LLM call dispatch         |
+| `intexuraos-whatsapp-media-cleanup-{env}`   | whatsapp-service                                           | whatsapp-service | Self-loop: deferred media expiry cleanup        |
+| `intexuraos-research-process-{env}`         | research-agent                                             | research-agent   | Self-loop: async research task execution        |
+| `intexuraos-todos-processing-{env}`         | todos-agent                                                | todos-agent      | Self-loop: AI todo item extraction              |
+| `intexuraos-whatsapp-send-{env}`            | actions-agent, research-agent, bookmarks-agent, code-agent | whatsapp-service | Multi-publisher notification bus                |
+| `intexuraos-whatsapp-transcription-{env}`   | whatsapp-service                                           | whatsapp-service | Self-loop: audio-to-text transcription          |
+| `intexuraos-whatsapp-webhook-process-{env}` | whatsapp-service (two event types)                         | whatsapp-service | Self-loop: async webhook + link-preview events  |
+| `intexuraos-log-cleanup-{env}`              | Cloud Scheduler                                            | Cloud Function   | Scheduled trigger for log retention enforcement |
 
 **Note:** `ExtractLinkPreviewsEvent` from whatsapp-service is published to `this.webhookProcessTopic` — it reuses `intexuraos-whatsapp-webhook-process-{env}` rather than a dedicated link-preview topic. See D-4.
 
@@ -199,11 +194,10 @@ All IAM grants use `roles/pubsub.publisher`. Verified against Terraform `publish
 | whatsapp_service | media_cleanup, webhook_process, transcription, commands_ingest, whatsapp_send, approval_reply | YES ✓           |
 | commands_agent   | actions_queue                                                                                 | YES ✓           |
 | actions_agent    | actions_queue, whatsapp_send, calendar_preview                                                | YES ✓           |
-| research_agent   | research_process, **llm_analytics** _(dead code)_, llm_call, whatsapp_send                    | PARTIAL ⚠       |
+| research_agent   | research*process, **llm_analytics** *(dead code)\_, llm_call, whatsapp_send                   | PARTIAL ⚠       |
 | bookmarks_agent  | bookmark_enrich, bookmark_summarize, whatsapp_send                                            | YES ✓           |
 | code_agent       | whatsapp_send                                                                                 | YES ✓           |
 | todos_agent      | todos_processing                                                                              | YES ✓           |
-| cloud_scheduler  | snapshot_refresh (via `google_pubsub_topic_iam_member.scheduler_publishes_log_cleanup`)       | YES ✓           |
 
 **research_agent IAM note:** Has publisher IAM for `llm_analytics` but `AnalyticsEventPublisherImpl` is not wired into the ServiceContainer. IAM grant is harmless but unnecessary. See D-1.
 
@@ -232,7 +226,6 @@ All IAM grants use `roles/pubsub.publisher`. Verified against Terraform `publish
 | whatsapp-service | `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`  | YES           | YES (`module.pubsub_whatsapp_webhook_process.topic_name`) | YES                    | OK ✓   |
 | whatsapp-service | `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`    | YES           | YES (`module.pubsub_whatsapp_transcription.topic_name`)   | YES                    | OK ✓   |
 | whatsapp-service | `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`   | YES           | YES (`module.pubsub_approval_reply.topic_name`)           | YES                    | OK ✓   |
-| data-insights    | _(none — Cloud Scheduler pushes directly)_ | N/A           | N/A                                                       | N/A                    | OK ✓   |
 
 ---
 
@@ -256,7 +249,7 @@ All topic env vars set in Terraform `env_vars` are compared against local fallba
 | `INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC`    | `intexuraos-whatsapp-transcription-dev` (module output)   | `whatsapp-transcription`     | ALIAS ⚠ |
 | `INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC`   | `intexuraos-approval-reply-dev` (module output)           | `approval-reply`             | ALIAS ⚠ |
 
-**ALIAS interpretation:** All ALIAS entries indicate correct behavior — the `ecosystem.config.cjs` reads from `process.env.*` and uses the short name only as a fallback when the actual env var is not set. At runtime (both local dev with `.envrc` loaded and Cloud Run), the actual `intexuraos-*-{env}` name is always used. The short fallback names exist only for isolated component testing. See D-8 for nuance.
+**ALIAS interpretation:** All ALIAS entries indicate correct behavior — the `ecosystem.config.cjs` reads from `process.env.*` and uses the short name only as a fallback when the actual env var is not set. At runtime (both local dev with `.envrc` loaded and Cloud Run), the actual `intexuraos-*-{env}` name is always used. The short fallback names exist only for isolated component testing. See D-7 for nuance.
 
 ---
 
@@ -362,19 +355,7 @@ This means `intexuraos-whatsapp-webhook-process-{env}` multiplexes two distinct 
 
 ---
 
-### D-6 · LOW · snapshot-refresh Topic Deviates from Naming Convention
-
-**Location:** `terraform/environments/dev/main.tf` line 1751
-
-**Description:** The data-insights snapshot refresh topic is named `snapshot-refresh-{env}` rather than following the `intexuraos-{purpose}-{env}` convention used by all 15 other topics.
-
-**Impact:** No runtime issue. May cause confusion in log analysis or monitoring dashboards that filter by `intexuraos-` prefix.
-
-**Action item:** Low priority — rename to `intexuraos-snapshot-refresh-{env}` in Terraform if naming conventions are being enforced.
-
----
-
-### D-7 · LOW · bookmarks-agent Env Vars Missing `_TOPIC` Suffix
+### D-6 · LOW · bookmarks-agent Env Vars Missing `_TOPIC` Suffix
 
 **Location:** `apps/bookmarks-agent/src/index.ts`
 
@@ -386,7 +367,7 @@ This means `intexuraos-whatsapp-webhook-process-{env}` multiplexes two distinct 
 
 ---
 
-### D-8 · INFORMATIONAL · ecosystem.config.cjs Fallback Values Are Development Shorthand Only
+### D-7 · INFORMATIONAL · ecosystem.config.cjs Fallback Values Are Development Shorthand Only
 
 **Location:** `ecosystem.config.cjs` `SERVICE_ENV_MAPPINGS`
 
@@ -411,9 +392,8 @@ At runtime:
 | D-3 | MEDIUM        | docs                    | Regenerate `technical.md` for 6 services with correct topic names and endpoint paths                           |
 | D-4 | MEDIUM        | docs / whatsapp-service | Update technical.md: `publishExtractLinkPreviews` reuses `webhook-process` topic, not separate                 |
 | D-5 | LOW           | todos-agent             | Consider renaming `INTEXURAOS_TODOS_PROCESSING_TOPIC` → `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC`             |
-| D-6 | LOW           | infra                   | Consider renaming `snapshot-refresh-{env}` → `intexuraos-snapshot-refresh-{env}`                               |
-| D-7 | LOW           | bookmarks-agent         | Consider adding `_TOPIC` suffix to bookmark pub/sub env var names                                              |
-| D-8 | INFORMATIONAL | N/A                     | ecosystem.config.cjs fallback names are development shorthand — no action required                             |
+| D-6 | LOW           | bookmarks-agent         | Consider adding `_TOPIC` suffix to bookmark pub/sub env var names                                              |
+| D-7 | INFORMATIONAL | N/A                     | ecosystem.config.cjs fallback names are development shorthand — no action required                             |
 
 ---
 

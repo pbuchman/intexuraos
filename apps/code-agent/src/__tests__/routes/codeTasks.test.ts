@@ -44,7 +44,6 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
@@ -168,10 +167,6 @@ describe('GET /code/tasks endpoints', () => {
         logger,
       }),
       gitHubPRSummaryRepo: {} as never,
-      prTaskLockRepo: createFirestorePRTaskLockRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
       turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -197,7 +192,6 @@ describe('GET /code/tasks endpoints', () => {
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
-      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
@@ -407,7 +401,7 @@ describe('GET /code/tasks endpoints', () => {
         }
       });
 
-      it('filters tasks by status', async () => {
+      it('filters tasks by single status', async () => {
         const response = await app.inject({
           method: 'GET',
           url: '/code/tasks?status=implemented',
@@ -420,6 +414,41 @@ describe('GET /code/tasks endpoints', () => {
         const body = JSON.parse(response.body);
         expect(body.success).toBe(true);
         expect(body.data.tasks).toBeDefined();
+        expect(body.data.tasks.every((task: CodeTask) => task.status === 'implemented')).toBe(true);
+      });
+
+      it('filters tasks by comma-separated statuses', async () => {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/code/tasks?status=implemented,failed',
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.tasks).toBeDefined();
+        const statuses = body.data.tasks.map((task: CodeTask) => task.status);
+        for (const s of statuses) {
+          expect(['implemented', 'failed']).toContain(s);
+        }
+      });
+
+      it('ignores invalid status tokens in comma-separated list', async () => {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/code/tasks?status=implemented,bogus',
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        // Only valid statuses are used; 'bogus' is dropped
         expect(body.data.tasks.every((task: CodeTask) => task.status === 'implemented')).toBe(true);
       });
     });

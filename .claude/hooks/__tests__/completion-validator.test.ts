@@ -184,7 +184,7 @@ describe.sequential('Claude Hooks - Completion Validator', () => {
     describe('Phase 2 contract', () => {
       it('blocks when PR line is missing', () => {
         const transcriptPath = createWorkerTranscript('2', [
-          `PHASE2_FINAL:\n- CI evidence: pnpm run ci:tracked successful\n- Linear issue: https://linear.app/intexuraos/issue/INT-2\n- Summary: Done`,
+          `PHASE2_FINAL:\n- CI evidence: pnpm run ci:tracked successful\n- Linear issue: https://linear.app/intexuraos/issue/INT-2\n- Review iterations: 1\n- Turn summary: Fixed bug | Wrote tests | Review clean | PR ready | Done\n- Summary: Done`,
         ]);
 
         const result = executeHookSync({
@@ -207,7 +207,7 @@ describe.sequential('Claude Hooks - Completion Validator', () => {
 
       it('blocks when CI evidence line is invalid', () => {
         const transcriptPath = createWorkerTranscript('2', [
-          `PHASE2_FINAL:\n- PR: https://github.com/user/repo/pull/123\n- CI evidence: ci passed\n- Linear issue: https://linear.app/intexuraos/issue/INT-2\n- Summary: Done`,
+          `PHASE2_FINAL:\n- PR: https://github.com/user/repo/pull/123\n- CI evidence: ci passed\n- Linear issue: https://linear.app/intexuraos/issue/INT-2\n- Review iterations: 1\n- Turn summary: Fixed bug | Wrote tests | Review clean | PR ready | Done\n- Summary: Done`,
         ]);
 
         const result = executeHookSync({
@@ -228,9 +228,55 @@ describe.sequential('Claude Hooks - Completion Validator', () => {
         cleanupTranscript(transcriptPath);
       });
 
+      it('blocks when review iterations line is missing', () => {
+        const transcriptPath = createWorkerTranscript('2', [
+          `PHASE2_FINAL:\n- PR: https://github.com/user/repo/pull/123\n- CI evidence: pnpm run ci:tracked successful\n- Linear issue: https://linear.app/intexuraos/issue/INT-2\n- Turn summary: Fixed bug | Wrote tests | Review clean | PR ready | Done\n- Summary: Done`,
+        ]);
+
+        const result = executeHookSync({
+          hookName: 'completion-validator',
+          input: {
+            tool_name: 'Stop',
+            tool_input: {},
+            transcript_path: transcriptPath,
+          },
+          env: { CLAUDE_WORKER_MODE: '1' },
+        });
+
+        expectJsonOutput(result, {
+          decision: 'block',
+          reasonIncludes: 'Review iterations line',
+        });
+
+        cleanupTranscript(transcriptPath);
+      });
+
+      it('blocks when turn summary line is missing', () => {
+        const transcriptPath = createWorkerTranscript('2', [
+          `PHASE2_FINAL:\n- PR: https://github.com/user/repo/pull/123\n- CI evidence: pnpm run ci:tracked successful\n- Linear issue: https://linear.app/intexuraos/issue/INT-2\n- Review iterations: 2\n- Summary: Done`,
+        ]);
+
+        const result = executeHookSync({
+          hookName: 'completion-validator',
+          input: {
+            tool_name: 'Stop',
+            tool_input: {},
+            transcript_path: transcriptPath,
+          },
+          env: { CLAUDE_WORKER_MODE: '1' },
+        });
+
+        expectJsonOutput(result, {
+          decision: 'block',
+          reasonIncludes: 'Turn summary line',
+        });
+
+        cleanupTranscript(transcriptPath);
+      });
+
       it('allows valid PHASE2_FINAL block', () => {
         const transcriptPath = createWorkerTranscript('2', [
-          `PHASE2_FINAL:\n- PR: https://github.com/user/repo/pull/123\n- CI evidence: pnpm run ci:tracked successful\n- Linear issue: https://linear.app/intexuraos/issue/INT-2\n- Summary: Implemented requested changes`,
+          `PHASE2_FINAL:\n- PR: https://github.com/user/repo/pull/123\n- CI evidence: pnpm run ci:tracked successful\n- Linear issue: https://linear.app/intexuraos/issue/INT-2\n- Review iterations: 2\n- Turn summary: Planned auth refactor | Wrote 8 tests | Implemented changes | Review clean after 2 iterations | PR ready\n- Summary: Implemented requested changes`,
         ]);
 
         const result = executeHookSync({

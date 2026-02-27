@@ -80,18 +80,24 @@ function NotificationCard({
             Are you sure you want to delete this notification?
           </p>
           <div className="flex gap-2">
-            <button
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
               onClick={handleDeleteConfirm}
-              className="rounded bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700"
+              disabled={isDeleting}
             >
               Delete
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
               onClick={handleDeleteCancel}
-              className="rounded bg-slate-200 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-300 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500"
+              disabled={isDeleting}
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}

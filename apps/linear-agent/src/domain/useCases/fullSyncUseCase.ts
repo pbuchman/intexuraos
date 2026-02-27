@@ -57,7 +57,7 @@ export async function fullSync(
   // Fetch all issues from Linear API
   const issuesResult = await linearClient.listIssues(connection.apiKey, connection.teamId);
   if (!issuesResult.ok) {
-    logger.error({ error: issuesResult.error }, 'Failed to fetch issues from Linear');
+    logger.error({ error: issuesResult.error, userId, teamId: connection.teamId }, 'Failed to fetch issues from Linear');
     return issuesResult;
   }
 

@@ -561,6 +561,7 @@ async function bootstrap(): Promise<void> {
       orchestratorSecret: config.orchestratorSecret,
       internalAuthToken,
       secretsBasePath,
+      sharedCredsPath,
     },
     logger
   );

@@ -175,7 +175,6 @@ Workers run as Cloud Functions, not Cloud Run. No HTTP endpoints — event-drive
 | DELETE | `/visualizations/:id`                                           | Bearer   | visualizationRoutes.ts | OK     |
 | POST   | `/visualizations/:id/refresh`                                   | Bearer   | visualizationRoutes.ts | OK     |
 | POST   | `/internal/visualizations/compute`                              | Internal | internalRoutes.ts      | OK     |
-| POST   | `/internal/snapshots/refresh`                                   | OIDC     | internalRoutes.ts      | OK     |
 
 ### image-service
 

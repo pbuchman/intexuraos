@@ -160,7 +160,27 @@ describe('issueMapper', () => {
       expect(result.teamId).toBe('team-1');
     });
 
-    it('sets assignee fields to null (not available in API response)', () => {
+    it('preserves assignee data when present', () => {
+      const issue = createApiIssue({
+        assignee: { id: 'assignee-1', name: 'Jane Doe' },
+      });
+
+      const result = mapApiIssueToSyncedIssue(issue, userId, 'team-1');
+
+      expect(result.assigneeId).toBe('assignee-1');
+      expect(result.assigneeName).toBe('Jane Doe');
+    });
+
+    it('handles null assignee', () => {
+      const issue = createApiIssue({ assignee: null });
+
+      const result = mapApiIssueToSyncedIssue(issue, userId, 'team-1');
+
+      expect(result.assigneeId).toBeNull();
+      expect(result.assigneeName).toBeNull();
+    });
+
+    it('handles undefined assignee (field not set)', () => {
       const issue = createApiIssue();
 
       const result = mapApiIssueToSyncedIssue(issue, userId, 'team-1');
