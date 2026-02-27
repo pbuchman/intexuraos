@@ -235,6 +235,76 @@ After this block, stop. Do not append any other checklist or schema payload.`;
   /* v8 ignore stop @preserve */
 }
 
+function buildPRReviewOverlay(params: SystemPromptParams): string {
+  const { taskUrl } = params;
+  /* v8 ignore start -- source-map: template conditional branches are misattributed after bundling/source-map transforms @preserve */
+  return `
+
+[PR REVIEW MODE — CONDITIONAL]
+
+If the incoming message is about a PR review, code review feedback, PR comment,
+or any request to address changes on a pull request, activate the behaviors below.
+If the message is NOT about PR feedback, IGNORE this entire section and use your
+normal completion block above.
+
+### Detecting PR Review Intent
+
+Activate this section when the message:
+- Contains PR review content (review state, inline comments, change requests)
+- Asks you to address PR feedback or review comments
+- References specific code review findings to fix
+
+Do NOT activate when the message merely mentions a previous review in passing
+or asks a general question that happens to reference a PR.
+
+### Gathering Feedback (MANDATORY when activated)
+
+Search ALL of these sources:
+1. **PR reviews** — \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews\`
+2. **PR comments** (review-level and inline) — \`gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments\`
+3. **Issue comments** — \`gh api /repos/{owner}/{repo}/issues/{pr_number}/comments\`
+
+All three are MANDATORY. Skipping any source means missing feedback.
+
+### Tracking Comment (MANDATORY when activated)
+
+Your FIRST action must be to post a tracking comment on the PR:
+
+\`\`\`
+gh api /repos/{owner}/{repo}/issues/{pr_number}/comments -f body="..."
+\`\`\`
+
+The comment must contain:
+- What you plan to do (1-3 bullet points summarizing the task)
+${taskUrl !== undefined ? `- A link to the live task console: [View progress](${taskUrl})` : ''}
+
+Save the comment ID from the response — you will need it to update this comment later.
+
+Your LAST action before outputting PULL_REQUEST_AGENT_FINAL must be to UPDATE this same comment with:
+- What you actually did (1-3 bullet points)
+- Outcome: commits pushed / no changes needed / etc.
+${taskUrl !== undefined ? `- Link to the task console: [View task](${taskUrl})` : ''}
+
+Use: \`gh api -X PATCH /repos/{owner}/{repo}/issues/comments/{comment_id} -f body="..."\`
+
+### Completion Block Override
+
+When PR Review Mode is active, use this completion block INSTEAD of your normal one:
+
+\`\`\`
+PULL_REQUEST_AGENT_FINAL:
+- PR: <full GitHub PR URL>
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: <full Linear URL>
+- Comment replied: <yes|no>
+- Tracking comment: <updated|not_applicable>
+- Summary: <3-5 sentences on one line: objective narrative of what you investigated, implemented, and delivered>
+\`\`\`
+
+After this block, stop. Do not append any other checklist or schema payload.`;
+  /* v8 ignore stop @preserve */
+}
+
 export function buildSystemPrompt(params: SystemPromptParams): string {
   const isPRComment = params.linearIssueLabels.some(
     (label) => label.trim().toLowerCase() === 'pr-comment'
@@ -246,9 +316,11 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
   const resolvedAgentType =
     params.agentType ?? (hasCodeTaskLabel(params.linearIssueLabels) ? 'execution' : 'planning');
 
+  const overlay = buildPRReviewOverlay(params);
+
   if (resolvedAgentType === 'planning') {
-    return buildPlanningPrompt(params);
+    return buildPlanningPrompt(params) + overlay;
   }
 
-  return buildExecutionPrompt(params);
+  return buildExecutionPrompt(params) + overlay;
 }
