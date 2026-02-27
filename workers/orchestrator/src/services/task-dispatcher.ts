@@ -1403,6 +1403,16 @@ export class TaskDispatcher {
       },
     };
 
+    this.logger.info(
+      {
+        taskId: task.taskId,
+        agentType: task.agentType ?? 'default',
+        systemPromptLength: workerConfig.systemPrompt.length,
+        userPromptLength: params.prompt.length,
+      },
+      'System prompt built'
+    );
+
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
     this.claudeLogBuffers.delete(task.taskId);
