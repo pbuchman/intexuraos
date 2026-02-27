@@ -839,7 +839,7 @@ async function handleProceedToImplementationButton(
 
   const successNotifyResult = await whatsappPublisher.publishSendMessage({
     userId,
-    message: `🚀 Starting implementation for your task!\n\nTask ID: ${result.value.implementationOf}\n\nYou'll receive another message when it's complete.`,
+    message: `🚀 Starting implementation for your task!\n\nYou'll receive another message when it's complete.`,
     correlationId: `proceed-implementation-success-${taskId}`,
   });
   if (!successNotifyResult.ok) {

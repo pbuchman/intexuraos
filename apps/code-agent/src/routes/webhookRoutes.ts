@@ -605,7 +605,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             );
           }
         } else {
-          await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
+          const completeNotifyResult = await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
+          if (!completeNotifyResult.ok) {
+            request.log.warn(
+              { taskId, errorCode: completeNotifyResult.error.code, errorMessage: completeNotifyResult.error.message },
+              'Failed to send task-complete notification'
+            );
+          }
         }
 
         // Record task completion for rate limiting (fire and forget)
