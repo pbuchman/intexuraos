@@ -23,12 +23,9 @@ export interface ThumbnailPrompt {
   prompt: string;
   negativePrompt: string;
   parameters: {
-    aspectRatio: '16:9';
     framing: string;
-    textOnImage: 'none';
     realism: 'photorealistic' | 'cinematic illustration' | 'clean vector';
     people: string;
-    logosTrademarks: 'none';
   };
 }
 
