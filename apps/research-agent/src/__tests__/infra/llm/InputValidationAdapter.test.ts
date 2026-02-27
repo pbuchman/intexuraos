@@ -32,6 +32,36 @@ describe('InputValidationAdapter', () => {
       mockLogger
     );
 
+  /**
+   * Helper for semantic rejection tests: mocks a successful LLM response followed
+   * by a failed repair, then asserts that improveInput rejects with the expected message.
+   */
+  async function expectSemanticRejection(
+    content: string,
+    input: string,
+    expectedMessage: string
+  ): Promise<void> {
+    mockGenerate.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content,
+        usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+      },
+    });
+    mockGenerate.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Repair failed' },
+    });
+
+    const adapter = createAdapter();
+    const result = await adapter.improveInput(input);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain(expectedMessage);
+    }
+  }
+
   describe('validateInput', () => {
     it('returns validation result for valid JSON response', async () => {
       mockGenerate.mockResolvedValueOnce({
@@ -457,91 +487,35 @@ describe('InputValidationAdapter', () => {
   describe('improveInput - semantic checks (F-015)', () => {
     describe('multi-option detection', () => {
       it('rejects response with numbered options (1. / 2.)', async () => {
-        mockGenerate.mockResolvedValueOnce({
-          ok: true,
-          value: {
-            content: '1. What are the best travel tips for Europe?\n2. What are the best travel tips for Asia?',
-            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
-          },
-        });
-        mockGenerate.mockResolvedValueOnce({
-          ok: false,
-          error: { code: 'API_ERROR', message: 'Repair failed' },
-        });
-
-        const adapter = createAdapter();
-        const result = await adapter.improveInput('travel tips');
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toContain('multiple options');
-        }
+        await expectSemanticRejection(
+          '1. What are the best travel tips for Europe?\n2. What are the best travel tips for Asia?',
+          'travel tips',
+          'multiple options'
+        );
       });
 
       it('rejects response with "Option 1:" / "Option 2:" labels', async () => {
-        mockGenerate.mockResolvedValueOnce({
-          ok: true,
-          value: {
-            content: 'Option 1: Budget travel in Europe. Option 2: Luxury travel in Asia.',
-            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
-          },
-        });
-        mockGenerate.mockResolvedValueOnce({
-          ok: false,
-          error: { code: 'API_ERROR', message: 'Repair failed' },
-        });
-
-        const adapter = createAdapter();
-        const result = await adapter.improveInput('travel tips');
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toContain('multiple options');
-        }
+        await expectSemanticRejection(
+          'Option 1: Budget travel in Europe. Option 2: Luxury travel in Asia.',
+          'travel tips',
+          'multiple options'
+        );
       });
 
       it('rejects response with "OR" separator between alternatives', async () => {
-        mockGenerate.mockResolvedValueOnce({
-          ok: true,
-          value: {
-            content: 'What are the best budget airlines in Europe? OR What are the cheapest train routes across Europe?',
-            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
-          },
-        });
-        mockGenerate.mockResolvedValueOnce({
-          ok: false,
-          error: { code: 'API_ERROR', message: 'Repair failed' },
-        });
-
-        const adapter = createAdapter();
-        const result = await adapter.improveInput('travel tips');
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toContain('multiple options');
-        }
+        await expectSemanticRejection(
+          'What are the best budget airlines in Europe? OR What are the cheapest train routes across Europe?',
+          'travel tips',
+          'multiple options'
+        );
       });
 
       it('rejects response with bullet-point alternatives (- or •)', async () => {
-        mockGenerate.mockResolvedValueOnce({
-          ok: true,
-          value: {
-            content: '- What are the best travel tips for Europe?\n- What are the best travel tips for Asia?',
-            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
-          },
-        });
-        mockGenerate.mockResolvedValueOnce({
-          ok: false,
-          error: { code: 'API_ERROR', message: 'Repair failed' },
-        });
-
-        const adapter = createAdapter();
-        const result = await adapter.improveInput('travel tips');
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toContain('multiple options');
-        }
+        await expectSemanticRejection(
+          '- What are the best travel tips for Europe?\n- What are the best travel tips for Asia?',
+          'travel tips',
+          'multiple options'
+        );
       });
 
       it('accepts a single well-formed prompt that happens to contain the word "or"', async () => {
@@ -565,69 +539,27 @@ describe('InputValidationAdapter', () => {
 
     describe('language drift detection', () => {
       it('rejects English output when input is in Cyrillic script', async () => {
-        mockGenerate.mockResolvedValueOnce({
-          ok: true,
-          value: {
-            content: 'What are the best budget travel destinations in 2026?',
-            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
-          },
-        });
-        mockGenerate.mockResolvedValueOnce({
-          ok: false,
-          error: { code: 'API_ERROR', message: 'Repair failed' },
-        });
-
-        const adapter = createAdapter();
-        const result = await adapter.improveInput('Какие лучшие направления для путешествий');
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toContain('language');
-        }
+        await expectSemanticRejection(
+          'What are the best budget travel destinations in 2026?',
+          'Какие лучшие направления для путешествий',
+          'language'
+        );
       });
 
       it('rejects English output when input is in CJK script', async () => {
-        mockGenerate.mockResolvedValueOnce({
-          ok: true,
-          value: {
-            content: 'What are the best travel tips for Japan in 2026?',
-            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
-          },
-        });
-        mockGenerate.mockResolvedValueOnce({
-          ok: false,
-          error: { code: 'API_ERROR', message: 'Repair failed' },
-        });
-
-        const adapter = createAdapter();
-        const result = await adapter.improveInput('日本旅行のヒント');
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toContain('language');
-        }
+        await expectSemanticRejection(
+          'What are the best travel tips for Japan in 2026?',
+          '日本旅行のヒント',
+          'language'
+        );
       });
 
       it('rejects English output when input is in Arabic script', async () => {
-        mockGenerate.mockResolvedValueOnce({
-          ok: true,
-          value: {
-            content: 'What are the best travel tips for the Middle East?',
-            usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
-          },
-        });
-        mockGenerate.mockResolvedValueOnce({
-          ok: false,
-          error: { code: 'API_ERROR', message: 'Repair failed' },
-        });
-
-        const adapter = createAdapter();
-        const result = await adapter.improveInput('نصائح السفر في الشرق الأوسط');
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toContain('language');
-        }
+        await expectSemanticRejection(
+          'What are the best travel tips for the Middle East?',
+          'نصائح السفر في الشرق الأوسط',
+          'language'
+        );
       });
 
       it('accepts output that preserves the same non-Latin script', async () => {
@@ -716,48 +648,20 @@ describe('InputValidationAdapter', () => {
       it('rejects previously-accepted multi-option response that violated prompt contract', async () => {
         // This would have passed the old validator (structure-only checks)
         // but violates "NO options or variations - just ONE improved version"
-        mockGenerate.mockResolvedValueOnce({
-          ok: true,
-          value: {
-            content: '1. Compare the most affordable European destinations for solo backpackers in 2026\n2. Evaluate budget-friendly hostels and travel routes across Western Europe for 2026',
-            usage: { inputTokens: 15, outputTokens: 12, costUsd: 0.002 },
-          },
-        });
-        mockGenerate.mockResolvedValueOnce({
-          ok: false,
-          error: { code: 'API_ERROR', message: 'Repair failed' },
-        });
-
-        const adapter = createAdapter();
-        const result = await adapter.improveInput('cheap europe travel');
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toContain('multiple options');
-        }
+        await expectSemanticRejection(
+          '1. Compare the most affordable European destinations for solo backpackers in 2026\n2. Evaluate budget-friendly hostels and travel routes across Western Europe for 2026',
+          'cheap europe travel',
+          'multiple options'
+        );
       });
 
       it('rejects previously-accepted language-drifted response', async () => {
         // Original is in Cyrillic, response is in English — old validator would accept
-        mockGenerate.mockResolvedValueOnce({
-          ok: true,
-          value: {
-            content: 'What are the most effective and safe weight loss methods for adults in 2026, considering diet, physical activity, and long-term sustainability?',
-            usage: { inputTokens: 15, outputTokens: 12, costUsd: 0.002 },
-          },
-        });
-        mockGenerate.mockResolvedValueOnce({
-          ok: false,
-          error: { code: 'API_ERROR', message: 'Repair failed' },
-        });
-
-        const adapter = createAdapter();
-        const result = await adapter.improveInput('как похудеть безопасно');
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.message).toContain('language');
-        }
+        await expectSemanticRejection(
+          'What are the most effective and safe weight loss methods for adults in 2026, considering diet, physical activity, and long-term sustainability?',
+          'как похудеть безопасно',
+          'language'
+        );
       });
     });
   });
