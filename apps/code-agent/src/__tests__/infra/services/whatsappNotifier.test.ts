@@ -735,4 +735,170 @@ describe('WhatsAppNotifier', () => {
       }
     });
   });
+
+  describe('notifyDesignComplete', () => {
+    it('sends design-complete message with implement button', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Add dark mode',
+        result: createMockResult({ summary: 'Design plan with implementation steps.' }),
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyDesignComplete('user-123', task);
+
+      expect(result.ok).toBe(true);
+      expect(getPublishSendMessageMock()).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-123',
+          message: expect.stringContaining('🎨 Design ready: Add dark mode'),
+          buttons: [
+            {
+              type: 'reply',
+              reply: {
+                id: `proceed-implementation:${task.id}`,
+                title: '▶️ Implement',
+              },
+            },
+          ],
+          correlationId: 'trace-123',
+        })
+      );
+    });
+
+    it('includes button prompt in message when buttons are sent', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Add dark mode',
+        result: createMockResult({ summary: 'Plan ready.' }),
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyDesignComplete('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0] as { message: string };
+      expect(callArgs.message).toContain('Click the button below to start Phase 2.');
+    });
+
+    it('uses prompt when linearIssueTitle is not set', async () => {
+      // createMockTask doesn't set linearIssueTitle by default, so it's naturally absent
+      const task = createMockTask({
+        prompt: 'Implement a very long prompt that should be truncated at fifty characters exactly',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyDesignComplete('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0] as { message: string };
+      // prompt.slice(0, 50) = "Implement a very long prompt that should be trunca"
+      expect(callArgs.message).toContain('🎨 Design ready: Implement a very long prompt that should be trunca');
+      expect(callArgs.message).not.toContain('Fix login bug'); // default task title
+    });
+
+    it('uses default summary when result has no summary', async () => {
+      // Construct result without summary to test the fallback path
+      const mockResult: TaskResult = { branch: 'fix/login-bug', commits: 3 };
+      const task = createMockTask({
+        linearIssueTitle: 'Add dark mode',
+        result: mockResult,
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyDesignComplete('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0] as { message: string };
+      expect(callArgs.message).toContain('Design completed and ready for implementation.');
+    });
+
+    it('uses default summary when result is undefined', async () => {
+      // createMockTask doesn't set result by default, so it's naturally absent
+      const task = createMockTask({
+        linearIssueTitle: 'Add dark mode',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyDesignComplete('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0] as { message: string };
+      expect(callArgs.message).toContain('Design completed and ready for implementation.');
+    });
+
+    it('falls back to sending without buttons when PUBLISH_FAILED', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Add dark mode',
+        result: createMockResult({ summary: 'Plan ready.' }),
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      // First call (with buttons) fails
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_FAILED', message: 'Buttons not supported' })
+      );
+      // Second call (without buttons) succeeds
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyDesignComplete('user-123', task);
+
+      expect(result.ok).toBe(true);
+      expect(getPublishSendMessageMock()).toHaveBeenCalledTimes(2);
+      // Fallback message should NOT say "click the button below"
+      const fallbackArgs = getPublishSendMessageMock().mock.calls[1]?.[0] as { message: string; buttons?: unknown };
+      expect(fallbackArgs.message).toContain('Open the web app to start Phase 2.');
+      expect(fallbackArgs.message).not.toContain('Click the button below');
+      expect(fallbackArgs.buttons).toBeUndefined();
+    });
+
+    it('returns error when fallback also fails', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Add dark mode',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      // First call (with buttons) fails
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_FAILED', message: 'Buttons not supported' })
+      );
+      // Second call (without buttons) also fails
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_FAILED', message: 'Service down' })
+      );
+
+      const result = await notifier.notifyDesignComplete('user-123', task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Service down');
+      }
+    });
+
+    it('returns error for non-PUBLISH_FAILED errors without fallback', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Add dark mode',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'TOPIC_NOT_FOUND', message: 'Topic missing' })
+      );
+
+      const result = await notifier.notifyDesignComplete('user-123', task);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Topic missing');
+      }
+      // Should NOT attempt fallback
+      expect(getPublishSendMessageMock()).toHaveBeenCalledTimes(1);
+    });
+  });
 });

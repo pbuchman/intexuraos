@@ -11,6 +11,7 @@ import type { CodeActionPayload } from '../models/action.js';
 export interface CodeAgentClient {
   submitTask(input: SubmitTaskInput): Promise<Result<SubmitTaskOutput, CodeAgentError>>;
   cancelTaskWithNonce(input: CancelTaskWithNonceInput): Promise<Result<CancelTaskWithNonceOutput, CancelTaskError>>;
+  submitToPhase2(input: SubmitToPhase2Input): Promise<Result<SubmitToPhase2Output, SubmitToPhase2Error>>;
 }
 
 export interface SubmitTaskInput {
@@ -47,4 +48,25 @@ export interface CancelTaskWithNonceOutput {
 export interface CancelTaskError {
   code: 'TASK_NOT_FOUND' | 'INVALID_NONCE' | 'NONCE_EXPIRED' | 'NOT_OWNER' | 'TASK_NOT_CANCELLABLE' | 'NETWORK_ERROR' | 'UNKNOWN';
   message: string;
+}
+
+/** Input for submit-to-phase2 request (INT-628) */
+export interface SubmitToPhase2Input {
+  taskId: string;
+  userId: string;
+}
+
+/** Output for submit-to-phase2 request (INT-628) */
+export interface SubmitToPhase2Output {
+  codeTaskId: string;
+  resourceUrl: string;
+  workerLocation: string;
+  implementationOf: string;
+}
+
+/** Error from submit-to-phase2 request (INT-628) */
+export interface SubmitToPhase2Error {
+  code: 'TASK_NOT_FOUND' | 'INVALID_STATUS' | 'NO_LINEAR_ISSUE' | 'LABEL_NOT_READY' | 'ALREADY_IMPLEMENTED' | 'ACTIVE_TASK_EXISTS' | 'WORKER_NOT_CONFIGURED' | 'NETWORK_ERROR' | 'UNKNOWN';
+  message: string;
+  existingTaskId?: string;
 }

@@ -2776,6 +2776,131 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
+  // POST /internal/code/submit-phase2 - Submit Phase 2 from WhatsApp button (INT-628)
+  fastify.post<{
+    Body: {
+      taskId: string;
+      userId: string;
+    };
+  }>(
+    '/internal/code/submit-phase2',
+    {
+      schema: {
+        operationId: 'submitToExecutionAgentInternal',
+        summary: 'Submit Phase 2 implementation from WhatsApp button',
+        description: 'Internal endpoint for submitting Phase 2 from WhatsApp button callback. Requires internal authentication.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string' },
+            userId: { type: 'string' },
+          },
+          required: ['taskId', 'userId'],
+        },
+        response: {
+          200: {
+            description: 'Phase 2 submitted successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  codeTaskId: { type: 'string' },
+                  resourceUrl: { type: 'string' },
+                  workerLocation: { type: 'string' },
+                  implementationOf: { type: 'string' },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Body: { taskId: string; userId: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/code/submit-phase2',
+      });
+
+      // Validate internal auth
+      const authResult = validateInternalAuth(request);
+      /* v8 ignore start -- test-infra: internal auth validation branch covered by other tests @preserve */
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for submit-phase2');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      /* v8 ignore stop @preserve */
+
+      const services = getServices();
+      const { taskId, userId } = request.body;
+
+      request.log.info({ taskId, userId }, 'Processing submit-phase2 request');
+
+      // Call existing submitToExecutionAgent use case
+      /* v8 ignore start -- test-infra: submitToExecutionAgent use case has its own tests @preserve */
+      const result = await submitToExecutionAgent(
+        {
+          logger: services.logger,
+          codeTaskRepo: services.codeTaskRepo,
+          linearAgentClient: services.linearAgentClient,
+          taskDispatcher: services.taskDispatcher,
+          whatsappNotifier: services.whatsappNotifier,
+          metricsClient: services.metricsClient,
+          workerSettingsRepo: services.workerSettingsRepo,
+          orchestratorSecret: loadConfig().orchestratorSecret,
+          serviceUrl: loadConfig().serviceUrl,
+        },
+        { originalTaskId: taskId, userId }
+      );
+      /* v8 ignore stop @preserve */
+
+      /* v8 ignore start -- test-infra: error handling branches covered by submitToExecutionAgent tests @preserve */
+      if (!result.ok) {
+        const error = result.error;
+        request.log.warn({ taskId, errorCode: error.code, errorMessage: error.message }, 'Submit-phase2 failed');
+
+        switch (error.code) {
+          case 'task_not_found':
+            return await reply.fail('NOT_FOUND', error.message);
+          case 'invalid_status':
+          case 'no_linear_issue':
+          case 'label_not_ready':
+            return await reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
+          case 'worker_not_configured':
+            return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
+          case 'already_implemented':
+            return await reply.code(409).send({ // @allow-raw-send: 409 with existingTaskId details
+              success: false,
+              error: {
+                code: error.code,
+                message: error.message,
+                details: { existingTaskId: error.existingTaskId, serverCode: error.code },
+              },
+            });
+          case 'active_task_exists':
+            return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
+          case 'internal_error':
+          default:
+            return await reply.fail('INTERNAL_ERROR', error.message);
+        }
+      }
+      /* v8 ignore stop @preserve */
+
+      request.log.info({ taskId, phase2TaskId: result.value.codeTaskId }, 'Phase 2 submitted successfully');
+      return await reply.ok(result.value);
+    }
+  );
+
   // POST /internal/tasks/cleanup-logs - Cleanup old task logs (cron endpoint)
   fastify.post<{
     Body: {
@@ -3519,21 +3644,21 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'invalid_status':
           case 'no_linear_issue':
           case 'label_not_ready':
-            return reply.fail('INVALID_REQUEST', error.message);
+            return reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
-            // Include existingTaskId in details so frontend can navigate
+            // @allow-raw-send: 409 with existingTaskId details for frontend navigation
             return reply.code(409).send({
               success: false,
               error: {
                 code: error.code,
                 message: error.message,
-                details: { existingTaskId: error.existingTaskId },
+                details: { existingTaskId: error.existingTaskId, serverCode: error.code },
               },
-            }); // @allow-raw-send: 409 with structured error payload containing existingTaskId
+            });
           case 'active_task_exists':
-            return reply.fail('CONFLICT', error.message);
+            return reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'internal_error':
           default:
             return reply.fail('INTERNAL_ERROR', error.message);

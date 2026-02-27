@@ -594,7 +594,25 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         /* v8 ignore start -- ts-type: spread with boolean shorthand creates complex type that requires assertion @preserve */
         const completedTask = { ...task, status: resolvedStatus, ...(result !== undefined && { result }) } as typeof task;
         /* v8 ignore stop @preserve */
-        await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
+
+        // INT-628: If planning agent completed, send notification with button to proceed to execution
+        if (task.agentType === 'planning') {
+          const notifyResult = await whatsappNotifier.notifyDesignComplete(task.userId, completedTask);
+          if (!notifyResult.ok) {
+            request.log.warn(
+              { taskId, errorCode: notifyResult.error.code, errorMessage: notifyResult.error.message },
+              'Failed to send design-complete notification — user may not receive Phase 2 button'
+            );
+          }
+        } else {
+          const completeNotifyResult = await whatsappNotifier.notifyTaskComplete(task.userId, completedTask);
+          if (!completeNotifyResult.ok) {
+            request.log.warn(
+              { taskId, errorCode: completeNotifyResult.error.code, errorMessage: completeNotifyResult.error.message },
+              'Failed to send task-complete notification'
+            );
+          }
+        }
 
         // Record task completion for rate limiting (fire and forget)
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
