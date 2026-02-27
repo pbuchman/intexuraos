@@ -38,6 +38,8 @@ Ownership split:
 - Orchestrator: routing, prompts, completion verification, flattened `planning_*` metadata
 - `code-agent`: deterministic Linear issue mutations after webhook receipt
 
+> **Note:** UI enhancements for displaying execution-agent verifier results and execution metadata are deferred to a future step. Current implementation covers backend orchestrator and code-agent contracts only.
+
 ## Architecture
 
 ```mermaid
@@ -452,13 +454,19 @@ Collects per-task resource and cost metrics after container exit:
 
 Evaluates whether a task attempt met its agent-specific contract using a two-stage pipeline:
 
-**Stage 1 — Deterministic checks:**
+**Stage 1 — Deterministic checks (Planning and Pull Request agents):**
 
 - Non-zero worker exit code → `passed=false`
 - Missing assistant final message in logs → `passed=false`
-- Planning Agent: validates `PLANNING_AGENT_FINAL:` block and planning outcome contract fields (including `planned` vs `unclear`)
-- Execution Agent: validates `EXECUTION_AGENT_FINAL:` block, presence of PR URL in task result, and absence of CI failures
+- Planning Agent: validates `PLANNING_AGENT_FINAL:` block and planning outcome contract fields
 - Pull Request Agent: validates `PULL_REQUEST_AGENT_FINAL:` block and PR result expectations
+
+**Execution Agent — Gemini-only semantic verification (no deterministic Stage 1):**
+
+- Skips exit-code and runtime-signal checks entirely
+- Gemini evaluates `EXECUTION_AGENT_FINAL:` semantics from Claude responses (latest first, prior-response fallback)
+- Extracts flattened `execution_*` metadata for webhook delivery
+- Hard-fails on wrong-issue mismatch (reported vs routed Linear issue)
 
 **Stage 2 — LLM adjudication (Gemini 2.5 Flash):**
 
@@ -482,7 +490,7 @@ Prevents accidental secret leaks in commits:
 Constructs agent-specific instructions for Claude Code workers:
 
 - **Planning Agent (`agentType=planning` or no `code-task` label):** planning mode, enriches Linear issue, adds labels
-- **Execution Agent (`agentType=execution` or `code-task` label present):** execution mode, writes tests/code, runs CI, creates PR; includes PR description format template
+- **Execution Agent (`agentType=execution` or `code-task` label present):** execution mode, writes tests/code, runs CI, creates PR with `gh` CLI, runs code-review loop, and emits `EXECUTION_AGENT_FINAL` with superpower/subagent proofs
 - **Pull Request Agent (`agentType=pull_request`):** PR-follow-up mode for comment-driven work on an existing branch/PR
 - Sanitizes user prompts by stripping XML tags and forbidden keywords (prompt injection defense)
 - Parent execution mode section injected when `hasChildren` is true

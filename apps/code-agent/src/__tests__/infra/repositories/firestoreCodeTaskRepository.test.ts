@@ -141,31 +141,31 @@ describe('firestoreCodeTaskRepository', () => {
       expect(second.ok).toBe(true);
     });
 
-    it('Layer 2: skips dedup check for phase2_implement follow-up tasks (same prompt intentional)', async () => {
+    it('Layer 2: skips dedup check for execution_implement follow-up tasks (same prompt intentional)', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      // Create Phase 1 task
+      // Create planning task
       const phase1Input = createTaskInput({ linearIssueId: 'INT-200' });
       const phase1 = await repo.create(phase1Input);
       expect(phase1.ok).toBe(true);
 
-      // Update Phase 1 to completed so it does not trigger Layer 3 (active task)
+      // Mark planning task complete so it does not trigger Layer 3 (active task)
       if (phase1.ok) {
         await repo.update(phase1.value.id, { status: 'planned' });
       }
 
-      // Create Phase 2 task with same prompt — must NOT be blocked by DUPLICATE_PROMPT
-      const phase2Input = createTaskInput({
+      // Create execution follow-up task with same prompt — must NOT be blocked by DUPLICATE_PROMPT
+      const executionInput = createTaskInput({
         linearIssueId: 'INT-200',
         parentTaskId: phase1.ok ? phase1.value.id : 'parent-id',
-        followUpReason: 'phase2_implement',
+        followUpReason: 'execution_implement',
       });
-      const phase2 = await repo.create(phase2Input);
+      const executionTask = await repo.create(executionInput);
 
-      expect(phase2.ok).toBe(true);
+      expect(executionTask.ok).toBe(true);
     });
 
     it('Layer 2: allows same prompt for different Linear issues within 5 minutes', async () => {

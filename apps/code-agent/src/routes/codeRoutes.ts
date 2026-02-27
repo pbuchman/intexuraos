@@ -11,7 +11,7 @@ import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../domain/usecases/retryTask.js';
 import { submitTaskFeedback } from '../domain/usecases/submitTaskFeedback.js';
 import { sendTaskMessage } from '../domain/usecases/sendTaskMessage.js';
-import { submitToPhase2 } from '../domain/usecases/submitToPhase2.js';
+import { submitToExecutionAgent } from '../domain/usecases/submitToExecutionAgent.js';
 import { hasCodeTaskLabel } from '../domain/utils/labelUtils.js';
 import { sanitizePrompt } from '../domain/utils/promptSanitization.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
@@ -3319,15 +3319,15 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
-  // POST /code/tasks/:taskId/implement - Start Phase 2 implementation from a completed design task
+  // POST /code/tasks/:taskId/implement - Start Execution Agent implementation from a completed planning task
   fastify.post(
     '/code/tasks/:taskId/implement',
     {
       onRequest: jwtValidator,
       schema: {
-        operationId: 'submitToPhase2',
-        summary: 'Start Phase 2 implementation from a completed design task',
-        description: 'Dispatches a Phase 2 strict-execution task from a completed Phase 1 design task. Requires Auth0 JWT.',
+        operationId: 'submitToExecutionAgent',
+        summary: 'Start Execution Agent implementation from a completed planning task',
+        description: 'Dispatches an Execution Agent task from a completed planning task. Route path remains stable for UI compatibility. Requires Auth0 JWT.',
         tags: ['public'],
         params: {
           type: 'object',
@@ -3335,13 +3335,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             taskId: {
               type: 'string',
-              description: 'The ID of the completed Phase 1 design task',
+                  description: 'The ID of the completed planning task',
             },
           },
         },
         response: {
           200: {
-            description: 'Phase 2 task dispatched successfully',
+            description: 'Execution Agent task dispatched successfully',
             type: 'object',
             required: ['success', 'data'],
             properties: {
@@ -3462,9 +3462,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       /* v8 ignore stop @preserve */
 
-      request.log.info({ taskId, userId }, 'Processing Phase 2 implementation request');
+      request.log.info({ taskId, userId }, 'Processing Execution Agent implementation request');
 
-      const result = await submitToPhase2(
+      const result = await submitToExecutionAgent(
         {
           logger: request.log,
           codeTaskRepo,

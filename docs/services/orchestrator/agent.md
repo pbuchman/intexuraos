@@ -180,6 +180,13 @@ interface TaskResult {
   planning_doc_path?: string;
   planning_pr_url?: string;
   planning_clarification_message?: string;
+  execution_outcome_label?: 'implemented';
+  execution_superpowers_executing_plans_used?: '0' | '1';
+  execution_superpowers_requesting_code_review_used?: '0' | '1';
+  execution_trivial_task?: '0' | '1';
+  execution_subagents?: string;
+  execution_review_iterations?: number;
+  execution_linear_issue_url?: string;
   rebaseResult?: {
     attempted: boolean;
     success: boolean;
@@ -220,6 +227,14 @@ Planning Agent note:
 - `planned` outcome is sent as `status='completed'`
 - `unclear` outcome is sent as `status='failed'` with `error.code='PLANNING_AGENT_UNCLEAR'`
 - Deterministic Linear label/state/comment normalization is performed by `code-agent`, not orchestrator
+
+Execution Agent note:
+
+- `implemented` is sent as `status='completed'`
+- Orchestrator verification is Gemini semantic validation of Claude responses only (latest response first)
+- Orchestrator flattens execution verifier metadata into `execution_*` fields on `result`
+- Worker owns GitHub execution (code/tests/CI/PR/review loop)
+- `code-agent` owns deterministic Linear enforcement for successful execution callbacks (executed issue only)
 
 ### TurnMetrics (sent to code-agent after task completion)
 
@@ -340,7 +355,7 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 6. Stream logs to code-agent via LogForwarder
 7. Monitor container exit (30s polling)
 8. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
-9. Run completion verification (deterministic checks + Gemini 2.5 Flash adjudication)
+9. Run completion verification (agent-specific: planning/pull_request use deterministic + Gemini; execution uses Gemini semantic validation of Claude responses + `execution_*` extraction)
 10. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria → go to step 4
 11. If verification **passes** or max attempts reached: collect turn metrics, send webhook with result or error
 12. Clean up token refresher, log forwarder, and task timers

@@ -22,6 +22,7 @@ export async function runAgentRoutingContractMigration({ firestore, logger }: Mi
       status?: string;
       executionPhase?: string;
       agentType?: string;
+      followUpReason?: string;
     };
 
     const update: Record<string, unknown> = {};
@@ -45,6 +46,11 @@ export async function runAgentRoutingContractMigration({ firestore, logger }: Mi
       needsUpdate = true;
     }
 
+    if (data.followUpReason === 'phase2_implement') {
+      update['followUpReason'] = 'execution_implement';
+      needsUpdate = true;
+    }
+
     if (!needsUpdate) {
       continue;
     }
@@ -64,11 +70,13 @@ export async function assertNoLegacyAgentRoutingContractValues({ firestore, logg
     const data = doc.data() as {
       status?: string;
       executionPhase?: unknown;
+      followUpReason?: unknown;
     };
 
     const hasLegacyExecutionPhase = data.executionPhase !== undefined;
     const hasLegacyStatus = data.status === 'designed';
-    if (hasLegacyExecutionPhase || hasLegacyStatus) {
+    const hasLegacyFollowUpReason = data.followUpReason === 'phase2_implement';
+    if (hasLegacyExecutionPhase || hasLegacyStatus || hasLegacyFollowUpReason) {
       offenders.push(doc.id);
       /* v8 ignore start -- test-infra: loop early-exit threshold branch depends on fixture cardinality @preserve */
       if (offenders.length >= 10) {

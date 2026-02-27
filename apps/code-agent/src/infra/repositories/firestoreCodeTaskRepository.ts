@@ -105,8 +105,11 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
           // Layer 2: Check dedupKey within 5-minute window (design lines 1543-1554)
           // Skip dedup for retried tasks — same prompt is intentional
-          // Skip dedup for phase2_implement tasks — Phase 2 reuses Phase 1 prompt by design
-          if (input.retriedFrom === undefined && input.followUpReason !== 'phase2_implement') {
+          // Skip dedup for execution follow-up tasks — implementation reuses planning prompt by design
+          if (
+            input.retriedFrom === undefined &&
+            input.followUpReason !== 'execution_implement'
+          ) {
             const dedupQuery = collection
               .where('dedupKey', '==', dedupKey)
               .where('createdAt', '>', Timestamp.fromDate(dedupWindowStart))

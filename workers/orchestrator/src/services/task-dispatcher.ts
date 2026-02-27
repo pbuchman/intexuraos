@@ -970,6 +970,22 @@ export class TaskDispatcher {
         await this.finalizeTask(task, 'completed', { result: planningResult });
         return;
       }
+      if (completionAgentType === 'execution' && verification.executionMetadata !== undefined) {
+        const executionResult: TaskResult = {
+          ...(finalResult ?? {}),
+          execution_outcome_label: verification.executionMetadata.outcomeLabel,
+          execution_superpowers_executing_plans_used:
+            verification.executionMetadata.superpowersExecutingPlansUsed,
+          execution_superpowers_requesting_code_review_used:
+            verification.executionMetadata.superpowersRequestingCodeReviewUsed,
+          execution_trivial_task: verification.executionMetadata.trivialTask,
+          execution_subagents: verification.executionMetadata.subagents,
+          execution_review_iterations: verification.executionMetadata.reviewIterations,
+          execution_linear_issue_url: verification.executionMetadata.linearIssueUrl,
+        };
+        await this.finalizeTask(task, 'completed', { result: executionResult });
+        return;
+      }
       await this.finalizeTask(task, 'completed', {
         ...(finalResult !== undefined && { result: finalResult }),
       });
@@ -1079,9 +1095,13 @@ export class TaskDispatcher {
     if (agentType === 'execution') {
       return [
         '- `PR` line must be only a GitHub PR URL (no trailing notes like "(already merged)").',
+        '- `Outcome` line must be exactly `implemented`.',
         '- `CI evidence` line must be exactly: `pnpm run ci:tracked successful`.',
         '- `Review iterations` line must contain digits only (example: `0`).',
-        '- Put explanations, caveats, and merged-history context in `Turn summary` or `Summary` only.',
+        '- `superpowers_executing_plans_used` and `superpowers_requesting_code_review_used` must be exactly `1`.',
+        '- `trivial_task` must be exactly `0` or `1`.',
+        '- `subagents` may be `none` only when `trivial_task` is `1`.',
+        '- Put explanations and caveats in `Summary`, not on strict fields.',
       ].join('\n');
     }
 
@@ -1106,11 +1126,16 @@ export class TaskDispatcher {
     if (agentType === 'execution') {
       return [
         'EXECUTION_AGENT_FINAL:',
+        '- Outcome: implemented',
         '- PR: https://github.com/<owner>/<repo>/pull/<number>',
         '- CI evidence: pnpm run ci:tracked successful',
         '- Linear issue: https://linear.app/<workspace>/issue/<ISSUE-ID>',
         '- Review iterations: 0',
-        '- Turn summary: <short statement> | <short statement> | <short statement>',
+        '- superpowers_executing_plans_used: 1',
+        '- superpowers_requesting_code_review_used: 1',
+        '- trivial_task: 0',
+        '- subagents: backend-reviewer (API contract checks), test-runner (targeted CI verification)',
+        '- Skill sequence proof: superpowers:executing-plans before superpowers:requesting-code-review',
         '- Summary: <3-5 factual sentences>',
       ].join('\n');
     }
