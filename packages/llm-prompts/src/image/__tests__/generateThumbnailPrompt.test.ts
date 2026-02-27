@@ -1,7 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { LLMClient, NormalizedUsage } from '@intexuraos/llm-contract';
 import { generateThumbnailPrompt } from '../generateThumbnailPrompt.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const sourceFilePath = resolve(__dirname, '../generateThumbnailPrompt.ts');
 
 const mockUsage: NormalizedUsage = {
   inputTokens: 100,
@@ -40,6 +46,34 @@ const validResponse = JSON.stringify({
 });
 
 describe('generateThumbnailPrompt', () => {
+  describe('F-012 version metadata contract', () => {
+    it('contains a valid prompt version comment', () => {
+      const source = readFileSync(sourceFilePath, 'utf8');
+      const versionPattern = /\/\/ Prompt version: \d+\.\d+\.\d+/;
+      expect(source).toMatch(versionPattern);
+    });
+
+    it('uses valid semver format in version comment', () => {
+      const source = readFileSync(sourceFilePath, 'utf8');
+      const match = /\/\/ Prompt version: (\d+\.\d+\.\d+)/.exec(source);
+      expect(match).not.toBeNull();
+      const version = match?.[1] ?? '';
+      const parts = version.split('.').map(Number);
+      expect(parts[0]).toBeGreaterThanOrEqual(1);
+      expect(parts[1]).toBeGreaterThanOrEqual(0);
+      expect(parts[2]).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('F-012 version metadata regression', () => {
+    it('version comment is not missing (regression: previously absent)', () => {
+      const source = readFileSync(sourceFilePath, 'utf8');
+      // The audit found this file lacked a version comment entirely.
+      // This test ensures the failure path (no version) cannot recur.
+      expect(source).toMatch(/\/\/ Prompt version:/);
+    });
+  });
+
   describe('successful generation', () => {
     it('returns thumbnail prompt with usage on success', async () => {
       const client = createMockClient(validResponse);
