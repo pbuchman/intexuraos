@@ -649,16 +649,22 @@ describe('formatLogChunk', () => {
   });
 
   describe('unknown JSON types', () => {
-    it('unknown type', () => {
-      const json = JSON.stringify({ type: 'future_event', data: 'some data' });
+    it('rate_limit_event is suppressed', () => {
+      const json = JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { limit: 100 } });
       const result = formatLogChunk(json, 0, ts());
-      expect(result[0]?.text).toBe('{"type":"future_event","data":"some data"}');
+      expect(result).toEqual([]);
     });
 
-    it('future protocol types', () => {
+    it('unknown type shows compact [event] label', () => {
+      const json = JSON.stringify({ type: 'future_event', data: 'some data' });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('[event] future_event');
+    });
+
+    it('future protocol types show compact [event] label', () => {
       const json = JSON.stringify({ type: 'streaming_delta', chunk: 'abc' });
       const result = formatLogChunk(json, 0, ts());
-      expect(result[0]?.text).toBe('{"type":"streaming_delta","chunk":"abc"}');
+      expect(result[0]?.text).toBe('[event] streaming_delta');
     });
   });
 
@@ -892,6 +898,98 @@ describe('formatLogChunk', () => {
       expect(result2[0]?.text).toBe('  → On branch main\n    nothing to commit');
     });
 
+    it('buffers incomplete JSON on last line and reassembles with next chunk', () => {
+      const state = createFormatterState();
+
+      // Simulate a user message with Read tool result split across chunks
+      // First half: JSON starts but doesn't close
+      const fullJson = JSON.stringify({
+        type: 'user',
+        message: {
+          content: [{
+            type: 'tool_result',
+            tool_use_id: 'call_read_split',
+            content: 'export const x = 1;',
+          }],
+        },
+      });
+
+      // Split the JSON roughly in the middle
+      const splitPoint = Math.floor(fullJson.length / 2);
+      const firstHalf = fullJson.slice(0, splitPoint);
+      const secondHalf = fullJson.slice(splitPoint);
+
+      // First chunk: set up Read tool context + incomplete JSON
+      const setupLine = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{
+            type: 'tool_use',
+            id: 'call_read_split',
+            name: 'Read',
+            input: { file_path: '/repo/file.ts' },
+          }],
+        },
+      });
+      const chunk1 = `${setupLine}\n${firstHalf}`;
+      const result1 = formatLogChunk(chunk1, 0, ts(), state);
+      // Should have the tool_use line but NOT the incomplete JSON
+      expect(result1).toHaveLength(1);
+      expect(result1[0]?.text).toBe('[tool] Read: /repo/file.ts');
+      expect(state.partialLine).toBeDefined();
+
+      // Second chunk starts with the rest of the JSON
+      const result2 = formatLogChunk(secondHalf, 1, ts(), state);
+      // Reassembled: user message with Read tool_result → suppressed
+      expect(result2).toHaveLength(0);
+      expect(state.partialLine).toBeUndefined();
+    });
+
+    it('does not buffer complete JSON on last line', () => {
+      const state = createFormatterState();
+
+      const completeJson = JSON.stringify({ type: 'system', subtype: 'init', model: 'opus' });
+      const result = formatLogChunk(completeJson, 0, ts(), state);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.text).toBe('[init] Model: opus');
+      expect(state.partialLine).toBeUndefined();
+    });
+
+    it('does not buffer non-JSON last line', () => {
+      const state = createFormatterState();
+
+      const result = formatLogChunk('just plain text', 0, ts(), state);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.text).toBe('just plain text');
+      expect(state.partialLine).toBeUndefined();
+    });
+
+    it('buffered partial + next chunk produces valid formatted output', () => {
+      const state = createFormatterState();
+
+      const fullJson = JSON.stringify({
+        type: 'result',
+        duration_ms: 5000,
+        num_turns: 3,
+        total_cost_usd: 0.15,
+      });
+
+      const splitPoint = 20;
+      const firstHalf = fullJson.slice(0, splitPoint);
+      const secondHalf = fullJson.slice(splitPoint);
+
+      // First chunk: incomplete JSON gets buffered
+      const result1 = formatLogChunk(firstHalf, 0, ts(), state);
+      expect(result1).toHaveLength(0);
+      expect(state.partialLine).toBe(firstHalf);
+
+      // Second chunk: reassembled and formatted as result
+      const result2 = formatLogChunk(secondHalf, 1, ts(), state);
+      expect(result2).toHaveLength(1);
+      expect(result2[0]?.text).toBe('[done] 5.0s, 3 turns, $0.150');
+      expect(state.partialLine).toBeUndefined();
+    });
+
     it('correlates tool_use_id across chunks for correct suppression', () => {
       const state = createFormatterState();
 
@@ -937,6 +1035,182 @@ describe('formatLogChunk', () => {
       expect(readResult).toHaveLength(0);
       expect(bashResult).toHaveLength(1);
       expect(bashResult[0]?.text).toBe('  → a.ts  b.ts');
+    });
+  });
+
+  describe('JSON tool result summarization', () => {
+    it('gh pr view --json output is summarized', () => {
+      const prData = JSON.stringify({
+        additions: 513,
+        baseRefName: 'development',
+        changedFiles: 8,
+        deletions: 3,
+        headRefName: 'feat/task-progress',
+        number: 909,
+        state: 'OPEN',
+        title: 'feat(INT-628): Enable task progress tracking in web app',
+        url: 'https://github.com/org/repo/pull/909',
+      });
+      const json = JSON.stringify({ type: 'tool_result', content: prData });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe(
+        '  \u2192 #909 feat(INT-628): Enable task progress tracking in web app | OPEN | +513/-3 | 8 files'
+      );
+    });
+
+    it('gh api comment creation is summarized', () => {
+      const commentData = JSON.stringify({
+        html_url: 'https://github.com/org/repo/issues/909#issuecomment-3972072122',
+        id: 3972072122,
+        body: 'This is the comment body that goes on and on and is quite long with a lot of detail about the issue at hand and what needs to be fixed in the code base to resolve the problem fully.',
+        user: { login: 'bot' },
+        created_at: '2026-02-27T00:00:00Z',
+      });
+      const json = JSON.stringify({ type: 'tool_result', content: commentData });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 Created comment 3972072122 on #909');
+    });
+
+    it('generic JSON object shows key count summary', () => {
+      const genericData: Record<string, unknown> = {
+        url: 'https://example.com',
+        id: 12345,
+        body: 'a'.repeat(100),
+        user: { login: 'test' },
+        reactions: { total_count: 0 },
+      };
+      const content = JSON.stringify(genericData);
+      const json = JSON.stringify({ type: 'tool_result', content });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe(
+        `  \u2192 {5 keys: url, id, body, user, reactions} [${String(content.length)} chars]`
+      );
+    });
+
+    it('short JSON (<200 chars) passes through unchanged', () => {
+      const shortData = JSON.stringify({ ok: true, count: 5 });
+      const json = JSON.stringify({ type: 'tool_result', content: shortData });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe(`  \u2192 ${shortData}`);
+    });
+
+    it('non-JSON content is unchanged', () => {
+      const json = JSON.stringify({ type: 'tool_result', content: 'plain text output from command' });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 plain text output from command');
+    });
+
+    it('error results are never summarized', () => {
+      const prData = JSON.stringify({
+        additions: 513,
+        baseRefName: 'development',
+        changedFiles: 8,
+        deletions: 3,
+        headRefName: 'feat/task-progress',
+        number: 909,
+        state: 'OPEN',
+        title: 'feat(INT-628): Enable task progress tracking in web app',
+        url: 'https://github.com/org/repo/pull/909',
+      });
+      const json = JSON.stringify({ type: 'tool_result', content: prData, is_error: true });
+      const result = formatLogChunk(json, 0, ts());
+      // Error results should NOT be summarized — they show the raw content with error prefix
+      expect(result[0]?.text).toContain('  \u2717 ');
+      expect(result[0]?.text).not.toContain('#909');
+    });
+
+    it('generic JSON with >5 keys shows ellipsis', () => {
+      const paddedData: Record<string, unknown> = {
+        a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 'x'.repeat(200),
+      };
+      const paddedContent = JSON.stringify(paddedData);
+      const json = JSON.stringify({ type: 'tool_result', content: paddedContent });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toContain('{7 keys: a, b, c, d, e, ...}');
+      expect(result[0]?.text).toContain('chars]');
+    });
+
+    it('content starting with { but not valid JSON passes through', () => {
+      const badJson = '{not valid json at all but long enough to exceed the threshold ' + 'x'.repeat(200);
+      const json = JSON.stringify({ type: 'tool_result', content: badJson });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toContain('  \u2192 {not valid json');
+    });
+
+    it('gh pr view with long title truncates at 60 chars', () => {
+      const longTitle = 'feat(INT-999): This is a very long pull request title that exceeds sixty characters easily';
+      const prData = JSON.stringify({
+        additions: 10,
+        baseRefName: 'development',
+        changedFiles: 2,
+        deletions: 5,
+        headRefName: 'feat/long-title',
+        number: 999,
+        state: 'OPEN',
+        title: longTitle,
+        url: 'https://github.com/org/repo/pull/999',
+      });
+      const json = JSON.stringify({ type: 'tool_result', content: prData });
+      const result = formatLogChunk(json, 0, ts());
+      // Title should be truncated to 57 chars + '...'
+      expect(result[0]?.text).toContain('#999 ' + longTitle.slice(0, 57) + '...');
+    });
+
+    it('gh pr view with missing optional numeric fields', () => {
+      const prData = JSON.stringify({
+        state: 'MERGED',
+        title: 'Simple PR',
+        headRefName: 'fix/something',
+        url: 'https://github.com/org/repo/pull/100',
+        // number, additions, deletions, changedFiles all missing
+        padding: 'x'.repeat(200),
+      });
+      const json = JSON.stringify({ type: 'tool_result', content: prData });
+      const result = formatLogChunk(json, 0, ts());
+      // No number prefix, no file count — title, state, and bare '/' from empty adds/dels
+      expect(result[0]?.text).toBe('  \u2192 Simple PR | MERGED | /');
+    });
+
+    it('gh pr view with non-string title and state', () => {
+      const prData = JSON.stringify({
+        state: 123,
+        title: true,
+        headRefName: 'fix/types',
+        number: 'not-a-number',
+        additions: 'many',
+        deletions: 'few',
+        changedFiles: 'some',
+        padding: 'x'.repeat(200),
+      });
+      const json = JSON.stringify({ type: 'tool_result', content: prData });
+      const result = formatLogChunk(json, 0, ts());
+      // All type guards fail — only '/' remains from empty adds/dels template
+      expect(result[0]?.text).toBe('  \u2192 /');
+    });
+
+    it('gh api comment with non-string url and non-number id', () => {
+      const commentData = JSON.stringify({
+        html_url: 12345,
+        id: 'not-a-number',
+        body: 'x'.repeat(200),
+        user: { login: 'bot' },
+      });
+      const json = JSON.stringify({ type: 'tool_result', content: commentData });
+      const result = formatLogChunk(json, 0, ts());
+      // Type guards fail — empty id and no issue extraction
+      expect(result[0]?.text).toBe('  \u2192 Created comment ');
+    });
+
+    it('gh api comment without issue number in URL', () => {
+      const commentData = JSON.stringify({
+        html_url: 'https://github.com/org/repo/comments/123456',
+        id: 123456,
+        body: 'A comment on something that is not an issue directly but still a valid comment with enough length to exceed the threshold for summarization.',
+        user: { login: 'bot' },
+      });
+      const json = JSON.stringify({ type: 'tool_result', content: commentData });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2192 Created comment 123456');
     });
   });
 

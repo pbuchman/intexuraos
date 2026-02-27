@@ -3674,9 +3674,7 @@ describe('TaskDispatcher', () => {
       await dispatcher.submitTask(request);
       await flushAsync();
 
-      const promptLogCall = infoSpy.mock.calls.find(
-        (call) => call[1] === 'System prompt built'
-      );
+      const promptLogCall = infoSpy.mock.calls.find((call) => call[1] === 'System prompt built');
       expect(promptLogCall).toBeDefined();
 
       const logData = promptLogCall?.[0] as Record<string, unknown>;
