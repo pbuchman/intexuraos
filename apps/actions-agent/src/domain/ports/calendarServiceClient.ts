@@ -3,6 +3,7 @@ import type { Action } from '../models/action.js';
 
 export interface ProcessCalendarRequest {
   action: Action;
+  text: string;
 }
 
 export type CalendarPreviewStatus = 'pending' | 'ready' | 'failed';
