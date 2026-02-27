@@ -163,6 +163,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     timestamp: number,
     workers: WorkerConfigWithCredentials[]
   ): Promise<Result<DispatchResult, DispatchError>> {
+    let allCapacityRelated = true;
+
     for (const worker of workers) {
       // Generate nonce for replay protection
       const nonce = generateNonce();
@@ -177,6 +179,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           { taskId: taskRequest.taskId, workerLocation: worker.location },
           'Failed to sign dispatch request'
         );
+        allCapacityRelated = false;
         continue;
       }
 
@@ -207,6 +210,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           { taskId: taskRequest.taskId, workerLocation: worker.location, reason: workerResponse.reason },
           'Worker rejected task'
         );
+        allCapacityRelated = false;
         continue;
       } catch (error) {
         this.logger.error(
@@ -223,6 +227,14 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           message: `Network error: ${getErrorMessage(error)}`,
         });
       }
+    }
+
+    // INT-619: Distinguish capacity-related failures from other failures
+    if (allCapacityRelated) {
+      return err({
+        code: 'at_capacity',
+        message: 'All workers are busy (returned 503)',
+      });
     }
 
     return err({

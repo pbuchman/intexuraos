@@ -24,8 +24,9 @@ export type AgentType = 'planning' | 'execution' | 'pull_request';
  * Task status lifecycle.
  * Design reference: Lines 316, 1422
  *
- * Flow: dispatched → running → planned|implemented|failed|cancelled
+ * Flow: queued → dispatched → running → planned|implemented|failed|cancelled
  *       dispatched → interrupted (if worker dies)
+ *       queued → failed (if TTL expires or queue full)
  *
  * 'planned'      = Planning Agent task completed successfully
  * 'implemented'  = Execution Agent task completed successfully
@@ -33,6 +34,7 @@ export type AgentType = 'planning' | 'execution' | 'pull_request';
 export type TaskStatus =
   | 'dispatched'   // Sent to worker, awaiting start
   | 'running'      // Worker actively processing
+  | 'queued'       // Waiting for worker capacity (INT-619)
   | 'planned'      // Planning Agent task finished
   | 'implemented'  // Execution Agent task finished
   | 'failed'       // Error occurred
@@ -161,6 +163,7 @@ export interface CodeTask {
 
   // Timestamps
   createdAt: Timestamp;
+  queuedAt?: Timestamp;           // When task entered queue (INT-619)
   dispatchedAt?: Timestamp;
   completedAt?: Timestamp;
   updatedAt: Timestamp;         // For zombie detection queries

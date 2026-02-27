@@ -48,6 +48,7 @@ export interface UpdateTaskInput {
   statusSummary?: CodeTask['statusSummary'];
   workerLocation?: string;
   callbackReceived?: boolean;
+  queuedAt?: Date;               // When task entered queue (INT-619)
   dispatchedAt?: Date;
   completedAt?: Date;
   logChunksDropped?: number;
@@ -165,4 +166,16 @@ export interface CodeTaskRepository {
    * Returns NOT_FOUND if the task does not exist or belongs to a different user.
    */
   deleteTask(taskId: string, userId: string): Promise<Result<void, RepositoryError>>;
+
+  /**
+   * Find oldest queued task for drain (INT-619).
+   * Returns null if no queued tasks exist.
+   */
+  findOldestQueued(): Promise<Result<CodeTask | null, RepositoryError>>;
+
+  /**
+   * Count currently queued tasks (INT-619).
+   * Used to check queue capacity before adding new tasks.
+   */
+  countQueued(): Promise<Result<number, RepositoryError>>;
 }
