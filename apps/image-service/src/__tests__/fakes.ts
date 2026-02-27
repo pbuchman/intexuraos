@@ -214,12 +214,9 @@ export class FakePromptGenerator implements PromptGenerator {
       prompt: 'A test prompt for image generation',
       negativePrompt: 'bad, ugly, distorted',
       parameters: {
-        aspectRatio: '16:9',
         framing: 'centered',
-        textOnImage: 'none',
         realism: 'photorealistic',
         people: 'none',
-        logosTrademarks: 'none',
       },
     });
   }
