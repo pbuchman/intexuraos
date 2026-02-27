@@ -216,7 +216,7 @@ describe('commandClassifierPrompt', () => {
       const prompt = commandClassifierPrompt.build({ message: 'test' });
 
       expect(prompt).toMatch(
-        /[Ss]ign up.*deadline.*→ todo|[Ss]ign up.*exam.*→ todo|[Pp]repare.*deadline.*→ todo/i
+        /[Ss]ign up.*deadline.*→ todo|[Ss]ign up.*exam.*→ todo|[Pp]repare.*→ todo/i
       );
     });
   });
@@ -230,8 +230,8 @@ describe('commandClassifierPrompt', () => {
       expect(commandClassifierPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
     });
 
-    it('has version 1.3.0', () => {
-      expect(commandClassifierPrompt.version).toBe('1.3.0');
+    it('has version 2.0.0', () => {
+      expect(commandClassifierPrompt.version).toBe('2.0.0');
     });
   });
 });

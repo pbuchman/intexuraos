@@ -31,7 +31,7 @@ export const commandClassifierPrompt: PromptBuilder<
 > = {
   name: 'command-classification',
   description: 'Classifies user messages into command categories (todo, research, note, etc.)',
-  version: '1.3.0',
+  version: '2.0.0',
 
   build(input: CommandClassifierPromptInput, _deps?: CommandClassifierPromptDeps): string {
     return `Classify the message into exactly one category. Follow this decision tree IN ORDER:
@@ -129,7 +129,8 @@ URLs indicate the user is sharing/saving a link, not asking for research or crea
 Apply in this priority order:
 
 **todo** — Action to complete, including actions with deadlines
-An action verb (send, buy, prepare, sign up, finish, complete, order, call, submit, schedule, book, create, write, review) signals a task to do. A deadline or date does NOT make it a calendar event.
+An action verb (send, buy, prepare, sign up, finish, complete, order, call, submit, create, write, review) signals a task to do. A deadline or date does NOT make it a calendar event.
+Note: "schedule" and "book" are handled in Step 2 as explicit calendar intent — they do not appear here.
 - "buy groceries" → todo
 - "finish the report" → todo
 - "call mom" → todo (no time specified)
