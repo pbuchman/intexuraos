@@ -21,8 +21,8 @@ declare module 'fastify' {
   }
 }
 import { validateLinearWebhookSignature } from '../infra/linearWebhookValidation.js';
-import { syncSingleIssue, syncCommentFromWebhook } from '../domain/index.js';
-import type { LinearWebhookEvent, LinearCommentWebhookEvent } from '../domain/webhookTypes.js';
+import { syncSingleIssue, syncCommentFromWebhook, shouldTriggerCodeTask, triggerCodeTaskFromAssignment } from '../domain/index.js';
+import type { LinearWebhookEvent, LinearCommentWebhookEvent, LinearWebhookUpdatedFrom } from '../domain/webhookTypes.js';
 
 interface LinearWebhookBody {
   action: string;
@@ -67,6 +67,7 @@ interface LinearWebhookBody {
         createdAt: string;
         updatedAt: string;
       };
+  updatedFrom?: LinearWebhookUpdatedFrom;
   webhookTimestamp: number;
   webhookId: string;
 }
@@ -178,6 +179,7 @@ async function handleLinearWebhook(
     }
 
     // Process Issue webhook (now trusted)
+    const { updatedFrom } = request.body;
     const event: LinearWebhookEvent = {
       action: action as 'create' | 'update' | 'remove',
       type,
@@ -195,6 +197,7 @@ async function handleLinearWebhook(
         labels: data.labels,
         team: data.team,
       },
+      ...(updatedFrom !== undefined && { updatedFrom }),
       webhookTimestamp,
       webhookId,
     };
@@ -211,6 +214,13 @@ async function handleLinearWebhook(
     }
 
     request.log.info({ action: syncResult.value.action, issueId: data.id, identifier: data.identifier, userId }, 'Issue synced from webhook');
+
+    if (shouldTriggerCodeTask(event)) {
+      void triggerCodeTaskFromAssignment(event, userId, {
+        codeAgentClient: services.codeAgentClient,
+        logger: request.log as unknown as Logger,
+      });
+    }
 
     return await reply.ok({
       message: 'Webhook processed',

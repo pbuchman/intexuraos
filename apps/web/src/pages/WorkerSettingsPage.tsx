@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { GripVertical, Plus, MoreVertical, FlaskConical, Pencil, Trash2, Server } from 'lucide-react';
+import { ChevronUp, ChevronDown, Plus, MoreVertical, FlaskConical, Pencil, Trash2, Server } from 'lucide-react';
 import { Button, Card, Input, Layout } from '@/components';
 import { useWorkerSettings } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
@@ -216,6 +216,7 @@ function AddWorkerForm({ onCancel, onAdd }: AddWorkerFormProps): React.JSX.Eleme
         <Input
           label="CF Access Client ID"
           type="password"
+          autoComplete="new-password"
           placeholder="Cloudflare Access Service Token ID"
           value={cfAccessClientId}
           onChange={(e): void => {
@@ -228,6 +229,7 @@ function AddWorkerForm({ onCancel, onAdd }: AddWorkerFormProps): React.JSX.Eleme
         <Input
           label="CF Access Client Secret"
           type="password"
+          autoComplete="new-password"
           placeholder="Cloudflare Access Service Token Secret"
           value={cfAccessClientSecret}
           onChange={(e): void => {
@@ -240,6 +242,7 @@ function AddWorkerForm({ onCancel, onAdd }: AddWorkerFormProps): React.JSX.Eleme
         <Input
           label="Orchestrator Secret"
           type="password"
+          autoComplete="new-password"
           placeholder="Shared secret for code-agent ↔ orchestrator communication"
           value={dispatchSigningSecret}
           onChange={(e): void => {
@@ -296,26 +299,27 @@ function WorkerRow({
   onUpdate,
   onDelete,
   onTest,
-  onMoveUp: _onMoveUp,
-  onMoveDown: _onMoveDown,
+  onMoveUp,
+  onMoveDown,
 }: WorkerRowProps): React.JSX.Element {
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [url, setUrl] = useState(worker.url);
-  const [cfAccessClientId, setCfAccessClientId] = useState(worker.cfAccessClientId);
-  const [cfAccessClientSecret, setCfAccessClientSecret] = useState(worker.cfAccessClientSecret);
-  const [dispatchSigningSecret, setDispatchSigningSecret] = useState(worker.dispatchSigningSecret);
+  const [cfAccessClientId, setCfAccessClientId] = useState('');
+  const [cfAccessClientSecret, setCfAccessClientSecret] = useState('');
+  const [dispatchSigningSecret, setDispatchSigningSecret] = useState('');
 
   const resetForm = (): void => {
     setUrl(worker.url);
-    setCfAccessClientId(worker.cfAccessClientId);
-    setCfAccessClientSecret(worker.cfAccessClientSecret);
-    setDispatchSigningSecret(worker.dispatchSigningSecret);
+    setCfAccessClientId('');
+    setCfAccessClientSecret('');
+    setDispatchSigningSecret('');
     setFormError(null);
   };
 
@@ -351,8 +355,13 @@ function WorkerRow({
   };
 
   const handleDelete = async (): Promise<void> => {
-    await onDelete();
-    setShowDeleteConfirm(false);
+    setDeleting(true);
+    try {
+      await onDelete();
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleTest = async (): Promise<void> => {
@@ -383,9 +392,30 @@ function WorkerRow({
   return (
     <Card>
       <div className="flex items-start justify-between gap-2">
+        {(onMoveUp !== undefined || onMoveDown !== undefined) && (
+          <div className="flex flex-col gap-0.5">
+            <button
+              type="button"
+              onClick={onMoveUp !== undefined ? (): void => { void onMoveUp(); } : undefined}
+              disabled={onMoveUp === undefined}
+              className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+              title="Move up (higher priority)"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onMoveDown !== undefined ? (): void => { void onMoveDown(); } : undefined}
+              disabled={onMoveDown === undefined}
+              className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+              title="Move down (lower priority)"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <GripVertical className="h-5 w-5 text-slate-400" />
             <Server className="h-5 w-5 text-slate-400" />
             <span className="font-medium text-slate-900 dark:text-slate-100">{worker.name}</span>
             <span className="text-sm text-slate-500">({priority === 1 ? 'Primary' : 'Fallback'})</span>
@@ -511,6 +541,7 @@ function WorkerRow({
           <Input
             label="CF Access Client ID"
             type="password"
+            autoComplete="new-password"
             placeholder="Cloudflare Access Service Token ID"
             value={cfAccessClientId}
             onChange={(e): void => {
@@ -522,6 +553,7 @@ function WorkerRow({
           <Input
             label="CF Access Client Secret"
             type="password"
+            autoComplete="new-password"
             placeholder="Cloudflare Access Service Token Secret"
             value={cfAccessClientSecret}
             onChange={(e): void => {
@@ -533,6 +565,7 @@ function WorkerRow({
           <Input
             label="Orchestrator Secret"
             type="password"
+            autoComplete="new-password"
             placeholder="Shared secret for code-agent ↔ orchestrator communication"
             value={dispatchSigningSecret}
             onChange={(e): void => {
@@ -580,6 +613,8 @@ function WorkerRow({
               onClick={(): void => {
                 void handleDelete();
               }}
+              disabled={deleting}
+              isLoading={deleting}
             >
               Delete
             </Button>
@@ -590,6 +625,7 @@ function WorkerRow({
               onClick={(): void => {
                 setShowDeleteConfirm(false);
               }}
+              disabled={deleting}
             >
               Cancel
             </Button>

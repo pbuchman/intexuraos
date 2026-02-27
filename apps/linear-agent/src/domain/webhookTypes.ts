@@ -37,10 +37,17 @@ export interface LinearWebhookPayload {
   };
 }
 
+export interface LinearWebhookUpdatedFrom {
+  assigneeId?: string | null;
+  stateId?: string | null;
+  updatedAt?: string;
+}
+
 export interface LinearWebhookEvent {
   action: WebhookAction;
   type: string;
   data: LinearWebhookPayload;
+  updatedFrom?: LinearWebhookUpdatedFrom;
   webhookTimestamp: number;
   webhookId: string;
 }

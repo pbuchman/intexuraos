@@ -60,11 +60,14 @@ export interface UpdateTaskInput {
   cancelNonceExpiresAt?: string | null;
   pendingUserMessages?: string[];
   implementationTaskId?: string | null;
+  // PR correlation (INT-465): populated on task completion from result.prUrl
+  prNumber?: number;
+  prBranch?: string;
 }
 
 export interface ListTasksInput {
   userId: string;
-  status?: TaskStatus;
+  status?: TaskStatus[];
   limit?: number;
   cursor?: string; // taskId for pagination
 }

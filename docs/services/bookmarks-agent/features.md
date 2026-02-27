@@ -1,85 +1,62 @@
 # Bookmarks Agent
 
-Save and organize links with automatic metadata extraction and AI-powered summaries delivered to your WhatsApp.
+Never lose a finding again. Save a link from wherever you are, and get an AI-generated summary delivered straight to your WhatsApp.
 
 ## The Problem
 
-Web bookmarking is broken in multiple ways:
+The web rewards curiosity but punishes memory. You find a brilliant article mid-conversation, think "I'll come back to this," and never do. Or you save it -- into a browser bookmark bar already holding hundreds of links, each stripped to a title and a URL, with no record of why it mattered.
 
-1. **No context** - You save a link, but weeks later you can't remember why it mattered or what it contains
-2. **Manual metadata** - Browser bookmarks store just the URL and maybe a title
-3. **Lost links** - URLs change, pages disappear, content gets paywalled
-4. **No mobile access** - Saving links from WhatsApp conversations requires app-switching
+The core failure of traditional bookmarking is that it captures the address but discards the understanding. A URL tells you where something lives. It tells you nothing about what it says.
+
+## Use Case: Capture What You Find, Understand It Later
+
+Someone shares an article in your WhatsApp conversation about a new regulatory framework. It looks important, but you are between meetings. You tell the platform to save it.
+
+Within seconds, the system visits the page, pulls the title, cover image, and site information, then reads the content and generates a concise summary. A moment later, a WhatsApp message arrives with the key arguments and relevant details. You did not open a browser. You did not leave the conversation. And when you come back next week, you will remember exactly why you saved it.
 
 ## How It Helps
 
-### Automatic OpenGraph Extraction
+### Automatic Metadata Enrichment
 
-Every saved link is enriched with metadata fetched from the page: title, description, images, favicon, and site name. No manual entry required.
+Every saved link is immediately enriched. The system visits the page and extracts the title, description, preview image, site name, and favicon -- everything needed to make a bookmark recognizable at a glance. Your dashboard shows rich preview cards, not bare URLs.
 
-**Example:** You save a Medium article. Bookmarks-agent automatically captures the article title, author byline, cover image, and publication name.
+If the page is temporarily unreachable, the system retries automatically. Permanent failures are recorded without blocking anything else.
 
-### AI-Powered Summaries with WhatsApp Delivery
+### AI-Generated Summaries
 
-Links are analyzed by AI to generate concise summaries of the content. After summarization, you receive the summary directly in WhatsApp, so you can review it without opening any app.
+After enrichment, the system reads the page and generates a concise AI summary. The summary is stored alongside the bookmark, so every link in your collection carries its own explanation -- turning forgotten URLs into a readable collection you can scan and act on.
 
-**Example:** You bookmark a 20-minute read. Within seconds, you receive a WhatsApp message with a 3-sentence summary and key takeaways.
+### WhatsApp Delivery
 
-### Event-Driven Enrichment Pipeline
-
-Bookmarks are processed asynchronously through a three-stage pipeline: create, enrich (fetch metadata), and summarize (AI analysis). Each stage is decoupled via Pub/Sub, ensuring reliability and scalability. Transient failures (rate limits, timeouts, network errors) trigger automatic Pub/Sub retries with exponential backoff.
-
-**Example:** Bookmark creation returns immediately. Metadata fetching and AI summarization happen in the background, with WhatsApp notification on completion. If Crawl4AI returns HTTP 429, the summarization automatically retries.
+You do not have to check a dashboard to see your summary. The moment the AI finishes, the summary is sent directly to your WhatsApp -- no need to open another app or remember to follow up.
 
 ### Tag-Based Organization
 
-Organize bookmarks with custom tags. Filter by tags, archived status, or processing state to find what you need.
+Attach tags to any bookmark for lightweight grouping. Tag links by topic, project, or priority and filter your collection when you need to find something specific.
 
-**Example:** Tag links with `#reading-list`, `#work`, or `#research` and quickly filter to find relevant bookmarks.
+### Duplicate Protection
 
-### Duplicate Detection
-
-Prevents saving the same URL twice per user. If you try to bookmark an existing URL, you get the existing bookmark ID back.
-
-**Example:** Someone shares the same article in two group chats. You save it once, and the second attempt returns the existing bookmark without creating a duplicate.
-
-## Use Cases
-
-### Save a Link from WhatsApp
-
-1. User shares a URL in WhatsApp conversation
-2. WhatsApp-service detects the link and creates a bookmark via actions-agent
-3. Bookmarks-agent stores the bookmark and triggers enrichment
-4. Web-agent fetches OpenGraph metadata and updates the bookmark
-5. AI generates a summary and updates the bookmark
-6. User receives the summary in WhatsApp via Pub/Sub event
-7. Bookmark is ready for browsing in the web dashboard
-
-### Force Refresh Stale Metadata
-
-1. A bookmarked page has been updated
-2. User requests force refresh via the web dashboard
-3. Bookmarks-agent fetches fresh metadata, bypassing cache
-4. OpenGraph preview is updated with new title/description/image
+The system will not save the same link twice. If you bookmark a URL you have already saved, it recognizes the duplicate and points you to the existing bookmark instead. One less source of clutter.
 
 ## Key Benefits
 
-- **Zero-friction capture** - Save links from WhatsApp without app-switching
-- **Rich metadata** - Title, description, images automatically extracted
-- **AI summaries** - Quick overview without visiting the page
-- **WhatsApp delivery** - Summaries sent directly to your chat (INT-210)
-- **Reliable processing** - Event-driven pipeline with automatic retry for transient failures (INT-198)
-- **Tag-based filtering** - Organize by project, topic, or priority
+- **Zero-friction capture** -- Save links from WhatsApp or other platform agents without switching apps
+- **Rich preview cards** -- Title, description, images, and site information extracted automatically from every page
+- **AI summaries on arrival** -- Every bookmark comes with a concise explanation of what the page contains
+- **WhatsApp notification** -- Summaries delivered to your chat the moment they are ready
+- **Tag-based filtering** -- Organize by topic, project, or priority and find bookmarks when you need them
+- **Duplicate prevention** -- The same URL is never saved twice; the system returns the existing bookmark
+- **Archive and restore** -- Hide finished bookmarks from your default view, bring them back when needed
 
 ## Limitations
 
-- **No full-text search** - Can only filter by tags and processing status
-- **No link validation** - Does not periodically check if URLs still work
-- **No folder hierarchy** - Tags are flat, no nested organization
-- **No sharing** - Bookmarks are private to each user
-- **No import/export** - Cannot bulk import browser bookmarks
-- **Metadata depends on page** - Some sites block scrapers or lack OpenGraph tags
+- **No folder hierarchy** -- Organization is flat and tag-based only; no nested folders or categories
+- **No full-text search** -- Filter by tags and processing status, but no keyword search across bookmark content
+- **No sharing or collaboration** -- Bookmarks are private to each user
+- **Conversation-first, not browser-first** -- Bookmarks are saved from WhatsApp and platform agents, not from a browser toolbar; capture happens where you are already talking
+- **Summary quality varies** -- Pages with poor structure or heavy JavaScript rendering produce weaker summaries
+- **WhatsApp connection required** -- Automatic summary delivery depends on an active WhatsApp connection
 
 ---
 
-_Part of [IntexuraOS](../overview.md) - Capture, summarize, and organize your web._
+_Part of [IntexuraOS](../overview.md) -- Never lose a finding again._

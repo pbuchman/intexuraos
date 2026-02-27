@@ -26,7 +26,6 @@ const TOPICS = [
   'bookmark-summarize',
   'todos-processing',
   'calendar-preview',
-  'snapshot-refresh',
 ];
 
 const TOPIC_ENDPOINTS = {
@@ -47,7 +46,6 @@ const TOPIC_ENDPOINTS = {
   'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
   'todos-processing': 'http://host.docker.internal:8123/internal/todos/pubsub/todos-processing',
   'calendar-preview': 'http://host.docker.internal:8125/internal/calendar/generate-preview',
-  'snapshot-refresh': 'http://host.docker.internal:8119/internal/snapshots/refresh',
 };
 
 const app = express();

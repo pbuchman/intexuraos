@@ -92,7 +92,7 @@ Determine:
 ### 3d. Mark as Processed
 
 ```bash
-# Add 🚀 reaction to mark as processed
+# Add 😄 reaction to mark as processed
 # IMPORTANT: Must run from repo root for script path to work
 "$SKILL_DIR/scripts/add-reaction.sh" "<comment_type>" "<comment_id>"
 ```
@@ -190,7 +190,7 @@ Summary format requirement (mandatory):
 Canonical shape:
 
 ```md
-## 🚀 Nitpick Nuker Report
+## 😄 Nitpick Nuker Report
 
 **PR:** #<number> | **Run:** <iso8601> | **Commit:** `<sha>`
 
@@ -263,7 +263,7 @@ Or for skipped:
 
 After successful run:
 
-1. All processed comments have 🚀 reaction
+1. All processed comments have 😄 reaction
 2. Summary comment posted to PR
 3. CI is green
 4. Report: "Processed X comments (Y fixed, Z skipped). CI passing. ✅"

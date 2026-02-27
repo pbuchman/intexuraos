@@ -1,99 +1,97 @@
-# Code Agent - Features
+# Code Agent
 
-> Autonomous code execution powered by Claude AI, dispatched to your own worker machines.
+Describe what you want. Walk away. Come back to a pull request.
 
 ## The Problem
 
-Software teams spend significant time on repetitive coding tasks: implementing well-defined features from Linear issues, fixing bugs with clear reproduction steps, refactoring code, and addressing PR review comments. Each task requires context-switching, environment setup, and manual execution -- even when the requirements are clearly specified.
+You know what needs to change. The signup flow shows a generic error when someone uses an existing email. The dashboard should filter by date range. A page returns the wrong error message when something goes wrong. You can describe the fix in thirty seconds. Getting it built takes hours — or days, if the queue is long.
 
-When a code task fails or produces incomplete results, developers must manually retry from scratch, losing the context of what went wrong. When a PR receives review comments, someone must manually read, understand, and implement the requested changes.
+AI coding tools promise to close that gap, but most of them skip the part that matters. You type a prompt, and minutes later a pull request — a proposed code change, submitted for your team to review — appears, built on assumptions you never approved. Maybe it rewrote the wrong file. Maybe it chose an approach that conflicts with how the rest of the system works. You find out during code review, after the compute is spent and the time is gone. Now you are debugging AI output instead of shipping.
 
-## How Code Agent Helps
+The deeper problem is not getting a machine to write code. It is getting a machine to write the *right* code — and knowing, before it starts, whether it understood what you meant.
 
-Code Agent bridges the gap between task specification and code execution. You describe what you want in natural language (or link a Linear issue), and Code Agent dispatches the work to a Claude-powered worker running on your own infrastructure. The worker analyzes your codebase, implements changes, runs tests, and creates pull requests -- all while streaming live logs back to your dashboard.
+## Use Case: From Voice Note to Pull Request
 
-### 1. Submit-and-Forget Code Tasks
+You run a SaaS product and your morning is already full. This is what happens when an idea hits you between meetings.
 
-Submit a coding task through the web UI or WhatsApp. Code Agent handles everything: creates a Linear issue (or links an existing one), validates rate limits, dispatches to your configured worker, and notifies you when the work completes.
+1. You are driving when you realize the onboarding flow sends a confusing error message. You record a voice note on WhatsApp: "Fix the signup error — when someone uses an email that already exists, tell them the account exists instead of showing a generic failure."
 
-**Example:** You submit "Add pagination support to the /bookmarks endpoint with cursor-based navigation" from the web UI. Code Agent creates a Linear issue with an LLM-generated title ("Add cursor-based pagination to bookmarks"), dispatches the task to your Mac worker, and sends a WhatsApp notification with a cancel button when work begins. Fifteen minutes later, you receive another notification with a link to the PR.
+2. By the time you park, your voice note has been transcribed and classified as a code task, and a project issue has appeared in Linear — your team's project tracker — with a clear title and description.
 
-### 2. Multi-Layer Deduplication
+3. The agent produces a design: which file handles the signup flow, what the new error message should say, which tests need updating, and how it plans to verify the fix. It stops there and waits.
 
-Code Agent prevents duplicate work through three deduplication layers:
+4. Over coffee the next morning, you open the dashboard and read the design. It looks right. You approve it.
 
-- **Layer 0 (Approval Event ID):** Prevents replayed approval messages from creating duplicate tasks.
-- **Layer 1 (Action ID):** Prevents Pub/Sub retries from spawning parallel tasks for the same action.
-- **Layer 2 (Dedup Key):** Uses `sha256(userId + prompt)` to catch rapid double-taps from the UI.
+5. The agent picks up the task on your own machine, writes the code inside an isolated environment, runs the tests, and opens a pull request. A WhatsApp notification arrives with a link to the PR.
 
-**Example:** You accidentally click "Submit" twice within a second. The second request returns a `409 CONFLICT` with the ID of the already-created task instead of launching a duplicate worker session.
+6. Later that day, your co-founder reviews the PR and leaves a comment: "Can we also handle the case where the email has a different capitalization?" The agent detects the comment, picks up the feedback with the full context of the original work, and pushes an update. You never opened a code editor.
 
-### 3. GitHub PR Comment Auto-Response
+## How It Helps
 
-When someone comments on a PR that Code Agent created, the service can automatically create a follow-up task. It detects `@claude` mentions or request patterns from the PR author, acquires a per-PR lock to prevent concurrent modifications, and dispatches a new task with full context from the original work.
+### Design Before Code
 
-**Example:** A reviewer comments "@claude please add error handling for the edge case where the user ID is missing" on your PR. Code Agent creates a follow-up task with the original task context (Linear issue, branch, previous work summary) and dispatches it. The worker pushes fixes to the existing branch.
+Every task the code agent receives goes through two distinct phases. In the first, the agent interprets your request, creates a project issue, and produces a design — an explanation of what it intends to build, which files it will touch, and how it plans to verify the result. Then it stops. No code is written. You review the design on your own schedule: over coffee, on the train, between meetings. If the approach looks right, you approve it. If not, you redirect. Only after your explicit approval does the second phase begin — writing tests, writing code, running the automated test suite, and opening a pull request.
 
-### 4. Per-User Worker Infrastructure
+This checkpoint exists because the most expensive mistake an AI coding tool can make is building the wrong thing quickly. A two-minute design review costs almost nothing. A pull request built on a misunderstanding costs an hour of code review and a round trip back to square one.
 
-Each user configures their own worker machines (Mac Mini, VM, etc.) with Cloudflare Access credentials and HMAC signing secrets. Code Agent stores credentials encrypted at rest and supports up to 2 workers per user with configurable priority ordering and health probing.
+**Example:** You ask the agent to add date filtering to the activity dashboard. The design comes back proposing to filter the data after loading all of it into the browser. You know the data set will grow to millions of rows, so you reply: "Filter the data in the database query instead — do not load everything first." The agent revises the design. When Phase 2 runs, it builds the right solution on the first attempt.
 
-**Example:** You configure a Mac Mini at home (`home-mac`) as primary and a cloud VM (`cloud-vm`) as fallback. When `home-mac` returns HTTP 503 (busy), Code Agent automatically falls back to `cloud-vm`.
+### Your Infrastructure, Your Code
 
-### 5. Rich GitHub PR Activity Timeline
+Every line of code the agent writes is produced inside an isolated environment running on a machine you configure and control. Your source code never leaves your infrastructure. The agent connects to your worker through your own network, using your own Claude subscription for the AI compute. You own the machine, you own the code, you own the bill.
 
-Every pull request created by Code Agent gets a live activity feed on your dashboard. The timeline shows PR opens, pushes, reviews, and comments -- each with a clickable link directly to that event on GitHub. When someone pushes new commits to the branch, a compare link shows exactly what changed.
+You can configure up to two worker machines, ordered by priority. If the primary worker is occupied with another task, the agent automatically routes to the secondary — no manual intervention, no waiting in a queue. Health checks confirm each worker is reachable before dispatching, so you know immediately if something is misconfigured rather than discovering it mid-task.
 
-Comment edits are automatically deduplicated: you see each comment once at its original position, but with the latest text. The PR description appears only on the most recent event so it does not repeat with every push.
+**Example:** You set up a high-spec desktop as your primary worker and a cloud VM as your backup. During a busy afternoon, you submit three tasks in quick succession. The first runs on your desktop, the second routes to the cloud VM, and the third queues until a slot opens — all without you making a single routing decision.
 
-**Example:** You push three commits to a Code Agent PR over the course of a review cycle. The timeline shows the original PR open (with description), three "synchronize" entries each linking to the exact diff for that push, two reviewer comments (showing the latest text if edited), and a review approval -- all in chronological order without repetition.
+### Talk to Running Tasks
 
-### 6. Retry, Feedback, and Mid-Task Messaging
+The conversation between you and the agent does not end when you press submit. While a task is running, you can send it new instructions through the dashboard — the message is queued and delivered at the next safe pause. Realized you forgot to mention an edge case? Send it. Changed your mind about the approach? Say so. The agent picks up your message and adjusts course.
 
-Failed or cancelled tasks can be retried with optional additional context. Completed tasks can receive follow-up feedback that creates a new task linked to the original, carrying forward the Linear issue, branch, and prior work summary. Running tasks can receive mid-session messages that are queued and delivered at the next turn boundary.
+After a pull request is open, the feedback loop shifts to where developers already work — the PR itself. Leave a review comment, and the agent detects the actionable feedback automatically. The comment is forwarded to the existing task — queued if the task is still running, or used to resume it if it has finished. The agent picks up where it left off with the full context of the original work intact.
 
-**Example (retry):** A task fails because a test was flaky. You click "Retry" and add context: "The flaky test is in `auth.test.ts` -- skip it and add a note." Code Agent creates a retry task with a 5-minute cool-off period, updates the Linear issue to In Progress, and adds a comment documenting the retry.
+If a task fails or produces a result that is close but not quite right, you can retry it with additional guidance. Failed tasks observe a one-minute cooling period — long enough to prevent runaway retries, short enough to keep you moving. Completed tasks can be resumed with new context, pushing further without losing what was already built.
 
-**Example (mid-task message):** While a task is running, you realize the implementation needs a constraint. You send "Also validate that the limit parameter is between 1 and 100." Code Agent queues the message in Firestore. When the worker finishes its current turn, it picks up the queued message and continues with the additional instruction.
+**Example:** You approve a design and the agent starts coding. Halfway through, you realize the feature also needs to update the help text users see when they hover over a form field. You send a mid-task message through the dashboard: "Also update the tooltip on the email field." The agent receives the message at its next pause point and includes the change in the same pull request.
 
-**Example (resume):** A task completed but you want one more change. You send a message to the completed task. Code Agent re-dispatches it to the worker with `--continue`, picking up where it left off on the same branch.
+### Real-Time Visibility
 
-## Use Case Walkthrough: From WhatsApp to PR
+While the agent works, a live terminal view in the web dashboard streams its output as it happens — every file it reads, every test it runs, every decision it makes. You are not waiting for an email that says "done." You are watching the work unfold.
 
-1. You send a WhatsApp message: "Fix the login redirect that loops on Safari."
-2. The actions-agent classifies it as a `code` action and sends it for approval.
-3. You approve via WhatsApp. The actions-agent calls `POST /internal/code/process`.
-4. Code Agent checks rate limits (3 concurrent, 10/hour, $20/day, $200/month).
-5. Code Agent calls the linear-agent to generate a title ("Fix Safari login redirect loop") and creates a Linear issue. Phase 1 (design) begins — the agent enriches the issue and adds the `code-task` label when the design is ready.
-6. The task document lands in Firestore with deduplication checks passing.
-7. Code Agent signs the dispatch request with HMAC and sends it to your primary worker via Cloudflare Access.
-8. You receive a WhatsApp message: "Task started on home-mac. Cancel: reply `cancel a1b2`."
-9. The worker streams log chunks back to `POST /internal/logs`. The web UI shows a live terminal.
-10. On completion, the worker calls `POST /internal/webhooks/task-complete` with the PR URL.
-11. Code Agent updates the Linear issue to "In Review," notifies the actions-agent, and sends a WhatsApp message with the PR link.
+Each task is tracked from the moment you submit it through completion. Per-task metrics break down exactly what happened: processing time, memory used, AI tokens consumed, and how time was split across API calls, tool execution, and overhead. A timeline view on the dashboard shows every pull request event — new versions pushed, reviews submitted, comments left — with links back to the source. Logs are retained for ninety days.
+
+**Example:** A task has been running for twenty minutes and you want to know if it is stuck or making progress. You open the dashboard, see the live log stream showing the agent is midway through running the test suite, and close the tab. No guessing, no pinging, no waiting.
+
+### Guardrails That Stay Out of the Way
+
+The agent enforces per-user limits on concurrent tasks (three at a time), hourly rate (ten per hour), and spend (twenty dollars per day, two hundred per month) — so you always know what the work costs before the bill arrives. The estimated cost per task is about $1.17. These limits are enforced in real time, not reconciled after the fact.
+
+Tasks that go silent for thirty minutes are automatically interrupted, so a hung process does not burn through your budget overnight. WhatsApp notifications arrive when a task starts, finishes, or fails — each with a link to the pull request or a one-tap button to cancel. You stay informed without checking a dashboard.
+
+**Example:** You submit a task before bed. The agent finishes at 2 a.m. and sends a WhatsApp notification with a link to the pull request. When you wake up, you tap the link, review the PR, and merge it before breakfast. If the task had failed, you would have seen that notification too — and you can cancel any running task with a single tap from the start notification.
+
+## Getting Started
+
+Connect a worker machine, link your Linear and GitHub accounts through the dashboard, and submit your first task — by typing in the web console, sending a WhatsApp message, or recording a voice note. The agent handles everything from issue creation through pull request.
 
 ## Key Benefits
 
-| Benefit                  | Detail                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------- |
-| Your infrastructure      | Workers run on your machines. Code never leaves your environment.            |
-| End-to-end tracing       | Every task carries a `traceId` from submission through completion.           |
-| Cost controls            | Per-user daily ($20) and monthly ($200) caps with real-time enforcement.     |
-| Zombie detection         | Tasks inactive for 30 minutes are automatically interrupted.                 |
-| Log retention management | Logs older than 90 days are archived automatically.                          |
-| Turn-level metrics       | CPU time, memory, token counts, and API wait times recorded per worker turn. |
+- **Design before code** — You approve the plan before a single line is written, so no compute is wasted on wrong assumptions
+- **Your machines, your code** — Source code stays on infrastructure you own and control, using your own Claude subscription
+- **Responds to PR feedback** — Review comments on the pull request are forwarded to the agent, which picks up where it left off with full context
+- **Submit from anywhere** — WhatsApp voice note, typed message, or web dashboard, every path leads to the same workflow
+- **Predictable spend** — Per-user limits on concurrency, hourly rate, daily and monthly cost, enforced before the work begins
+- **Always watching** — Live log streaming, per-task metrics, and WhatsApp notifications mean you know what is happening without checking
 
 ## Limitations
 
-- Maximum 2 workers per user (configurable at the model level).
-- Maximum 3 concurrent tasks per user.
-- Prompt sanitization is not yet implemented (uses raw prompt).
-- System prompt hash is currently a static placeholder.
-- PR comment auto-dispatch (`handlePRComment`, Phase 4) prepares tasks and logs them but does not yet dispatch to a worker.
-- Tasks complete as `designed` (Phase 1) or `implemented` (Phase 2), not as a generic `completed` status.
-- Workers require Cloudflare Access tunnels for secure connectivity.
-- GLM model support (`workerType: 'glm'`) depends on external Z.ai availability.
+- **Design phase adds a deliberate pause** — Teams that prefer fully autonomous execution will find this slower by design, because the checkpoint exists to prevent wasted work
+- **Two worker machines per user** — You can configure a primary and a fallback, but not a larger pool
+- **One-minute retry cooling period** — After a task fails, you must wait one minute before retrying, to prevent runaway loops
+- **Mid-task messages are not instantaneous** — Messages sent to a running task are delivered at the next safe pause, not mid-operation
+- **WhatsApp notifications require a connected account** — Without WhatsApp linked, you rely on the dashboard for status updates
+- **Prompt length capped at 10,000 characters** — Very long task descriptions need to be broken into smaller requests
 
 ---
 
-_Part of [IntexuraOS](../../overview.md)_
+_Part of [IntexuraOS](../overview.md) — describe what you want, come back to a pull request._

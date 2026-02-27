@@ -1,8 +1,8 @@
-# Data Insights Agent — Technical Reference
+# Data Insights Agent -- Technical Reference
 
 ## Overview
 
-AI-powered data analysis service that combines static data sources with mobile notifications into composite feeds, performs LLM-driven analysis using user's configured API keys, and generates Vega-Lite chart definitions. Supports persistent visualizations that auto-refresh with snapshot data. Runs on Cloud Run with Firestore persistence.
+AI-powered data analysis service that combines static data sources with mobile notifications into composite feeds, performs LLM-driven analysis using user's configured API keys, and generates Vega-Lite chart definitions. Supports persistent visualizations with on-demand refresh. Runs on Cloud Run with Firestore persistence.
 
 ## Architecture
 
@@ -23,6 +23,7 @@ graph TB
         Firestore[(Firestore)]
         UserService[user-service]
         NotifSvc[mobile-notifications-service]
+        AppSettings[app-settings-service]
         LLM[LLM Providers]
     end
 
@@ -41,7 +42,7 @@ graph TB
 
     class API,Domain,Infra service
     class Firestore storage
-    class Client,Mobile,LLM external
+    class Client,Mobile,LLM,AppSettings external
 ```
 
 ## Data Flow
@@ -63,6 +64,8 @@ sequenceDiagram
     LLM-->>DataInsights: Feed name
     DataInsights-->>-Client: Composite feed created
 
+    Note over DataInsights: Snapshot refreshes on creation/update
+
     Client->>+DataInsights: POST /composite-feeds/:id/analyze
     DataInsights->>Firestore: Get snapshot data
     DataInsights->>UserService: Get LLM client
@@ -74,7 +77,7 @@ sequenceDiagram
 
     Client->>+DataInsights: POST /visualizations
     DataInsights->>Firestore: Create visualization (pending)
-    DataInsights-->>Client: Visualization created
+    DataInsights-->>Client: Visualization created (201)
     DataInsights->>LLM: Transform data (fire-and-forget)
     DataInsights->>Firestore: Update visualization (ready)
 ```
@@ -83,17 +86,16 @@ sequenceDiagram
 
 | Commit     | Description                                                 | Date       |
 | ---------- | ----------------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0                                              | 2026-02-22 |
+| `f1e27f57` | Remove scheduled snapshot refresh (saves ~6.5M tokens/day)  | 2026-02-20 |
+| `c8a42105` | Release v3.0.0                                              | 2026-02-19 |
 | `f00798da` | Add saved visualizations feature (full CRUD + auto-refresh) | 2026-02-17 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability             | 2026-02-16 |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration                         | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention        | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback       | 2026-02-15 |
+| `e60eafc1` | Standardize API key secrets to APP naming convention         | 2026-02-15 |
+| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + add fallback      | 2026-02-15 |
 | `0f69a74b` | Add default model selector with platform Zai fallback       | 2026-02-08 |
 | `5aa3e1bd` | INT-427 Enable strict 100% coverage enforcement             | 2026-01-31 |
-| `c3198407` | Fix response contract violations (reply.ok/reply.fail)      | 2026-01-30 |
-| `dfd702f1` | Migrate to Sentry-enabled createAppLogger                   | 2026-01-30 |
-| `73e8375f` | INT-408 Enforce mandatory env var registration              | 2026-01-28 |
-| `1faa1d3b` | INT-301 Consolidate user service client architecture        | 2026-01-26 |
 
 ## API Endpoints
 
@@ -126,58 +128,57 @@ sequenceDiagram
 
 ### Internal Endpoints
 
-| Method | Path                               | Purpose                    | Caller                    |
-| ------ | ---------------------------------- | -------------------------- | ------------------------- |
-| POST   | `/internal/snapshots/refresh`      | Refresh all feed snapshots | Cloud Scheduler (Pub/Sub) |
-| POST   | `/internal/visualizations/compute` | Compute visualization data | Internal services         |
+| Method | Path                               | Purpose                    | Caller            |
+| ------ | ---------------------------------- | -------------------------- | ----------------- |
+| POST   | `/internal/visualizations/compute` | Compute visualization data | Internal services |
 
 ## Domain Model
 
 ### DataSource
 
-| Field       | Type   | Description                   |
-| ----------- | ------ | ----------------------------- |
-| `id`        | string | Unique identifier             |
-| `userId`    | string | Owner user ID                 |
-| `title`     | string | Data source title             |
-| `content`   | string | Data content (CSV, JSON, etc) |
-| `createdAt` | Date   | Creation timestamp            |
-| `updatedAt` | Date   | Last update timestamp         |
+| Field       | Type     | Description                   |
+| ----------- | -------- | ----------------------------- |
+| `id`        | `string` | Unique identifier             |
+| `userId`    | `string` | Owner user ID                 |
+| `title`     | `string` | Data source title (max 200)   |
+| `content`   | `string` | Data content (max 60,000)     |
+| `createdAt` | `Date`   | Creation timestamp            |
+| `updatedAt` | `Date`   | Last update timestamp         |
 
 ### CompositeFeed
 
-| Field                 | Type                       | Description                 |
-| --------------------- | -------------------------- | --------------------------- |
-| `id`                  | string                     | Unique identifier           |
-| `userId`              | string                     | Owner user ID               |
-| `name`                | string                     | AI-generated feed name      |
-| `purpose`             | string                     | User-provided feed purpose  |
-| `staticSourceIds`     | string[]                   | Data source IDs (max 5)     |
-| `notificationFilters` | NotificationFilterConfig[] | Notification filter configs |
-| `dataInsights`        | DataInsight[] \| null      | AI analysis results         |
-| `createdAt`           | Date                       | Creation timestamp          |
-| `updatedAt`           | Date                       | Last update timestamp       |
+| Field                 | Type                         | Description                    |
+| --------------------- | ---------------------------- | ------------------------------ |
+| `id`                  | `string`                     | Unique identifier              |
+| `userId`              | `string`                     | Owner user ID                  |
+| `name`                | `string`                     | AI-generated feed name         |
+| `purpose`             | `string`                     | User-provided purpose (max 1K) |
+| `staticSourceIds`     | `string[]`                   | Data source IDs (max 5)        |
+| `notificationFilters` | `NotificationFilterConfig[]` | Notification filter configs    |
+| `dataInsights`        | `DataInsight[] \| null`      | AI analysis results            |
+| `createdAt`           | `Date`                       | Creation timestamp             |
+| `updatedAt`           | `Date`                       | Last update timestamp          |
 
 ### NotificationFilterConfig
 
-| Field    | Type     | Description                  |
-| -------- | -------- | ---------------------------- |
-| `id`     | string   | Filter identifier            |
-| `name`   | string   | Filter name                  |
-| `app`    | string[] | Multi-select app filter      |
-| `source` | string   | Single-select source filter  |
-| `title`  | string   | Title filter substring match |
+| Field    | Type       | Description                  |
+| -------- | ---------- | ---------------------------- |
+| `id`     | `string`   | Filter identifier            |
+| `name`   | `string`   | Filter name                  |
+| `app`    | `string[]` | Multi-select app filter      |
+| `source` | `string`   | Single-select source filter  |
+| `title`  | `string`   | Title filter substring match |
 
 ### DataInsight
 
-| Field                | Type        | Description                    |
-| -------------------- | ----------- | ------------------------------ |
-| `id`                 | string      | Unique identifier              |
-| `title`              | string      | Insight title                  |
-| `description`        | string      | Insight description            |
-| `trackableMetric`    | string      | Measurable metric to track     |
-| `suggestedChartType` | ChartTypeId | Recommended chart type (C1-C6) |
-| `generatedAt`        | string      | ISO timestamp                  |
+| Field                | Type          | Description                    |
+| -------------------- | ------------- | ------------------------------ |
+| `id`                 | `string`      | Unique identifier              |
+| `title`              | `string`      | Insight title                  |
+| `description`        | `string`      | Insight description            |
+| `trackableMetric`    | `string`      | Measurable metric to track     |
+| `suggestedChartType` | `ChartTypeId` | Recommended chart type (C1-C6) |
+| `generatedAt`        | `string`      | ISO timestamp                  |
 
 **Chart Type Values:**
 
@@ -190,59 +191,52 @@ sequenceDiagram
 | `C5` | Pie Chart    | Part-to-whole composition        |
 | `C6` | Heatmap      | Density patterns and matrix data |
 
-### Snapshot
+### Snapshot (DataInsightSnapshot)
 
-| Field         | Type   | Description                  |
-| ------------- | ------ | ---------------------------- |
-| `id`          | string | Unique identifier            |
-| `feedId`      | string | Associated composite feed ID |
-| `userId`      | string | Owner user ID                |
-| `feedName`    | string | Feed name at snapshot time   |
-| `generatedAt` | Date   | Snapshot creation timestamp  |
-| `expiresAt`   | Date   | Snapshot expiration (15 min) |
-| `data`        | object | Aggregated feed data         |
+| Field         | Type     | Description                  |
+| ------------- | -------- | ---------------------------- |
+| `id`          | `string` | Unique identifier            |
+| `feedId`      | `string` | Associated composite feed ID |
+| `userId`      | `string` | Owner user ID                |
+| `feedName`    | `string` | Feed name at snapshot time   |
+| `generatedAt` | `Date`   | Snapshot creation timestamp  |
+| `expiresAt`   | `Date`   | Snapshot expiration (15 min) |
+| `data`        | `object` | Aggregated feed data         |
 
 ### Visualization
 
-| Field                   | Type                                            | Description                     |
-| ----------------------- | ----------------------------------------------- | ------------------------------- |
-| `id`                    | string                                          | Unique identifier               |
-| `userId`                | string                                          | Owner user ID                   |
-| `feedId`                | string                                          | Associated composite feed ID    |
-| `feedName`              | string                                          | Feed name at creation time      |
-| `insightId`             | string                                          | Associated insight ID           |
-| `insightTitle`          | string                                          | Insight title at creation time  |
-| `trackableMetric`       | string                                          | Metric being tracked            |
-| `chartConfig`           | object                                          | Vega-Lite spec (without data)   |
-| `transformInstructions` | string                                          | LLM data transform instructions |
-| `chartData`             | unknown[] \| null                               | Computed chart data             |
-| `status`                | `pending` \| `ready` \| `refreshing` \| `error` | Computation lifecycle status    |
-| `lastError`             | string?                                         | Last error message if any       |
-| `lastRefreshedAt`       | Date?                                           | Timestamp of last data refresh  |
-| `createdAt`             | Date                                            | Creation timestamp              |
-| `updatedAt`             | Date                                            | Last update timestamp           |
+| Field                   | Type                                              | Description                     |
+| ----------------------- | ------------------------------------------------- | ------------------------------- |
+| `id`                    | `string`                                          | Unique identifier               |
+| `userId`                | `string`                                          | Owner user ID                   |
+| `feedId`                | `string`                                          | Associated composite feed ID    |
+| `feedName`              | `string`                                          | Feed name at creation time      |
+| `insightId`             | `string`                                          | Associated insight ID           |
+| `insightTitle`          | `string`                                          | Insight title at creation time  |
+| `trackableMetric`       | `string`                                          | Metric being tracked            |
+| `chartConfig`           | `object`                                          | Vega-Lite spec (without data)   |
+| `transformInstructions` | `string`                                          | LLM data transform instructions |
+| `chartData`             | `unknown[] \| null`                               | Computed chart data             |
+| `status`                | `pending \| ready \| refreshing \| error`         | Computation lifecycle status    |
+| `lastError`             | `string?`                                         | Last error message if any       |
+| `lastRefreshedAt`       | `Date?`                                           | Timestamp of last data refresh  |
+| `createdAt`             | `Date`                                            | Creation timestamp              |
+| `updatedAt`             | `Date`                                            | Last update timestamp           |
 
-**Status Lifecycle:** `pending` → `ready` (or `error`). Manual and scheduled refreshes use `refreshing` as intermediate state.
+**Status Lifecycle:** `pending` -> `ready` (or `error`). Manual refreshes use `refreshing` as intermediate state.
 
 **Limit:** Max 10 visualizations per composite feed.
-
-## Pub/Sub
-
-### Subscribed Events
-
-| Topic       | Handler                       | Action                                           |
-| ----------- | ----------------------------- | ------------------------------------------------ |
-| (scheduled) | `/internal/snapshots/refresh` | Refresh all feed snapshots + feed visualizations |
 
 ## Dependencies
 
 ### External Services
 
-| Service       | Purpose                                           | Failure Mode                       |
-| ------------- | ------------------------------------------------- | ---------------------------------- |
-| LLM Providers | Data analysis, title generation, chart generation | Return error, prompt configure key |
-| Firestore     | Data persistence                                  | Propagate error                    |
-| user-service  | LLM client management                             | Propagate error                    |
+| Service              | Purpose                                            | Failure Mode                       |
+| -------------------- | -------------------------------------------------- | ---------------------------------- |
+| LLM Providers        | Data analysis, title generation, chart generation  | Return error, prompt configure key |
+| Firestore            | Data persistence                                   | Propagate error                    |
+| user-service         | LLM client management, API key resolution          | Propagate error                    |
+| app-settings-service | LLM pricing data at startup                        | Fail-fast (startup crash)          |
 
 ### Internal Services
 
@@ -250,6 +244,7 @@ sequenceDiagram
 | ---------------------------- | ----------------- | ---------------------------- |
 | user-service                 | (internal client) | Get user's LLM API key       |
 | mobile-notifications-service | (internal client) | Query filtered notifications |
+| app-settings-service         | (internal client) | Fetch LLM pricing at boot    |
 
 ## Configuration
 
@@ -268,20 +263,32 @@ sequenceDiagram
 | `INTEXURAOS_ZAI_APP_API_KEY`                  | No       | Platform-level Zai API key (fallback LLM provider)    |
 | `INTEXURAOS_GEMINI_APP_API_KEY`               | No       | Platform-level Gemini API key (fallback LLM provider) |
 
+## LLM Models
+
+| Model             | Constant          | Purpose                             |
+| ----------------- | ----------------- | ----------------------------------- |
+| Gemini 2.5 Flash  | `Gemini25Flash`   | Default model for all LLM tasks     |
+| GLM-4.7           | `Glm47`           | Alternative via Zai platform        |
+| GLM-4.7 Flash     | `Glm47Flash`      | Lightweight alternative via Zai     |
+
 ## Gotchas
 
-- **Delete protection**: Data sources used by composite feeds return 409 Conflict with feed names
+- **Delete protection**: Data sources used by composite feeds return 409 Conflict with feed names listed
 - **LLM repair pattern**: Analysis auto-retries with repair prompt on parse failure (INT-79)
 - **Empty insights**: Returns success with empty array and `noInsightsReason` instead of error (INT-77)
 - **Chart type IDs**: Use compact format (C1-C6) not full names in storage
-- **Snapshot expiration**: Snapshots expire after 15 minutes, scheduled job refreshes all feeds
+- **Snapshot refresh**: Snapshots refresh on feed creation and update only (scheduled refresh was removed in v3.1.0 to save ~6.5M tokens/day)
+- **Snapshot ?refresh=true**: The `GET /composite-feeds/:id/snapshot` endpoint accepts a `refresh=true` query param to force on-demand refresh
 - **Visualization async compute**: `POST /visualizations` returns 201 immediately with `status: pending`; poll `GET /visualizations/:id` until `status: ready` or `error`
-- **Visualization auto-refresh**: Every scheduled snapshot refresh also recomputes all feed visualizations via `refreshFeedVisualizations`
 - **Visualization limit**: Max 10 per feed; creation returns 400 `INVALID_REQUEST` when exceeded
+- **Visualization refresh idempotency**: `POST /visualizations/:id/refresh` returns current state without queuing duplicate computation if already `refreshing`
+- **Orphaned visualizations**: When re-analysis replaces insights, visualizations linked to removed insights are marked as `error` with "Parent insight was replaced during re-analysis"
+- **Feed deletion cascade**: Deleting a composite feed also deletes its snapshot and all associated visualizations (non-fatal warnings on failure)
 - **Default LLM**: Gemini 2.5 Flash (with Gemini fallback); Zai available as alternative platform
 - **Internal client**: Uses `@intexuraos/internal-clients` package for user-service access (INT-269)
 - **Response contract**: All routes use `reply.ok()` / `reply.fail()` instead of raw `reply.send()`
 - **Sentry logging**: Uses `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`)
+- **Pricing at startup**: Fetches LLM pricing from app-settings-service at boot; fails fast if unavailable
 
 ## File Structure
 
@@ -289,24 +296,25 @@ sequenceDiagram
 apps/data-insights-agent/src/
 ├── domain/
 │   ├── dataSource/          # Data source models and ports
-│   │   ├── models/          # DataSource entity
+│   │   ├── models/          # DataSource entity, MAX_CONTENT_LENGTH, MAX_TITLE_LENGTH
 │   │   └── ports/           # DataSourceRepository interface
 │   ├── compositeFeed/       # Composite feed models and ports
-│   │   ├── models/          # CompositeFeed, NotificationFilterConfig
-│   │   ├── schemas/         # Zod schemas
-│   │   ├── ports/           # Repository and service interfaces
+│   │   ├── models/          # CompositeFeed, NotificationFilterConfig, limits
+│   │   ├── schemas/         # Zod schemas (CompositeFeedData, getCompositeFeedJsonSchema)
+│   │   ├── ports/           # Repository, FeedNameGenerationService, MobileNotificationsClient
 │   │   └── usecases/        # createCompositeFeed, getCompositeFeedData
 │   ├── snapshot/            # Snapshot caching
-│   │   ├── models/          # Snapshot entity
+│   │   ├── models/          # DataInsightSnapshot entity, SNAPSHOT_TTL_MINUTES
 │   │   ├── ports/           # SnapshotRepository interface
-│   │   └── usecases/        # refreshSnapshot, refreshAllSnapshots, getDataInsightSnapshot
+│   │   └── usecases/        # refreshSnapshot, getDataInsightSnapshot
 │   ├── dataInsights/        # AI analysis capabilities
-│   │   ├── types.ts         # DataInsight, ChartTypeDefinition
-│   │   ├── chartTypes.ts    # CHART_TYPES array (C1-C6)
-│   │   ├── ports.ts         # Service interfaces
+│   │   ├── types.ts         # DataInsight, ChartTypeDefinition, MAX_INSIGHTS_PER_FEED
+│   │   ├── chartTypes.ts    # CHART_TYPES array (C1-C6 with Vega-Lite schemas)
+│   │   ├── ports.ts         # DataAnalysisService, ChartDefinitionService, DataTransformService
+│   │   ├── utils.ts         # buildCompositeFeedSchema helper
 │   │   └── usecases/        # analyzeData, generateChartDefinition, transformDataForPreview
 │   └── visualization/       # Saved visualization management
-│       ├── models/          # Visualization entity, VisualizationStatus
+│       ├── models/          # Visualization entity, VisualizationStatus, MAX_VISUALIZATIONS_PER_FEED
 │       ├── ports/           # VisualizationRepository interface
 │       └── usecases/        # createVisualization, computeVisualization, refreshFeedVisualizations
 │                            # listVisualizations, getVisualization, deleteVisualization
@@ -317,23 +325,23 @@ apps/data-insights-agent/src/
 │   │   ├── snapshotRepository.ts
 │   │   └── visualizationRepository.ts
 │   ├── gemini/              # LLM service implementations
-│   │   ├── dataAnalysisService.ts
+│   │   ├── dataAnalysisService.ts      # Includes LLM repair pattern
 │   │   ├── chartDefinitionService.ts
 │   │   ├── dataTransformService.ts
 │   │   ├── titleGenerationService.ts
 │   │   └── feedNameGenerationService.ts
-│   ├── http/                # External service clients
-│   │   └── mobileNotificationsClient.ts
+│   └── http/                # External service clients
+│       └── mobileNotificationsClient.ts
 ├── routes/
-│   ├── dataSourceRoutes.ts
-│   ├── compositeFeedRoutes.ts
-│   ├── dataInsightsRoutes.ts
-│   ├── visualizationRoutes.ts  # Full visualization CRUD + refresh
-│   └── internalRoutes.ts    # Scheduled snapshot refresh + compute visualization
-├── services.ts              # DI container
-├── config.ts                # Environment configuration
-├── server.ts                # Fastify app builder
-└── index.ts                 # Entry point
+│   ├── dataSourceRoutes.ts        # CRUD + generate-title (340 lines)
+│   ├── compositeFeedRoutes.ts     # CRUD + schema/data/snapshot (583 lines)
+│   ├── dataInsightsRoutes.ts      # analyze + chart-definition + preview (271 lines)
+│   ├── visualizationRoutes.ts     # CRUD + refresh (320 lines)
+│   └── internalRoutes.ts          # compute visualization (78 lines)
+├── services.ts              # DI container (10 services)
+├── config.ts                # Environment configuration (Zod validated)
+├── server.ts                # Fastify app builder (v0.0.4)
+└── index.ts                 # Entry point (pricing fetch, service wiring)
 ```
 
 ## Firestore Collections
@@ -342,5 +350,5 @@ apps/data-insights-agent/src/
 | -------------------------- | ------------------- | --------------------------- |
 | `custom_data_sources`      | data-insights-agent | By userId, by id            |
 | `composite_feeds`          | data-insights-agent | By userId, by id            |
-| `composite_feed_snapshots` | data-insights-agent | By feedId+userId, TTL 15m   |
+| `composite_feed_snapshots` | data-insights-agent | By feedId+userId            |
 | `visualizations`           | data-insights-agent | By userId, by feedId, by id |

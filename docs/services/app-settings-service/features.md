@@ -1,85 +1,41 @@
 # App Settings Service
 
-Application-wide configuration and LLM usage analytics.
+The cost transparency layer for IntexuraOS — know exactly what every AI interaction costs before you start, and track where every dollar goes after.
 
 ## The Problem
 
-Users need visibility into:
+AI services bill by the token, and every provider prices differently. Google charges one rate, OpenAI another, Anthropic a third. Some models charge for cache reads, others for web searches, others for image generation. Multiply that by five providers and dozens of models, and the true cost of any given interaction becomes nearly impossible to calculate on your own.
 
-1. **LLM pricing** - Current costs for all providers
-2. **Usage tracking** - Personal API usage and costs
-3. **Configuration** - Provider pricing details
+Without visibility, usage creeps upward unnoticed. A month passes and the bill arrives with no explanation of which models drove the cost, which workflows consumed the most tokens, or how spending shifted week over week. You are left guessing.
+
+## Use Case: Understanding What You Spend
+
+Built for anyone managing AI costs across multiple providers and workflows.
+
+You open the dashboard before kicking off a batch of research tasks. The pricing page shows current rates for all five providers — Google, OpenAI, Anthropic, Perplexity, and Zai — broken down by model, with input and output token costs displayed per million tokens. Specialty costs are listed too: cache read multipliers, web search fees, grounding charges, image pricing. You compare two models side by side and pick the one that fits your budget.
+
+A week later, you check your usage. The system shows your total spend, total calls, and total tokens consumed — input and output counted separately. The breakdown splits by month, by model, and by call type. Each segment includes its dollar cost, call count, and percentage of your total. You adjust the time window from the default ninety days down to thirty to focus on recent activity.
 
 ## How It Helps
 
-App-settings-service provides:
+Every model in the system has verified pricing. At startup, the service checks that every registered model has a complete pricing entry. If any model is missing, the service refuses to start. This guarantee means the costs you see are never stale and never incomplete.
 
-1. **Pricing endpoint** - All LLM provider pricing (internal and public)
-2. **Usage costs** - Per-user aggregated usage statistics
-3. **Provider coverage** - Google, OpenAI, Anthropic, Perplexity, Zai
-
-## Key Features
-
-**Pricing (`/settings/pricing`):**
-
-- All 5 providers (Google, OpenAI, Anthropic, Perplexity, Zai)
-- Per-model pricing
-- Input/output token costs (per million tokens)
-- Optional costs: grounding, web search, image generation, caching multipliers
-- Internal endpoint for service startup
-- Guaranteed fresh: service refuses to start if any model lacks pricing
-
-**Usage Costs (`/settings/usage-costs`):**
-
-- Monthly breakdown
-- By-model breakdown
-- By-call-type breakdown
-- Configurable time range (1-365 days, default 90)
-- Total token consumption (input + output)
-- Percentage contribution per segment
-
-## Use Cases
-
-### Get pricing (internal)
-
-Services fetch pricing on startup to populate PricingContext for cost tracking.
-
-### Get pricing (public)
-
-Frontend fetches pricing to display costs before API calls.
-
-### Track usage
-
-Users view their spending over time, broken down by model and month.
+Other services in the platform pull pricing data at launch so they can track costs in real time as they process your requests. The result: by the time you check your usage, the numbers are already there — aggregated, categorized, and rounded to six decimal places.
 
 ## Key Benefits
 
-**Transparent pricing** - Users know costs before using LLMs
-
-**Personal analytics** - Track individual usage patterns
-
-**Multi-provider** - All LLM providers in one endpoint
-
-**Internal/Public separation** - Services need auth, users get their own data
-
-**Pricing integrity** - Startup validation ensures no service runs with missing model pricing
+- **All providers, one view** — Five providers and every model they offer, displayed in a single pricing endpoint
+- **Verified completeness** — The service will not run unless every model has pricing data, so gaps are impossible
+- **Personal cost tracking** — See your own usage broken down by month, model, and call type
+- **Flexible time range** — Query anywhere from the last day to the last year of usage, with a sensible ninety-day default
 
 ## Limitations
 
-**Read-only** - No pricing management (admin-configured)
+- **Read-only** — Pricing is configured by administrators; there is no self-service pricing management
+- **No budgets or alerts** — The service reports costs but does not enforce spending limits
+- **No forecasting** — Historical data only; no projected cost estimates
+- **Monthly aggregates** — The API groups usage by month; there is no daily breakdown in the response
 
-**90-day default** - Usage defaults to 90 days, max 365
+---
 
-**No predictions** - No cost forecasting
-
-**No budgets** - No spending limits or alerts
-
-**No daily breakdown** - Usage aggregates by month, not day
-
-## Recent Changes
-
-- **Dash0 OpenTelemetry integration** - Distributed tracing added for all requests
-- **Dev-mode log formatting** - Improved structured logging for local PM2 output
-- **Response contract standardization** - Internal endpoints now use `reply.ok(data)` / `reply.fail(code, message)` for consistent `{ success, data }` or `{ success, error: { code, message } }` responses
-- **Sentry-enabled logging** - `FirestoreUsageStatsRepository` migrated from direct `pino()` to `createAppLogger()` for automatic Sentry error reporting
-- **100% branch coverage** - Added v8 ignore exemptions for TypeScript-only safety branches
+_Part of [IntexuraOS](../overview.md) — Cost transparency across every AI provider, every model, every call._

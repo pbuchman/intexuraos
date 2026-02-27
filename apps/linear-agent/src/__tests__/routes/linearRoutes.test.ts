@@ -11,6 +11,7 @@ import {
   FakeUserServiceClient,
   FakeLinearIssueRepository,
   FakeLinearCommentRepository,
+  FakeCodeAgentClient,
 } from '../fakes.js';
 
 describe('linearRoutes', () => {
@@ -1760,6 +1761,7 @@ describe('linearRoutes logging coverage', () => {
     issueRepository: new FakeLinearIssueRepository(),
     userServiceClient: new FakeUserServiceClient(),
     commentRepository: new FakeLinearCommentRepository(),
+    codeAgentClient: new FakeCodeAgentClient(),
   };
 
   beforeAll(async () => {

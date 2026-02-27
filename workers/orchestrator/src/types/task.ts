@@ -58,6 +58,12 @@ export interface Task {
    * Verification history for each completed attempt.
    */
   verificationHistory?: TaskVerificationRecord[];
+  /**
+   * Set when a completed task is resumed via sendMessage().
+   * Gates loosened completion verification (exit code + Claude error only).
+   * Cleared before persisting in finalizeTask().
+   */
+  resumedAfterSuccess?: boolean;
 }
 
 export interface TaskResult {

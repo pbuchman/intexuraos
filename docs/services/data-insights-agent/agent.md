@@ -1,4 +1,4 @@
-# data-insights-agent — Agent Interface
+# data-insights-agent -- Agent Interface
 
 > **Machine-readable specification for AI agent integration**
 
@@ -20,14 +20,14 @@
 
 **Endpoint:** `POST /data-sources`
 
-**When to use:** Store custom data (CSV, JSON) for analysis
+**When to use:** Store custom data (CSV, JSON, text) for inclusion in composite feeds
 
 **Input Schema:**
 
 ```typescript
 interface CreateDataSourceInput {
-  title: string;
-  content: string;
+  title: string;   // max 200 chars
+  content: string; // max 60,000 chars
 }
 ```
 
@@ -60,8 +60,8 @@ interface DataSource {
     "id": "ds-abc123",
     "title": "Q1 Sales Data",
     "content": "month,revenue,expenses\nJan,50000,30000...",
-    "createdAt": "2025-01-25T10:00:00Z",
-    "updatedAt": "2025-01-25T10:00:00Z"
+    "createdAt": "2026-02-22T10:00:00Z",
+    "updatedAt": "2026-02-22T10:00:00Z"
   }
 }
 ```
@@ -70,7 +70,7 @@ interface DataSource {
 
 **Endpoint:** `POST /data-sources/generate-title`
 
-**When to use:** Auto-generate descriptive title from data content
+**When to use:** Auto-generate descriptive title from data content before creating a data source
 
 **Input Schema:**
 
@@ -92,22 +92,22 @@ interface GenerateTitleOutput {
 
 **Endpoint:** `POST /composite-feeds`
 
-**When to use:** Combine data sources and notification filters for unified analysis
+**When to use:** Combine data sources and notification filters for unified analysis. Triggers snapshot generation automatically.
 
 **Input Schema:**
 
 ```typescript
 interface CreateCompositeFeedInput {
-  purpose: string;
-  staticSourceIds: string[]; // max 5
+  purpose: string;                         // max 1000 chars
+  staticSourceIds: string[];               // max 5
   notificationFilters: NotificationFilter[]; // max 3
 }
 
 interface NotificationFilter {
   name: string;
-  app?: string[];
-  source?: string;
-  title?: string;
+  app?: string[];   // multi-select app filter
+  source?: string;  // single-select source filter
+  title?: string;   // title substring match
 }
 ```
 
@@ -131,7 +131,7 @@ interface CompositeFeed {
 
 **Endpoint:** `POST /composite-feeds/{feedId}/analyze`
 
-**When to use:** Extract AI-powered insights from feed data
+**When to use:** Extract AI-powered insights from feed snapshot data. Requires existing snapshot (created on feed creation/update).
 
 **Output Schema:**
 
@@ -164,7 +164,7 @@ interface DataInsight {
         "description": "Revenue increased 20% from January to March",
         "trackableMetric": "Monthly revenue growth rate",
         "suggestedChartType": "C1",
-        "generatedAt": "2025-01-25T10:10:00Z"
+        "generatedAt": "2026-02-22T10:10:00Z"
       }
     ]
   }
@@ -175,7 +175,7 @@ interface DataInsight {
 
 **Endpoint:** `POST /composite-feeds/{feedId}/insights/{insightId}/chart-definition`
 
-**When to use:** Get Vega-Lite spec for rendering a chart
+**When to use:** Get Vega-Lite spec and transform instructions for rendering a chart. Ephemeral, not persisted.
 
 **Output Schema:**
 
@@ -209,7 +209,7 @@ interface ChartDefinitionOutput {
 
 **Endpoint:** `POST /composite-feeds/{feedId}/preview`
 
-**When to use:** Transform snapshot data for chart rendering (one-time, not persisted)
+**When to use:** Transform snapshot data for one-time chart rendering without persisting
 
 **Input Schema:**
 
@@ -231,9 +231,9 @@ interface PreviewOutput {
 
 ### Get Snapshot
 
-**Endpoint:** `GET /composite-feeds/{feedId}/snapshot?refresh=true`
+**Endpoint:** `GET /composite-feeds/{feedId}/snapshot`
 
-**When to use:** Get cached feed data without re-analysis
+**When to use:** Retrieve cached feed data. Use `?refresh=true` to force re-generation.
 
 **Output Schema:**
 
@@ -244,8 +244,13 @@ interface Snapshot {
   purpose: string;
   generatedAt: string;
   expiresAt: string;
-  staticSources: SourceData[];
-  notifications: NotificationData[];
+  staticSources: { id: string; name: string; content: string }[];
+  notifications: {
+    filterId: string;
+    filterName: string;
+    criteria: { app?: string[]; source?: string; title?: string };
+    items: { id: string; app: string; title: string; body: string; timestamp: string; source?: string }[];
+  }[];
 }
 ```
 
@@ -253,7 +258,7 @@ interface Snapshot {
 
 **Endpoint:** `POST /visualizations`
 
-**When to use:** Save a chart configuration that persists and auto-refreshes with snapshot data
+**When to use:** Save a chart configuration that persists and can be refreshed on demand
 
 **Input Schema:**
 
@@ -261,7 +266,7 @@ interface Snapshot {
 interface CreateVisualizationInput {
   feedId: string;
   insightId: string;
-  chartConfig: object; // Vega-Lite spec without data
+  chartConfig: object;          // Vega-Lite spec without data
   transformInstructions: string;
 }
 ```
@@ -281,7 +286,7 @@ interface Visualization {
   trackableMetric: string;
   chartConfig: object;
   transformInstructions: string;
-  chartData: object[] | null; // null until computation completes
+  chartData: object[] | null;
   status: VisualizationStatus;
   lastError?: string;
   lastRefreshedAt?: string;
@@ -290,19 +295,13 @@ interface Visualization {
 }
 ```
 
-**Note:** Returns 201 immediately with `status: pending`. Poll `GET /visualizations/:id` until `status: ready` or `error`. Auto-refreshes when feed snapshot refreshes.
+**Note:** Returns 201 immediately with `status: pending`. Poll `GET /visualizations/:id` until `status: ready` or `error`.
 
 ### List Visualizations
 
 **Endpoint:** `GET /visualizations`
 
 **When to use:** Retrieve all saved visualizations for the authenticated user
-
-**Output Schema:**
-
-```typescript
-type ListVisualizationsOutput = Visualization[];
-```
 
 ### Get Visualization
 
@@ -322,7 +321,7 @@ type ListVisualizationsOutput = Visualization[];
 
 **When to use:** Manually trigger chart data recomputation against current snapshot
 
-**Note:** Idempotent when already `refreshing` — returns current state without queuing duplicate computation.
+**Note:** Idempotent when already `refreshing` -- returns current state without queuing duplicate computation.
 
 ---
 
@@ -332,15 +331,16 @@ type ListVisualizationsOutput = Visualization[];
 
 - Exceed 5 static sources per composite feed
 - Exceed 3 notification filters per composite feed
-- Generate more than 5 insights per feed
 - Exceed 10 visualizations per composite feed
 - Access data sources owned by other users
+- Call analyze before a snapshot exists (created on feed creation)
+- Create visualizations before analyzing the feed (requires insights)
 
 **Requires:**
 
-- Valid Auth0 bearer token for all requests
+- Valid Auth0 bearer token for all public requests
 - Configured LLM API key in user-service for analysis operations
-- Existing snapshot before analysis (created automatically on feed creation)
+- Existing snapshot before analysis (created automatically on feed creation/update)
 - Analyzed feed (with insights) before creating visualizations
 
 ---
@@ -351,23 +351,22 @@ type ListVisualizationsOutput = Visualization[];
 
 ```
 1. POST /data-sources - Store custom data
-2. POST /composite-feeds - Create feed with sources + filters
-3. GET /composite-feeds/:id/snapshot - Wait for snapshot generation
-4. POST /composite-feeds/:id/analyze - Extract insights
-5. POST /composite-feeds/:id/insights/:insightId/chart-definition - Get chart spec
-6. POST /composite-feeds/:id/preview - Get transformed chart data (ephemeral)
+2. POST /composite-feeds - Create feed with sources + filters (auto-creates snapshot)
+3. POST /composite-feeds/:id/analyze - Extract insights
+4. POST /composite-feeds/:id/insights/:insightId/chart-definition - Get chart spec
+5. POST /composite-feeds/:id/preview - Get transformed chart data (ephemeral)
 ```
 
 ### Pattern 2: Persistent Visualization Workflow
 
 ```
 1. POST /data-sources - Store custom data
-2. POST /composite-feeds - Create feed
+2. POST /composite-feeds - Create feed (auto-creates snapshot)
 3. POST /composite-feeds/:id/analyze - Extract insights
-4. POST /composite-feeds/:id/insights/:insightId/chart-definition - Get chart spec + instructions
+4. POST /composite-feeds/:id/insights/:insightId/chart-definition - Get spec + instructions
 5. POST /visualizations - Save as persistent visualization (returns pending)
 6. GET /visualizations/:id - Poll until status: ready
-7. (Auto) Every 15 min snapshot refresh also recomputes chartData
+7. (On-demand) GET /composite-feeds/:id/snapshot?refresh=true then POST /visualizations/:id/refresh
 ```
 
 ### Pattern 3: Data Source Management
@@ -399,35 +398,27 @@ type ListVisualizationsOutput = Visualization[];
 
 ## Chart Types Reference
 
-| Code | Name         | Mark  | Best For                         |
-| ---- | ------------ | ----- | -------------------------------- |
-| C1   | Line Chart   | line  | Time-series trends               |
-| C2   | Bar Chart    | bar   | Category comparison              |
-| C3   | Scatter Plot | point | Correlation analysis             |
-| C4   | Area Chart   | area  | Cumulative trends                |
-| C5   | Pie Chart    | arc   | Part-to-whole composition        |
-| C6   | Heatmap      | rect  | Density patterns and matrix data |
-
----
-
-## Rate Limits
-
-| Endpoint                          | Limit       | Window   |
-| --------------------------------- | ----------- | -------- |
-| POST /composite-feeds/:id/analyze | 10 requests | 1 minute |
-| POST /data-sources/generate-title | 20 requests | 1 minute |
+| Code | Name         | Mark    | Best For                         |
+| ---- | ------------ | ------- | -------------------------------- |
+| C1   | Line Chart   | `line`  | Time-series trends               |
+| C2   | Bar Chart    | `bar`   | Category comparison              |
+| C3   | Scatter Plot | `point` | Correlation analysis             |
+| C4   | Area Chart   | `area`  | Cumulative trends                |
+| C5   | Pie Chart    | `arc`   | Part-to-whole composition        |
+| C6   | Heatmap      | `rect`  | Density patterns and matrix data |
 
 ---
 
 ## Dependencies
 
-| Service                           | Why Needed                                        |
-| --------------------------------- | ------------------------------------------------- |
-| user-service                      | Get user's LLM API key                            |
-| mobile-notifications-service      | Query filtered notifications for feeds            |
-| Firestore                         | Persist feeds, sources, snapshots, visualizations |
-| LLM Providers (Gemini, GLM, etc.) | Data analysis, title/chart generation, transform  |
+| Service                      | Why Needed                                        |
+| ---------------------------- | ------------------------------------------------- |
+| user-service                 | Get user's LLM API key                            |
+| mobile-notifications-service | Query filtered notifications for feeds            |
+| app-settings-service         | LLM pricing data (fetched at startup)             |
+| Firestore                    | Persist feeds, sources, snapshots, visualizations |
+| LLM Providers (Gemini, Zai)  | Data analysis, title/chart generation, transform  |
 
 ---
 
-**Last updated:** 2026-02-19
+**Last updated:** 2026-02-22

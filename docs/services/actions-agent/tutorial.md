@@ -1,6 +1,12 @@
 # Actions Agent - Tutorial
 
-This tutorial will help you get started with the actions-agent service, from basic listing to advanced action management including WhatsApp approval workflows and code action dispatching.
+> **Time:** 20-30 minutes
+> **Prerequisites:** IntexuraOS development environment running, Auth0 access token
+> **You will learn:** How to list, approve, execute, and manage actions through the actions-agent API
+
+This tutorial walks you through the actions-agent service, from basic listing to advanced action management including WhatsApp approval workflows, code action dispatching, and duplicate resolution.
+
+---
 
 ## Prerequisites
 
@@ -8,13 +14,15 @@ This tutorial will help you get started with the actions-agent service, from bas
 - Auth0 access token for API requests
 - Familiarity with HTTP clients (curl, Postman, or similar)
 
-## Part 1: Hello World - List Your Actions
+---
+
+## Part 1: Hello World - List Your Actions (5 minutes)
 
 The simplest interaction is listing actions for the authenticated user.
 
-### Step 1: Get your access token
+### Step 1.1: Get your access token
 
-First, authenticate with Auth0 to get an access token:
+Authenticate with Auth0 to get an access token:
 
 ```bash
 # Using the device code flow
@@ -39,7 +47,7 @@ curl -X POST https://YOUR_DOMAIN/auth/oauth/token \
   }'
 ```
 
-### Step 2: List your actions
+### Step 1.2: List your actions
 
 ```bash
 curl -X GET https://actions-agent.intexuraos.com/actions \
@@ -74,6 +82,10 @@ curl -X GET https://actions-agent.intexuraos.com/actions \
 }
 ```
 
+### What Just Happened?
+
+The GET `/actions` endpoint returns all actions owned by the authenticated user. Each action has a type (what kind of work it represents), a status (where it is in its lifecycle), and a confidence score (how certain the AI was about the classification).
+
 ### Checkpoint
 
 You should see a list of your actions. Try filtering by status:
@@ -83,7 +95,9 @@ curl -X GET "https://actions-agent.intexuraos.com/actions?status=pending,awaitin
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-## Part 2: WhatsApp Interactive Button Approval (v4.0.0)
+---
+
+## Part 2: WhatsApp Interactive Button Approval (10 minutes)
 
 The most powerful feature of actions-agent is approving actions by tapping interactive WhatsApp buttons.
 
@@ -94,17 +108,17 @@ The most powerful feature of actions-agent is approving actions by tapping inter
    - **Approve** button
    - **Reject** button
 3. Tap **Approve** to execute the action
-4. Receive confirmation: "✅ Approved! Processing your research: 'Research machine learning trends'"
+4. Receive confirmation and later a completion notification with a link
 
 ### Understanding the Flow
 
 ```
 You: "Research machine learning trends"
-Bot: "📚 New research request ready for approval
+Bot: "New research request ready for approval
       Review: https://app.intexuraos.com/#/inbox?action=abc123"
       [Approve] [Reject]
 You: *tap Approve*
-Bot: "✅ Approved! Processing your research: 'Research machine learning trends'"
+Bot: "Approved! Processing your research: 'Research machine learning trends'"
 [Later]
 Bot: "Your research is ready! View it here: [link]"
 ```
@@ -121,17 +135,21 @@ Bot: "Please use the buttons to approve or reject. If buttons expired, here they
 
 > **Note:** As of v4.0.0, text-based approval (typing "yes"/"no") is no longer supported. The system always re-sends buttons if no button was tapped. No LLM API key is required.
 
+### Auto-Execution
+
+High-confidence actions (>= 90%) skip the approval step entirely and execute immediately. You will receive a completion notification without needing to approve.
+
 ### Checkpoint
 
 Send a command via WhatsApp and practice approving/rejecting by tapping the buttons.
 
-## Part 3: Update an Action Status
+---
 
-Update an action's status to manually approve, reject, or archive it (alternative to WhatsApp buttons).
+## Part 3: Update and Execute Actions (5 minutes)
 
-### Approve an action
+### Update an action status
 
-Move an action from `awaiting_approval` to `processing`:
+Move an action from `awaiting_approval` to `processing` (manual approval via API):
 
 ```bash
 curl -X PATCH https://actions-agent.intexuraos.com/actions/ACTION_ID \
@@ -162,9 +180,7 @@ curl -X PATCH https://actions-agent.intexuraos.com/actions/ACTION_ID \
 
 This logs the transition for ML training and re-routes the action.
 
-## Part 4: Execute an Action
-
-Execute an action synchronously (useful for testing or immediate execution).
+### Execute an action synchronously
 
 ```bash
 curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
@@ -184,7 +200,9 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
 }
 ```
 
-## Part 5: Handle Errors
+---
+
+## Part 4: Handle Errors (5 minutes)
 
 ### Error: Action not found
 
@@ -198,29 +216,37 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
 }
 ```
 
-**Cause:** The action doesn't exist or belongs to another user.
+**Cause:** The action does not exist or belongs to another user.
 
-**Solution:** Verify the action ID and that you're authenticated as the owner.
+**Solution:** Verify the action ID and that you are authenticated as the owner.
 
 ### Error: Unauthorized (401)
 
 ```json
 {
-  "error": "Unauthorized"
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Internal auth failed for create action"
+  }
 }
 ```
 
-**Cause:** Missing or invalid `X-Internal-Auth` header for internal endpoints.
+**Cause:** Missing or invalid `X-Internal-Auth` header for internal endpoints, or invalid Bearer token for public endpoints.
 
-**Solution:** Ensure the shared secret is correctly set in environment variables.
+**Solution:** Ensure the shared secret or access token is correctly set.
 
 ### Error: Action type mismatch
 
-When processing Pub/Sub events, if the URL action type doesn't match the event:
+When processing Pub/Sub events, if the URL action type does not match the event:
 
 ```json
 {
-  "error": "Action type mismatch"
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Action type mismatch between URL and event"
+  }
 }
 ```
 
@@ -228,20 +254,22 @@ When processing Pub/Sub events, if the URL action type doesn't match the event:
 
 **Solution:** Verify Pub/Sub subscription endpoints match action types.
 
-## Part 6: Real-World Scenario - Duplicate Link Resolution
+---
 
-When creating a bookmark action, if the URL already exists, the action fails with an `existingBookmarkId` in the payload. Here's how to handle it:
+## Part 5: Real-World Scenario - Duplicate Link Resolution (5 minutes)
 
-### Step 1: Check the failed action
+When creating a bookmark action, if the URL already exists, the action fails with an `existingBookmarkId` in the payload. Here is how to handle it:
+
+### Step 5.1: Check the failed action
+
+List your failed actions and look for `payload.existingBookmarkId`:
 
 ```bash
-curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID \
+curl -X GET "https://actions-agent.intexuraos.com/actions?status=failed" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-Look for `payload.existingBookmarkId`.
-
-### Step 2: Choose resolution
+### Step 5.2: Choose resolution
 
 **Skip (reject the new link):**
 
@@ -252,7 +280,7 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/resolve-dupl
   -d '{"action": "skip"}'
 ```
 
-**Update (refresh existing bookmark with new metadata):**
+**Update (refresh existing bookmark with new OG metadata):**
 
 ```bash
 curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/resolve-duplicate \
@@ -261,7 +289,9 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/resolve-dupl
   -d '{"action": "update"}'
 ```
 
-## Part 7: Calendar Action Preview
+---
+
+## Part 6: Calendar Action Preview
 
 Calendar actions support previewing before execution.
 
@@ -294,7 +324,9 @@ curl -X GET https://actions-agent.intexuraos.com/actions/ACTION_ID/preview \
 }
 ```
 
-## Part 8: Code Actions (v3.0.0)
+---
+
+## Part 7: Code Actions (v3.0.0)
 
 Code actions dispatch tasks to code-agent (Claude Code). They use interactive WhatsApp buttons with three options.
 
@@ -308,15 +340,6 @@ Code actions dispatch tasks to code-agent (Claude Code). They use interactive Wh
 3. Tap **Approve** to dispatch to code-agent
 4. Receive confirmation and later a completion message with PR/branch details
 
-### Approval Message Content
-
-The approval message includes:
-
-- Prompt preview (truncated to 100 chars)
-- Estimated cost: $1-2
-- Estimated time: 30-60 min
-- Link to review in web UI
-
 ### Cancelling a Running Code Task
 
 Once a code task starts, the code-agent sends a "task started" WhatsApp message with a **Cancel Task** button:
@@ -328,32 +351,13 @@ Error codes returned when cancellation fails:
 
 | Error Code             | Description                                       |
 | ---------------------- | ------------------------------------------------- |
-| `TASK_NOT_FOUND`       | Task doesn't exist                                |
+| `TASK_NOT_FOUND`       | Task does not exist                               |
 | `INVALID_NONCE`        | Cancel code already used                          |
 | `NONCE_EXPIRED`        | Cancel link has expired                           |
 | `NOT_OWNER`            | You are not the owner of this task (HTTP 403)     |
 | `TASK_NOT_CANCELLABLE` | Task has already completed or cannot be cancelled |
 
-### Execute a Code Action Manually
-
-```bash
-curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-**Expected response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "actionId": "123e4567-e89b-12d3-a456-426614174000",
-    "status": "completed",
-    "resourceUrl": "/code-tasks/abc123",
-    "message": "Code task code-task-123 created successfully"
-  }
-}
-```
+---
 
 ## Troubleshooting
 
@@ -364,7 +368,7 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
 | Type correction not working     | Action stays same type after PATCH      | Ensure action is in `pending` or `awaiting_approval` status  |
 | Batch returns wrong actions     | Actions from other users                | Security check filters by userId; verify correct IDs         |
 | WhatsApp notifications not sent | Action completes silently               | Check `whatsapp-send` topic configuration                    |
-| WhatsApp approval not working   | Text reply ignored, buttons re-sent     | Expected behavior in v4.0.0 — tap a button instead           |
+| WhatsApp approval not working   | Text reply ignored, buttons re-sent     | Expected behavior in v4.0.0 -- tap a button instead          |
 | Race condition errors           | Duplicate notifications                 | System handles this automatically with `updateStatusIf`      |
 | Calendar preview returns null   | No preview available                    | Wait for calendar-agent to generate preview                  |
 | Code task worker unavailable    | Action marked as failed                 | code-agent has no available workers; retry later             |
@@ -372,12 +376,14 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
 | Interactive buttons not showing | Plain text message instead of buttons   | WhatsApp client may not support interactive messages         |
 | Action deleted, approval fails  | WhatsApp message: "no longer available" | Action was deleted or expired; this is handled gracefully    |
 
+---
+
 ## Exercises
 
 ### Easy
 
 1. List all your completed actions
-2. Find actions created in the last 24 hours
+2. Find actions created in the last 24 hours using status filtering
 3. Archive an old action you no longer need
 
 ### Medium
@@ -392,9 +398,26 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/execute \
 2. Build a dashboard that polls for action status updates
 3. Test the race condition protection by sending multiple rapid approval button taps
 
-## Understanding Race Condition Protection
+<details>
+<summary>Solutions</summary>
 
-The v2.0.0 release introduced atomic status transitions to prevent race conditions. Here's what happens:
+### Exercise 1 (Easy): List Completed Actions
+
+```bash
+curl -X GET "https://actions-agent.intexuraos.com/actions?status=completed" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### Exercise 2 (Medium): Batch Fetch
+
+```bash
+curl -X POST https://actions-agent.intexuraos.com/actions/batch \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"actionIds": ["id1", "id2", "id3", "id4", "id5", "id6", "id7", "id8", "id9", "id10"]}'
+```
+
+### Exercise 3 (Hard): Race Condition Test
 
 ```
 Scenario: Two WhatsApp approval button taps arrive simultaneously
@@ -409,4 +432,12 @@ Firestore Transaction:
 Result: Only one approval is processed, no duplicate notifications
 ```
 
-This ensures reliable behavior even under heavy load or network delays.
+</details>
+
+---
+
+## Next Steps
+
+1. Explore the [Technical Reference](technical.md) for full API details and domain model documentation
+2. Read about the [approval flow architecture](technical.md#handleapprovalreply-v200-redesigned-in-v400) for deeper understanding
+3. Check the [Agent Interface](agent.md) for machine-readable integration specs

@@ -1,8 +1,8 @@
-# Todos Agent — Technical Reference
+# Todos Agent -- Technical Reference
 
 ## Overview
 
-Todos-agent manages tasks with support for todo items, priorities, due dates, and AI-powered item extraction. Runs on Cloud Run with auto-scaling, uses Firestore for persistence, and integrates with user-service for LLM access.
+Todos-agent manages tasks with support for todo items, priorities, due dates, and AI-powered item extraction. Runs on Cloud Run with auto-scaling, uses Firestore for persistence, and integrates with user-service for LLM access. Package version: 3.1.0.
 
 ## Architecture
 
@@ -22,6 +22,7 @@ graph TB
         Firestore[(Firestore<br/>todos collection)]
         PubSub[Pub/Sub<br/>todos-processing]
         UserService[user-service]
+        AppSettings[app-settings-service]
         LLM[LLM Provider<br/>Gemini/GLM]
     end
 
@@ -31,6 +32,7 @@ graph TB
     Infra --> Firestore
     Infra --> PubSub
     Infra --> UserService
+    Infra --> AppSettings
     UserService --> LLM
 
     classDef service fill:#e1f5ff
@@ -52,15 +54,18 @@ sequenceDiagram
     participant Firestore
     participant PubSub
     participant Worker as PubSub Handler
+    participant UserSvc as user-service
     participant LLM
 
-    Client->>+API: POST /todos (with description)
+    Client->>+API: POST /internal/todos (with description)
     API->>Firestore: Create todo (status: processing)
     API->>PubSub: Publish todos.processing.created
     API-->>-Client: 201 Created
 
     PubSub->>+Worker: Push event to /internal/todos/pubsub/...
     Worker->>Firestore: Fetch todo by ID
+    Worker->>UserSvc: Get LLM client for user
+    UserSvc-->>Worker: LlmGenerateClient
     Worker->>LLM: Extract items from description
     LLM-->>Worker: Structured items (Zod validated)
     Worker->>Firestore: Update todo with items (status: pending)
@@ -71,16 +76,16 @@ sequenceDiagram
 
 | Commit     | Description                                              | Date       |
 | ---------- | -------------------------------------------------------- | ---------- |
+| `b3f34d85` | Release v3.1.0                                           | 2026-02-22 |
+| `c8a42105` | Release v3.0.0                                           | 2026-02-19 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability          | 2026-02-16 |
 | `a52a6bbc` | Add Dash0 OpenTelemetry integration (#803)               | 2026-02-16 |
 | `e60eafc1` | Standardize API key secrets to APP naming (#793)         | 2026-02-15 |
 | `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + fallback (#792) | 2026-02-15 |
 | `45f001c1` | Switch PM2 ecosystem to pnpm --filter (#790)             | 2026-02-14 |
 | `0f69a74b` | Add default model selector with platform Zai fallback    | 2026-02-08 |
-| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)            | 2026-01-30 |
-| `c3198407` | Fix response contract violations (reply.ok/fail)         | 2026-01-30 |
 | `5aa3e1bd` | INT-427: Enable strict 100% coverage enforcement         | 2026-01-31 |
-| `1faa1d3b` | INT-301: Consolidate user service client imports         | 2026-01-26 |
+| `dfd702f1` | Migrate from pino to createAppLogger (Sentry)            | 2026-01-30 |
 
 ## API Endpoints
 
@@ -107,6 +112,14 @@ sequenceDiagram
 | ------ | ----------------------------------------- | -------------------------- | ------------ |
 | POST   | `/internal/todos`                         | Create todo (internal)     | Internal key |
 | POST   | `/internal/todos/pubsub/todos-processing` | Process Pub/Sub push event | Pub/Sub OIDC |
+
+### System Endpoints
+
+| Method | Path            | Description            | Auth |
+| ------ | --------------- | ---------------------- | ---- |
+| GET    | `/health`       | Health check           | None |
+| GET    | `/docs`         | Swagger UI             | None |
+| GET    | `/openapi.json` | OpenAPI specification  | None |
 
 ## Domain Model
 
@@ -173,13 +186,26 @@ sequenceDiagram
 | `high`   | Important, do soon          |
 | `urgent` | Critical, do immediately    |
 
+## Automatic Status Transitions
+
+The `updateTodoItem` use case automatically computes todo status based on item states:
+
+| Condition                               | Computed Status |
+| --------------------------------------- | --------------- |
+| All items completed                     | `completed`     |
+| Some items completed                    | `in_progress`   |
+| No items completed                      | `pending`       |
+| Todo was cancelled or processing        | No change       |
+
+When a new item is added to a completed todo, the status reverts to `in_progress` and `completedAt` is cleared.
+
 ## Pub/Sub
 
 ### Published Events
 
-| Topic              | Event Type                 | Payload                     | Trigger          |
-| ------------------ | -------------------------- | --------------------------- | ---------------- |
-| `todos-processing` | `todos.processing.created` | `{ todoId, userId, title }` | On todo creation |
+| Topic              | Event Type                 | Payload                     | Trigger                       |
+| ------------------ | -------------------------- | --------------------------- | ----------------------------- |
+| `todos-processing` | `todos.processing.created` | `{ todoId, userId, title }` | On internal todo creation     |
 
 ### Subscribed Events
 
@@ -197,9 +223,10 @@ sequenceDiagram
 
 ### Internal Services
 
-| Service      | Endpoint                             | Purpose               |
-| ------------ | ------------------------------------ | --------------------- |
-| user-service | `/internal/users/:userId/llm-client` | Get user's LLM client |
+| Service              | Endpoint                             | Purpose                              |
+| -------------------- | ------------------------------------ | ------------------------------------ |
+| user-service         | `/internal/users/:userId/llm-client` | Get user's LLM client                |
+| app-settings-service | `/internal/settings/pricing`         | Fetch LLM pricing for model selector |
 
 ### Infrastructure
 
@@ -220,7 +247,7 @@ sequenceDiagram
 | `INTEXURAOS_TODOS_PROCESSING_TOPIC`   | Pub/Sub topic for processing           | Yes      |
 | `INTEXURAOS_USER_SERVICE_URL`         | User-service base URL                  | Yes      |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | App-settings base URL (LLM pricing)    | Yes      |
-| `INTEXURAOS_SENTRY_DSN`               | Sentry error tracking                  | No       |
+| `INTEXURAOS_SENTRY_DSN`              | Sentry error tracking                  | No       |
 | `INTEXURAOS_ENVIRONMENT`              | Environment name                       | No       |
 | `INTEXURAOS_ZAI_APP_API_KEY`          | Platform Zai API key (LLM fallback)    | No       |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini API key (LLM fallback) | No       |
@@ -228,11 +255,14 @@ sequenceDiagram
 ## Gotchas
 
 - **Processing status**: Todos with `processing` status are handled asynchronously by the Pub/Sub handler. They become `pending` after AI extraction completes.
-- **Description truncation**: Descriptions over 10,000 characters are truncated before LLM extraction (hard limit in `processTodoCreated`).
+- **Description truncation**: Descriptions over 10,000 characters are truncated before LLM extraction (hard limit in both `processTodoCreated` and `todoItemExtractionService`).
 - **Item extraction requires user API key**: If user has no configured LLM API key, extraction fails and a warning item is added.
 - **Archive restriction**: Only completed or cancelled todos can be archived.
 - **Cancel restriction**: Cannot cancel already completed todos (invalid operation).
-- **Item ordering**: Reorder requires all item IDs to match existing items exactly — partial reorders are rejected.
+- **Item ordering**: Reorder requires all item IDs to match existing items exactly -- partial reorders are rejected.
+- **Max items cap**: LLM extraction results are capped at 50 items.
+- **Markdown stripping**: LLM responses wrapped in markdown code blocks (```json ... ```) are automatically stripped before parsing.
+- **Pub/Sub auth**: The Pub/Sub handler accepts both Cloud Run OIDC (from header `noreply@google.com`) and internal auth token.
 
 ## AI Item Extraction
 
@@ -244,13 +274,17 @@ The service uses your configured LLM (via user-service) to extract structured it
 4. LLM parses description, returns items validated by Zod schema
 5. Items added to todo, status changed to `pending`
 
+**Prompt:** `itemExtractionPrompt` from `@intexuraos/llm-prompts`
+
 **Zod Schema:** `TodoExtractionResponseSchema` from `@intexuraos/llm-prompts`
+
+**Model chain:** Gemini 2.5 Flash (primary), GLM-4.7 (fallback), GLM-4.7-Flash (fallback)
 
 **Fallback behaviors:**
 
 - No items found: Adds informational item "No actionable items found"
 - Extraction fails: Adds warning item "Item extraction failed (error code)"
-- No API key: Adds warning item "No API key configured"
+- No API key: Returns `NO_API_KEY` error, warning item added
 
 ## File Structure
 
@@ -273,7 +307,7 @@ apps/todos-agent/src/
       cancelTodo.ts
       processTodoCreated.ts      # AI extraction handler
       addTodoItem.ts
-      updateTodoItem.ts
+      updateTodoItem.ts          # Includes auto-status computation
       deleteTodoItem.ts
       reorderTodoItems.ts
   infra/
@@ -282,10 +316,11 @@ apps/todos-agent/src/
     gemini/
       todoItemExtractionService.ts  # LLM extraction implementation
   routes/
-    todoRoutes.ts                # Public endpoints
+    todoRoutes.ts                # Public endpoints (12 routes)
     internalRoutes.ts            # Internal create endpoint
     pubsubRoutes.ts              # Pub/Sub push handler
   services.ts                    # DI container
   config.ts
   index.ts
+  server.ts
 ```

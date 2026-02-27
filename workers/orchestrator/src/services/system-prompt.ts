@@ -176,7 +176,7 @@ Example PR body format:
 
 ## References
 - Linear: [${linearIssueId ?? 'INT-XXX'}${linearIssueTitle !== undefined ? ` ${linearIssueTitle}` : ''}](https://linear.app/pbuchman/issue/${linearIssueId ?? 'INT-XXX'})
-${taskUrl !== undefined ? `- Task: [View task](${taskUrl})` : ''}
+${taskUrl !== undefined ? `- IntexuraOS Code Task: [View task](${taskUrl})` : ''}
 
 ## Changes
 <bullet list of key changes>

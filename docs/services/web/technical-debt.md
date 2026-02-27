@@ -1,6 +1,6 @@
-# Web App — Technical Debt
+# Web App -- Technical Debt
 
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-02-22
 **Analysis Run:** Autonomous documentation generation (service-scribe agent)
 
 ---
@@ -9,11 +9,11 @@
 
 | Category    | Count | Severity      |
 | ----------- | ----- | ------------- |
-| Code Smells | 5     | Medium/Low    |
+| Code Smells | 6     | Medium/Low    |
 | Test Gaps   | N/A   | N/A (planned) |
-| Type Issues | 0     | --            |
+| Type Issues | 1     | Low           |
 | TODOs       | 0     | --            |
-| **Total**   | **5** | --            |
+| **Total**   | **7** | --            |
 
 ---
 
@@ -24,7 +24,8 @@ Based on code analysis and recent commits:
 - **Refactoring for improved coverage:** The web app is exempt from the 95% coverage threshold due to planned refactoring (see CLAUDE.md)
 - **PWA enhancements:** Enhanced offline capabilities and background sync
 - **Mobile optimization:** Continued improvements to mobile responsiveness across all pages
-- **Code task UX refinement:** Ongoing iteration on task submission, log viewing, and two-phase flow
+- **Code task UX refinement:** Ongoing iteration on collapsible tool output, multi-status filtering, and two-phase flow
+- **Component extraction:** Large page files (InboxPage, CodeTaskViewPage, LinearIssuesPage) are candidates for decomposition into smaller, focused components
 
 ---
 
@@ -36,19 +37,20 @@ None identified.
 
 ### Medium Priority
 
-| File                           | Issue                                     | Impact                                                                                                                                 |
-| ------------------------------ | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `InboxPage.tsx`                | 866 lines (exceeds SRP guideline)         | Handles UI, state management, real-time listeners, filtering, pagination, and deep linking. Consider extracting to smaller components. |
-| `LinearIssuesPage.tsx`         | 804 lines with inline sub-issue rendering | Board columns, Firestore listener, sub-issue tree, label display, and sync management all in one file.                                 |
-| `CodeTaskViewPage.tsx`         | 862 lines with two-phase UI inline        | Task detail, terminal, two-phase banner, worker offline handling, queue messaging, and retry all in one file.                          |
-| `pages/WorkerSettingsPage.tsx` | 601 lines with inline form components     | Worker add/edit forms, drag-and-drop, and connectivity testing all in one file. Extract form components.                               |
-| `pages/CalendarPage.tsx`       | 536 lines with inline logic               | Event list, month/week views, filtering, sync management, and failed event recovery all in one file.                                   |
+| File                     | Issue                                     | Impact                                                                                                                                 |
+| ------------------------ | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `CodeTaskViewPage.tsx`   | 1021 lines with collapsible log viewer    | Task detail, collapsible tool output, two-phase banner, queue messaging, retry, and PR events timeline all in one file.                |
+| `InboxPage.tsx`          | 871 lines (exceeds SRP guideline)         | Handles UI, state management, real-time listeners, filtering, pagination, and deep linking. Consider extracting to smaller components. |
+| `LinearIssuesPage.tsx`   | 810 lines with inline sub-issue rendering | Board columns, Firestore listener, sub-issue tree, assignee badges, label display, and sync management all in one file.                |
+| `WorkerSettingsPage.tsx` | 637 lines with inline form components     | Worker add/edit forms, drag-and-drop reorder, connectivity testing, and autofill prevention all in one file.                           |
 
 ### Low Priority
 
-| File           | Issue                  | Impact                                                                                   |
-| -------------- | ---------------------- | ---------------------------------------------------------------------------------------- |
-| `HomePage.tsx` | Large single component | Landing page is less critical, but extraction of sections could improve maintainability. |
+| File                              | Issue                                                   | Impact                                                                                                   |
+| --------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `ResearchDetailPage.tsx`          | 1818 lines -- largest file in the app                   | Report detail with markdown rendering, model attribution, cover image, and export. Major SRP violation.  |
+| `HomePage.tsx`                    | 607 lines, large single component                       | Landing page is less critical, but extraction of sections could improve maintainability.                 |
+| `Sidebar.tsx`                     | 690 lines with filter URL building and matching logic   | Navigation, collapsible sections, notification filters, and scroll preservation all in one component.    |
 
 ---
 
@@ -58,9 +60,9 @@ None identified.
 
 Tests are REQUIRED for:
 
-- `utils/` - Utility functions
-- `services/` - API client functions
-- `hooks/` - Custom React hooks
+- `utils/` -- Utility functions
+- `services/` -- API client functions
+- `hooks/` -- Custom React hooks
 - Calculations and business logic
 
 Tests are OPTIONAL for:
@@ -81,57 +83,69 @@ Tests are OPTIONAL for:
 | `hooks/__tests__/useActionConfig.test.ts`                  | Present  | Tests action config loading hook                   |
 | `hooks/__tests__/useFailedLinearIssues.test.ts`            | Present  | Tests Linear issues hook                           |
 | `hooks/__tests__/useCodeTasks.test.ts`                     | Present  | Tests code tasks hook (CRUD, polling, workers)     |
+| `hooks/__tests__/useVisualizations.test.ts`                | Present  | Tests visualization management hook                |
 | `components/__tests__/Chat/Chat.test.tsx`                  | Present  | Tests Chat component (send, guest, errors)         |
 | `components/__tests__/TaskConflictModal.test.tsx`          | Present  | Tests conflict modal rendering and actions         |
 | `utils/__tests__/markdownUtils.test.ts`                    | Present  | Tests markdown/HTML stripping utilities            |
 | `utils/__tests__/todoItemSort.test.ts`                     | Present  | Tests todo sorting logic                           |
+| `utils/__tests__/dateUtils.test.ts`                        | Present  | Tests calendar date utilities                      |
 
 ### Missing Tests
 
-| Module                          | Missing                 | Priority       |
-| ------------------------------- | ----------------------- | -------------- |
-| `services/actionExecutor.ts`    | Execution flow tests    | Medium         |
-| `hooks/useGitHubPRSummaries.ts` | PR summary hook tests   | Medium         |
-| `hooks/useTaskView.ts`          | Task view state tests   | Medium         |
-| `hooks/useActionChanges.ts`     | Listener behavior tests | Low            |
-| `hooks/useCommandChanges.ts`    | Listener behavior tests | Low            |
-| Most `pages/` components        | Integration tests       | Low (optional) |
+| Module                          | Missing                            | Priority       |
+| ------------------------------- | ---------------------------------- | -------------- |
+| `services/actionExecutor.ts`    | Execution flow tests               | Medium         |
+| `hooks/useGitHubPRSummaries.ts` | PR summary hook tests              | Medium         |
+| `hooks/useTaskView.ts`          | Task view state tests              | Medium         |
+| `hooks/useActionChanges.ts`     | Listener behavior tests            | Low            |
+| `hooks/useCommandChanges.ts`    | Listener behavior tests            | Low            |
+| `hooks/useWorkerSettings.ts`    | Worker settings hook tests         | Low            |
+| Most `pages/` components        | Integration tests                  | Low (optional) |
 
 ---
 
 ## TypeScript Issues
 
-No `any` types, `@ts-ignore`, or `@ts-expect-error` found in the codebase.
+| File                                            | Issue           | Count |
+| ----------------------------------------------- | --------------- | ----- |
+| `components/__tests__/Chat/Chat.test.tsx`       | @ts-expect-error | 1     |
+
+The single `@ts-expect-error` is for assigning to `import.meta.env` in test setup, which is a valid test infrastructure need.
 
 ---
 
 ## TODOs / FIXMEs
 
-None identified.
+None identified. The codebase is clean of TODO/FIXME/HACK comments.
 
 ---
 
 ## SRP Violations
 
-| File                     | Lines | Issue                                                                  | Suggestion                                                                                                         |
-| ------------------------ | ----- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `InboxPage.tsx`          | 866   | Handles routing, state, listeners, filtering, pagination, modals       | Extract filtering to `useInboxFilters` hook, pagination to `useInfiniteScroll` hook, modals to separate components |
-| `LinearIssuesPage.tsx`   | 804   | Board columns, Firestore listener, sub-issue tree, labels, sync inline | Extract `IssueCard`, `IssueTree`, and `LinearBoardColumn` components                                               |
-| `CodeTaskViewPage.tsx`   | 862   | Task detail, terminal, two-phase banner, queue messaging, retry inline | Extract `TaskTerminal`, `DesignTaskBanner`, and `TaskActions` into separate components                             |
-| `WorkerSettingsPage.tsx` | 601   | Add/edit forms, drag-drop reorder, connectivity testing inline         | Extract `WorkerForm`, `WorkerCard`, and `WorkerList` components                                                    |
-| `CalendarPage.tsx`       | 536   | Event list, month/week views, filtering, sync, failed event recovery   | Extract calendar views and event list rendering                                                                    |
+| File                     | Lines | Issue                                                                         | Suggestion                                                                                                         |
+| ------------------------ | ----- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `ResearchDetailPage.tsx` | 1818  | Report detail, markdown, model attribution, cover image, export, share        | Extract `ResearchReport`, `ModelAttribution`, `CoverImageViewer`, and `ExportPanel` components                     |
+| `CodeTaskViewPage.tsx`   | 1021  | Task detail, collapsible tool log, two-phase banner, queue messaging, retry   | Extract `CollapsibleLogViewer`, `DesignTaskBanner`, `TaskActions`, and `TaskMessaging` into separate components    |
+| `TodosListPage.tsx`      | 1149  | Todo list, inline editing, item management, drag-and-drop, filtering          | Extract `TodoCard`, `TodoItemList`, and `TodoFilters` components                                                   |
+| `BookmarksListPage.tsx`  | 1134  | Bookmark list, search, OG preview, AI summary, archive, filtering             | Extract `BookmarkCard`, `BookmarkSearch`, and `BookmarkFilters` components                                         |
+| `InboxPage.tsx`          | 871   | Routing, state, listeners, filtering, pagination, modals                      | Extract filtering to `useInboxFilters` hook, pagination to `useInfiniteScroll` hook, modals to separate components |
+| `LinearIssuesPage.tsx`   | 810   | Board columns, Firestore listener, sub-issue tree, assignees, labels, sync    | Extract `IssueCard`, `IssueTree`, and `LinearBoardColumn` components                                               |
+| `Sidebar.tsx`            | 690   | Navigation, collapsible sections, filter URL logic, scroll preservation       | Extract `SidebarSection`, `NotificationFilterList`, and filter URL utils                                           |
+| `WorkerSettingsPage.tsx` | 637   | Add/edit forms, drag-drop reorder, connectivity testing, autofill prevention  | Extract `WorkerForm`, `WorkerCard`, and `WorkerList` components                                                    |
 
 ---
 
 ## Code Duplicates
 
-| Pattern              | Locations                                                        | Suggestion                                     |
-| -------------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
-| API error handling   | All `pages/` components                                          | Create `useApiCall` hook for try/catch pattern |
-| Filter dropdown UI   | `InboxPage.tsx`, `LinearIssuesPage.tsx`                          | Extract to `FilterDropdown.tsx` component      |
-| Modal close handlers | All modal components                                             | Create `useModal` hook for close logic         |
-| Loading spinner      | Repeated in most page components                                 | Extract `PageLoader` component                 |
-| Dark mode classes    | `dark:bg-*` / `dark:text-*` repeated across all pages/components | Consider shared theme utility classes          |
+| Pattern                     | Locations                                                        | Suggestion                                     |
+| --------------------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
+| API error handling          | All `pages/` components                                          | Create `useApiCall` hook for try/catch pattern |
+| Filter dropdown UI          | `InboxPage.tsx`, `CodeTasksPage.tsx`, `LinearIssuesPage.tsx`     | Extract to `FilterDropdown.tsx` component      |
+| Delete confirmation dialogs | `CodeTasksPage`, `DataSourcesListPage`, `TodosListPage`, etc.   | Extract to shared `ConfirmDeleteDialog`        |
+| Modal close handlers        | All modal components                                             | Create `useModal` hook for close logic         |
+| Loading spinner             | Repeated in most page components                                 | Extract `PageLoader` component                 |
+| Dark mode classes           | `dark:bg-*` / `dark:text-*` repeated across all pages/components | Consider shared theme utility classes          |
+| Status badge styling        | `CodeTasksPage.tsx`, `CodeTaskViewPage.tsx`                      | Extract `StatusBadge` component                |
 
 ---
 
@@ -145,6 +159,13 @@ None identified.
 
 | Date       | Issue                                                     | Resolution                                                   |
 | ---------- | --------------------------------------------------------- | ------------------------------------------------------------ |
+| 2026-02-22 | Tool output lines not collapsing correctly in log viewer  | Fixed isBodyLine single-space timestamp detection (`1ee7e8c6`) |
+| 2026-02-22 | Worker reorder buttons not working in settings UI         | Fixed button handlers in WorkerSettingsPage (`fbe7c944`)     |
+| 2026-02-21 | Delete confirmations inconsistent across pages            | Standardized all delete actions with confirmation (`c9acdce3`) |
+| 2026-02-21 | Filter state and sidebar collapse lost on page refresh    | Persisted both to localStorage (`2e3ae30c`)                  |
+| 2026-02-21 | Browser autofill on worker secret fields                  | Added autoComplete="new-password" to secret inputs (`3b081686`) |
+| 2026-02-20 | Null assignee crashes LinearIssuesPage                    | Added null guards for assignee in board display (`19442f43`) |
+| 2026-02-20 | Assignee not displayed on Linear board cards              | Added assignee name with emerald badge (`6df58b52`)          |
 | 2026-02-19 | PR event comment bodies showed raw HTML                   | Added rehype-raw rendering (`2a187f90`)                      |
 | 2026-02-19 | PR event page loaded all events at once (expensive)       | Split into lazy-loaded summaries + details (`e8bbacd7`)      |
 | 2026-02-18 | No way to navigate from design task to impl task          | Added DesignTaskBanner with link (`0e07e938`)                |
@@ -169,6 +190,6 @@ None identified.
 
 ## Related
 
-- [Features](features.md) — User-facing documentation
-- [Technical](technical.md) — Developer reference
+- [Features](features.md) -- User-facing documentation
+- [Technical](technical.md) -- Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

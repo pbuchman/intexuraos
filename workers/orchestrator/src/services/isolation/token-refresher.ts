@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import type { Logger } from '@intexuraos/common-core';
+import { createRetryOctokit } from '../../github/octokit-client.js';
 
 export interface TokenRefresherConfig {
   secretsBasePath: string;
@@ -65,45 +66,32 @@ export class TokenRefresher {
    * Mint a new GitHub installation token.
    */
   private async mintGitHubToken(): Promise<string> {
-    const url = `https://api.github.com/app/installations/${this.config.githubInstallationId}/access_tokens`;
     const jwt = await this.createGitHubAppJWT();
 
-    let response: Response;
     try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${jwt}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      });
+      const octokit = createRetryOctokit(jwt);
+      const { data } = await octokit.request(
+        'POST /app/installations/{installation_id}/access_tokens',
+        { installation_id: Number(this.config.githubInstallationId) }
+      );
+      return data.token;
     } catch (error) {
       /* v8 ignore start -- ts-type: catch block type narrowing on unknown error @preserve */
       const cause =
         error instanceof Error && error.cause instanceof Error ? error.cause : undefined;
       this.logger.error(
         {
-          url,
           errorMessage: error instanceof Error ? error.message : String(error),
           /* v8 ignore stop @preserve */
           causeMessage: cause?.message,
           causeCode: (cause as NodeJS.ErrnoException | undefined)?.code,
           causeSyscall: (cause as NodeJS.ErrnoException | undefined)?.syscall,
+          status: (error as { status?: number }).status,
         },
-        'GitHub token mint fetch failed'
+        'GitHub token mint failed after retries'
       );
       throw error;
     }
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '<unreadable>');
-      this.logger.error({ url, status: response.status, body }, 'GitHub token mint HTTP error');
-      throw new Error(`GitHub token mint failed: ${String(response.status)}`);
-    }
-
-    const data = (await response.json()) as { token: string };
-    return data.token;
   }
 
   private async createGitHubAppJWT(): Promise<string> {

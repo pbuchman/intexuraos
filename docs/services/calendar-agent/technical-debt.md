@@ -1,19 +1,31 @@
 # Calendar Agent - Technical Debt
 
-**Last Updated:** 2026-02-19
-**Analysis Run:** v2.4.0 (Gemini 2.5 Flash default LLM, Dash0 OpenTelemetry, APP naming convention)
+**Last Updated:** 2026-02-22
+**Analysis Run:** v3.1.0 (INT-585 htmlLink as resourceUrl, Release v3.0.0/v3.1.0)
 
 ---
 
 ## Summary
 
-| Category      | Count | Severity |
-| ------------- | ----- | -------- |
-| Code Smells   | 1     | Low      |
-| Test Coverage | 0     | -        |
-| Type Issues   | 0     | -        |
-| TODOs         | 0     | -        |
-| **Total**     | **1** | Low      |
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| Code Smells | 1     | Low      |
+| Test Gaps   | 0     | -        |
+| Type Issues | 0     | -        |
+| TODOs       | 0     | -        |
+| **Total**   | **1** | Low      |
+
+---
+
+## Recent Improvements (v3.1.0)
+
+### INT-585: Google Calendar htmlLink as resourceUrl
+
+**Status:** Complete
+
+`processCalendarAction` now uses the Google Calendar `htmlLink` from the created event as the `resourceUrl` in the ServiceFeedback response. This means approval actions (e.g., WhatsApp approvals) link users directly to the Google Calendar event page rather than the internal `/#/calendar` path. Falls back to `/#/calendar` only when the created event has no `htmlLink`.
+
+**Change:** Replaced `createResourceUrl()` helper function with inline `createdEvent.htmlLink ?? '/#/calendar'`.
 
 ---
 
@@ -83,7 +95,7 @@ All-day events with date-only format (YYYY-MM-DD) from LLM responses are now acc
 
 **Status:** Complete
 
-Removed local `UserServiceClientImpl` and entire `infra/user/` directory. All use cases now use the shared `@intexuraos/internal-clients` `UserServiceClient` with `getOAuthToken(userId, 'google')`. A new `mapUserServiceError()` function in `domain/errors.ts` maps `UserServiceError` codes (`CONNECTION_NOT_FOUND`, `TOKEN_REFRESH_FAILED`, `OAUTH_NOT_CONFIGURED`) to `CalendarError` codes. Removed `llmUserServiceClient` from `ServiceContainer` -- the single `userServiceClient` now handles both OAuth and LLM client retrieval.
+Removed local `UserServiceClientImpl` and entire `infra/user/` directory. All use cases now use the shared `@intexuraos/internal-clients` `UserServiceClient` with `getOAuthToken(userId, 'google')`. A new `mapUserServiceError()` function in `domain/errors.ts` maps `UserServiceError` codes (`CONNECTION_NOT_FOUND`, `TOKEN_REFRESH_FAILED`, `OAUTH_NOT_CONFIGURED`) to `CalendarError` codes.
 
 ### Sentry-Enabled Logging
 
@@ -159,11 +171,11 @@ Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 
 No test coverage gaps identified. Strict 100% branch coverage enforced with v8 ignore categories.
 
-**Coverage areas (v2.3.0):**
+**Coverage areas:**
 
 - generateCalendarPreview use case - fully tested
 - CalendarPreviewRepository - all CRUD operations tested
-- processCalendarAction - preview integration tested, minimal preview fallback tested
+- processCalendarAction - preview integration tested, htmlLink resource URL tested, fallback to /#/calendar tested
 - Duration calculation - edge cases covered
 - All-day detection - comprehensive tests
 - LLM extraction repair mechanism - JSON syntax errors, Zod validation errors, max attempts
@@ -194,60 +206,11 @@ No deprecated API usage detected.
 
 ---
 
-## v2.0.0 Changes Analysis
-
-### CalendarPreview Model
-
-**Quality:** Good
-
-- Uses actionId as document ID for natural idempotency
-- Status enum covers all states: pending, ready, failed
-- Duration and isAllDay computed fields for UI convenience
-
-### generateCalendarPreview Use Case
-
-**Quality:** Good
-
-- Idempotent - returns existing preview if already generated
-- Non-blocking cleanup pattern applied
-- Error handling saves failed extractions for review
-- LLM reasoning preserved for transparency
-
-### Preview Repository
-
-**Quality:** Good
-
-- O(1) lookups via actionId document ID
-- Delete operation is fire-and-forget (non-blocking)
-- Proper error handling with CalendarError mapping
-
-### Non-Blocking Cleanup Pattern
-
-**Quality:** Good
-
-The preview cleanup after event creation uses non-blocking deletion:
-
-```typescript
-// Fire-and-forget deletion - don't block response
-calendarPreviewRepo.delete(actionId).then((result) => {
-  if (!result.ok) {
-    logger.warn({ actionId, error: result.error }, 'Failed to cleanup preview');
-  }
-});
-```
-
-This ensures:
-
-- Event creation response is not delayed by cleanup
-- Cleanup failures don't break the main flow
-- Warning logged for debugging orphan previews
-
----
-
 ## Resolved Issues
 
 | Date       | Issue                                             | Resolution                                      |
 | ---------- | ------------------------------------------------- | ----------------------------------------------- |
+| 2026-02-20 | processAction returned internal /#/calendar URL   | Now uses Google Calendar htmlLink as resourceUrl |
 | 2026-02-16 | No distributed tracing across service boundaries  | Added Dash0 OpenTelemetry integration           |
 | 2026-02-15 | API key env vars inconsistently named             | Standardized to APP naming convention           |
 | 2026-02-15 | Single LLM with no fallback on unavailability     | Added multi-model with Zai fallback             |

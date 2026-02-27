@@ -47,22 +47,21 @@ node scripts/pubsub-publish-test.mjs calendar-preview
 
 ## Monitored Topics
 
-| Topic                      | Color        | Event Type                     |
-| -------------------------- | ------------ | ------------------------------ |
-| `whatsapp-media-cleanup`   | Purple       | Media file deletion            |
-| `whatsapp-send-message`    | Green        | Outbound WhatsApp messages     |
-| `whatsapp-webhook-process` | Light Purple | WhatsApp webhook processing    |
-| `whatsapp-transcription`   | Light Green  | Audio transcription            |
-| `commands-ingest`          | Orange       | Command routing                |
-| `actions-queue`            | Cyan         | Action processing              |
-| `research-process`         | Blue         | Research task processing       |
-| `llm-analytics`            | Indigo       | LLM usage analytics            |
-| `llm-call`                 | Purple       | LLM API calls                  |
-| `bookmark-enrich`          | Orange       | Bookmark metadata enriching    |
-| `bookmark-summarize`       | Teal         | Bookmark AI summarization      |
-| `todos-processing`         | Pink         | Todo processing events         |
-| `calendar-preview`         | Teal         | Calendar preview generation    |
-| `snapshot-refresh`         | Gray         | Data insights snapshot refresh |
+| Topic                      | Color        | Event Type                  |
+| -------------------------- | ------------ | --------------------------- |
+| `whatsapp-media-cleanup`   | Purple       | Media file deletion         |
+| `whatsapp-send-message`    | Green        | Outbound WhatsApp messages  |
+| `whatsapp-webhook-process` | Light Purple | WhatsApp webhook processing |
+| `whatsapp-transcription`   | Light Green  | Audio transcription         |
+| `commands-ingest`          | Orange       | Command routing             |
+| `actions-queue`            | Cyan         | Action processing           |
+| `research-process`         | Blue         | Research task processing    |
+| `llm-analytics`            | Indigo       | LLM usage analytics         |
+| `llm-call`                 | Purple       | LLM API calls               |
+| `bookmark-enrich`          | Orange       | Bookmark metadata enriching |
+| `bookmark-summarize`       | Teal         | Bookmark AI summarization   |
+| `todos-processing`         | Pink         | Todo processing events      |
+| `calendar-preview`         | Teal         | Calendar preview generation |
 
 ## Architecture
 
@@ -115,7 +114,6 @@ node scripts/pubsub-publish-test.mjs calendar-preview
 - `bookmark-summarize` → `POST /internal/bookmarks/pubsub/summarize` (:8124)
 - `todos-processing` → `POST /internal/todos/pubsub/todos-processing` (:8123)
 - `calendar-preview` → `POST /internal/calendar/generate-preview` (:8125)
-- `snapshot-refresh` → `POST /internal/snapshots/refresh` (:8119)
 
 ## Environment Variables
 
@@ -158,7 +156,6 @@ const TOPICS = [
   'bookmark-summarize',
   'todos-processing',
   'calendar-preview',
-  'snapshot-refresh',
   'your-new-topic', // Add here
 ];
 ```

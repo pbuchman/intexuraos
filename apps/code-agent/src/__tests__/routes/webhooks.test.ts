@@ -14,7 +14,7 @@ vi.mock('jose', () => ({
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../server.js';
-import { resetServices, setServices } from '../../services.js';
+import { getServices, resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
@@ -50,7 +50,6 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createFirestorePRTaskLockRepository } from '../../infra/firestore/firestorePRTaskLockRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 
 // Mock fetchWithAuth
@@ -180,10 +179,6 @@ describe('POST /internal/webhooks/task-complete', () => {
         logger,
       }),
       gitHubPRSummaryRepo: {} as never,
-      prTaskLockRepo: createFirestorePRTaskLockRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
       turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -209,7 +204,6 @@ describe('POST /internal/webhooks/task-complete', () => {
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
-      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
@@ -534,6 +528,156 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('designed');
       expect(getResult.value.result?.branch).toBe('test-branch');
       expect(getResult.value.callbackReceived).toBe(true);
+    });
+
+    it('populates prNumber and prBranch from result.prUrl on completion (INT-465)', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug with prNumber',
+        sanitizedPrompt: 'Fix the bug with prNumber',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/pr-number-population',
+          commits: 2,
+          summary: 'Fixed PR number population',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/835',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.prNumber).toBe(835);
+      expect(getResult.value.prBranch).toBe('fix/pr-number-population');
+    });
+
+    it('does not set prNumber when result has no prUrl (INT-465)', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug no prUrl',
+        sanitizedPrompt: 'Fix the bug no prUrl',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/no-pr',
+          commits: 1,
+          summary: 'Fixed but no PR',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.prNumber).toBeUndefined();
+      expect(getResult.value.prBranch).toBe('fix/no-pr');
+    });
+
+    it('does not set prNumber on failed webhook (INT-465)', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug fail case',
+        sanitizedPrompt: 'Fix the bug fail case',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: {
+          code: 'WORKER_ERROR',
+          message: 'Worker crashed',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.prNumber).toBeUndefined();
+      expect(getResult.value.prBranch).toBeUndefined();
     });
 
     it('updates task status correctly for completed task without result', async () => {
@@ -1340,6 +1484,204 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.status).toBe('interrupted');
     });
   });
+
+  describe('Linear In Review transition', () => {
+    it('calls markInReview when completed task has prUrl and linearIssueId', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+        linearIssueId: 'INT-500',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const services = getServices();
+      const markInReviewSpy = vi.spyOn(services.linearIssueService, 'markInReview');
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/linear-transition',
+          commits: 2,
+          summary: 'Fixed the bug',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/500',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(markInReviewSpy).toHaveBeenCalledWith('user-123', 'INT-500');
+    });
+
+    it('does not call markInReview when completed task has prUrl but no linearIssueId', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const services = getServices();
+      const markInReviewSpy = vi.spyOn(services.linearIssueService, 'markInReview');
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/no-linear',
+          commits: 1,
+          summary: 'Fixed without Linear',
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/501',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(markInReviewSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not call markInReview when completed task has no prUrl', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+        linearIssueId: 'INT-502',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const services = getServices();
+      const markInReviewSpy = vi.spyOn(services.linearIssueService, 'markInReview');
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          branch: 'fix/no-pr',
+          commits: 1,
+          summary: 'Completed but no PR',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(markInReviewSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not call markInReview for failed task with linearIssueId', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        webhookSecret: 'test-webhook-secret',
+        linearIssueId: 'INT-503',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const services = getServices();
+      const markInReviewSpy = vi.spyOn(services.linearIssueService, 'markInReview');
+
+      const payload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: {
+          code: 'WORKER_ERROR',
+          message: 'Worker crashed',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(markInReviewSpy).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
@@ -1465,10 +1807,6 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         logger,
       }),
       gitHubPRSummaryRepo: {} as never,
-      prTaskLockRepo: createFirestorePRTaskLockRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
       turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1494,7 +1832,6 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
-      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
@@ -1808,10 +2145,6 @@ describe('POST /internal/logs', () => {
         logger,
       }),
       gitHubPRSummaryRepo: {} as never,
-      prTaskLockRepo: createFirestorePRTaskLockRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
       turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1837,7 +2170,6 @@ describe('POST /internal/logs', () => {
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
-      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
@@ -2373,10 +2705,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         logger,
       }),
       gitHubPRSummaryRepo: {} as never,
-      prTaskLockRepo: createFirestorePRTaskLockRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      }),
       turnMetricsRepo: createFirestoreTurnMetricsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -2402,7 +2730,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       workerHealthProbe: WorkerHealthProbe;
       gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
       gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
-      prTaskLockRepo: import('../../domain/repositories/prTaskLockRepository.js').PRTaskLockRepository;
       turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
     });
 
