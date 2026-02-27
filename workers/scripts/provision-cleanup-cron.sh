@@ -26,6 +26,14 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
+# Pre-flight: verify source files exist
+for required_file in cleanup-containers.sh container-cleanup.service container-cleanup.timer; do
+  if [[ ! -f "${SOURCE_DIR}/${required_file}" ]]; then
+    echo "ERROR: Required file not found: ${SOURCE_DIR}/${required_file}"
+    exit 1
+  fi
+done
+
 # 1. Create directories
 echo "[1/5] Creating directories..."
 mkdir -p "${INSTALL_DIR}"
