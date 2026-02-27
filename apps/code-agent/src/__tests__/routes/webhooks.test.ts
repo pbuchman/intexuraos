@@ -984,10 +984,6 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.error?.code).toBe('EXECUTION_AGENT_ENFORCEMENT_FAILED');
     });
 
-    // ============================================================
-    // Pull Request Agent Enforcement Tests (INT-655)
-    // ============================================================
-
     it('pull_request task rejects missing result payload', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',

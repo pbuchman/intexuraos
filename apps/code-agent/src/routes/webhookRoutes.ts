@@ -545,6 +545,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Step 3: Update task based on status
       if (status === 'completed') {
+        // Trace which agent type is being handled for debugging
+        request.log.info({ taskId, agentType: task.agentType }, 'Processing completed task');
+
         if (task.agentType === 'execution') {
           if (result === undefined) {
             request.log.error(
