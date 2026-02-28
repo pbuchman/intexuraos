@@ -175,9 +175,8 @@ interface TaskResult {
   ciFailed?: boolean;
   planning_outcome_label?: 'planned' | 'unclear';
   planning_superpowers_writing_plans_used?: '0' | '1';
-  planning_issue_url?: string;
-  planning_trivial_task?: '0' | '1' | '';
-  planning_doc_path?: string;
+  planning_original_issue_url?: string;
+  planning_is_complex?: '0' | '1';
   planning_pr_url?: string;
   planning_clarification_message?: string;
   execution_outcome_label?: 'implemented';
