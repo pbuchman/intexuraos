@@ -289,3 +289,5 @@ workers/claude-worker/
 **Attribution file uses jq merge** - If `/repo/.claude/settings.local.json` already exists (e.g. from a previous orchestrator run on the same worktree), the entrypoint uses `jq` to merge the `attribution` key rather than overwriting the file. This preserves any user settings already present.
 
 **UID 1001, not 1000** - The `node:22-alpine` base image assigns UID 1000 to the `node` user. The `claude` user uses UID 1001 to avoid conflicts. The tmpfs mounts specify `uid=1001,gid=1001` to match.
+
+**Container cleanup is external** - Exited `claude-worker-*` containers are cleaned up by two mechanisms: (1) the orchestrator's in-process `cleanupOrphanedContainers()` on startup (removes containers >24h old), and (2) a cron-based cleanup script (`workers/scripts/cleanup-containers.sh`) running every 6 hours via systemd timer or macOS LaunchAgent. Running containers are never touched by either mechanism. See `workers/orchestrator/README.md` > Container Cleanup Cron for setup instructions.
