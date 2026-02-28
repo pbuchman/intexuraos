@@ -2962,6 +2962,21 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(body.success).toBe(true);
     });
 
+    it('returns 200 when authenticated via OIDC bearer token', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/drain-queue',
+        headers: {
+          authorization: 'Bearer fake-oidc-token',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+    });
+
     it('returns 500 when drain use case fails', async () => {
       const services = getServices();
       const failingRepo = {

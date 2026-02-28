@@ -297,6 +297,34 @@ describe('drainTaskQueue', () => {
     }
   });
 
+  it('fails task when dispatch returns non-capacity error', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));
+    setupWorkerSettings();
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      err({ code: 'network_error', message: 'Connection refused' })
+    );
+
+    mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ action: 'failed', taskId: 'task-123' });
+    }
+
+    // Verify task was marked as failed with the dispatch error
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
+      status: 'failed',
+      error: {
+        code: 'network_error',
+        message: expect.stringContaining('Connection refused'),
+      },
+    });
+  });
+
   it('dispatches successfully and updates task status', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.findOldestQueued.mockResolvedValue(ok(task));

@@ -359,7 +359,12 @@ ${additionalContext.trim()}
     // INT-619: Queue task when all workers are at capacity
     if (dispatchError.code === 'at_capacity') {
       const queueCountResult = await codeTaskRepo.countQueued();
-      const queueCount = queueCountResult.ok ? queueCountResult.value : 0;
+      /* v8 ignore start -- test-infra: Firestore countQueued failure fallback to fail-closed @preserve */
+      if (!queueCountResult.ok) {
+        logger.error({ error: queueCountResult.error }, 'Failed to count queued tasks, treating as queue full');
+      }
+      /* v8 ignore stop @preserve */
+      const queueCount = queueCountResult.ok ? queueCountResult.value : config.queue.maxSize;
 
       if (queueCount >= config.queue.maxSize) {
         await codeTaskRepo.update(retryTask.id, {

@@ -640,7 +640,7 @@ describe('submitToExecutionAgent', () => {
         expect.stringContaining('task_'),
         expect.objectContaining({
           status: 'failed',
-          error: expect.objectContaining({ code: 'at_capacity' }),
+          error: expect.objectContaining({ code: 'queue_full' }),
         })
       );
 

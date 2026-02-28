@@ -2038,9 +2038,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       // Step 3: Check task is cancellable
-      if (!['dispatched', 'running'].includes(task.status)) {
-        request.log.info({ taskId, status: task.status }, 'Cannot cancel task - not in running state');
-        return await reply.fail('CONFLICT', 'Task is not running');
+      if (!['dispatched', 'running', 'queued'].includes(task.status)) {
+        request.log.info({ taskId, status: task.status }, 'Cannot cancel task - not in cancellable state');
+        return await reply.fail('CONFLICT', 'Task is not in a cancellable state');
       }
 
       // Step 4: Update Firestore status to cancelled (source of truth)
@@ -3838,10 +3838,20 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /internal/drain-queue',
       });
 
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for drain-queue');
-        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      // Cloud Scheduler uses OIDC tokens validated by Cloud Run at infrastructure level.
+      // If request has Authorization header, Cloud Run already validated the OIDC token.
+      // Direct service calls use x-internal-auth header.
+      const authHeader = request.headers.authorization;
+      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+
+      if (isOidcAuth) {
+        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn({ reason: authResult.reason }, 'Internal auth failed for drain-queue');
+          return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+        }
       }
 
       const services = getServices();

@@ -187,7 +187,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
     );
   }
 
-  const isActive = task.status === 'running' || task.status === 'dispatched';
+  const isActive = task.status === 'running' || task.status === 'dispatched' || task.status === 'queued';
   const isRetryable = task.status === 'failed' || task.status === 'cancelled' || task.status === 'interrupted';
   const taskWorkerStatus = workersStatus !== null
     ? workersStatus.workers.find((w) => w.name === task.workerLocation)

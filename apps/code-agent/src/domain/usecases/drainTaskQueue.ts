@@ -26,7 +26,7 @@ export function _resetDrainGuard(): void {
 }
 
 export interface DrainTaskQueueResult {
-  action: 'dispatched' | 'expired' | 'still_busy' | 'empty' | 'skipped';
+  action: 'dispatched' | 'expired' | 'still_busy' | 'empty' | 'skipped' | 'failed';
   taskId?: string;
 }
 
@@ -157,8 +157,24 @@ export async function drainTaskQueue(
     });
 
     if (!dispatchResult.ok) {
-      logger.info({ taskId: task.id, error: dispatchResult.error }, 'Workers still busy, task remains queued');
-      return ok({ action: 'still_busy', taskId: task.id });
+      const dispatchError = dispatchResult.error;
+
+      // Only at_capacity means workers are genuinely busy — task stays queued
+      if (dispatchError.code === 'at_capacity') {
+        logger.info({ taskId: task.id, error: dispatchError }, 'Workers still busy, task remains queued');
+        return ok({ action: 'still_busy', taskId: task.id });
+      }
+
+      // Other dispatch failures (network_error, dispatch_failed, etc.) — fail the task
+      logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with non-capacity error');
+      await codeTaskRepo.update(task.id, {
+        status: 'failed',
+        error: {
+          code: dispatchError.code,
+          message: `Drain dispatch failed: ${dispatchError.message}`,
+        },
+      });
+      return ok({ action: 'failed', taskId: task.id });
     }
 
     // Step 6: Success - update status to dispatched

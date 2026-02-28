@@ -361,7 +361,7 @@ describe('POST /code/cancel', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toBe('Task is not running');
+      expect(body.error.message).toBe('Task is not in a cancellable state');
     });
 
     it('returns 409 for already cancelled task', async () => {
@@ -399,7 +399,7 @@ describe('POST /code/cancel', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toBe('Task is not running');
+      expect(body.error.message).toBe('Task is not in a cancellable state');
     });
 
     it('returns 409 for failed task', async () => {
@@ -437,7 +437,7 @@ describe('POST /code/cancel', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toBe('Task is not running');
+      expect(body.error.message).toBe('Task is not in a cancellable state');
     });
   });
 
