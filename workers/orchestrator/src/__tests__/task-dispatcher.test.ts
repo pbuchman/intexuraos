@@ -71,9 +71,8 @@ const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
 - superpowers_writing_plans_used: 1
 - Original issue: https://linear.app/intexuraos/issue/INT-123
 - Planning issue: ${outcome === 'planned' ? 'https://linear.app/intexuraos/issue/INT-456' : ''}
-- Trivial task: ${outcome === 'planned' ? '1' : ''}
-- Parallel breakdown proof: 
-- Plan doc: 
+- Child issues: ${outcome === 'planned' ? '1' : '0'}
+- Plan doc:
 - Planning PR: 
 - Clarification message: ${outcome === 'unclear' ? 'Need API contract details from user' : ''}
 - Summary: Planning completed`,
@@ -247,7 +246,7 @@ describe('TaskDispatcher', () => {
       outcomeLabel: 'planned' | 'unclear';
       superpowersWritingPlansUsed: '0' | '1';
       planningIssueUrl?: string;
-      trivialTask?: '0' | '1';
+      childIssueCount?: number;
       docPath?: string;
       prUrl?: string;
       clarificationMessage?: string;
@@ -3949,115 +3948,6 @@ describe('TaskDispatcher', () => {
       expect(retryLog).toContain('verificationTrend=');
       expect(retryLog).toContain('score=');
       expect(retryLog).toContain('effective=');
-      vi.useRealTimers();
-    });
-
-    it('logs agent-type mismatch warning when planning-agent task creates a PR', async () => {
-      vi.useFakeTimers();
-      const phaseState = createStatePersistence();
-      const agentDispatcher = new TaskDispatcher(
-        mockConfig,
-        phaseState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        singleAttemptCompletionControl
-      );
-
-      const phaseInternal = agentDispatcher as unknown as {
-        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
-      };
-      vi.spyOn(phaseInternal, 'checkForResult').mockResolvedValue({
-        branch: 'feat/phase-mismatch',
-        commits: 1,
-        ciFailed: false,
-        prUrl: 'https://github.com/pbuchman/intexuraos/pull/800',
-      });
-
-      const warnSpy = vi.spyOn(mockLogger, 'warn');
-
-      const request: CreateTaskRequest = {
-        taskId: 'obs-phase-mismatch-task',
-        workerType: 'auto',
-        prompt: 'Design-only task',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: [],
-        hasChildren: false,
-      };
-
-      await agentDispatcher.submitTask(request);
-      await vi.advanceTimersByTimeAsync(0);
-      vi.mocked(mockLogForwarder.appendChunk).mockClear();
-      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
-
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-
-      const logs = getOrchestratorLogs();
-      const mismatchLog = logs.find((l) => l.includes('[WARN] Agent mismatch'));
-      expect(mismatchLog).toBeDefined();
-      expect(mismatchLog).toContain('task ran as Planning Agent but worker created PR');
-      expect(mismatchLog).toContain('https://github.com/pbuchman/intexuraos/pull/800');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: 'obs-phase-mismatch-task',
-          agentType: 'planning',
-          prUrl: 'https://github.com/pbuchman/intexuraos/pull/800',
-        }),
-        'Agent mismatch: Planning Agent task created a PR'
-      );
-      vi.useRealTimers();
-    });
-
-    it('does not log agent-type mismatch for execution-agent tasks with PR', async () => {
-      vi.useFakeTimers();
-      const noMismatchState = createStatePersistence();
-      const noMismatchDispatcher = new TaskDispatcher(
-        mockConfig,
-        noMismatchState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        singleAttemptCompletionControl
-      );
-
-      const noMismatchInternal = noMismatchDispatcher as unknown as {
-        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
-      };
-      vi.spyOn(noMismatchInternal, 'checkForResult').mockResolvedValue({
-        branch: 'feat/no-mismatch',
-        commits: 2,
-        ciFailed: false,
-        prUrl: 'https://github.com/pbuchman/intexuraos/pull/801',
-      });
-
-      const request: CreateTaskRequest = {
-        taskId: 'obs-no-mismatch-task',
-        workerType: 'auto',
-        prompt: 'Code-task with PR',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: ['code-task'],
-        hasChildren: false,
-      };
-
-      await noMismatchDispatcher.submitTask(request);
-      await vi.advanceTimersByTimeAsync(0);
-      vi.mocked(mockLogForwarder.appendChunk).mockClear();
-      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
-
-      await vi.advanceTimersByTimeAsync(30 * 1000);
-
-      const logs = getOrchestratorLogs();
-      const mismatchLog = logs.find((l) => l.includes('[WARN] Phase mismatch'));
-      expect(mismatchLog).toBeUndefined();
       vi.useRealTimers();
     });
 

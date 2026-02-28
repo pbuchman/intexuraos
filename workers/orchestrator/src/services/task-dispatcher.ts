@@ -764,16 +764,6 @@ export class TaskDispatcher {
         `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
       );
     }
-    if (completionAgentType === 'planning' && result?.prUrl !== undefined && result.prUrl !== '') {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `[WARN] Agent mismatch: task ran as Planning Agent but worker created PR: ${result.prUrl}`
-      );
-      this.logger.warn(
-        { taskId: task.taskId, agentType: completionAgentType, prUrl: result.prUrl },
-        'Agent mismatch: Planning Agent task created a PR'
-      );
-    }
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Running completion verification: exitCode=${String(exitCode ?? 'unknown')} claudeError=${claudeError ?? 'none'} detectedPr=${result?.prUrl ?? 'none'}`
@@ -1024,7 +1014,7 @@ export class TaskDispatcher {
           planning_superpowers_writing_plans_used:
             verification.planningMetadata.superpowersWritingPlansUsed,
           planning_issue_url: verification.planningMetadata.planningIssueUrl ?? '',
-          planning_trivial_task: verification.planningMetadata.trivialTask ?? '',
+          planning_child_issue_count: String(verification.planningMetadata.childIssueCount ?? 0),
           planning_doc_path: verification.planningMetadata.docPath ?? '',
           planning_pr_url: verification.planningMetadata.prUrl ?? '',
           planning_clarification_message: verification.planningMetadata.clarificationMessage ?? '',
