@@ -123,10 +123,10 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
         // Route comment to existing task if dedup found one
         if (createResult.error.existingTaskId !== undefined) {
           const existingTaskId = createResult.error.existingTaskId;
-          const taskResult = await services.codeTaskRepo.findById(existingTaskId);
+          const existingTaskResult = await services.codeTaskRepo.findById(existingTaskId);
 
-          if (taskResult.ok) {
-            const existingTask = taskResult.value;
+          if (existingTaskResult.ok) {
+            const existingTask = existingTaskResult.value; // @allow-result-access -- narrowed by existingTaskResult.ok above
             const payload = event.payload as Record<string, unknown> | undefined;
             const message = buildDispatchMessage(event, payload);
 
@@ -144,11 +144,18 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
             );
 
             if (sendResult.ok) {
-              await services.codeTaskRepo.update(existingTaskId, { prNumber: event.pullRequestNumber });
-              logger.info(
-                { taskId: existingTaskId, prNumber: event.pullRequestNumber },
-                'Routed PR comment to existing task (dedup ACTIVE_TASK_EXISTS)'
-              );
+              const updateResult = await services.codeTaskRepo.update(existingTaskId, { prNumber: event.pullRequestNumber });
+              if (updateResult.ok) {
+                logger.info(
+                  { taskId: existingTaskId, prNumber: event.pullRequestNumber },
+                  'Routed PR comment to existing task (dedup ACTIVE_TASK_EXISTS)'
+                );
+              } else {
+                logger.warn(
+                  { taskId: existingTaskId, prNumber: event.pullRequestNumber, error: updateResult.error },
+                  'Routed PR comment but failed to persist prNumber — future comments may not auto-route'
+                );
+              }
             } else {
               logger.error(
                 { taskId: existingTaskId, error: sendResult.error, prNumber: event.pullRequestNumber },
@@ -159,8 +166,10 @@ async function dispatchPRCommentToTask(event: GitHubPREvent, logger: Logger): Pr
           }
 
           logger.error(
-            { existingTaskId, error: taskResult.error },
-            'Failed to fetch existing task for comment routing'
+            { existingTaskId, errorCode: existingTaskResult.error.code, error: existingTaskResult.error },
+            existingTaskResult.error.code === 'NOT_FOUND'
+              ? 'Existing task not found for comment routing (possible race condition — task may have been deleted)'
+              : 'Failed to fetch existing task for comment routing (Firestore error)'
           );
         }
 
