@@ -146,12 +146,6 @@ export class TaskDispatcher {
       return capacityCheck;
     }
 
-    // Increment attempt count
-    task.attemptCount = (task.attemptCount ?? 0) + 1;
-
-    // Save task state
-    await this.saveTask(task);
-
     // Register with log forwarder
     this.logForwarder.registerTask(task.taskId, task.webhookSecret);
 
@@ -164,7 +158,9 @@ export class TaskDispatcher {
 
     if (!startResult.ok) {
       if (this.runningCount > 0) this.runningCount--;
+      this.isolation.tokenRefresher.unregisterTask(task.taskId);
       this.logForwarder.unregisterTask(task.taskId);
+      await this.isolation.provider.cleanupTaskSession?.(task.taskId);
       return {
         ok: false,
         error: {
@@ -175,12 +171,19 @@ export class TaskDispatcher {
       };
     }
 
+    // Increment attempt count after successful start
+    task.attemptCount = (task.attemptCount ?? 0) + 1;
     task.containerId = startResult.containerId;
     await this.saveTask(task);
 
     this.scheduleTimeoutWarning(task.taskId);
     this.scheduleTimeoutKill(task.taskId);
     this.startCompletionMonitoring(task.taskId);
+
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Task adopted after restart: attempt=${String(task.attemptCount)}/${String(task.maxAttempts ?? this.completionMaxAttempts)} containerId=${task.containerId}`
+    );
 
     this.logger.info(
       {

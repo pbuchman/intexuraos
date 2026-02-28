@@ -170,6 +170,7 @@ describe('TaskDispatcher', () => {
     waitForCompletion: vi.fn(async () => 0),
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
     listWorkers: vi.fn(async () => []),
+    cleanupTaskSession: vi.fn(async () => undefined),
   };
 
   // Mock TokenRefresher
@@ -4314,7 +4315,9 @@ describe('TaskDispatcher', () => {
         expect(result.error.type).toBe('service_error');
       }
       expect(dispatcher.getRunningCount()).toBe(0);
+      expect(mockTokenRefresher.unregisterTask).toHaveBeenCalledWith('adopt-task-1');
       expect(mockLogForwarder.unregisterTask).toHaveBeenCalledWith('adopt-task-1');
+      expect(mockIsolationProvider.cleanupTaskSession).toHaveBeenCalledWith('adopt-task-1');
     });
 
     it('should increment attemptCount by 1', async () => {
