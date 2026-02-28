@@ -61,7 +61,7 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      original_issue_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
       is_complex: '0',
       pr_url: '',
       summary: 'Planned the task.',
@@ -74,7 +74,7 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'unclear',
       superpowers_writing_plans: 'not used',
-      original_issue_url: '',
+      linear_url: '',
       is_complex: '0',
       pr_url: '',
       summary: 'Could not plan.',
@@ -87,7 +87,7 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      original_issue_url: 'https://linear.app/pbuchman/issue/INT-631',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-631',
       is_complex: '1',
       pr_url: 'https://github.com/pbuchman/intexuraos/pull/950',
       summary: 'Planned and created PR.',
@@ -100,7 +100,7 @@ describe('PLANNING_SCHEMA', () => {
     const result = PLANNING_SCHEMA.safeParse({
       outcome: 'done',
       superpowers_writing_plans: 'used',
-      original_issue_url: '',
+      linear_url: '',
       is_complex: '0',
       pr_url: '',
       summary: 'x',
@@ -167,7 +167,7 @@ describe('buildPlanningPrompt', () => {
     expect(prompt).toContain('Planning Agent');
     expect(prompt).toContain('outcome');
     expect(prompt).toContain('superpowers_writing_plans');
-    expect(prompt).toContain('original_issue_url');
+    expect(prompt).toContain('linear_url');
     expect(prompt).toContain('is_complex');
     expect(prompt).toContain('pr_url');
     expect(prompt).toContain('unclear_clarification');
@@ -292,7 +292,7 @@ describe('OrchestratorCompletionVerifier', () => {
     const validPlanningResponse = JSON.stringify({
       outcome: 'planned',
       superpowers_writing_plans: 'used',
-      original_issue_url: 'https://linear.app/intexuraos/issue/INT-100',
+      linear_url: 'https://linear.app/intexuraos/issue/INT-100',
       is_complex: '0',
       pr_url: '',
       summary: 'The agent planned successfully.',
@@ -322,7 +322,7 @@ describe('OrchestratorCompletionVerifier', () => {
         agentType: 'planning',
         outcome: 'planned',
         superpowers_writing_plans: 'used',
-        original_issue_url: 'https://linear.app/intexuraos/issue/INT-100',
+        linear_url: 'https://linear.app/intexuraos/issue/INT-100',
         is_complex: '0',
         pr_url: '',
         summary: 'The agent planned successfully.',
@@ -337,7 +337,7 @@ describe('OrchestratorCompletionVerifier', () => {
           content: JSON.stringify({
             outcome: 'unclear',
             superpowers_writing_plans: 'not used',
-            original_issue_url: '',
+            linear_url: '',
             is_complex: '0',
             pr_url: '',
             summary: 'Could not plan.',
@@ -512,7 +512,7 @@ describe('OrchestratorCompletionVerifier', () => {
       const wrappedResponse = `Here is the result:\n${JSON.stringify({
         outcome: 'planned',
         superpowers_writing_plans: 'used',
-        original_issue_url: 'https://linear.app/intexuraos/issue/INT-50',
+        linear_url: 'https://linear.app/intexuraos/issue/INT-50',
         is_complex: '0',
         pr_url: '',
         summary: 'Planned.',

@@ -584,7 +584,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Created planning issue and plan PR',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_original_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
@@ -611,10 +611,10 @@ describe('POST /internal/webhooks/task-complete', () => {
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.status).toBe('planned');
       expect(getResult.value.result?.planning_outcome_label).toBe('planned');
-      expect(getResult.value.result?.planning_original_issue_url).toContain('/INT-123');
+      expect(getResult.value.result?.planning_linear_url).toContain('/INT-123');
     });
 
-    it('complex planned: validates subtasks are direct children and normalizes them', async () => {
+    it('complex planned: accepts correctly delivered subtasks without normalization', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Plan complex task',
@@ -669,18 +669,18 @@ describe('POST /internal/webhooks/task-complete', () => {
               identifier: 'INT-200',
               url: 'https://linear.app/intexuraos/issue/INT-200',
               parentId: 'original-uuid',
-              labels: [],
-              assigneeId: 'some-user',
-              state: 'Backlog',
+              labels: ['code-task'],
+              assigneeId: null,
+              state: 'Todo',
             },
             {
               id: 'child-2-uuid',
               identifier: 'INT-201',
               url: 'https://linear.app/intexuraos/issue/INT-201',
               parentId: 'original-uuid',
-              labels: [],
+              labels: ['code-task'],
               assigneeId: null,
-              state: 'Backlog',
+              state: 'Todo',
             },
           ],
         })
@@ -696,7 +696,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Created complex plan with subtasks',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_original_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
           planning_unclear_clarification: '',
@@ -718,11 +718,10 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Original → in_review
+      // Issue → in_review + planned label (only mutations on the input issue)
       expect(updateIssueStateSpy).toHaveBeenCalledWith(
         expect.objectContaining({ issueId: 'original-uuid', state: 'in_review' })
       );
-      // Original labels
       expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           issueId: 'original-uuid',
@@ -730,28 +729,110 @@ describe('POST /internal/webhooks/task-complete', () => {
           removeLabels: ['unclear', 'code-task'],
         })
       );
-      // Descendants normalized to todo + code-task
-      expect(updateIssueStateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-1-uuid', state: 'todo' })
-      );
-      expect(updateIssueStateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ issueId: 'child-2-uuid', state: 'todo' })
-      );
-      expect(updateIssueMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          issueId: 'child-1-uuid',
-          assigneeId: null,
-          addLabels: ['code-task'],
-          removeLabels: ['planned', 'unclear'],
-        })
-      );
-      // PR comment on original
+      // No normalization of subtasks — only 1 updateIssueState call (the input issue)
+      expect(updateIssueStateSpy).toHaveBeenCalledTimes(1);
+      // Only 1 updateIssueMetadata call (the input issue)
+      expect(updateIssueMetadataSpy).toHaveBeenCalledTimes(1);
+      // PR comment on issue
       expect(addCommentSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           issueId: 'original-uuid',
           body: 'Planning PR: https://github.com/pbuchman/intexuraos/pull/999',
         })
       );
+    });
+
+    it('complex planned: rejects subtask with wrong state/labels/assignee (delivery contract violation)', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Plan with bad subtask state',
+        sanitizedPrompt: 'Plan with bad subtask state',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-123',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'planning',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const linearAgentClient = getServices().linearAgentClient;
+      const validateIssueSpy = vi.mocked(linearAgentClient.validateIssue);
+      const fetchIssueTreeSpy = vi.mocked(linearAgentClient.fetchIssueTree);
+
+      validateIssueSpy.mockReset();
+      validateIssueSpy.mockResolvedValueOnce(
+        ok({
+          id: 'original-uuid',
+          identifier: 'INT-123',
+          title: 'Original issue',
+          url: 'https://linear.app/intexuraos/issue/INT-123',
+          labels: [],
+          childCount: 1,
+        })
+      );
+      fetchIssueTreeSpy.mockResolvedValue(
+        ok({
+          root: {
+            id: 'original-uuid',
+            identifier: 'INT-123',
+            url: 'https://linear.app/intexuraos/issue/INT-123',
+            parentId: null,
+            labels: [],
+            assigneeId: null,
+            state: 'In Progress',
+          },
+          descendants: [
+            {
+              id: 'child-uuid',
+              identifier: 'INT-200',
+              url: 'https://linear.app/intexuraos/issue/INT-200',
+              parentId: 'original-uuid',
+              labels: [],
+              assigneeId: 'some-user',
+              state: 'Backlog',
+            },
+          ],
+        })
+      );
+
+      const payload = {
+        taskId: task.id,
+        status: 'completed' as const,
+        result: {
+          summary: 'Subtask not delivered correctly',
+          planning_outcome_label: 'planned' as const,
+          planning_superpowers_writing_plans_used: '1' as const,
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_is_complex: '1' as const,
+          planning_pr_url: '',
+          planning_unclear_clarification: '',
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.error.message).toContain('violates delivery contract');
+      expect(body.error.message).toContain('missing code-task label');
+      expect(body.error.message).toContain('has assignee');
     });
 
     it('complex planned: fails when subtask is not a direct child of original', async () => {
@@ -821,7 +902,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Planned with non-direct subtask',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_original_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_pr_url: '',
           planning_unclear_clarification: '',
@@ -898,9 +979,9 @@ describe('POST /internal/webhooks/task-complete', () => {
               identifier: 'INT-200',
               url: 'https://linear.app/intexuraos/issue/INT-200',
               parentId: 'original-uuid',
-              labels: [],
+              labels: ['code-task'],
               assigneeId: null,
-              state: 'Backlog',
+              state: 'Todo',
             },
           ],
         })
@@ -914,7 +995,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Complex but no PR',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_original_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '1' as const,
           planning_pr_url: '',
           planning_unclear_clarification: '',
@@ -989,7 +1070,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Simple task planned in-place',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_original_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '0' as const,
           planning_pr_url: '',
           planning_unclear_clarification: '',
@@ -1087,7 +1168,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Simple task',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '0' as const,
-          planning_original_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '0' as const,
           planning_pr_url: '',
           planning_unclear_clarification: '',
@@ -1164,7 +1245,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Simple task',
           planning_outcome_label: 'planned' as const,
           planning_superpowers_writing_plans_used: '0' as const,
-          planning_original_issue_url: 'https://linear.app/intexuraos/issue/INT-123',
+          planning_linear_url: 'https://linear.app/intexuraos/issue/INT-123',
           planning_is_complex: '0' as const,
           planning_pr_url: '',
           planning_unclear_clarification: '',
@@ -2218,7 +2299,7 @@ describe('POST /internal/webhooks/task-complete', () => {
           summary: 'Clarification needed',
           planning_outcome_label: 'unclear' as const,
           planning_superpowers_writing_plans_used: '1' as const,
-          planning_original_issue_url: '',
+          planning_linear_url: '',
           planning_is_complex: '0' as const,
           planning_pr_url: '',
           planning_unclear_clarification: 'Missing acceptance criteria and target service',

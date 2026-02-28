@@ -1030,7 +1030,7 @@ export class TaskDispatcher {
       base.planning_outcome_label = agentData.outcome;
       base.planning_superpowers_writing_plans_used =
         agentData.superpowers_writing_plans === 'used' ? '1' : '0';
-      base.planning_original_issue_url = agentData.original_issue_url;
+      base.planning_linear_url = agentData.linear_url;
       base.planning_is_complex = agentData.is_complex;
       if (agentData.pr_url !== '') {
         base.planning_pr_url = agentData.pr_url;
